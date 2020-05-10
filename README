@@ -10,9 +10,9 @@ the Pi Zero.
 !!!!!!
 2020-05-09
 ATTENTION!  ATTENTION!
+Update for RPI4 users
 For RPI1/2/3 user,please find "makefile1" and delete the number "1"
 For RPI4 user,please find "makefile2" and delete the number "2"
-
 !!!!!!
 2017-04-21
 Do note that some users have been reporting lockups with recent OS versions.
