@@ -1,24 +1,23 @@
-/**
- *  @file wspr.cpp
- *  @brief WSPR transmitter for the Raspberry Pi. See accompanying README file for a description on how to use this code.
+// WSPR transmitter for the Raspberry Pi. See accompanying README
+// file for a description on how to use this code.
 
- License:
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 2 of the License, or
-   (at your option) any later version.
+// License:
+//   This program is free software: you can redistribute it and/or modify
+//   it under the terms of the GNU General Public License as published by
+//   the Free Software Foundation, either version 2 of the License, or
+//   (at your option) any later version.
+//
+//   This program is distributed in the hope that it will be useful,
+//   but WITHOUT ANY WARRANTY; without even the implied warranty of
+//   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//   GNU General Public License for more details.
+//
+//   You should have received a copy of the GNU General Public License
+//   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+// ha7ilm: added RPi2 support based on a patch to PiFmRds by Cristophe
+// Jacquet and Richard Hirst: http://git.io/vn7O9
 
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
- ha7ilm: added RPi2 support based on a patch to PiFmRds by Cristophe
- Jacquet and Richard Hirst: http://git.io/vn7O9
- */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -45,7 +44,6 @@
 #include <algorithm>
 #include <pthread.h>
 #include <sys/timex.h>
-#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -103,43 +101,45 @@ extern "C" {
 // addresses and structures are created and calculations performed in this
 // program to figure out how to access them with virtual addresses.
 
-/** call exit */
 #define ABORT(a) exit(a)
-/**  Used for debugging */
+// Used for debugging
 #define MARK std::cout << "Currently in file: " << __FILE__ << " line: " << __LINE__ << std::endl
 
 // PLLD clock frequency.
 // For RPi1, after NTP converges, these is a 2.5 PPM difference between
 // the PPM correction reported by NTP and the actual frequency offset of
-// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3.
+// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
 // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+#ifdef RPI4
+#define F_PLLD_CLK   (750000000.0)
+#else
 #ifdef RPI23
 #define F_PLLD_CLK   (500000000.0)
 #else
 #ifdef RPI1
 #define F_PLLD_CLK   (500000000.0*(1-2.500e-6))
-#else
-#error "RPI version macro is not defined"
 #endif
 #endif
-/** Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
- *  0.682s long. For some reason, despite the use of DMA, the load on the PI
- *  affects the TX length of the symbols. However, the varying symbol length is
- *  compensated for in the main loop.
- */
+#endif
+// Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
+// 0.682s long. For some reason, despite the use of DMA, the load on the PI
+// affects the TX length of the symbols. However, the varying symbol length is
+// compensated for in the main loop.
 #define F_PWM_CLK_INIT (31156186.6125761)
 
-/** WSRP nominal symbol time */
+// WSRP nominal symbol time
 #define WSPR_SYMTIME (8192.0/12000.0)
-/** How much random frequency offset should be added to WSPR transmissions
- *  if the --offset option has been turned on.
- */
+// How much random frequency offset should be added to WSPR transmissions
+// if the --offset option has been turned on.
 #define WSPR_RAND_OFFSET 80
 #define WSPR15_RAND_OFFSET 8
 
-// Choose proper base address depending on RPI1/RPI23 macro from makefile.
+// Choose proper base address depending on RPI1/RPI234 macro from makefile.
 // PERI_BASE_PHYS is the base address of the peripherals, in physical
 // address space.
+#ifdef RPI4
+#define PERI_BASE_PHYS 0xfe000000
+#define MEM_FLAG 0x04
 #ifdef RPI23
 #define PERI_BASE_PHYS 0x3f000000
 #define MEM_FLAG 0x04
@@ -147,124 +147,110 @@ extern "C" {
 #ifdef RPI1
 #define PERI_BASE_PHYS 0x20000000
 #define MEM_FLAG 0x0c
-#else
-#error "RPI version macro is not defined"
+#endif
 #endif
 #endif
 
 #define PAGE_SIZE (4*1024)
 #define BLOCK_SIZE (4*1024)
 
-/** peri_base_virt is the base virtual address that a userspace program (this
- *  program) can use to read/write to the the physical addresses controlling
- *  the peripherals. This address is mapped at runtime using mmap and /dev/mem.
- *  This must be declared global so that it can be called by the atexit
- * function.
- */
-volatile uint32_t *peri_base_virt = NULL;
+// peri_base_virt is the base virtual address that a userspace program (this
+// program) can use to read/write to the the physical addresses controlling
+// the peripherals. This address is mapped at runtime using mmap and /dev/mem.
+// This must be declared global so that it can be called by the atexit
+// function.
+volatile unsigned *peri_base_virt = NULL;
 
-/** Given an address in the bus address space of the peripherals, this
- *  macro calculates the appropriate virtual address to use to access
- *  the requested bus address space. It does this by first subtracting
- *  0x7e000000 from the supplied bus address to calculate the offset into
- *  the peripheral address space. Then, this offset is added to peri_base_virt
- *  Which is the base address of the peripherals, in virtual address space.
- */
-#define ACCESS_BUS_ADDR(buss_addr) *(volatile uint32_t*)((uintptr_t)peri_base_virt+(buss_addr)-0x7e000000)
-/** Given a bus address in the peripheral address space, set bit */
+// Given an address in the bus address space of the peripherals, this
+// macro calculates the appropriate virtual address to use to access
+// the requested bus address space. It does this by first subtracting
+// 0x7e000000 from the supplied bus address to calculate the offset into
+// the peripheral address space. Then, this offset is added to peri_base_virt
+// Which is the base address of the peripherals, in virtual address space.
+#define ACCESS_BUS_ADDR(buss_addr) *(volatile int*)((long int)peri_base_virt+(buss_addr)-0x7e000000)
+// Given a bus address in the peripheral address space, set or clear a bit.
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1<<bit
-/** Given a bus address in the peripheral address space, clear a bit. */
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1<<bit)
 
 // The following are all bus addresses.
-/** address of GPIO register GPFSEL0 */
 #define GPIO_BUS_BASE (0x7E200000)
-/** address of GPIO register CM_GP0CTL */
 #define CM_GP0CTL_BUS (0x7e101070)
-/** address of GPIO register CM_GP0DIV */
 #define CM_GP0DIV_BUS (0x7e101074)
-/** address of GPIO register PADS_GPIO_0_27 */
 #define PADS_GPIO_0_27_BUS  (0x7e10002c)
-/** address of GPIO register CLKBASE */
 #define CLK_BUS_BASE (0x7E101000)
-/** address of gpio register DMABASE */
 #define DMA_BUS_BASE (0x7E007000)
-/** address of PWM Controller */
 #define PWM_BUS_BASE  (0x7e20C000) /* PWM controller */
 
-/**  Convert from a bus address to a physical address. */
+// Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x)&~0xC0000000)
 
-/** enum to select either WSPR transmit or tone transmit */
 typedef enum {WSPR,TONE} mode_type;
 
-/** Structure used to control clock generator. The bit structure of the GPCTL register */
+// Structure used to control clock generator
 struct GPCTL {
-    char SRC         : 4; /** source of clock is PLLD or XTAL */
-    char ENAB        : 1; /** enable transmit */
-    char KILL        : 1; /** always 0 */
-    char             : 1; /** always 0 */
-    char BUSY        : 1; /** always 0 */
-    char FLIP        : 1; /** always 0 */
-    char MASH        : 2; /** 3 for on and 1 for off */
-    unsigned int     : 13; /** always 0 */
-    char PASSWD      : 8; /** always 0x5a */
+    char SRC         : 4;
+    char ENAB        : 1;
+    char KILL        : 1;
+    char             : 1;
+    char BUSY        : 1;
+    char FLIP        : 1;
+    char MASH        : 2;
+    unsigned int     : 13;
+    char PASSWD      : 8;
 };
 
-/** Structure used to tell the DMA engine what to do */
+// Structure used to tell the DMA engine what to do
 struct CB {
-    volatile uint32_t TI;
-    volatile uint32_t SOURCE_AD;
-    volatile uint32_t DEST_AD;
-    volatile uint32_t TXFR_LEN;
-    volatile uint32_t STRIDE;
-    volatile uint32_t NEXTCONBK;
-    volatile uint32_t RES1;
-    volatile uint32_t RES2;
+    volatile unsigned int TI;
+    volatile unsigned int SOURCE_AD;
+    volatile unsigned int DEST_AD;
+    volatile unsigned int TXFR_LEN;
+    volatile unsigned int STRIDE;
+    volatile unsigned int NEXTCONBK;
+    volatile unsigned int RES1;
+    volatile unsigned int RES2;
 };
 
-/**  DMA engine status registers */
+// DMA engine status registers
 struct DMAregs {
-    volatile uint32_t CS;
-    volatile uint32_t CONBLK_AD;
-    volatile uint32_t TI;
-    volatile uint32_t SOURCE_AD;
-    volatile uint32_t DEST_AD;
-    volatile uint32_t TXFR_LEN;
-    volatile uint32_t STRIDE;
-    volatile uint32_t NEXTCONBK;
-    volatile uint32_t DEBUG;
+    volatile unsigned int CS;
+    volatile unsigned int CONBLK_AD;
+    volatile unsigned int TI;
+    volatile unsigned int SOURCE_AD;
+    volatile unsigned int DEST_AD;
+    volatile unsigned int TXFR_LEN;
+    volatile unsigned int STRIDE;
+    volatile unsigned int NEXTCONBK;
+    volatile unsigned int DEBUG;
 };
 
-/** Virtual and bus addresses of a page of physical memory. */
+// Virtual and bus addresses of a page of physical memory.
 struct PageInfo {
-    void* b; /** bus address */
-    void* v; /** virtual address */
+    void* b; // bus address
+    void* v; // virtual address
 };
 
-/** Must be global so that exit handlers can access this.*/
+// Must be global so that exit handlers can access this.
 static struct {
-  int handle;                      /** From mbox_open() */
-  uint32_t mem_ref = 0;            /** From mem_alloc() */
-  uint32_t bus_addr;               /** From mem_lock() */
-  uint8_t *virt_addr = NULL; /** From mapmem() */ //ha7ilm: originally uint8_t
-  uint32_t pool_size;  /** the number of pages allocated */
-  uint32_t pool_cnt;   /** the count for which page we are on */
+  int handle;                      /* From mbox_open() */
+  unsigned mem_ref = 0;            /* From mem_alloc() */
+  unsigned bus_addr;               /* From mem_lock() */
+  unsigned char *virt_addr = NULL; /* From mapmem() */ //ha7ilm: originally uint8_t
+  unsigned pool_size;
+  unsigned pool_cnt;
 } mbox;
 
-/**
- *  @brief Use the mbox interface to allocate a single chunk of memory to hold all the pages we will need. The bus address and the virtual address are saved in the mbox structure.
- *  @param numpages - number of pages to allocate
- *  @return Void.
- */
-void allocMemPool(uint32_t numpages) {
+// Use the mbox interface to allocate a single chunk of memory to hold
+// all the pages we will need. The bus address and the virtual address
+// are saved in the mbox structure.
+void allocMemPool(unsigned numpages) {
   // Allocate space.
-  mbox.mem_ref = mem_alloc(mbox.handle, (uint32_t)4096*numpages, (uint32_t)4096, (uint32_t)MEM_FLAG);
+  mbox.mem_ref = mem_alloc(mbox.handle, 4096*numpages, 4096, MEM_FLAG);
   // Lock down the allocated space and return its bus address.
   mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
   // Conert the bus address to a physical address and map this to virtual
   // (aka user) space.
-  mbox.virt_addr = (uint8_t *)mapmem((uint32_t)BUS_TO_PHYS(mbox.bus_addr), (uint32_t)4096*numpages);
+  mbox.virt_addr = (unsigned char*)mapmem(BUS_TO_PHYS(mbox.bus_addr), 4096*numpages);
   // The number of pages in the pool. Never changes!
   mbox.pool_size=numpages;
   // How many of the created pages have actually been used.
@@ -272,31 +258,24 @@ void allocMemPool(uint32_t numpages) {
   //printf("allocMemoryPool bus_addr=%x virt_addr=%x mem_ref=%x\n",mbox.bus_addr,(unsigned)mbox.virt_addr,mbox.mem_ref);
 }
 
-/**
- *  @brief Returns the virtual and bus address (NOT physical address!) of another page in the pool.
- *  @param vAddr - return a page from virt_address
- *  @param bAddr - return a page from bus_addr
- *  @return Void.
- */
+// Returns the virtual and bus address (NOT physical address!) of another
+// page in the pool.
 void getRealMemPageFromPool(void ** vAddr, void **bAddr) {
   if (mbox.pool_cnt>=mbox.pool_size) {
     std::cerr << "Error: unable to allocated more pages!" << std::endl;
     ABORT(-1);
   }
-  uint32_t offset = mbox.pool_cnt*4096;
-  *vAddr = (uint8_t *)(((uintptr_t)mbox.virt_addr) + offset);
-  *bAddr = (void *)(((uintptr_t)mbox.bus_addr) + offset);
+  unsigned offset = mbox.pool_cnt*4096;
+  *vAddr = (void*)(((unsigned)mbox.virt_addr) + offset);
+  *bAddr = (void*)(((unsigned)mbox.bus_addr) + offset);
   //printf("getRealMemoryPageFromPool bus_addr=%x virt_addr=%x\n", (unsigned)*pAddr,(unsigned)*vAddr);
   mbox.pool_cnt++;
 }
 
-/**
- *  @brief Free the memory pool
- *  @return Void.
- */
+// Free the memory pool
 void deallocMemPool() {
   if(mbox.virt_addr!=NULL) {
-    unmapmem(mbox.virt_addr, (uint32_t)mbox.pool_size*4096);
+    unmapmem(mbox.virt_addr, mbox.pool_size*4096);
   }
   if (mbox.mem_ref!=0) {
     mem_unlock(mbox.handle, mbox.mem_ref);
@@ -304,10 +283,7 @@ void deallocMemPool() {
   }
 }
 
-/**
- *  @brief Disable the PWM clock and wait for it to become 'not busy'.
- *  @return Void.
- */
+// Disable the PWM clock and wait for it to become 'not busy'.
 void disable_clock() {
   // Check if mapping has been set up yet.
   if (peri_base_virt==NULL) {
@@ -315,11 +291,11 @@ void disable_clock() {
   }
   // Disable the clock (in case it's already running) by reading current
   // settings and only clearing the enable bit.
-  uint32_t settings=ACCESS_BUS_ADDR(CM_GP0CTL_BUS);
+  auto settings=ACCESS_BUS_ADDR(CM_GP0CTL_BUS);
   // Clear enable bit and add password
   settings=(settings&0x7EF)|0x5A000000;
   // Disable
-  ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((uint32_t*)&settings);
+  ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&settings);
   // Wait for clock to not be busy.
   while (true) {
     if (!(ACCESS_BUS_ADDR(CM_GP0CTL_BUS)&(1<<7))) {
@@ -328,10 +304,7 @@ void disable_clock() {
   }
 }
 
-/**
- *  @brief Turn on TX
- *  @return Void.
- */
+// Turn on TX
 void txon() {
   // Set function select for GPIO4.
   // Fsel 000 => input
@@ -369,37 +342,21 @@ void txon() {
   ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
 }
 
-/**
- *  @brief Turn transmitter on. Disable clock.
- *  @return Void.
- */
+// Turn transmitter on
 void txoff() {
   //struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
   //ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
   disable_clock();
 }
 
-/** Number of PWM clocks for this iteration */
+// Transmit symbol sym for tsym seconds.
+//
+// TODO:
+// Upon entering this function at the beginning of a WSPR transmission, we
+// do not know which DMA table entry is being processed by the DMA engine.
 #define PWM_CLOCKS_PER_ITER_NOMINAL 1000
-/**
- *  @brief Transmit symbol sym for tsym seconds.
- *
- * TODO:
- * Upon entering this function at the beginning of a WSPR transmission, we
- * do not know which DMA table entry is being processed by the DMA engine.
- *  @param sym_num
- *  @param center_freq
- *  @param tone_spacing
- *  @param tsym
- *  @param dma_table_freq
- *  @param f_pwm_clk
- *  @param instrs
- *  @param constPage
- *  @param bufPtr
- *  @return Void.
- */
 void txSym(
-  const int32_t & sym_num,
+  const int & sym_num,
   const double & center_freq,
   const double & tone_spacing,
   const double & tsym,
@@ -407,10 +364,10 @@ void txSym(
   const double & f_pwm_clk,
   struct PageInfo instrs[],
   struct PageInfo & constPage,
-  int32_t & bufPtr
+  int & bufPtr
 ) {
-  const int32_t f0_idx=sym_num*2;
-  const int32_t f1_idx=f0_idx+1;
+  const int f0_idx=sym_num*2;
+  const int f1_idx=f0_idx+1;
   const double f0_freq=dma_table_freq[f0_idx];
   const double f1_freq=dma_table_freq[f1_idx];
   const double tone_freq=center_freq-1.5*tone_spacing+sym_num*tone_spacing;
@@ -419,14 +376,14 @@ void txSym(
   const double f0_ratio=1.0-(tone_freq-f0_freq)/(f1_freq-f0_freq);
   //cout << "f0_ratio = " << f0_ratio << std::endl;
   assert ((f0_ratio>=0)&&(f0_ratio<=1));
-  const int32_t n_pwmclk_per_sym=round(f_pwm_clk*tsym);
+  const long int n_pwmclk_per_sym=round(f_pwm_clk*tsym);
 
-  int32_t n_pwmclk_transmitted=0;
-  int32_t n_f0_transmitted=0;
+  long int n_pwmclk_transmitted=0;
+  long int n_f0_transmitted=0;
   //printf("<instrs[bufPtr] begin=%x>",(unsigned)&instrs[bufPtr]);
   while (n_pwmclk_transmitted<n_pwmclk_per_sym) {
     // Number of PWM clocks for this iteration
-    int32_t n_pwmclk=PWM_CLOCKS_PER_ITER_NOMINAL;
+    long int n_pwmclk=PWM_CLOCKS_PER_ITER_NOMINAL;
     // Iterations may produce spurs around the main peak based on the iteration
     // frequency. Randomize the iteration period so as to spread this peak
     // around.
@@ -437,30 +394,28 @@ void txSym(
 
     // Calculate number of clocks to transmit f0 during this iteration so
     // that the long term average is as close to f0_ratio as possible.
-    const int32_t n_f0=round(f0_ratio*(n_pwmclk_transmitted+n_pwmclk))-n_f0_transmitted;
-    const int32_t n_f1=n_pwmclk-n_f0;
+    const long int n_f0=round(f0_ratio*(n_pwmclk_transmitted+n_pwmclk))-n_f0_transmitted;
+    const long int n_f1=n_pwmclk-n_f0;
 
     // Configure the transmission for this iteration
     // Set GPIO pin to transmit f0
     bufPtr++;
-    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (uintptr_t)(instrs[bufPtr].b)) {
-        usleep(100);
-    }
-    ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (uintptr_t)constPage.b + f0_idx*4;
+    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].b)) usleep(100);
+    ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f0_idx*4;
 
     // Wait for n_f0 PWM clocks
     bufPtr++;
-    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (uintptr_t)(instrs[bufPtr].b)) usleep(100);
+    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].b)) usleep(100);
     ((struct CB*)(instrs[bufPtr].v))->TXFR_LEN = n_f0;
 
     // Set GPIO pin to transmit f1
     bufPtr++;
-    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (uintptr_t)(instrs[bufPtr].b)) usleep(100);
-    ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (uintptr_t)constPage.b + f1_idx*4;
+    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].b)) usleep(100);
+    ((struct CB*)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f1_idx*4;
 
     // Wait for n_f1 PWM clocks
     bufPtr=(bufPtr+1) % (1024);
-    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (uintptr_t)(instrs[bufPtr].b)) usleep(100);
+    while( ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) ==  (long int)(instrs[bufPtr].b)) usleep(100);
     ((struct CB*)(instrs[bufPtr].v))->TXFR_LEN = n_f1;
 
     // Update counters
@@ -470,10 +425,7 @@ void txSym(
   //printf("<instrs[bufPtr]=%x %x>",(unsigned)instrs[bufPtr].v,(unsigned)instrs[bufPtr].b);
 }
 
-/**
- *  @brief Turn off (reset) DMA engine
- *  @return Void.
- */
+// Turn off (reset) DMA engine
 void unSetupDMA(){
   // Check if mapping has been set up yet.
   if (peri_base_virt==NULL) {
@@ -485,29 +437,15 @@ void unSetupDMA(){
   txoff();
 }
 
-/**
- *  @brief Truncate at bit lsb. i.e. set all bits less than lsb to zero.
- *  @param d - the number
- *  @param lsb - the least significant bit
- *  @return double - new number
- */
+// Truncate at bit lsb. i.e. set all bits less than lsb to zero.
 double bit_trunc(
   const double & d,
-  const int32_t & lsb
+  const int & lsb
 ) {
   return floor(d/pow(2.0,lsb))*pow(2.0,lsb);
 }
 
-/**
- *  @brief Program the tuning words into the DMA table.
- *  @param center_freq_desired
- *  @param tone_spacing
- *  @param plld_actual_freq
- *  @param dma_table_freq
- *  @param center_freq_actual
- *  @param constPage
- *  @return Void.
- */
+// Program the tuning words into the DMA table.
 void setupDMATab(
   const double & center_freq_desired,
   const double & tone_spacing,
@@ -532,26 +470,26 @@ void setupDMATab(
   // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
   // 2*i+1 to generate the appropriate tone.
   double tone0_freq=center_freq_actual-1.5*tone_spacing;
-  std::vector <int32_t> tuning_word(1024);
-  for (int32_t i=0;i<8;i++) {
+  std::vector <long int> tuning_word(1024);
+  for (int i=0;i<8;i++) {
     double tone_freq=tone0_freq+(i>>1)*tone_spacing;
     double div=bit_trunc(plld_actual_freq/tone_freq,-12);
     if (i%2==0) {
       div=div+pow(2.0,-12);
     }
-    tuning_word[i]=((int32_t)(div*pow(2.0,12)));
+    tuning_word[i]=((int)(div*pow(2.0,12)));
   }
   // Fill the remaining table, just in case...
-  for (int32_t i=8;i<1024;i++) {
+  for (int i=8;i<1024;i++) {
     double div=500+i;
-    tuning_word[i]=((int32_t)(div*pow(2.0,12)));
+    tuning_word[i]=((int)(div*pow(2.0,12)));
   }
 
   // Program the table
   dma_table_freq.resize(1024);
-  for (int32_t i=0;i<1024;i++) {
+  for (int i=0;i<1024;i++) {
     dma_table_freq[i]=plld_actual_freq/(tuning_word[i]/pow(2.0,12));
-    ((int32_t*)(constPage.v))[i] = (0x5a<<24)+tuning_word[i];
+    ((int*)(constPage.v))[i] = (0x5a<<24)+tuning_word[i];
     if ((i%2==0)&&(i<8)) {
       assert((tuning_word[i]&(~0xfff))==(tuning_word[i+1]&(~0xfff)));
     }
@@ -559,19 +497,14 @@ void setupDMATab(
 
 }
 
-/** 
- *  @brief Create the memory structures needed by the DMA engine and perform initial clock configuration.
- *  @param constPage 
- *  @param instrPage
- *  @param instrs
- *  @return Void.
- */
+// Create the memory structures needed by the DMA engine and perform initial
+// clock configuration.
 void setupDMA(
   struct PageInfo & constPage,
   struct PageInfo & instrPage,
   struct PageInfo instrs[]
 ){
-  allocMemPool((uint32_t)1025);
+  allocMemPool(1025);
 
   // Allocate a page of ram for the constants
   getRealMemPageFromPool(&constPage.v, &constPage.b);
@@ -591,9 +524,9 @@ void setupDMA(
     struct CB* instr0= (struct CB*)instrPage.v;
     int i;
     for (i=0; i<(signed)(4096/sizeof(struct CB)); i++) {
-      instrs[instrCnt].v = (void*)((uintptr_t)instrPage.v + sizeof(struct CB)*i);
-      instrs[instrCnt].b = (void*)((uintptr_t)instrPage.b + sizeof(struct CB)*i);
-      instr0->SOURCE_AD = (uintptr_t)constPage.b+2048;
+      instrs[instrCnt].v = (void*)((long int)instrPage.v + sizeof(struct CB)*i);
+      instrs[instrCnt].b = (void*)((long int)instrPage.b + sizeof(struct CB)*i);
+      instr0->SOURCE_AD = (unsigned long int)constPage.b+2048;
       instr0->DEST_AD = PWM_BUS_BASE+0x18 /* FIF1 */;
       instr0->TXFR_LEN = 4;
       instr0->STRIDE = 0;
@@ -642,14 +575,11 @@ void setupDMA(
   DMA0->CS =1<<31;  // reset
   DMA0->CONBLK_AD=0;
   DMA0->TI=0;
-  DMA0->CONBLK_AD = (uintptr_t)(instrPage.b);
+  DMA0->CONBLK_AD = (unsigned long int)(instrPage.b);
   DMA0->CS =(1<<0)|(255 <<16);  // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-/** @brief Convert string to uppercase
- *  @param str - pointer to a c_str
- *  @return Void.
- */
+// Convert string to uppercase
 void to_upper(
   char *str
 ) {
@@ -659,31 +589,24 @@ void to_upper(
   }
 }
 
-/** 
- *  @brief Encode call, locator, and dBm into WSPR codeblock.
- *  @param call - a c_str
- *  @param l_pre - a c_str
- *  @param dbm - a c_str
- *  @param symbols
- *  @return Void.
- */
+// Encode call, locator, and dBm into WSPR codeblock.
 void wspr(
   const char* call,
   const char* l_pre,
   const char* dbm,
-  uint8_t* symbols
+  unsigned char* symbols
 ) {
   // pack prefix in nadd, call in n1, grid, dbm in n2
   char* c, buf[16];
   strncpy(buf, call, 16);
   c=buf;
   to_upper(c);
-  uint32_t ng,nadd=0;
+  unsigned long ng,nadd=0;
 
   if(strchr(c, '/')){ //prefix-suffix
     nadd=2;
-    int32_t i=strchr(c, '/')-c; //stroke position
-    int32_t n=strlen(c)-i-1; //suffix len, prefix-call len
+    int i=strchr(c, '/')-c; //stroke position
+    int n=strlen(c)-i-1; //suffix len, prefix-call len
     c[i]='\0';
     if(n==1) ng=60000-32768+(c[i+1]>='0'&&c[i+1]<='9'?c[i+1]-'0':c[i+1]==' '?38:c[i+1]-'A'+10); // suffix /A to /Z, /0 to /9
     if(n==2) ng=60000+26+10*(c[i+1]-'0')+(c[i+2]-'0'); // suffix /10 to /99
@@ -696,9 +619,9 @@ void wspr(
     }
   }
 
-  int32_t i=(isdigit(c[2])?2:isdigit(c[1])?1:0); //last prefix digit of de-suffixed/de-prefixed callsign
-  int32_t n=strlen(c)-i-1; //2nd part of call len
-  uint32_t n1;
+  int i=(isdigit(c[2])?2:isdigit(c[1])?1:0); //last prefix digit of de-suffixed/de-prefixed callsign
+  int n=strlen(c)-i-1; //2nd part of call len
+  unsigned long n1;
   n1=(i<2?36:c[i-2]>='0'&&c[i-2]<='9'?c[i-2]-'0':c[i-2]-'A'+10);
   n1=36*n1+(i<1?36:c[i-1]>='0'&&c[i-1]<='9'?c[i-1]-'0':c[i-1]-'A'+10);
   n1=10*n1+c[i]-'0';
@@ -715,20 +638,20 @@ void wspr(
     to_upper(l); //grid square Maidenhead locator (uppercase)
     ng=180*(179-10*(l[0]-'A')-(l[2]-'0'))+10*(l[1]-'A')+(l[3]-'0');
   }
-  int32_t p = atoi(dbm);    //EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
-  int32_t corr[]={0,-1,1,0,-1,2,1,0,-1,1};
+  int p = atoi(dbm);    //EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
+  int corr[]={0,-1,1,0,-1,2,1,0,-1,1};
   p=p>60?60:p<0?0:p+corr[p%10];
-  uint32_t n2=(ng<<7)|(p+64+nadd);
+  unsigned long n2=(ng<<7)|(p+64+nadd);
 
   // pack n1,n2,zero-tail into 50 bits
-  uint8_t packed[11] = {
-    static_cast<uint8_t>(n1>>20),
-    static_cast<uint8_t>(n1>>12),
-    static_cast<uint8_t>(n1>>4),
-    static_cast<uint8_t>(((n1&0x0f)<<4)|((n2>>18)&0x0f)),
-    static_cast<uint8_t>(n2>>10),
-    static_cast<uint8_t>(n2>>2),
-    static_cast<uint8_t>((n2&0x03)<<6),
+  char packed[11] = {
+    static_cast<char>(n1>>20),
+    static_cast<char>(n1>>12),
+    static_cast<char>(n1>>4),
+    static_cast<char>(((n1&0x0f)<<4)|((n2>>18)&0x0f)),
+    static_cast<char>(n2>>10),
+    static_cast<char>(n2>>2),
+    static_cast<char>((n2&0x03)<<6),
     0,
     0,
     0,
@@ -736,17 +659,17 @@ void wspr(
   };
 
   // convolutional encoding K=32, r=1/2, Layland-Lushbaugh polynomials
-  int32_t k = 0;
-  int32_t j,s;
-  int32_t nstate = 0;
-  uint8_t symbol[176];
+  int k = 0;
+  int j,s;
+  int nstate = 0;
+  unsigned char symbol[176];
   for(j=0;j!=sizeof(packed);j++){
      for(i=7;i>=0;i--){
-        uint32_t poly[2] = { 0xf2d05351L, 0xe4613c47L };
+        unsigned long poly[2] = { 0xf2d05351L, 0xe4613c47L };
         nstate = (nstate<<1) | ((packed[j]>>i)&1);
         for(s=0;s!=2;s++){   //convolve
-           uint32_t n = nstate & poly[s];
-           int32_t even = 0;  // even := parity(n)
+           unsigned long n = nstate & poly[s];
+           int even = 0;  // even := parity(n)
            while(n){
               even = 1 - even;
               n = n & (n - 1);
@@ -758,7 +681,7 @@ void wspr(
   }
 
   // interleave symbols
-  const uint8_t npr3[162] = {
+  const unsigned char npr3[162] = {
      1,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0,0,0,0,
      0,0,1,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,1,1,0,1,0,0,0,1,1,0,1,0,
      0,0,0,1,1,0,1,0,1,0,1,0,1,0,0,1,0,0,1,0,1,1,0,0,0,1,1,0,1,0,1,0,
@@ -767,7 +690,7 @@ void wspr(
      0,0 };
   for(i=0;i!=162;i++){
      // j0 := bit reversed_values_smaller_than_161[i]
-     uint8_t j0;
+     unsigned char j0;
      p=-1;
      for(k=0;p!=i;k++){
         for(j=0;j!=8;j++)   // j0:=bit_reverse(k)
@@ -779,11 +702,7 @@ void wspr(
   }
 }
 
-/**
- *  @brief Wait for the system clock's minute to reach one second past 'minute'
- *  @param minute 
- *  @return Void.
- */
+// Wait for the system clock's minute to reach one second past 'minute'
 void wait_every(
   int minute
 ) {
@@ -798,10 +717,6 @@ void wait_every(
   usleep(1000000); // wait another second
 }
 
-/** 
- *  @brief print out the usage of the program
- *  @return Void.
- */
 void print_usage() {
   std::cout << "Usage:" << std::endl;
   std::cout << "  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ..." << std::endl;
@@ -842,24 +757,6 @@ void print_usage() {
   std::cout << "Transmission gaps can be created by specifying a TX frequency of 0" << std::endl;
 }
 
-/** 
- *  @breif parse the command line arguments
- *  @param argc - count of command line arguments
- *  @param argv - the list of command line arguments
- *  @param callsign
- *  @param locator
- *  @param tx_power
- *  @param center_freq_set
- *  @param ppm
- *  @param self_cal
- *  @param repeat
- *  @param random_offset
- *  @param test_tone
- *  @param no_delay
- *  @param mode
- *  @param terminate
- *  @return Void.
- */
 void parse_commandline(
   // Inputs
   const int & argc,
@@ -972,7 +869,7 @@ void parse_commandline(
   }
 
   // Parse the non-option parameters
-  uint32_t n_free_args=0;
+  unsigned int n_free_args=0;
   while (optind<argc) {
     // Check for callsign, locator, tx_power
     if (n_free_args==0) {
@@ -1076,7 +973,7 @@ void parse_commandline(
     std::cout << "  Power:    " << tx_power << " dBm" << std::endl;
     std::cout << "Requested TX frequencies:" << std::endl;
     std::stringstream temp;
-    for (uint32_t t=0;t<center_freq_set.size();t++) {
+    for (unsigned int t=0;t<center_freq_set.size();t++) {
       temp << std::setprecision(6) << std::fixed;
       temp << "  " << center_freq_set[t]/1e6 << " MHz" << std::endl;
     }
@@ -1113,11 +1010,7 @@ void parse_commandline(
   }
 }
 
-/**
- *  @brief Call ntp_adjtime() to obtain the latest calibration coefficient.
- *  @param ppm - return this new value of the adjusted clock
- *  @return Void.
- */
+// Call ntp_adjtime() to obtain the latest calibration coefficient.
 void update_ppm(
   double & ppm
 ) {
@@ -1144,13 +1037,7 @@ void update_ppm(
   }
 }
 
-/**
- *  @brief Return 1 if the difference is negative, otherwise 0.
- *  @param timeval - the result
- *  @param t2 - the larger (more recent) time
- *  @param t1 - the smaller (older) time
- *  @return int
- */
+/* Return 1 if the difference is negative, otherwise 0.  */
 // From StackOverflow:
 // http://stackoverflow.com/questions/1468596/c-programming-calculate-elapsed-time-in-milliseconds-unix
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
@@ -1161,11 +1048,6 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
     return (diff<0);
 }
 
-/** 
- *  @breif print the universial time
- *  @param tv - the current time to print
- *  @return Void.
- */
 void timeval_print(struct timeval *tv) {
     char buffer[30];
     time_t curtime;
@@ -1177,10 +1059,7 @@ void timeval_print(struct timeval *tv) {
     printf("%s.%03ld", buffer, (tv->tv_usec+500)/1000);
 }
 
-/**
- *  @brief Create the mbox special files and open mbox.
- *  @return Void.
- */
+// Create the mbox special files and open mbox.
 void open_mbox() {
   mbox.handle = mbox_open();
   if (mbox.handle < 0) {
@@ -1189,10 +1068,7 @@ void open_mbox() {
   }
 }
 
-/**
- *  @brief Called when exiting or when a signal is received.
- *  @return Void.
- */
+// Called when exiting or when a signal is received.
 void cleanup() {
   disable_clock();
   unSetupDMA();
@@ -1200,22 +1076,13 @@ void cleanup() {
   unlink(LOCAL_DEVICE_FILE_NAME);
 }
 
-/**
- *  @brief Called when a signal is received. Automatically calls cleanup().
- *  @param sig - int that is printed before exiting
- *  @return Void.
- */
+// Called when a signal is received. Automatically calls cleanup().
 void cleanupAndExit(int sig) {
   std::cerr << "Exiting with error; caught signal: " << sig << std::endl;
   cleanup();
   ABORT(-1);
 }
 
-/** 
- *  @brief make this program have a higher priority.  Must run as Super user for this to work
- *  @param priority - priority number for pthread
- *  @return Void.
- */
 void setSchedPriority(int priority) {
   //In order to get the best timing at a decent queue size, we want the kernel
   //to avoid interrupting us for long durations.  This is done by giving our
@@ -1228,18 +1095,18 @@ void setSchedPriority(int priority) {
   }
 }
 
-/** 
- *  @brief Create the memory map between virtual memory and the peripheral range of physical memory.
- *  @return Void.
- */
-void setup_peri_base_virt() {
+// Create the memory map between virtual memory and the peripheral range
+// of physical memory.
+void setup_peri_base_virt(
+  volatile unsigned * & peri_base_virt
+) {
   int mem_fd;
   // open /dev/mem
   if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
     std::cerr << "Error: can't open /dev/mem" << std::endl;
     ABORT (-1);
   }
-  peri_base_virt = (uint32_t *)mmap(
+  peri_base_virt = (unsigned *)mmap(
     NULL,
     0x01000000,  //len
     PROT_READ|PROT_WRITE,
@@ -1247,19 +1114,13 @@ void setup_peri_base_virt() {
     mem_fd,
     PERI_BASE_PHYS  //base
   );
-  if (peri_base_virt==MAP_FAILED) {
+  if ((long int)peri_base_virt==-1) {
     std::cerr << "Error: peri_base_virt mmap error!" << std::endl;
     ABORT(-1);
   }
   close(mem_fd);
 }
 
-/**
- *  @brief entry point into the application
- *  @param argc - number of arguments
- *  @param argv - list of arguments
- *  @return int - exit value
- */
 int main(const int argc, char * const argv[]) {
   //catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
   for (int i = 0; i < 64; i++) {
@@ -1277,7 +1138,9 @@ int main(const int argc, char * const argv[]) {
 #ifdef RPI23
   std::cout << "Detected Raspberry Pi version 2/3" << std::endl;
 #else
-#error "RPI version macro is not defined"
+#ifdef RPI4
+  std::cout << "Detected Raspberry Pi version 4" << std::endl;
+#endif
 #endif
 #endif
 
@@ -1319,7 +1182,7 @@ int main(const int argc, char * const argv[]) {
   struct PageInfo constPage;
   struct PageInfo instrPage;
   struct PageInfo instrs[1024];
-  setup_peri_base_virt();
+  setup_peri_base_virt(peri_base_virt);
   // Set up DMA
   open_mbox();
   txon();
@@ -1369,7 +1232,7 @@ int main(const int argc, char * const argv[]) {
     // WSPR mode
 
     // Create WSPR symbols
-    uint8_t symbols[162];
+    unsigned char symbols[162];
     wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols);
     /*
     printf("WSPR codeblock: ");

@@ -1,7 +1,4 @@
-/**
-    @file mailbox.c
-    @brief don't know yet
-
+/*
 Copyright (c) 2012, Broadcom Europe Ltd.
 All rights reserved.
 Redistribution and use in source and binary forms, with or without
@@ -33,31 +30,26 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <unistd.h>
 #include <assert.h>
 #include <stdint.h>
+#include <sys/sysmacros.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 
 #include "mailbox.h"
 
-/** value used to calculate offset in mapmem */
 #define PAGE_SIZE (4*1024)
 
-/*-------------------------------------------------------------------
- * Function:
- *     mapmem
- */
-uint8_t *mapmem(uint32_t base, uint32_t size)
+void *mapmem(unsigned base, unsigned size)
 {
     int mem_fd;
-    uint32_t offset = base % PAGE_SIZE;
+    unsigned offset = base % PAGE_SIZE;
     base = base - offset;
     /* open /dev/mem */
     if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
         printf("can't open /dev/mem\nThis program should be run as root. Try prefixing command with: sudo\n");
         exit (-1);
     }
-    uint8_t *mem = (uint8_t *) mmap(
+    void *mem = mmap(
         0,
         size,
         PROT_READ|PROT_WRITE,
@@ -72,34 +64,24 @@ uint8_t *mapmem(uint32_t base, uint32_t size)
         exit (-1);
     }
     close(mem_fd);
-    return (uint8_t *)mem + offset;
+    return (char *)mem + offset;
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     unmapmem
- */
-void unmapmem(uint8_t *addr, uint32_t size)
+void *unmapmem(void *addr, unsigned size)
 {
     int s = munmap(addr, size);
     if (s != 0) {
         printf("munmap error %d\n", s);
         exit (-1);
     }
+
+    return NULL;
 }
 
 /*
  * use ioctl to send mbox property message
  */
 
-/*-------------------------------------------------------------------
- * Function:
- *     mbox_property
- * @breif make system call to manipulate the file descriptor
- * @param file_desc - the file descriptor
- * @param buf - an untyped memory pointer
- * @return int - 0 on success and -1 on failure
- */
 static int mbox_property(int file_desc, void *buf)
 {
     int ret_val = ioctl(file_desc, IOCTL_MBOX_PROPERTY, buf);
@@ -117,14 +99,10 @@ static int mbox_property(int file_desc, void *buf)
     return ret_val;
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mem_alloc
- */
-uint32_t mem_alloc(int file_desc, uint32_t size, uint32_t align, uint32_t flags)
+unsigned mem_alloc(int file_desc, unsigned size, unsigned align, unsigned flags)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
 
@@ -145,14 +123,10 @@ uint32_t mem_alloc(int file_desc, uint32_t size, uint32_t align, uint32_t flags)
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mem_free
- */
-uint32_t mem_free(int file_desc, uint32_t handle)
+unsigned mem_free(int file_desc, unsigned handle)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
 
@@ -171,14 +145,10 @@ uint32_t mem_free(int file_desc, uint32_t handle)
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mem_lock
- */
-uint32_t mem_lock(int file_desc, uint32_t handle)
+unsigned mem_lock(int file_desc, unsigned handle)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
 
@@ -197,14 +167,10 @@ uint32_t mem_lock(int file_desc, uint32_t handle)
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mem_unlock
- */
-uint32_t mem_unlock(int file_desc, uint32_t handle)
+unsigned mem_unlock(int file_desc, unsigned handle)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
 
@@ -223,14 +189,10 @@ uint32_t mem_unlock(int file_desc, uint32_t handle)
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     execute_code
- */
-uint32_t execute_code(int file_desc, uint32_t code, uint32_t r0, uint32_t r1, uint32_t r2, uint32_t r3, uint32_t r4, uint32_t r5)
+unsigned execute_code(int file_desc, unsigned code, unsigned r0, unsigned r1, unsigned r2, unsigned r3, unsigned r4, unsigned r5)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
 
@@ -255,14 +217,10 @@ uint32_t execute_code(int file_desc, uint32_t code, uint32_t r0, uint32_t r1, ui
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     qpu_enable
- */
-uint32_t qpu_enable(int file_desc, uint32_t enable)
+unsigned qpu_enable(int file_desc, unsigned enable)
 {
-    int32_t i=0;
-    uint32_t p[32];
+    int i=0;
+    unsigned p[32];
 
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
@@ -282,13 +240,9 @@ uint32_t qpu_enable(int file_desc, uint32_t enable)
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     execute_qpu
- */
-uint32_t execute_qpu(int file_desc, uint32_t num_qpus, uint32_t control, uint32_t noflush, uint32_t timeout) {
-    int32_t i=0;
-    uint32_t p[32];
+unsigned execute_qpu(int file_desc, unsigned num_qpus, unsigned control, unsigned noflush, unsigned timeout) {
+    int i=0;
+    unsigned p[32];
 
     p[i++] = 0; // size
     p[i++] = 0x00000000; // process request
@@ -310,10 +264,6 @@ uint32_t execute_qpu(int file_desc, uint32_t num_qpus, uint32_t control, uint32_
     return p[5];
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mbox_open  
- */
 int mbox_open() {
     int file_desc;
 
@@ -345,10 +295,6 @@ int mbox_open() {
     exit (-1);
 }
 
-/*-------------------------------------------------------------------
- * Function:
- *     mbox_close
- */
 void mbox_close(int file_desc) {
     close(file_desc);
 }
