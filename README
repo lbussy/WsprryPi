@@ -26,7 +26,7 @@ Installation / update:
 ******
   Download and compile code:
     sudo apt-get install git
-    git clone https://github.com/JamesP6000/WsprryPi.git
+    git clone https://github.com/threeme3/WsprryPi.git
     cd WsprryPi
     make
 
