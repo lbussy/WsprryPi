@@ -39,7 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define PAGE_SIZE (4*1024)
 
-void *mapmem(unsigned base, unsigned size)
+void *mapmem(uint32_t base, uint32_t size)
 {
     int mem_fd;
     unsigned offset = base % PAGE_SIZE;
@@ -64,18 +64,16 @@ void *mapmem(unsigned base, unsigned size)
         exit (-1);
     }
     close(mem_fd);
-    return (char *)mem + offset;
+    return mem + offset;
 }
 
-void *unmapmem(void *addr, unsigned size)
+void unmapmem(void *addr, uint32_t size)
 {
     int s = munmap(addr, size);
     if (s != 0) {
         printf("munmap error %d\n", s);
         exit (-1);
     }
-
-    return NULL;
 }
 
 /*
