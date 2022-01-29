@@ -140,6 +140,7 @@ extern "C" {
 #ifdef RPI4
 #define PERI_BASE_PHYS 0xfe000000
 #define MEM_FLAG 0x04
+#else
 #ifdef RPI23
 #define PERI_BASE_PHYS 0x3f000000
 #define MEM_FLAG 0x04
