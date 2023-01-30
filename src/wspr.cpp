@@ -124,15 +124,6 @@ int mem_flag;
 
 void getPLLD()
 {
-    // #ifdef RPI4
-    // #define f_plld_clk   (750000000.0)
-
-    // #ifdef RPI23
-    // #define f_plld_clk   (500000000.0)
-
-    // #ifdef RPI1
-    // #define f_plld_clk   (500000000.0*(1-2.500e-6))
-
     // Nominal clock frequencies
     // double f_xtal = 19200000.0;
     // PLLD clock frequency.
