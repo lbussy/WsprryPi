@@ -21,7 +21,7 @@ mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
 wspr: mailbox.o wspr.cpp mailbox.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) mailbox.o wspr.cpp -owspr $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PI_VERSION) mailbox.o wspr.cpp -owspr $(LDLIBS)
 
 clean:
 	$(RM) *.o wspr
