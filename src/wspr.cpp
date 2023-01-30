@@ -179,15 +179,12 @@ void getPLLD()
 // address space.
 #ifdef RPI4
 #define PERI_BASE_PHYS 0xfe000000
-#define MEM_FLAG 0x04
 #else
 #ifdef RPI23
 #define PERI_BASE_PHYS 0x3f000000
-#define MEM_FLAG 0x04
 #else
 #ifdef RPI1
 #define PERI_BASE_PHYS 0x20000000
-#define MEM_FLAG 0x0c
 #endif
 #endif
 #endif
@@ -286,7 +283,7 @@ static struct {
 // are saved in the mbox structure.
 void allocMemPool(unsigned numpages) {
   // Allocate space.
-  mbox.mem_ref = mem_alloc(mbox.handle, 4096*numpages, 4096, MEM_FLAG);
+  mbox.mem_ref = mem_alloc(mbox.handle, 4096*numpages, 4096, mem_flag);
   // Lock down the allocated space and return its bus address.
   mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
   // Conert the bus address to a physical address and map this to virtual
