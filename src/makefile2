@@ -2,10 +2,11 @@ prefix=/usr/local
 
 CFLAGS += -Wall
 CXXFLAGS += -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5
-LDLIBS += -lm
-PI_VERSION = -DRPI4
+CXXFLAGS += -I/usr/include -L/opt/vc/lib -L/usr/lib/arm-linux-gnueabihf
+CXXFLAGS += -Wno-psabi
+LDLIBS += -lm -lbcm_host
 
-all: wspr gpioclk
+all: wspr
 
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
@@ -13,18 +14,13 @@ mailbox.o: mailbox.c mailbox.h
 wspr: mailbox.o wspr.cpp mailbox.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(LDLIBS) $(PI_VERSION) mailbox.o wspr.cpp -owspr
 
-gpioclk: gpioclk.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(LDLIBS) $(PI_VERSION) gpioclk.cpp -ogpioclk
-
 clean:
-	$(RM) *.o gpioclk wspr
+	$(RM) *.o wspr
 
 .PHONY: install
 install: wspr
 	install -m 0755 wspr $(prefix)/bin
-	install -m 0755 gpioclk $(prefix)/bin
 
 .PHONY: uninstall
 uninstall:
-	$(RM) $(prefix)/bin/wspr $(prefix)/bin/gpioclk
-
+	$(RM) $(prefix)/bin/wspr

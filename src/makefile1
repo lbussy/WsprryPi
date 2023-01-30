@@ -2,7 +2,9 @@ prefix=/usr/local
 
 CFLAGS += -Wall
 CXXFLAGS += -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5
-LDLIBS += -lm
+CXXFLAGS += -I/usr/include -L/opt/vc/lib -L/usr/lib/arm-linux-gnueabihf
+CXXFLAGS += -Wno-psabi
+LDLIBS += -lm -lbcm_host
 
 ifeq ($(findstring armv6,$(shell uname -m)),armv6)
 # Broadcom BCM2835 SoC with 700 MHz 32-bit ARM 1176JZF-S (ARMv6 arch)
@@ -13,26 +15,21 @@ else
 PI_VERSION = -DRPI23
 endif
 
-all: wspr gpioclk
+all: wspr
 
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
 wspr: mailbox.o wspr.cpp mailbox.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(LDLIBS) $(PI_VERSION) mailbox.o wspr.cpp -owspr
-
-gpioclk: gpioclk.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(LDLIBS) $(PI_VERSION) gpioclk.cpp -ogpioclk
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) mailbox.o wspr.cpp -owspr $(LDLIBS)
 
 clean:
-	$(RM) *.o gpioclk wspr
+	$(RM) *.o wspr
 
 .PHONY: install
 install: wspr
 	install -m 0755 wspr $(prefix)/bin
-	install -m 0755 gpioclk $(prefix)/bin
 
 .PHONY: uninstall
 uninstall:
-	$(RM) $(prefix)/bin/wspr $(prefix)/bin/gpioclk
-
+	$(RM) $(prefix)/bin/wspr
