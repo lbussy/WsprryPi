@@ -131,6 +131,8 @@ void getPLLD()
     // the PPM correction reported by NTP and the actual frequency offset of
     // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
     // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+
+    // TODO:  Can we get this programmatically?
     switch (ver)
     {
     case 0: // RPi1
@@ -164,21 +166,6 @@ void getPLLD()
 // if the --offset option has been turned on.
 #define WSPR_RAND_OFFSET 80
 #define WSPR15_RAND_OFFSET 8
-
-// Choose proper base address depending on RPI1/RPI234 macro from makefile.
-// PERI_BASE_PHYS is the base address of the peripherals, in physical
-// address space.
-#ifdef RPI4
-#define PERI_BASE_PHYS 0xfe000000
-#else
-#ifdef RPI23
-#define PERI_BASE_PHYS 0x3f000000
-#else
-#ifdef RPI1
-#define PERI_BASE_PHYS 0x20000000
-#endif
-#endif
-#endif
 
 #define PAGE_SIZE (4*1024)
 #define BLOCK_SIZE (4*1024)
@@ -1130,6 +1117,7 @@ void setup_peri_base_virt(
   volatile unsigned * & peri_base_virt
 ) {
   int mem_fd;
+  unsigned gpio_base = ( bcm_host_get_peripheral_address() );
   // open /dev/mem
   if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
     std::cerr << "Error: can't open /dev/mem" << std::endl;
@@ -1141,7 +1129,7 @@ void setup_peri_base_virt(
     PROT_READ|PROT_WRITE,
     MAP_SHARED,
     mem_fd,
-    PERI_BASE_PHYS  //base
+    gpio_base  //base
   );
   if ((long int)peri_base_virt==-1) {
     std::cerr << "Error: peri_base_virt mmap error!" << std::endl;
