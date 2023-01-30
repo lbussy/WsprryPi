@@ -60,6 +60,14 @@ const char* version[4]
             "Raspberry Pi 2B or 3B (BCM2837)",
             "Raspberry Pi 4 (BCM2711)"
         };
+static int ver = bcm_host_get_processor_id();
+const char* version[4]
+        = {
+            "Raspberry Pi 1 or Zero (BCM2835)",
+            "Raspberry Pi 2B (BCM2836)",
+            "Raspberry Pi 2B or 3B (BCM2837)",
+            "Raspberry Pi 4 (BCM2711)"
+        };
 
 // Note on accessing memory in RPi:
 //
