@@ -796,6 +796,7 @@ void wait_every(
 
 void print_usage()
 {
+    // TODO: Think about a man page or at least docs for some of this
     std::cout << "Usage:" << std::endl;
     std::cout << "  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ..." << std::endl;
     std::cout << "    OR" << std::endl;
@@ -829,8 +830,9 @@ void print_usage()
     std::cout << "Frequencies can be specified either as an absolute TX carrier frequency, or" << std::endl;
     std::cout << "using one of the following strings. If a string is used, the transmission" << std::endl;
     std::cout << "will happen in the middle of the WSPR region of the selected band." << std::endl;
-    std::cout << "  LF LF-15 MF MF-15 160m 160m-15 80m 60m 40m 30m 20m 17m 15m 12m 10m 6m 4m 2m" << std::endl;
-    std::cout << "<B>-15 indicates the WSPR-15 region of band <B>." << std::endl;
+    std::cout << "  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m," << std::endl;
+    std::cout << "  17m, 15m, 12m, 10m, 6m, 4m, and 2m" << std::endl;
+    std::cout << "The \"-15\" indicates the WSPR-15 region of band ." << std::endl;
     std::cout << std::endl;
     std::cout << "Transmission gaps can be created by specifying a TX frequency of 0" << std::endl;
 }
