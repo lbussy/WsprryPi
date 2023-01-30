@@ -9,3 +9,4 @@ mailbox.o
 .gcc-flags.json
 .pio
 .vscode
+.DS_Store
