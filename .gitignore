@@ -1,3 +1,11 @@
 wspr
 gpioclk
 mailbox.o
+*.log
+
+.pioenvs
+.piolibdeps
+.clang_complete
+.gcc-flags.json
+.pio
+.vscode
