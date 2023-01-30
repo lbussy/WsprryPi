@@ -44,6 +44,7 @@
 #include <algorithm>
 #include <pthread.h>
 #include <sys/timex.h>
+#include <bcm_host.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,14 @@ extern "C" {
 }
 #endif /* __cplusplus */
 
+static int ver = bcm_host_get_processor_id();
+const char* version[4]
+        = {
+            "Raspberry Pi 1 or Zero (BCM2835)",
+            "Raspberry Pi 2B (BCM2836)",
+            "Raspberry Pi 2B or 3B (BCM2837)",
+            "Raspberry Pi 4 (BCM2711)"
+        };
 
 // Note on accessing memory in RPi:
 //
@@ -110,17 +119,48 @@ extern "C" {
 // the PPM correction reported by NTP and the actual frequency offset of
 // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
 // This 2.5 PPM offset is compensated for here, but only for the RPi1.
-#ifdef RPI4
-#define F_PLLD_CLK   (750000000.0)
-#else
-#ifdef RPI23
-#define F_PLLD_CLK   (500000000.0)
-#else
-#ifdef RPI1
-#define F_PLLD_CLK   (500000000.0*(1-2.500e-6))
-#endif
-#endif
-#endif
+double f_plld_clk;
+int mem_flag;
+
+void getPLLD()
+{
+    // #ifdef RPI4
+    // #define f_plld_clk   (750000000.0)
+
+    // #ifdef RPI23
+    // #define f_plld_clk   (500000000.0)
+
+    // #ifdef RPI1
+    // #define f_plld_clk   (500000000.0*(1-2.500e-6))
+
+    // Nominal clock frequencies
+    // double f_xtal = 19200000.0;
+    // PLLD clock frequency.
+    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
+    // the PPM correction reported by NTP and the actual frequency offset of
+    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
+    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+    switch (ver)
+    {
+    case 0: // RPi1
+        mem_flag = 0x0c;
+        f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        break;
+    case 1: // RPi2
+    case 2: // RPi3
+        mem_flag = 0x04;
+        f_plld_clk = (500000000.0);
+        break;
+    case 3: // RPi 4
+        mem_flag = 0x04;
+        f_plld_clk = (750000000.0);
+        break;
+    default:
+        fprintf(stderr, "Error: Unknown chipset (%d).", ver);
+        exit(-1);
+    }
+}
+
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
 // affects the TX length of the symbols. However, the varying symbol length is
@@ -1123,6 +1163,9 @@ void setup_peri_base_virt(
 }
 
 int main(const int argc, char * const argv[]) {
+  printf("\nRunning on: %s.\n", version[ver]);
+  getPLLD(); // Get PLLD Frequency // TODO: Can we get this programmatically?
+
   //catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
   for (int i = 0; i < 64; i++) {
     struct sigaction sa;
@@ -1132,18 +1175,6 @@ int main(const int argc, char * const argv[]) {
   }
   atexit(cleanup);
   setSchedPriority(30);
-
-#ifdef RPI1
-  std::cout << "Detected Raspberry Pi version 1" << std::endl;
-#else
-#ifdef RPI23
-  std::cout << "Detected Raspberry Pi version 2/3" << std::endl;
-#else
-#ifdef RPI4
-  std::cout << "Detected Raspberry Pi version 4" << std::endl;
-#endif
-#endif
-#endif
 
   // Initialize the RNG
   srand(time(NULL));
@@ -1211,7 +1242,7 @@ int main(const int argc, char * const argv[]) {
         update_ppm(ppm);
       }
       if (ppm!=ppm_prev) {
-        setupDMATab(test_tone+1.5*tone_spacing,tone_spacing,F_PLLD_CLK*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
+        setupDMATab(test_tone+1.5*tone_spacing,tone_spacing,f_plld_clk*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
         //cout << std::setprecision(30) << dma_table_freq[0] << std::endl;
         //cout << std::setprecision(30) << dma_table_freq[1] << std::endl;
         //cout << std::setprecision(30) << dma_table_freq[2] << std::endl;
@@ -1288,7 +1319,7 @@ int main(const int argc, char * const argv[]) {
       std::vector <double> dma_table_freq;
       double center_freq_actual;
       if (center_freq_desired) {
-        setupDMATab(center_freq_desired,tone_spacing,F_PLLD_CLK*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
+        setupDMATab(center_freq_desired,tone_spacing,f_plld_clk*(1-ppm/1e6),dma_table_freq,center_freq_actual,constPage);
       } else {
         center_freq_actual=center_freq_desired;
       }
