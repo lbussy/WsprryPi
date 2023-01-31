@@ -8,6 +8,9 @@ LDLIBS += -lm -lbcm_host
 
 all: wspr
 
+gpiotest: gpio.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PI_VERSION) gpio.cpp -ogpiotest $(LDLIBS)
+
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
@@ -15,7 +18,7 @@ wspr: mailbox.o wspr.cpp mailbox.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PI_VERSION) mailbox.o wspr.cpp -owspr $(LDLIBS)
 
 clean:
-	$(RM) *.o wspr
+	$(RM) *.o wspr gpiotest
 
 .PHONY: install
 install: wspr
