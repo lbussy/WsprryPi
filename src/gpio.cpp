@@ -1,27 +1,4 @@
-// GPIO Output test
-// From: https://elinux.org/RPi_GPIO_Code_Samples#Direct_register_access
-// cc gpio.cpp -I/opt/vc/include -L/opt/vc/lib -lbcm_host -o gpiotest
-// gcc -ogpiotest gpio.cpp -I/opt/vc/include -L/opt/vc/lib -lbcm_host
-// (Remember to use sudo for memory access)
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <string>
-#include <bcm_host.h>
-
-static int ver = bcm_host_get_processor_id();
-const char* version[4]
-        = {
-            "Raspberry Pi 1 and Zero Models (BCM2835)",
-            "Raspberry Pi 2B (BCM2836)",
-            "Raspberry Pi 2B and 3B (BCM2837)",
-            "Raspberry Pi 4 (BCM2711)"
-        };
-
-#define LED_PIN 18 // Flash this pin
+#include "gpio.hpp"
 
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
@@ -45,7 +22,7 @@ void setup_io()
 {
     int mem_fd;
     // Set up a memory regions to access GPIO
-    unsigned gpio_base = ( bcm_host_get_peripheral_address() + 0x200000 );
+    unsigned gpio_base = gpioBase() + 0x200000;
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -99,7 +76,7 @@ void ledOff(int pin)
 
 int main()
 {
-    printf("\nRunning on: %s.\n", version[ver]);
+    printf("\nRunning on: %s.\n", version());
     printf("Testing GPIO.\n");
     setupGPIO(LED_PIN);
 
