@@ -1,6 +1,6 @@
 prefix = /usr/local
 
-LED_PIN = 18
+LED_PIN = 18 # Set to 0 for no LED, 18 for TAPR board
 
 CFLAGS += -Wall
 CXXFLAGS += -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5

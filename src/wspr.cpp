@@ -60,46 +60,6 @@ extern "C"
 // Used for debugging
 #define MARK std::cout << "Currently in file: " << __FILE__ << " line: " << __LINE__ << std::endl
 
-// PLLD clock frequency.
-// For RPi1, after NTP converges, these is a 2.5 PPM difference between
-// the PPM correction reported by NTP and the actual frequency offset of
-// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-// This 2.5 PPM offset is compensated for here, but only for the RPi1.
-double f_plld_clk;
-int mem_flag;
-
-void getPLLD()
-{
-    // Nominal clock frequencies
-    // double f_xtal = 19200000.0;
-    // PLLD clock frequency.
-    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
-    // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
-
-    // TODO:  Can we get this programmatically?
-    switch (ver())
-    {
-    case 0: // RPi1
-        mem_flag = 0x0c;
-        f_plld_clk = (500000000.0 * (1 - 2.500e-6));
-        break;
-    case 1: // RPi2
-    case 2: // RPi3
-        mem_flag = 0x04;
-        f_plld_clk = (500000000.0);
-        break;
-    case 3: // RPi 4
-        mem_flag = 0x04;
-        f_plld_clk = (750000000.0);
-        break;
-    default:
-        fprintf(stderr, "Error: Unknown chipset (%d).", ver());
-        exit(-1);
-    }
-}
-
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
 // affects the TX length of the symbols. However, the varying symbol length is
@@ -116,12 +76,7 @@ void getPLLD()
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
-// peri_base_virt is the base virtual address that a userspace program (this
-// program) can use to read/write to the the physical addresses controlling
-// the peripherals. This address is mapped at runtime using mmap and /dev/mem.
-// This must be declared global so that it can be called by the atexit
-// function.
-volatile unsigned *peri_base_virt = NULL;
+#define PWM_CLOCKS_PER_ITER_NOMINAL 1000
 
 // Given an address in the bus address space of the peripherals, this
 // macro calculates the appropriate virtual address to use to access
@@ -143,8 +98,42 @@ volatile unsigned *peri_base_virt = NULL;
 #define DMA_BUS_BASE (0x7E007000)
 #define PWM_BUS_BASE (0x7e20C000) /* PWM controller */
 
+// Used for GPIO DIO Access:
+// GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
+#define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
+#define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
+#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3 : 2) << (((g) % 10) * 3))
+#define GPIO_SET *(gpio + 7)    // sets bits which are 1 ignores bits which are 0
+#define GPIO_CLR *(gpio + 10) // clears bits which are 1 ignores bits which are 0
+#define GET_GPIO(g) (*(gpio + 13) & (1 << g)) // 0 if LOW, (1<<g) if HIGH
+#define GPIO_PULL *(gpio + 37) // Pull up/pull down
+#define GPIO_PULLCLK0 *(gpio + 38) // Pull up/pull down clock
+
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
+
+// PLLD clock frequency.
+// For RPi1, after NTP converges, these is a 2.5 PPM difference between
+// the PPM correction reported by NTP and the actual frequency offset of
+// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
+// This 2.5 PPM offset is compensated for here, but only for the RPi1.
+double f_plld_clk;
+
+// MEM_FLAG_L1_NONALLOCATING?
+int mem_flag;
+
+// peri_base_virt is the base virtual address that a userspace program (this
+// program) can use to read/write to the the physical addresses controlling
+// the peripherals. This address is mapped at runtime using mmap and /dev/mem.
+// This must be declared global so that it can be called by the atexit
+// function.
+volatile unsigned *peri_base_virt = NULL;
+
+// Used for GPIO DIO Access:
+// Map to GPIO register
+void *gpio_map;
+// I/O access
+volatile unsigned *gpio;
 
 typedef enum
 {
@@ -210,6 +199,94 @@ static struct
     unsigned pool_size;
     unsigned pool_cnt;
 } mbox;
+
+// GPIO/DIO Control:
+
+void setupGPIO(int pin = 0)
+{
+    if (pin == 0) return;
+    // Set up gpio pointer for direct register access
+    int mem_fd;
+    // Set up a memory regions to access GPIO
+    unsigned gpio_base = gpioBase() + 0x200000;
+
+    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
+    {
+        printf("Fail: Unable to open /dev/mem\n");
+        exit(-1);
+    }
+
+    /* mmap GPIO */
+    gpio_map = mmap(
+        NULL,                   // Any adddress in our space will do
+        BLOCK_SIZE,             // Map length
+        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+        MAP_SHARED,             // Shared with other processes
+        mem_fd,                 // File to map
+        gpio_base               // Offset to GPIO peripheral
+    );
+
+    close(mem_fd); // No need to keep mem_fd open after mmap
+
+    if (gpio_map == MAP_FAILED)
+    {
+        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set!
+        exit(-1);
+    }
+
+    // Always use volatile pointer!
+    gpio = (volatile unsigned *)gpio_map;
+
+    // Set GPIO pins to output
+    // Must use INP_GPIO before we can use OUT_GPIO
+    INP_GPIO(pin);
+    OUT_GPIO(pin);
+}
+
+void pinHigh(int pin = 0)
+{
+    if (pin == 0) return;
+    GPIO_SET = 1 << pin;
+}
+
+void pinLow(int pin = 0)
+{
+    if (pin == 0) return;
+    GPIO_CLR = 1 << pin;
+}
+
+// GPIO/DIO Control^
+
+void getPLLD()
+{
+    // Nominal clock frequencies
+    // double f_xtal = 19200000.0;
+    // PLLD clock frequency.
+    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
+    // the PPM correction reported by NTP and the actual frequency offset of
+    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
+    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+
+    switch (ver())
+    {
+    case 0: // RPi1
+        mem_flag = 0x0c;
+        f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        break;
+    case 1: // RPi2
+    case 2: // RPi3
+        mem_flag = 0x04;
+        f_plld_clk = (500000000.0);
+        break;
+    case 3: // RPi 4
+        mem_flag = 0x04;
+        f_plld_clk = (750000000.0);
+        break;
+    default:
+        fprintf(stderr, "Error: Unknown chipset (%d).", ver());
+        exit(-1);
+    }
+}
 
 // Use the mbox interface to allocate a single chunk of memory to hold
 // all the pages we will need. The bus address and the virtual address
@@ -288,6 +365,7 @@ void disable_clock()
 // Turn on TX
 void txon()
 {
+    pinHigh(LED_PIN);
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -329,6 +407,7 @@ void txoff()
 {
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
+    pinLow(LED_PIN);
     disable_clock();
 }
 
@@ -337,7 +416,7 @@ void txoff()
 // TODO:
 // Upon entering this function at the beginning of a WSPR transmission, we
 // do not know which DMA table entry is being processed by the DMA engine.
-#define PWM_CLOCKS_PER_ITER_NOMINAL 1000
+
 void txSym(
     const int &sym_num,
     const double &center_freq,
@@ -1175,6 +1254,7 @@ void open_mbox()
 // Called when exiting or when a signal is received.
 void cleanup()
 {
+    pinLow(LED_PIN);
     disable_clock();
     unSetupDMA();
     deallocMemPool();
@@ -1235,7 +1315,8 @@ void setup_peri_base_virt(
 int main(const int argc, char *const argv[])
 {
     printf("\nRunning on: %s.\n", version());
-    getPLLD(); // Get PLLD Frequency // TODO: Can we get this programmatically?
+    getPLLD(); // Get PLLD Frequency
+    setupGPIO(LED_PIN);
 
     // catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
     for (int i = 0; i < 64; i++)

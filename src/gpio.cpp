@@ -3,6 +3,7 @@
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
+// Map to GPIO register
 void *gpio_map;
 
 // I/O access
@@ -18,8 +19,9 @@ volatile unsigned *gpio;
 #define GPIO_PULL *(gpio + 37) // Pull up/pull down
 #define GPIO_PULLCLK0 *(gpio + 38) // Pull up/pull down clock
 
-void setup_io()
+void setupGPIO(int pin)
 {
+    // Set up gpio pointer for direct register access
     int mem_fd;
     // Set up a memory regions to access GPIO
     unsigned gpio_base = gpioBase() + 0x200000;
@@ -51,25 +53,18 @@ void setup_io()
     // Always use volatile pointer!
     gpio = (volatile unsigned *)gpio_map;
 
-} // setup_io
-
-void setupGPIO(int pin)
-{
-    // Set up gpio pointer for direct register access
-    setup_io();
-
     // Set GPIO pins to output
     // Must use INP_GPIO before we can use OUT_GPIO
     INP_GPIO(pin);
     OUT_GPIO(pin);
 }
 
-void ledOn(int pin)
+void pinHigh(int pin)
 {
     GPIO_SET = 1 << pin;
 }
 
-void ledOff(int pin)
+void pinLow(int pin)
 {
     GPIO_CLR = 1 << pin;
 }
@@ -82,9 +77,9 @@ int main()
 
     for (int i = 0; i < 5; i++)
     {
-        ledOn(LED_PIN);
+        pinHigh(LED_PIN);
         sleep(1);
-        ledOff(LED_PIN);
+        pinLow(LED_PIN);
         if (i < 5)
             sleep(1);
     }
