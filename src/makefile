@@ -9,13 +9,13 @@ LDLIBS += -lm -lbcm_host
 all: wspr
 
 gpiotest: version.hpp version.cpp gpio.hpp gpio.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PI_VERSION) version.hpp version.cpp gpio.hpp gpio.cpp -ogpiotest $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) version.hpp version.cpp gpio.hpp gpio.cpp -ogpiotest $(LDLIBS)
 
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
-wspr: mailbox.o wspr.cpp mailbox.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PI_VERSION) mailbox.o wspr.cpp -owspr $(LDLIBS)
+wspr: mailbox.o wspr.hpp wspr.cpp mailbox.h
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) mailbox.o wspr.hpp wspr.cpp -owspr $(LDLIBS)
 
 clean:
 	$(RM) *.o wspr gpiotest

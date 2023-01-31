@@ -1,30 +1,4 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <math.h>
-#include <cmath>
-#include <cstdint>
-#include <fcntl.h>
-#include <assert.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <malloc.h>
-#include <time.h>
-#include <sys/time.h>
-#include <getopt.h>
-#include <vector>
-#include <iostream>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
-#include <pthread.h>
-#include <sys/timex.h>
-#include <bcm_host.h>
+#include "wspr.hpp"
 
 #ifdef __cplusplus
 extern "C"
@@ -32,13 +6,6 @@ extern "C"
 #include "mailbox.h"
 }
 #endif /* __cplusplus */
-
-static int ver = bcm_host_get_processor_id();
-const char *version[4] = {
-    "Raspberry Pi 1 or Zero (BCM2835)",
-    "Raspberry Pi 2B (BCM2836)",
-    "Raspberry Pi 2B or 3B (BCM2837)",
-    "Raspberry Pi 4 (BCM2711)"};
 
 // Note on accessing memory in RPi:
 //
@@ -112,7 +79,7 @@ void getPLLD()
     // This 2.5 PPM offset is compensated for here, but only for the RPi1.
 
     // TODO:  Can we get this programmatically?
-    switch (ver)
+    switch (ver())
     {
     case 0: // RPi1
         mem_flag = 0x0c;
@@ -128,7 +95,7 @@ void getPLLD()
         f_plld_clk = (750000000.0);
         break;
     default:
-        fprintf(stderr, "Error: Unknown chipset (%d).", ver);
+        fprintf(stderr, "Error: Unknown chipset (%d).", ver());
         exit(-1);
     }
 }
@@ -1242,7 +1209,7 @@ void setup_peri_base_virt(
     volatile unsigned *&peri_base_virt)
 {
     int mem_fd;
-    unsigned gpio_base = (bcm_host_get_peripheral_address());
+    unsigned gpio_base = gpioBase();
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -1267,7 +1234,7 @@ void setup_peri_base_virt(
 
 int main(const int argc, char *const argv[])
 {
-    printf("\nRunning on: %s.\n", version[ver]);
+    printf("\nRunning on: %s.\n", version());
     getPLLD(); // Get PLLD Frequency // TODO: Can we get this programmatically?
 
     // catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
