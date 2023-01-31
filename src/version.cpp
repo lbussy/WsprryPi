@@ -17,3 +17,8 @@ const char* version()
             };
     return vertext[ver()];
 }
+
+unsigned gpioBase()
+{
+    return bcm_host_get_peripheral_address();
+}

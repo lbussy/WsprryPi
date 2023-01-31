@@ -24,7 +24,7 @@ void setup_io()
 {
     int mem_fd;
     // Set up a memory regions to access GPIO
-    unsigned gpio_base = ( bcm_host_get_peripheral_address() + 0x200000 );
+    unsigned gpio_base = gpioBase() + 0x200000;
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {

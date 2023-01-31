@@ -5,5 +5,6 @@
 
 int ver();
 const char* version();
+unsigned gpioBase();
 
 #endif // _VERSION_H

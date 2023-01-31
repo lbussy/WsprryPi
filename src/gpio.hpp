@@ -8,4 +8,6 @@
 #include <unistd.h>
 #include <string>
 
+#include "version.hpp"
+
 #endif // _GPIO_H
