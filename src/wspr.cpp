@@ -308,6 +308,7 @@ void disable_clock()
 // Turn on TX
 void txon()
 {
+    pinHigh(LED_PIN);
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -349,6 +350,7 @@ void txoff()
 {
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
+    pinLow(LED_PIN);
     disable_clock();
 }
 
@@ -1195,6 +1197,7 @@ void open_mbox()
 // Called when exiting or when a signal is received.
 void cleanup()
 {
+    pinLow(LED_PIN);
     disable_clock();
     unSetupDMA();
     deallocMemPool();
@@ -1310,6 +1313,7 @@ int main(const int argc, char *const argv[])
 {
     printf("\nRunning on: %s.\n", version());
     getPLLD(); // Get PLLD Frequency
+    setupGPIO(LED_PIN);
 
     // catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
     for (int i = 0; i < 64; i++)
