@@ -200,6 +200,60 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
+// GPIO/DIO Control:
+
+void setupGPIO(int pin)
+{
+    // Set up gpio pointer for direct register access
+    int mem_fd;
+    // Set up a memory regions to access GPIO
+    unsigned gpio_base = gpioBase() + 0x200000;
+
+    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
+    {
+        printf("Fail: Unable to open /dev/mem\n");
+        exit(-1);
+    }
+
+    /* mmap GPIO */
+    gpio_map = mmap(
+        NULL,                   // Any adddress in our space will do
+        BLOCK_SIZE,             // Map length
+        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+        MAP_SHARED,             // Shared with other processes
+        mem_fd,                 // File to map
+        gpio_base               // Offset to GPIO peripheral
+    );
+
+    close(mem_fd); // No need to keep mem_fd open after mmap
+
+    if (gpio_map == MAP_FAILED)
+    {
+        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set!
+        exit(-1);
+    }
+
+    // Always use volatile pointer!
+    gpio = (volatile unsigned *)gpio_map;
+
+    // Set GPIO pins to output
+    // Must use INP_GPIO before we can use OUT_GPIO
+    INP_GPIO(pin);
+    OUT_GPIO(pin);
+}
+
+void pinHigh(int pin)
+{
+    GPIO_SET = 1 << pin;
+}
+
+void pinLow(int pin)
+{
+    GPIO_CLR = 1 << pin;
+}
+
+// GPIO/DIO Control^
+
 void getPLLD()
 {
     // Nominal clock frequencies
@@ -1254,60 +1308,6 @@ void setup_peri_base_virt(
     }
     close(mem_fd);
 }
-
-// GPIO/DIO Control:
-
-void setupGPIO(int pin)
-{
-    // Set up gpio pointer for direct register access
-    int mem_fd;
-    // Set up a memory regions to access GPIO
-    unsigned gpio_base = gpioBase() + 0x200000;
-
-    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
-    {
-        printf("Fail: Unable to open /dev/mem\n");
-        exit(-1);
-    }
-
-    /* mmap GPIO */
-    gpio_map = mmap(
-        NULL,                   // Any adddress in our space will do
-        BLOCK_SIZE,             // Map length
-        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
-        MAP_SHARED,             // Shared with other processes
-        mem_fd,                 // File to map
-        gpio_base               // Offset to GPIO peripheral
-    );
-
-    close(mem_fd); // No need to keep mem_fd open after mmap
-
-    if (gpio_map == MAP_FAILED)
-    {
-        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set!
-        exit(-1);
-    }
-
-    // Always use volatile pointer!
-    gpio = (volatile unsigned *)gpio_map;
-
-    // Set GPIO pins to output
-    // Must use INP_GPIO before we can use OUT_GPIO
-    INP_GPIO(pin);
-    OUT_GPIO(pin);
-}
-
-void pinHigh(int pin)
-{
-    GPIO_SET = 1 << pin;
-}
-
-void pinLow(int pin)
-{
-    GPIO_CLR = 1 << pin;
-}
-
-// GPIO/DIO Control^
 
 int main(const int argc, char *const argv[])
 {
