@@ -17,7 +17,7 @@ mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
 wspr: mailbox.o wspr.hpp wspr.cpp mailbox.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) mailbox.o version.hpp version.cpp wspr.hpp wspr.cpp -owspr $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) mailbox.o version.hpp version.cpp wspr.hpp wspr.cpp -owspr $(LDLIBS)
 
 clean:
 	$(RM) *.o wspr gpiotest
