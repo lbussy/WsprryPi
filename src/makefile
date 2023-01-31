@@ -1,4 +1,6 @@
-prefix=/usr/local
+prefix = /usr/local
+
+LED_PIN = 18
 
 CFLAGS += -Wall
 CXXFLAGS += -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5
@@ -9,7 +11,7 @@ LDLIBS += -lm -lbcm_host
 all: wspr
 
 gpiotest: version.hpp version.cpp gpio.hpp gpio.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) version.hpp version.cpp gpio.hpp gpio.cpp -ogpiotest $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) version.hpp version.cpp gpio.hpp gpio.cpp -ogpiotest $(LDLIBS)
 
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c

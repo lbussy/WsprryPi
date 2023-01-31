@@ -1,7 +1,5 @@
 #include "gpio.hpp"
 
-#define LED_PIN 18 // Flash this pin
-
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
