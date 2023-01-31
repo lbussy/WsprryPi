@@ -202,8 +202,9 @@ static struct
 
 // GPIO/DIO Control:
 
-void setupGPIO(int pin)
+void setupGPIO(int pin = 0)
 {
+    if (pin == 0) return;
     // Set up gpio pointer for direct register access
     int mem_fd;
     // Set up a memory regions to access GPIO
@@ -242,13 +243,15 @@ void setupGPIO(int pin)
     OUT_GPIO(pin);
 }
 
-void pinHigh(int pin)
+void pinHigh(int pin = 0)
 {
+    if (pin == 0) return;
     GPIO_SET = 1 << pin;
 }
 
-void pinLow(int pin)
+void pinLow(int pin = 0)
 {
+    if (pin == 0) return;
     GPIO_CLR = 1 << pin;
 }
 
