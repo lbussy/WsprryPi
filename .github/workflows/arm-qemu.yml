@@ -1,0 +1,94 @@
+name: ARM (qemu) builder
+on:
+#  schedule:
+#    # Nightly build at 3:42 A.M.
+#    - cron: "42 3 */1 * *"
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  # Manual run
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    # The host should always be linux
+    name: Build wheel for cp${{ matrix.make_command }}-${{ matrix.arch }}
+#    runs-on: [self-hosted, linux, X64]
+    runs-on: ubuntu-latest
+
+    # Run steps on a matrix of 4 arch/distro combinations
+    strategy:
+      fail-fast: false
+      matrix:
+        # Removing '3.10' for now
+        make_command: ['3.8', '3.9']
+#        arch: [aarch64, armv7]
+        # arch: [aarch64]
+        arch: [armv7]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: thorrak/run-on-arch-action@master
+        name: Build artifact
+        id: build
+        with:
+          arch: ${{ matrix.arch }}
+          distro: bullseye
+
+          # Not required, but speeds up builds
+          githubToken: ${{ github.token }}
+
+          # Create an artifacts directory
+          setup: |
+            mkdir -p "${PWD}/artifacts_${{ matrix.arch }}"
+
+          # Mount the artifacts directory as /artifacts in the container
+          dockerRunArgs: |
+            --volume "${PWD}/artifacts_${{ matrix.arch }}:/artifacts"
+
+          # Pass some environment variables to the container
+          env: | # YAML, but pipe character is necessary
+            artifact_name: git-${{ matrix.arch }}
+
+          # The shell to run commands with in the container
+          shell: /bin/sh
+
+          # Install some dependencies in the container. This speeds up builds if
+          # you are also using githubToken. Any dependencies installed here will
+          # be part of the container image that gets cached, so subsequent
+          # builds don't have to re-install them. The image layer is cached
+          # publicly in your project's package repository, so it is vital that
+          # no secrets are present in the container state or logs.
+          install: |
+            apt-get update -q -y
+            apt-get install
+            apt-get install -y build-essential git cmake wget
+            apt-get install -y gcc g++
+            apt-get install -y libssl-dev libncurses5-dev libsqlite3-dev libreadline-dev libtk8.6 libgdm-dev libdb4o-cil-dev libpcap-dev
+            apt-get upgrade -y
+            apt-get install -y libpq-dev
+            apt-get install -y libjpeg62 zlib1g libtiff5 libfreetype6 zlib1g-dev libtiff5-dev libfreetype6-dev
+            apt-get install -y libjbig0 liblcms2-2 libopenjp2-7 libtiff5 libwebp6 libwebpdemux2 libwebpmux3
+            apt-get install -y libssl-dev libffi-dev cargo
+            apt-get install -y libaom0 libatlas3-base libavcodec58 libavformat58 libavutil56 libbluray2 libcairo2 libchromaprint1  libdatrie1 libdrm2 libfontconfig1 libgdk-pixbuf2.0-0 libgfortran5 libgme0 libgraphite2-3 libgsm1 libharfbuzz0b libilmbase25 libjbig0 libmp3lame0 libmpg123-0 libogg0 libopenexr25 libopenjp2-7 libopenmpt0 libopus0 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libpixman-1-0 librsvg2-2 libshine3 libsnappy1v5 libsoxr0 libspeex1 libssh-gcrypt-4 libswresample3 libswscale5 libthai0 libtheora0 libtiff5 libtwolame0 libva-drm2 libva-x11-2 libva2 libvdpau1 libvorbis0a libvorbisenc2 libvorbisfile3 libwavpack1 libwebp6 libwebpmux3 libx264-160 libxcb-render0 libxcb-shm0 libxfixes3 libxrender1 libxvidcore4 libzvbi0
+            apt-get install -y libcodec2-0.9 libvpx6 libx265-192
+            apt-get install -y gfortran libopenblas-dev libatlas-base-dev
+            apt-get install -y libbluetooth-dev
+            ./configure --enable-optimizations
+            make ${{ matrix.make_command }}
+
+          # Produce a binary artifact and place it in the mounted volume
+          run: |
+            git clone https://lbussy:${{ github.token }}@github.com/lbussy/wsprrypi.git
+            cd wsprrypi/src
+            tar cfJ /artifacts/${{ matrix.make_command }}.tar.xz wspr
+#            cp $(which git) "/artifacts/${artifact_name}"
+#            echo "Produced artifact at /artifacts/${artifact_name}"
+
+      - name: Show the artifact
+        # Items placed in /artifacts in the container will be in
+        # ${PWD}/artifacts on the host.
+        run: |
+          ls -al "${PWD}/artifacts_${{ matrix.arch }}_${{ matrix.python }}"
