@@ -10,3 +10,5 @@ mailbox.o
 .pio
 .vscode
 .DS_Store
+
+docs/_build
