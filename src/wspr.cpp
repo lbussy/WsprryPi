@@ -363,7 +363,7 @@ void disable_clock()
 }
 
 // Turn on TX
-void txon(bool *led = false)
+void txon(bool led = false)
 {
     if (led)
     {
@@ -406,7 +406,7 @@ void txon(bool *led = false)
 }
 
 // Turn transmitter on
-void txoff(bool *led = false)
+void txoff(bool led = false)
 {
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
@@ -681,7 +681,7 @@ void wspr(
     const char *l_pre,
     const char *dbm,
     unsigned char *symbols
-    bool *led)
+    bool led)
 {
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
