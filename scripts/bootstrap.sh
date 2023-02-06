@@ -516,8 +516,6 @@ main() {
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
     echo -e "\nRunning on: $sysver\n"
-    echo $LINK
-    exit
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
