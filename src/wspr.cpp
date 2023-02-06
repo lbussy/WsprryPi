@@ -680,7 +680,7 @@ void wspr(
     const char *call,
     const char *l_pre,
     const char *dbm,
-    unsigned char *symbols
+    unsigned char *symbols,
     bool led)
 {
     // pack prefix in nadd, call in n1, grid, dbm in n2
