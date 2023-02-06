@@ -888,7 +888,7 @@ void parse_commandline(
     double &test_tone,
     bool &no_delay,
     mode_type &mode,
-    int &terminate
+    int &terminate,
     bool &led)
 {
     // Default values
