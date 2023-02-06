@@ -25,7 +25,7 @@ OWNER="lbussy"
 # These should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 THISSCRIPT="bootstrap.sh"
-LINK="https://raw.githubusercontent.com/$OWNER/$PACKAGE/$GITBRNCH/bootstrap.sh"
+LINK="https://raw.githubusercontent.com/$OWNER/$PACKAGE/$GITBRNCH/scripts/bootstrap.sh"
 GITRAW="https://raw.githubusercontent.com/$OWNER"
 GITHUB="https://github.com/$OWNER"
 
