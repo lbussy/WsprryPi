@@ -363,9 +363,12 @@ void disable_clock()
 }
 
 // Turn on TX
-void txon()
+void txon(bool *led = false)
 {
-    pinHigh(LED_PIN);
+    if (led)
+    {
+        pinHigh(LED_PIN);
+    }
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -403,11 +406,14 @@ void txon()
 }
 
 // Turn transmitter on
-void txoff()
+void txoff(bool *led = false)
 {
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
-    pinLow(LED_PIN);
+    if (led)
+    {
+        pinLow(LED_PIN);        
+    }
     disable_clock();
 }
 
@@ -674,7 +680,8 @@ void wspr(
     const char *call,
     const char *l_pre,
     const char *dbm,
-    unsigned char *symbols)
+    unsigned char *symbols
+    bool *led)
 {
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
@@ -849,6 +856,8 @@ void print_usage()
     std::cout << "  -t --test-tone freq" << std::endl;
     std::cout << "    Simply output a test tone at the specified frequency. Only used" << std::endl;
     std::cout << "    for debugging and to verify calibration." << std::endl;
+    std::cout << "  -l --led" << std::endl;
+    std::cout << "    Use LED when transmitting (TAPR board)." << std::endl;
     std::cout << "  -n --no-delay" << std::endl;
     std::cout << "    Transmit immediately, do not wait for a WSPR TX window. Used" << std::endl;
     std::cout << "    for testing only." << std::endl;
@@ -879,7 +888,8 @@ void parse_commandline(
     double &test_tone,
     bool &no_delay,
     mode_type &mode,
-    int &terminate)
+    int &terminate
+    bool &led)
 {
     // Default values
     ppm = 0;
@@ -890,6 +900,7 @@ void parse_commandline(
     no_delay = false;
     mode = WSPR;
     terminate = -1;
+    led = false;
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -901,6 +912,7 @@ void parse_commandline(
         {"offset", no_argument, 0, 'o'},
         {"test-tone", required_argument, 0, 't'},
         {"no-delay", no_argument, 0, 'n'},
+        {"led", no_argument, 0, 'l'},
         {0, 0, 0, 0}};
 
     while (true)
@@ -969,6 +981,9 @@ void parse_commandline(
             break;
         case 'n':
             no_delay = true;
+            break;
+        case 'l':
+            led = true;
             break;
         case '?':
             /* getopt_long already printed an error message. */
@@ -1345,6 +1360,7 @@ int main(const int argc, char *const argv[])
     bool no_delay;
     mode_type mode;
     int terminate;
+    bool led;
     parse_commandline(
         argc,
         argv,
@@ -1359,7 +1375,8 @@ int main(const int argc, char *const argv[])
         test_tone,
         no_delay,
         mode,
-        terminate);
+        terminate,
+        led);
     int nbands = center_freq_set.size();
 
     // Initial configuration
@@ -1384,7 +1401,7 @@ int main(const int argc, char *const argv[])
         std::cout << temp.str();
         std::cout << "Press CTRL-C to exit!" << std::endl;
 
-        txon();
+        txon(led);
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1423,7 +1440,7 @@ int main(const int argc, char *const argv[])
 
         // Create WSPR symbols
         unsigned char symbols[162];
-        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols);
+        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, led);
         /*
         printf("WSPR codeblock: ");
         for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
@@ -1505,7 +1522,7 @@ int main(const int argc, char *const argv[])
                 struct timeval sym_start;
                 struct timeval diff;
                 int bufPtr = 0;
-                txon();
+                txon(led);
                 for (int i = 0; i < 162; i++)
                 {
                     gettimeofday(&sym_start, NULL);
@@ -1523,7 +1540,7 @@ int main(const int argc, char *const argv[])
                 n_tx++;
 
                 // Turn transmitter off
-                txoff();
+                txoff(led);
 
                 // End timestamp
                 gettimeofday(&tvEnd, NULL);
