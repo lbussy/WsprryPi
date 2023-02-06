@@ -19,7 +19,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 # Set branch
 BRANCH="scripts"
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
-PACKAGE="WsppryPi"
+PACKAGE="WsprryPi"
 OWNER="lbussy"
 
 # These should not change
