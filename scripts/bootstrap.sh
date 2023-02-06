@@ -460,7 +460,6 @@ packages() {
 ############
 
 check_wsprrypi() {
-    # TODO:  Figure out how we want to do this
     if [ -d "$HOMEPATH/$GITPROJ" ]; then
         if [ -n "$(ls -A "$HOMEPATH/$GITPROJ")" ]; then
             echo -e "\nWarning: $HOMEPATH/$GITPROJ exists and is not empty."
@@ -484,7 +483,6 @@ check_wsprrypi() {
 ############
 
 clone_repo() {
-    # TODO: Clone repo instead of install
     echo -e "\nCloning $GITPROJ repo."
     eval "sudo -u $REALUSER git clone $GITCMD $HOMEPATH/$GITPROJ"||die
     cd "$HOMEPATH/$GITPROJ"||die
@@ -518,12 +516,7 @@ main() {
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
-    if [[ "$VERBOSE" == "true" ]]; then
-        true
-    else
-        true
-    fi
-    # check_wsprrypi # See if WsprryPi is installed
+    check_wsprrypi # See if WsprryPi is installed
     # checkpass # Check for default password
     # settime # Set timezone
     # host_name # Change hostname
