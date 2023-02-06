@@ -5,3 +5,7 @@ The source code has been modified to create a single version of `wspr` that is e
 *****
 TODO
 *****
+
+    # Packages to be installed/checked via apt
+    APTPACKAGES="libraspberrypi-dev raspberrypi-kernel-headers"
+
