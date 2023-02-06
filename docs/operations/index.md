@@ -75,15 +75,15 @@ The minimum command line configuration to transmit a WSPR beacon is:
 
 e.g.
 
-`wspr-tapr NXXX FM18lv 20 20m`
+`wspr NXXX FM18lv 20 20m`
 
-This command line uses the TAPR version of WsprryPi (`wspr-tapr`); your callsign is `NXXX`; you are located in Washington, DC (`FM18lv`), transmitting with 20dBm of power (`20`), on the `20m` WSPR frequency (14.097100 MHz.)
+Your callsign is `NXXX`; you are located in Washington, DC (`FM18lv`), transmitting with 20dBm of power (`20`), on the `20m` WSPR frequency (14.097100 MHz.)
 
 Note that `callsign`, `locator`, and `tx_power_dBm` are used to fill in the appropriate fields of the WSPR message; `
 
 - User Context: You must generally use `sudo` to execute wspr because it directly accesses memory segments of the operating system. If you install with the makefile or provided scripting, the executable has been changed to `setuid` to execute as the root user no matter the execution context, meaning you do not need to use `sudo`. An error will be displayed if the executable cannot execute as root.
 
-- Executable: The name of the executable is `wspr`. If you are using the TAPR Hat, you may optionally use the `wspr-tapr` executable, which will leverage the onboard LED to indicate an active transmission. The LED is connected to Pin 12 (GPIO18, BCM18.)
+- Executable: The name of the executable is `wspr`.
 
 - Callsign: This is your registered callsign. Please do not make things up or use another person's callsign. It is illegal, and immoral, and you will eventually annoy someone enough for them to find and report you.
 
@@ -138,9 +138,13 @@ Transmit a constant test tone at 780 kHz:
 
 `wspr --test-tone 780e3`
 
-Using callsign N9NNN, locator EM10, and TX power 33 dBm, transmit a single WSPR transmission on the 20m band using NTP-based frequency offset calibration.
+Using callsign N9NNN, locator EM10, and TX power 33 dBm, transmit a single WSPR transmission on the 20m band using NTP-based frequency offset calibration:
 
 `wspr N9NNN EM10 33 20m`
+
+The same as above, but using the red LED on transmit (TAPR Hat) to indicate an active transmission. The LED is connected to Pin 12 (GPIO18, BCM18):
+
+`wspr --led N9NNN EM10 33 20m`
 
 The same as above, but without NTP calibration:
 
