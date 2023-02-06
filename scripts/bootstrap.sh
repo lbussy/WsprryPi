@@ -9,9 +9,9 @@
 ############
 
 # General constants
-declare THISSCRIPT GITBRNCH GITURL GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY SOURCE SCRIPTSOURCE SCRIPTPATH CMDLINE GITRAW GITHUB CLONE
-declare SCRIPTNAME GITCMD GITTEST APTPACKAGES VERBOSE LINK BRANCH
+declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
+declare REPLY CMDLINE GITRAW GITHUB
+declare VERBOSE LINK BRANCH
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
@@ -37,15 +37,9 @@ init() {
     # Set up some project variables we won't have running as a curled script
     CMDLINE="curl -L $LINK | BRANCH=$GITBRNCH sudo bash"
     # Cobble together some strings
-    SCRIPTNAME="${THISSCRIPT%%.*}"
     GITPROJ="${PACKAGE,,}"
     GITHUB="$GITHUB/$GITPROJ.git"
     GITRAW="$GITRAW/$GITPROJ/$GITBRNCH/$THISSCRIPT"
-    GITCMD="$GITHUB"
-    # Website for network test
-    GITTEST="$GITHUB"
-    # Packages to be installed/checked via apt
-    APTPACKAGES="git libraspberrypi-dev raspberrypi-kernel-headers"
 }
 
 ############
@@ -189,15 +183,6 @@ checkroot() {
             exit 1
         fi
     fi
-    # And get the user home directory
-    shadow="$( (getent passwd "$REALUSER") 2>&1)"
-    retval="$?"
-    if [ "$retval" -eq 0 ]; then
-        HOMEPATH="$(echo "$shadow" | cut -d':' -f6)"
-    else
-        echo -e "\nUnable to retrieve $REALUSER's home directory. Manual install may be necessary."
-        exit 1
-    fi
 }
 
 ############
@@ -268,21 +253,21 @@ die() {
 ############
 
 instructions() {
-    local any sp10 sp21
-    sp10="$(printf ' %.0s' {1..10})"
-    sp21="$(printf ' %.0s' {1..21})"
+    local sp8 sp23
+    sp8="$(printf ' %.0s' {1..8})"
+    sp23="$(printf ' %.0s' {1..23})"
     clear
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
   cat << EOF
 
-$DOT$BGBLK$FGYLW$sp10 __          __                          _____ _ $sp21
-$DOT$BGBLK$FGYLW$sp10 \ \        / /                         |  __ (_)$sp21
-$DOT$BGBLK$FGYLW$sp10  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp21
-$DOT$BGBLK$FGYLW$sp10   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp21
-$DOT$BGBLK$FGYLW$sp10    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp21
-$DOT$BGBLK$FGYLW$sp10     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp21
-$DOT$BGBLK$FGYLW$sp10                | |               __/ |          $sp21
-$DOT$BGBLK$FGYLW$sp10                |_|              |___/           $sp21
+$DOT$BGBLK$FGYLW$sp8 __          __                          _____ _ $sp23
+$DOT$BGBLK$FGYLW$sp8 \ \        / /                         |  __ (_)$sp23
+$DOT$BGBLK$FGYLW$sp8  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp23
+$DOT$BGBLK$FGYLW$sp8   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp23
+$DOT$BGBLK$FGYLW$sp8    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp23
+$DOT$BGBLK$FGYLW$sp8     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp23
+$DOT$BGBLK$FGYLW$sp8                | |               __/ |          $sp23
+$DOT$BGBLK$FGYLW$sp8                |_|              |___/           $sp23
 $DOT$BGBLK$FGGRN$HHR$RESET
 You will be presented with some choices during the install. Most frequently
 you will see a 'yes or no' choice, with the default choice capitalized like
@@ -300,39 +285,6 @@ choice.
 EOF
     read -n 1 -s -r -p  "Press any key when you are ready to proceed. " < /dev/tty
     echo -e ""
-}
-
-############
-### Check for default 'pi' password and gently prompt to change it now
-############
-
-checkpass() {
-    local user_exists salt extpass match badpwd yn setpass
-    user_exists=$(id -u 'pi' > /dev/null 2>&1; echo $?)
-    if [ "$user_exists" -eq 0 ]; then
-        salt=$(getent shadow "pi" | cut -d$ -f3)
-        extpass=$(getent shadow "pi" | cut -d: -f2)
-        match=$(python3 -c 'import crypt; print(crypt.crypt("'"raspberry"'", "$6$'${salt}'"))')
-        [ "${match}" == "${extpass}" ] && badpwd=true || badpwd=false
-        if [ "$badpwd" = true ]; then
-            echo -e "\nDefault password found for the 'pi' account. This should be changed."
-            while true; do
-                read -rp "Do you want to change the password now? [Y/n]: " yn  < /dev/tty
-                case "$yn" in
-                    '' ) setpass=1; break ;;
-                    [Yy]* ) setpass=1; break ;;
-                    [Nn]* ) break ;;
-                    * ) echo "Enter [y]es or [n]o." ;;
-                esac
-            done
-        fi
-        if [ -n "$setpass" ]; then
-            echo
-            until passwd pi < /dev/tty; do sleep 2; echo; done
-            echo -e "\nYour password has been changed, remember it or write it down now."
-            sleep 5
-        fi
-    fi
 }
 
 ############
@@ -366,128 +318,12 @@ settime() {
 }
 
 ############
-### Change hostname
-###########
-
-host_name() {
-    local oldHostName yn sethost host1 host2 newHostName
-    oldHostName=$(hostname)
-    if [ "$oldHostName" = "raspberrypi" ]; then
-        while true; do
-            echo -e "\nYour hostname is set to '$oldHostName'. Each machine on your network should"
-            echo -e "have a unique name to prevent issues. Do you want to change it now, maybe"
-            read -rp "to 'wsprrypi'? [Y/n]: " yn < /dev/tty
-            case "$yn" in
-                '' ) sethost=1; break ;;
-                [Yy]* ) sethost=1; break ;;
-                [Nn]* ) break ;;
-                * ) echo "Enter [y]es or [n]o." ; sleep 1 ; echo ;;
-            esac
-        done
-        echo
-        if [ -n "$sethost" ]; then
-            echo -e "You will now be asked to enter a new hostname."
-            while
-            read -rp "Enter new hostname: " host1  < /dev/tty
-            read -rp "Enter new hostname again: " host2 < /dev/tty
-            [[ -z "$host1" || "$host1" != "$host2" ]]
-            do
-                echo -e "\nHost names blank or do not match.\n";
-                sleep 1
-            done
-            echo
-            newHostName=$(echo "$host1" | awk '{print tolower($0)}')
-            eval "sed -i 's/$oldHostName/$newHostName/g' /etc/hosts"||die
-            eval "sed -i 's/$oldHostName/$newHostName/g' /etc/hostname"||die
-            hostnamectl set-hostname "$newHostName"
-            /etc/init.d/avahi-daemon restart
-            echo -e "\nYour hostname has been changed to '$newHostName'."
-            echo -e "\n(If your hostname is part of your prompt, your prompt will not change until"
-            echo -e "you log out and in again.  This will have no effect on anything but the way"
-            echo -e "the prompt looks.)"
-            sleep 5
-        fi
-    fi
-}
-
-############
-### Install or update required packages
-############
-
-packages() {
-    local lastUpdate nowTime pkgOk upgradesAvail pkg
-    echo -e "\nUpdating any expired apt keys."
-    for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
-	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
-    done
-    echo -e "\nFixing any broken installations."
-    sudo apt-get --fix-broken install -y||die
-    # Run 'apt update' if last run was > 1 week ago
-    lastUpdate=$(stat -c %Y /var/lib/apt/lists)
-    nowTime=$(date +%s)
-    if [ $((nowTime - lastUpdate)) -gt 604800 ]; then
-        echo -e "\nLast apt update was over a week ago. Running apt update before updating"
-        echo -e "dependencies."
-        apt-get update -yq||die
-    fi
-    
-    # Now install any necessary packages if they are not installed
-    echo -e "\nChecking and installing required dependencies via apt."
-    for pkg in $APTPACKAGES; do
-        pkgOk=$(dpkg-query -W --showformat='${Status}\n' "$pkg" | \
-        grep "install ok installed")
-        if [ -z "$pkgOk" ]; then
-            echo -e "\nInstalling '$pkg'."
-            apt-get install "$pkg" -y -q=2||die
-        fi
-    done
-    
-    # Get list of installed packages with updates available
-    upgradesAvail=$(dpkg --get-selections | xargs apt-cache policy {} | \
-        grep -1 Installed | sed -r 's/(:|Installed: |Candidate: )//' | \
-    uniq -u | tac | sed '/--/I,+1 d' | tac | sed '$d' | sed -n 1~2p)
-    # Loop through the required packages and see if they need an upgrade
-    for pkg in $APTPACKAGES; do
-        if [[ "$upgradesAvail" == *"$pkg"* ]]; then
-            echo -e "\nUpgrading '$pkg'."
-            apt-get install "$pkg" -y -q=2||die
-        fi
-    done
-}
-
-############
 ### Check for an existing WsprryPi installation
 ############
 
 check_wsprrypi() {
-    if [ -d "$HOMEPATH/$GITPROJ" ]; then
-        if [ -n "$(ls -A "$HOMEPATH/$GITPROJ")" ]; then
-            echo -e "\nWarning: $HOMEPATH/$GITPROJ exists and is not empty."
-        else
-            echo -e "\nWarning: $HOMEPATH/$GITPROJ exists."
-        fi
-        echo -e "\nIf you are sure you do not need it, or you are starting over completely, we can"
-        echo -e "delete the old repo by accepting the below prompt."
-        read -rp "Remove $HOMEPATH/$GITPROJ? [y/N] " < /dev/tty
-        if [[ "$REPLY" =~ ^[Yy]$ ]]; then
-            rm -fr "${HOMEPATH:?}/$GITPROJ"
-        else
-            echo -e "\nLeaving $HOMEPATH/$GITPROJ in place and exiting."
-            exit 1
-        fi
-    fi
-}
-
-############
-### Clone WsprryPi repo
-############
-
-clone_repo() {
-    echo -e "\nCloning $GITPROJ repo."
-    eval "sudo -u $REALUSER git clone $GITCMD $HOMEPATH/$GITPROJ"||die
-    cd "$HOMEPATH/$GITPROJ"||die
-    eval "sudo -u $REALUSER git checkout $GITBRNCH"||die
-    cd "$HOMEPATH"||die
+    echo -e "In a perfect world I would be checking for an existing install here."
+    true # DEBUG
 }
 
 ############
@@ -495,8 +331,8 @@ clone_repo() {
 ############
 
 install_program() {
-    true
-    # TODO: Install vs clone
+    echo -e "In a perfect world I would be installing something here."
+    # TODO: Install
 }
 
 ############
@@ -504,7 +340,6 @@ install_program() {
 ############
 
 main() {
-    [[ "$*" == *"-clone"* ]] && CLONE=true # Clone repo only
     VERBOSE=true  # Do not trim logs
     log "$@" # Start logging
     init "$@" # Get constants
@@ -517,12 +352,8 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     check_wsprrypi # See if WsprryPi is installed
-    # checkpass # Check for default password
-    # settime # Set timezone
-    # host_name # Change hostname
-    # packages # Install and update required packages
-    # clone_repo # Clone tools repo
-    # TODO:  Are we done?  Any follow-up?
+    settime # Set timezone
+    install_program # Install services
 }
 
 ############
