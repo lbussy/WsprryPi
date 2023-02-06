@@ -179,6 +179,7 @@ checkroot() {
         if [ "$retval" -eq 0 ]; then
             echo -e "\nNot running as root, relaunching correctly."
             sleep 2
+            echo "$CMDLINE" && exit
             eval "$CMDLINE"
             exit "$?"
         else
