@@ -497,7 +497,7 @@ clone_repo() {
 ############
 
 install_program() {
-    # TODO: Install vs clone
+    echo.# TODO: Install vs clone
 }
 
 ############
