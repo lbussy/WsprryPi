@@ -35,6 +35,7 @@ GITHUB="https://github.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
+    echo $LINK || exit
     CMDLINE="curl -L $LINK | BRANCH=$GITBRNCH sudo bash"
     # Cobble together some strings
     SCRIPTNAME="${THISSCRIPT%%.*}"
