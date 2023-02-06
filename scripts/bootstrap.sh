@@ -57,7 +57,7 @@ timestamp() {
     [[ "$VERBOSE" == "true" ]] && length=999 || length=60 # Allow full logging
     while read -r; do
         # Clean and trim line to 60 characters to allow for timestamp on one line
-        REPLY="$(clean "$REPLY" $length)"
+        REPLY="$(clean "$REPLY" "$length")"
         # Strip blank lines
         if [ -n "$REPLY" ]; then
             # Add date in '2019-02-26 08:19:22' format to log
@@ -487,9 +487,9 @@ clone_repo() {
     # TODO: Clone repo instead of install
     echo -e "\nCloning $GITPROJ repo."
     eval "sudo -u $REALUSER git clone $GITCMD $HOMEPATH/$GITPROJ"||die
-    cd "$HOMEPATH/$GITPROJ"
+    cd "$HOMEPATH/$GITPROJ"||die
     eval "sudo -u $REALUSER git checkout $GITBRNCH"||die
-    cd "$HOMEPATH"
+    cd "$HOMEPATH"||die
 }
 
 ############
@@ -497,7 +497,8 @@ clone_repo() {
 ############
 
 install_program() {
-    echo.# TODO: Install vs clone
+    true
+    # TODO: Install vs clone
 }
 
 ############
@@ -518,9 +519,9 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     if [[ "$VERBOSE" == "true" ]]; then
-
+        true
     else
-
+        true
     fi
     # check_wsprrypi # See if WsprryPi is installed
     # checkpass # Check for default password
