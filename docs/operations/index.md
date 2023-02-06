@@ -60,9 +60,11 @@ Usage: (WSPR --help output):
     -t --test-tone freq
       Simply output a test tone at the specified frequency. Only used
       for debugging and to verify calibration.
+    -l --led
+      Use LED when transmitting (TAPR board).
     -n --no-delay
-      Transmit immediately, do not wait for a WSPR TX window. Used for
-      testing only.
+      Transmit immediately, do not wait for a WSPR TX window. Used
+      for testing only.
 ```
 
 ### Mandatory Command Line Entries
