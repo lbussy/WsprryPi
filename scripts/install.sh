@@ -309,7 +309,6 @@ settime() {
             esac
         fi
     done
-    echo
 }
 
 ############
@@ -560,7 +559,7 @@ main() {
         [Nn]* ) echo ;;
         * ) echo ;;
     esac
-    echo -e "\n***Script $THISSCRIPT complete.***\n"
+    echo -e "***Script $THISSCRIPT complete.***\n"
 }
 
 ############
