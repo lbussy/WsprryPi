@@ -511,9 +511,9 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
-    do_unit "wspr" # Install/upgrade wspr daemon
+    do_unit "wspr" "bash" # Install/upgrade wspr daemon
     # TODO: Make shutdown button install a choice
-    do_unit "shutdown-button" # Install/upgrade shutdown-button daemon
+    do_unit "shutdown-button" "python3" # Install/upgrade shutdown-button daemon
 }
 
 ############
