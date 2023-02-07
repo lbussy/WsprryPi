@@ -8,7 +8,7 @@
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW PACKAGENAME
+declare REPLY CMDLINE GITRAW PACKAGENAME VERSION
 declare VERBOSE BRANCH
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
@@ -16,6 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="scripts"
+VERSION="0.1"
 # Set this script
 THISSCRIPT="bootstrap.sh"
 # Set Project
@@ -324,6 +325,7 @@ settime() {
 ############
 
 function compare() {
+    echo -e "DEBUG: Entering compare() with src=$1 and tgt=$2"
     local src tgt
     src="$1"
     tgt="$2"
@@ -344,6 +346,7 @@ function compare() {
 ############
 
 do_unit() {
+    echo -e "DEBUG: Entering do_unit() with unit=$1 and ext=$2"
     local unit executable ext extension executable retval
     unit="$1"
     ext="$2"
@@ -372,6 +375,7 @@ do_unit() {
 ############
 
 copy_file() {
+    echo -e "DEBUG: Entering copy_file() with scriptName=$1"
     local scriptPath scriptName fullName curlFile
     scriptName="$1"
     scriptPath="/usr/local/bin"
@@ -397,6 +401,7 @@ copy_file() {
 ############
 
 checkdaemon() {
+    echo -e "DEBUG: Entering checkdaemon() with daemonName=$1"
     local daemonName unitFile src verchk
     daemonName="${1,,}"
     unitFile="/etc/systemd/system/$daemonName.service"
@@ -441,6 +446,7 @@ checkdaemon() {
 ############
 
 createdaemon () {
+    echo -e "DEBUG: Entering checkdaemon() with scriptName=$1 daemonName=$2 userName=$3 productName=$4 processShell=$5"
     local scriptName daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
     unitFile="$unitFileLocation/$daemonName.service"
