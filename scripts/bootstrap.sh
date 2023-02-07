@@ -354,7 +354,7 @@ do_unit() {
     if [ "$ext" == "bash" ]; then
         extension=".sh"
         executable="bash"
-    elif [ "$ext" == "python" ]; then
+    elif [ "$ext" == "python3" ]; then
         extension=".py"
         executable="python3"
     else
