@@ -8,26 +8,24 @@
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW GITHUB PACKAGENAME
-declare VERBOSE LINK BRANCH
+declare REPLY CMDLINE GITRAW PACKAGENAME
+declare VERBOSE BRANCH
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="scripts"
+# Set this script
+THISSCRIPT="bootstrap.sh"
+# Set Project
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
-
 OWNER="lbussy"
-
-# These should not change
+# This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
-THISSCRIPT="bootstrap.sh"
-LINK="https://raw.githubusercontent.com/$OWNER/$PACKAGE/$GITBRNCH/scripts/bootstrap.sh"
 GITRAW="https://raw.githubusercontent.com/$OWNER"
-GITHUB="https://github.com/$OWNER"
 
 ############
 ### Init
@@ -35,11 +33,9 @@ GITHUB="https://github.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-    CMDLINE="curl -L $LINK | BRANCH=$GITBRNCH sudo bash"
+    CMDLINE="curl -L "$GITRAW/$PACKAGE/$GITBRNCH/scripts/$THISSCRIPT" | BRANCH=$GITBRNCH sudo bash"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
-    GITHUB="$GITHUB/$GITPROJ.git"
-    GITRAW="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$THISSCRIPT"
 }
 
 ############
