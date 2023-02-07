@@ -348,10 +348,10 @@ do_unit() {
     unit="$1"
     ext="$2"
     if [ "$ext" == "bash" ]; then
-        extension=".sh"
+        extension="sh"
         executable="bash"
     elif [ "$ext" == "python3" ]; then
-        extension=".py"
+        extension="py"
         executable="python3"
     else
         echo -e "Unknown extension."&&die
