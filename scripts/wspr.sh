@@ -1,4 +1,5 @@
 #!/bin/bash
+# Created for Wsprry Pi version 0.1
 
 # Copyright (C) 2023 Lee C. Bussy (@LBussy)
 

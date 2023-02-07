@@ -391,6 +391,46 @@ copy_file() {
 }
 
 ############
+### Check existence and version of any current script files
+### Required:  scriptName - Name of scriot
+### Returns:  0 to execute, 255 to skip
+############
+
+checkscript() {
+    local scriptName scriptFile src verchk
+    scriptName="${1,,}"
+    scriptFile="/usr/local/bin/$scriptName"
+    if [ -f "$scriptFile" ]; then
+        src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
+        src=${src##* }
+        verchk="$(compare "$src" "$VERSION")"
+        if [ "$verchk" == "lt" ]; then
+            echo -e "\nFile: $scriptName exists but is an older version" > /dev/tty
+            read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
+            case "$yn" in
+                [Nn]* )
+                return 255;;
+                * )
+                return 0 ;; # Do overwrite
+            esac
+            elif [ "$verchk" == "eq" ]; then
+            echo -e "\nFile: $scriptName exists and is the same version" > /dev/tty
+            read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
+            case "$yn" in
+                [Yy]* ) return 0;; # Do overwrite
+                * ) return 255;;
+            esac
+            elif [ "$verchk" == "gt" ]; then
+            echo -e "\nFile: $scriptName file is newer than the version being installed."
+            echo -e "Skipping."
+            return 255
+        fi
+    else
+        return 0
+    fi
+}
+
+############
 ### Check existence and version of any current unit files
 ### Required:  daemonName - Name of Unit
 ### Returns:  0 to execute, 255 to skip
