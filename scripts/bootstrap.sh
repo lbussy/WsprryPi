@@ -356,6 +356,7 @@ do_unit() {
         echo -e "Unknown extension."&&die
     fi
     # Handle script install
+    # TODO:  Check version
     copy_file "$unit.$extension"
 
     # Handle Unit file install
@@ -509,8 +510,13 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     do_unit "wspr" "bash" # Install/upgrade wspr daemon
-    # TODO: Make shutdown button install a choice
-    do_unit "shutdown-button" "python3" # Install/upgrade shutdown-button daemon
+    # Choose to support shutdown button
+    read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
+    case "$yn" in
+        [Yy]* ) do_unit "shutdown-button" "python3" ; break ;;
+        [Nn]* ) echo ; break ;;
+        * ) echo ; break ;;
+    esac
 }
 
 ############

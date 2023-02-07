@@ -14,7 +14,7 @@ loop() {
     while :
     do
         # Run wspr
-        true # DEBUG
+        sleep 1
     done
 }
 
