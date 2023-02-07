@@ -309,7 +309,7 @@ settime() {
             esac
         fi
     done
-    echo.
+    echo
 }
 
 ############
@@ -531,7 +531,7 @@ WantedBy=multi-user.target"
     eval "systemctl enable $daemonName"
     echo -e "Starting $daemonName daemon."
     eval "systemctl restart $daemonName"
-    echo.
+    echo
 }
 
 ############
