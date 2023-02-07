@@ -232,7 +232,7 @@ main() {
     echo -e "\n***Script $THISSCRIPT starting.***\n"
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
-    echo -e "\nRunning on: $sysver\n"
+    echo -e "Running on: $sysver\n"
     checkroot # Make sure we are su into root
     uninstall # Uninstall services
     echo -e "\n***Script $THISSCRIPT complete.***\n"
