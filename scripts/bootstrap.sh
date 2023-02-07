@@ -553,9 +553,9 @@ main() {
     # Choose to support shutdown button
     read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
     case "$yn" in
-        [Yy]* ) do_unit "shutdown-button" "python3" ; break ;;
-        [Nn]* ) echo ; break ;;
-        * ) echo ; break ;;
+        [Yy]* ) do_unit "shutdown-button" "python3" ;;
+        [Nn]* ) echo ;;
+        * ) echo ;;
     esac
 }
 
