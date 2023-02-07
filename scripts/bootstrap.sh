@@ -250,21 +250,21 @@ die() {
 ############
 
 instructions() {
-    local sp8 sp23
-    sp8="$(printf ' %.0s' {1..8})"
-    sp23="$(printf ' %.0s' {1..23})"
+    local sp12 sp19
+    sp12="$(printf ' %.0s' {1..2})"
+    sp19="$(printf ' %.0s' {1..19})"
     clear
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
   cat << EOF
 
-$DOT$BGBLK$FGYLW$sp8 __          __                          _____ _ $sp23
-$DOT$BGBLK$FGYLW$sp8 \ \        / /                         |  __ (_)$sp23
-$DOT$BGBLK$FGYLW$sp8  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp23
-$DOT$BGBLK$FGYLW$sp8   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp23
-$DOT$BGBLK$FGYLW$sp8    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp23
-$DOT$BGBLK$FGYLW$sp8     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp23
-$DOT$BGBLK$FGYLW$sp8                | |               __/ |          $sp23
-$DOT$BGBLK$FGYLW$sp8                |_|              |___/           $sp23
+$DOT$BGBLK$FGYLW$sp12 __          __                          _____ _ $sp19
+$DOT$BGBLK$FGYLW$sp12 \ \        / /                         |  __ (_)$sp19
+$DOT$BGBLK$FGYLW$sp12  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp19
+$DOT$BGBLK$FGYLW$sp12   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp19
+$DOT$BGBLK$FGYLW$sp12    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp19
+$DOT$BGBLK$FGYLW$sp12     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp19
+$DOT$BGBLK$FGYLW$sp12                | |               __/ |          $sp19
+$DOT$BGBLK$FGYLW$sp12                |_|              |___/           $sp19
 $DOT$BGBLK$FGGRN$HHR$RESET
 You will be presented with some choices during the install. Most frequently
 you will see a 'yes or no' choice, with the default choice capitalized like
