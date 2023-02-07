@@ -10,7 +10,7 @@
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW GITHUB
+declare REPLY CMDLINE GITRAW GITHUB PACKAGENAME
 declare VERBOSE LINK BRANCH
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
@@ -20,6 +20,8 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 BRANCH="scripts"
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
+PACKAGE="Wsprry Pi"
+
 OWNER="lbussy"
 
 # These should not change
@@ -39,7 +41,7 @@ init() {
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
     GITHUB="$GITHUB/$GITPROJ.git"
-    GITRAW="$GITRAW/$GITPROJ/$GITBRNCH/$THISSCRIPT"
+    GITRAW="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$THISSCRIPT"
 }
 
 ############
@@ -406,15 +408,19 @@ checkdaemon() {
 ###   scriptName - Name of script to run under Bash
 ###   daemonName - Name to be used for Unit
 ###   userName - Context under which daemon shall be run
+###   productName - Common name for the daemon
+###   processShell - Executable under which the script shall run
 ############
 
 createdaemon () {
-    local scriptName daemonName userName unitFile productName
+    local scriptName daemonName userName unitFile unitFileLocation productName
+    unitFileLocation="/etc/systemd/system"
+    unitFile="$unitFileLocation/$daemonName.service"
     scriptName="$1 -d"
     daemonName="${2,,}"
     userName="$3"
     productName="$4"
-    unitFile="/etc/systemd/system/$daemonName.service"
+    
     if [ -f "$unitFile" ]; then
         echo -e "\nStopping $daemonName daemon.";
         systemctl stop "$daemonName";
@@ -423,27 +429,28 @@ createdaemon () {
         echo -e "Removing unit file $unitFile";
         rm "$unitFile"
     fi
-    echo -e "\nCreating unit file for $daemonName."
+    echo -e "\nCreating $productName unit file for $daemonName."
     {
         echo -e "# Created for BrewPi version $VERSION
 
 [Unit]
 Description=$productName daemon for: $daemonName
-Documentation=https://docs.brewpiremix.com/
+Documentation=https://github.com/lbussy/WsprryPi/discussions
 After=multi-user.target
 
 [Service]
 Type=simple
 Restart=on-failure
-RestartSec=1
+RestartSec=5
 User=$userName
 Group=$userName
-ExecStart=/bin/bash $scriptName
+ExecStart=$processShell $scriptName
 SyslogIdentifier=$daemonName
 
 [Install]
 WantedBy=multi-user.target"
     } > "$unitFile"
+
     chown root:root "$unitFile"
     chmod 0644 "$unitFile"
     echo -e "Reloading systemd config."
@@ -452,28 +459,68 @@ WantedBy=multi-user.target"
     eval "systemctl enable $daemonName"
     echo -e "Starting $daemonName daemon."
     eval "systemctl restart $daemonName"
-
-    # TODO:  Copy Python file
 }
 
 ############
 ### Call the creation of unit files
+### Required:
+###   unit - Name of systemd unit
+###   ext - Type of controlling script (e.g. "bash" or "python3")
 ############
 
-project_unit() {
-    local retval
-    # Handle WSPR Unit file setup
-    checkdaemon "wspr"
+do_unit() {
+    local unit executable ext extension executable retval
+    unit="$1"
+    ext="$2"
+    if [ "$ext" == "bash" ]; then
+        extension=".sh"
+        executable="bash"
+    elif [ "$ext" == "python" ]; then
+        extension=".py"
+        executable="python3"
+    else
+        echo -e "Unknown extension."&&die
+    fi
+    # Handle script install
+    copy_file "$unit.$extension"
+
+    # Handle Unit file install
+    checkdaemon "$unit"
     retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "wspr.sh" "wspr" "root" "Wsprry Pi"
+    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"
+}
+
+project_unit() {
+    do_unit "wspr"
 }
 
 shutdown_unit() {
-    local retval
-    # Handle Shutdown Watch Unit file setup
-    checkdaemon "shutdown-button"
-    retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "shutdown.py" "shutdown-button" "root" "Wsprry Pi"
+    do_unit "shutdown-button"
+}
+
+############
+### Copy daemon scripts
+### Required:
+###   scriptName - Name of script to run under systemd
+############
+
+copy_file() {
+    local scriptPath scriptName fullName curlFile
+    scriptName="$1"
+    scriptPath="/usr/local/bin"
+    fullName="$scriptPath/$scriptName"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName"
+
+    # Download file
+    curl -o "$fullName" "$curlFile"
+
+    # See if file begins with "#!"
+    if grep -q "#!" "$fullName"; then
+        chown root:root "$fullName"
+        chmod 0744 "$fullName"
+    else
+        echo -e "Script install failed for $fullName"&&die
+    fi
 }
 
 ############
