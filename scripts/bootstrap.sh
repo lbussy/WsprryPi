@@ -342,7 +342,8 @@ function compare() {
 ############
 
 do_unit() {
-    local unit executable ext extension executable retval
+    local unit executable ext extension executable retval paths
+    path="/usr/local/bin"
     unit="$1"
     ext="$2"
     if [ "$ext" == "bash" ]; then
@@ -360,7 +361,7 @@ do_unit() {
     # Handle Unit file install
     checkdaemon "$unit"
     retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
+    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$path" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
 }
 
 ############
@@ -439,13 +440,14 @@ checkdaemon() {
 ############
 
 createdaemon () {
-    local scriptName daemonName userName unitFile unitFileLocation productName processShell
+    local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
     scriptName="$1 -d"
-    daemonName="${2,,}"
-    userName="$3"
-    productName="$4"
-    processShell="$5"
+    scriptPath="$2"
+    daemonName="${3,,}"
+    userName="$4"
+    productName="$5"
+    processShell="$6"
     unitFile="$unitFileLocation/$daemonName.service"
     
     if [ -f "$unitFile" ]; then
@@ -471,7 +473,7 @@ Restart=on-failure
 RestartSec=5
 User=$userName
 Group=$userName
-ExecStart=$processShell $scriptName
+ExecStart=$processShell $scriptPath/$scriptName
 SyslogIdentifier=$daemonName
 
 [Install]
