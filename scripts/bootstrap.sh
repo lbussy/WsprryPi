@@ -256,7 +256,7 @@ instructions() {
     clear
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
   cat << EOF
- 
+
 $DOT$BGBLK$FGYLW$sp12 __          __                          _____ _ $sp19
 $DOT$BGBLK$FGYLW$sp12 \ \        / /                         |  __ (_)$sp19
 $DOT$BGBLK$FGYLW$sp12  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp19
