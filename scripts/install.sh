@@ -18,7 +18,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 BRANCH="scripts"
 VERSION="0.1"
 # Set this script
-THISSCRIPT="bootstrap.sh"
+THISSCRIPT="install.sh"
 # Set Project
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
@@ -86,7 +86,7 @@ log() {
     local thisscript scriptname realuser homepath shadow
     # Explicit scriptname (creates log name) since we start
     # before the main script
-    thisscript="bootstrap.sh"
+    thisscript="$THISSCRIPT"
     scriptname="${thisscript%%.*}"
     # Get home directory for logging
     if [ -n "$SUDO_USER" ]; then realuser="$SUDO_USER"; else realuser=$(whoami); fi
