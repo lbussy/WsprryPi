@@ -309,6 +309,7 @@ settime() {
             esac
         fi
     done
+    echo.
 }
 
 ############
@@ -530,6 +531,7 @@ WantedBy=multi-user.target"
     eval "systemctl enable $daemonName"
     echo -e "Starting $daemonName daemon."
     eval "systemctl restart $daemonName"
+    echo.
 }
 
 ############
@@ -557,6 +559,7 @@ main() {
         [Nn]* ) echo ;;
         * ) echo ;;
     esac
+    echo -e "\n***Script $THISSCRIPT complete.***\n"
 }
 
 ############
