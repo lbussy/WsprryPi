@@ -274,10 +274,7 @@ default to 'yes.'
 
 Yes/no choices are not case sensitive. However; passwords, system names and
 install paths are. Be aware of this. There is generally no difference between
-'y', 'yes', 'YES', 'Yes'; you get the idea. In some areas you are asked for a
-path; the default/recommended choice is in braces like: [/home/wsprrypi].
-Pressing <enter> without typing anything will take the default/recommended
-choice.
+'y', 'yes', 'YES', 'Yes'.
 
 EOF
     read -n 1 -s -r -p  "Press any key when you are ready to proceed. " < /dev/tty
