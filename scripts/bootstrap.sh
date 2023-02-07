@@ -2,8 +2,6 @@
 
 # Copyright (C) 2023 Lee C. Bussy (@LBussy)
 
-# Install to /usr/local/bin
-
 ############
 ### Global Declarations
 ############
@@ -20,7 +18,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 BRANCH="scripts"
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
-PACKAGE="Wsprry Pi"
+PACKAGENAME="Wsprry Pi"
 
 OWNER="lbussy"
 
@@ -320,26 +318,6 @@ settime() {
 }
 
 ############
-### Check for an existing WsprryPi installation
-############
-
-check_wsprrypi() {
-    echo -e "In a perfect world I would be checking for an existing install here."
-    # TODO: Check for existing service
-}
-
-############
-### Install Wsprry Pi function
-############
-
-install_program() {
-    echo -e "In a perfect world I would be installing something here."
-    # TODO: Install
-    project_unit "$@" # Create Wsprry Pi daemon unit file
-    shutdown_unit "$@" # Create Shutdown Button daemon unit file
-}
-
-############
 ### Daemon Functions
 ############
 
@@ -363,6 +341,60 @@ function compare() {
 }
 
 ############
+### Call the creation of unit files
+### Required:
+###   unit - Name of systemd unit
+###   ext - Type of controlling script (e.g. "bash" or "python3")
+############
+
+do_unit() {
+    local unit executable ext extension executable retval
+    unit="$1"
+    ext="$2"
+    if [ "$ext" == "bash" ]; then
+        extension=".sh"
+        executable="bash"
+    elif [ "$ext" == "python" ]; then
+        extension=".py"
+        executable="python3"
+    else
+        echo -e "Unknown extension."&&die
+    fi
+    # Handle script install
+    copy_file "$unit.$extension"
+
+    # Handle Unit file install
+    checkdaemon "$unit"
+    retval="$?"
+    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
+}
+
+############
+### Copy daemon scripts
+### Required:
+###   scriptName - Name of script to run under systemd
+############
+
+copy_file() {
+    local scriptPath scriptName fullName curlFile
+    scriptName="$1"
+    scriptPath="/usr/local/bin"
+    fullName="$scriptPath/$scriptName"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName"
+
+    # Download file
+    curl -o "$fullName" "$curlFile"
+
+    # See if file begins with "#!"
+    if grep -q "#!" "$fullName"; then
+        chown root:root "$fullName"
+        chmod 0744 "$fullName"
+    else
+        echo -e "Script install failed for $fullName"&&die
+    fi
+}
+
+############
 ### Check existence and version of any current unit files
 ### Required:  daemonName - Name of Unit
 ### Returns:  0 to execute, 255 to skip
@@ -373,7 +405,7 @@ checkdaemon() {
     daemonName="${1,,}"
     unitFile="/etc/systemd/system/$daemonName.service"
     if [ -f "$unitFile" ]; then
-        src=$(grep "^# Created for BrewPi version" "$unitFile")
+        src=$(grep "^# Created for $PACKAGENAME version" "$unitFile")
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
@@ -413,13 +445,14 @@ checkdaemon() {
 ############
 
 createdaemon () {
-    local scriptName daemonName userName unitFile unitFileLocation productName
+    local scriptName daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
     unitFile="$unitFileLocation/$daemonName.service"
     scriptName="$1 -d"
     daemonName="${2,,}"
     userName="$3"
     productName="$4"
+    processShell="$5"
     
     if [ -f "$unitFile" ]; then
         echo -e "\nStopping $daemonName daemon.";
@@ -431,7 +464,7 @@ createdaemon () {
     fi
     echo -e "\nCreating $productName unit file for $daemonName."
     {
-        echo -e "# Created for BrewPi version $VERSION
+        echo -e "# Created for $PACKAGENAME version $VERSION
 
 [Unit]
 Description=$productName daemon for: $daemonName
@@ -456,71 +489,9 @@ WantedBy=multi-user.target"
     echo -e "Reloading systemd config."
     systemctl daemon-reload
     echo -e "Enabling $daemonName daemon."
-    eval "systemctl enable $daemonName"
+    # TODO: eval "systemctl enable $daemonName"
     echo -e "Starting $daemonName daemon."
-    eval "systemctl restart $daemonName"
-}
-
-############
-### Call the creation of unit files
-### Required:
-###   unit - Name of systemd unit
-###   ext - Type of controlling script (e.g. "bash" or "python3")
-############
-
-do_unit() {
-    local unit executable ext extension executable retval
-    unit="$1"
-    ext="$2"
-    if [ "$ext" == "bash" ]; then
-        extension=".sh"
-        executable="bash"
-    elif [ "$ext" == "python" ]; then
-        extension=".py"
-        executable="python3"
-    else
-        echo -e "Unknown extension."&&die
-    fi
-    # Handle script install
-    copy_file "$unit.$extension"
-
-    # Handle Unit file install
-    checkdaemon "$unit"
-    retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"
-}
-
-project_unit() {
-    do_unit "wspr"
-}
-
-shutdown_unit() {
-    do_unit "shutdown-button"
-}
-
-############
-### Copy daemon scripts
-### Required:
-###   scriptName - Name of script to run under systemd
-############
-
-copy_file() {
-    local scriptPath scriptName fullName curlFile
-    scriptName="$1"
-    scriptPath="/usr/local/bin"
-    fullName="$scriptPath/$scriptName"
-    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName"
-
-    # Download file
-    curl -o "$fullName" "$curlFile"
-
-    # See if file begins with "#!"
-    if grep -q "#!" "$fullName"; then
-        chown root:root "$fullName"
-        chmod 0744 "$fullName"
-    else
-        echo -e "Script install failed for $fullName"&&die
-    fi
+    # TODO: eval "systemctl restart $daemonName"
 }
 
 ############
@@ -539,9 +510,10 @@ main() {
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
-    check_wsprrypi # See if WsprryPi is installed
     settime # Set timezone
-    install_program # Install services
+    do_unit "wspr" # Install/upgrade wspr daemon
+    # TODO: Make shutdown button install a choice
+    do_unit "shutdown-button" # Install/upgrade shutdown-button daemon
 }
 
 ############
