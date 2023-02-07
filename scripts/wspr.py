@@ -5,8 +5,6 @@ from time import sleep
 from os import system, getuid
 from sys import stdout, exit
 
-# Physical pin 35 = BCM19
-stopPin = "BOARD35"
 
 def isRoot():
     if getuid() != 0:
@@ -16,7 +14,7 @@ def isRoot():
 
 
 def main():
-    print("\nMonitoring pin {} for shutdown signal.".format(stopPin))
+    print("\nStarting wspr.")
     print("Ctrl-C to quit.\n")
 
     try:
