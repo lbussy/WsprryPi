@@ -357,8 +357,9 @@ do_unit() {
         echo -e "Unknown extension."&&die
     fi
     # Handle script install
-    # TODO:  Check version
-    copy_file "$unit.$extension"
+    checkscript "$unit.$extension"
+    retval="$?"
+    if [[ "$retval" == 0 ]]; then copy_file "$unit.$extension"; fi
 
     # Handle Unit file install
     checkdaemon "$unit"
@@ -393,7 +394,7 @@ copy_file() {
 
 ############
 ### Check existence and version of any current script files
-### Required:  scriptName - Name of scriot
+### Required:  scriptName - Name of script
 ### Returns:  0 to execute, 255 to skip
 ############
 
