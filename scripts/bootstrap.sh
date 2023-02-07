@@ -449,12 +449,12 @@ createdaemon () {
     echo -e "DEBUG: Entering createdaemon() with scriptName=$1 daemonName=$2 userName=$3 productName=$4 processShell=$5"
     local scriptName daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
-    unitFile="$unitFileLocation/$daemonName.service"
     scriptName="$1 -d"
     daemonName="${2,,}"
     userName="$3"
     productName="$4"
     processShell="$5"
+    unitFile="$unitFileLocation/$daemonName.service"
     
     if [ -f "$unitFile" ]; then
         echo -e "\nStopping $daemonName daemon.";
