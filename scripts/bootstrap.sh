@@ -322,7 +322,6 @@ settime() {
 ############
 
 function compare() {
-    echo -e "DEBUG: Entering compare() with src=$1 and tgt=$2"
     local src tgt
     src="$1"
     tgt="$2"
@@ -343,7 +342,6 @@ function compare() {
 ############
 
 do_unit() {
-    echo -e "DEBUG: Entering do_unit() with unit=$1 and ext=$2"
     local unit executable ext extension executable retval
     unit="$1"
     ext="$2"
@@ -372,7 +370,6 @@ do_unit() {
 ############
 
 copy_file() {
-    echo -e "DEBUG: Entering copy_file() with scriptName=$1"
     local scriptPath scriptName fullName curlFile
     scriptName="$1"
     scriptPath="/usr/local/bin"
@@ -398,7 +395,6 @@ copy_file() {
 ############
 
 checkdaemon() {
-    echo -e "DEBUG: Entering checkdaemon() with daemonName=$1"
     local daemonName unitFile src verchk
     daemonName="${1,,}"
     unitFile="/etc/systemd/system/$daemonName.service"
@@ -443,7 +439,6 @@ checkdaemon() {
 ############
 
 createdaemon () {
-    echo -e "DEBUG: Entering createdaemon() with scriptName=$1 daemonName=$2 userName=$3 productName=$4 processShell=$5"
     local scriptName daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
     scriptName="$1 -d"
@@ -488,9 +483,9 @@ WantedBy=multi-user.target"
     echo -e "Reloading systemd config."
     systemctl daemon-reload
     echo -e "Enabling $daemonName daemon."
-    # TODO: eval "systemctl enable $daemonName"
+    eval "systemctl enable $daemonName"
     echo -e "Starting $daemonName daemon."
-    # TODO: eval "systemctl restart $daemonName"
+    eval "systemctl restart $daemonName"
 }
 
 ############
