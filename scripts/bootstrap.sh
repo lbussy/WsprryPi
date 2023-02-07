@@ -251,7 +251,7 @@ die() {
 
 instructions() {
     local sp12 sp19
-    sp12="$(printf ' %.0s' {1..2})"
+    sp12="$(printf ' %.0s' {1..12})"
     sp19="$(printf ' %.0s' {1..19})"
     clear
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
