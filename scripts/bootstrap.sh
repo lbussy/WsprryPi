@@ -458,7 +458,7 @@ createdaemon () {
         echo -e "Removing unit file $unitFile";
         rm "$unitFile"
     fi
-    echo -e "\nCreating $productName unit file for $daemonName."
+    echo -e "\nCreating $productName unit file for $daemonName ($unitFile)."
     {
         echo -e "# Created for $PACKAGENAME version $VERSION
 
