@@ -18,7 +18,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 BRANCH="scripts"
 VERSION="0.1"
 # Set this script
-THISSCRIPT="bootstrap.sh"
+THISSCRIPT="install.sh"
 # Set Project
 COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
@@ -86,7 +86,7 @@ log() {
     local thisscript scriptname realuser homepath shadow
     # Explicit scriptname (creates log name) since we start
     # before the main script
-    thisscript="bootstrap.sh"
+    thisscript="$THISSCRIPT"
     scriptname="${thisscript%%.*}"
     # Get home directory for logging
     if [ -n "$SUDO_USER" ]; then realuser="$SUDO_USER"; else realuser=$(whoami); fi
@@ -309,7 +309,6 @@ settime() {
             esac
         fi
     done
-    echo
 }
 
 ############
@@ -357,8 +356,9 @@ do_unit() {
         echo -e "Unknown extension."&&die
     fi
     # Handle script install
-    # TODO:  Check version
-    copy_file "$unit.$extension"
+    checkscript "$unit.$extension"
+    retval="$?"
+    if [[ "$retval" == 0 ]]; then copy_file "$unit.$extension"; fi
 
     # Handle Unit file install
     checkdaemon "$unit"
@@ -393,7 +393,7 @@ copy_file() {
 
 ############
 ### Check existence and version of any current script files
-### Required:  scriptName - Name of scriot
+### Required:  scriptName - Name of script
 ### Returns:  0 to execute, 255 to skip
 ############
 
@@ -559,7 +559,7 @@ main() {
         [Nn]* ) echo ;;
         * ) echo ;;
     esac
-    echo -e "\n***Script $THISSCRIPT complete.***\n"
+    echo -e "***Script $THISSCRIPT complete.***\n"
 }
 
 ############
