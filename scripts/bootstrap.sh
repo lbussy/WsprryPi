@@ -433,6 +433,7 @@ checkdaemon() {
 ### Create systemd unit file
 ### Required:
 ###   scriptName - Name of script to run under Bash
+###   scriptPath - Path to scriptName
 ###   daemonName - Name to be used for Unit
 ###   userName - Context under which daemon shall be run
 ###   productName - Common name for the daemon
