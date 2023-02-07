@@ -2,6 +2,7 @@ wspr
 gpioclk
 mailbox.o
 *.log
+docs/_build/
 
 .pioenvs
 .piolibdeps
