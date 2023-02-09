@@ -88,7 +88,6 @@ ConfigParser::ConfigParser(string path) : mPathToConfig(path) {
 template <>
 bool ConfigParser::aConfig<bool>(std::string section, std::string configName, size_t pos) {
 
-  bool tmp;
   std::string config = mConfigurations[section + " - " + configName][pos];
   std::istringstream iss(config);
 
