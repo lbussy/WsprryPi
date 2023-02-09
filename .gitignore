@@ -1,6 +1,6 @@
 wspr
 gpioclk
-mailbox.o
+*.o
 *.log
 docs/_build/
 
