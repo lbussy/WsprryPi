@@ -1,7 +1,7 @@
-OBJS	= example.o configparser.o
-SOURCE	= example.cpp configparser.cpp
+OBJS	= config.o configparser.o
+SOURCE	= config.cpp configparser.cpp
 HEADER	= configparser.hpp
-OUT	= example
+OUT	= config
 CC	 = g++
 FLAGS	 = -g -c -Wall
 LFLAGS	 = 
@@ -9,8 +9,8 @@ LFLAGS	 =
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)
 
-example.o: example.cpp
-	$(CC) $(FLAGS) example.cpp
+config.o: config.cpp
+	$(CC) $(FLAGS) config.cpp
 
 configparser.o: configparser.cpp
 	$(CC) $(FLAGS) configparser.cpp -std=c++14
