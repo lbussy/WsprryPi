@@ -15,6 +15,5 @@ example.o: example.cpp
 configparser.o: configparser.cpp
 	$(CC) $(FLAGS) configparser.cpp -std=c++14
 
-
 clean:
 	rm -f $(OBJS) $(OUT)
