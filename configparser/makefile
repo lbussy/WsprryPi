@@ -10,10 +10,11 @@ all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)
 
 example.o: example.cpp
-	$(CC) $(FLAGS) example.cpp 
+	$(CC) $(FLAGS) example.cpp
 
 configparser.o: configparser.cpp
-	$(CC) $(FLAGS) configparser.cpp 
+	$(CC) $(FLAGS) configparser.cpp -std=c++14
+
 
 clean:
 	rm -f $(OBJS) $(OUT)
