@@ -13,10 +13,7 @@ all: wspr
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
-configparser.o: configparser.cpp configparser.hpp
-	$(CC) $(FLAGS) configparser.cpp -std=c++14
-
-wspr: configparser.o mailbox.o wspr.hpp wspr.cpp mailbox.h configparser.h
+wspr: mailbox.o wspr.hpp wspr.cpp mailbox.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) mailbox.o version.hpp version.cpp wspr.hpp wspr.cpp -owspr $(LDLIBS)
 
 clean:
