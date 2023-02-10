@@ -207,7 +207,7 @@ void setupGPIO(int pin = 0)
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        printf("Fail: Unable to open /dev/mem\n");
+        printf("Fail: Unable to open /dev/mem (running as root?)\n");
         exit(-1);
     }
 
@@ -225,11 +225,11 @@ void setupGPIO(int pin = 0)
 
     if (gpio_map == MAP_FAILED)
     {
-        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set!
+        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set
         exit(-1);
     }
 
-    // Always use volatile pointer!
+    // Always use volatile pointer
     gpio = (volatile unsigned *)gpio_map;
 
     // Set GPIO pins to output
@@ -295,20 +295,20 @@ void allocMemPool(unsigned numpages)
     // Conert the bus address to a physical address and map this to virtual
     // (aka user) space.
     mbox.virt_addr = (unsigned char *)mapmem(BUS_TO_PHYS(mbox.bus_addr), 4096 * numpages);
-    // The number of pages in the pool. Never changes!
+    // The number of pages in the pool. Never changes
     mbox.pool_size = numpages;
     // How many of the created pages have actually been used.
     mbox.pool_cnt = 0;
     // printf("allocMemoryPool bus_addr=%x virt_addr=%x mem_ref=%x\n",mbox.bus_addr,(unsigned)mbox.virt_addr,mbox.mem_ref);
 }
 
-// Returns the virtual and bus address (NOT physical address!) of another
+// Returns the virtual and bus address (NOT physical address) of another
 // page in the pool.
 void getRealMemPageFromPool(void **vAddr, void **bAddr)
 {
     if (mbox.pool_cnt >= mbox.pool_size)
     {
-        std::cerr << "Error: unable to allocated more pages!" << std::endl;
+        std::cerr << "Error: unable to allocated more pages." << std::endl;
         ABORT(-1);
     }
     unsigned offset = mbox.pool_cnt * 4096;
@@ -502,7 +502,7 @@ void unSetupDMA()
     {
         return;
     }
-    // cout << "Exiting!" << std::endl;
+    // cout << "Exiting." << std::endl;
     struct DMAregs *DMA0 = (struct DMAregs *)&(ACCESS_BUS_ADDR(DMA_BUS_BASE));
     DMA0->CS = 1 << 31; // reset dma controller
     txoff();
@@ -536,7 +536,7 @@ void setupDMATab(
         std::stringstream temp;
         temp << std::setprecision(6) << std::fixed << "  Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz" << std::endl;
         std::cout << temp.str();
-        std::cout << "  because of hardware limitations!" << std::endl;
+        std::cout << "  because of hardware limitations." << std::endl;
     }
 
     // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
@@ -837,7 +837,7 @@ void print_usage()
     std::cout << "    Known PPM correction to 19.2MHz RPi nominal crystal frequency." << std::endl;
     std::cout << "  -s --self-calibration" << std::endl;
     std::cout << "    Check NTP before every transmission to obtain the PPM error of the" << std::endl;
-    std::cout << "    crystal (default setting!)." << std::endl;
+    std::cout << "    crystal (default setting.)." << std::endl;
     std::cout << "  -f --free-running" << std::endl;
     std::cout << "    Do not use NTP to correct frequency error of RPi crystal." << std::endl;
     std::cout << "  -r --repeat" << std::endl;
@@ -925,7 +925,7 @@ void parse_commandline(
         case 0:
             // Code should only get here if a long option was given a non-null
             // flag value.
-            std::cout << "Check code!" << std::endl;
+            std::cout << "Check code." << std::endl;
             ABORT(-1);
             break;
         case 'h':
@@ -1108,14 +1108,14 @@ void parse_commandline(
     // Check consistency among command line options.
     if (ppm && self_cal)
     {
-        std::cout << "Warning: ppm value is being ignored!" << std::endl;
+        std::cout << "Warning: ppm value is being ignored." << std::endl;
         ppm = 0.0;
     }
     if (mode == TONE)
     {
         if ((callsign != "") || (locator != "") || (tx_power != "") || (center_freq_set.size() != 0) || random_offset)
         {
-            std::cerr << "Warning: callsign, locator, etc. are ignored when generating test tone" << std::endl;
+            std::cerr << "Warning: callsign, locator, etc. are ignored when generating test tone." << std::endl;
         }
         random_offset = 0;
         if (test_tone <= 0)
@@ -1214,7 +1214,7 @@ void update_ppm(
     ppm_new = (double)ntx.freq / (double)(1 << 16); /* frequency scale */
     if (abs(ppm_new) > 200)
     {
-        std::cerr << "Warning: absolute ppm value is greater than 200 and is being ignored!" << std::endl;
+        std::cerr << "Warning: absolute ppm value is greater than 200 and is being ignored." << std::endl;
     }
     else
     {
@@ -1316,7 +1316,7 @@ void setup_peri_base_virt(
     );
     if ((long int)peri_base_virt == -1)
     {
-        std::cerr << "Error: peri_base_virt mmap error!" << std::endl;
+        std::cerr << "Error: peri_base_virt mmap error." << std::endl;
         ABORT(-1);
     }
     close(mem_fd);
@@ -1402,7 +1402,7 @@ int main(const int argc, char *const argv[])
         std::stringstream temp;
         temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << test_tone / 1.0e6 << " MHz" << std::endl;
         std::cout << temp.str();
-        std::cout << "Press CTRL-C to exit!" << std::endl;
+        std::cout << "Press CTRL-C to exit." << std::endl;
 
         txon(led);
         int bufPtr = 0;
@@ -1511,8 +1511,8 @@ int main(const int argc, char *const argv[])
                 center_freq_actual = center_freq_desired;
             }
 
-            // Send the message!
-            // cout << "TX started!" << std::endl;
+            // Send the message
+            // cout << "TX started." << std::endl;
             if (center_freq_actual)
             {
                 // Print a status message right before transmission begins.
