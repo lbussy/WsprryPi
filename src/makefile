@@ -1,20 +1,20 @@
 prefix = /usr/local
 
-LED_PIN = 18 # Set to 0 for no LED, 18 for TAPR board
+LED_PIN = -DLED_PIN=18 # Set to 0 for no LED, 18 for TAPR board
 
 CFLAGS += -Wall
-CXXFLAGS += -D_GLIBCXX_DEBUG -std=c++11 -Wall -Werror -fmax-errors=5
-CXXFLAGS += -I/usr/include -L/opt/vc/lib -L/usr/lib/arm-linux-gnueabihf
+CXXFLAGS += -Wall -Werror -fmax-errors=5
 CXXFLAGS += -Wno-psabi
 LDLIBS += -lm -lbcm_host
+OUT = wspr
 
 all: wspr
 
-mailbox.o: mailbox.c mailbox.h
+mailbox.o:
 	$(CC) $(CFLAGS) -c mailbox.c
 
-wspr: mailbox.o wspr.hpp wspr.cpp mailbox.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) mailbox.o version.hpp version.cpp wspr.hpp wspr.cpp -owspr $(LDLIBS)
+wspr: mailbox.o
+	$(CXX) $(CXXFLAGS) $(LED_PIN) mailbox.o wspr.cpp -o$(OUT) $(LDLIBS)
 
 clean:
 	$(RM) *.o wspr
