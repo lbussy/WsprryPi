@@ -1,3 +1,5 @@
+# Testing: make clean && make && ./config
+
 OBJS	 = testconfig.o 
 SOURCE	 = testconfig.cpp
 OUT	     = config
