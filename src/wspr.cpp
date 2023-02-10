@@ -1,11 +1,6 @@
 #include "wspr.hpp"
 
-#ifdef __cplusplus
-extern "C"
-{
-#include "mailbox.h"
-}
-#endif /* __cplusplus */
+#define SINGLETON_PORT 1234
 
 // Note on accessing memory in RPi:
 //
@@ -1329,6 +1324,14 @@ void setup_peri_base_virt(
 
 int main(const int argc, char *const argv[])
 {
+    // Make sure we're the only one
+    SingletonProcess singleton(SINGLETON_PORT);
+    if (!singleton())
+    {
+        std::cerr << "Process already running; see " << singleton.GetLockFileName() << std::endl;
+        return 1;
+    }
+
     printf("\nRunning on: %s.\n", version());
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);

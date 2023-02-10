@@ -29,5 +29,13 @@
 #include <sys/timex.h>
 
 #include "version.hpp"
+#include "singleton.hpp"
+
+#ifdef __cplusplus
+extern "C"
+{
+#include "mailbox.h"
+}
+#endif /* __cplusplus */
 
 #endif // _WSPR_H
