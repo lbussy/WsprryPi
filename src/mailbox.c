@@ -66,7 +66,7 @@ void *mapmem(uint32_t base, uint32_t size)
         exit(-1);
     }
     close(mem_fd);
-    return mem + offset;
+    return (uint8_t* )mem + offset; // TODO:  Make sure we are still sending a good packet
 }
 
 void unmapmem(void *addr, uint32_t size)
