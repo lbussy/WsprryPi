@@ -2,13 +2,13 @@
 
 // https://theonlytutorials.com/read-and-update-config-file-ini-file-in-php/
 
-read_ini_file("/usr/local/etc/wspr.ini");
+read_ini_file("config.ini");
 
 function read_ini_file($file)
 {
     // Parse with sections
-    $ini_array = parse_ini_file($file, true);
-    print_r($ini_array);
+    $ini_array = parse_ini_file($file, true, INI_SCANNER_TYPED);
+    print("<pre>".print_r($ini_array,true)."</pre>");
 }
 
 function write_php_ini($array, $file)
