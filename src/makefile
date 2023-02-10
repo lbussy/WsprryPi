@@ -10,9 +10,6 @@ LDLIBS += -lm -lbcm_host
 
 all: wspr
 
-gpiotest: version.hpp version.cpp gpio.hpp gpio.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) version.hpp version.cpp gpio.hpp gpio.cpp -ogpiotest $(LDLIBS)
-
 mailbox.o: mailbox.c mailbox.h
 	$(CC) $(CFLAGS) -c mailbox.c
 
@@ -20,7 +17,7 @@ wspr: mailbox.o wspr.hpp wspr.cpp mailbox.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -DLED_PIN=$(LED_PIN) mailbox.o version.hpp version.cpp wspr.hpp wspr.cpp -owspr $(LDLIBS)
 
 clean:
-	$(RM) *.o wspr gpiotest
+	$(RM) *.o wspr
 
 .PHONY: install
 install: wspr

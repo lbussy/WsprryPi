@@ -551,7 +551,7 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
-    do_unit "wspr" "bash" # Install/upgrade wspr daemon
+    do_unit "wspr" "python3" # Install/upgrade wspr daemon
     # Choose to support shutdown button
     read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
     case "$yn" in
