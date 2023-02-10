@@ -1,13 +1,11 @@
-CFLAGS += -Wall
-CXXFLAGS += -Wall -Werror -fmax-errors=5
-CXXFLAGS += -I/usr/include -L/opt/vc/lib -L/usr/lib/arm-linux-gnueabihf 
-CXXFLAGS += -Wno-psabi
-LDLIBS += -lm -lbcm_host
+# g++ -std=c++17 -lstdc++fs filetime.cpp -o filetime
 
-all: filetime
+GXXFLAGS += -Wall -Werror -fmax-errors=5
+GXXFLAGS += -lstdc++fs -std=c++17
+OUT = filetime
 
-filetime: filetime.cpp
-	gcc -lstdc++fs filetime.cpp -o filetime
+filetime:
+	g++ $(GXXFLAGS) filetime.cpp -o $(OUT)
 
 clean:
-	$(RM) *.o filetime
+	$(RM) *.o $(OUT)
