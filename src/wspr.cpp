@@ -824,7 +824,7 @@ void wait_every(
 
 void print_usage()
 {
-    // TODO: Think about a man page or at least docs for some of this
+    // TODO: Update documentation
     std::cout << "Usage:" << std::endl;
     std::cout << "  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ..." << std::endl;
     std::cout << "    OR" << std::endl;
@@ -841,7 +841,8 @@ void print_usage()
     std::cout << "  -f --free-running" << std::endl;
     std::cout << "    Do not use NTP to correct frequency error of RPi crystal." << std::endl;
     std::cout << "  -r --repeat" << std::endl;
-    std::cout << "    Repeatedly, and in order, transmit on all the specified command line freqs." << std::endl;
+    std::cout << "    Repeatedly, and in order, transmit on all the specified command line" << std::endl;
+    std::cout << "    freqs." << std::endl;
     std::cout << "  -x --terminate <n>" << std::endl;
     std::cout << "    Terminate after n transmissions have been completed." << std::endl;
     std::cout << "  -o --offset" << std::endl;
@@ -849,25 +850,34 @@ void print_usage()
     std::cout << "      +/- " << WSPR_RAND_OFFSET << " Hz for WSPR" << std::endl;
     std::cout << "      +/- " << WSPR15_RAND_OFFSET << " Hz for WSPR-15" << std::endl;
     std::cout << "  -t --test-tone freq" << std::endl;
-    std::cout << "    Simply output a test tone at the specified frequency. Only used" << std::endl;
-    std::cout << "    for debugging and to verify calibration." << std::endl;
+    std::cout << "    Simply output a test tone at the specified frequency. Only used for" << std::endl;
+    std::cout << "    debugging and to verify calibration." << std::endl;
     std::cout << "  -l --led" << std::endl;
     std::cout << "    Use LED when transmitting (TAPR board)." << std::endl;
     std::cout << "  -n --no-delay" << std::endl;
-    std::cout << "    Transmit immediately, do not wait for a WSPR TX window. Used" << std::endl;
-    std::cout << "    for testing only." << std::endl;
+    std::cout << "    Transmit immediately, do not wait for a WSPR TX window. Used for" << std::endl;
+    std::cout << "    testing only." << std::endl;
+    std::cout << "  -i --ini-file" << std::endl;
+    std::cout << "    Load parameters from an ini file. Supply path and file name." << std::endl;
+    std::cout << "  -d --daemon-mode" << std::endl;
+    std::cout << "    Run with terse messaging." << std::endl;
     std::cout << std::endl;
-    std::cout << "Frequencies can be specified either as an absolute TX carrier frequency, or" << std::endl;
-    std::cout << "using one of the following strings. If a string is used, the transmission" << std::endl;
-    std::cout << "will happen in the middle of the WSPR region of the selected band." << std::endl;
+    std::cout << "Frequencies can be specified either as an absolute TX carrier frequency," << std::endl;
+    std::cout << "or using one of the following strings:" << std::endl;
+    std::cout << std::endl;
     std::cout << "  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m," << std::endl;
     std::cout << "  17m, 15m, 12m, 10m, 6m, 4m, and 2m" << std::endl;
-    std::cout << "The \"-15\" indicates the WSPR-15 region of band ." << std::endl;
     std::cout << std::endl;
-    std::cout << "Transmission gaps can be created by specifying a TX frequency of 0" << std::endl;
+    std::cout << "If a string is used, the transmission will happen in the middle of the" << std::endl;
+    std::cout << "WSPR region of the selected band." << std::endl;
+    std::cout << std::endl;
+    std::cout << "The \"-15\" suffix indicates the WSPR-15 region of band." << std::endl;
+    std::cout << std::endl;
+    std::cout << "Transmission gaps can be created by specifying a TX frequency of 0." << std::endl;
+    std::cout << std::endl;
 }
 
-void parse_commandline(
+bool parse_commandline(
     // Inputs
     const int &argc,
     char *const argv[],
@@ -885,7 +895,8 @@ void parse_commandline(
     mode_type &mode,
     int &terminate,
     bool &useled,
-    bool &useini)
+    bool &useini,
+    bool &daemon_mode)
 {
     // TODO:  Daemon mode to turn off verbose crap
 
@@ -900,6 +911,7 @@ void parse_commandline(
     terminate = -1;
     useled = false;
     useini = false;
+    daemon_mode = false;
 
     std::string inifile;
 
@@ -915,13 +927,14 @@ void parse_commandline(
         {"no-delay", no_argument, 0, 'n'},
         {"led", no_argument, 0, 'l'},
         {"ini-file", required_argument, 0, 'i'},
+        {"daemon-mode", no_argument, 0, 'd'},
         {0, 0, 0, 0}};
 
     while (true)
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "hp:sfrx:ot:nli:",
+        int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:d",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -933,18 +946,19 @@ void parse_commandline(
             // Code should only get here if a long option was given a non-null
             // flag value.
             std::cout << "Check code." << std::endl;
-            ABORT(-1);
+            return false;
             break;
         case 'h':
+        case '?':
             print_usage();
-            ABORT(-1);
+            return false;
             break;
         case 'p':
             ppm = strtod(optarg, &endp);
             if ((optarg == endp) || (*endp != '\0'))
             {
                 std::cerr << "Error: could not parse ppm value" << std::endl;
-                ABORT(-1);
+                return false;
             }
             break;
         case 's':
@@ -961,12 +975,12 @@ void parse_commandline(
             if ((optarg == endp) || (*endp != '\0'))
             {
                 std::cerr << "Error: could not parse termination argument" << std::endl;
-                ABORT(-1);
+                return false;
             }
             if (terminate < 1)
             {
                 std::cerr << "Error: termination parameter must be >= 1" << std::endl;
-                ABORT(-1);
+                return false;
             }
             break;
         case 'o':
@@ -978,11 +992,10 @@ void parse_commandline(
             if ((optarg == endp) || (*endp != '\0'))
             {
                 std::cerr << "Error: could not parse test tone frequency" << std::endl;
-                ABORT(-1);
+                return false;
             }
             break;
         case 'i':
-            // TODO: INI file
             inifile = optarg;
             useini = true;
             break;
@@ -992,11 +1005,11 @@ void parse_commandline(
         case 'l':
             useled = true;
             break;
-        case '?':
-            /* getopt_long already printed an error message. */
-            ABORT(-1);
+        case 'd':
+            daemon_mode = true;
+            break;
         default:
-            ABORT(-1);
+            return false;
         }
     }
 
@@ -1115,7 +1128,7 @@ void parse_commandline(
 
     if (useini == true)
     {
-        // TODO:  Read INI and clobber what we have alread
+        // TODO:  Read INI and clobber what we have already
     }
 
     // Convert to uppercase
@@ -1209,6 +1222,7 @@ void parse_commandline(
         }
         std::cout << std::endl;
     }
+    return true;
 }
 
 // Call ntp_adjtime() to obtain the latest calibration coefficient.
@@ -1341,6 +1355,43 @@ void setup_peri_base_virt(
 
 int main(const int argc, char *const argv[])
 {
+    // Parse arguments first
+    std::string callsign;
+    std::string locator;
+    std::string tx_power;
+    std::vector<double> center_freq_set;
+    double ppm;
+    bool self_cal;
+    bool repeat;
+    bool random_offset;
+    double test_tone;
+    bool no_delay;
+    mode_type mode;
+    int terminate;
+    bool useled;
+    bool useini;
+    bool daemon_mode;
+    bool parsed = parse_commandline(
+        argc,
+        argv,
+        callsign,
+        locator,
+        tx_power,
+        center_freq_set,
+        ppm,
+        self_cal,
+        repeat,
+        random_offset,
+        test_tone,
+        no_delay,
+        mode,
+        terminate,
+        useled,
+        useini,
+        daemon_mode);
+    
+    if (!parsed) return 1;
+
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
     if (!singleton())
@@ -1367,38 +1418,6 @@ int main(const int argc, char *const argv[])
     // Initialize the RNG
     srand(time(NULL));
 
-    // Parse arguments
-    std::string callsign;
-    std::string locator;
-    std::string tx_power;
-    std::vector<double> center_freq_set;
-    double ppm;
-    bool self_cal;
-    bool repeat;
-    bool random_offset;
-    double test_tone;
-    bool no_delay;
-    mode_type mode;
-    int terminate;
-    bool useled;
-    bool useini;
-    parse_commandline(
-        argc,
-        argv,
-        callsign,
-        locator,
-        tx_power,
-        center_freq_set,
-        ppm,
-        self_cal,
-        repeat,
-        random_offset,
-        test_tone,
-        no_delay,
-        mode,
-        terminate,
-        useled,
-        useini);
     int nbands = center_freq_set.size();
 
     // Initial configuration
