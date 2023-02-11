@@ -928,6 +928,93 @@ bool getINIValues(
 
 }
 
+void convertToFreq(const char* &option, double &parsed_freq)
+{
+    if (!strcasecmp(option, "LF"))
+    {
+        parsed_freq = 137500.0;
+    }
+    else if (!strcasecmp(option, "LF-15"))
+    {
+        parsed_freq = 137612.5;
+    }
+    else if (!strcasecmp(option, "MF"))
+    {
+        parsed_freq = 475700.0;
+    }
+    else if (!strcasecmp(option, "MF-15"))
+    {
+        parsed_freq = 475812.5;
+    }
+    else if (!strcasecmp(option, "160m"))
+    {
+        parsed_freq = 1838100.0;
+    }
+    else if (!strcasecmp(option, "160m-15"))
+    {
+        parsed_freq = 1838212.5;
+    }
+    else if (!strcasecmp(option, "80m"))
+    {
+        parsed_freq = 3570100.0;
+    }
+    else if (!strcasecmp(option, "60m"))
+    {
+        parsed_freq = 5288700.0;
+    }
+    else if (!strcasecmp(option, "40m"))
+    {
+        parsed_freq = 7040100.0;
+    }
+    else if (!strcasecmp(option, "30m"))
+    {
+        parsed_freq = 10140200.0;
+    }
+    else if (!strcasecmp(option, "20m"))
+    {
+        parsed_freq = 14097100.0;
+    }
+    else if (!strcasecmp(option, "17m"))
+    {
+        parsed_freq = 18106100.0;
+    }
+    else if (!strcasecmp(option, "15m"))
+    {
+        parsed_freq = 21096100.0;
+    }
+    else if (!strcasecmp(option, "12m"))
+    {
+        parsed_freq = 24926100.0;
+    }
+    else if (!strcasecmp(option, "10m"))
+    {
+        parsed_freq = 28126100.0;
+    }
+    else if (!strcasecmp(option, "6m"))
+    {
+        parsed_freq = 50294500.0;
+    }
+    else if (!strcasecmp(option, "4m"))
+    {
+        parsed_freq = 70092500.0;
+    }
+    else if (!strcasecmp(option, "2m"))
+    {
+        parsed_freq = 144490500.0;
+    }
+    else
+    {
+        // Not a string. See if it can be parsed as a double.
+        char *endp;
+        parsed_freq = strtod(option, &endp);
+        if ((optarg == endp) || (*endp != '\0'))
+        {
+            std::cerr << "Error: could not parse transmit frequency: " << option << std::endl;
+            ABORT(-1);
+        }
+    }
+}
+
 bool parse_commandline(
     // Inputs
     const int &argc,
@@ -1115,89 +1202,8 @@ bool parse_commandline(
         // Must be a frequency
         // First see if it is a string.
         double parsed_freq;
-        if (!strcasecmp(argv[optind], "LF"))
-        {
-            parsed_freq = 137500.0;
-        }
-        else if (!strcasecmp(argv[optind], "LF-15"))
-        {
-            parsed_freq = 137612.5;
-        }
-        else if (!strcasecmp(argv[optind], "MF"))
-        {
-            parsed_freq = 475700.0;
-        }
-        else if (!strcasecmp(argv[optind], "MF-15"))
-        {
-            parsed_freq = 475812.5;
-        }
-        else if (!strcasecmp(argv[optind], "160m"))
-        {
-            parsed_freq = 1838100.0;
-        }
-        else if (!strcasecmp(argv[optind], "160m-15"))
-        {
-            parsed_freq = 1838212.5;
-        }
-        else if (!strcasecmp(argv[optind], "80m"))
-        {
-            parsed_freq = 3570100.0;
-        }
-        else if (!strcasecmp(argv[optind], "60m"))
-        {
-            parsed_freq = 5288700.0;
-        }
-        else if (!strcasecmp(argv[optind], "40m"))
-        {
-            parsed_freq = 7040100.0;
-        }
-        else if (!strcasecmp(argv[optind], "30m"))
-        {
-            parsed_freq = 10140200.0;
-        }
-        else if (!strcasecmp(argv[optind], "20m"))
-        {
-            parsed_freq = 14097100.0;
-        }
-        else if (!strcasecmp(argv[optind], "17m"))
-        {
-            parsed_freq = 18106100.0;
-        }
-        else if (!strcasecmp(argv[optind], "15m"))
-        {
-            parsed_freq = 21096100.0;
-        }
-        else if (!strcasecmp(argv[optind], "12m"))
-        {
-            parsed_freq = 24926100.0;
-        }
-        else if (!strcasecmp(argv[optind], "10m"))
-        {
-            parsed_freq = 28126100.0;
-        }
-        else if (!strcasecmp(argv[optind], "6m"))
-        {
-            parsed_freq = 50294500.0;
-        }
-        else if (!strcasecmp(argv[optind], "4m"))
-        {
-            parsed_freq = 70092500.0;
-        }
-        else if (!strcasecmp(argv[optind], "2m"))
-        {
-            parsed_freq = 144490500.0;
-        }
-        else
-        {
-            // Not a string. See if it can be parsed as a double.
-            char *endp;
-            parsed_freq = strtod(argv[optind], &endp);
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                std::cerr << "Error: could not parse transmit frequency: " << argv[optind] << std::endl;
-                ABORT(-1);
-            }
-        }
+        const char * argument = argv[optind];
+        convertToFreq(argument, parsed_freq);
         optind++;
         center_freq_set.push_back(parsed_freq);
     }
