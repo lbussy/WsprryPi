@@ -206,7 +206,6 @@ void prtStdOut(T t, Args... args)
 {
     std::cout << t;
     prtStdOut(args...);
-    std::cout<<std::endl;
 }
 
 // Recursive variadic function for stderr
@@ -220,7 +219,11 @@ void prtStdErr(T t, Args... args)
 {
     std::cerr << t;
     prtStdOut(args...);
-    std::cerr<<std::endl;
+}
+
+void strip(std::string &mystring)
+{
+    mystring.erase( std::remove(mystring.begin(), mystring.end(), '\r'), mystring.end() );
 }
 
 // GPIO/DIO Control:
@@ -1325,7 +1328,6 @@ bool parse_commandline(
             prtStdOut("Extra options:");
             prtStdOut(temp.str());
         }
-        prtStdOut("");
     }
     else
     {
@@ -1528,7 +1530,7 @@ int main(const int argc, char *const argv[])
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 
-    // catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
+    // Catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
     for (int i = 0; i < 64; i++)
     {
         struct sigaction sa;
