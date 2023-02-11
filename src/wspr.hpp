@@ -31,6 +31,7 @@
 #include "version.hpp"
 #include "singleton.hpp"
 #include "monitorfile.hpp"
+#include "config.hpp"
 
 #ifdef __cplusplus
 extern "C"

@@ -877,11 +877,63 @@ void print_usage()
     std::cout << std::endl;
 }
 
+bool getINIValues(
+    std::string inifile,
+    bool &xmit_enabled,
+    std::string &callsign,
+    std::string &locator,
+    std::string &tx_power,
+    std::string &frequency_string,
+    double &ppm,
+    bool &self_cal,
+    bool &random_offset,
+    bool &useled,
+    bool &daemon_mode)
+{
+    WSPRConfig config(inifile);
+    if (config.isInitialized())
+    {
+        xmit_enabled = config.getTransmit();
+        callsign = config.getCallsign();
+        locator = config.getGridsquare();
+        tx_power = config.getTxpower();
+        frequency_string = config.getFrequency();
+        ppm = config.getPpm();
+        self_cal = config.getSelfcal();
+        random_offset = config.getOffset();
+        useled = config.useLED();
+        daemon_mode = config.useDaemon();
+
+        std::cout << std::endl;
+        std::cout << "Config loaded from: " << inifile << std::endl;
+        std::cout << "==================================" << std::endl;
+        std::cout << "Transmit Enabled:\t\t" << xmit_enabled << std::endl;
+        std::cout << "Call Sign:\t\t\t" << callsign << std::endl;
+        std::cout << "Grid Square:\t\t\t" << locator << std::endl;
+        std::cout << "Transmit Power:\t\t\t" << tx_power << std::endl;
+        std::cout << "Frequencies:\t\t\t" << frequency_string << std::endl;
+        std::cout << "PPM Offset:\t\t\t" << ppm << std::endl;
+        std::cout << "Do not use NTP sync:\t\t" << (!self_cal) << std::endl;
+        std::cout << "Check NTP Each Run (default):\t" << self_cal << std::endl;
+        std::cout << "Use Frequency Randomization:\t" << random_offset << std::endl;
+        std::cout << "Use LED:\t\t\t" << useled << std::endl;
+        std::cout << "Use daemon mode:\t\t" << daemon_mode << std::endl;
+        std::cout << std::endl;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+
+}
+
 bool parse_commandline(
     // Inputs
     const int &argc,
     char *const argv[],
     // Outputs
+    bool &xmit_enabled,
     std::string &callsign,
     std::string &locator,
     std::string &tx_power,
@@ -901,6 +953,7 @@ bool parse_commandline(
     // TODO:  Daemon mode to turn off verbose crap
 
     // Default values
+    xmit_enabled = false;
     ppm = 0;
     self_cal = true;
     repeat = false;
@@ -914,6 +967,7 @@ bool parse_commandline(
     daemon_mode = false;
 
     std::string inifile;
+    std::string freq_string;
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -1012,6 +1066,28 @@ bool parse_commandline(
             return false;
         }
     }
+
+    if (useini == true)
+    {
+        // TODO:  Read INI and clobber what we have already
+        bool gotINI = getINIValues(
+            inifile,
+            xmit_enabled,
+            callsign,
+            locator,
+            tx_power,
+            freq_string,
+            ppm,
+            self_cal,
+            random_offset,
+            useled,
+            daemon_mode);
+        if (!gotINI)
+        {
+            return false;
+        }
+    }
+    return false; // DEBUG
 
     // Parse the non-option parameters
     unsigned int n_free_args = 0;
@@ -1124,11 +1200,6 @@ bool parse_commandline(
         }
         optind++;
         center_freq_set.push_back(parsed_freq);
-    }
-
-    if (useini == true)
-    {
-        // TODO:  Read INI and clobber what we have already
     }
 
     // Convert to uppercase
@@ -1356,6 +1427,7 @@ void setup_peri_base_virt(
 int main(const int argc, char *const argv[])
 {
     // Parse arguments first
+    bool xmit_enabled;
     std::string callsign;
     std::string locator;
     std::string tx_power;
@@ -1371,9 +1443,11 @@ int main(const int argc, char *const argv[])
     bool useled;
     bool useini;
     bool daemon_mode;
+
     bool parsed = parse_commandline(
         argc,
         argv,
+        xmit_enabled,
         callsign,
         locator,
         tx_power,

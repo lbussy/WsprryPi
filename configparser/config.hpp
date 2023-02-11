@@ -27,7 +27,7 @@ public:
     {
         return gridsquare;
     }
-    int getTxpower()
+    std::string getTxpower()
     {
         return txpower;
     }
@@ -39,9 +39,9 @@ public:
     {
         return ppm;
     }
-    bool getFreerun()
+    bool getSelfcal()
     {
-        return freerun;
+        return selfcal;
     }
     bool getOffset()
     {
@@ -77,16 +77,16 @@ private:
 
             // Common group
             callsign = reader.Get("Common", "Call Sign", "");
-            gridsquare = reader.Get("Common", "Grid Square", "");;
-            txpower = reader.GetInteger("Common", "TX Power", 0);
+            gridsquare = reader.Get("Common", "Grid Square", "");
+            txpower = std::to_string(reader.GetInteger("Common", "TX Power", 0));
             frequency = reader.Get("Common", "Frequency", "");
 
             // Extended Group
-            ppm = reader.GetReal("Extended", "PPM", 0.0);;
-            freerun = reader.GetBoolean("Extended", "Free Run", false);;
-            offset = reader.GetBoolean("Extended", "Offset", false);;
-            useled = reader.GetBoolean("Extended", "Use LED", false);;
-            usedaemon = reader.GetBoolean("Extended", "Use Daemon", false);;
+            ppm = reader.GetReal("Extended", "PPM", 0.0);
+            selfcal = reader.GetBoolean("Extended", "Self Cal", false);
+            offset = reader.GetBoolean("Extended", "Offset", false);
+            useled = reader.GetBoolean("Extended", "Use LED", false);
+            usedaemon = reader.GetBoolean("Extended", "Use Daemon", false);
         }
     }
 
@@ -96,11 +96,11 @@ private:
     // Common group
     std::string callsign;
     std::string gridsquare;
-    int txpower;
+    std::string txpower;
     std::string frequency;
     // Extended group
     double ppm;
-    bool freerun;
+    bool selfcal;
     bool offset;
     bool useled;
     bool usedaemon;
