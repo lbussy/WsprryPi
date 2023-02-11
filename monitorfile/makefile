@@ -2,10 +2,10 @@
 
 GXXFLAGS += -Wall -Werror -fmax-errors=5
 GXXFLAGS += -lstdc++fs -std=c++17
-OUT = filetime
+OUT = monitor
 
 filetime:
-	g++ $(GXXFLAGS) filetime.cpp -o $(OUT)
+	g++ $(GXXFLAGS) filemonitor.cpp -o $(OUT)
 
 clean:
 	$(RM) *.o $(OUT)
