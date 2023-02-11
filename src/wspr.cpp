@@ -906,7 +906,7 @@ bool getINIValues(
 
         std::cout << std::endl;
         std::cout << "Config loaded from: " << inifile << std::endl;
-        std::cout << "==================================" << std::endl;
+        std::cout << "============================================" << std::endl;
         std::cout << "Transmit Enabled:\t\t" << xmit_enabled << std::endl;
         std::cout << "Call Sign:\t\t\t" << callsign << std::endl;
         std::cout << "Grid Square:\t\t\t" << locator << std::endl;
@@ -930,6 +930,7 @@ bool getINIValues(
 
 void convertToFreq(const char* &option, double &parsed_freq)
 {
+    // TODO:  Find a better way to do this
     if (!strcasecmp(option, "LF"))
     {
         parsed_freq = 137500.0;
@@ -1156,7 +1157,6 @@ bool parse_commandline(
 
     if (useini == true)
     {
-        // TODO:  Read INI and clobber what we have already
         bool gotINI = getINIValues(
             inifile,
             xmit_enabled,
@@ -1174,38 +1174,55 @@ bool parse_commandline(
             return false;
         }
     }
-    return false; // DEBUG
 
     // Parse the non-option parameters
-    unsigned int n_free_args = 0;
-    while (optind < argc)
+    if (useini)
     {
-        // Check for callsign, locator, tx_power
-        if (n_free_args == 0)
+        std::vector<std::string> freq_list;
+        std::istringstream s ( freq_string);
+        freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
+
+        for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f) 
         {
-            callsign = argv[optind++];
-            n_free_args++;
-            continue;
+            std::string fString{ *f };
+            const char * fs = fString.c_str();
+            double parsed_freq;
+            convertToFreq(fs, parsed_freq);
+            center_freq_set.push_back(parsed_freq);
         }
-        if (n_free_args == 1)
+    }
+    else
+    {
+        unsigned int n_free_args = 0;
+        while (optind < argc)
         {
-            locator = argv[optind++];
-            n_free_args++;
-            continue;
+            // Check for callsign, locator, tx_power
+            if (n_free_args == 0)
+            {
+                callsign = argv[optind++];
+                n_free_args++;
+                continue;
+            }
+            if (n_free_args == 1)
+            {
+                locator = argv[optind++];
+                n_free_args++;
+                continue;
+            }
+            if (n_free_args == 2)
+            {
+                tx_power = argv[optind++];
+                n_free_args++;
+                continue;
+            }
+            // Must be a frequency
+            // First see if it is a string.
+            double parsed_freq;
+            const char * argument = argv[optind];
+            convertToFreq(argument, parsed_freq);
+            optind++;
+            center_freq_set.push_back(parsed_freq);
         }
-        if (n_free_args == 2)
-        {
-            tx_power = argv[optind++];
-            n_free_args++;
-            continue;
-        }
-        // Must be a frequency
-        // First see if it is a string.
-        double parsed_freq;
-        const char * argument = argv[optind];
-        convertToFreq(argument, parsed_freq);
-        optind++;
-        center_freq_set.push_back(parsed_freq);
     }
 
     // Convert to uppercase
@@ -1511,13 +1528,13 @@ int main(const int argc, char *const argv[])
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
-    if (useini)
-    {
-        // TODO:
-        std::cout << "INI detected." << std::endl;
-        cleanup();
-        return 0;
-    }
+    // if (useini)
+    // {
+    //     // TODO:
+    //     std::cout << "INI detected." << std::endl;
+    //     cleanup();
+    //     return 0;
+    // }
 
     if (mode == TONE)
     {
