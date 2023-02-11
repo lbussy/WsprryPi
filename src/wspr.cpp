@@ -676,7 +676,7 @@ void wspr(
     const char *l_pre,
     const char *dbm,
     unsigned char *symbols,
-    bool led)
+    bool useled)
 {
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
@@ -884,8 +884,11 @@ void parse_commandline(
     bool &no_delay,
     mode_type &mode,
     int &terminate,
-    bool &led)
+    bool &useled,
+    bool &useini)
 {
+    // TODO:  Daemon mode to turn off verbose crap
+
     // Default values
     ppm = 0;
     self_cal = true;
@@ -895,7 +898,10 @@ void parse_commandline(
     no_delay = false;
     mode = WSPR;
     terminate = -1;
-    led = false;
+    useled = false;
+    useini = false;
+
+    std::string inifile;
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -908,13 +914,14 @@ void parse_commandline(
         {"test-tone", required_argument, 0, 't'},
         {"no-delay", no_argument, 0, 'n'},
         {"led", no_argument, 0, 'l'},
+        {"ini-file", required_argument, 0, 'i'},
         {0, 0, 0, 0}};
 
     while (true)
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "hp:sfrx:ot:n",
+        int c = getopt_long(argc, argv, "hp:sfrx:ot:nli:",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -974,11 +981,16 @@ void parse_commandline(
                 ABORT(-1);
             }
             break;
+        case 'i':
+            // TODO: INI file
+            inifile = optarg;
+            useini = true;
+            break;
         case 'n':
             no_delay = true;
             break;
         case 'l':
-            led = true;
+            useled = true;
             break;
         case '?':
             /* getopt_long already printed an error message. */
@@ -1099,6 +1111,11 @@ void parse_commandline(
         }
         optind++;
         center_freq_set.push_back(parsed_freq);
+    }
+
+    if (useini == true)
+    {
+        // TODO:  Read INI and clobber what we have alread
     }
 
     // Convert to uppercase
@@ -1363,7 +1380,8 @@ int main(const int argc, char *const argv[])
     bool no_delay;
     mode_type mode;
     int terminate;
-    bool led;
+    bool useled;
+    bool useini;
     parse_commandline(
         argc,
         argv,
@@ -1379,7 +1397,8 @@ int main(const int argc, char *const argv[])
         no_delay,
         mode,
         terminate,
-        led);
+        useled,
+        useini);
     int nbands = center_freq_set.size();
 
     // Initial configuration
@@ -1393,6 +1412,14 @@ int main(const int argc, char *const argv[])
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
+    if (useini)
+    {
+        // TODO:
+        std::cout << "INI detected." << std::endl;
+        cleanup();
+        return 0;
+    }
+
     if (mode == TONE)
     {
         // Test tone mode...
@@ -1404,7 +1431,7 @@ int main(const int argc, char *const argv[])
         std::cout << temp.str();
         std::cout << "Press CTRL-C to exit." << std::endl;
 
-        txon(led);
+        txon(useled);
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1443,7 +1470,7 @@ int main(const int argc, char *const argv[])
 
         // Create WSPR symbols
         unsigned char symbols[162];
-        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, led);
+        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, useled);
         /*
         printf("WSPR codeblock: ");
         for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
@@ -1525,7 +1552,7 @@ int main(const int argc, char *const argv[])
                 struct timeval sym_start;
                 struct timeval diff;
                 int bufPtr = 0;
-                txon(led);
+                txon(useled);
                 for (int i = 0; i < 162; i++)
                 {
                     gettimeofday(&sym_start, NULL);
@@ -1543,7 +1570,7 @@ int main(const int argc, char *const argv[])
                 n_tx++;
 
                 // Turn transmitter off
-                txoff(led);
+                txoff(useled);
 
                 // End timestamp
                 gettimeofday(&tvEnd, NULL);
