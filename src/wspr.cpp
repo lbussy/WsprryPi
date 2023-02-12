@@ -107,6 +107,9 @@
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
+// Daemon Mode = Hold running as daemon status
+bool daemon_mode;
+
 // PLLD clock frequency.
 // For RPi1, after NTP converges, these is a 2.5 PPM difference between
 // the PPM correction reported by NTP and the actual frequency offset of
@@ -219,11 +222,6 @@ void prtStdErr(T t, Args... args)
 {
     std::cerr << t;
     prtStdOut(args...);
-}
-
-void strip(std::string &mystring)
-{
-    mystring.erase( std::remove(mystring.begin(), mystring.end(), '\r'), mystring.end() );
 }
 
 // GPIO/DIO Control:
@@ -917,8 +915,7 @@ bool getINIValues(
     double &ppm,
     bool &self_cal,
     bool &random_offset,
-    bool &useled,
-    bool &daemon_mode)
+    bool &useled)
 {
     WSPRConfig config(inifile);
     if (config.isInitialized())
@@ -932,7 +929,6 @@ bool getINIValues(
         self_cal = config.getSelfcal();
         random_offset = config.getOffset();
         useled = config.useLED();
-        daemon_mode = config.useDaemon();
 
         prtStdOut("");
         prtStdOut("Config loaded from: ", inifile);
@@ -947,7 +943,6 @@ bool getINIValues(
         prtStdOut("Check NTP Each Run (default):\t", self_cal);
         prtStdOut("Use Frequency Randomization:\t", random_offset);
         prtStdOut("Use LED:\t\t\t", useled);
-        prtStdOut("Use daemon mode:\t\t", daemon_mode);
         prtStdOut("");
         return true;
     }
@@ -1064,8 +1059,7 @@ bool parse_commandline(
     mode_type &mode,
     int &terminate,
     bool &useled,
-    bool &useini,
-    bool &daemon_mode)
+    bool &useini)
 {
     // TODO:  Daemon mode to turn off verbose crap
 
@@ -1098,14 +1092,14 @@ bool parse_commandline(
         {"no-delay", no_argument, 0, 'n'},
         {"led", no_argument, 0, 'l'},
         {"ini-file", required_argument, 0, 'i'},
-        {"daemon-mode", no_argument, 0, 'd'},
+        {"daemon-mode", no_argument, 0, 'D'},
         {0, 0, 0, 0}};
 
     while (true)
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:d",
+        int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -1176,7 +1170,7 @@ bool parse_commandline(
         case 'l':
             useled = true;
             break;
-        case 'd':
+        case 'D':
             daemon_mode = true;
             break;
         default:
@@ -1196,8 +1190,7 @@ bool parse_commandline(
             ppm,
             self_cal,
             random_offset,
-            useled,
-            daemon_mode);
+            useled);
         if (!gotINI)
         {
             return false;
@@ -1401,6 +1394,16 @@ void timeval_print(struct timeval *tv)
     printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
 }
 
+std::string timeStamp()
+{
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    auto str = oss.str();
+    return str;
+}
+
 // Create the mbox special files and open mbox.
 void open_mbox()
 {
@@ -1492,7 +1495,7 @@ int main(const int argc, char *const argv[])
     int terminate;
     bool useled;
     bool useini;
-    bool daemon_mode;
+    // bool daemon_mode; Moved to a global
 
     bool parsed = parse_commandline(
         argc,
@@ -1511,8 +1514,7 @@ int main(const int argc, char *const argv[])
         mode,
         terminate,
         useled,
-        useini,
-        daemon_mode);
+        useini);
     
     if (!parsed) return 1;
 
@@ -1678,10 +1680,8 @@ int main(const int argc, char *const argv[])
             {
                 // Print a status message right before transmission begins.
                 struct timeval tvBegin, tvEnd, tvDiff;
-                gettimeofday(&tvBegin, NULL);
-                std::cout << "  TX started at: ";
-                timeval_print(&tvBegin);
-                std::cout << std::endl;
+                // TODO: Test
+                prtStdOut("\tTX Started: ", timeStamp());
 
                 struct timeval sym_start;
                 struct timeval diff;
@@ -1708,6 +1708,8 @@ int main(const int argc, char *const argv[])
 
                 // End timestamp
                 gettimeofday(&tvEnd, NULL);
+
+                // TODO:  Fix this to use timeStamp
                 std::cout << "TX ended at:   ";
                 timeval_print(&tvEnd);
                 timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
