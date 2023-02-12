@@ -1518,6 +1518,16 @@ int main(const int argc, char *const argv[])
     
     if (!parsed) return 1;
 
+    if (useini && !xmit_enabled)
+    {
+        std::cout << "Transmit disabled, waiting." << std::endl;
+        // TODO: Loop and wait for an ini file change
+        while (true)
+        {
+            ;
+        }
+    }
+
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
     if (!singleton())
