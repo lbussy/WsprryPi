@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for running as daemon
+
+[Service]
+Type=simple 
+ExecStart=WSPR_DAEMON=true /usr/local/bin/daemoncheck
+
+[Install]
+WantedBy=multi-user.target
