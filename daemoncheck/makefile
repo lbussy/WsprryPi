@@ -3,7 +3,7 @@ OBJS	= $(NAME).o
 SOURCE	= $(NAME).cpp
 OUT	    = $(NAME)
 CC	    = g++
-FLAGS	= -g -c -Wall
+FLAGS	= -g -c -Wall -lstdc++fs
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT)
