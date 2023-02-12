@@ -342,16 +342,16 @@ function compare() {
 ############
 
 do_unit() {
-    local unit executable ext extension executable retval paths env
+    local unit executable ext extension executable retval paths
     path="/usr/local/bin"
     unit="$1"
     ext="$2"
-    env="$3"
+    arg="$3"
     if [ "$ext" == "bash" ]; then
-        extension="sh"
+        extension=".sh"
         executable="bash"
     elif [ "$ext" == "python3" ]; then
-        extension="py"
+        extension=".py"
         executable="python3"
     elif [ "$ext" == "exe" ]; then
         extension=""
@@ -360,14 +360,21 @@ do_unit() {
         echo -e "Unknown extension."&&die
     fi
     # Handle script install
-    checkscript "$unit.$extension"
+    checkscript "$unit$extension"
     retval="$?"
-    if [[ "$retval" == 0 ]]; then copy_file "$unit.$extension"; fi
+    if [[ "$retval" == 0 ]]; then
+        echo -e "\n"
+        copy_file "$unit" "$extension"
+    fi
 
     # Handle Unit file install
     checkdaemon "$unit"
     retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$path" "$env" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
+    if [[ "$retval" == 0 ]]; then
+        createdaemon "$unit$extension" "$path" "$arg" $unit "root" "$PACKAGENAME" "$(which "$executable")"
+    else
+        echo -e "\n"
+    fi
 }
 
 ############
@@ -379,15 +386,16 @@ do_unit() {
 copy_file() {
     local scriptPath scriptName fullName curlFile
     scriptName="$1"
+    extension="$2"
     scriptPath="/usr/local/bin"
-    fullName="$scriptPath/$scriptName"
-    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName"
+    fullName="$scriptPath/$scriptName$extension"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName$extension"
 
     # Download file
     curl -o "$fullName" "$curlFile"
 
-    # See if file begins with "#!"
-    if grep -q "#!" "$fullName"; then
+    # See if file is an executable
+    if file "$fullName" | grep -q executable; then
         chown root:root "$fullName"
         chmod 0744 "$fullName"
     else
@@ -414,18 +422,20 @@ checkscript() {
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
-                return 255;;
+                    return 255;;
                 * )
-                return 0 ;; # Do overwrite
+                    return 0 ;; # Do overwrite
             esac
-            elif [ "$verchk" == "eq" ]; then
+        elif [ "$verchk" == "eq" ]; then
             echo -e "\nFile: $scriptName exists and is the same version" > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
-                [Yy]* ) return 0;; # Do overwrite
-                * ) return 255;;
+                [Yy]* )
+                    return 0;; # Do overwrite
+                * )
+                    return 255;;
             esac
-            elif [ "$verchk" == "gt" ]; then
+        elif [ "$verchk" == "gt" ]; then
             echo -e "\nFile: $scriptName file is newer than the version being installed."
             echo -e "Skipping."
             return 255
@@ -489,9 +499,9 @@ checkdaemon() {
 createdaemon () {
     local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
-    scriptName="$1 -d"
-    envSet="$2"
-    scriptPath="$3"
+    scriptName="$1"
+    scriptPath="$2"
+    arguments="$3"
     daemonName="${4,,}"
     userName="$5"
     productName="$6"
@@ -521,7 +531,7 @@ Restart=on-failure
 RestartSec=5
 User=$userName
 Group=$userName
-ExecStart=$processShell $envSet $scriptPath/$scriptName
+ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
 SyslogIdentifier=$daemonName
 
 [Install]
@@ -556,7 +566,7 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
-    do_unit "wspr" "exe" "WSPR_DAEMON=true" # Install/upgrade wspr daemon
+    do_unit "wspr" "exe" " -D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     # Choose to support shutdown button
     read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
     case "$yn" in
