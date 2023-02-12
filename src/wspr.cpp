@@ -1380,8 +1380,6 @@ void update_ppm(
 }
 
 /* Return 1 if the difference is negative, otherwise 0.  */
-// From StackOverflow:
-// http://stackoverflow.com/questions/1468596/c-programming-calculate-elapsed-time-in-milliseconds-unix
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1)
 {
     long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -1557,6 +1555,8 @@ int main(const int argc, char *const argv[])
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
+    //TODO:  Reload on ini file change
+
     if (mode == TONE)
     {
         // Test tone mode...
@@ -1616,7 +1616,7 @@ int main(const int argc, char *const argv[])
         printf("\n");
         */
 
-        prtStdOut("Ready to transmit (setup complete)...");
+        prtStdOut("Ready to transmit (setup complete).");
         int band = 0;
         int n_tx = 0;
         for (;;)
