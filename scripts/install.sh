@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="scripts"
+BRANCH="std-out-err"
 VERSION="0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -342,16 +342,20 @@ function compare() {
 ############
 
 do_unit() {
-    local unit executable ext extension executable retval paths
+    local unit executable ext extension executable retval paths env
     path="/usr/local/bin"
     unit="$1"
     ext="$2"
+    env="$3"
     if [ "$ext" == "bash" ]; then
         extension="sh"
         executable="bash"
     elif [ "$ext" == "python3" ]; then
         extension="py"
         executable="python3"
+    elif [ "$ext" == "exe" ]; then
+        extension=""
+        executable=""
     else
         echo -e "Unknown extension."&&die
     fi
@@ -363,7 +367,7 @@ do_unit() {
     # Handle Unit file install
     checkdaemon "$unit"
     retval="$?"
-    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$path" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
+    if [[ "$retval" == 0 ]]; then createdaemon "$unit.$extension" "$path" "$env" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"; fi
 }
 
 ############
@@ -486,11 +490,12 @@ createdaemon () {
     local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell
     unitFileLocation="/etc/systemd/system"
     scriptName="$1 -d"
-    scriptPath="$2"
-    daemonName="${3,,}"
-    userName="$4"
-    productName="$5"
-    processShell="$6"
+    envSet="$2"
+    scriptPath="$3"
+    daemonName="${4,,}"
+    userName="$5"
+    productName="$6"
+    processShell="$7"
     unitFile="$unitFileLocation/$daemonName.service"
     
     if [ -f "$unitFile" ]; then
@@ -516,7 +521,7 @@ Restart=on-failure
 RestartSec=5
 User=$userName
 Group=$userName
-ExecStart=$processShell $scriptPath/$scriptName
+ExecStart=$processShell $envSet $scriptPath/$scriptName
 SyslogIdentifier=$daemonName
 
 [Install]
@@ -551,7 +556,7 @@ main() {
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
-    do_unit "wspr" "python3" # Install/upgrade wspr daemon
+    do_unit "wspr" "exe" "WSPR_DAEMON=true" # Install/upgrade wspr daemon
     # Choose to support shutdown button
     read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
     case "$yn" in
