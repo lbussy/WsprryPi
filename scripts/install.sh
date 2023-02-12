@@ -342,7 +342,7 @@ function compare() {
 ############
 
 do_unit() {
-    local unit executable ext extension executable retval paths
+    local unit executable ext extension executable retval
     path="/usr/local/bin"
     unit="$1"
     ext="$2"
@@ -371,7 +371,7 @@ do_unit() {
     checkdaemon "$unit"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        createdaemon "$unit$extension" "$path" "$arg" $unit "root" "$PACKAGENAME" "$(which "$executable")"
+        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"
     else
         echo -e "\n"
     fi
@@ -497,7 +497,7 @@ checkdaemon() {
 ############
 
 createdaemon () {
-    local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell
+    local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell execStart
     unitFileLocation="/etc/systemd/system"
     scriptName="$1"
     scriptPath="$2"
@@ -506,7 +506,18 @@ createdaemon () {
     userName="$5"
     productName="$6"
     processShell="$7"
+    execStart=""
     unitFile="$unitFileLocation/$daemonName.service"
+
+    # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
+    if [ -n "$processShell" ]; then
+        execStart="$processShell"
+        if [ -n "$scriptPath" ]; then execStart="${execStart} $scriptPath/"; fi
+    else
+        if [ -n "$scriptPath" ]; then execStart="$scriptPath/"; fi
+    fi
+    if [ -n "$scriptName" ]; then execStart="${execStart}$scriptName"; fi
+    if [ -n "$arguments" ]; then execStart="${execStart} $arguments"; fi
     
     if [ -f "$unitFile" ]; then
         echo -e "\nStopping $daemonName daemon.";
@@ -531,7 +542,7 @@ Restart=on-failure
 RestartSec=5
 User=$userName
 Group=$userName
-ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
+ExecStart=$execStart
 SyslogIdentifier=$daemonName
 
 [Install]
