@@ -51,10 +51,6 @@ public:
     {
         return useled;
     }
-    bool useDaemon()
-    {
-        return usedaemon;
-    }
 
 private:
     void valueHandler(const char *configfile)
@@ -86,7 +82,6 @@ private:
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
             useled = reader.GetBoolean("Extended", "Use LED", false);
-            usedaemon = reader.GetBoolean("Extended", "Use Daemon", false);
         }
     }
 
@@ -103,5 +98,4 @@ private:
     bool selfcal;
     bool offset;
     bool useled;
-    bool usedaemon;
 };
