@@ -1,13 +1,14 @@
-OBJS	 = test.o 
-SOURCE	 = test.cpp
-OUT	     = test
+NAME	= testsingle
+OBJS	 = $(NAME).o 
+SOURCE	 = $(NAME).cpp
+OUT	     = $(NAME)
 CC	     = g++
 FLAGS	 = -g -c -Wall
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT)
 
-test.o: $(SOURCE)
+$(NAME).o: $(SOURCE)
 	$(CC) $(FLAGS) $(SOURCE)
 
 clean:
