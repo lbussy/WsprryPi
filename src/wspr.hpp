@@ -27,7 +27,18 @@
 #include <algorithm>
 #include <pthread.h>
 #include <sys/timex.h>
+#include <iterator>
 
 #include "version.hpp"
+#include "singleton.hpp"
+#include "monitorfile.hpp"
+#include "config.hpp"
+
+#ifdef __cplusplus
+extern "C"
+{
+#include "mailbox.h"
+}
+#endif /* __cplusplus */
 
 #endif // _WSPR_H

@@ -1,4 +1,11 @@
-#include "version.hpp"
+#ifndef _VERSION_H
+#define _VERSION_H
+
+#include <bcm_host.h>
+
+int ver();
+const char* version();
+unsigned gpioBase();
 
 int ver()
 {
@@ -22,3 +29,5 @@ unsigned gpioBase()
 {
     return bcm_host_get_peripheral_address();
 }
+
+#endif // _VERSION_H
