@@ -135,7 +135,6 @@ volatile unsigned *gpio;
 
 // Class to monitor for file changes
 bool useini;
-std::string inifile;
 MonitorFile iniMonitor;
 
 typedef enum
@@ -937,9 +936,11 @@ bool getINIValues(
         random_offset = config.getOffset();
         useled = config.useLED();
 
-        prtStdOut("============================================\n");
+        if (! daemon_mode )
+            prtStdOut("============================================\n");
         prtStdOut("Config loaded from: ", inifile, "\n");
-        prtStdOut("============================================\n");
+        if (! daemon_mode )
+            prtStdOut("============================================\n");
         prtStdOut("Transmit Enabled:\t\t", std::boolalpha, xmit_enabled, "\n");
         prtStdOut("Repeat transmission:\t\t", std::boolalpha, repeat, "\n");
         prtStdOut("Call Sign:\t\t\t", callsign, "\n");
@@ -951,7 +952,8 @@ bool getINIValues(
         prtStdOut("Check NTP Each Run (default):\t", std::boolalpha, self_cal, "\n");
         prtStdOut("Use Frequency Randomization:\t", std::boolalpha, random_offset, "\n");
         prtStdOut("Use LED:\t\t\t", std::boolalpha, useled, "\n");
-        prtStdOut("============================================\n");
+        if (! daemon_mode )
+            prtStdOut("============================================\n");
         return true;
     }
     else
@@ -1080,6 +1082,7 @@ bool parse_commandline(
     terminate = -1;
     useled = false;
     useini = false;
+    std::string inifile;
     daemon_mode = false;
 
     std::string freq_string;
@@ -1281,7 +1284,7 @@ bool parse_commandline(
     // Print a summary of the parsed options
     if (mode == WSPR)
     {
-        prtStdOut("WSPR packet contents:\n");
+        prtStdOut("WSPR packet payload:\n");
         prtStdOut("- Callsign: ", callsign, "\n");
         prtStdOut("- Locator:  ", locator, "\n");
         prtStdOut("- Power:    ", tx_power, " dBm\n");
