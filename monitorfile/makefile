@@ -1,11 +1,10 @@
-# g++ -std=c++17 -lstdc++fs filetime.cpp -o filetime
+NAME		= filemonitor
+GXXFLAGS 	+= -Wall -Werror -fmax-errors=5
+GXXFLAGS 	+= -lstdc++fs -std=c++17
+OUT 		= $(NAME)
 
-GXXFLAGS += -Wall -Werror -fmax-errors=5
-GXXFLAGS += -lstdc++fs -std=c++17
-OUT = monitor
-
-filetime:
-	g++ $(GXXFLAGS) filemonitor.cpp -o $(OUT)
+$(NAME):
+	g++ $(GXXFLAGS) $(NAME).cpp -o $(OUT)
 
 clean:
 	$(RM) *.o $(OUT)

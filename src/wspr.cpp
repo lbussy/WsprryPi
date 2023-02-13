@@ -837,6 +837,7 @@ void wspr(
 void wait_every(
     int minute)
 {
+    //TODO:  Reload on ini file change
     time_t t;
     struct tm *ptm;
     for (;;)
@@ -1540,8 +1541,6 @@ int main(const int argc, char *const argv[])
     txon();
     setupDMA(constPage, instrPage, instrs);
     txoff();
-
-    //TODO:  Reload on ini file change
 
     if (mode == TONE)
     {
