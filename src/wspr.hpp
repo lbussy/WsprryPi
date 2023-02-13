@@ -26,6 +26,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <pthread.h>
+#include <sys/timex.h>
 #include <iterator>
 
 #include "version.hpp"
