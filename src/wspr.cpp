@@ -224,6 +224,16 @@ void prtStdErr(T t, Args... args)
     prtStdOut(args...);
 }
 
+std::string timeStamp()
+{
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    auto str = oss.str();
+    return str;
+}
+
 // GPIO/DIO Control:
 
 void setupGPIO(int pin = 0)
@@ -1394,16 +1404,6 @@ void timeval_print(struct timeval *tv)
     printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
 }
 
-std::string timeStamp()
-{
-    auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    auto str = oss.str();
-    return str;
-}
-
 // Create the mbox special files and open mbox.
 void open_mbox()
 {
@@ -1691,7 +1691,7 @@ int main(const int argc, char *const argv[])
                 // Print a status message right before transmission begins.
                 struct timeval tvBegin, tvEnd, tvDiff;
                 // TODO: Test
-                prtStdOut("\tTX Started: ", timeStamp());
+                prtStdOut("TX Started: ", timeStamp());
 
                 struct timeval sym_start;
                 struct timeval diff;
@@ -1719,11 +1719,11 @@ int main(const int argc, char *const argv[])
                 // End timestamp
                 gettimeofday(&tvEnd, NULL);
 
-                // TODO:  Fix this to use timeStamp
-                std::cout << "TX ended at:   ";
-                timeval_print(&tvEnd);
                 timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
+                std::stringstream temp;
+                temp << "TX ended at: " << timeStamp() << "(";
+                temp << tvDiff.tv_sec << "."<< std::setprecision(6) << std::fixed << (tvDiff.tv_usec + 500) / 1000 << " s)";
+                prtStdOut(temp.str());
             }
             else
             {
