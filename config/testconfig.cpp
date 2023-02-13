@@ -21,6 +21,5 @@ int main()
         std::cout << "Check NTP Each Run (default):\t" << config.getSelfcal() << std::endl;
         std::cout << "Use Frequency Randomization:\t" << config.getOffset() << std::endl;
         std::cout << "Use LED:\t\t\t" << config.useLED() << std::endl;
-        std::cout << "Use daemon mode:\t\t" << config.useDaemon() << std::endl;
     }
 }
