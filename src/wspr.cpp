@@ -224,16 +224,6 @@ void prtStdErr(T t, Args... args)
     prtStdErr(args...);
 }
 
-std::string timeStamp()
- {
-    auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    auto str = oss.str();
-    return str;
- }
-
 // GPIO/DIO Control:
 
 void setupGPIO(int pin = 0)
@@ -573,8 +563,8 @@ void setupDMATab(
     {
         center_freq_actual = plld_actual_freq / floor(div_lo) - 1.6 * tone_spacing;
         std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "  Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
-        prtStdOut(temp.str(), " because of hardware limitations.\n");
+        temp << std::setprecision(6) << std::fixed << "Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
+        prtStdErr(temp.str(), " because of hardware limitations.\n");
     }
 
     // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
@@ -862,7 +852,6 @@ void wait_every(
 
 void print_usage()
 {
-    // TODO: Update documentation
     prtStdOut("Usage:\n");
     prtStdOut("  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...\n");
     prtStdOut("    OR\n");
@@ -1044,7 +1033,7 @@ void convertToFreq(const char* &option, double &parsed_freq)
         parsed_freq = strtod(option, &endp);
         if ((optarg == endp) || (*endp != '\0'))
         {
-            prtStdErr("Error: could not parse transmit frequency: ", option);
+            prtStdErr("Error: Could not parse transmit frequency: ", option, "\n");
             exit(-1);
         }
     }
@@ -1071,8 +1060,6 @@ bool parse_commandline(
     bool &useled,
     bool &useini)
 {
-    // TODO:  Daemon mode to turn off verbose crap
-
     // Default values
     xmit_enabled = false;
     ppm = 0;
@@ -1120,7 +1107,7 @@ bool parse_commandline(
         case 0:
             // Code should only get here if a long option was given a non-null
             // flag value.
-            prtStdErr("Check code.");
+            prtStdErr("Check code.\n");
             return false;
             break;
         case 'h':
@@ -1132,7 +1119,7 @@ bool parse_commandline(
             ppm = strtod(optarg, &endp);
             if ((optarg == endp) || (*endp != '\0'))
             {
-                prtStdErr("Error: could not parse ppm value.");
+                prtStdErr("Error: Could not parse ppm value.\n");
                 return false;
             }
             break;
@@ -1149,12 +1136,12 @@ bool parse_commandline(
             terminate = strtol(optarg, &endp, 10);
             if ((optarg == endp) || (*endp != '\0'))
             {
-                prtStdErr("Error: Could not parse termination argument.");
+                prtStdErr("Error: Could not parse termination argument.\n");
                 return false;
             }
             if (terminate < 1)
             {
-                prtStdErr("Error: Termination parameter must be >= 1.");
+                prtStdErr("Error: Termination parameter must be >= 1.\n");
                 return false;
             }
             break;
@@ -1166,7 +1153,7 @@ bool parse_commandline(
             mode = TONE;
             if ((optarg == endp) || (*endp != '\0'))
             {
-                prtStdErr("Error: could not parse test tone frequency.");
+                prtStdErr("Error: could not parse test tone frequency.\n");
                 return false;
             }
             break;
@@ -1264,19 +1251,19 @@ bool parse_commandline(
     // Check consistency among command line options.
     if (ppm && self_cal)
     {
-        prtStdErr("Warning: ppm value is being ignored.");
+        prtStdErr("Warning: ppm value is being ignored.\n");
         ppm = 0.0;
     }
     if (mode == TONE)
     {
         if ((callsign != "") || (locator != "") || (tx_power != "") || (center_freq_set.size() != 0) || random_offset)
         {
-            prtStdErr("Warning: Callsign, locator, etc. are ignored when generating test tone.");
+            prtStdErr("Warning: Callsign, locator, etc. are ignored when generating test tone.\n");
         }
         random_offset = 0;
         if (test_tone <= 0)
         {
-            prtStdErr("Error: Test tone frequency must be positive.");
+            prtStdErr("Error: Test tone frequency must be positive.\n");
             exit(-1);
         }
     }
@@ -1284,8 +1271,8 @@ bool parse_commandline(
     {
         if ((callsign == "") || (locator == "") || (tx_power == "") || (center_freq_set.size() == 0))
         {
-            prtStdErr("Error: must specify callsign, locator, dBm, and at least one frequency.");
-            prtStdErr("Try: wspr --help");
+            prtStdErr("Error: must specify callsign, locator, dBm, and at least one frequency.\n");
+            prtStdErr("Try: wspr --help\n");
             exit(-1);
         }
     }
@@ -1391,7 +1378,7 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
     return (diff < 0);
 }
 
-// TODO:  Get rid of this one
+// Time Stamp
 void timeval_print(struct timeval *tv)
 {
     char buffer[30];
@@ -1410,7 +1397,7 @@ void open_mbox()
     mbox.handle = mbox_open();
     if (mbox.handle < 0)
     {
-        prtStdErr("Failed to open mailbox.");
+        prtStdErr("Failed to open mailbox.\n");
         exit(-1);
     }
 }
@@ -1443,7 +1430,7 @@ void setSchedPriority(int priority)
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (ret)
     {
-        prtStdErr("Warning: pthread_setschedparam (increase thread priority) returned non-zero: ", ret);
+        prtStdErr("Warning: pthread_setschedparam (increase thread priority) returned non-zero: ", ret, "\n");
     }
 }
 
@@ -1457,7 +1444,7 @@ void setup_peri_base_virt(
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        prtStdErr("Error: Can't open /dev/mem");
+        prtStdErr("Error: Can't open /dev/mem\n");
         exit(-1);
     }
     peri_base_virt = (unsigned *)mmap(
@@ -1470,7 +1457,7 @@ void setup_peri_base_virt(
     );
     if ((long int)peri_base_virt == -1)
     {
-        prtStdErr("Error: peri_base_virt mmap error.");
+        prtStdErr("Error: peri_base_virt mmap error.\n");
         exit(-1);
     }
     close(mem_fd);
@@ -1522,7 +1509,7 @@ int main(const int argc, char *const argv[])
     SingletonProcess singleton(SINGLETON_PORT);
     if (!singleton())
     {
-        prtStdErr("Process already running; see ", singleton.GetLockFileName());
+        prtStdErr("Process already running; see ", singleton.GetLockFileName(), "\n");
         return 1;
     }
 
@@ -1589,7 +1576,7 @@ int main(const int argc, char *const argv[])
                 if (center_freq_actual != test_tone + 1.5 * tone_spacing)
                 {
                     std::stringstream temp;
-                    temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.";
+                    temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.\n";
                     prtStdErr(temp.str());
                 }
                 ppm_prev = ppm;
@@ -1676,7 +1663,8 @@ int main(const int argc, char *const argv[])
             if (center_freq_actual)
             {
                 // Print a status message right before transmission begins.
-                // TODO:
+                // Leave this as-is for now because of the three-digit precision
+                // Time Stamp
                 struct timeval tvBegin, tvEnd, tvDiff;
                 gettimeofday(&tvBegin, NULL);
                 std::cout << "TX started at: ";
@@ -1706,8 +1694,7 @@ int main(const int argc, char *const argv[])
                 // Turn transmitter off
                 txoff(useled);
 
-                // End timestamp
-                // TODO:
+                // Time Stamp
                 gettimeofday(&tvEnd, NULL);
                 std::cout << "TX ended at: ";
                 timeval_print(&tvEnd);
