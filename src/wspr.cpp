@@ -1182,11 +1182,6 @@ bool parse_commandline(
         }
     }
 
-    if (useini == true)
-    {
-
-    }
-
     // Parse the non-option parameters
     if (useini)
     {
@@ -1311,7 +1306,7 @@ bool parse_commandline(
         {
             temp << "- TX will stop after " << terminate << " transmissions." << "\n";
         }
-        else if (repeat)
+        else if (repeat && ! daemon_mode)
         {
             temp << "- Transmissions will continue forever until stopped with CTRL-C." << "\n";
         }
@@ -1393,8 +1388,9 @@ void timeval_print(struct timeval *tv)
     // printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
     curtime = tv->tv_sec;
     // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
-    strftime(buffer, 30, "%Y-%m-%d %T UTC", gmtime(&curtime));
+    strftime(buffer, 30, "%Y-%m-%d %T", gmtime(&curtime));
     printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
+    std::cout << " UTC";
 }
 
 // Create the mbox special files and open mbox.
