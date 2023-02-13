@@ -19,6 +19,10 @@ public:
     {
         return transmit;
     }
+    bool getRepeat()
+    {
+        return repeat;
+    }
     std::string getCallsign()
     {
         return callsign;
@@ -70,6 +74,7 @@ private:
         {
             // Control group
             transmit = reader.GetBoolean("Control", "Transmit", false);
+            repeat = reader.GetBoolean("Control", "Repeat", false);
 
             // Common group
             callsign = reader.Get("Common", "Call Sign", "");
@@ -88,6 +93,7 @@ private:
     bool isinitialized;
     // Control group
     bool transmit;
+    bool repeat;
     // Common group
     std::string callsign;
     std::string gridsquare;

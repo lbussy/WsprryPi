@@ -133,6 +133,11 @@ void *gpio_map;
 // I/O access
 volatile unsigned *gpio;
 
+// Class to monitor for file changes
+bool useini;
+std::string inifile;
+MonitorFile iniMonitor;
+
 typedef enum
 {
     WSPR,
@@ -908,6 +913,7 @@ void print_usage()
 bool getINIValues(
     std::string inifile,
     bool &xmit_enabled,
+    bool &repeat,
     std::string &callsign,
     std::string &locator,
     std::string &tx_power,
@@ -921,6 +927,7 @@ bool getINIValues(
     if (config.isInitialized())
     {
         xmit_enabled = config.getTransmit();
+        repeat = config.getRepeat();
         callsign = config.getCallsign();
         locator = config.getGridsquare();
         tx_power = config.getTxpower();
@@ -934,6 +941,7 @@ bool getINIValues(
         prtStdOut("Config loaded from: ", inifile, "\n");
         prtStdOut("============================================\n");
         prtStdOut("Transmit Enabled:\t\t", std::boolalpha, xmit_enabled, "\n");
+        prtStdOut("Repeat transmission:\t\t", std::boolalpha, repeat, "\n");
         prtStdOut("Call Sign:\t\t\t", callsign, "\n");
         prtStdOut("Grid Square:\t\t\t", locator, "\n");
         prtStdOut("Transmit Power:\t\t\t", tx_power, "\n");
@@ -1058,8 +1066,7 @@ bool parse_commandline(
     bool &no_delay,
     mode_type &mode,
     int &terminate,
-    bool &useled,
-    bool &useini)
+    bool &useled)
 {
     // Default values
     xmit_enabled = false;
@@ -1075,7 +1082,6 @@ bool parse_commandline(
     useini = false;
     daemon_mode = false;
 
-    std::string inifile;
     std::string freq_string;
 
     static struct option long_options[] = {
@@ -1178,9 +1184,16 @@ bool parse_commandline(
 
     if (useini == true)
     {
-        bool gotINI = getINIValues(
+
+    }
+
+    // Parse the non-option parameters
+    if (useini)
+    {
+        if ( !getINIValues(
             inifile,
             xmit_enabled,
+            repeat,
             callsign,
             locator,
             tx_power,
@@ -1188,18 +1201,10 @@ bool parse_commandline(
             ppm,
             self_cal,
             random_offset,
-            useled);
-        if (!gotINI)
-        {
-            return false;
-        }
-    }
+            useled) ) return false;
 
-    // Parse the non-option parameters
-    if (useini)
-    {
         std::vector<std::string> freq_list;
-        std::istringstream s ( freq_string);
+        std::istringstream s ( freq_string );
         freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
         for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f) 
@@ -1388,7 +1393,7 @@ void timeval_print(struct timeval *tv)
     // printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
     curtime = tv->tv_sec;
     // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
-    strftime(buffer, 30, "UTC %Y-%m-%d %T", gmtime(&curtime));
+    strftime(buffer, 30, "%Y-%m-%d %T UTC", gmtime(&curtime));
     printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
 }
 
@@ -1481,7 +1486,6 @@ int main(const int argc, char *const argv[])
     mode_type mode;
     int terminate;
     bool useled;
-    bool useini;
 
     prtStdOut("Wsprry Pi running on: ", version(), ".\n");
     getPLLD(); // Get PLLD Frequency
@@ -1503,8 +1507,7 @@ int main(const int argc, char *const argv[])
         no_delay,
         mode,
         terminate,
-        useled,
-        useini) ) return 1;
+        useled) ) return 1;
 
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
@@ -1586,137 +1589,138 @@ int main(const int argc, char *const argv[])
     else
     {
         // WSPR mode
-
+        { // Reload Loop >
         // Create WSPR symbols
-        unsigned char symbols[162];
-        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, useled);
-        /*
-        printf("WSPR codeblock: ");
-        for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
-          if (i) {
-            std::cout << ",";
-          }
-          printf("%d", symbols[i]);
-        }
-        printf("\n");
-        */
-
-        prtStdOut("Ready to transmit (setup complete).\n");
-        int band = 0;
-        int n_tx = 0;
-        for (;;)
-        {
-            // Calculate WSPR parameters for this transmission
-            double center_freq_desired;
-            center_freq_desired = center_freq_set[band];
-            bool wspr15 =
-                (center_freq_desired > 137600 && center_freq_desired < 137625) ||
-                (center_freq_desired > 475800 && center_freq_desired < 475825) ||
-                (center_freq_desired > 1838200 && center_freq_desired < 1838225);
-            double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-            double tone_spacing = 1.0 / wspr_symtime;
-
-            // Add random offset
-            if ((center_freq_desired != 0) && random_offset)
-            {
-                center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+            unsigned char symbols[162];
+            wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, useled);
+            /*
+            printf("WSPR codeblock: ");
+            for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
+            if (i) {
+                std::cout << ",";
             }
-
-            // Status message before transmission
-            std::stringstream temp;
-            temp << std::setprecision(6) << std::fixed;
-            temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
-            prtStdOut(temp.str(), "\n");
-
-            // Wait for WSPR transmission window to arrive.
-            if (no_delay)
-            {
-                prtStdOut("Transmitting immediately (not waiting for WSPR window.)\n");
+            printf("%d", symbols[i]);
             }
-            else
-            {
-                prtStdOut("Waiting for next WSPR transmission window.\n");
-                wait_every((wspr15) ? 15 : 2);
-            }
+            printf("\n");
+            */
 
-            // Update crystal calibration information
-            if (self_cal)
+            prtStdOut("Ready to transmit (setup complete).\n");
+            int band = 0;
+            int n_tx = 0;
+            for (;;)
             {
-                update_ppm(ppm);
-            }
+                // Calculate WSPR parameters for this transmission
+                double center_freq_desired;
+                center_freq_desired = center_freq_set[band];
+                bool wspr15 =
+                    (center_freq_desired > 137600 && center_freq_desired < 137625) ||
+                    (center_freq_desired > 475800 && center_freq_desired < 475825) ||
+                    (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+                double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+                double tone_spacing = 1.0 / wspr_symtime;
 
-            // Create the DMA table for this center frequency
-            std::vector<double> dma_table_freq;
-            double center_freq_actual;
-            if (center_freq_desired)
-            {
-                setupDMATab(center_freq_desired, tone_spacing, f_plld_clk * (1 - ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
-            }
-            else
-            {
-                center_freq_actual = center_freq_desired;
-            }
-
-            // Send the message
-            // cout << "TX started." << "\n";
-            if (center_freq_actual)
-            {
-                // Print a status message right before transmission begins.
-                // Leave this as-is for now because of the three-digit precision
-                // Time Stamp
-                struct timeval tvBegin, tvEnd, tvDiff;
-                gettimeofday(&tvBegin, NULL);
-                std::cout << "TX started at: ";
-                timeval_print(&tvBegin);
-                std::cout << "\n";
-
-                struct timeval sym_start;
-                struct timeval diff;
-                int bufPtr = 0;
-                txon(useled);
-                for (int i = 0; i < 162; i++)
+                // Add random offset
+                if ((center_freq_desired != 0) && random_offset)
                 {
-                    gettimeofday(&sym_start, NULL);
-                    timeval_subtract(&diff, &sym_start, &tvBegin);
-                    double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-                    // elapsed=(i)*wspr_symtime;
-                    double sched_end = (i + 1) * wspr_symtime;
-                    // cout << "symbol " << i << " " << wspr_symtime << "\n";
-                    // cout << sched_end-elapsed << "\n";
-                    double this_sym = sched_end - elapsed;
-                    this_sym = (this_sym < .2) ? .2 : this_sym;
-                    this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
-                    txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
                 }
-                n_tx++;
 
-                // Turn transmitter off
-                txoff(useled);
+                // Status message before transmission
+                std::stringstream temp;
+                temp << std::setprecision(6) << std::fixed;
+                temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+                prtStdOut(temp.str(), "\n");
 
-                // Time Stamp
-                gettimeofday(&tvEnd, NULL);
-                std::cout << "TX ended at: ";
-                timeval_print(&tvEnd);
-                timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
-            }
-            else
-            {
-                prtStdOut("Skipping transmission.\n");
-                usleep(1000000);
-            }
+                // Wait for WSPR transmission window to arrive.
+                if (no_delay)
+                {
+                    prtStdOut("Transmitting immediately (not waiting for WSPR window.)\n");
+                }
+                else
+                {
+                    prtStdOut("Waiting for next WSPR transmission window.\n");
+                    wait_every((wspr15) ? 15 : 2);
+                }
 
-            // Advance to next band
-            band = (band + 1) % nbands;
-            if ((band == 0) && !repeat)
-            {
-                break;
+                // Update crystal calibration information
+                if (self_cal)
+                {
+                    update_ppm(ppm);
+                }
+
+                // Create the DMA table for this center frequency
+                std::vector<double> dma_table_freq;
+                double center_freq_actual;
+                if (center_freq_desired)
+                {
+                    setupDMATab(center_freq_desired, tone_spacing, f_plld_clk * (1 - ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                }
+                else
+                {
+                    center_freq_actual = center_freq_desired;
+                }
+
+                // Send the message
+                // cout << "TX started." << "\n";
+                if (center_freq_actual)
+                {
+                    // Print a status message right before transmission begins.
+                    // Leave this as-is for now because of the three-digit precision
+                    // Time Stamp
+                    struct timeval tvBegin, tvEnd, tvDiff;
+                    gettimeofday(&tvBegin, NULL);
+                    std::cout << "TX started at: ";
+                    timeval_print(&tvBegin);
+                    std::cout << "\n";
+
+                    struct timeval sym_start;
+                    struct timeval diff;
+                    int bufPtr = 0;
+                    txon(useled);
+                    for (int i = 0; i < 162; i++)
+                    {
+                        gettimeofday(&sym_start, NULL);
+                        timeval_subtract(&diff, &sym_start, &tvBegin);
+                        double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+                        // elapsed=(i)*wspr_symtime;
+                        double sched_end = (i + 1) * wspr_symtime;
+                        // cout << "symbol " << i << " " << wspr_symtime << "\n";
+                        // cout << sched_end-elapsed << "\n";
+                        double this_sym = sched_end - elapsed;
+                        this_sym = (this_sym < .2) ? .2 : this_sym;
+                        this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
+                        txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    }
+                    n_tx++;
+
+                    // Turn transmitter off
+                    txoff(useled);
+
+                    // Time Stamp
+                    gettimeofday(&tvEnd, NULL);
+                    std::cout << "TX ended at: ";
+                    timeval_print(&tvEnd);
+                    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
+                    printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
+                }
+                else
+                {
+                    prtStdOut("Skipping transmission.\n");
+                    usleep(1000000);
+                }
+
+                // Advance to next band
+                band = (band + 1) % nbands;
+                if ((band == 0) && !repeat)
+                {
+                    break;
+                }
+                if ((terminate > 0) && (n_tx >= terminate))
+                {
+                    break;
+                }
             }
-            if ((terminate > 0) && (n_tx >= terminate))
-            {
-                break;
-            }
-        }
+        } // < Reload Loop
     }
 
     return 0;
