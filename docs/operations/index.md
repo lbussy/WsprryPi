@@ -29,42 +29,56 @@ TODO
 ### Command Line Help File
 
 ```
-******
-Usage: (WSPR --help output):
-******
+Wsprry Pi running on: Raspberry Pi 2B or 3B (BCM2837).
+Usage:
+  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
+    OR
+  wspr [options] --test-tone f
 
-  Usage:
-    wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
-      OR
-    wspr [options] --test-tone f
+Options:
+  -h --help
+    Print out this help screen.
+  -p --ppm ppm
+    Known PPM correction to 19.2MHz RPi nominal crystal frequency.
+  -s --self-calibration
+    Check NTP before every transmission to obtain the PPM error of the
+    crystal (default setting.).
+  -f --free-running
+    Do not use NTP to correct frequency error of RPi crystal.
+  -r --repeat
+    Repeatedly, and in order, transmit on all the specified command line
+    freqs.
+  -x --terminate <n>
+    Terminate after n transmissions have been completed.
+  -o --offset
+    Add a random frequency offset to each transmission:
+      +/- 80 Hz for WSPR
+      +/- 8 Hz for WSPR-15
+  -t --test-tone freq
+    Simply output a test tone at the specified frequency. Only used for
+    debugging and to verify calibration.
+  -l --led
+    Use LED when transmitting (TAPR board).
+  -n --no-delay
+    Transmit immediately, do not wait for a WSPR TX window. Used for
+    testing only.
+  -i --ini-file
+    Load parameters from an ini file. Supply path and file name.
+  -D --daemon-mode
+    Run with terse messaging.
 
-  Options:
-    -h --help
-      Print out this help screen.
-    -p --ppm ppm
-      Known PPM correction to 19.2MHz RPi nominal crystal frequency.
-    -s --self-calibration
-      Check NTP before every transmission to obtain the PPM error of the
-      crystal (default setting.)
-    -f --free-running
-      Do not use NTP to correct frequency error of RPi crystal.
-    -r --repeat
-      Repeatedly, and in order, transmit on all the specified command line
-      freqs.
-    -x --terminate <n>
-      Terminate after n transmissions have been completed.
-    -o --offset
-      Add a random frequency offset to each transmission:
-        +/- 80 Hz for WSPR
-        +/- 8 Hz for WSPR-15
-    -t --test-tone freq
-      Simply output a test tone at the specified frequency. Only used
-      for debugging and to verify calibration.
-    -l --led
-      Use LED when transmitting (TAPR board).
-    -n --no-delay
-      Transmit immediately, do not wait for a WSPR TX window. Used
-      for testing only.
+Frequencies can be specified either as an absolute TX carrier frequency,
+or using one of the following strings:
+
+  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,
+  17m, 15m, 12m, 10m, 6m, 4m, and 2m
+
+If a string is used, the transmission will happen in the middle of the
+WSPR region of the selected band.
+
+The "-15" suffix indicates the WSPR-15 region of band.
+
+Transmission gaps can be created by specifying a TX frequency of 0.
 ```
 
 ### Mandatory Command Line Entries
