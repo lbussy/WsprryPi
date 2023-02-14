@@ -51,10 +51,6 @@
 // addresses and structures are created and calculations performed in this
 // program to figure out how to access them with virtual addresses.
 
-#define ABORT(a) exit(a)
-// Used for debugging
-#define MARK std::cout << "Currently in file: " << __FILE__ << " line: " << __LINE__ << "\n"
-
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
 // affects the TX length of the symbols. However, the varying symbol length is
@@ -188,9 +184,8 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
-class wConfig
+struct wConfig
 {
-public:
     bool useini = false;
     std::string inifile;
     bool xmit_enabled = false;
@@ -210,17 +205,13 @@ public:
     bool useled = false;
     bool daemon_mode = false;
     // PLLD clock frequency.
-    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
-    // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
     double f_plld_clk;
     // MEM_FLAG_L1_NONALLOCATING?
     int mem_flag;
 };
 wConfig config;
 
-// Recursive variadic function for stdout
+// Recursive variadic functions for stdout/err
 template <typename T>
 void prtStdOut(T t) 
 {
@@ -233,7 +224,6 @@ void prtStdOut(T t, Args... args)
     prtStdOut(args...);
 }
 
-// Recursive variadic function for stderr
 template <typename T>
 void prtStdErr(T t) 
 {
@@ -334,11 +324,12 @@ void getPLLD()
     }
 }
 
-// Use the mbox interface to allocate a single chunk of memory to hold
-// all the pages we will need. The bus address and the virtual address
-// are saved in the mbox structure.
 void allocMemPool(unsigned numpages)
 {
+    // Use the mbox interface to allocate a single chunk of memory to hold
+    // all the pages we will need. The bus address and the virtual address
+    // are saved in the mbox structure.
+
     // Allocate space.
     mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, config.mem_flag);
     // Lock down the allocated space and return its bus address.
@@ -353,10 +344,10 @@ void allocMemPool(unsigned numpages)
     // printf("allocMemoryPool bus_addr=%x virt_addr=%x mem_ref=%x\n",mbox.bus_addr,(unsigned)mbox.virt_addr,mbox.mem_ref);
 }
 
-// Returns the virtual and bus address (NOT physical address) of another
-// page in the pool.
 void getRealMemPageFromPool(void **vAddr, void **bAddr)
 {
+    // Returns the virtual and bus address (NOT physical address) of another
+    // page in the pool.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
         prtStdErr("Error: unable to allocated more pages.");
@@ -369,9 +360,9 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     mbox.pool_cnt++;
 }
 
-// Free the memory pool
 void deallocMemPool()
 {
+    // Free the memory pool
     if (mbox.virt_addr != NULL)
     {
         unmapmem(mbox.virt_addr, mbox.pool_size * 4096);
@@ -383,9 +374,9 @@ void deallocMemPool()
     }
 }
 
-// Disable the PWM clock and wait for it to become 'not busy'.
 void disable_clock()
 {
+    // Disable the PWM clock and wait for it to become 'not busy'.
     // Check if mapping has been set up yet.
     if (peri_base_virt == NULL)
     {
@@ -408,9 +399,9 @@ void disable_clock()
     }
 }
 
-// Turn on TX
 void txon(bool led = false)
 {
+    // Turn on TX
     if (led)
     {
         pinHigh(LED_PIN);
@@ -451,9 +442,9 @@ void txon(bool led = false)
     ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
 }
 
-// Turn transmitter on
 void txoff(bool led = false)
 {
+    // Turn transmitter on
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
     if (led)
@@ -462,12 +453,6 @@ void txoff(bool led = false)
     }
     disable_clock();
 }
-
-// Transmit symbol sym for tsym seconds.
-//
-// TODO:
-// Upon entering this function at the beginning of a WSPR transmission, we
-// do not know which DMA table entry is being processed by the DMA engine.
 
 void txSym(
     const int &sym_num,
@@ -480,6 +465,11 @@ void txSym(
     struct PageInfo &constPage,
     int &bufPtr)
 {
+    // Transmit symbol sym for tsym seconds.
+    //
+    // Note:
+    // Upon entering this function at the beginning of a WSPR transmission, we
+    // do not know which DMA table entry is being processed by the DMA engine.
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
     const double f0_freq = dma_table_freq[f0_idx];
@@ -545,9 +535,9 @@ void txSym(
     // printf("<instrs[bufPtr]=%x %x>",(unsigned)instrs[bufPtr].v,(unsigned)instrs[bufPtr].b);
 }
 
-// Turn off (reset) DMA engine
 void unSetupDMA()
 {
+    // Turn off (reset) DMA engine
     // Check if mapping has been set up yet.
     if (peri_base_virt == NULL)
     {
@@ -559,15 +549,14 @@ void unSetupDMA()
     txoff();
 }
 
-// Truncate at bit lsb. i.e. set all bits less than lsb to zero.
 double bit_trunc(
     const double &d,
     const int &lsb)
 {
+    // Truncate at bit lsb. i.e. set all bits less than lsb to zero.
     return floor(d / pow(2.0, lsb)) * pow(2.0, lsb);
 }
 
-// Program the tuning words into the DMA table.
 void setupDMATab(
     const double &center_freq_desired,
     const double &tone_spacing,
@@ -576,6 +565,8 @@ void setupDMATab(
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
+    // Program the tuning words into the DMA table.
+
     // Make sure that all the WSPR tones can be produced solely by
     // varying the fractional part of the frequency divider.
     center_freq_actual = center_freq_desired;
@@ -623,13 +614,14 @@ void setupDMATab(
     }
 }
 
-// Create the memory structures needed by the DMA engine and perform initial
-// clock configuration.
 void setupDMA(
     struct PageInfo &constPage,
     struct PageInfo &instrPage,
     struct PageInfo instrs[])
 {
+    // Create the memory structures needed by the DMA engine and perform initial
+    // clock configuration.
+
     allocMemPool(1025);
 
     // Allocate a page of ram for the constants
@@ -709,10 +701,10 @@ void setupDMA(
     DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-// Convert string to uppercase
-void to_upper(
-    char *str)
+void to_upper(char *str)
 {
+    // Convert string to uppercase
+
     while (*str)
     {
         *str = toupper(*str);
@@ -720,13 +712,14 @@ void to_upper(
     }
 }
 
-// Encode call, locator, and dBm into WSPR codeblock.
 void wspr(
     const char *call,
     const char *l_pre,
     const char *dbm,
     unsigned char *symbols)
 {
+    // Encode call, locator, and dBm into WSPR codeblock.
+
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
     strncpy(buf, call, 16);
@@ -1282,10 +1275,10 @@ bool parse_commandline(const int &argc, char *const argv[])
     return true;
 }
 
-// Wait for the system clock's minute to reach one second past 'minute'
-void wait_every(
-    int minute)
+void wait_every(int minute)
 {
+    // Wait for the system clock's minute to reach one second past 'minute'
+
     // TODO:  Reload on ini file change
     time_t t;
     struct tm *ptm;
@@ -1306,9 +1299,10 @@ void wait_every(
     usleep(1000000); // wait another second
 }
 
-// Call ntp_adjtime() to obtain the latest calibration coefficient.
 void update_ppm()
 {
+    // Call ntp_adjtime() to obtain the latest calibration coefficient.
+
     struct timex ntx;
     int status;
     double ppm_new;
@@ -1337,9 +1331,9 @@ void update_ppm()
     }
 }
 
-/* Return 1 if the difference is negative, otherwise 0.  */
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1)
 {
+    // Return 1 if the difference is negative, otherwise 0.
     long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     result->tv_sec = diff / 1000000;
     result->tv_usec = diff % 1000000;
@@ -1347,9 +1341,10 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
     return (diff < 0);
 }
 
-// Time Stamp
 void timeval_print(struct timeval *tv)
 {
+    // Print Time Stamp
+
     char buffer[30];
     time_t curtime;
 
@@ -1361,9 +1356,9 @@ void timeval_print(struct timeval *tv)
     std::cout << " UTC";
 }
 
-// Create the mbox special files and open mbox.
 void open_mbox()
 {
+    // Create the mbox special files and open mbox.
     mbox.handle = mbox_open();
     if (mbox.handle < 0)
     {
@@ -1372,9 +1367,9 @@ void open_mbox()
     }
 }
 
-// Called when exiting or when a signal is received.
 void cleanup()
 {
+    // Called when exiting or when a signal is received.
     pinLow(LED_PIN);
     disable_clock();
     unSetupDMA();
@@ -1382,9 +1377,10 @@ void cleanup()
     unlink(LOCAL_DEVICE_FILE_NAME);
 }
 
-// Called when a signal is received. Automatically calls cleanup().
 void cleanupAndExit(int sig)
 {
+    // Called when a signal is received. Automatically calls cleanup().
+
     prtStdErr("Exiting, caught signal: ", sig, "\n");
     cleanup();
     exit(-1);
@@ -1404,11 +1400,11 @@ void setSchedPriority(int priority)
     }
 }
 
-// Create the memory map between virtual memory and the peripheral range
-// of physical memory.
-void setup_peri_base_virt(
-    volatile unsigned *&peri_base_virt)
+void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 {
+    // Create the memory map between virtual memory and the peripheral range
+    // of physical memory.
+
     int mem_fd;
     unsigned gpio_base = gpioBase();
     // open /dev/mem
@@ -1593,12 +1589,9 @@ int main(const int argc, char *const argv[])
                 }
 
                 // Send the message
-                // cout << "TX started." << "\n";
                 if (center_freq_actual)
                 {
                     // Print a status message right before transmission begins.
-                    // Leave this as-is for now because of the three-digit precision
-                    // Time Stamp
                     struct timeval tvBegin, tvEnd, tvDiff;
                     gettimeofday(&tvBegin, NULL);
                     std::cout << "TX started at: ";
@@ -1614,10 +1607,7 @@ int main(const int argc, char *const argv[])
                         gettimeofday(&sym_start, NULL);
                         timeval_subtract(&diff, &sym_start, &tvBegin);
                         double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-                        // elapsed=(i)*wspr_symtime;
                         double sched_end = (i + 1) * wspr_symtime;
-                        // cout << "symbol " << i << " " << wspr_symtime << "\n";
-                        // cout << sched_end-elapsed << "\n";
                         double this_sym = sched_end - elapsed;
                         this_sym = (this_sym < .2) ? .2 : this_sym;
                         this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
@@ -1645,11 +1635,11 @@ int main(const int argc, char *const argv[])
                 band = (band + 1) % nbands;
                 if ((band == 0) && !config.repeat)
                 {
-                    break;
+                    return 0;
                 }
                 if ((config.terminate > 0) && (n_tx >= config.terminate))
                 {
-                    break;
+                    return 0;
                 }
             }
         } // < Reload Loop
