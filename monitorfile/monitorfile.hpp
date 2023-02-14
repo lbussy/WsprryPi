@@ -9,7 +9,6 @@ public:
     void filemon(const std::string &fileName)
     {
         file_name = fileName.c_str();
-        std::cout << file_name << std::endl;
         start_monitoring();
     }
 
