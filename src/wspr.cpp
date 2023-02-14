@@ -125,9 +125,9 @@ typedef enum
     TONE
 } mode_type;
 
-// Structure used to control clock generator
 struct GPCTL
 {
+    // Structure used to control clock generator
     char SRC : 4;
     char ENAB : 1;
     char KILL : 1;
@@ -139,9 +139,9 @@ struct GPCTL
     char PASSWD : 8;
 };
 
-// Structure used to tell the DMA engine what to do
 struct CB
 {
+    // Structure used to tell the DMA engine what to do
     volatile unsigned int TI;
     volatile unsigned int SOURCE_AD;
     volatile unsigned int DEST_AD;
@@ -152,9 +152,9 @@ struct CB
     volatile unsigned int RES2;
 };
 
-// DMA engine status registers
 struct DMAregs
 {
+    // DMA engine status registers
     volatile unsigned int CS;
     volatile unsigned int CONBLK_AD;
     volatile unsigned int TI;
@@ -166,16 +166,16 @@ struct DMAregs
     volatile unsigned int DEBUG;
 };
 
-// Virtual and bus addresses of a page of physical memory.
 struct PageInfo
 {
+    // Virtual and bus addresses of a page of physical memory.
     void *b; // bus address
     void *v; // virtual address
 };
 
-// Must be global so that exit handlers can access this.
 static struct
 {
+    // Must be global so that exit handlers can access this.
     int handle;                                          /* From mbox_open() */
     unsigned mem_ref = 0;                                /* From mem_alloc() */
     unsigned bus_addr;                                   /* From mem_lock() */
@@ -186,6 +186,7 @@ static struct
 
 struct wConfig
 {
+    // Global configuration items from cvommand line and ini file
     bool useini = false;
     std::string inifile;
     bool xmit_enabled = false;
@@ -208,10 +209,9 @@ struct wConfig
     double f_plld_clk;
     // MEM_FLAG_L1_NONALLOCATING?
     int mem_flag;
-};
-wConfig config;
+} config;
 
-// Recursive variadic functions for stdout/err
+// Recursive variadic functions for stdout/err control
 template <typename T>
 void prtStdOut(T t) 
 {
