@@ -1022,109 +1022,118 @@ void convertToFreq(const char* &option, double &parsed_freq)
     }
 }
 
-bool parse_commandline(const int &argc, char *const argv[])
+bool parse_commandline(const int &argc, char *const argv[], bool reparse = false)
 {
-    static struct option long_options[] = {
-        {"help", no_argument, 0, 'h'},
-        {"ppm", required_argument, 0, 'p'},
-        {"self-calibration", no_argument, 0, 's'},
-        {"free-running", no_argument, 0, 'f'},
-        {"repeat", no_argument, 0, 'r'},
-        {"terminate", required_argument, 0, 'x'},
-        {"offset", no_argument, 0, 'o'},
-        {"test-tone", required_argument, 0, 't'},
-        {"no-delay", no_argument, 0, 'n'},
-        {"led", no_argument, 0, 'l'},
-        {"ini-file", required_argument, 0, 'i'},
-        {"daemon-mode", no_argument, 0, 'D'},
-        {0, 0, 0, 0}};
-
-    while (true)
+    if (reparse)
     {
-        /* getopt_long stores the option index here. */
-        int option_index = 0;
-        int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
-                            long_options, &option_index);
-        if (c == -1)
-            break;
+        prtStdOut("DEBUG: Re-parsing ini file.\n");
+        return true;
+    }
+    if ( ! reparse )
+    {
+        static struct option long_options[] = {
+            {"help", no_argument, 0, 'h'},
+            {"ppm", required_argument, 0, 'p'},
+            {"self-calibration", no_argument, 0, 's'},
+            {"free-running", no_argument, 0, 'f'},
+            {"repeat", no_argument, 0, 'r'},
+            {"terminate", required_argument, 0, 'x'},
+            {"offset", no_argument, 0, 'o'},
+            {"test-tone", required_argument, 0, 't'},
+            {"no-delay", no_argument, 0, 'n'},
+            {"led", no_argument, 0, 'l'},
+            {"ini-file", required_argument, 0, 'i'},
+            {"daemon-mode", no_argument, 0, 'D'},
+            {0, 0, 0, 0}};
 
-        switch (c)
+        while (true)
         {
-            char *endp;
-        case 0:
-            // Code should only get here if a long option was given a non-null
-            // flag value.
-            prtStdErr("Check code.\n");
-            return false;
-            break;
-        case 'h':
-        case '?':
-            print_usage();
-            return false;
-            break;
-        case 'p':
-            config.ppm = strtod(optarg, &endp);
-            if ((optarg == endp) || (*endp != '\0'))
+            /* getopt_long stores the option index here. */
+            int option_index = 0;
+            int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
+                                long_options, &option_index);
+            if (c == -1)
+                break;
+
+            switch (c)
             {
-                prtStdErr("Error: Could not parse ppm value.\n");
+                char *endp;
+            case 0:
+                // Code should only get here if a long option was given a non-null
+                // flag value.
+                prtStdErr("Check code.\n");
+                return false;
+                break;
+            case 'h':
+            case '?':
+                print_usage();
+                return false;
+                break;
+            case 'p':
+                config.ppm = strtod(optarg, &endp);
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: Could not parse ppm value.\n");
+                    return false;
+                }
+                break;
+            case 's':
+                config.self_cal = true;
+                break;
+            case 'f':
+                config.self_cal = false;
+                break;
+            case 'r':
+                config.repeat = true;
+                break;
+            case 'x':
+                config.terminate = strtol(optarg, &endp, 10);
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: Could not parse termination argument.\n");
+                    return false;
+                }
+                if (config.terminate < 1)
+                {
+                    prtStdErr("Error: Termination parameter must be >= 1.\n");
+                    return false;
+                }
+                break;
+            case 'o':
+                config.random_offset = true;
+                break;
+            case 't':
+                config.test_tone = strtod(optarg, &endp);
+                config.mode = TONE;
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: could not parse test tone frequency.\n");
+                    return false;
+                }
+                break;
+            case 'i':
+                config.inifile = optarg;
+                config.useini = true;
+                break;
+            case 'n':
+                config.no_delay = true;
+                break;
+            case 'l':
+                config.useled = true;
+                break;
+            case 'D':
+                config.daemon_mode = true;
+                break;
+            default:
                 return false;
             }
-            break;
-        case 's':
-            config.self_cal = true;
-            break;
-        case 'f':
-            config.self_cal = false;
-            break;
-        case 'r':
-            config.repeat = true;
-            break;
-        case 'x':
-            config.terminate = strtol(optarg, &endp, 10);
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                prtStdErr("Error: Could not parse termination argument.\n");
-                return false;
-            }
-            if (config.terminate < 1)
-            {
-                prtStdErr("Error: Termination parameter must be >= 1.\n");
-                return false;
-            }
-            break;
-        case 'o':
-            config.random_offset = true;
-            break;
-        case 't':
-            config.test_tone = strtod(optarg, &endp);
-            config.mode = TONE;
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                prtStdErr("Error: could not parse test tone frequency.\n");
-                return false;
-            }
-            break;
-        case 'i':
-            config.inifile = optarg;
-            config.useini = true;
-            break;
-        case 'n':
-            config.no_delay = true;
-            break;
-        case 'l':
-            config.useled = true;
-            break;
-        case 'D':
-            config.daemon_mode = true;
-            break;
-        default:
-            return false;
         }
     }
 
     // Parse the non-option parameters
     if (config.useini)
     {
+        iniMonitor.filemon(config.inifile);
         if ( !getINIValues() ) return false;
 
         std::vector<std::string> freq_list;
@@ -1266,6 +1275,15 @@ bool parse_commandline(const int &argc, char *const argv[])
     return true;
 }
 
+bool parse_commandline(bool reparse)
+{
+    int x = 0;
+    char * y[] = {};
+    // const int argc, char *const argv[]
+    // if ( ! parse_commandline(argc, argv) ) return 1;
+    return parse_commandline(x, y, true);
+}
+
 void wait_every(int minute)
 {
     // Wait for the system clock's minute to reach one second past 'minute'
@@ -1276,11 +1294,11 @@ void wait_every(int minute)
     for (;;)
     {
         // TODO:
-        // if (iniMonitor.changed())
-        // {
-        //     prtStdOut("Notice: INI file changed, reloading parameters.\n");
-        //     // TODO: parse_commandline(argc, argv);
-        // }
+        if (iniMonitor.changed())
+        {
+            prtStdOut("Notice: INI file changed, reloading parameters.\n");
+            parse_commandline(true);
+        }
         time(&t);
         ptm = gmtime(&t);
         if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
