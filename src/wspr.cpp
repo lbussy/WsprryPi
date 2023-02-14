@@ -402,10 +402,7 @@ void disable_clock()
 void txon(bool led = false)
 {
     // Turn on TX
-    if (led)
-    {
-        pinHigh(LED_PIN);
-    }
+    if (led) pinHigh(LED_PIN);
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -447,10 +444,7 @@ void txoff(bool led = false)
     // Turn transmitter on
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
-    if (led)
-    {
-        pinLow(LED_PIN);        
-    }
+    if (led) pinLow(LED_PIN);
     disable_clock();
 }
 
@@ -549,9 +543,7 @@ void unSetupDMA()
     txoff();
 }
 
-double bit_trunc(
-    const double &d,
-    const int &lsb)
+double bit_trunc(const double &d, const int &lsb)
 {
     // Truncate at bit lsb. i.e. set all bits less than lsb to zero.
     return floor(d / pow(2.0, lsb)) * pow(2.0, lsb);
@@ -636,7 +628,7 @@ void setupDMA(
         // Allocate a page of ram for the instructions
         getRealMemPageFromPool(&instrPage.v, &instrPage.b);
 
-        // make copy instructions
+        // Make copy instructions
         // Only create as many instructions as will fit in the recently
         // allocated page. If not enough space for all instructions, the
         // next loop will allocate another page.
@@ -704,7 +696,6 @@ void setupDMA(
 void to_upper(char *str)
 {
     // Convert string to uppercase
-
     while (*str)
     {
         *str = toupper(*str);
