@@ -107,16 +107,6 @@
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
-// PLLD clock frequency.
-// For RPi1, after NTP converges, these is a 2.5 PPM difference between
-// the PPM correction reported by NTP and the actual frequency offset of
-// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-// This 2.5 PPM offset is compensated for here, but only for the RPi1.
-double f_plld_clk;
-
-// MEM_FLAG_L1_NONALLOCATING?
-int mem_flag;
-
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
 // the peripherals. This address is mapped at runtime using mmap and /dev/mem.
@@ -219,6 +209,14 @@ public:
     int terminate = -1;
     bool useled = false;
     bool daemon_mode = false;
+    // PLLD clock frequency.
+    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
+    // the PPM correction reported by NTP and the actual frequency offset of
+    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
+    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+    double f_plld_clk;
+    // MEM_FLAG_L1_NONALLOCATING?
+    int mem_flag;
 };
 wConfig config;
 
@@ -318,17 +316,17 @@ void getPLLD()
     switch (ver())
     {
     case 0: // RPi1
-        mem_flag = 0x0c;
-        f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        config.mem_flag = 0x0c;
+        config.f_plld_clk = (500000000.0 * (1 - 2.500e-6));
         break;
     case 1: // RPi2
     case 2: // RPi3
-        mem_flag = 0x04;
-        f_plld_clk = (500000000.0);
+        config.mem_flag = 0x04;
+        config.f_plld_clk = (500000000.0);
         break;
     case 3: // RPi 4
-        mem_flag = 0x04;
-        f_plld_clk = (750000000.0);
+        config.mem_flag = 0x04;
+        config.f_plld_clk = (750000000.0);
         break;
     default:
         fprintf(stderr, "Error: Unknown chipset (%d).", ver());
@@ -342,7 +340,7 @@ void getPLLD()
 void allocMemPool(unsigned numpages)
 {
     // Allocate space.
-    mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, mem_flag);
+    mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, config.mem_flag);
     // Lock down the allocated space and return its bus address.
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
     // Conert the bus address to a physical address and map this to virtual
@@ -1504,7 +1502,7 @@ int main(const int argc, char *const argv[])
             }
             if (config.ppm != ppm_prev)
             {
-                setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
                 // cout << std::setprecision(30) << dma_table_freq[0] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[1] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[2] << "\n";
@@ -1587,7 +1585,7 @@ int main(const int argc, char *const argv[])
                 double center_freq_actual;
                 if (center_freq_desired)
                 {
-                    setupDMATab(center_freq_desired, tone_spacing, f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                    setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
                 }
                 else
                 {
