@@ -3,10 +3,11 @@
 
 #define FILE_NAME "./monitorfile.ini"
 
+MonitorFile monitor;
+
 int main()
 {
-    MonitorFile monitor(FILE_NAME);
-
+    monitor.filemon(FILE_NAME);
     while (true)
     {
         if (monitor.changed())

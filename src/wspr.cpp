@@ -1,5 +1,7 @@
 #include "wspr.hpp"
 
+// #define WSPR_DEBUG
+
 #define SINGLETON_PORT 1234
 
 // Note on accessing memory in RPi:
@@ -50,10 +52,6 @@
 // The perhipherals in the Broadcom documentation are described using their bus
 // addresses and structures are created and calculations performed in this
 // program to figure out how to access them with virtual addresses.
-
-#define ABORT(a) exit(a)
-// Used for debugging
-#define MARK std::cout << "Currently in file: " << __FILE__ << " line: " << __LINE__ << "\n"
 
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
@@ -107,19 +105,6 @@
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
-// Daemon Mode = Hold running as daemon status
-bool daemon_mode;
-
-// PLLD clock frequency.
-// For RPi1, after NTP converges, these is a 2.5 PPM difference between
-// the PPM correction reported by NTP and the actual frequency offset of
-// the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-// This 2.5 PPM offset is compensated for here, but only for the RPi1.
-double f_plld_clk;
-
-// MEM_FLAG_L1_NONALLOCATING?
-int mem_flag;
-
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
 // the peripherals. This address is mapped at runtime using mmap and /dev/mem.
@@ -133,15 +118,18 @@ void *gpio_map;
 // I/O access
 volatile unsigned *gpio;
 
+// Class to monitor for file changes
+MonitorFile iniMonitor;
+
 typedef enum
 {
     WSPR,
     TONE
 } mode_type;
 
-// Structure used to control clock generator
 struct GPCTL
 {
+    // Structure used to control clock generator
     char SRC : 4;
     char ENAB : 1;
     char KILL : 1;
@@ -153,9 +141,9 @@ struct GPCTL
     char PASSWD : 8;
 };
 
-// Structure used to tell the DMA engine what to do
 struct CB
 {
+    // Structure used to tell the DMA engine what to do
     volatile unsigned int TI;
     volatile unsigned int SOURCE_AD;
     volatile unsigned int DEST_AD;
@@ -166,9 +154,9 @@ struct CB
     volatile unsigned int RES2;
 };
 
-// DMA engine status registers
 struct DMAregs
 {
+    // DMA engine status registers
     volatile unsigned int CS;
     volatile unsigned int CONBLK_AD;
     volatile unsigned int TI;
@@ -180,16 +168,16 @@ struct DMAregs
     volatile unsigned int DEBUG;
 };
 
-// Virtual and bus addresses of a page of physical memory.
 struct PageInfo
 {
+    // Virtual and bus addresses of a page of physical memory.
     void *b; // bus address
     void *v; // virtual address
 };
 
-// Must be global so that exit handlers can access this.
 static struct
 {
+    // Must be global so that exit handlers can access this.
     int handle;                                          /* From mbox_open() */
     unsigned mem_ref = 0;                                /* From mem_alloc() */
     unsigned bus_addr;                                   /* From mem_lock() */
@@ -198,7 +186,34 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
-// Recursive variadic function for stdout
+struct wConfig
+{
+    // Global configuration items from cvommand line and ini file
+    bool useini = false;
+    std::string inifile;
+    bool xmit_enabled = false;
+    bool repeat = false;
+    std::string callsign;
+    std::string locator;
+    std::string tx_power;
+    std::string frequency_string;
+    std::vector<double> center_freq_set;
+    double ppm = 0;
+    bool self_cal = true;
+    bool random_offset = false;
+    double test_tone = NAN;
+    bool no_delay = false;
+    mode_type mode = WSPR;
+    int terminate = -1;
+    bool useled = false;
+    bool daemon_mode = false;
+    // PLLD clock frequency.
+    double f_plld_clk;
+    // MEM_FLAG_L1_NONALLOCATING?
+    int mem_flag;
+} config;
+
+// Recursive variadic functions for stdout/err control
 template <typename T>
 void prtStdOut(T t) 
 {
@@ -211,7 +226,6 @@ void prtStdOut(T t, Args... args)
     prtStdOut(args...);
 }
 
-// Recursive variadic function for stderr
 template <typename T>
 void prtStdErr(T t) 
 {
@@ -294,17 +308,17 @@ void getPLLD()
     switch (ver())
     {
     case 0: // RPi1
-        mem_flag = 0x0c;
-        f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        config.mem_flag = 0x0c;
+        config.f_plld_clk = (500000000.0 * (1 - 2.500e-6));
         break;
     case 1: // RPi2
     case 2: // RPi3
-        mem_flag = 0x04;
-        f_plld_clk = (500000000.0);
+        config.mem_flag = 0x04;
+        config.f_plld_clk = (500000000.0);
         break;
     case 3: // RPi 4
-        mem_flag = 0x04;
-        f_plld_clk = (750000000.0);
+        config.mem_flag = 0x04;
+        config.f_plld_clk = (750000000.0);
         break;
     default:
         fprintf(stderr, "Error: Unknown chipset (%d).", ver());
@@ -312,13 +326,14 @@ void getPLLD()
     }
 }
 
-// Use the mbox interface to allocate a single chunk of memory to hold
-// all the pages we will need. The bus address and the virtual address
-// are saved in the mbox structure.
 void allocMemPool(unsigned numpages)
 {
+    // Use the mbox interface to allocate a single chunk of memory to hold
+    // all the pages we will need. The bus address and the virtual address
+    // are saved in the mbox structure.
+
     // Allocate space.
-    mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, mem_flag);
+    mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, config.mem_flag);
     // Lock down the allocated space and return its bus address.
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
     // Conert the bus address to a physical address and map this to virtual
@@ -331,10 +346,10 @@ void allocMemPool(unsigned numpages)
     // printf("allocMemoryPool bus_addr=%x virt_addr=%x mem_ref=%x\n",mbox.bus_addr,(unsigned)mbox.virt_addr,mbox.mem_ref);
 }
 
-// Returns the virtual and bus address (NOT physical address) of another
-// page in the pool.
 void getRealMemPageFromPool(void **vAddr, void **bAddr)
 {
+    // Returns the virtual and bus address (NOT physical address) of another
+    // page in the pool.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
         prtStdErr("Error: unable to allocated more pages.");
@@ -347,9 +362,9 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     mbox.pool_cnt++;
 }
 
-// Free the memory pool
 void deallocMemPool()
 {
+    // Free the memory pool
     if (mbox.virt_addr != NULL)
     {
         unmapmem(mbox.virt_addr, mbox.pool_size * 4096);
@@ -361,9 +376,9 @@ void deallocMemPool()
     }
 }
 
-// Disable the PWM clock and wait for it to become 'not busy'.
 void disable_clock()
 {
+    // Disable the PWM clock and wait for it to become 'not busy'.
     // Check if mapping has been set up yet.
     if (peri_base_virt == NULL)
     {
@@ -386,13 +401,10 @@ void disable_clock()
     }
 }
 
-// Turn on TX
 void txon(bool led = false)
 {
-    if (led)
-    {
-        pinHigh(LED_PIN);
-    }
+    // Turn on TX
+    if (led) pinHigh(LED_PIN);
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -429,23 +441,14 @@ void txon(bool led = false)
     ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
 }
 
-// Turn transmitter on
 void txoff(bool led = false)
 {
+    // Turn transmitter on
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
-    if (led)
-    {
-        pinLow(LED_PIN);        
-    }
+    if (led) pinLow(LED_PIN);
     disable_clock();
 }
-
-// Transmit symbol sym for tsym seconds.
-//
-// TODO:
-// Upon entering this function at the beginning of a WSPR transmission, we
-// do not know which DMA table entry is being processed by the DMA engine.
 
 void txSym(
     const int &sym_num,
@@ -458,6 +461,11 @@ void txSym(
     struct PageInfo &constPage,
     int &bufPtr)
 {
+    // Transmit symbol sym for tsym seconds.
+    //
+    // Note:
+    // Upon entering this function at the beginning of a WSPR transmission, we
+    // do not know which DMA table entry is being processed by the DMA engine.
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
     const double f0_freq = dma_table_freq[f0_idx];
@@ -523,9 +531,9 @@ void txSym(
     // printf("<instrs[bufPtr]=%x %x>",(unsigned)instrs[bufPtr].v,(unsigned)instrs[bufPtr].b);
 }
 
-// Turn off (reset) DMA engine
 void unSetupDMA()
 {
+    // Turn off (reset) DMA engine
     // Check if mapping has been set up yet.
     if (peri_base_virt == NULL)
     {
@@ -537,15 +545,12 @@ void unSetupDMA()
     txoff();
 }
 
-// Truncate at bit lsb. i.e. set all bits less than lsb to zero.
-double bit_trunc(
-    const double &d,
-    const int &lsb)
+double bit_trunc(const double &d, const int &lsb)
 {
+    // Truncate at bit lsb. i.e. set all bits less than lsb to zero.
     return floor(d / pow(2.0, lsb)) * pow(2.0, lsb);
 }
 
-// Program the tuning words into the DMA table.
 void setupDMATab(
     const double &center_freq_desired,
     const double &tone_spacing,
@@ -554,6 +559,8 @@ void setupDMATab(
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
+    // Program the tuning words into the DMA table.
+
     // Make sure that all the WSPR tones can be produced solely by
     // varying the fractional part of the frequency divider.
     center_freq_actual = center_freq_desired;
@@ -601,13 +608,14 @@ void setupDMATab(
     }
 }
 
-// Create the memory structures needed by the DMA engine and perform initial
-// clock configuration.
 void setupDMA(
     struct PageInfo &constPage,
     struct PageInfo &instrPage,
     struct PageInfo instrs[])
 {
+    // Create the memory structures needed by the DMA engine and perform initial
+    // clock configuration.
+
     allocMemPool(1025);
 
     // Allocate a page of ram for the constants
@@ -622,7 +630,7 @@ void setupDMA(
         // Allocate a page of ram for the instructions
         getRealMemPageFromPool(&instrPage.v, &instrPage.b);
 
-        // make copy instructions
+        // Make copy instructions
         // Only create as many instructions as will fit in the recently
         // allocated page. If not enough space for all instructions, the
         // next loop will allocate another page.
@@ -687,10 +695,9 @@ void setupDMA(
     DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-// Convert string to uppercase
-void to_upper(
-    char *str)
+void to_upper(char *str)
 {
+    // Convert string to uppercase
     while (*str)
     {
         *str = toupper(*str);
@@ -698,14 +705,14 @@ void to_upper(
     }
 }
 
-// Encode call, locator, and dBm into WSPR codeblock.
 void wspr(
     const char *call,
     const char *l_pre,
     const char *dbm,
-    unsigned char *symbols,
-    bool useled)
+    unsigned char *symbols)
 {
+    // Encode call, locator, and dBm into WSPR codeblock.
+
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
     strncpy(buf, call, 16);
@@ -833,23 +840,6 @@ void wspr(
     }
 }
 
-// Wait for the system clock's minute to reach one second past 'minute'
-void wait_every(
-    int minute)
-{
-    time_t t;
-    struct tm *ptm;
-    for (;;)
-    {
-        time(&t);
-        ptm = gmtime(&t);
-        if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
-            break;
-        usleep(1000);
-    }
-    usleep(1000000); // wait another second
-}
-
 void print_usage()
 {
     prtStdOut("Usage:\n");
@@ -904,45 +894,40 @@ void print_usage()
     prtStdOut("\n");
 }
 
-bool getINIValues(
-    std::string inifile,
-    bool &xmit_enabled,
-    std::string &callsign,
-    std::string &locator,
-    std::string &tx_power,
-    std::string &frequency_string,
-    double &ppm,
-    bool &self_cal,
-    bool &random_offset,
-    bool &useled)
+bool getINIValues(bool reload = false)
 {
-    WSPRConfig config(inifile);
-    if (config.isInitialized())
+    WSPRConfig iniConfig;
+    if (iniConfig.initialize(config.inifile))
     {
-        xmit_enabled = config.getTransmit();
-        callsign = config.getCallsign();
-        locator = config.getGridsquare();
-        tx_power = config.getTxpower();
-        frequency_string = config.getFrequency();
-        ppm = config.getPpm();
-        self_cal = config.getSelfcal();
-        random_offset = config.getOffset();
-        useled = config.useLED();
+        config.xmit_enabled = iniConfig.getTransmit();
+        config.repeat = iniConfig.getRepeat();
+        config.callsign = iniConfig.getCallsign();
+        config.locator = iniConfig.getGridsquare();
+        config.tx_power = iniConfig.getTxpower();
+        config.frequency_string = iniConfig.getFrequency();
+        config.ppm = iniConfig.getPpm();
+        config.self_cal = iniConfig.getSelfcal();
+        config.random_offset = iniConfig.getOffset();
+        config.useled = iniConfig.useLED();
 
-        prtStdOut("============================================\n");
-        prtStdOut("Config loaded from: ", inifile, "\n");
-        prtStdOut("============================================\n");
-        prtStdOut("Transmit Enabled:\t\t", std::boolalpha, xmit_enabled, "\n");
-        prtStdOut("Call Sign:\t\t\t", callsign, "\n");
-        prtStdOut("Grid Square:\t\t\t", locator, "\n");
-        prtStdOut("Transmit Power:\t\t\t", tx_power, "\n");
-        prtStdOut("Frequencies:\t\t\t", frequency_string, "\n");
-        prtStdOut("PPM Offset:\t\t\t", ppm, "\n");
-        prtStdOut("Do not use NTP sync:\t\t", std::boolalpha, (!self_cal), "\n");
-        prtStdOut("Check NTP Each Run (default):\t", std::boolalpha, self_cal, "\n");
-        prtStdOut("Use Frequency Randomization:\t", std::boolalpha, random_offset, "\n");
-        prtStdOut("Use LED:\t\t\t", std::boolalpha, useled, "\n");
-        prtStdOut("============================================\n");
+        if (! config.daemon_mode )
+            prtStdOut("\n============================================\n");
+        prtStdOut("Config ", ((reload) ? "(re)" : ""), "loaded from: ", config.inifile, "\n");
+        if (! config.daemon_mode )
+            prtStdOut("============================================\n");
+        prtStdOut("Transmit Enabled:\t\t", std::boolalpha, config.xmit_enabled, "\n");
+        prtStdOut("Repeat transmission:\t\t", std::boolalpha, config.repeat, "\n");
+        prtStdOut("Call Sign:\t\t\t", config.callsign, "\n");
+        prtStdOut("Grid Square:\t\t\t", config.locator, "\n");
+        prtStdOut("Transmit Power:\t\t\t", config.tx_power, "\n");
+        prtStdOut("Frequencies:\t\t\t", config.frequency_string, "\n");
+        prtStdOut("PPM Offset:\t\t\t", config.ppm, "\n");
+        prtStdOut("Do not use NTP sync:\t\t", std::boolalpha, (!config.self_cal), "\n");
+        prtStdOut("Check NTP Each Run (default):\t", std::boolalpha, config.self_cal, "\n");
+        prtStdOut("Use Frequency Randomization:\t", std::boolalpha, config.random_offset, "\n");
+        prtStdOut("Use LED:\t\t\t", std::boolalpha, config.useled, "\n");
+        if (! config.daemon_mode )
+            prtStdOut("============================================\n\n");
         return true;
     }
     else
@@ -1039,166 +1024,121 @@ void convertToFreq(const char* &option, double &parsed_freq)
     }
 }
 
-bool parse_commandline(
-    // Inputs
-    const int &argc,
-    char *const argv[],
-    // Outputs
-    bool &xmit_enabled,
-    std::string &callsign,
-    std::string &locator,
-    std::string &tx_power,
-    std::vector<double> &center_freq_set,
-    double &ppm,
-    bool &self_cal,
-    bool &repeat,
-    bool &random_offset,
-    double &test_tone,
-    bool &no_delay,
-    mode_type &mode,
-    int &terminate,
-    bool &useled,
-    bool &useini)
+bool parse_commandline(const int &argc, char *const argv[], bool reparse = false)
 {
-    // Default values
-    xmit_enabled = false;
-    ppm = 0;
-    self_cal = true;
-    repeat = false;
-    random_offset = false;
-    test_tone = NAN;
-    no_delay = false;
-    mode = WSPR;
-    terminate = -1;
-    useled = false;
-    useini = false;
-    daemon_mode = false;
-
-    std::string inifile;
-    std::string freq_string;
-
-    static struct option long_options[] = {
-        {"help", no_argument, 0, 'h'},
-        {"ppm", required_argument, 0, 'p'},
-        {"self-calibration", no_argument, 0, 's'},
-        {"free-running", no_argument, 0, 'f'},
-        {"repeat", no_argument, 0, 'r'},
-        {"terminate", required_argument, 0, 'x'},
-        {"offset", no_argument, 0, 'o'},
-        {"test-tone", required_argument, 0, 't'},
-        {"no-delay", no_argument, 0, 'n'},
-        {"led", no_argument, 0, 'l'},
-        {"ini-file", required_argument, 0, 'i'},
-        {"daemon-mode", no_argument, 0, 'D'},
-        {0, 0, 0, 0}};
-
-    while (true)
+    if ( ! reparse )
     {
-        /* getopt_long stores the option index here. */
-        int option_index = 0;
-        int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
-                            long_options, &option_index);
-        if (c == -1)
-            break;
+        static struct option long_options[] = {
+            {"help", no_argument, 0, 'h'},
+            {"ppm", required_argument, 0, 'p'},
+            {"self-calibration", no_argument, 0, 's'},
+            {"free-running", no_argument, 0, 'f'},
+            {"repeat", no_argument, 0, 'r'},
+            {"terminate", required_argument, 0, 'x'},
+            {"offset", no_argument, 0, 'o'},
+            {"test-tone", required_argument, 0, 't'},
+            {"no-delay", no_argument, 0, 'n'},
+            {"led", no_argument, 0, 'l'},
+            {"ini-file", required_argument, 0, 'i'},
+            {"daemon-mode", no_argument, 0, 'D'},
+            {0, 0, 0, 0}};
 
-        switch (c)
+        while (true && ! reparse)
         {
-            char *endp;
-        case 0:
-            // Code should only get here if a long option was given a non-null
-            // flag value.
-            prtStdErr("Check code.\n");
-            return false;
-            break;
-        case 'h':
-        case '?':
-            print_usage();
-            return false;
-            break;
-        case 'p':
-            ppm = strtod(optarg, &endp);
-            if ((optarg == endp) || (*endp != '\0'))
+            /* getopt_long stores the option index here. */
+            int option_index = 0;
+            int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
+                                long_options, &option_index);
+            if (c == -1)
+                break;
+
+            switch (c)
             {
-                prtStdErr("Error: Could not parse ppm value.\n");
+                char *endp;
+            case 0:
+                // Code should only get here if a long option was given a non-null
+                // flag value.
+                prtStdErr("Check code.\n");
+                return false;
+                break;
+            case 'h':
+            case '?':
+                print_usage();
+                return false;
+                break;
+            case 'p':
+                config.ppm = strtod(optarg, &endp);
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: Could not parse ppm value.\n");
+                    return false;
+                }
+                break;
+            case 's':
+                config.self_cal = true;
+                break;
+            case 'f':
+                config.self_cal = false;
+                break;
+            case 'r':
+                config.repeat = true;
+                break;
+            case 'x':
+                config.terminate = strtol(optarg, &endp, 10);
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: Could not parse termination argument.\n");
+                    return false;
+                }
+                if (config.terminate < 1)
+                {
+                    prtStdErr("Error: Termination parameter must be >= 1.\n");
+                    return false;
+                }
+                break;
+            case 'o':
+                config.random_offset = true;
+                break;
+            case 't':
+                config.test_tone = strtod(optarg, &endp);
+                config.mode = TONE;
+                if ((optarg == endp) || (*endp != '\0'))
+                {
+                    prtStdErr("Error: could not parse test tone frequency.\n");
+                    return false;
+                }
+                break;
+            case 'i':
+                config.inifile = optarg;
+                config.useini = true;
+                break;
+            case 'n':
+                config.no_delay = true;
+                break;
+            case 'l':
+                config.useled = true;
+                break;
+            case 'D':
+                config.daemon_mode = true;
+                break;
+            default:
                 return false;
             }
-            break;
-        case 's':
-            self_cal = true;
-            break;
-        case 'f':
-            self_cal = false;
-            break;
-        case 'r':
-            repeat = true;
-            break;
-        case 'x':
-            terminate = strtol(optarg, &endp, 10);
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                prtStdErr("Error: Could not parse termination argument.\n");
-                return false;
-            }
-            if (terminate < 1)
-            {
-                prtStdErr("Error: Termination parameter must be >= 1.\n");
-                return false;
-            }
-            break;
-        case 'o':
-            random_offset = true;
-            break;
-        case 't':
-            test_tone = strtod(optarg, &endp);
-            mode = TONE;
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                prtStdErr("Error: could not parse test tone frequency.\n");
-                return false;
-            }
-            break;
-        case 'i':
-            inifile = optarg;
-            useini = true;
-            break;
-        case 'n':
-            no_delay = true;
-            break;
-        case 'l':
-            useled = true;
-            break;
-        case 'D':
-            daemon_mode = true;
-            break;
-        default:
-            return false;
         }
     }
 
-    if (useini == true)
+    if (config.useini)
     {
-        bool gotINI = getINIValues(
-            inifile,
-            xmit_enabled,
-            callsign,
-            locator,
-            tx_power,
-            freq_string,
-            ppm,
-            self_cal,
-            random_offset,
-            useled);
-        if (!gotINI)
+        if (! reparse) iniMonitor.filemon(config.inifile.c_str());
+        if ( !getINIValues(reparse) )
         {
-            return false;
+            prtStdErr("Error: Failed to reload the INI.\n");
+            exit(-1);
         }
-    }
+        config.center_freq_set.clear();
 
-    // Parse the non-option parameters
-    if (useini)
-    {
         std::vector<std::string> freq_list;
-        std::istringstream s ( freq_string);
+        std::istringstream s ( config.frequency_string );
         freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
         for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f) 
@@ -1207,7 +1147,7 @@ bool parse_commandline(
             const char * fs = fString.c_str();
             double parsed_freq;
             convertToFreq(fs, parsed_freq);
-            center_freq_set.push_back(parsed_freq);
+            config.center_freq_set.push_back(parsed_freq);
         }
     }
     else
@@ -1218,19 +1158,19 @@ bool parse_commandline(
             // Check for callsign, locator, tx_power
             if (n_free_args == 0)
             {
-                callsign = argv[optind++];
+                config.callsign = argv[optind++];
                 n_free_args++;
                 continue;
             }
             if (n_free_args == 1)
             {
-                locator = argv[optind++];
+                config.locator = argv[optind++];
                 n_free_args++;
                 continue;
             }
             if (n_free_args == 2)
             {
-                tx_power = argv[optind++];
+                config.tx_power = argv[optind++];
                 n_free_args++;
                 continue;
             }
@@ -1240,28 +1180,28 @@ bool parse_commandline(
             const char * argument = argv[optind];
             convertToFreq(argument, parsed_freq);
             optind++;
-            center_freq_set.push_back(parsed_freq);
+            config.center_freq_set.push_back(parsed_freq);
         }
     }
 
     // Convert to uppercase
-    transform(callsign.begin(), callsign.end(), callsign.begin(), ::toupper);
-    transform(locator.begin(), locator.end(), locator.begin(), ::toupper);
+    transform(config.callsign.begin(), config.callsign.end(), config.callsign.begin(), ::toupper);
+    transform(config.locator.begin(), config.locator.end(), config.locator.begin(), ::toupper);
 
     // Check consistency among command line options.
-    if (ppm && self_cal)
+    if (config.ppm && config.self_cal)
     {
         prtStdErr("Warning: ppm value is being ignored.\n");
-        ppm = 0.0;
+        config.ppm = 0.0;
     }
-    if (mode == TONE)
+    if (config.mode == TONE)
     {
-        if ((callsign != "") || (locator != "") || (tx_power != "") || (center_freq_set.size() != 0) || random_offset)
+        if ((config.callsign != "") || (config.locator != "") || (config.tx_power != "") || (config.center_freq_set.size() != 0) || config.random_offset)
         {
             prtStdErr("Warning: Callsign, locator, etc. are ignored when generating test tone.\n");
         }
-        random_offset = 0;
-        if (test_tone <= 0)
+        config.random_offset = 0;
+        if (config.test_tone <= 0)
         {
             prtStdErr("Error: Test tone frequency must be positive.\n");
             exit(-1);
@@ -1269,7 +1209,7 @@ bool parse_commandline(
     }
     else
     {
-        if ((callsign == "") || (locator == "") || (tx_power == "") || (center_freq_set.size() == 0))
+        if ((config.callsign == "") || (config.locator == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
             prtStdErr("Error: must specify callsign, locator, dBm, and at least one frequency.\n");
             prtStdErr("Try: wspr --help\n");
@@ -1278,38 +1218,38 @@ bool parse_commandline(
     }
 
     // Print a summary of the parsed options
-    if (mode == WSPR)
+    if (config.mode == WSPR)
     {
-        prtStdOut("WSPR packet contents:\n");
-        prtStdOut("- Callsign: ", callsign, "\n");
-        prtStdOut("- Locator:  ", locator, "\n");
-        prtStdOut("- Power:    ", tx_power, " dBm\n");
+        prtStdOut("WSPR packet payload:\n");
+        prtStdOut("- Callsign: ", config.callsign, "\n");
+        prtStdOut("- Locator:  ", config.locator, "\n");
+        prtStdOut("- Power:    ", config.tx_power, " dBm\n");
         prtStdOut("Requested TX frequencies:\n");
         std::stringstream temp;
-        for (unsigned int t = 0; t < center_freq_set.size(); t++)
+        for (unsigned int t = 0; t < config.center_freq_set.size(); t++)
         {
             temp << std::setprecision(6) << std::fixed;
-            temp << "- " << center_freq_set[t] / 1e6 << " MHz\n";
+            temp << "- " << config.center_freq_set[t] / 1e6 << " MHz\n";
         }
         prtStdOut(temp.str());
         temp.str("");
-        if (self_cal)
+        if (config.self_cal)
         {
             temp << "- NTP will be used to periodically calibrate the transmission frequency." << "\n";
         }
-        else if (ppm)
+        else if (config.ppm)
         {
-            temp << "- PPM value to be used for all transmissions: " << ppm << "\n";
+            temp << "- PPM value to be used for all transmissions: " << config.ppm << "\n";
         }
-        if (terminate > 0)
+        if (config.terminate > 0)
         {
-            temp << "- TX will stop after " << terminate << " transmissions." << "\n";
+            temp << "- TX will stop after " << config.terminate << " transmissions." << "\n";
         }
-        else if (repeat)
+        else if (config.repeat && ! config.daemon_mode)
         {
             temp << "- Transmissions will continue forever until stopped with CTRL-C." << "\n";
         }
-        if (random_offset)
+        if (config.random_offset)
         {
             temp << "- A small random frequency offset will be added to all transmissions." << "\n";
         }
@@ -1322,24 +1262,52 @@ bool parse_commandline(
     else
     {
         std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "A test tone will be generated at frequency " << test_tone / 1e6 << " MHz.";
+        temp << std::setprecision(6) << std::fixed << "A test tone will be generated at frequency " << config.test_tone / 1e6 << " MHz.";
         prtStdOut(temp.str(), "\n");
-        if (self_cal)
+        if (config.self_cal)
         {
             prtStdOut("NTP will be used to calibrate the tone frequency.\n");
         }
-        else if (ppm)
+        else if (config.ppm)
         {
-            prtStdOut("PPM value to be used to generate the tone: ", ppm, "\n");
+            prtStdOut("PPM value to be used to generate the tone: ", config.ppm, "\n");
         }
     }
     return true;
 }
 
-// Call ntp_adjtime() to obtain the latest calibration coefficient.
-void update_ppm(
-    double &ppm)
+bool parse_commandline(bool reparse)
 {
+    return parse_commandline(0, {}, reparse);
+}
+
+bool wait_every(int minute)
+{
+    // Wait for the system clock's minute to reach one second past 'minute'
+    time_t t;
+    struct tm *ptm;
+    for (;;)
+    {
+        if (iniMonitor.changed())
+        {
+            prtStdOut("Notice: INI file changed, reloading parameters.\n");
+            parse_commandline(true);
+            return false; // Need to reload
+        }
+        time(&t);
+        ptm = gmtime(&t);
+        if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
+            break;
+        usleep(1000);
+    }
+    usleep(1000000); // Wait another second
+    return true; // OK to proceed
+}
+
+void update_ppm()
+{
+    // Call ntp_adjtime() to obtain the latest calibration coefficient.
+
     struct timex ntx;
     int status;
     double ppm_new;
@@ -1360,17 +1328,17 @@ void update_ppm(
     }
     else
     {
-        if (ppm != ppm_new)
+        if (config.ppm != ppm_new)
         {
             prtStdOut("Obtained new ppm value: ", ppm_new, "\n");
         }
-        ppm = ppm_new;
+        config.ppm = ppm_new;
     }
 }
 
-/* Return 1 if the difference is negative, otherwise 0.  */
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1)
 {
+    // Return 1 if the difference is negative, otherwise 0.
     long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     result->tv_sec = diff / 1000000;
     result->tv_usec = diff % 1000000;
@@ -1378,22 +1346,24 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
     return (diff < 0);
 }
 
-// Time Stamp
 void timeval_print(struct timeval *tv)
 {
+    // Print Time Stamp
+
     char buffer[30];
     time_t curtime;
 
     // printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
     curtime = tv->tv_sec;
     // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
-    strftime(buffer, 30, "UTC %Y-%m-%d %T", gmtime(&curtime));
+    strftime(buffer, 30, "%Y-%m-%d %T", gmtime(&curtime));
     printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
+    std::cout << " UTC";
 }
 
-// Create the mbox special files and open mbox.
 void open_mbox()
 {
+    // Create the mbox special files and open mbox.
     mbox.handle = mbox_open();
     if (mbox.handle < 0)
     {
@@ -1402,9 +1372,9 @@ void open_mbox()
     }
 }
 
-// Called when exiting or when a signal is received.
 void cleanup()
 {
+    // Called when exiting or when a signal is received.
     pinLow(LED_PIN);
     disable_clock();
     unSetupDMA();
@@ -1412,9 +1382,10 @@ void cleanup()
     unlink(LOCAL_DEVICE_FILE_NAME);
 }
 
-// Called when a signal is received. Automatically calls cleanup().
 void cleanupAndExit(int sig)
 {
+    // Called when a signal is received. Automatically calls cleanup().
+
     prtStdErr("Exiting, caught signal: ", sig, "\n");
     cleanup();
     exit(-1);
@@ -1434,11 +1405,11 @@ void setSchedPriority(int priority)
     }
 }
 
-// Create the memory map between virtual memory and the peripheral range
-// of physical memory.
-void setup_peri_base_virt(
-    volatile unsigned *&peri_base_virt)
+void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 {
+    // Create the memory map between virtual memory and the peripheral range
+    // of physical memory.
+
     int mem_fd;
     unsigned gpio_base = gpioBase();
     // open /dev/mem
@@ -1465,45 +1436,11 @@ void setup_peri_base_virt(
 
 int main(const int argc, char *const argv[])
 {
-    // Parse arguments first to show help file
-    bool xmit_enabled;
-    std::string callsign;
-    std::string locator;
-    std::string tx_power;
-    std::vector<double> center_freq_set;
-    double ppm;
-    bool self_cal;
-    bool repeat;
-    bool random_offset;
-    double test_tone;
-    bool no_delay;
-    mode_type mode;
-    int terminate;
-    bool useled;
-    bool useini;
-
     prtStdOut("Wsprry Pi running on: ", version(), ".\n");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 
-    if ( ! parse_commandline(
-        argc,
-        argv,
-        xmit_enabled,
-        callsign,
-        locator,
-        tx_power,
-        center_freq_set,
-        ppm,
-        self_cal,
-        repeat,
-        random_offset,
-        test_tone,
-        no_delay,
-        mode,
-        terminate,
-        useled,
-        useini) ) return 1;
+    if ( ! parse_commandline(argc, argv) ) return 1;
 
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
@@ -1527,7 +1464,7 @@ int main(const int argc, char *const argv[])
     // Initialize the RNG
     srand(time(NULL));
 
-    int nbands = center_freq_set.size();
+    int nbands = config.center_freq_set.size();
 
     // Initial configuration
     struct PageInfo constPage;
@@ -1541,20 +1478,18 @@ int main(const int argc, char *const argv[])
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
-    //TODO:  Reload on ini file change
-
-    if (mode == TONE)
+    if (config.mode == TONE)
     {
         // Test tone mode...
         double wspr_symtime = WSPR_SYMTIME;
         double tone_spacing = 1.0 / wspr_symtime;
 
         std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << test_tone / 1.0e6 << " MHz.";
+        temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
         prtStdOut(temp.str(), "\n");
         prtStdOut("Press CTRL-C to exit.\n");
 
-        txon(useled);
+        txon(config.useled);
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1562,24 +1497,24 @@ int main(const int argc, char *const argv[])
         double center_freq_actual;
         while (true)
         {
-            if (self_cal)
+            if (config.self_cal)
             {
-                update_ppm(ppm);
+                update_ppm();
             }
-            if (ppm != ppm_prev)
+            if (config.ppm != ppm_prev)
             {
-                setupDMATab(test_tone + 1.5 * tone_spacing, tone_spacing, f_plld_clk * (1 - ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
                 // cout << std::setprecision(30) << dma_table_freq[0] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[1] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[2] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[3] << "\n";
-                if (center_freq_actual != test_tone + 1.5 * tone_spacing)
+                if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
                 {
                     std::stringstream temp;
                     temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.\n";
                     prtStdErr(temp.str());
                 }
-                ppm_prev = ppm;
+                ppm_prev = config.ppm;
             }
             txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
         }
@@ -1587,137 +1522,139 @@ int main(const int argc, char *const argv[])
     else
     {
         // WSPR mode
-
-        // Create WSPR symbols
-        unsigned char symbols[162];
-        wspr(callsign.c_str(), locator.c_str(), tx_power.c_str(), symbols, useled);
-        /*
-        printf("WSPR codeblock: ");
-        for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
-          if (i) {
-            std::cout << ",";
-          }
-          printf("%d", symbols[i]);
-        }
-        printf("\n");
-        */
-
-        prtStdOut("Ready to transmit (setup complete).\n");
-        int band = 0;
-        int n_tx = 0;
         for (;;)
-        {
-            // Calculate WSPR parameters for this transmission
-            double center_freq_desired;
-            center_freq_desired = center_freq_set[band];
-            bool wspr15 =
-                (center_freq_desired > 137600 && center_freq_desired < 137625) ||
-                (center_freq_desired > 475800 && center_freq_desired < 475825) ||
-                (center_freq_desired > 1838200 && center_freq_desired < 1838225);
-            double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-            double tone_spacing = 1.0 / wspr_symtime;
+        { // Reload Loop >
+        // Create WSPR symbols
+            unsigned char symbols[162];
+            wspr(config.callsign.c_str(), config.locator.c_str(), config.tx_power.c_str(), symbols);
 
-            // Add random offset
-            if ((center_freq_desired != 0) && random_offset)
-            {
-                center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+#ifdef WSPR_DEBUG
+            // Print encodeed packet
+            printf("WSPR codeblock: ");
+            for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
+            if (i) {
+                std::cout << ",";
             }
-
-            // Status message before transmission
-            std::stringstream temp;
-            temp << std::setprecision(6) << std::fixed;
-            temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
-            prtStdOut(temp.str(), "\n");
-
-            // Wait for WSPR transmission window to arrive.
-            if (no_delay)
-            {
-                prtStdOut("Transmitting immediately (not waiting for WSPR window.)\n");
+            printf("%d", symbols[i]);
             }
-            else
-            {
-                prtStdOut("Waiting for next WSPR transmission window.\n");
-                wait_every((wspr15) ? 15 : 2);
-            }
+            printf("\n");
+#endif
 
-            // Update crystal calibration information
-            if (self_cal)
+            prtStdOut("Ready to transmit (setup complete).\n");
+            int band = 0;
+            int n_tx = 0;
+            for (;;)
             {
-                update_ppm(ppm);
-            }
+                // Calculate WSPR parameters for this transmission
+                double center_freq_desired;
+                center_freq_desired = config.center_freq_set[band];
+                bool wspr15 =
+                    (center_freq_desired > 137600 && center_freq_desired < 137625) ||
+                    (center_freq_desired > 475800 && center_freq_desired < 475825) ||
+                    (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+                double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+                double tone_spacing = 1.0 / wspr_symtime;
 
-            // Create the DMA table for this center frequency
-            std::vector<double> dma_table_freq;
-            double center_freq_actual;
-            if (center_freq_desired)
-            {
-                setupDMATab(center_freq_desired, tone_spacing, f_plld_clk * (1 - ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
-            }
-            else
-            {
-                center_freq_actual = center_freq_desired;
-            }
-
-            // Send the message
-            // cout << "TX started." << "\n";
-            if (center_freq_actual)
-            {
-                // Print a status message right before transmission begins.
-                // Leave this as-is for now because of the three-digit precision
-                // Time Stamp
-                struct timeval tvBegin, tvEnd, tvDiff;
-                gettimeofday(&tvBegin, NULL);
-                std::cout << "TX started at: ";
-                timeval_print(&tvBegin);
-                std::cout << "\n";
-
-                struct timeval sym_start;
-                struct timeval diff;
-                int bufPtr = 0;
-                txon(useled);
-                for (int i = 0; i < 162; i++)
+                // Add random offset
+                if ((center_freq_desired != 0) && config.random_offset)
                 {
-                    gettimeofday(&sym_start, NULL);
-                    timeval_subtract(&diff, &sym_start, &tvBegin);
-                    double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-                    // elapsed=(i)*wspr_symtime;
-                    double sched_end = (i + 1) * wspr_symtime;
-                    // cout << "symbol " << i << " " << wspr_symtime << "\n";
-                    // cout << sched_end-elapsed << "\n";
-                    double this_sym = sched_end - elapsed;
-                    this_sym = (this_sym < .2) ? .2 : this_sym;
-                    this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
-                    txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
                 }
-                n_tx++;
 
-                // Turn transmitter off
-                txoff(useled);
+                // Status message before transmission
+                std::stringstream temp;
+                temp << std::setprecision(6) << std::fixed;
+                temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+                prtStdOut(temp.str(), "\n");
 
-                // Time Stamp
-                gettimeofday(&tvEnd, NULL);
-                std::cout << "TX ended at: ";
-                timeval_print(&tvEnd);
-                timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
-            }
-            else
-            {
-                prtStdOut("Skipping transmission.\n");
-                usleep(1000000);
-            }
+                // Wait for WSPR transmission window to arrive.
+                if (config.no_delay)
+                {
+                    prtStdOut("Transmitting immediately (not waiting for WSPR window.)\n");
+                }
+                else
+                {
+                    prtStdOut("Waiting for next WSPR transmission window.\n");
+                    if ( ! wait_every((wspr15) ? 15 : 2) )
+                    {
+                        // Break and reload if ini changes
+                        break;
+                    };
+                }
 
-            // Advance to next band
-            band = (band + 1) % nbands;
-            if ((band == 0) && !repeat)
-            {
-                break;
+                // Update crystal calibration information
+                if (config.self_cal)
+                {
+                    update_ppm();
+                }
+
+                // Create the DMA table for this center frequency
+                std::vector<double> dma_table_freq;
+                double center_freq_actual;
+                if (center_freq_desired)
+                {
+                    setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                }
+                else
+                {
+                    center_freq_actual = center_freq_desired;
+                }
+
+                // Send the message if freq != 0 and transmission is enabled
+                if (center_freq_actual && config.xmit_enabled)
+                {
+                    // Print a status message right before transmission begins.
+                    struct timeval tvBegin, tvEnd, tvDiff;
+                    gettimeofday(&tvBegin, NULL);
+                    std::cout << "TX started at: ";
+                    timeval_print(&tvBegin);
+                    std::cout << "\n";
+
+                    struct timeval sym_start;
+                    struct timeval diff;
+                    int bufPtr = 0;
+                    txon(config.useled);
+                    for (int i = 0; i < 162; i++)
+                    {
+                        gettimeofday(&sym_start, NULL);
+                        timeval_subtract(&diff, &sym_start, &tvBegin);
+                        double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+                        double sched_end = (i + 1) * wspr_symtime;
+                        double this_sym = sched_end - elapsed;
+                        this_sym = (this_sym < .2) ? .2 : this_sym;
+                        this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
+                        txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    }
+                    n_tx++;
+
+                    // Turn transmitter off
+                    txoff(config.useled);
+
+                    // Time Stamp
+                    gettimeofday(&tvEnd, NULL);
+                    std::cout << "TX ended at: ";
+                    timeval_print(&tvEnd);
+                    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
+                    printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
+                }
+                else
+                {
+                    prtStdOut("Skipping transmission.\n");
+                    usleep(1000000);
+                }
+
+                // Advance to next band
+                band = (band + 1) % nbands;
+                if ((band == 0) && !config.repeat)
+                {
+                    return 0;
+                }
+                if ((config.terminate > 0) && (n_tx >= config.terminate))
+                {
+                    return 0;
+                }
             }
-            if ((terminate > 0) && (n_tx >= terminate))
-            {
-                break;
-            }
-        }
+        } // < Reload Loop
     }
 
     return 0;

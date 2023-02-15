@@ -7,17 +7,19 @@
 class WSPRConfig
 {
 public:
-    WSPRConfig(const std::string &configFile)
+    WSPRConfig(){}
+    bool initialize(const std::string &configFile)
     {
         valueHandler(configFile.c_str());
-    }
-    bool isInitialized()
-    {
         return isinitialized;
     }
     bool getTransmit()
     {
         return transmit;
+    }
+    bool getRepeat()
+    {
+        return repeat;
     }
     std::string getCallsign()
     {
@@ -70,6 +72,7 @@ private:
         {
             // Control group
             transmit = reader.GetBoolean("Control", "Transmit", false);
+            repeat = reader.GetBoolean("Control", "Repeat", false);
 
             // Common group
             callsign = reader.Get("Common", "Call Sign", "");
@@ -88,6 +91,7 @@ private:
     bool isinitialized;
     // Control group
     bool transmit;
+    bool repeat;
     // Common group
     std::string callsign;
     std::string gridsquare;
