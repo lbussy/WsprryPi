@@ -1,6 +1,6 @@
 # Testing: make clean && make && ./config
 
-NAME	= testconfig
+NAME	= iniconfig
 OBJS 	= $(NAME).o 
 SOURCE	= $(NAME).cpp
 OUT	    = $(NAME)

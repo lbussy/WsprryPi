@@ -7,12 +7,10 @@
 class WSPRConfig
 {
 public:
-    WSPRConfig(const std::string &configFile)
+    WSPRConfig(){}
+    bool initialize(const std::string &configFile)
     {
         valueHandler(configFile.c_str());
-    }
-    bool isInitialized()
-    {
         return isinitialized;
     }
     bool getTransmit()

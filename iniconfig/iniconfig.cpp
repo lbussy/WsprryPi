@@ -5,15 +5,15 @@
 
 int main()
 {
-    WSPRConfig config(CONFIG_FILE);
-    if (config.isInitialized())
+    WSPRConfig config;
+    if (config.initialize(CONFIG_FILE))
     {
         std::cout << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << "Config loaded from: " << CONFIG_FILE << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << "Transmit Enabled:\t\t" << std::boolalpha << config.getTransmit() << std::endl;
-        std::cout << "Repeat Transmissions:\t\t" << std::boolalpha << config.getTransmit() << std::endl;
+        std::cout << "Repeat Transmissions:\t\t" << std::boolalpha << config.getRepeat() << std::endl;
         std::cout << "Call Sign:\t\t\t" << config.getCallsign() << std::endl;
         std::cout << "Grid Square:\t\t\t" << config.getGridsquare() << std::endl;
         std::cout << "Transmit Power:\t\t\t" << config.getTxpower() << std::endl;
