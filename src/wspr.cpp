@@ -1,5 +1,7 @@
 #include "wspr.hpp"
 
+// #define WSPR_DEBUG
+
 #define SINGLETON_PORT 1234
 
 // Note on accessing memory in RPi:
@@ -892,10 +894,10 @@ void print_usage()
     prtStdOut("\n");
 }
 
-bool getINIValues()
+bool getINIValues(bool reload = false)
 {
-    WSPRConfig iniConfig(config.inifile);
-    if (iniConfig.isInitialized())
+    WSPRConfig iniConfig;
+    if (iniConfig.initialize(config.inifile))
     {
         config.xmit_enabled = iniConfig.getTransmit();
         config.repeat = iniConfig.getRepeat();
@@ -910,7 +912,7 @@ bool getINIValues()
 
         if (! config.daemon_mode )
             prtStdOut("\n============================================\n");
-        prtStdOut("Config loaded from: ", config.inifile, "\n");
+        prtStdOut("Config ", ((reload) ? "(re)" : ""), "loaded from: ", config.inifile, "\n");
         if (! config.daemon_mode )
             prtStdOut("============================================\n");
         prtStdOut("Transmit Enabled:\t\t", std::boolalpha, config.xmit_enabled, "\n");
@@ -1024,11 +1026,6 @@ void convertToFreq(const char* &option, double &parsed_freq)
 
 bool parse_commandline(const int &argc, char *const argv[], bool reparse = false)
 {
-    if (reparse)
-    {
-        prtStdOut("DEBUG: Re-parsing ini file.\n");
-        return true;
-    }
     if ( ! reparse )
     {
         static struct option long_options[] = {
@@ -1046,7 +1043,7 @@ bool parse_commandline(const int &argc, char *const argv[], bool reparse = false
             {"daemon-mode", no_argument, 0, 'D'},
             {0, 0, 0, 0}};
 
-        while (true)
+        while (true && ! reparse)
         {
             /* getopt_long stores the option index here. */
             int option_index = 0;
@@ -1130,11 +1127,15 @@ bool parse_commandline(const int &argc, char *const argv[], bool reparse = false
         }
     }
 
-    // Parse the non-option parameters
     if (config.useini)
     {
-        iniMonitor.filemon(config.inifile);
-        if ( !getINIValues() ) return false;
+        if (! reparse) iniMonitor.filemon(config.inifile.c_str());
+        if ( !getINIValues(reparse) )
+        {
+            prtStdErr("Error: Failed to reload the INI.\n");
+            exit(-1);
+        }
+        config.center_freq_set.clear();
 
         std::vector<std::string> freq_list;
         std::istringstream s ( config.frequency_string );
@@ -1277,27 +1278,21 @@ bool parse_commandline(const int &argc, char *const argv[], bool reparse = false
 
 bool parse_commandline(bool reparse)
 {
-    int x = 0;
-    char * y[] = {};
-    // const int argc, char *const argv[]
-    // if ( ! parse_commandline(argc, argv) ) return 1;
-    return parse_commandline(x, y, true);
+    return parse_commandline(0, {}, reparse);
 }
 
-void wait_every(int minute)
+bool wait_every(int minute)
 {
     // Wait for the system clock's minute to reach one second past 'minute'
-
-    // TODO:  Reload on ini file change
     time_t t;
     struct tm *ptm;
     for (;;)
     {
-        // TODO:
         if (iniMonitor.changed())
         {
             prtStdOut("Notice: INI file changed, reloading parameters.\n");
             parse_commandline(true);
+            return false; // Need to reload
         }
         time(&t);
         ptm = gmtime(&t);
@@ -1305,7 +1300,8 @@ void wait_every(int minute)
             break;
         usleep(1000);
     }
-    usleep(1000000); // wait another second
+    usleep(1000000); // Wait another second
+    return true; // OK to proceed
 }
 
 void update_ppm()
@@ -1526,11 +1522,14 @@ int main(const int argc, char *const argv[])
     else
     {
         // WSPR mode
+        for (;;)
         { // Reload Loop >
         // Create WSPR symbols
             unsigned char symbols[162];
             wspr(config.callsign.c_str(), config.locator.c_str(), config.tx_power.c_str(), symbols);
-            /*
+
+#ifdef WSPR_DEBUG
+            // Print encodeed packet
             printf("WSPR codeblock: ");
             for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
             if (i) {
@@ -1539,7 +1538,7 @@ int main(const int argc, char *const argv[])
             printf("%d", symbols[i]);
             }
             printf("\n");
-            */
+#endif
 
             prtStdOut("Ready to transmit (setup complete).\n");
             int band = 0;
@@ -1576,7 +1575,11 @@ int main(const int argc, char *const argv[])
                 else
                 {
                     prtStdOut("Waiting for next WSPR transmission window.\n");
-                    wait_every((wspr15) ? 15 : 2);
+                    if ( ! wait_every((wspr15) ? 15 : 2) )
+                    {
+                        // Break and reload if ini changes
+                        break;
+                    };
                 }
 
                 // Update crystal calibration information
@@ -1597,8 +1600,8 @@ int main(const int argc, char *const argv[])
                     center_freq_actual = center_freq_desired;
                 }
 
-                // Send the message
-                if (center_freq_actual)
+                // Send the message if freq != 0 and transmission is enabled
+                if (center_freq_actual && config.xmit_enabled)
                 {
                     // Print a status message right before transmission begins.
                     struct timeval tvBegin, tvEnd, tvDiff;
