@@ -19,7 +19,7 @@ public:
     }
     bool getRepeat()
     {
-        return repeat;
+        return transmit;
     }
     std::string getCallsign()
     {

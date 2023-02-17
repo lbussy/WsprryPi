@@ -1,0 +1,96 @@
+<?php
+
+$file = "wspr.ini";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'PUT') {
+    // Convert to a PHP object
+    $post = file_get_contents('php://input');
+    $decoded = urldecode($post);
+    $data = json_decode($post, true);
+    // Write INI
+    write_ini_file($file, $data);
+} else {
+    // Read and send INI
+    read_ini_file($file);
+}
+
+function read_ini_file($file)
+{
+    // Parse with sections
+    $ini_array = parse_ini_file($file, true, INI_SCANNER_TYPED);
+    try {
+        echo json_encode($ini_array);
+    } catch (HttpException $ex) {
+        echo $ex;
+    }
+}
+
+function write_ini_file($file, $array = []) {
+    // check first argument is string
+    if (!is_string($file)) {
+        throw new \InvalidArgumentException('Function argument 1 must be a string.');
+    }
+
+    // check second argument is array
+    if (!is_array($array)) {
+        throw new \InvalidArgumentException('Function argument 2 must be an array.');
+    }
+
+    // process array
+    $data = array();
+    foreach ($array as $key => $val) {
+        if (is_array($val)) {
+            $data[] = "[$key]";
+            foreach ($val as $skey => $sval) {
+                if (is_array($sval)) {
+                    foreach ($sval as $_skey => $_sval) {
+                        if (is_numeric($_skey)) {
+                            $data[] = $skey.'[] = '.(is_bool($_sval) ? (($_sval) ? 'true' : 'false') : $_sval);
+                        } else {
+                            $data[] = $skey.'['.$_skey.'] = '.(is_bool($_sval) ? (($_sval) ? 'true' : 'false') : $_sval);
+                        }
+                    }
+                } else {
+                    $data[] = $skey.' = '.(is_bool($sval) ? (($sval) ? 'true' : 'false') : $sval);
+                }
+            }
+        } else {
+            $data[] = $key.' = '.(is_bool($val) ? (($val) ? 'true' : 'false') : $val);
+        }
+        // empty line
+        $data[] = null;
+    }
+
+    // open file pointer, init flock options
+    $fp = fopen($file, 'w'); // TODO: Capture a failure
+    $retries = 0;
+    $max_retries = 100;
+
+    if (!$fp) {
+        return false;
+    }
+
+    // loop until get lock, or reach max retries
+    do {
+        if ($retries > 0) {
+            usleep(rand(1, 5000));
+        }
+        $retries += 1;
+    } while (!flock($fp, LOCK_EX) && $retries <= $max_retries);
+
+    // couldn't get the lock
+    if ($retries == $max_retries) {
+        return false;
+    }
+
+    // got lock, write data
+    fwrite($fp, implode(PHP_EOL, $data).PHP_EOL);
+
+    // release lock
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    return true;
+}
+
+?>

@@ -900,7 +900,7 @@ bool getINIValues(bool reload = false)
     if (iniConfig.initialize(config.inifile))
     {
         config.xmit_enabled = iniConfig.getTransmit();
-        config.repeat = iniConfig.getRepeat();
+        config.repeat = iniConfig.getTransmit(); // Repeat is not used in an ini setup
         config.callsign = iniConfig.getCallsign();
         config.locator = iniConfig.getGridsquare();
         config.tx_power = iniConfig.getTxpower();
@@ -916,7 +916,6 @@ bool getINIValues(bool reload = false)
         if (! config.daemon_mode )
             prtStdOut("============================================\n");
         prtStdOut("Transmit Enabled:\t\t", std::boolalpha, config.xmit_enabled, "\n");
-        prtStdOut("Repeat transmission:\t\t", std::boolalpha, config.repeat, "\n");
         prtStdOut("Call Sign:\t\t\t", config.callsign, "\n");
         prtStdOut("Grid Square:\t\t\t", config.locator, "\n");
         prtStdOut("Transmit Power:\t\t\t", config.tx_power, "\n");
