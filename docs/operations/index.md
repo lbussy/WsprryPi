@@ -40,11 +40,14 @@ The `wspr` service will log messages like any other systemd executable.
 
 ## Command Line Usage
 
+```{admonition} Because `wspr` directly accesses memory areas of the Raspberry Pi, it must be run as the root user with the `sudo` command prepended. 
+```
+
 Should you desire to run `wspr` from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
 
 ### Command Line Help File
 
-```
+``` text
 Wsprry Pi running on: Raspberry Pi 2B or 3B (BCM2837).
 Usage:
   wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
@@ -98,9 +101,6 @@ Transmission gaps can be created by specifying a TX frequency of 0.
 ```
 
 ### Mandatory Command Line Entries
-
-```{admonition} Because `wspr` directly accesses system memory areas, it must be run as the root user with the `sudo` command prepended.
-```
 
 The minimum command line configuration to transmit a WSPR beacon is:
 
