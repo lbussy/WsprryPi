@@ -192,7 +192,7 @@ html_static_path = ['_static']
 # html_logo = "_static/bubblegum_icon.png"
 
 # Favicon
-# html_favicon = 'favicon.png'
+html_favicon = '_static/favicon.ico'
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
