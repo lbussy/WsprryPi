@@ -32,6 +32,8 @@ My goal, and where success will be determined, is to allow you to execute one co
 
 installation/index
 operations/index
+operations/manual
+operations/rf
 developer/index
 ```
 
