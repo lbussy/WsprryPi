@@ -241,6 +241,7 @@
     <script src="https://kit.fontawesome.com/e51821420e.js" crossorigin="anonymous"></script>
 
     <script>
+      var url = "wspr_ini.php";
       $(document).ready(function() { 
         bindActions();
         loadPage();
@@ -271,9 +272,7 @@
       if (populateConfigRunning) return;
         populateConfigRunning = true;
 
-        var url = "ini_read.php";
-
-        var configJson = $.getJSON(url, function () {
+        var configJson = $.getJSON(url, function (data) {
             // Clear any warnings here
         })
             .done(function (configJson) {
@@ -304,19 +303,22 @@
                       callback();
                   }
                 } catch {
-                    if (!unloadingState) {
-                        // Unable to parse data.
-                    }
+                    // if (!unloadingState) {
+                    //     // Unable to parse data.
+                    // }
+                    console.log("Unable to parse data.");
                     setTimeout(populateConfig, 10000);
                 }
             })
-            .fail(function () {
-                if (!unloadingState) {
-                    // Unable to retrieve data.
-                }
+            .fail(function (data) {
+                // if (!unloadingState) {
+                //     // Unable to retrieve data.
+                // }
+                console.log("Unable to retrieve data.");
                 setTimeout(populateConfig, 10000);
             })
-            .always(function () {
+            .always(function (data) {
+                console.log(data);
                 populateConfigRunning = false;
                 // Can post-process here
             });
@@ -324,6 +326,7 @@
 
       function savePage()
       {
+        // TODO: Make button "spin"
         var Control  = {
           "Transmit" : $('#transmit').is(":checked"),
         };
@@ -344,17 +347,25 @@
         };
 
         var Config = {Control, Common, Extended};
-        console.log("DEBUG: \n" + JSON.stringify(Config, null, 4));
+        var json = JSON.stringify(Config);
         
-        // TODO: Handle POST
-        // $.ajax({
-        //     type: "POST",
-        //     url: "ini_write.php",
-        //     data: Config,
-        //     success: function(data) {
-        //          //
-        //     }
-        // });
+        $.ajax({
+          url: url,
+          //headers: {"X-Something": something },
+          data: json,
+          type: 'PUT'
+        })
+            .done(function (data) {
+                // Done
+            })
+            .fail(function (data) {
+                // Fail
+                // TODO:  Alert on failure
+                console.log("Unable to POST data.\n" + data);
+            })
+            .always(function (data) {
+                // Always
+            });
       };
 
       function resetPage()
