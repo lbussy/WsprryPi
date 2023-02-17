@@ -1,8 +1,8 @@
 # Developer Notes
 
-The source code has been modified to create a single version of `wspr` that is executable on all Raspberry Pi versions.  
+The source code has been modified from the Legacy source to create a single version of `wspr` that is executable on all Raspberry Pi versions.
 
-% TODO:  Create developer instructions
+The following apt packages are required to compile on the Pi:
 
-## Packages to be installed/checked via apt for development
-APTPACKAGES="libraspberrypi-dev raspberrypi-kernel-headers"
+* libraspberrypi-dev
+* raspberrypi-kernel-headers
