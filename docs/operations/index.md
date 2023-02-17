@@ -102,6 +102,8 @@ Transmission gaps can be created by specifying a TX frequency of 0.
 
 ### Mandatory Command Line Entries
 
+Note:  Because `wspr` directly accesses system memory areas, it must be run as the root user with the `sudo` command prepended.
+
 The minimum command line configuration to transmit a WSPR beacon is:
 
 `{user context} wspr{-tapr} {Callsign} {Locator} {Transmit Power in dBm} {Frequency}`
