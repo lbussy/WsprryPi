@@ -20,11 +20,27 @@ DO NOT expose GPIO4 to voltages or currents above the specified Absolute Maximum
 
 ## System Daemon Usage
 
-*****
-TODO
-*****
+### Service Controls
+
+The `wspr` executble is controlled by a `systemd` daemon called `wspr.service`.
+
+* `wspr` Start:  `sudo systemctl start wspr`
+* `wspr` Stop: `sudo systemctl stop wspr`
+* `wspr` Status: `sudo systemctl status wspr`
+
+For more information about interacting with services, please see `man systemctl`.
+
+### Log Files
+
+The `wspr` service will log messages like any other systemd executable.
+
+* View all log files: `journalctl -u wspr`
+* View log files since last system boot: `journalctl -u wspr -b`
+* View the last page of the log file: `journalctl -u wspr -e`
 
 ## Command Line Usage
+
+Should you desire to run `wspr` from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
 
 ### Command Line Help File
 
@@ -82,6 +98,9 @@ Transmission gaps can be created by specifying a TX frequency of 0.
 ```
 
 ### Mandatory Command Line Entries
+
+```{admonition} Because `wspr` directly accesses system memory areas, it must be run as the root user with the `sudo` command prepended.
+```
 
 The minimum command line configuration to transmit a WSPR beacon is:
 
