@@ -207,7 +207,7 @@
 
               <hr class="border-2 border-top">
 
-              <div class="modal-footer justify-content-center">
+              <div id="buttons" class="modal-footer justify-content-center">
                 <button id="submit" type="button" class="btn btn-primary">&nbsp;Save&nbsp;</button>
                 &nbsp;
                 <button id="reset" type="button" class="btn btn-secondary">Reset</button>
@@ -242,6 +242,8 @@
 
     <script>
       var url = "wspr_ini.php";
+      var populateConfigRunning = false;
+
       $(document).ready(function() { 
         bindActions();
         loadPage();
@@ -267,66 +269,63 @@
         populateConfig();
       };
 
-      var populateConfigRunning = false;
       function populateConfig(callback = null) { // Get wspr data
-      if (populateConfigRunning) return;
-        populateConfigRunning = true;
+        if (populateConfigRunning) return;
+          populateConfigRunning = true;
 
-        var configJson = $.getJSON(url, function (data) {
-            // Clear any warnings here
-        })
-            .done(function (configJson) {
-                try {
-                  $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
-                  $('#useled').prop('checked', configJson["Extended"]["Use LED"]);
-                  $('#callsign').val(configJson["Common"]["Call Sign"]);
-                  $('#gridsquare').val(configJson["Common"]["Grid Square"]);
-                  $('#dbm').val(configJson["Common"]["TX Power"]);
-                  $('#frequencies').val(configJson["Common"]["Frequency"]);
-                  $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
-                  $('#selfcal').prop('checked', configJson["Extended"]["Self Cal"]);
-                  $('#ppm').val(configJson["Extended"]["PPM"]);
-                  if ($('#selfcal').is(":checked"))
-                  {
-                    // Disable PPM when using self-cal
-                    $('#ppm').prop( "disabled", true );
+          var configJson = $.getJSON(url, function (data) {
+              // Clear any warnings here
+          })
+              .done(function (configJson) {
+                  try {
+                    $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
+                    $('#useled').prop('checked', configJson["Extended"]["Use LED"]);
+                    $('#callsign').val(configJson["Common"]["Call Sign"]);
+                    $('#gridsquare').val(configJson["Common"]["Grid Square"]);
+                    $('#dbm').val(configJson["Common"]["TX Power"]);
+                    $('#frequencies').val(configJson["Common"]["Frequency"]);
+                    $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
+                    $('#selfcal').prop('checked', configJson["Extended"]["Self Cal"]);
+                    $('#ppm').val(configJson["Extended"]["PPM"]);
+                    if ($('#selfcal').is(":checked"))
+                    {
+                      // Disable PPM when using self-cal
+                      $('#ppm').prop( "disabled", true );
+                    }
+                    else
+                    {
+                      // Enable PPM when not using self-cal
+                      $('#ppm').prop( "disabled", false );
+                    }
+                    // Enable Form
+                    $('#submit').prop( "disabled", false );
+                    $('#reset').prop( "disabled", false );
+                    $('#wsprconfig').prop( "disabled", false );
+
+                    if (typeof callback == "function") {
+                        callback();
+                    }
+                  } catch {
+                      alert("Unable to parse data.")
+                      console.log("Unable to parse data.");
+                      setTimeout(populateConfig, 10000);
                   }
-                  else
-                  {
-                    // Enable PPM when not using self-cal
-                    $('#ppm').prop( "disabled", false );
-                  }
-                  // Enable Form
-                  $('#wsprconfig').prop( "disabled", false );
-                  
-                  if (typeof callback == "function") {
-                      callback();
-                  }
-                } catch {
-                    // if (!unloadingState) {
-                    //     // Unable to parse data.
-                    // }
-                    console.log("Unable to parse data.");
-                    setTimeout(populateConfig, 10000);
-                }
-            })
-            .fail(function (data) {
-                // if (!unloadingState) {
-                //     // Unable to retrieve data.
-                // }
-                console.log("Unable to retrieve data.");
-                setTimeout(populateConfig, 10000);
-            })
-            .always(function (data) {
-                console.log(data);
-                populateConfigRunning = false;
-                // Can post-process here
-            });
+              })
+              .fail(function (data) {
+                  alert("Unable to retrieve data.")
+                  console.log("Unable to retrieve data.");
+                  setTimeout(populateConfig, 10000);
+              })
+              .always(function (data) {
+                  populateConfigRunning = false;
+                  // Can post-process here
+              });
       }
 
       function savePage()
       {
-        // TODO: Make button "spin"
+        $('#submit').prop( "disabled", true );
+        $('#reset').prop( "disabled", true );
         var Control  = {
           "Transmit" : $('#transmit').is(":checked"),
         };
@@ -360,17 +359,23 @@
             })
             .fail(function (data) {
                 // Fail
-                // TODO:  Alert on failure
+                alert("Unable to save data.")
                 console.log("Unable to POST data.\n" + data);
             })
             .always(function (data) {
-                // Always
+              setTimeout(() => {
+                $('#submit').prop( "disabled", false );
+                $('#reset').prop( "disabled", false );
+              }, 500)
+
             });
       };
 
       function resetPage()
       {
         // Disable Form
+        $('#submit').prop( "disabled", false );
+        $('#reset').prop( "disabled", false );
         $('#wsprconfig').prop( "disabled", true );
         populateConfig();
       };
