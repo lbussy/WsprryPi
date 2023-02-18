@@ -900,7 +900,6 @@ bool getINIValues(bool reload = false)
     if (iniConfig.initialize(config.inifile))
     {
         config.xmit_enabled = iniConfig.getTransmit();
-        config.repeat = true; // Repeat must be true in an ini setup
         config.callsign = iniConfig.getCallsign();
         config.locator = iniConfig.getGridsquare();
         config.tx_power = iniConfig.getTxpower();
@@ -1122,6 +1121,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'D':
             config.daemon_mode = true;
+            config.repeat = true; // Repeat must be true in a daemon setup
             break;
         default:
             return false;
@@ -1299,6 +1299,10 @@ bool wait_every(int minute)
     {
         if (iniMonitor.changed())
         {
+            // Delay and make sure the file is done changing
+            usleep(500000);
+            while (iniMonitor.changed()) {;;}
+
             prtStdOut("Notice: INI file changed, reloading parameters.\n");
             parseConfigData(true);
             return false; // Need to reload
@@ -1394,7 +1398,6 @@ void cleanup()
 void cleanupAndExit(int sig)
 {
     // Called when a signal is received. Automatically calls cleanup().
-
     prtStdErr("Exiting, caught signal: ", sig, "\n");
     cleanup();
     exit(-1);
