@@ -424,8 +424,6 @@ checkscript() {
             src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
             src=${src##* }
         fi
-        # TODO: Handle executable versions
-        # if file "$fullName" | grep -q executable; then
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
             echo -e "\nFile: $scriptName exists but is an older version" > /dev/tty
@@ -677,6 +675,32 @@ doWWW() {
 }
 
 ############
+### Print final banner
+############
+
+complete() {
+    clear
+    local sp7 sp11 sp18 sp28 sp49 ip port
+    sp7="$(printf ' %.0s' {1..7})" sp11="$(printf ' %.0s' {1..11})"
+    sp18="$(printf ' %.0s' {1..18})" sp28="$(printf ' %.0s' {1..28})"
+    sp49="$(printf ' %.0s' {1..49})"
+    # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
+  cat << EOF
+$DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
+$DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
+$DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
+$DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
+$DOT$BGBLK$FGYLW$sp49|_|$sp28
+
+The WSPR daemon has started.
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
+                  -or- : http://$(hostname).local/wspr
+ - Release version     : $VERSION
+EOF
+    echo -e "\nHappy DXing!"
+}
+
+############
 ### Main function
 ############
 
@@ -696,15 +720,20 @@ main() {
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
-    read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
-    case "$yn" in
-        [Yy]* ) do_unit "shutdown-button" "python3" ;;
-        [Nn]* ) echo ;;
-        * ) echo ;;
-    esac
+    if [ -f /usr/local/bin/shutdown-button.py ]; then
+       do_unit "shutdown-button" "python3"
+    else
+        read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
+        case "$yn" in
+            [Yy]* ) do_unit "shutdown-button" "python3" ;;
+            [Nn]* ) echo ;;
+            * ) echo ;;
+        esac
+    fi
     aptPackages # Install any apt packages needed
     doWWW # Download website
     echo -e "\n***Script $THISSCRIPT complete.***\n"
+    complete
 }
 
 ############
