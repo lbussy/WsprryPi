@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="installer"
-VERSION="0.0.1" # TODO: Create script to update this
+VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -37,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-    CMDLINE="curl -s -L "$GITRAW/$PACKAGE/$GITBRNCH/scripts/$THISSCRIPT" | BRANCH=$GITBRNCH sudo bash"
+BRANCH="installer"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
