@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="scripts"
-VERSION="0.1"
+VERSION="0.0.1"  # TODO: Create script to update this
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project

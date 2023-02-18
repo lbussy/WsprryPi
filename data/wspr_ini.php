@@ -62,7 +62,7 @@ function write_ini_file($file, $array = []) {
     }
 
     // open file pointer, init flock options
-    $fp = fopen($file, 'w'); // TODO: Capture a failure
+    $fp = fopen($file, 'w');
     $retries = 0;
     $max_retries = 100;
 

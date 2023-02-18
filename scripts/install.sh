@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="installer"
-VERSION="0.0.1"
+VERSION="0.0.1" # TODO: Create script to update this
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -686,6 +686,7 @@ complete() {
     sp49="$(printf ' %.0s' {1..49})"
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
   cat << EOF
+
 $DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
 $DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
 $DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
