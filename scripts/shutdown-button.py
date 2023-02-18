@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Created for Wsprry Pi version 0.1
+# Created for WsprryPi version "0.0.1"
 
 from gpiozero import Button
 from time import sleep

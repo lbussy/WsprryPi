@@ -8,15 +8,15 @@
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW PACKAGENAME VERSION
-declare VERBOSE BRANCH
+declare REPLY CMDLINE GITRAW PACKAGENAME VERSION APTPACKAGES
+declare VERBOSE BRANCH WWWFILES
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="std-out-err"
-VERSION="0.1"
+BRANCH="installer"
+VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -24,6 +24,9 @@ COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
+APTPACKAGES="apache2 php"
+WWWFILES="android-chrome-192x192.png android-chrome-512x512.png apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css bootstrap-icons.css custom.min.css favicon-16x16.png favicon-32x32.png favicon.ico ham_white.svg index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
+WWWREMOV=""
 # This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
@@ -34,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-    CMDLINE="curl -L "$GITRAW/$PACKAGE/$GITBRNCH/scripts/$THISSCRIPT" | BRANCH=$GITBRNCH sudo bash"
+BRANCH="installer"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -347,6 +350,7 @@ do_unit() {
     unit="$1"
     ext="$2"
     arg="$3"
+    systemctl stop "$unit" &> /dev/null
     if [ "$ext" == "bash" ]; then
         extension=".sh"
         executable="bash"
@@ -392,12 +396,12 @@ copy_file() {
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName$extension"
 
     # Download file
-    curl -o "$fullName" "$curlFile"
+    curl -s "$curlFile" > "$fullName" || warn
 
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
         chown root:root "$fullName"
-        chmod 0744 "$fullName"
+        chmod 0755 "$fullName"
     else
         echo -e "Script install failed for $fullName"&&die
     fi
@@ -414,8 +418,12 @@ checkscript() {
     scriptName="${1,,}"
     scriptFile="/usr/local/bin/$scriptName"
     if [ -f "$scriptFile" ]; then
-        src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
-        src=${src##* }
+        if file "$scriptFile" | grep -iv python | grep -q executable; then
+            src=`/usr/local/bin/wspr -v | grep -oE '[^ ]+$'`
+        else
+            src=$(grep "^# Created for $PACKAGE version" "$scriptFile")
+            src=${src##* }
+        fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
             echo -e "\nFile: $scriptName exists but is an older version" > /dev/tty
@@ -456,7 +464,7 @@ checkdaemon() {
     daemonName="${1,,}"
     unitFile="/etc/systemd/system/$daemonName.service"
     if [ -f "$unitFile" ]; then
-        src=$(grep "^# Created for $PACKAGENAME version" "$unitFile")
+        src=$(grep "^# Created for $PACKAGE version" "$unitFile")
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
@@ -529,7 +537,7 @@ createdaemon () {
     fi
     echo -e "\nCreating $productName unit file for $daemonName ($unitFile)."
     {
-        echo -e "# Created for $PACKAGENAME version $VERSION
+        echo -e "# Created for $PACKAGE version $VERSION
 
 [Unit]
 Description=$productName daemon for: $daemonName
@@ -561,6 +569,139 @@ WantedBy=multi-user.target"
 }
 
 ############
+### Create wspr ini file
+### Required:
+###   none
+############
+
+createini () {
+    local fullName dir file
+    file="wspr.ini"
+    dir="/usr/local/etc"
+    fullName="$dir/$file"
+
+    echo -e "\nCreating configuration file for $PACKAGENAME."
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$file"
+    # Download file to etc directory
+    curl -s "$curlFile" > "$fullName" || warn
+
+    chown root:root "$fullName"
+    chmod 666 "$fullName"
+    echo
+}
+
+aptPackages() {
+    local lastUpdate nowTime pkgOk upgradesAvail pkg
+
+    echo -e "\nUpdating any expired apt keys."
+    for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
+	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
+    done
+
+    echo -e "\nFixing any broken installations."
+    sudo apt-get --fix-broken install -y||die
+    # Run 'apt update' if last run was > 1 week ago
+    lastUpdate=$(stat -c %Y /var/lib/apt/lists)
+    nowTime=$(date +%s)
+    if [ $((nowTime - lastUpdate)) -gt 604800 ]; then
+        echo -e "\nLast apt update was over a week ago. Running apt update before updating"
+        echo -e "dependencies."
+        apt-get update -yq||die
+    fi
+
+    # Now install any necessary packages if they are not installed
+    echo -e "\nChecking and installing required dependencies via apt."
+    for pkg in $APTPACKAGES; do
+        pkgOk=$(dpkg-query -W --showformat='${Status}\n' "$pkg" | \
+        grep "install ok installed")
+        if [ -z "$pkgOk" ]; then
+            echo -e "\nInstalling '$pkg'."
+            apt-get install "$pkg" -y -q=2||die
+        fi
+    done
+
+    # Get list of installed packages with updates available
+    upgradesAvail=$(dpkg --get-selections | xargs apt-cache policy {} | \
+        grep -1 Installed | sed -r 's/(:|Installed: |Candidate: )//' | \
+    uniq -u | tac | sed '/--/I,+1 d' | tac | sed '$d' | sed -n 1~2p)
+    # Loop through the required packages and see if they need an upgrade
+    for pkg in $APTPACKAGES; do
+        if [[ "$upgradesAvail" == *"$pkg"* ]]; then
+            echo -e "\nUpgrading '$pkg'."
+            apt-get install "$pkg" -y -q=2||die
+        fi
+    done
+
+    # Restart Apache just in case
+    systemctl restart apache2
+}
+
+doWWW() {
+    local file dir inisource inilink
+    dir="/var/www/html/wspr"
+    # Delete old files
+    echo -e "\nDeleting any deprecated files."
+    for file in $WWWREMOV; do
+        if [ -f "$dir/$file" ]; then
+            rm -f "$dir/$file"
+        fi
+    done
+
+    # Copy down web pages
+    echo -e "\nChecking and installing web pages."
+    if [ ! -d "$dir" ]; then
+        mkdir "$dir"
+    fi
+    for file in $WWWFILES; do
+        fullName="$dir/$file"
+        curlFile="$GITRAW/$GITPROJ/$GITBRNCH/data/$file"
+        # Download file to web directory
+        curl -s "$curlFile" > "$fullName" || warn
+    done
+
+    # Set the permissions
+    echo -e "\nFixing file permissions for $dir."
+    chown -R www-data:www-data "$dir" || warn
+    find "$dir" -type d -exec chmod 2770 {} \; || warn
+    find "$dir" -type f -exec chmod 660 {} \; || warn
+
+    # Link and perms on ini file
+    echo -e "\nFixing file permissions for data file."
+    inisource="/usr/local/etc/wspr.ini"
+    inilink="$dir/wspr.ini"
+    chmod 666 "$inisource" || warn
+    ln -sf "$inisource" "$inilink"
+    chown -R www-data:www-data "$inilink" || warn
+}
+
+############
+### Print final banner
+############
+
+complete() {
+    local sp7 sp11 sp18 sp28 sp49 ip port
+    sp7="$(printf ' %.0s' {1..7})" sp11="$(printf ' %.0s' {1..11})"
+    sp18="$(printf ' %.0s' {1..18})" sp28="$(printf ' %.0s' {1..28})"
+    sp49="$(printf ' %.0s' {1..49})"
+    # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
+  cat << EOF
+
+$DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
+$DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
+$DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
+$DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
+$DOT$BGBLK$FGYLW$sp49|_|$sp28
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+The WSPR daemon has started.
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
+                  -or- : http://$(hostname).local/wspr
+ - Release version     : $VERSION
+EOF
+    echo -e "\nHappy DXing!"
+}
+
+############
 ### Main function
 ############
 
@@ -569,7 +710,7 @@ main() {
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
-    echo -e "\n***Script $THISSCRIPT starting.***\n"
+    echo -e "\n***Script $THISSCRIPT starting.***"
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
     echo -e "\nRunning on: $sysver\n"
@@ -578,14 +719,22 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
+    createini # Create ini file
     # Choose to support shutdown button
-    read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
-    case "$yn" in
-        [Yy]* ) do_unit "shutdown-button" "python3" ;;
-        [Nn]* ) echo ;;
-        * ) echo ;;
-    esac
-    echo -e "***Script $THISSCRIPT complete.***\n"
+    if [ -f /usr/local/bin/shutdown-button.py ]; then
+       do_unit "shutdown-button" "python3"
+    else
+        read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
+        case "$yn" in
+            [Yy]* ) do_unit "shutdown-button" "python3" ;;
+            [Nn]* ) echo ;;
+            * ) echo ;;
+        esac
+    fi
+    aptPackages # Install any apt packages needed
+    doWWW # Download website
+    echo -e "\n***Script $THISSCRIPT complete.***\n"
+    complete
 }
 
 ############

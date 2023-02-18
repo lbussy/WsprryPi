@@ -3,6 +3,14 @@
 
 #include <bcm_host.h>
 
+#define stringify(s) _stringifyDo(s)
+#define _stringifyDo(s) #s
+
+// const char *project() { return stringify(MAKE_SRC_NAM); }
+const char *exeversion() { return stringify(MAKE_SRC_TAG); }
+// const char *commit() { return stringify(MAKE_SRC_REV); }
+// const char *branch() { return stringify(MAKE_SRC_BRH); }
+
 int ver();
 const char* version();
 unsigned gpioBase();
