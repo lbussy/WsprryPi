@@ -350,6 +350,7 @@ do_unit() {
     unit="$1"
     ext="$2"
     arg="$3"
+    systemctl stop "$unit" &> /dev/null
     if [ "$ext" == "bash" ]; then
         extension=".sh"
         executable="bash"
@@ -400,7 +401,7 @@ copy_file() {
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
         chown root:root "$fullName"
-        chmod 0744 "$fullName"
+        chmod 4755 "$fullName"
     else
         echo -e "Script install failed for $fullName"&&die
     fi
@@ -419,6 +420,8 @@ checkscript() {
     if [ -f "$scriptFile" ]; then
         src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
         src=${src##* }
+        # TODO: Handle executable versions
+        # if file "$fullName" | grep -q executable; then
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
             echo -e "\nFile: $scriptName exists but is an older version" > /dev/tty
@@ -572,16 +575,16 @@ WantedBy=multi-user.target"
 createini () {
     local fullName dir file
     file="wspr.ini"
-    dir = "/usr/local/etc"
+    dir="/usr/local/etc"
     fullName="$dir/$file"
 
     echo -e "\nCreating configuration file for $PACKAGENAME."
-    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/source/$file"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$file"
     # Download file to etc directory
     curl "$curlFile" > "$fullName" || warn
 
-    chown root:root "$inifile"
-    chmod 0644 "$inifile"
+    chown root:root "$fullName"
+    chmod 666 "$fullName"
     echo
 }
 
