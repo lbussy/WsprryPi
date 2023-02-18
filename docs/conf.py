@@ -12,37 +12,31 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# Using myst-parser
-# MyST
-# for rst-to-myst[sphinx]
-# rst2myst convert **/*.rst
-
-import os
-import sys
-#sys.path.insert(0, os.path.abspath('.'))
-import subprocess
-
-import sphinx_bootstrap_theme
-from sphinx.ext import todo
+# import os
+# import sys
+# sys.path.insert(0, os.path.abspath('.'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = u'Wsprry Pi'
-copyright = u'2023, Lee C. Bussy'
-author = u'Lee C. Bussy'
+copyright = u'2023, Lee C. Bussy (and others)'
+author = u'Lee C. Bussy (and others)'
 
+# The short X.Y version
 # Get 0.0.0 version from latest Git tag
 tagcmd = "git describe --tags --abbrev=0"
 try:
     version = subprocess.check_output(tagcmd, shell=True).decode().strip()
 except:
-    version = "0.0.1"
-
-# The short X.Y version
-version = version
+    version = "0.0.0"
 # The full version, including alpha/beta/rc tags
-release = version
+# Get 0.0.0 version from latest Git tag
+tagcmd = "git describe --tags"
+try:
+    release = subprocess.check_output(tagcmd, shell=True).decode().strip()
+except:
+    release = "0.0.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -55,7 +49,6 @@ release = version
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'myst_parser',
     'sphinx.ext.autodoc',
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
@@ -78,12 +71,12 @@ master_doc = 'index'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = 'en'
+language = None
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store', 'README.*']
+exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
@@ -94,83 +87,13 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'bootstrap'
-html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
+html_theme = 'alabaster'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-html_theme_options = {
-    # Navigation bar title. (Default: ``project`` value)
-    'navbar_title': "Wsprry Pi",
-
-    # Tab name for entire site. (Default: "Site")
-    'navbar_site_name': "Site",
-
-    # A list of tuples containing pages or urls to link to.
-    # Valid tuples should be in the following forms:
-    #    (name, page)                 # a link to a page
-    #    (name, "/aa/bb", 1)          # a link to an arbitrary relative url
-    #    (name, "http://example.com", True) # arbitrary absolute url
-    # Note the "1" or "True" value above as the third argument to indicate
-    # an arbitrary url.
-    # 'navbar_links': [
-    #     ("Examples", "examples"),
-    #     ("Link", "http://example.com", True),
-    # ],
-
-    # Render the next and previous page links in navbar. (Default: true)
-    'navbar_sidebarrel': True,
-
-    # Render the current pages TOC in the navbar. (Default: true)
-    'navbar_pagenav': True,
-
-    # Tab name for the current pages TOC. (Default: "Page")
-    'navbar_pagenav_name': "Page",
-
-    # Global TOC depth for "site" navbar tab. (Default: 1)
-    # Switching to -1 shows all levels.
-    'globaltoc_depth': 2,
-
-    # Include hidden TOCs in Site navbar?
-    #
-    # Note: If this is "false", you cannot have mixed ``:hidden:`` and
-    # non-hidden ``toctree`` directives in the same page, or else the build
-    # will break.
-    #
-    # Values: "true" (default) or "false"
-    'globaltoc_includehidden': "true",
-
-    # HTML navbar class (Default: "navbar") to attach to <div> element.
-    # For black navbar, do "navbar navbar-inverse"
-    'navbar_class': "navbar",
-
-    # Fix navigation bar to top of page?
-    # Values: "true" (default) or "false"
-    'navbar_fixed_top': "true",
-
-    # Location of link to source.
-    # Options are "nav" (default), "footer" or anything else to exclude.
-    'source_link_position': "none",
-
-    # Bootswatch (http://bootswatch.com/) theme.
-    #
-    # Options are nothing (default) or the name of a valid theme
-    # such as "cosmo" or "sandstone".
-    #
-    # The set of valid themes depend on the version of Bootstrap
-    # that's used (the next config option).
-    #
-    # Currently, the supported themes are:
-    # - Bootstrap 2: https://bootswatch.com/2
-    # - Bootstrap 3: https://bootswatch.com/3
-    'bootswatch_theme': "lumen",
-
-    # Choose Bootstrap version.
-    # Values: "3" (default) or "2" (in quotes)
-    'bootstrap_version': "3",
-}
+# html_theme_options = {}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -186,13 +109,6 @@ html_static_path = ['_static']
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
-
-# (Optional) Logo. Should be small enough to fit the navbar (ideally 24x24).
-# Path should be relative to the ``_static`` files directory.
-# html_logo = "_static/bubblegum_icon.png"
-
-# Favicon
-html_favicon = '_static/favicon.ico'
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -274,6 +190,5 @@ epub_exclude_files = ['search.html']
 
 # -- Options for todo extension ----------------------------------------------
 
-todo_include_todos = True   # If this is True, todo and todolist produce output, else they produce nothing. The default is False.
-todo_emit_warnings = False   # If this is True, todo emits a warning for each TODO entries. The default is False.
-todo_link_only = False      # If this is True, todolist produce output without file path and line, The default is False.
+# If true, `todo` and `todoList` produce output, else they produce nothing.
+todo_include_todos = True
