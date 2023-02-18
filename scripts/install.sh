@@ -8,14 +8,14 @@
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW PACKAGENAME VERSION
-declare VERBOSE BRANCH
+declare REPLY CMDLINE GITRAW PACKAGENAME VERSION APTPACKAGES
+declare VERBOSE BRANCH WWWFILES
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="std-out-err"
+BRANCH="installer"
 VERSION="0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -24,6 +24,9 @@ COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
+APTPACKAGES="apache2 php"
+WWWFILES="android-chrome-192x192.png android-chrome-512x512.png apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css bootstrap-icons.css custom.min.css favicon-16x16.png favicon-32x32.png favicon.ico ham_white.svg index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
+WWWREMOV=""
 # This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
@@ -392,7 +395,7 @@ copy_file() {
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName$extension"
 
     # Download file
-    curl -o "$fullName" "$curlFile"
+    curl  "$curlFile" > "$fullName" || warn
 
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
@@ -561,6 +564,112 @@ WantedBy=multi-user.target"
 }
 
 ############
+### Create wspr ini file
+### Required:
+###   none
+############
+
+createini () {
+    local fullName dir file
+    file="wspr.ini"
+    dir = "/usr/local/etc"
+    fullName="$dir/$file"
+
+    echo -e "\nCreating configuration file for $PACKAGENAME."
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/source/$file"
+    # Download file to etc directory
+    curl "$curlFile" > "$fullName" || warn
+
+    chown root:root "$inifile"
+    chmod 0644 "$inifile"
+    echo
+}
+
+aptPackages() {
+    local lastUpdate nowTime pkgOk upgradesAvail pkg
+
+    echo -e "\nUpdating any expired apt keys."
+    for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
+	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
+    done
+
+    echo -e "\nFixing any broken installations."
+    sudo apt-get --fix-broken install -y||die
+    # Run 'apt update' if last run was > 1 week ago
+    lastUpdate=$(stat -c %Y /var/lib/apt/lists)
+    nowTime=$(date +%s)
+    if [ $((nowTime - lastUpdate)) -gt 604800 ]; then
+        echo -e "\nLast apt update was over a week ago. Running apt update before updating"
+        echo -e "dependencies."
+        apt-get update -yq||die
+    fi
+
+    # Now install any necessary packages if they are not installed
+    echo -e "\nChecking and installing required dependencies via apt."
+    for pkg in $APTPACKAGES; do
+        pkgOk=$(dpkg-query -W --showformat='${Status}\n' "$pkg" | \
+        grep "install ok installed")
+        if [ -z "$pkgOk" ]; then
+            echo -e "\nInstalling '$pkg'."
+            apt-get install "$pkg" -y -q=2||die
+        fi
+    done
+
+    # Get list of installed packages with updates available
+    upgradesAvail=$(dpkg --get-selections | xargs apt-cache policy {} | \
+        grep -1 Installed | sed -r 's/(:|Installed: |Candidate: )//' | \
+    uniq -u | tac | sed '/--/I,+1 d' | tac | sed '$d' | sed -n 1~2p)
+    # Loop through the required packages and see if they need an upgrade
+    for pkg in $APTPACKAGES; do
+        if [[ "$upgradesAvail" == *"$pkg"* ]]; then
+            echo -e "\nUpgrading '$pkg'."
+            apt-get install "$pkg" -y -q=2||die
+        fi
+    done
+
+    # Restart Apache just in case
+    systemctl restart apache2
+}
+
+doWWW() {
+    local file dir inisource inilink
+    dir="/var/www/html/wspr"
+    # Delete old files
+    echo -e "\nDeleting any deprecated files."
+    for file in $WWWREMOV; do
+        if [ -f "$dir/$file" ]; then
+            rm -f "$dir/$file"
+        fi
+    done
+
+    # Copy down web pages
+    echo -e "\nChecking and installing web pages."
+    if [ ! -d "$dir" ]; then
+        mkdir "$dir"
+    fi
+    for file in $WWWFILES; do
+        fullName="$dir/$file"
+        curlFile="$GITRAW/$GITPROJ/$GITBRNCH/data/$file"
+        # Download file to web directory
+        curl "$curlFile" > "$fullName" || warn
+    done
+
+    # Set the permissions
+    echo -e "\nFixing file permissions for $dir."
+    chown -R www-data:www-data "$dir" || warn
+    find "$dir" -type d -exec chmod 2770 {} \; || warn
+    find "$dir" -type f -exec chmod 660 {} \; || warn
+
+    # Link and perms on ini file
+    echo -e "\nFixing file permissions for $dir."
+    inisource="/usr/local/etc/wspr.ini"
+    inilink="$dir/wspr.ini"
+    chmod 666 "$inisource" || warn
+    ln -sf "$inisource" "$inilink"
+    chown -R www-data:www-data "$inilink" || warn
+}
+
+############
 ### Main function
 ############
 
@@ -578,6 +687,7 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
+    createini # Create ini file
     # Choose to support shutdown button
     read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
     case "$yn" in
@@ -585,6 +695,8 @@ main() {
         [Nn]* ) echo ;;
         * ) echo ;;
     esac
+    aptPackages # Install any apt packages needed
+    doWWW # Download website
     echo -e "***Script $THISSCRIPT complete.***\n"
 }
 
