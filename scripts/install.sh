@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="installer"
-VERSION="0.1"
+VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -37,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-    CMDLINE="curl -L "$GITRAW/$PACKAGE/$GITBRNCH/scripts/$THISSCRIPT" | BRANCH=$GITBRNCH sudo bash"
+    CMDLINE="curl -s -L "$GITRAW/$PACKAGE/$GITBRNCH/scripts/$THISSCRIPT" | BRANCH=$GITBRNCH sudo bash"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -396,7 +396,7 @@ copy_file() {
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName$extension"
 
     # Download file
-    curl  "$curlFile" > "$fullName" || warn
+    curl -s "$curlFile" > "$fullName" || warn
 
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
@@ -418,8 +418,12 @@ checkscript() {
     scriptName="${1,,}"
     scriptFile="/usr/local/bin/$scriptName"
     if [ -f "$scriptFile" ]; then
-        src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
-        src=${src##* }
+        if file "$scriptFile" | grep -iv python | grep -q executable; then
+            src=`/usr/local/bin/wspr -v | grep -oE '[^ ]+$'`
+        else
+            src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
+            src=${src##* }
+        fi
         # TODO: Handle executable versions
         # if file "$fullName" | grep -q executable; then
         verchk="$(compare "$src" "$VERSION")"
@@ -581,7 +585,7 @@ createini () {
     echo -e "\nCreating configuration file for $PACKAGENAME."
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$file"
     # Download file to etc directory
-    curl "$curlFile" > "$fullName" || warn
+    curl -s "$curlFile" > "$fullName" || warn
 
     chown root:root "$fullName"
     chmod 666 "$fullName"
@@ -654,7 +658,7 @@ doWWW() {
         fullName="$dir/$file"
         curlFile="$GITRAW/$GITPROJ/$GITBRNCH/data/$file"
         # Download file to web directory
-        curl "$curlFile" > "$fullName" || warn
+        curl -s "$curlFile" > "$fullName" || warn
     done
 
     # Set the permissions
@@ -664,7 +668,7 @@ doWWW() {
     find "$dir" -type f -exec chmod 660 {} \; || warn
 
     # Link and perms on ini file
-    echo -e "\nFixing file permissions for $dir."
+    echo -e "\nFixing file permissions for data file."
     inisource="/usr/local/etc/wspr.ini"
     inilink="$dir/wspr.ini"
     chmod 666 "$inisource" || warn
@@ -681,7 +685,7 @@ main() {
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
-    echo -e "\n***Script $THISSCRIPT starting.***\n"
+    echo -e "\n***Script $THISSCRIPT starting.***"
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
     echo -e "\nRunning on: $sysver\n"
@@ -700,7 +704,7 @@ main() {
     esac
     aptPackages # Install any apt packages needed
     doWWW # Download website
-    echo -e "***Script $THISSCRIPT complete.***\n"
+    echo -e "\n***Script $THISSCRIPT complete.***\n"
 }
 
 ############
