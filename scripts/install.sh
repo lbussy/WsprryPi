@@ -692,7 +692,7 @@ $DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ __
 $DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
 $DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
 $DOT$BGBLK$FGYLW$sp49|_|$sp28
-
+$DOT$BGBLK$FGGRN$HHR$RESET
 The WSPR daemon has started.
  - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
                   -or- : http://$(hostname).local/wspr
