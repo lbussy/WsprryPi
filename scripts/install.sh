@@ -421,7 +421,7 @@ checkscript() {
         if file "$scriptFile" | grep -iv python | grep -q executable; then
             src=`/usr/local/bin/wspr -v | grep -oE '[^ ]+$'`
         else
-            src=$(grep "^# Created for $PACKAGENAME version" "$scriptFile")
+            src=$(grep "^# Created for $PACKAGE version" "$scriptFile")
             src=${src##* }
         fi
         verchk="$(compare "$src" "$VERSION")"
@@ -679,7 +679,6 @@ doWWW() {
 ############
 
 complete() {
-    clear
     local sp7 sp11 sp18 sp28 sp49 ip port
     sp7="$(printf ' %.0s' {1..7})" sp11="$(printf ' %.0s' {1..11})"
     sp18="$(printf ' %.0s' {1..18})" sp28="$(printf ' %.0s' {1..28})"
@@ -693,6 +692,7 @@ $DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ 
 $DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
 $DOT$BGBLK$FGYLW$sp49|_|$sp28
 $DOT$BGBLK$FGGRN$HHR$RESET
+
 The WSPR daemon has started.
  - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
                   -or- : http://$(hostname).local/wspr
