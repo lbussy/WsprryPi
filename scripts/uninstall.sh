@@ -213,11 +213,12 @@ uninstall() {
     systemctl stop wspr.service
     systemctl disable wspr.service
     rm /etc/systemd/system/wspr.service
-    rm /usr/local/bin/wspr.sh
+    rm /usr/local/bin/wspr
     systemctl stop shutdown-button.service
     systemctl disable shutdown-button.service
     rm /etc/systemd/system/shutdown-button.service
     rm /usr/local/bin/shutdown-button.py
+    rm -fr /var/www/html/wspr/
 }
 
 ############
