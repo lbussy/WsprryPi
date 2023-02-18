@@ -900,7 +900,7 @@ bool getINIValues(bool reload = false)
     if (iniConfig.initialize(config.inifile))
     {
         config.xmit_enabled = iniConfig.getTransmit();
-        config.repeat = iniConfig.getTransmit(); // Repeat is not used in an ini setup
+        config.repeat = true; // Repeat must be true in an ini setup
         config.callsign = iniConfig.getCallsign();
         config.locator = iniConfig.getGridsquare();
         config.tx_power = iniConfig.getTxpower();
@@ -1534,21 +1534,19 @@ int main(const int argc, char *const argv[])
         // WSPR mode
         for (;;)
         { // Reload Loop >
-        // Create WSPR symbols
+            // Create WSPR symbols
             unsigned char symbols[162];
             wspr(config.callsign.c_str(), config.locator.c_str(), config.tx_power.c_str(), symbols);
 
-#ifdef WSPR_DEBUG
-            // Print encodeed packet
-            printf("WSPR codeblock: ");
-            for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
-            if (i) {
-                std::cout << ",";
-            }
-            printf("%d", symbols[i]);
-            }
-            printf("\n");
-#endif
+            // // Print encodeed packet
+            // printf("WSPR codeblock: ");
+            // for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
+            // if (i) {
+            //     std::cout << ",";
+            // }
+            // printf("%d", symbols[i]);
+            // }
+            // printf("\n");
 
             prtStdOut("Ready to transmit (setup complete).\n");
             int band = 0;
@@ -1652,7 +1650,7 @@ int main(const int argc, char *const argv[])
                     prtStdOut("Skipping transmission.\n");
                     usleep(1000000);
                 }
-
+                
                 // Advance to next band
                 band = (band + 1) % nbands;
                 if ((band == 0) && !config.repeat)
