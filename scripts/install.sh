@@ -401,7 +401,7 @@ copy_file() {
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
         chown root:root "$fullName"
-        chmod 4755 "$fullName"
+        chmod 0755 "$fullName"
     else
         echo -e "Script install failed for $fullName"&&die
     fi
