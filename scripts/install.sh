@@ -464,7 +464,7 @@ checkdaemon() {
     daemonName="${1,,}"
     unitFile="/etc/systemd/system/$daemonName.service"
     if [ -f "$unitFile" ]; then
-        src=$(grep "^# Created for $PACKAGENAME version" "$unitFile")
+        src=$(grep "^# Created for $PACKAGE version" "$unitFile")
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
@@ -537,7 +537,7 @@ createdaemon () {
     fi
     echo -e "\nCreating $productName unit file for $daemonName ($unitFile)."
     {
-        echo -e "# Created for $PACKAGENAME version $VERSION
+        echo -e "# Created for $PACKAGE version $VERSION
 
 [Unit]
 Description=$productName daemon for: $daemonName

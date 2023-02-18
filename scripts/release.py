@@ -53,11 +53,12 @@ def replace_in_file(file, string, replace):
 def edit_files():
     global version
     global branch
+    global project
     replace_in_file("install.sh", "VERSION=", version)
     replace_in_file("uninstall.sh", "VERSION=", version)
     replace_in_file("install.sh", "BRANCH=", branch)
     replace_in_file("uninstall.sh", "BRANCH=", branch)
-    replace_in_file("shutdown-button.py", "# Created for WsprryPi version ", version)
+    replace_in_file("shutdown-button.py", "# Created for " + project + " version ", version)
 
 
 def compile():
