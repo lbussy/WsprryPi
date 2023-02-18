@@ -3,6 +3,6 @@
 
 int main()
 {
-    std::cout << "Foo" << std::endl;
+    std::cout << "Version: " << version() << std::endl;
     return 0;
 }

@@ -1023,109 +1023,116 @@ void convertToFreq(const char* &option, double &parsed_freq)
     }
 }
 
-bool parse_commandline(const int &argc, char *const argv[], bool reparse = false)
+bool parse_commandline(const int &argc, char *const argv[])
 {
-    if ( ! reparse )
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"version", no_argument, 0, 'v'},
+        {"ppm", required_argument, 0, 'p'},
+        {"self-calibration", no_argument, 0, 's'},
+        {"free-running", no_argument, 0, 'f'},
+        {"repeat", no_argument, 0, 'r'},
+        {"terminate", required_argument, 0, 'x'},
+        {"offset", no_argument, 0, 'o'},
+        {"test-tone", required_argument, 0, 't'},
+        {"no-delay", no_argument, 0, 'n'},
+        {"led", no_argument, 0, 'l'},
+        {"ini-file", required_argument, 0, 'i'},
+        {"daemon-mode", no_argument, 0, 'D'},
+        {0, 0, 0, 0}};
+
+    while (true)
     {
-        static struct option long_options[] = {
-            {"help", no_argument, 0, 'h'},
-            {"ppm", required_argument, 0, 'p'},
-            {"self-calibration", no_argument, 0, 's'},
-            {"free-running", no_argument, 0, 'f'},
-            {"repeat", no_argument, 0, 'r'},
-            {"terminate", required_argument, 0, 'x'},
-            {"offset", no_argument, 0, 'o'},
-            {"test-tone", required_argument, 0, 't'},
-            {"no-delay", no_argument, 0, 'n'},
-            {"led", no_argument, 0, 'l'},
-            {"ini-file", required_argument, 0, 'i'},
-            {"daemon-mode", no_argument, 0, 'D'},
-            {0, 0, 0, 0}};
+        /* getopt_long stores the option index here. */
+        int option_index = 0;
+        int c = getopt_long(argc, argv, "?vhp:sfrx:ot:nli:D",
+                            long_options, &option_index);
+        if (c == -1)
+            break;
 
-        while (true && ! reparse)
+        switch (c)
         {
-            /* getopt_long stores the option index here. */
-            int option_index = 0;
-            int c = getopt_long(argc, argv, "?hp:sfrx:ot:nli:D",
-                                long_options, &option_index);
-            if (c == -1)
-                break;
-
-            switch (c)
+            char *endp;
+        case 0:
+            // Code should only get here if a long option was given a non-null
+            // flag value.
+            prtStdErr("Check code.\n");
+            return false;
+            break;
+        case 'h':
+        case '?':
+            print_usage();
+            return false;
+            break;
+        case 'v':
+            prtStdOut("Wsprry Pi (wspr) version ", exeversion(), "\n");
+            return false;
+            break;
+        case 'p':
+            config.ppm = strtod(optarg, &endp);
+            if ((optarg == endp) || (*endp != '\0'))
             {
-                char *endp;
-            case 0:
-                // Code should only get here if a long option was given a non-null
-                // flag value.
-                prtStdErr("Check code.\n");
-                return false;
-                break;
-            case 'h':
-            case '?':
-                print_usage();
-                return false;
-                break;
-            case 'p':
-                config.ppm = strtod(optarg, &endp);
-                if ((optarg == endp) || (*endp != '\0'))
-                {
-                    prtStdErr("Error: Could not parse ppm value.\n");
-                    return false;
-                }
-                break;
-            case 's':
-                config.self_cal = true;
-                break;
-            case 'f':
-                config.self_cal = false;
-                break;
-            case 'r':
-                config.repeat = true;
-                break;
-            case 'x':
-                config.terminate = strtol(optarg, &endp, 10);
-                if ((optarg == endp) || (*endp != '\0'))
-                {
-                    prtStdErr("Error: Could not parse termination argument.\n");
-                    return false;
-                }
-                if (config.terminate < 1)
-                {
-                    prtStdErr("Error: Termination parameter must be >= 1.\n");
-                    return false;
-                }
-                break;
-            case 'o':
-                config.random_offset = true;
-                break;
-            case 't':
-                config.test_tone = strtod(optarg, &endp);
-                config.mode = TONE;
-                if ((optarg == endp) || (*endp != '\0'))
-                {
-                    prtStdErr("Error: could not parse test tone frequency.\n");
-                    return false;
-                }
-                break;
-            case 'i':
-                config.inifile = optarg;
-                config.useini = true;
-                break;
-            case 'n':
-                config.no_delay = true;
-                break;
-            case 'l':
-                config.useled = true;
-                break;
-            case 'D':
-                config.daemon_mode = true;
-                break;
-            default:
+                prtStdErr("Error: Could not parse ppm value.\n");
                 return false;
             }
+            break;
+        case 's':
+            config.self_cal = true;
+            break;
+        case 'f':
+            config.self_cal = false;
+            break;
+        case 'r':
+            config.repeat = true;
+            break;
+        case 'x':
+            config.terminate = strtol(optarg, &endp, 10);
+            if ((optarg == endp) || (*endp != '\0'))
+            {
+                prtStdErr("Error: Could not parse termination argument.\n");
+                return false;
+            }
+            if (config.terminate < 1)
+            {
+                prtStdErr("Error: Termination parameter must be >= 1.\n");
+                return false;
+            }
+            break;
+        case 'o':
+            config.random_offset = true;
+            break;
+        case 't':
+            config.test_tone = strtod(optarg, &endp);
+            config.mode = TONE;
+            if ((optarg == endp) || (*endp != '\0'))
+            {
+                prtStdErr("Error: could not parse test tone frequency.\n");
+                return false;
+            }
+            break;
+        case 'i':
+            config.inifile = optarg;
+            config.useini = true;
+            break;
+        case 'n':
+            config.no_delay = true;
+            break;
+        case 'l':
+            config.useled = true;
+            break;
+        case 'D':
+            config.daemon_mode = true;
+            break;
+        default:
+            return false;
         }
     }
 
+    return true;
+}
+
+bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
+{
     if (config.useini)
     {
         if (! reparse) iniMonitor.filemon(config.inifile.c_str());
@@ -1151,35 +1158,38 @@ bool parse_commandline(const int &argc, char *const argv[], bool reparse = false
     }
     else
     {
-        unsigned int n_free_args = 0;
-        while (optind < argc)
+        if ( ! reparse)
         {
-            // Check for callsign, locator, tx_power
-            if (n_free_args == 0)
+            unsigned int n_free_args = 0;
+            while (optind < argc)
             {
-                config.callsign = argv[optind++];
-                n_free_args++;
-                continue;
+                // Check for callsign, locator, tx_power
+                if (n_free_args == 0)
+                {
+                    config.callsign = argv[optind++];
+                    n_free_args++;
+                    continue;
+                }
+                if (n_free_args == 1)
+                {
+                    config.locator = argv[optind++];
+                    n_free_args++;
+                    continue;
+                }
+                if (n_free_args == 2)
+                {
+                    config.tx_power = argv[optind++];
+                    n_free_args++;
+                    continue;
+                }
+                // Must be a frequency
+                // First see if it is a string.
+                double parsed_freq;
+                const char * argument = argv[optind];
+                convertToFreq(argument, parsed_freq);
+                optind++;
+                config.center_freq_set.push_back(parsed_freq);
             }
-            if (n_free_args == 1)
-            {
-                config.locator = argv[optind++];
-                n_free_args++;
-                continue;
-            }
-            if (n_free_args == 2)
-            {
-                config.tx_power = argv[optind++];
-                n_free_args++;
-                continue;
-            }
-            // Must be a frequency
-            // First see if it is a string.
-            double parsed_freq;
-            const char * argument = argv[optind];
-            convertToFreq(argument, parsed_freq);
-            optind++;
-            config.center_freq_set.push_back(parsed_freq);
         }
     }
 
@@ -1275,9 +1285,9 @@ bool parse_commandline(const int &argc, char *const argv[], bool reparse = false
     return true;
 }
 
-bool parse_commandline(bool reparse)
+bool parseConfigData(bool reparse)
 {
-    return parse_commandline(0, {}, reparse);
+    return parseConfigData(0, {}, reparse);
 }
 
 bool wait_every(int minute)
@@ -1290,7 +1300,7 @@ bool wait_every(int minute)
         if (iniMonitor.changed())
         {
             prtStdOut("Notice: INI file changed, reloading parameters.\n");
-            parse_commandline(true);
+            parseConfigData(true);
             return false; // Need to reload
         }
         time(&t);
@@ -1435,11 +1445,12 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 
 int main(const int argc, char *const argv[])
 {
+    if ( ! parse_commandline(argc, argv) ) return 1;
     prtStdOut("Wsprry Pi running on: ", version(), ".\n");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 
-    if ( ! parse_commandline(argc, argv) ) return 1;
+    if ( ! parseConfigData(argc, argv) ) return 1;
 
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
