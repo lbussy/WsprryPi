@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="documentation"
+BRANCH="devel"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="uninstall.sh"
@@ -34,7 +34,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-BRANCH="documentation"
+BRANCH="devel"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
