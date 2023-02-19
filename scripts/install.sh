@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="documentation"
+BRANCH="devel"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -37,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-BRANCH="documentation"
+BRANCH="devel"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -689,14 +689,18 @@ doWWW() {
 disable_sound() {
     echo "blacklist snd_bcm2835" > /etc/modprobe.d/alsa-blacklist.conf
       cat << EOF
+
+*Important Note:*
+
 Wsprry Pi uses the same hardware as the sound system to gemerate
 radio frequencies. This soundcard has been disabled. You must
 reboot the Pi with the following command after install for this
 to take effect:
 
 sudo reboot now
+
 EOF
-    read -rp "\nPress any key to continue." < /dev/tty
+    read -rp "Press any key to continue." < /dev/tty
     echo
 }
 
@@ -724,9 +728,9 @@ The WSPR daemon has started.
                   -or- : http://$(hostname).local/wspr
  - Release version     : $VERSION
 
-Remember to reboot! (sudo reboot now)
+Remember to reboot: (sudo reboot now)
 
-Happy DXing!"
+Happy DXing!
 EOF
 }
 
@@ -762,7 +766,7 @@ main() {
     fi
     aptPackages # Install any apt packages needed
     doWWW # Download website
-    disable_sound ;;
+    disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
 }
