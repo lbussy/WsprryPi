@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="devel"
+BRANCH="documentation"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -37,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-BRANCH="devel"
+BRANCH="documentation"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -735,6 +735,8 @@ main() {
     doWWW # Download website
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
+
+    # TODO: Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device.
 }
 
 ############
