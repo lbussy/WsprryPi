@@ -850,6 +850,8 @@ void print_usage()
     prtStdOut("Options:\n");
     prtStdOut("  -h --help\n");
     prtStdOut("    Print out this help screen.\n");
+    prtStdOut("  -v --version\n");
+    prtStdOut("    Show Wsprry Pi version.\n");
     prtStdOut("  -p --ppm ppm\n");
     prtStdOut("    Known PPM correction to 19.2MHz RPi nominal crystal frequency.\n");
     prtStdOut("  -s --self-calibration\n");
