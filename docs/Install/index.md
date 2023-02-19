@@ -1,8 +1,10 @@
 # Installing Wsprry Pi
 
-You may use this command to install Wsprry Pi:
+You may use this command to install Wsprry Pi (one line):
 
--------->>>>> TODO:  Add command here
+`curl -L installwspr.aa0nt.net | sudo bash`
+
+This install command is idempotent; running it additional times will not have any negative impact. If an update is ever released, re-run the installer to take advantage of the new release.
 
 The first screen will welcome you and give you instructions:
 
