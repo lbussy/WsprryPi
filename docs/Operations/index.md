@@ -58,10 +58,18 @@ Configuration items:
 
 ## Command Line Interface
 
------->>> TODO:
-Please note that `wspr` is a singleton application by design.  Should you wish to operate it from the command line, you will need to stop the daemon using the instructions in 
+The Wsprry Pi executable, wspr, is controlled by the Linux `systemd` controller.  It will run in the background as soon as your Pi starts up. It is a singleton application by design, meaning only one `wspr` process may be running.  You must stop the daemon if you desire to have some manual control for testing or other reasons.  Here are some commands you may use:
 
-Should you desire to run wspr from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
+- `sudo systemctl status wspr`: Show a status page for the running daemon.
+- `sudo systemctl restart wspr`: Restart the daemon, and wspr with it.
+- `sudo systemctl stop wspr`: Stop the daemn. The daemon will restart again upon reboot.
+- `sudo systemctl start wspr`: Start the daemon if it is not running.
+- `sudo systemctl disable wspr`: Disable teh daemon from restarting on reboot.
+- `sudo systemctl enable wspr`: Enable teh daemon to start on reboot if it is disabled.
+
+You will control the shutdown button monitor daemon in the same way as `wspr`, substituting `shutdown-button` for `wspr` above.
+
+To run wspr from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
 
 ```
 Usage:
