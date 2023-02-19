@@ -1,5 +1,4 @@
-recommonmark
+myst-parser
 sphinx
-sphinx_bootstrap_theme
-sphinx_markdown_parser
+sphinx_rtd_theme
 esbonio

@@ -1,6 +1,6 @@
 prefix = /usr/local
 
-LED_PIN = -DLED_PIN=18 # Set to 0 for no LED, 18 for TAPR board
+LED_PIN = -DLED_PIN=18
 CXXFLAGS += -Wall -Werror -fmax-errors=5
 CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host

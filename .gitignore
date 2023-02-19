@@ -8,3 +8,5 @@ docs/_build/
 .pio
 .vscode
 .DS_Store
+
+docs/_build
