@@ -733,10 +733,16 @@ main() {
     fi
     aptPackages # Install any apt packages needed
     doWWW # Download website
+    # TODO: Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device.
+    # https://www.instructables.com/Disable-the-Built-in-Sound-Card-of-Raspberry-Pi/
+    # read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
+    # case "$yn" in
+    #     [Yy]* ) do_unit "shutdown-button" "python3" ;;
+    #     [Nn]* ) echo ;;
+    #     * ) echo ;;
+    # esac
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
-
-    # TODO: Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device.
 }
 
 ############
