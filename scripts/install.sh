@@ -590,6 +590,10 @@ createini () {
     echo
 }
 
+############
+### Install apt packages
+############
+
 aptPackages() {
     local lastUpdate nowTime pkgOk upgradesAvail pkg
 
@@ -636,6 +640,10 @@ aptPackages() {
     systemctl restart apache2
 }
 
+############
+### Instal website
+############
+
 doWWW() {
     local file dir inisource inilink
     dir="/var/www/html/wspr"
@@ -675,6 +683,24 @@ doWWW() {
 }
 
 ############
+### Disable sound
+############
+
+disable_sound() {
+    echo "blacklist snd_bcm2835" > /etc/modprobe.d/alsa-blacklist.conf
+      cat << EOF
+Wsprry Pi uses the same hardware as the sound system to gemerate
+radio frequencies. This soundcard has been disabled. You must
+reboot the Pi with the following command after install for this
+to take effect:
+
+sudo reboot now
+EOF
+    read -rp "\nPress any key to continue." < /dev/tty
+    echo
+}
+
+############
 ### Print final banner
 ############
 
@@ -697,8 +723,11 @@ The WSPR daemon has started.
  - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
                   -or- : http://$(hostname).local/wspr
  - Release version     : $VERSION
+
+Remember to reboot! (sudo reboot now)
+
+Happy DXing!"
 EOF
-    echo -e "\nHappy DXing!"
 }
 
 ############
@@ -733,14 +762,7 @@ main() {
     fi
     aptPackages # Install any apt packages needed
     doWWW # Download website
-    # TODO: Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device.
-    # https://www.instructables.com/Disable-the-Built-in-Sound-Card-of-Raspberry-Pi/
-    # read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
-    # case "$yn" in
-    #     [Yy]* ) do_unit "shutdown-button" "python3" ;;
-    #     [Nn]* ) echo ;;
-    #     * ) echo ;;
-    # esac
+    disable_sound ;;
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
 }

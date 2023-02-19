@@ -219,6 +219,7 @@ uninstall() {
     rm /etc/systemd/system/shutdown-button.service
     rm /usr/local/bin/shutdown-button.py
     rm -fr /var/www/html/wspr/
+    rm /etc/modprobe.d/alsa-blacklist.conf
 }
 
 ############
