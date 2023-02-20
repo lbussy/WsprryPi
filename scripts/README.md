@@ -1,5 +1,3 @@
 # Wsspry Pi Scripts
 
-Working area for new scripting.
-
-Need:  Editing `/etc/modules` and commenting out the `snd-bcm2835` device.
+These scripts are used for development and automation.  These should not be needed by most users.
