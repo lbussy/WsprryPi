@@ -36,7 +36,7 @@ This install command is idempotent; running it additional times will not have an
 
 The first screen will welcome you and give you instructions:
 
-```
+```text
 You will be presented with some choices during the install.
 Most frequently you will see a 'yes or no' choice, with the
 default choice capitalized like so: [y/N]. Default means if
@@ -55,7 +55,7 @@ Take special note about default choices, `[Y/n]` means that hitting `Enter` will
 
 The first choice you make will be related to the system time zone and time:
 
-```
+```text
 The time is currently set to Sun 19 Feb 12:05:48 CST 2023.
 Is this correct? [Y/n]:
 ```
@@ -64,7 +64,7 @@ Please be sure this is correct. If you select "No," the script will provide you 
 
 The next choice you make will be whether or not to add support for the system shutdown button:
 
-```
+```text
 Support system shutdown button (TAPR)? [y/N]:
 ```
 
@@ -74,7 +74,7 @@ Following this choice, some system packages, including Apache2, an open-source w
 
 When complete, the script displays the final screen:
 
-```
+```text
 The WSPR daemon has started.
  - WSPR frontend URL   : http://192.168.1.24/wspr
                   -or- : http://wspr.local/wspr
