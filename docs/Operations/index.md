@@ -71,7 +71,7 @@ You will control the shutdown button monitor daemon in the same way as `wspr`, s
 
 To run wspr from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
 
-```
+```text
 Usage:
   wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
     OR
