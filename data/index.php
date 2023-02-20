@@ -32,7 +32,7 @@
               <a target="_blank" rel="noopener" class="nav-link" href="https://github.com/lbussy/WsprryPi/"><i class="fa-brands fa-github"></i>&nbsp;&nbsp;GitHub</a>
             </li>
             <li class="nav-item">
-              <a target="_blank" rel="noopener" class="nav-link" href="#"><i class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
+              <a target="_blank" rel="noopener" class="nav-link" href="http://wsprdocs.aa0nt.net"><i class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
             </li>
           </ul>
         </div>
@@ -223,15 +223,14 @@
         <div class="row">
           <div class="col-lg-12">
             <ul class="list-unstyled">
+              <li><a href="http://wsprdocs.aa0nt.net">Documentation</a></li>
+              <li><a href="https://github.com/lbussy/WsprryPi">GitHub</a></li>
               <li><a href="https://tapr.org/">TAPR</a></li>
               <li><a href="https://www.wsprnet.org/">WSPRNet</a></li>
-              <li><a href="#">Documentation</a></li>
-              <li><a href="https://github.com/lbussy/WsprryPi">GitHub</a></li>
             </ul>
-            <p>Made by Lee Bussy, AA0NT.</p>
+            <p>Created by Lee Bussy, AA0NT.</p>
             <p>Code released under the <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md">GNU General Public License</a>.</p>
             <p>Based on <a href="https://getbootstrap.com/" rel="nofollow">Bootstrap</a>. Icons from <a href="https://fontawesome.com/" rel="nofollow">Font Awesome</a>. Web fonts from <a href="https://fonts.google.com/" rel="nofollow">Google</a>.</p>
-
           </div>
         </div>
       </footer>
