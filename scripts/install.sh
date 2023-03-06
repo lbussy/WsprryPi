@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="devel"
+BRANCH="main"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -25,8 +25,8 @@ PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
 APTPACKAGES="apache2 php"
-WWWFILES="android-chrome-192x192.png android-chrome-512x512.png apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css bootstrap-icons.css custom.min.css favicon-16x16.png favicon-32x32.png favicon.ico ham_white.svg index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
-WWWREMOV=""
+WWWFILES="android-chrome-192x192.png android-chrome-512x512.png apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.min.css favicon-16x16.png favicon-32x32.png favicon.ico ham_white.svg index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
+WWWREMOV="bootstrap-icons.css"
 # This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
