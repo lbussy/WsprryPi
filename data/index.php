@@ -54,7 +54,7 @@
 
                 <h3 class="card-title">Wsprry Pi Configuration</h3>
 
-                <form>
+                <form id="wsprform">
                     <fieldset id="wsprconfig" class="form-group" disabled="disabled">
                         <!-- First Row -->
                         <legend class="mt-4">Control</legend>
@@ -296,7 +296,7 @@
             isValid = true;
             freqString = $("#frequencies").val().toLowerCase();
 
-            // Min length would be one of 2m, 4m, 6, = 2
+            // Min length would be one of 2m, 4m, 6m, = 2
             if (freqString.length < 2) isValid = false;
 
             // Check for alphanumerics, spaces or hypens only
@@ -385,6 +385,16 @@
             populateConfig();
         };
 
+        function validatePage() {
+            // $('element').hasClass('className')
+            var thisSection = $('#wsprconfig');
+            var thisForm = document.querySelector('#wsprform');
+            var failcount = 0;
+            if (!thisForm.reportValidity()) failcount++;
+            if (! $("#frequencies").hasClass('is-valid')) failcount++;
+            return (failcount > 0 ? false : true);
+        };
+
         function populateConfig(callback = null) { // Get wspr data
             if (populateConfigRunning) return;
             populateConfigRunning = true;
@@ -437,7 +447,10 @@
         };
 
         function savePage() {
-            // TODO:  Check all fields for validity before save
+            if (! validatePage() ) {
+                alert("Please correct the errors on the page.");
+                return false;
+            }
             $('#submit').prop("disabled", true);
             $('#reset').prop("disabled", true);
             var Control = {
