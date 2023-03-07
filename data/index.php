@@ -521,7 +521,7 @@
 
             var Extended = {
                 "PPM": parseFloat($('#ppm').val()),
-                "Power Level": parseint($('#power_level').val()),
+                "Power Level": parseInt($('#power_level').val()),
                 "Self Cal": $('#selfcal').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
