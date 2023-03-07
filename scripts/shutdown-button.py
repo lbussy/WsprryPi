@@ -6,6 +6,9 @@ from time import sleep
 from os import system, getuid
 from sys import stdout, exit
 
+# Debugging for local work
+debug = False
+
 # Physical pin 35 = BCM19
 stopPin = "BOARD35"
 
@@ -26,15 +29,20 @@ def main():
             if stopButton.is_pressed:
                 sleep(0.5)
                 if stopButton.is_pressed:
-                    system('wall Shutdown button pressed, system is going down in 60 seconds.')
-                    system("shutdown -h")
-                    print('\nShutdown initiated.')
-                    sleep(30)
-                    system('wall Shutdown button pressed, system is going down in 30 seconds.')
-                    sleep(20)
-                    system('wall Shutdown button pressed, system is going down in 10 seconds.')
-                    sleep(9)
-                    system('wall Shutdown button pressed, system is going down now.')
+                    if (debug):
+                        system('wall Shutdown button pressed, system is going down in 60 seconds.')
+                        system("shutdown -h")
+                        print('\nShutdown initiated.')
+                        sleep(30)
+                        system('wall Shutdown button pressed, system is going down in 30 seconds.')
+                        sleep(20)
+                        system('wall Shutdown button pressed, system is going down in 10 seconds.')
+                        sleep(9)
+                        system('wall Shutdown button pressed, system is going down now.')
+                    else:
+                        print('\nShutdown initiated.')
+                        system('wall Shutdown button pressed, system is going down now.')
+                        system("shutdown -h now")
 
             sleep(0.1)
 
