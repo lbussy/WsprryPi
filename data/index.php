@@ -232,6 +232,20 @@
                         </div>
                         <!-- End Fourth Row -->
 
+                        <!--
+                        TODO:  Add power control
+
+                        Power Levels:
+                            0: 2mA or -3.4dBm
+                            1: 4mA or 2.1dBm
+                            2: 6mA or 4.9dBm
+                            3: 8mA or 6.6dBm
+                            4: 10mA or 8.2dBm
+                            5: 12mA or 9.2dBm
+                            6: 14mA or 10.0dBm
+                            7: 16mA or 10.6dBm (Default)
+                        -->
+
                         <hr class="border-2 border-top">
 
                         <div id="buttons" class="modal-footer justify-content-center">
