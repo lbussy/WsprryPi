@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="utf-8">
     <title>Wsprry Pi</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,388 +12,510 @@
     <link rel="stylesheet" href="bootstrap.css">
     <link rel="stylesheet" href="custom.min.css">
     <script src="jquery-3.6.3.min.js"></script>
-  </head>
-  <body>
-    <div class="navbar navbar-expand-lg fixed-top navbar-dark bg-primary">
-      <div class="container">
-        <a href="../" class="navbar-brand">
-          <img src="ham_white.svg" style="width:30px;height:30px;"/>
-          &nbsp;
-          Wsprry Pi
-        </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarResponsive">
-          <ul class="navbar-nav">
+</head>
 
-          </ul>
-          <ul class="navbar-nav ms-md-auto">
-            <li class="nav-item">
-              <a target="_blank" rel="noopener" class="nav-link" href="https://github.com/lbussy/WsprryPi/"><i class="fa-brands fa-github"></i>&nbsp;&nbsp;GitHub</a>
-            </li>
-            <li class="nav-item">
-              <a target="_blank" rel="noopener" class="nav-link" href="http://wsprdocs.aa0nt.net"><i class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
-            </li>
-          </ul>
+<body>
+    <div class="navbar navbar-expand-lg fixed-top navbar-dark bg-primary">
+        <div class="container">
+            <a href="../" class="navbar-brand">
+                <img src="ham_white.svg" style="width:30px;height:30px;" />
+                &nbsp;
+                Wsprry Pi
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive"
+                aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarResponsive">
+                <ul class="navbar-nav">
+
+                </ul>
+                <ul class="navbar-nav ms-md-auto">
+                    <li class="nav-item">
+                        <a target="_blank" rel="noopener" class="nav-link" href="https://github.com/lbussy/WsprryPi/"><i
+                                class="fa-brands fa-github"></i>&nbsp;&nbsp;GitHub</a>
+                    </li>
+                    <li class="nav-item">
+                        <a target="_blank" rel="noopener" class="nav-link" href="http://wsprdocs.aa0nt.net"><i
+                                class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
+                    </li>
+                </ul>
+            </div>
         </div>
-      </div>
     </div>
 
     <div class="container">
 
-      <div class="card border-primary mb-3">
-        <div class="card-header">For server: <?php echo gethostname();?> </div>
-        <div class="card-body">
+        <div class="card border-primary mb-3">
+            <div class="card-header">For server:
+                <?php echo gethostname();?>
+            </div>
+            <div class="card-body">
 
-          <h3 class="card-title">Wsprry Pi Configuration</h3>
+                <h3 class="card-title">Wsprry Pi Configuration</h3>
 
-          <form class="was-validated">
-            <fieldset id="wsprconfig" class="form-group" disabled="disabled">
-              <!-- First Row -->
-              <legend class="mt-4">Control</legend>
-              <div class="container">
-                <div class="row ">
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-4 text-end">
-                        <label class="form-check-label" for="transmit">Enable Transmission:&nbsp;</label>
-                      </div>
-                      <div class="col-md-8">
-                        <div class="form-check form-switch">
-                          <input class="form-check-input" type="checkbox" id="transmit" data-form-type="other">
+                <form id="wsprform">
+                    <fieldset id="wsprconfig" class="form-group" disabled="disabled">
+                        <!-- First Row -->
+                        <legend class="mt-4">Control</legend>
+                        <div class="was-validated container">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-4 text-end">
+                                            <label class="form-check-label" for="transmit">Enable
+                                                Transmission:&nbsp;</label>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="transmit"
+                                                    data-form-type="other">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-4 text-end">
+                                            <label class="form-check-label" for="useled">Enable LED:&nbsp;</label>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="useled"
+                                                    data-form-type="other">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-4 text-end">
-                      <label class="form-check-label" for="useled">Enable LED:&nbsp;</label>
-                      </div>
-                      <div class="col-md-8">
-                        <div class="form-check form-switch">
-                          <input class="form-check-input" type="checkbox" id="useled" data-form-type="other">
+                        <!-- First Row -->
+
+                        <!-- Second Row -->
+                        <legend class="mt-4">Operator Information</legend>
+                        <div class="was-validated container">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-3 text-end">
+                                            Call Sign:&nbsp;
+                                        </div>
+                                        <div class="col-md-9">
+                                            <input minlength="4" type="text" pattern="[-a-zA-Z0-9\/]+"
+                                                class="form-control" id="callsign" placeholder="Enter callsign"
+                                                required>
+                                            <div class="valid-feedback">Valid.</div>
+                                            <div class="invalid-feedback">Please enter your callsign.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-3 text-end">
+                                            Grid Square:&nbsp;
+                                        </div>
+                                        <div class="col-md-9">
+                                            <input minlength="4" maxlength="4" pattern="[a-z,A-Z]{2}[0-9]{2}"
+                                                type="text" class="form-control" id="gridsquare"
+                                                placeholder="Enter gridsquare" required>
+                                            <div class="valid-feedback">Valid.</div>
+                                            <div class="invalid-feedback">Please enter your four-character grid square.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- First Row -->
+                        <!-- End Second Row -->
 
-              <!-- Second Row -->
-              <legend class="mt-4">Operator Information</legend>
-              <div class="container">
-                <div class="row ">
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-3 text-end">
-                        Call Sign:&nbsp;
-                      </div>
-                      <div class="col-md-9">
-                        <input minlength="4" type="text" pattern="[-a-zA-Z0-9\/]+" class="form-control" id="callsign" placeholder="Enter callsign" required>
-                        <div class="valid-feedback">Valid.</div>
-                        <div class="invalid-feedback">Please enter your callsign.</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-3 text-end">
-                        Grid Square:&nbsp;
-                      </div>
-                      <div class="col-md-9">
-                        <input minlength="4" maxlength="4" pattern="[a-z,A-Z]{2}[0-9]{2}" type="text" class="form-control" id="gridsquare" placeholder="Enter gridsquare" required>
-                        <div class="valid-feedback">Valid.</div>
-                        <div class="invalid-feedback">Please enter your four-character grid square.</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- End Second Row -->
+                        <!-- Third Row -->
+                        <legend class="mt-4">Station Information</legend>
+                        <div class="container">
+                            <div class="row">
 
-              <!-- Third Row -->
-              <legend class="mt-4">Station Information</legend>
-              <div class="container">
-                <div class="row ">
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-3 text-end">
+                                            Transmit Power:&nbsp;
+                                        </div>
+                                        <div class="was-validated col-md-9">
+                                            <input type="number" min="-10" max="62" step="1" class="form-control"
+                                                id="dbm" placeholder="Enter transmit power" required>
+                                            <div class="valid-feedback">Valid.</div>
+                                            <div class="invalid-feedback">Please enter your transmit power in dBm
+                                                (without the 'dBm' suffix.)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-3 text-end">
+                                            Frequency:&nbsp;
+                                        </div>
+                                        <div class="col-md-9">
+                                            <input type="text" class="form-control" id="frequencies"
+                                                placeholder="Enter frequency" oninput="checkFreq();">
+                                            <div class="valid-feedback">Ok.</div>
+                                            <div class="invalid-feedback">Add a single frequency or a space-delimited
+                                                list (see <a
+                                                    href="https://wsprry-pi.readthedocs.io/en/latest/Operations/index.html"
+                                                    target="_blank" rel="noopener noreferrer">documentation</a>.)</div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-3 text-end">
-                        Transmit Power:&nbsp;
-                      </div>
-                      <div class="col-md-9">
-                        <input type="number" min="-10" max="62" step="1" class="form-control" id="dbm" placeholder="Enter transmit power" required>
-                        <div class="valid-feedback">Valid.</div>
-                        <div class="invalid-feedback">Please enter your transmit power in dBm (without the 'dBm' suffix.)</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-3 text-end">
-                        Frequency:&nbsp;
-                      </div>
-                      <div class="col-md-9">
-                        <input type="text" class="form-control" id="frequencies" placeholder="Enter frequency" required>
-                        <div class="valid-feedback">Ok.</div>
-                        <div class="invalid-feedback">Add a single frequency or a space-delimted list (see documentation.)</div>
-                      </div>
-                    </div>
-                  </div>
+                                <!-- Row Split -->
 
-                  <!-- Row Split -->
-
-                  <div class="row ">
-                    <div class="col-md-6">
-                      <div class="row gx-1 ">
-                        <div class="col-md-4 text-end">
-                          <!-- Empty -->
+                                <div class="was-validated row">
+                                    <div class="col-md-6">
+                                        <div class="row gx-1 ">
+                                            <div class="col-md-4 text-end">
+                                                <!-- Empty -->
+                                            </div>
+                                            <div class="col-md-8">
+                                                <!-- Empty -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="row gx-1 ">
+                                            <div class="col-md-4 text-end">
+                                                <label class="form-check-label" for="useoffset">Random
+                                                    Offset:&nbsp;</label>
+                                            </div>
+                                            <div class="col-md-8">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="useoffset"
+                                                        data-form-type="other">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-8">
-                          <!-- Empty -->
+                        <!-- End Third Row -->
+
+                        <!-- Fourth Row -->
+                        <legend class="mt-4">Advanced Information</legend>
+                        <div class="container">
+                            <div class="was-validated row">
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-4 text-end">
+                                            <label class="form-check-label" for="selfcal">Self
+                                                Calibration:&nbsp;</label>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="selfcal"
+                                                    data-form-type="other">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="row gx-1 ">
+                                        <div class="col-md-3 text-end">
+                                            PPM Offset:&nbsp;
+                                        </div>
+                                        <div class="col-md-9">
+                                            <input type="number" min="-60" max="60" step=".0001" class="form-control"
+                                                id="ppm" placeholder="Enter PPM" required>
+                                            <div class="valid-feedback">Valid.</div>
+                                            <div class="invalid-feedback">Enter a positive or negative decimal number
+                                                for frequency correction.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                    <div class="col-md-6">
-                      <div class="row gx-1 ">
-                        <div class="col-md-4 text-end">
-                          <label class="form-check-label" for="useoffset">Random Offset:&nbsp;</label>
+                        <!-- End Fourth Row -->
+
+                        <hr class="border-2 border-top">
+
+                        <div id="buttons" class="modal-footer justify-content-center">
+                            <button id="submit" type="button" class="btn btn-primary">&nbsp;Save&nbsp;</button>
+                            &nbsp;
+                            <button id="reset" type="button" class="btn btn-secondary">Reset</button>
                         </div>
-                        <div class="col-md-8">
-                          <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="useoffset" data-form-type="other">
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- End Third Row -->
 
-              <!-- Fourth Row -->
-              <legend class="mt-4">Advanced Information</legend>
-              <div class="container">
-              <div class="row ">
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-4 text-end">
-                        <label class="form-check-label" for="selfcal">Self Calibration:&nbsp;</label>
-                      </div>
-                      <div class="col-md-8">
-                        <div class="form-check form-switch">
-                          <input class="form-check-input" type="checkbox" id="selfcal" data-form-type="other">
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <div class="row gx-1 ">
-                      <div class="col-md-3 text-end">
-                        PPM Offset:&nbsp;
-                      </div>
-                      <div class="col-md-9">
-                        <input type="number" min="-60" max="60" step=".0001" class="form-control" id="ppm" placeholder="Enter PPM" required>
-                        <div class="valid-feedback">Valid.</div>
-                        <div class="invalid-feedback">Enter a positive or negative decimal number for frequency correction.</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- End Fourth Row -->
-
-              <hr class="border-2 border-top">
-
-              <div id="buttons" class="modal-footer justify-content-center">
-                <button id="submit" type="button" class="btn btn-primary">&nbsp;Save&nbsp;</button>
-                &nbsp;
-                <button id="reset" type="button" class="btn btn-secondary">Reset</button>
-              </div>
-
-            </fieldset>
-          </form>
-
+                    </fieldset>
+                </form>
+            </div>
         </div>
-      </div>
 
-      <footer id="footer">
-        <div class="row">
-          <div class="col-lg-12">
-            <ul class="list-unstyled">
-              <li><a href="http://wsprdocs.aa0nt.net">Documentation</a></li>
-              <li><a href="https://github.com/lbussy/WsprryPi">GitHub</a></li>
-              <li><a href="https://tapr.org/">TAPR</a></li>
-              <li><a href="https://www.wsprnet.org/">WSPRNet</a></li>
-            </ul>
-            <p>Created by Lee Bussy, AA0NT.</p>
-            <p>Code released under the <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md">GNU General Public License</a>.</p>
-            <p>Based on <a href="https://getbootstrap.com/" rel="nofollow">Bootstrap</a>. Icons from <a href="https://fontawesome.com/" rel="nofollow">Font Awesome</a>. Web fonts from <a href="https://fonts.google.com/" rel="nofollow">Google</a>.</p>
-          </div>
-        </div>
-      </footer>
+        <footer id="footer">
+            <div class="row">
+                <div class="col-lg-12">
+                    <ul class="list-unstyled">
+                        <li><a href="http://wsprdocs.aa0nt.net">Documentation</a></li>
+                        <li><a href="https://github.com/lbussy/WsprryPi">GitHub</a></li>
+                        <li><a href="https://tapr.org/">TAPR</a></li>
+                        <li><a href="https://www.wsprnet.org/">WSPRNet</a></li>
+                    </ul>
+                    <p>Created by Lee Bussy, AA0NT.</p>
+                    <p>Code released under the <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md">GNU
+                            General Public License</a>.</p>
+                    <p>Based on <a href="https://getbootstrap.com/" rel="nofollow">Bootstrap</a>. Icons from <a
+                            href="https://fontawesome.com/" rel="nofollow">Font Awesome</a>. Web fonts from <a
+                            href="https://fonts.google.com/" rel="nofollow">Google</a>.</p>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <script src="bootstrap.bundle.min.js"></script>
-    <script src="https://kit.fontawesome.com/e51821420e.js" crossorigin="anonymous"></script>
+    <script src="fa.js" crossorigin="anonymous"></script>
 
     <script>
-      var url = "wspr_ini.php";
-      var populateConfigRunning = false;
+        var url = "wspr_ini.php";
+        var populateConfigRunning = false;
 
-      $(document).ready(function() { 
-        bindActions();
-        loadPage();
-      });
-
-      function bindActions(){
-        // Grab Self Cal Switch
-        $( "#selfcal" ).on( "click", function() {
-          clickSelfCal();
+        $(document).ready(function () {
+            bindActions();
+            loadPage();
         });
 
-        // Grab Submit and Reset Buttons
-        $("#submit").click(function (){
-          savePage();
-        });
-        $("#reset").click(function (){
-          resetPage();
-        });
-      };
-
-      function loadPage()
-      {
-        populateConfig();
-      };
-
-      function populateConfig(callback = null) { // Get wspr data
-        if (populateConfigRunning) return;
-          populateConfigRunning = true;
-
-          var configJson = $.getJSON(url, function (data) {
-              // Clear any warnings here
-          })
-              .done(function (configJson) {
-                  try {
-                    $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
-                    $('#useled').prop('checked', configJson["Extended"]["Use LED"]);
-                    $('#callsign').val(configJson["Common"]["Call Sign"]);
-                    $('#gridsquare').val(configJson["Common"]["Grid Square"]);
-                    $('#dbm').val(configJson["Common"]["TX Power"]);
-                    $('#frequencies').val(configJson["Common"]["Frequency"]);
-                    $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
-                    $('#selfcal').prop('checked', configJson["Extended"]["Self Cal"]);
-                    $('#ppm').val(configJson["Extended"]["PPM"]);
-                    if ($('#selfcal').is(":checked"))
-                    {
-                      // Disable PPM when using self-cal
-                      $('#ppm').prop( "disabled", true );
-                    }
-                    else
-                    {
-                      // Enable PPM when not using self-cal
-                      $('#ppm').prop( "disabled", false );
-                    }
-                    // Enable Form
-                    $('#submit').prop( "disabled", false );
-                    $('#reset').prop( "disabled", false );
-                    $('#wsprconfig').prop( "disabled", false );
-
-                    if (typeof callback == "function") {
-                        callback();
-                    }
-                  } catch {
-                      alert("Unable to parse data.")
-                      console.log("Unable to parse data.");
-                      setTimeout(populateConfig, 10000);
-                  }
-              })
-              .fail(function (data) {
-                  alert("Unable to retrieve data.")
-                  console.log("Unable to retrieve data.");
-                  setTimeout(populateConfig, 10000);
-              })
-              .always(function (data) {
-                  populateConfigRunning = false;
-                  // Can post-process here
-              });
-      }
-
-      function savePage()
-      {
-        $('#submit').prop( "disabled", true );
-        $('#reset').prop( "disabled", true );
-        var Control  = {
-          "Transmit" : $('#transmit').is(":checked"),
-        };
-
-        var Common = {
-          "Call Sign" : $('#callsign').val(),
-          "Grid Square" : $('#gridsquare').val(),
-          "TX Power" : parseInt($('#dbm').val()),
-          "Frequency" : $('#frequencies').val(),
-        };
-
-        var Extended = {
-          "PPM" : parseFloat($('#ppm').val()),
-          "Self Cal" : $('#selfcal').is(":checked"),
-          "Offset" : $('#useoffset').is(":checked"),
-          "Offset" : $('#useoffset').is(":checked"),
-          "Use LED" : $('#useled').is(":checked"),
-        };
-
-        var Config = {Control, Common, Extended};
-        var json = JSON.stringify(Config);
-        
-        $.ajax({
-          url: url,
-          //headers: {"X-Something": something },
-          data: json,
-          type: 'PUT'
-        })
-            .done(function (data) {
-                // Done
-            })
-            .fail(function (data) {
-                // Fail
-                alert("Unable to save data.")
-                console.log("Unable to POST data.\n" + data);
-            })
-            .always(function (data) {
-              setTimeout(() => {
-                $('#submit').prop( "disabled", false );
-                $('#reset').prop( "disabled", false );
-              }, 500)
-
+        function bindActions() {
+            // Grab Self Cal Switch
+            $("#selfcal").on("click", function () {
+                clickSelfCal();
             });
-      };
 
-      function resetPage()
-      {
-        // Disable Form
-        $('#submit').prop( "disabled", false );
-        $('#reset').prop( "disabled", false );
-        $('#wsprconfig').prop( "disabled", true );
-        populateConfig();
-      };
+            // Grab Submit and Reset Buttons
+            $("#submit").click(function () {
+                savePage();
+            });
+            $("#reset").click(function () {
+                resetPage();
+            });
+        };
 
-      function clickSelfCal()
-      {
-        console.log("Executed clickSelfCal().");
-        if ($('#selfcal').is(":checked"))
-        {
-          // Disable PPM when using self-cal
-          $('#ppm').prop( "disabled", true );
-        }
-        else
-        {
-          // Enable PPM when not using self-cal
-          $('#ppm').prop( "disabled", false );
-        }
-      };
+        function checkFreq() {
+            isValid = true;
+            freqString = $("#frequencies").val().toLowerCase();
+
+            // Min length would be one of 2m, 4m, 6m, = 2
+            if (freqString.length < 2) isValid = false;
+
+            // Check for alphanumerics, spaces or hypens only
+            compareRegEx = "^[a-zA-Z0-9 \-]*$";
+            if (!freqString.match(compareRegEx)) isValid = false;
+
+            // Split on whitespace (duplicates are merged)
+            freqArray = freqString.split(/\s+/);
+            freqArrayLength = freqArray.length;
+            for (var i = 0; i < freqArrayLength; i++) {
+                freqWord = freqArray[i];
+                // Make sure this is not an empty string
+                if (!freqArray[i] == " ") {
+                    // Check if all numbers (also catches exponents)
+                    if (isNumeric(freqWord)) {
+                        // Ok
+                    }
+                    // Check for LF or MF
+                    else if (freqWord == "lf" || freqWord == "mf") {
+                        // Ok
+                    }
+                    // Check for "-15" on the end
+                    else if (freqWord.endsWith("-15") && !freqWord.endsWith("--15")) {
+                        // If removing the "-15" does not yield a number
+                        if (isNaN(trimLast(freqWord, 3)) || trimLast(freqWord, 1) < 3) {
+                            // See if it indicates a band plan
+                            if (!trimLast(freqWord, 3).endsWith("m")) {
+                                // Not a number but does not end in 'm'
+                                isValid = false;
+                            } else if (isNumeric(trimLast(freqWord, 4))) {
+                                // It's numeric, is it a band plan?
+                                if (! isBand(trimLast(freqWord, 4))) {
+                                    // Not a band plan
+                                    isValid = false;
+                                }
+                            }
+                            // Ok - Is a number and a band plan
+                        }
+                        // Ok - Is a number
+                    }
+                    // Check for "m" on the end
+                    else if (freqWord.endsWith("m")) {
+                        // Check to see if it's a number
+                        if (isNaN(trimLast(freqWord, 1)) || trimLast(freqWord, 1) < 1) {
+                            // Not a valid number
+                            isValid = false;
+                        } else if (! isBand(trimLast(freqWord, 1))) {
+                            // Not a valid band plan
+                            isValid = false;
+                        }
+                        // Ok
+                    }
+                    // Anything else is invalid
+                    else {
+                        // Not Ok
+                        isValid = false;
+                    }
+                }
+            }
+
+            // Handle showing validity
+            if (isValid) {
+                $("#frequencies").removeClass("is-invalid");
+                $("#frequencies").addClass("is-valid");
+            }
+            else {
+                $("#frequencies").removeClass("is-valid");
+                $("#frequencies").addClass("is-invalid");
+            }
+        };
+
+        function isNumeric(num) {
+            return !isNaN(num)
+        };
+
+        function trimLast(string, num) {
+            return string.substring(0, string.length - num);
+        };
+
+        function isBand(num) {
+            const bandArray = [160, 80, 60, 40, 30, 20, 17, 15, 12, 10, 6, 4, 2];
+            return bandArray.includes(parseInt(num));
+        };
+
+        function loadPage() {
+            populateConfig();
+        };
+
+        function validatePage() {
+            // $('element').hasClass('className')
+            var thisSection = $('#wsprconfig');
+            var thisForm = document.querySelector('#wsprform');
+            var failcount = 0;
+            if (!thisForm.reportValidity()) failcount++;
+            if (! $("#frequencies").hasClass('is-valid')) failcount++;
+            return (failcount > 0 ? false : true);
+        };
+
+        function populateConfig(callback = null) { // Get wspr data
+            if (populateConfigRunning) return;
+            populateConfigRunning = true;
+
+            var configJson = $.getJSON(url, function (data) {
+                // Clear any warnings here
+            })
+                .done(function (configJson) {
+                    try {
+                        $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
+                        $('#useled').prop('checked', configJson["Extended"]["Use LED"]);
+                        $('#callsign').val(configJson["Common"]["Call Sign"]);
+                        $('#gridsquare').val(configJson["Common"]["Grid Square"]);
+                        $('#dbm').val(configJson["Common"]["TX Power"]);
+                        $('#frequencies').val(configJson["Common"]["Frequency"]);
+                        $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
+                        $('#selfcal').prop('checked', configJson["Extended"]["Self Cal"]);
+                        $('#ppm').val(configJson["Extended"]["PPM"]);
+                        if ($('#selfcal').is(":checked")) {
+                            // Disable PPM when using self-cal
+                            $('#ppm').prop("disabled", true);
+                        }
+                        else {
+                            // Enable PPM when not using self-cal
+                            $('#ppm').prop("disabled", false);
+                        }
+                        // Enable Form
+                        $('#submit').prop("disabled", false);
+                        $('#reset').prop("disabled", false);
+                        $('#wsprconfig').prop("disabled", false);
+
+                        if (typeof callback == "function") {
+                            callback();
+                        }
+                    } catch {
+                        alert("Unable to parse data.")
+                        console.log("Unable to parse data.");
+                        setTimeout(populateConfig, 10000);
+                    }
+                })
+                .fail(function (data) {
+                    alert("Unable to retrieve data.")
+                    console.log("Unable to retrieve data.");
+                    setTimeout(populateConfig, 10000);
+                })
+                .always(function (data) {
+                    populateConfigRunning = false;
+                    checkFreq(); // frequency is not validated by HTML5
+                });
+        };
+
+        function savePage() {
+            if (! validatePage() ) {
+                alert("Please correct the errors on the page.");
+                return false;
+            }
+            $('#submit').prop("disabled", true);
+            $('#reset').prop("disabled", true);
+            var Control = {
+                "Transmit": $('#transmit').is(":checked"),
+            };
+
+            var Common = {
+                "Call Sign": $('#callsign').val(),
+                "Grid Square": $('#gridsquare').val(),
+                "TX Power": parseInt($('#dbm').val()),
+                "Frequency": $('#frequencies').val(),
+            };
+
+            var Extended = {
+                "PPM": parseFloat($('#ppm').val()),
+                "Self Cal": $('#selfcal').is(":checked"),
+                "Offset": $('#useoffset').is(":checked"),
+                "Offset": $('#useoffset').is(":checked"),
+                "Use LED": $('#useled').is(":checked"),
+            };
+
+            var Config = { Control, Common, Extended };
+            var json = JSON.stringify(Config);
+
+            $.ajax({
+                url: url,
+                data: json,
+                type: 'PUT'
+            })
+                .done(function (data) {
+                    // Done
+                })
+                .fail(function (data) {
+                    // Fail
+                    alert("Unable to save data.")
+                    console.log("Unable to POST data.\n" + data);
+                })
+                .always(function (data) {
+                    setTimeout(() => {
+                        $('#submit').prop("disabled", false);
+                        $('#reset').prop("disabled", false);
+                    }, 500)
+
+                });
+        };
+
+        function resetPage() {
+            // Disable Form
+            $('#submit').prop("disabled", false);
+            $('#reset').prop("disabled", false);
+            $('#wsprconfig').prop("disabled", true);
+            populateConfig();
+        };
+
+        function clickSelfCal() {
+            if ($('#selfcal').is(":checked")) {
+                // Disable PPM when using self-cal
+                $('#ppm').prop("disabled", true);
+            }
+            else {
+                // Enable PPM when not using self-cal
+                $('#ppm').prop("disabled", false);
+            }
+        };
     </script>
-  </body>
+</body>
+
 </html>
