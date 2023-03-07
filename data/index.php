@@ -10,7 +10,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <link rel="manifest" href="site.webmanifest">
     <link rel="stylesheet" href="bootstrap.css">
-    <link rel="stylesheet" href="custom.min.css">
+    <link rel="stylesheet" href="custom.css">
     <script src="jquery-3.6.3.min.js"></script>
 </head>
 
@@ -55,7 +55,7 @@
                 <h3 class="card-title">Wsprry Pi Configuration</h3>
 
                 <form id="wsprform">
-                    <fieldset id="wsprconfig" class="form-group" disabled="disabled">
+                    <id="wsprconfig" class="form-group" disabled="disabled">
                         <!-- First Row -->
                         <legend class="mt-4">Control</legend>
                         <div class="was-validated container">
@@ -232,6 +232,24 @@
                         </div>
                         <!-- End Fourth Row -->
 
+                        <!-- Fifth Row -->
+                        <legend class="mt-4">Transmit Power</legend>
+                        <p>This sets power on the Pi GPIO only; any amplification must be taken into account.</p>
+                        <div class="container">
+                            <div class="was-validated row">
+                                <div class="col-md-12">
+                                    <div class="row gx-1 ">
+                                        <class="col-md-12">
+                                            <input type="range" min="0" max="7" step="1" value="7" class="form-range"
+                                                id="power_level" data-form-type="other">
+                                            <div class="form-label text-center" id="rangeText"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- End Fifth Row -->
+
                         <hr class="border-2 border-top">
 
                         <div id="buttons" class="modal-footer justify-content-center">
@@ -272,6 +290,19 @@
         var url = "wspr_ini.php";
         var populateConfigRunning = false;
 
+        var rangeValues =
+        {
+            // Define range labels for slider
+            "0": "2mA<br />-3.4dBm",
+            "1": "4mA<br />2.1dBm",
+            "2": "6mA<br />4.9dBm",
+            "3": "8mA<br />6.6dBm",
+            "4": "10mA<br />8.2dBm",
+            "5": "12mA<br />9.2dBm",
+            "6": "14mA<br />10.0dBm",
+            "7": "16mA<br />10.6dBm"
+        };
+
         $(document).ready(function () {
             bindActions();
             loadPage();
@@ -289,6 +320,11 @@
             });
             $("#reset").click(function () {
                 resetPage();
+            });
+
+            // setup an event handler to set the text when the range value is dragged (see event for input) or changed (see event for change)
+            $('#power_level').on('input change', function () {
+                $('#rangeText').html(rangeValues[$(this).val()]);
             });
         };
 
@@ -332,7 +368,7 @@
                                 }
                             } else if (isNumeric(trimLast(freqWord, 4))) {
                                 // It's numeric, is it a band plan?
-                                if (! isBand(trimLast(freqWord, 4))) {
+                                if (!isBand(trimLast(freqWord, 4))) {
                                     // Not a band plan
                                     isValid = false;
                                 } else {
@@ -358,7 +394,7 @@
                         if (isNaN(trimLast(freqWord, 1)) || trimLast(freqWord, 1) < 1) {
                             // Not a valid number
                             isValid = false;
-                        } else if (! isBand(trimLast(freqWord, 1))) {
+                        } else if (!isBand(trimLast(freqWord, 1))) {
                             // Not a valid band plan
                             isValid = false;
                         }
@@ -406,11 +442,11 @@
             var thisForm = document.querySelector('#wsprform');
             var failcount = 0;
             if (!thisForm.reportValidity()) failcount++;
-            if (! $("#frequencies").hasClass('is-valid')) failcount++;
+            if (!$("#frequencies").hasClass('is-valid')) failcount++;
             return (failcount > 0 ? false : true);
         };
 
-        function populateConfig(callback = null) { // Get wspr data
+        function populateConfig(callback = null) {
             if (populateConfigRunning) return;
             populateConfigRunning = true;
 
@@ -436,10 +472,15 @@
                             // Enable PPM when not using self-cal
                             $('#ppm').prop("disabled", false);
                         }
+                        $('#power_level').val(configJson["Extended"]["Power Level"]);
+                        $('#power_level').change();
+
                         // Enable Form
                         $('#submit').prop("disabled", false);
                         $('#reset').prop("disabled", false);
                         $('#wsprconfig').prop("disabled", false);
+
+                        checkFreq(); // frequency is not validated by HTML5
 
                         if (typeof callback == "function") {
                             callback();
@@ -457,12 +498,11 @@
                 })
                 .always(function (data) {
                     populateConfigRunning = false;
-                    checkFreq(); // frequency is not validated by HTML5
                 });
         };
 
         function savePage() {
-            if (! validatePage() ) {
+            if (!validatePage()) {
                 alert("Please correct the errors on the page.");
                 return false;
             }
@@ -481,6 +521,7 @@
 
             var Extended = {
                 "PPM": parseFloat($('#ppm').val()),
+                "Power Level": parseInt($('#power_level').val()),
                 "Self Cal": $('#selfcal').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
