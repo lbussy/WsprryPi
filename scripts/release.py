@@ -80,7 +80,7 @@ def copy(file):
     project_dir_command = "git rev-parse --show-toplevel"
     project_dir = subprocess.check_output(project_dir_command, shell=True).decode().strip()
     source_dir = project_dir + "/src"
-    copy_command = "cp -f " + source_dir + "/wspr " + current_dir
+    copy_command = "cp -f " + source_dir + "/" + file + " " + current_dir
     print("Copying {} to {}.".format(file, current_dir))
     subprocess.check_output(copy_command, shell=True)
 
