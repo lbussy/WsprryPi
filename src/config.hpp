@@ -53,6 +53,10 @@ public:
     {
         return useled;
     }
+    bool powerLevel()
+    {
+        return powerlevel;
+    }
 
 private:
     void valueHandler(const char *configfile)
@@ -85,6 +89,7 @@ private:
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
             useled = reader.GetBoolean("Extended", "Use LED", false);
+            powerlevel = reader.GetBoolean("Extended", "PowerLevel", 7);
         }
     }
 
@@ -102,4 +107,5 @@ private:
     bool selfcal;
     bool offset;
     bool useled;
+    int powerlevel;
 };

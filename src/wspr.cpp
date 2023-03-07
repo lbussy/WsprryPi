@@ -188,7 +188,7 @@ static struct
 
 struct wConfig
 {
-    // Global configuration items from cvommand line and ini file
+    // Global configuration items from command line and ini file
     bool useini = false;
     std::string inifile;
     bool xmit_enabled = false;
@@ -207,6 +207,7 @@ struct wConfig
     int terminate = -1;
     bool useled = false;
     bool daemon_mode = false;
+    int power_level = 7;
     // PLLD clock frequency.
     double f_plld_clk;
     // MEM_FLAG_L1_NONALLOCATING?
@@ -401,7 +402,7 @@ void disable_clock()
     }
 }
 
-void txon(bool led = false)
+void txon(bool led = false, int power_level = 7)
 {
     // Turn on TX
     if (led) pinHigh(LED_PIN);
@@ -422,14 +423,33 @@ void txon(bool led = false)
     CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
 
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
-    ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 7; // 16mA +10.6dBm
+    switch (power_level)  {
+    case 0:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
+        break;
+    case 1:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
+        break;
+    case 2:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
+        break;
+    case 3:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
+        break;
+    case 4:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
+        break;
+    case 5:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
+        break;
+    case 6:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
+        break;
+    case 7:
+    default:
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 7; // 16mA +10.6dBm
+        break;
+    }
 
     disable_clock();
 
@@ -851,48 +871,50 @@ void print_usage()
     prtStdOut("  -h --help\n");
     prtStdOut("    Print out this help screen.\n");
     prtStdOut("  -v --version\n");
-    prtStdOut("    Show Wsprry Pi version.\n");
+    prtStdOut("    Show the Wsprry Pi version.\n");
     prtStdOut("  -p --ppm ppm\n");
     prtStdOut("    Known PPM correction to 19.2MHz RPi nominal crystal frequency.\n");
     prtStdOut("  -s --self-calibration\n");
     prtStdOut("    Check NTP before every transmission to obtain the PPM error of the\n");
-    prtStdOut("    crystal (default setting.).\n");
+    prtStdOut("    crystal (default setting.)\n");
     prtStdOut("  -f --free-running\n");
-    prtStdOut("    Do not use NTP to correct frequency error of RPi crystal.\n");
+    prtStdOut("    Do not use NTP to correct the frequency error of RPi crystal.\n");
     prtStdOut("  -r --repeat\n");
-    prtStdOut("    Repeatedly, and in order, transmit on all the specified command line\n");
+    prtStdOut("    Repeatedly and in order, transmit on all the specified command line\n");
     prtStdOut("    freqs.\n");
     prtStdOut("  -x --terminate <n>\n");
-    prtStdOut("    Terminate after n transmissions have been completed.\n");
+    prtStdOut("    Terminate after completing <n> transmissions.\n");
     prtStdOut("  -o --offset\n");
     prtStdOut("    Add a random frequency offset to each transmission:\n");
-    prtStdOut("      +/- ", WSPR_RAND_OFFSET, " Hz for WSPR\n");
-    prtStdOut("      +/- ", WSPR15_RAND_OFFSET, " Hz for WSPR-15\n");
+    prtStdOut("      +/- ", WSPR_RAND_OFFSET, "Hz for WSPR\n");
+    prtStdOut("      +/- ", WSPR15_RAND_OFFSET, "Hz for WSPR-15\n");
     prtStdOut("  -t --test-tone freq\n");
-    prtStdOut("    Simply output a test tone at the specified frequency. Only used for\n");
-    prtStdOut("    debugging and to verify calibration.\n");
+    prtStdOut("    Output a test tone at the specified frequency. Only used for\n");
+    prtStdOut("    debugging and verifying calibration.\n");
     prtStdOut("  -l --led\n");
-    prtStdOut("    Use LED when transmitting (TAPR board).\n");
-    prtStdOut("  -n --no-delay\n");
-    prtStdOut("    Transmit immediately, do not wait for a WSPR TX window. Used for\n");
+    prtStdOut("    Use LED as a transmit indicator (TAPR board).\n");
+    prtStdOut("  -n --no-delay;\n");
+    prtStdOut("    Transmit immediately without waiting for a WSPR TX window. Used for\n");
     prtStdOut("    testing only.\n");
     prtStdOut("  -i --ini-file\n");
     prtStdOut("    Load parameters from an ini file. Supply path and file name.\n");
     prtStdOut("  -D --daemon-mode\n");
     prtStdOut("    Run with terse messaging.\n");
+    prtStdOut("  -d --power_level\n");
+    prtStdOut("    Set actual TX power, 0-7.\n");
     prtStdOut("\n");
     prtStdOut("Frequencies can be specified either as an absolute TX carrier frequency,\n");
-    prtStdOut("or using one of the following strings:\n");
+    prtStdOut("or using one of the following bands:\n");
     prtStdOut("\n");
     prtStdOut("  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,\n");
     prtStdOut("  17m, 15m, 12m, 10m, 6m, 4m, and 2m\n");
     prtStdOut("\n");
-    prtStdOut("If a string is used, the transmission will happen in the middle of the\n");
+    prtStdOut("If you specify a band, the transmission will happen in the middle of the\n");
     prtStdOut("WSPR region of the selected band.\n");
     prtStdOut("\n");
-    prtStdOut("The \"-15\" suffix indicates the WSPR-15 region of band.\n");
+    prtStdOut("The \"-15\" suffix indicates the WSPR-15 region of the band.\n");
     prtStdOut("\n");
-    prtStdOut("Transmission gaps can be created by specifying a TX frequency of 0.\n");
+    prtStdOut("You may create transmission gaps by specifying a TX frequency of 0.\n");
     prtStdOut("\n");
 }
 
@@ -910,6 +932,7 @@ bool getINIValues(bool reload = false)
         config.self_cal = iniConfig.getSelfcal();
         config.random_offset = iniConfig.getOffset();
         config.useled = iniConfig.useLED();
+        config.power_level = iniConfig.powerLevel();
 
         if (! config.daemon_mode )
             prtStdOut("\n============================================\n");
@@ -925,6 +948,7 @@ bool getINIValues(bool reload = false)
         prtStdOut("Do not use NTP sync:\t\t", std::boolalpha, (!config.self_cal), "\n");
         prtStdOut("Check NTP Each Run (default):\t", std::boolalpha, config.self_cal, "\n");
         prtStdOut("Use Frequency Randomization:\t", std::boolalpha, config.random_offset, "\n");
+        prtStdOut("Power Level:\t\t\t", config.power_level, "\n");
         prtStdOut("Use LED:\t\t\t", std::boolalpha, config.useled, "\n");
         if (! config.daemon_mode )
             prtStdOut("============================================\n\n");
@@ -1040,13 +1064,14 @@ bool parse_commandline(const int &argc, char *const argv[])
         {"led", no_argument, 0, 'l'},
         {"ini-file", required_argument, 0, 'i'},
         {"daemon-mode", no_argument, 0, 'D'},
+        {"power_level", required_argument, 0, 'd'},
         {0, 0, 0, 0}};
 
     while (true)
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "?vhp:sfrx:ot:nli:D",
+        int c = getopt_long(argc, argv, "?vhp:sfrxd:ot:nli:D",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -1062,14 +1087,17 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'h':
         case '?':
+            // Help
             print_usage();
             return false;
             break;
         case 'v':
+            // Version
             prtStdOut("Wsprry Pi (wspr) version ", exeversion(), "\n");
             return false;
             break;
         case 'p':
+            // Set PPM to X
             config.ppm = strtod(optarg, &endp);
             if ((optarg == endp) || (*endp != '\0'))
             {
@@ -1078,15 +1106,19 @@ bool parse_commandline(const int &argc, char *const argv[])
             }
             break;
         case 's':
+            // Self-Cal
             config.self_cal = true;
             break;
         case 'f':
+            // Free Running
             config.self_cal = false;
             break;
         case 'r':
+            // Repeat
             config.repeat = true;
             break;
         case 'x':
+            // Terminate after X
             config.terminate = strtol(optarg, &endp, 10);
             if ((optarg == endp) || (*endp != '\0'))
             {
@@ -1100,9 +1132,11 @@ bool parse_commandline(const int &argc, char *const argv[])
             }
             break;
         case 'o':
+            // Use random offset
             config.random_offset = true;
             break;
         case 't':
+            // Set a test tone
             config.test_tone = strtod(optarg, &endp);
             config.mode = TONE;
             if ((optarg == endp) || (*endp != '\0'))
@@ -1112,19 +1146,38 @@ bool parse_commandline(const int &argc, char *const argv[])
             }
             break;
         case 'i':
+            // Use INI file
             config.inifile = optarg;
             config.useini = true;
             break;
         case 'n':
+            // No delay, transmit immediately
             config.no_delay = true;
             break;
         case 'l':
+            // Use LED
             config.useled = true;
             break;
         case 'D':
+            // Daemon mode, repeats indefinitely
             config.daemon_mode = true;
             config.repeat = true; // Repeat must be true in a daemon setup
             break;
+        case 'd':
+            {
+                // Set power output 0-7
+                int _pwr = strtol(optarg, NULL, 10);
+                if (_pwr < 0 || _pwr > 7 )
+                {
+                    config.power_level = 7;
+                }
+                else
+                {
+                    config.power_level = _pwr;
+                }
+                config.power_level = strtol(optarg, NULL, 10);
+                break;
+            }
         default:
             return false;
         }
@@ -1489,7 +1542,7 @@ int main(const int argc, char *const argv[])
 
     // Set up DMA
     open_mbox();
-    txon();
+    txon(false, 0);
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
@@ -1504,7 +1557,7 @@ int main(const int argc, char *const argv[])
         prtStdOut(temp.str(), "\n");
         prtStdOut("Press CTRL-C to exit.\n");
 
-        txon(config.useled);
+        txon(config.useled, config.power_level);
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1626,7 +1679,7 @@ int main(const int argc, char *const argv[])
                     struct timeval sym_start;
                     struct timeval diff;
                     int bufPtr = 0;
-                    txon(config.useled);
+                    txon(config.useled, config.power_level);
                     for (int i = 0; i < 162; i++)
                     {
                         gettimeofday(&sym_start, NULL);

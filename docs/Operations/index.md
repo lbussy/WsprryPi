@@ -81,48 +81,50 @@ Options:
   -h --help
     Print out this help screen.
   -v --version
-    Show Wsprry Pi version.
+    Show the Wsprry Pi version.
   -p --ppm ppm
     Known PPM correction to 19.2MHz RPi nominal crystal frequency.
   -s --self-calibration
     Check NTP before every transmission to obtain the PPM error of the
-    crystal (default setting.).
+    crystal (default setting.)
   -f --free-running
-    Do not use NTP to correct frequency error of RPi crystal.
+    Do not use NTP to correct the frequency error of RPi crystal.
   -r --repeat
-    Repeatedly, and in order, transmit on all the specified command line
+    Repeatedly and in order, transmit on all the specified command line
     freqs.
   -x --terminate <n>
-    Terminate after n transmissions have been completed.
+    Terminate after completing <n> transmissions.
   -o --offset
     Add a random frequency offset to each transmission:
-      +/- 80 Hz for WSPR
-      +/- 8 Hz for WSPR-15
+      +/- 80Hz for WSPR
+      +/- 8Hz for WSPR-15
   -t --test-tone freq
-    Simply output a test tone at the specified frequency. Only used for
-    debugging and to verify calibration.
+    Output a test tone at the specified frequency. Only used for
+    debugging and verifying calibration.
   -l --led
-    Use LED when transmitting (TAPR board).
-  -n --no-delay
-    Transmit immediately, do not wait for a WSPR TX window. Used for
+    Use LED as a transmit indicator (TAPR board).
+  -n --no-delay;
+    Transmit immediately without waiting for a WSPR TX window. Used for
     testing only.
   -i --ini-file
     Load parameters from an ini file. Supply path and file name.
   -D --daemon-mode
     Run with terse messaging.
+  -d --power_level
+    Set actual TX power, 0-7.
 
 Frequencies can be specified either as an absolute TX carrier frequency,
-or using one of the following strings:
+or using one of the following bands:
 
   LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,
   17m, 15m, 12m, 10m, 6m, 4m, and 2m
 
-If a string is used, the transmission will happen in the middle of the
+If you specify a band, the transmission will happen in the middle of the
 WSPR region of the selected band.
 
-The "-15" suffix indicates the WSPR-15 region of band.
+The "-15" suffix indicates the WSPR-15 region of the band.
 
-Transmission gaps can be created by specifying a TX frequency of 0.
+You may create transmission gaps by specifying a TX frequency of 0.
 ```
 
 ### Command Line Entries for Testing
@@ -173,6 +175,22 @@ NTP calibration is enabled by default and produces a frequency error of about 0.
 
 Frequency calibration is required to ensure that the WSPR-2 transmission occurs within the narrow 200 Hz band. The reference crystal on your RPi might have a frequency error (which, in addition, is temperature dependent -1.3Hz/deg C @10MHz). You may manually correct the frequency or add a PPM correction on the command line to calibrate the transmission.
 
+## Power Level
+
+You may specify the power level for special cases where you desire an extremely low one.  The options are:
+
+- *Power Level**:
+  - *0*: 2mA or -3.4dBm
+  - *1*: 4mA or 2.1dBm
+  - *2*: 6mA or 4.9dBm
+  - *3*: 8mA or 6.6dBm
+  - *4*: 10mA or 8.2dBm
+  - *5*: 12mA or 9.2dBm
+  - *6*: 14mA or 10.0dBm
+  - *7*: 16mA or 10.6dBm (Default)
+
+These levels are estimated at the Raspberry Pi GPIO according to Broadcom documentation.  They do not consider any amplification, such as on the TAPR board.
+
 ### NTP Calibration
 
 NTP automatically tracks and calculates a PPM frequency correction. If you are running NTP on your Pi, you can use the `--self-calibration` option to have this program query NTP for the latest frequency correction before each WSPR transmission. Some residual frequency errors may still be present due to delays in the NTP measurement loop, and this method works best if your Pi has been on for a long time, the crystal's temperature has stabilized, and the NTP control loop has converged.
@@ -182,6 +200,65 @@ NTP automatically tracks and calculates a PPM frequency correction. If you are r
 A practical way to calibrate is to tune the transmitter on the same frequency as a medium wave AM broadcast station, keep tuning until zero-beat (the constant audio tone disappears when the transmitter is precisely on the same frequency as the broadcast station), and determine the frequency difference with the broadcast station. This difference is the frequency error that can be applied for correction while tuning on a WSPR frequency.
 
 Suppose your local AM radio station is at 780kHz. Use the `--test-tone` option to produce different tones around 780kHz (e.g., 780100 Hz) until you can successfully zero-beat the AM station. If the zero-beat tone specified on the command line is F, calculate the PPM correction required as `ppm=(F/780000-1)*1e6`. In the future, specify this value as the argument to the `--ppm` option on the command line. You can verify that the ppm value has been set correction by specifying `--test-tone 780000 --ppm \<ppm\>` on the command line and confirming that the Pi is still zero beating the AM station.
+
+## INI File
+
+System daemon operations will read the `wspr.ini` file to supply execution parameters.  During everyday use, there should not be any reason to edit the file directly.  The Wsprry Pi installer stores the file in the user data directory:
+
+``` bash
+$ ls -al /usr/local/etc
+total 12
+drwxr-xr-x  2 root root 4096 Feb 18 14:51 .
+drwxr-xr-x 10 root root 4096 Sep 21 19:02 ..
+-rw-rw-rw-  1 root root  171 Mar  6 19:47 wspr.ini
+```
+
+The INI file is a standard INI file with which you may already be familiar.  It has three sections, Control, Common, and Extended.  The application will ignore blank lines and other whitespaces.  The settings are in a key/value pair separated by an equals sign.  Comments are allowed and delineated by a semicolon.
+
+Note that commas will not be retained when the web page updates the file.
+
+Here is an example file:
+
+``` ini
+[Control]
+Transmit = False ; Bool
+
+[Common]
+Call Sign = NXXX ; String of 7 or less
+Grid Square = ZZ99 ; Four characters
+TX Power = 20 ; Power in dBm is always a relatively low integer
+Frequency = 20m ; This can be an integer with "m" on end, an integer as in "450000000", or an exponential format like "780e3"
+
+[Extended]
+PPM = 0.0 ; Double
+Self Cal = True ; Bool
+Offset = False; Bool
+Use LED = False ; Bool
+Power Level = 7 ; 0-7, 7 is max
+```
+
+- **Control**
+   - *Transmit**: A true or false Boolean, indicating whether wspr will transmit.  Even when not transmitting, wspr will continue to run and react to changes in the INI.
+- **Common**
+  - **Call Sign**: Your registered call sign.  Your callsign will be alphanumeric, contain no spaces, and be that which is assigned to you by your authorizing entity.
+  - **Grid Square**: Your four-digit Maidenhead grid square.  It will be two letters followed by two numbers.
+  - **TX Power**:
+  - **Frequency**: A string representing the frequency or a list of frequencies through which wspr will rotate.  The notation can be an integer with "m" as a suffix indicating a standard band plan, an integer as in '450000000' representing the frequency in Hz, or an exponential format like '780e3'.  The '-15' indicates it should use a 15-minute window in LF, MF, or 160m.
+- **Extended**
+  - **PPM*: A double for the PPM offset to use as a specific calibration.  The compensation is not honored when in self-calibration mode.
+  - **Self Cal**: A true/false Boolean indicating whether wspr should self-calibrate with the NTP clock.
+  - **Offset**: = A true/false Boolean indicating whether to add a slight offset to each transmission.
+  - **Use LED**: A true/false Boolean to use the LED attached to the TAPR board as a transmission indicator.
+  - *Power Level**: A power level indicator, 0-7, the default is 7:
+    - *0*: 2mA or -3.4dBm
+    - *1*: 4mA or 2.1dBm
+    - *2*: 6mA or 4.9dBm
+    - *3*: 8mA or 6.6dBm
+    - *4*: 10mA or 8.2dBm
+    - *5*: 12mA or 9.2dBm
+    - *6*: 14mA or 10.0dBm
+    - *7*: 16mA or 10.6dBm
+
 
 ## PWM Peripheral
 
