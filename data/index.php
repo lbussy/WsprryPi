@@ -325,17 +325,32 @@
                             // See if it indicates a band plan
                             if (!trimLast(freqWord, 3).endsWith("m")) {
                                 // Not a number but does not end in 'm'
-                                isValid = false;
+                                if (trimLast(freqWord, 3) == "lf" || trimLast(freqWord, 3) == "mf") {
+                                    // Ol, LF or MF
+                                } else {
+                                    isValid = false;
+                                }
                             } else if (isNumeric(trimLast(freqWord, 4))) {
                                 // It's numeric, is it a band plan?
                                 if (! isBand(trimLast(freqWord, 4))) {
                                     // Not a band plan
                                     isValid = false;
+                                } else {
+                                    band = parseInt(trimLast(freqWord, 4));
+                                    if (band == 160) {
+                                        // Ok - 160m is good with -15
+                                    } else {
+                                        isValid = false;
+                                    }
                                 }
+                            } else {
+                                // All letters
+                                isValid = false;
                             }
-                            // Ok - Is a number and a band plan
+                        } else {
+                            // Straight frequency, no -15 available
+                            isValid = false;
                         }
-                        // Ok - Is a number
                     }
                     // Check for "m" on the end
                     else if (freqWord.endsWith("m")) {
