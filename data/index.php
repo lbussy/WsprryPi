@@ -275,7 +275,6 @@
         $(document).ready(function () {
             bindActions();
             loadPage();
-            checkFreq(); // frequency is not validated by HTML5
         });
 
         function bindActions() {
@@ -433,7 +432,7 @@
                 })
                 .always(function (data) {
                     populateConfigRunning = false;
-                    // Can post-process here
+                    checkFreq(); // frequency is not validated by HTML5
                 });
         };
 
