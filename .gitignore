@@ -8,5 +8,8 @@ docs/_build/
 .pio
 .vscode
 .DS_Store
+.idea
 
 docs/_build
+
+package-lock.json
