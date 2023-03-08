@@ -89,7 +89,7 @@ private:
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
             useled = reader.GetBoolean("Extended", "Use LED", false);
-            powerlevel = reader.GetBoolean("Extended", "PowerLevel", 7);
+            powerlevel = reader.GetBoolean("Extended", "Power Level", 7);
         }
     }
 
