@@ -247,10 +247,9 @@
                                 </div>
                             </div>
                         </div>
+                        <p></p>
 
                         <!-- End Fifth Row -->
-
-                        <hr class="border-2 border-top">
 
                         <div id="buttons" class="modal-footer justify-content-center">
                             <button id="submit" type="button" class="btn btn-primary">&nbsp;Save&nbsp;</button>
