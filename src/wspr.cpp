@@ -1093,7 +1093,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            prtStdOut("Wsprry Pi (wspr) version ", exeversion(), "\n");
+            prtStdOut("Wsprry Pi (wspr) version ", exeversion(), " (", branch(), ")." "\n");
             return false;
             break;
         case 'p':
@@ -1504,7 +1504,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 int main(const int argc, char *const argv[])
 {
     if ( ! parse_commandline(argc, argv) ) return 1;
-    prtStdOut("Wsprry Pi running on: ", version(), ".\n");
+    prtStdOut("Wsprry Pi v", exeversion(), " (", branch(), "), running on: ", RPiVersion(), ".\n");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 

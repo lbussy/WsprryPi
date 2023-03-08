@@ -71,7 +71,7 @@ void pinLow(int pin)
 
 int main()
 {
-    printf("\nRunning on: %s.\n", version());
+    printf("\nRunning on: %s.\n", RPiVersion());
     printf("Testing GPIO.\n");
     setupGPIO(LED_PIN);
 

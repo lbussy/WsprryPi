@@ -3,6 +3,6 @@
 
 int main()
 {
-    std::cout << "Version: " << version() << std::endl;
+    std::cout << "Version: " << RPiVersion() << std::endl;
     return 0;
 }
