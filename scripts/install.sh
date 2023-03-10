@@ -2,6 +2,10 @@
 
 # Copyright (C) 2023 Lee C. Bussy (@LBussy)
 
+# TODO:
+# Look at:
+# https://www.digitalocean.com/community/tutorials/how-to-manage-logfiles-with-logrotate-on-ubuntu-20-04
+
 ############
 ### Global Declarations
 ############

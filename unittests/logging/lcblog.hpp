@@ -1,9 +1,10 @@
+#ifndef _LOGGING_HPP
+#define _LOGGING_HPP
+#pragma once
+
 #include <iostream>
 #include <string> 
-#include <regex> 
-
-// Look at:
-// https://www.digitalocean.com/community/tutorials/how-to-manage-logfiles-with-logrotate-on-ubuntu-20-04
+#include <regex>
 
 class LCBLog
 {
@@ -174,3 +175,5 @@ private:
         return str;
     }
 };
+
+#endif // _LOGGING_HPP
