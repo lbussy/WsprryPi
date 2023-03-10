@@ -1141,7 +1141,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             // Daemon mode, repeats indefinitely
             config.daemon_mode = true;
             config.repeat = true; // Repeat must be true in a daemon setup
-            // llog.setDaemon(config.daemon_mode);
+            llog.setDaemon(config.daemon_mode);
             break;
         case 'd':
             {
