@@ -59,6 +59,7 @@ def edit_files():
     replace_in_file("install.sh", "BRANCH=", branch)
     replace_in_file("uninstall.sh", "BRANCH=", branch)
     replace_in_file("shutdown-button.py", "# Created for " + project + " version ", version)
+    replace_in_file("logrotate.d", "# Created for " + project + " version ", version)
 
 
 def compile():

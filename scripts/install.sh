@@ -2,10 +2,6 @@
 
 # Copyright (C) 2023 Lee C. Bussy (@LBussy)
 
-# TODO:
-# Look at:
-# https://www.digitalocean.com/community/tutorials/how-to-manage-logfiles-with-logrotate-on-ubuntu-20-04
-
 ############
 ### Global Declarations
 ############
@@ -407,6 +403,27 @@ copy_file() {
     else
         echo -e "Script install failed for $fullName"&&die
     fi
+}
+
+############
+### Copy Log Rotate Config
+### Required:
+############
+
+copy_logd() {
+    local scriptPath scriptName fullName curlFile
+    scriptName="${GITPROJ// /}"
+    scriptName="${logdName,,}"
+    scriptPath="/etc/logrotate.d/"
+    fullName="$scriptPath/$scriptName"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
+
+    # Download file
+    curl -s "$curlFile" > "$fullName" || warn
+
+    # See if file is an executable
+    chown root:root "$fullName"
+    chmod 0644 "$fullName"
 }
 
 ############

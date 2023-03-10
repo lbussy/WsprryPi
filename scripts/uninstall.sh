@@ -220,6 +220,8 @@ uninstall() {
     rm /usr/local/bin/shutdown-button.py
     rm -fr /var/www/html/wspr/
     rm /etc/modprobe.d/alsa-blacklist.conf
+    rm -fr /var/log/WsprryPi
+    rm /etc/logrotate.d/wsprrypi
 }
 
 ############
