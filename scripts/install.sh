@@ -577,8 +577,8 @@ User=$userName
 Group=$userName
 ExecStart=$execStart
 SyslogIdentifier=$daemonName
-StandardOutput=file:$stdLog
-StandardError=file:$errLog
+StandardOutput=append:$stdLog
+StandardError=append:$errLog
 
 [Install]
 WantedBy=multi-user.target"
