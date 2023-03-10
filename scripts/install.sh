@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="devel"
+BRANCH="logd_work"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -505,6 +505,7 @@ checkdaemon() {
 createdaemon () {
     local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell execStart
     unitFileLocation="/etc/systemd/system"
+    logFileLocation="/var/log"
     scriptName="$1"
     scriptPath="$2"
     arguments="$3"
@@ -514,6 +515,8 @@ createdaemon () {
     processShell="$7"
     execStart=""
     unitFile="$unitFileLocation/$daemonName.service"
+    stdLog="$logFileLocation/$productName/$daemonName.access.log"
+    errLog="$logFileLocation/$productName/$daemonName.error.log"
 
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
     if [ -n "$processShell" ]; then
@@ -550,6 +553,8 @@ User=$userName
 Group=$userName
 ExecStart=$execStart
 SyslogIdentifier=$daemonName
+StandardOutput=file:
+StandardError=file:/var/log/wspr/wspr.error.log
 
 [Install]
 WantedBy=multi-user.target"
