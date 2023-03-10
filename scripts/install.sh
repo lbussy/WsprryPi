@@ -514,9 +514,12 @@ createdaemon () {
     productName="$6"
     processShell="$7"
     execStart=""
+    dirName="${productName// /}"
+    dirName="${dirName,,}"
     unitFile="$unitFileLocation/$daemonName.service"
-    stdLog="$logFileLocation/$productName/$daemonName.access.log"
-    errLog="$logFileLocation/$productName/$daemonName.error.log"
+    logFileLocation="$logFileLocation/$dirName"
+    stdLog="$logFileLocation/$daemonName.access.log"
+    errLog="$logFileLocation/$daemonName.error.log"
 
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
     if [ -n "$processShell" ]; then
@@ -560,6 +563,7 @@ StandardError=file:$errLog
 WantedBy=multi-user.target"
     } > "$unitFile"
 
+    [[ -d "$logFileLocation" ]] || mkdir "$logFileLocation"
     chown root:root "$unitFile"
     chmod 0644 "$unitFile"
     echo -e "Reloading systemd config."
