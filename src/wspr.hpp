@@ -33,6 +33,7 @@
 #include "singleton.hpp"
 #include "monitorfile.hpp"
 #include "config.hpp"
+#include "lcblog.hpp"
 
 #ifdef __cplusplus
 extern "C"
