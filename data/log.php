@@ -1,43 +1,45 @@
 <?php
+/*
+ * Easy PHP Tail 
+ * by: Thomas Depole
+ * v1.0
+ * 
+ * just fill in the varibles bellow, open in a web browser and tail away 
+ */
+$logFile = ""; // local path to log file
+$interval = 1000; //how often it checks the log file for changes, min 100
+$textColor = ""; //use CSS color
 
-// Setup variables
-$logFile = "/var/log/wspr.access.log"; // Local path to log file
-$interval = 1000; // Check for change window, in ms
-$textColor = ""; // Use CSS color if empty
+if(isset($_GET['displayLog'])) {
+	$logFile = "/var/log/wsprrypi/" . $_GET['displayLog'];
+}
 
+// Don't have to change anything bellow
 if(!$textColor) $textColor = "white";
 if($interval < 100)  $interval = 100; 
-if(isset($_GET['getLog'])){
-	echo file_get_contents($logFile);
-}else{
+if(isset($_GET['getLog'])) {
+?>
+<pre>
+<?php echo file_get_contents($logFile); ?>
+</pre>
+<?php
+} else {
 ?>
 <html>
-	<title>WSPR Log</title>
-	<style>
-		@import url(http://fonts.googleapis.com/css?family=Ubuntu);
-		body{
-			background-color: black;
-			color: <?php echo $textColor; ?>;
-			font-family: 'Ubuntu', sans-serif;
-			font-size: 16px;
-			line-height: 20px;	
-		}
-		h4{
-			font-size: 18px;
-			line-height: 22px;
-			color: #353535;
-		}
-		#log {
-			position: relative;
-			top: -34px;
-		}
-		#scrollLock{
-			width:2px;
-			height: 2px;
-			overflow:visible;
-		}
-	</style>
-	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.0/jquery.min.js" type="text/javascript"></script>
+
+<head>
+    <meta charset="utf-8">
+    <title>Wsprry Pi</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <link rel="stylesheet" href="bootstrap.css">
+    <link rel="stylesheet" href="custom.css">
+    <script src="jquery-3.6.3.min.js"></script>
+</head>
+
 	<script>
 		setInterval(readLogFile, <?php echo $interval; ?>);
 		window.onload = readLogFile; 
@@ -69,10 +71,12 @@ if(isset($_GET['getLog'])){
 	</script>
 	<body>
 		<h4><?php echo $logFile; ?></h4>
-		<div id="log">
-			
-		</div>
+		<div id="log"></div>
 		<div id="scrollLock"> <input class="disableScrollLock" type="button" value="Disable Scroll Lock" /> <input class="enableScrollLock" style="display: none;" type="button" value="Enable Scroll Lock" /></div>
+	
+		<script src="bootstrap.bundle.min.js"></script>
+    	<script src="fa.js" crossorigin="anonymous"></script>
+	
 	</body>
 </html>
 <?php  } ?>
