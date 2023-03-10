@@ -553,8 +553,8 @@ User=$userName
 Group=$userName
 ExecStart=$execStart
 SyslogIdentifier=$daemonName
-StandardOutput=file:
-StandardError=file:/var/log/wspr/wspr.error.log
+StandardOutput=file:$stdLog
+StandardError=file:$errLog
 
 [Install]
 WantedBy=multi-user.target"
