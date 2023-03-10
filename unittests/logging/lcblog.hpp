@@ -2,6 +2,9 @@
 #include <string> 
 #include <regex> 
 
+// Look at:
+// https://www.digitalocean.com/community/tutorials/how-to-manage-logfiles-with-logrotate-on-ubuntu-20-04
+
 class LCBLog
 {
 public:
@@ -14,7 +17,7 @@ public:
     void logS(T t)
     {
         if (isDaemon)
-            std::cout << getStamp() << "\t<I> ";
+            std::cout << getStamp() << "\t";
         prtStd(t);
     }
 
@@ -22,7 +25,7 @@ public:
     void logS(T t, Args... args)
     {
         if (isDaemon)
-            std::cout << getStamp() << "\t<I> ";
+            std::cout << getStamp() << "\t";
         prtStd(t, args...);
     }
 
@@ -30,7 +33,7 @@ public:
     void logE(T t)
     {
         if (isDaemon)
-            std::cerr << getStamp() << "\t<E> ";
+            std::cerr << getStamp() << "\t";
         prtStd(t);
     }
 
@@ -38,13 +41,13 @@ public:
     void logE(T t, Args... args)
     {
         if (isDaemon)
-            std::cerr << getStamp() << "\t<E> ";
+            std::cerr << getStamp() << "\t";
         prtStd(t, args...);
     }
 
 private:
-    bool isDaemon;
-    std::string printline;
+    bool isDaemon = false;
+    std::string printline = "";
 
     // Standard Out Printline
     //
@@ -150,9 +153,12 @@ private:
         prtErr(args...);
     }
 
+    // Clean string of extraeneous whitespace 
     void crush(std::string &s)
     {
+        // Remove multiple whitespace down to a single space
         s = std::regex_replace(s, std::regex("\\s+"), " ");
+        // Remove leading and trailing whitespace
         s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
     }
 
