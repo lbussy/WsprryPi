@@ -3,7 +3,7 @@
 #pragma once
 
 #include <iostream>
-#include <string> 
+#include <string>
 #include <regex>
 
 class LCBLog
