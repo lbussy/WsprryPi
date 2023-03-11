@@ -11,11 +11,14 @@ all: wspr
 mailbox.o:
 	$(CXX) $(CXXFLAGS) -c mailbox.c
 
-wspr: ver mailbox.o
-	$(CXX) $(CXXFLAGS) $(LED_PIN) -DMAKE_SRC_TAG="$(VER)" mailbox.o wspr.cpp -o$(OUT) $(LDLIBS)
+wspr: ver brh mailbox.o
+	$(CXX) $(CXXFLAGS) $(LED_PIN) -DMAKE_SRC_TAG="$(VER)" -DMAKE_SRC_BRH="$(BRH)" mailbox.o wspr.cpp -o$(OUT) $(LDLIBS)
 
 ver:
 	$(eval VER:=$(shell git describe --tags))
+
+brh:
+	$(eval BRH:=$(shell git rev-parse --abbrev-ref HEAD))
 
 clean:
 	$(RM) *.o wspr
