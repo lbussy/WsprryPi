@@ -1,3 +1,7 @@
+#ifndef _CONFIG_H
+#define _CONFIG_H
+#pragma once
+
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -109,3 +113,5 @@ private:
     bool use_led;
     int power_level;
 };
+
+#endif // _CONFIG_H

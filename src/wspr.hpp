@@ -1,5 +1,6 @@
 #ifndef _WSPR_H
 #define _WSPR_H
+#pragma once
 
 #include <stdio.h>
 #include <string.h>
