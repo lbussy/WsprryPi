@@ -1,3 +1,7 @@
+#ifndef _CONFIG_H
+#define _CONFIG_H
+#pragma once
+
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -53,6 +57,10 @@ public:
     {
         return use_led;
     }
+    int getPowerLevel()
+    {
+        return power_level;
+    }
 
 private:
     void valueHandler(const char *configfile)
@@ -85,6 +93,7 @@ private:
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
             use_led = reader.GetBoolean("Extended", "Use LED", false);
+            power_level = reader.GetInteger("Extended", "Power Level", 7);
         }
     }
 
@@ -102,4 +111,7 @@ private:
     bool selfcal;
     bool offset;
     bool use_led;
+    int power_level;
 };
+
+#endif // _CONFIG_H
