@@ -49,9 +49,9 @@ public:
     {
         return offset;
     }
-    bool useLED()
+    bool getUseLED()
     {
-        return useled;
+        return use_led;
     }
 
 private:
@@ -84,7 +84,7 @@ private:
             ppm = reader.GetReal("Extended", "PPM", 0.0);
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
-            useled = reader.GetBoolean("Extended", "Use LED", false);
+            use_led = reader.GetBoolean("Extended", "Use LED", false);
         }
     }
 
@@ -101,5 +101,5 @@ private:
     double ppm;
     bool selfcal;
     bool offset;
-    bool useled;
+    bool use_led;
 };

@@ -198,7 +198,7 @@ struct wConfig
     bool xmit_enabled = false;
     bool repeat = false;
     std::string callsign;
-    std::string locator;
+    std::string grid_square;
     std::string tx_power;
     std::string frequency_string;
     std::vector<double> center_freq_set;
@@ -209,7 +209,7 @@ struct wConfig
     bool no_delay = false;
     mode_type mode = WSPR;
     int terminate = -1;
-    bool useled = false;
+    bool use_led = false;
     bool daemon_mode = false;
     int power_level = 7;
     // PLLD clock frequency.
@@ -710,7 +710,7 @@ void wspr(
     const char *dbm,
     unsigned char *symbols)
 {
-    // Encode call, locator, and dBm into WSPR codeblock.
+    // Encode call, grid_square, and dBm into WSPR codeblock.
 
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
@@ -762,11 +762,11 @@ void wspr(
     // if(rand() % 2) nadd=0;
     if (!nadd)
     {
-        // Copy locator locally since it is declared const and we cannot modify
+        // Copy grid_square locally since it is declared const and we cannot modify
         // its contents in-place.
         char l[4];
         strncpy(l, l_pre, 4);
-        to_upper(l); // grid square Maidenhead locator (uppercase)
+        to_upper(l); // grid square Maidenhead grid_square (uppercase)
         ng = 180 * (179 - 10 * (l[0] - 'A') - (l[2] - '0')) + 10 * (l[1] - 'A') + (l[3] - '0');
     }
     int p = atoi(dbm); // EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
@@ -842,7 +842,7 @@ void wspr(
 void print_usage()
 {
     llog.logS("Usage:");
-    llog.logS("  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...");
+    llog.logS("  wspr [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
     llog.logS("    OR");
     llog.logS("  wspr [options] --test-tone f");
     llog.logS("");
@@ -904,14 +904,16 @@ bool getINIValues(bool reload = false)
     {
         config.xmit_enabled = iniConfig.getTransmit();
         config.callsign = iniConfig.getCallsign();
-        config.locator = iniConfig.getGridsquare();
+        config.grid_square = iniConfig.getGridsquare();
         config.tx_power = iniConfig.getTxpower();
         config.frequency_string = iniConfig.getFrequency();
         config.ppm = iniConfig.getPpm();
         config.self_cal = iniConfig.getSelfcal();
         config.random_offset = iniConfig.getOffset();
-        config.useled = iniConfig.useLED();
-        config.power_level = iniConfig.powerLevel();
+        config.use_led = iniConfig.getUseLED();
+        config.power_level = iniConfig.getPowerLevel();
+        llog.logS("DEBUG: iniConfig.getPowerLevel() = ", iniConfig.getPowerLevel());
+        llog.logS("DEBUG: config.power_level = ", config.power_level);
 
         if (! config.daemon_mode )
             llog.logS("\n============================================");
@@ -920,7 +922,7 @@ bool getINIValues(bool reload = false)
             llog.logS("============================================");
         llog.logS("Transmit Enabled:\t\t", ((config.xmit_enabled) ? "true" : "false"));
         llog.logS("Call Sign:\t\t\t", config.callsign);
-        llog.logS("Grid Square:\t\t\t", config.locator);
+        llog.logS("Grid Square:\t\t\t", config.grid_square);
         llog.logS("Transmit Power:\t\t\t", config.tx_power);
         llog.logS("Frequencies:\t\t\t", config.frequency_string);
         llog.logS("PPM Offset:\t\t\t", config.ppm);
@@ -928,7 +930,7 @@ bool getINIValues(bool reload = false)
         llog.logS("Check NTP Each Run (default):\t", ((config.self_cal) ? "true" : "false"));
         llog.logS("Use Frequency Randomization:\t", ((config.random_offset) ? "true" : "false"));
         llog.logS("Power Level:\t\t\t", config.power_level);
-        llog.logS("Use LED:\t\t\t", ((config.useled) ? "true" : "false"));
+        llog.logS("Use LED:\t\t\t", ((config.use_led) ? "true" : "false"));
         if (! config.daemon_mode )
             llog.logS("============================================\n");
         return true;
@@ -1135,7 +1137,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'l':
             // Use LED
-            config.useled = true;
+            config.use_led = true;
             break;
         case 'D':
             // Daemon mode, repeats indefinitely
@@ -1198,7 +1200,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
             unsigned int n_free_args = 0;
             while (optind < argc)
             {
-                // Check for callsign, locator, tx_power
+                // Check for callsign, grid_square, tx_power
                 if (n_free_args == 0)
                 {
                     config.callsign = argv[optind++];
@@ -1207,7 +1209,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
                 }
                 if (n_free_args == 1)
                 {
-                    config.locator = argv[optind++];
+                    config.grid_square = argv[optind++];
                     n_free_args++;
                     continue;
                 }
@@ -1230,7 +1232,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
 
     // Convert to uppercase
     transform(config.callsign.begin(), config.callsign.end(), config.callsign.begin(), ::toupper);
-    transform(config.locator.begin(), config.locator.end(), config.locator.begin(), ::toupper);
+    transform(config.grid_square.begin(), config.grid_square.end(), config.grid_square.begin(), ::toupper);
 
     // Check consistency among command line options.
     if (config.ppm && config.self_cal)
@@ -1240,9 +1242,9 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     if (config.mode == TONE)
     {
-        if ((config.callsign != "") || (config.locator != "") || (config.tx_power != "") || (config.center_freq_set.size() != 0) || config.random_offset)
+        if ((config.callsign != "") || (config.grid_square != "") || (config.tx_power != "") || (config.center_freq_set.size() != 0) || config.random_offset)
         {
-            llog.logE("Warning: Callsign, locator, etc. are ignored when generating test tone.");
+            llog.logE("Warning: Callsign, gridsquare, etc. are ignored when generating test tone.");
         }
         config.random_offset = 0;
         if (config.test_tone <= 0)
@@ -1253,9 +1255,9 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     else
     {
-        if ((config.callsign == "") || (config.locator == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
+        if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
-            llog.logE("Error: must specify callsign, locator, dBm, and at least one frequency.");
+            llog.logE("Error: must specify callsign, gridsquare, dBm, and at least one frequency.");
             llog.logE("Try: wspr --help");
             exit(-1);
         }
@@ -1266,7 +1268,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     {
         llog.logS("WSPR packet payload:");
         llog.logS("- Callsign: ", config.callsign);
-        llog.logS("- Locator:  ", config.locator);
+        llog.logS("- Locator:  ", config.grid_square);
         llog.logS("- Power:    ", config.tx_power, " dBm");
         llog.logS("Requested TX frequencies:");
         std::stringstream temp;
@@ -1537,7 +1539,7 @@ int main(const int argc, char *const argv[])
         llog.logS(temp.str());
         llog.logS("Press CTRL-C to exit.");
 
-        txon(config.useled, config.power_level);
+        txon(config.use_led, config.power_level);
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1574,7 +1576,7 @@ int main(const int argc, char *const argv[])
         { // Reload Loop >
             // Create WSPR symbols
             unsigned char symbols[162];
-            wspr(config.callsign.c_str(), config.locator.c_str(), config.tx_power.c_str(), symbols);
+            wspr(config.callsign.c_str(), config.grid_square.c_str(), config.tx_power.c_str(), symbols);
 
             // // Print encodeed packet
             // printf("WSPR codeblock: ");
@@ -1659,7 +1661,7 @@ int main(const int argc, char *const argv[])
                     struct timeval sym_start;
                     struct timeval diff;
                     int bufPtr = 0;
-                    txon(config.useled, config.power_level);
+                    txon(config.use_led, config.power_level);
                     for (int i = 0; i < 162; i++)
                     {
                         gettimeofday(&sym_start, NULL);
@@ -1674,7 +1676,7 @@ int main(const int argc, char *const argv[])
                     n_tx++;
 
                     // Turn transmitter off
-                    txoff(config.useled);
+                    txoff(config.use_led);
 
                     // Time Stamp
                     gettimeofday(&tvEnd, NULL);
