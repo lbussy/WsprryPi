@@ -220,7 +220,7 @@
                                             PPM Offset:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input type="number" min="-60" max="60" step=".0001" class="form-control"
+                                            <input type="number" min="-200" max="200" step=".000001" class="form-control"
                                                 id="ppm" placeholder="Enter PPM" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Enter a positive or negative decimal number
