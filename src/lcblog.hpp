@@ -165,12 +165,12 @@ private:
 
     std::string getStamp()
     {
-        char dts[20];
+        char dts[24];
         time_t t = time(0);
         struct tm *tm;
 
         tm = gmtime(&t);
-        strftime(dts, sizeof(dts), "%F %T", tm); 
+        strftime(dts, sizeof(dts), "%F %T %Z", tm);
         std::string str(dts);
         return str;
     }

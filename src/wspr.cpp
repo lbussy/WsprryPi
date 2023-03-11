@@ -1652,15 +1652,15 @@ int main(const int argc, char *const argv[])
                 if (center_freq_actual && config.xmit_enabled)
                 {
                     // Print a status message right before transmission begins.
-                    struct timeval tvBegin, tvEnd, tvDiff;
-                    gettimeofday(&tvBegin, NULL);
-                    std::cout << "TX started at: ";
-                    timeval_print(&tvBegin);
-                    std::cout << std::endl;
+                    llog.logS("Transmission started.");
 
-                    struct timeval sym_start;
-                    struct timeval diff;
+                    struct timeval tvBegin, sym_start, diff;
+                    gettimeofday(&tvBegin, NULL);
                     int bufPtr = 0;
+
+                    // Get Begin Timestamp
+                    auto txBegin = std::chrono::high_resolution_clock::now();
+
                     txon(config.use_led, config.power_level);
                     for (int i = 0; i < 162; i++)
                     {
@@ -1678,12 +1678,12 @@ int main(const int argc, char *const argv[])
                     // Turn transmitter off
                     txoff(config.use_led);
 
-                    // Time Stamp
-                    gettimeofday(&tvEnd, NULL);
-                    std::cout << "TX ended at: ";
-                    timeval_print(&tvEnd);
-                    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                    printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
+                    // Get End Timestamp
+                    auto txEnd = std::chrono::high_resolution_clock::now();
+                    // Calculate duration in <double> seconds
+                    std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
+                    double num_seconds = elapsed.count();
+                    llog.logS("Transmission completed, (", num_seconds, " sec.)");
                 }
                 else
                 {

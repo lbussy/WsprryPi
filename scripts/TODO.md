@@ -8,5 +8,4 @@
 # Shit I Need to Fix:
 
 - Branch not displaying correctly in exe
-- Get decimal seconds display from "Transmission started" message
-- Check for any other "cout" or "cerr"
+- Make a log page
