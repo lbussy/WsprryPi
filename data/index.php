@@ -77,11 +77,11 @@
                                 <div class="col-md-6">
                                     <div class="row gx-1 ">
                                         <div class="col-md-4 text-end">
-                                            <label class="form-check-label" for="useled">Enable LED:&nbsp;</label>
+                                            <label class="form-check-label" for="use_led">Enable LED:&nbsp;</label>
                                         </div>
                                         <div class="col-md-8">
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="useled"
+                                                <input class="form-check-input" type="checkbox" id="use_led"
                                                     data-form-type="other">
                                             </div>
                                         </div>
@@ -220,7 +220,7 @@
                                             PPM Offset:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input type="number" min="-60" max="60" step=".0001" class="form-control"
+                                            <input type="number" min="-200" max="200" step=".000001" class="form-control"
                                                 id="ppm" placeholder="Enter PPM" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Enter a positive or negative decimal number
@@ -247,10 +247,9 @@
                                 </div>
                             </div>
                         </div>
+                        <p></p>
 
                         <!-- End Fifth Row -->
-
-                        <hr class="border-2 border-top">
 
                         <div id="buttons" class="modal-footer justify-content-center">
                             <button id="submit" type="button" class="btn btn-primary">&nbsp;Save&nbsp;</button>
@@ -456,7 +455,7 @@
                 .done(function (configJson) {
                     try {
                         $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
-                        $('#useled').prop('checked', configJson["Extended"]["Use LED"]);
+                        $('#use_led').prop('checked', configJson["Extended"]["Use LED"]);
                         $('#callsign').val(configJson["Common"]["Call Sign"]);
                         $('#gridsquare').val(configJson["Common"]["Grid Square"]);
                         $('#dbm').val(configJson["Common"]["TX Power"]);
@@ -525,7 +524,7 @@
                 "Self Cal": $('#selfcal').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
-                "Use LED": $('#useled').is(":checked"),
+                "Use LED": $('#use_led').is(":checked"),
             };
 
             var Config = { Control, Common, Extended };

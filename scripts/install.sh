@@ -15,7 +15,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="devel"
+BRANCH="logd_work"
 VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
@@ -406,6 +406,27 @@ copy_file() {
 }
 
 ############
+### Copy Log Rotate Config
+### Required:
+############
+
+copy_logd() {
+    local scriptPath scriptName fullName curlFile
+    scriptName="${GITPROJ// /}"
+    scriptName="${logdName,,}"
+    scriptPath="/etc/logrotate.d/"
+    fullName="$scriptPath/$scriptName"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
+
+    # Download file
+    curl -s "$curlFile" > "$fullName" || warn
+
+    # See if file is an executable
+    chown root:root "$fullName"
+    chmod 0644 "$fullName"
+}
+
+############
 ### Check existence and version of any current script files
 ### Required:  scriptName - Name of script
 ### Returns:  0 to execute, 255 to skip
@@ -505,6 +526,7 @@ checkdaemon() {
 createdaemon () {
     local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell execStart
     unitFileLocation="/etc/systemd/system"
+    logFileLocation="/var/log"
     scriptName="$1"
     scriptPath="$2"
     arguments="$3"
@@ -513,7 +535,12 @@ createdaemon () {
     productName="$6"
     processShell="$7"
     execStart=""
+    dirName="${productName// /}"
+    dirName="${dirName,,}"
     unitFile="$unitFileLocation/$daemonName.service"
+    logFileLocation="$logFileLocation/$dirName"
+    stdLog="$logFileLocation/$daemonName.transmit.log"
+    errLog="$logFileLocation/$daemonName.error.log"
 
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
     if [ -n "$processShell" ]; then
@@ -550,11 +577,14 @@ User=$userName
 Group=$userName
 ExecStart=$execStart
 SyslogIdentifier=$daemonName
+StandardOutput=append:$stdLog
+StandardError=append:$errLog
 
 [Install]
 WantedBy=multi-user.target"
     } > "$unitFile"
 
+    [[ -d "$logFileLocation" ]] || mkdir "$logFileLocation"
     chown root:root "$unitFile"
     chmod 0644 "$unitFile"
     echo -e "Reloading systemd config."

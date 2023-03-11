@@ -1,3 +1,7 @@
+#ifndef _CONFIG_H
+#define _CONFIG_H
+#pragma once
+
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -49,13 +53,13 @@ public:
     {
         return offset;
     }
-    bool useLED()
+    bool getUseLED()
     {
-        return useled;
+        return use_led;
     }
-    bool powerLevel()
+    int getPowerLevel()
     {
-        return powerlevel;
+        return power_level;
     }
 
 private:
@@ -88,8 +92,8 @@ private:
             ppm = reader.GetReal("Extended", "PPM", 0.0);
             selfcal = reader.GetBoolean("Extended", "Self Cal", false);
             offset = reader.GetBoolean("Extended", "Offset", false);
-            useled = reader.GetBoolean("Extended", "Use LED", false);
-            powerlevel = reader.GetBoolean("Extended", "Power Level", 7);
+            use_led = reader.GetBoolean("Extended", "Use LED", false);
+            power_level = reader.GetInteger("Extended", "Power Level", 7);
         }
     }
 
@@ -106,6 +110,8 @@ private:
     double ppm;
     bool selfcal;
     bool offset;
-    bool useled;
-    int powerlevel;
+    bool use_led;
+    int power_level;
 };
+
+#endif // _CONFIG_H

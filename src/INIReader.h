@@ -1,22 +1,7 @@
-// Read an INI file into easy-to-access name/value pairs.
+#ifndef _INIREADER_H
+#define _INIREADER_H
+#pragma once
 
-// inih and INIReader are released under the New BSD license (see LICENSE.txt).
-// Go to the project home page for more info:
-//
-// https://github.com/benhoyt/inih
-/* inih -- simple .INI file parser
-
-inih is released under the New BSD license (see LICENSE.txt). Go to the project
-home page for more info:
-
-https://github.com/benhoyt/inih
-
-*/
-
-#ifndef __INI_H__
-#define __INI_H__
-
-/* Make this header file easier to include in C++ code */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -459,4 +444,4 @@ inline int INIReader::ValueHandler(void* user, const char* section, const char* 
     return 1;
 }
 
-#endif  // __INIREADER__
+#endif  // _INIREADER_H
