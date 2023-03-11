@@ -7,5 +7,4 @@
 
 # Shit I Need to Fix:
 
-- Branch not displaying correctly in exe
 - Make a log page

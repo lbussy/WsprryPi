@@ -912,8 +912,6 @@ bool getINIValues(bool reload = false)
         config.random_offset = iniConfig.getOffset();
         config.use_led = iniConfig.getUseLED();
         config.power_level = iniConfig.getPowerLevel();
-        llog.logS("DEBUG: iniConfig.getPowerLevel() = ", iniConfig.getPowerLevel());
-        llog.logS("DEBUG: config.power_level = ", config.power_level);
 
         if (! config.daemon_mode )
             llog.logS("\n============================================");
