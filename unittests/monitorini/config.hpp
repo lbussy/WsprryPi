@@ -1,3 +1,7 @@
+#ifndef _MONITORINI_H
+#define _MONOTORINI_H
+#pragma once
+
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -103,3 +107,5 @@ private:
     bool offset;
     bool use_led;
 };
+
+#endif // _MONITORINI_H

@@ -57,7 +57,8 @@ private:
     {
         // String argument
         printline = printline + t;
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cout << printline << std::endl << std::flush;
         printline = "";
     }
@@ -65,7 +66,8 @@ private:
     {
         // Char argument
         printline = printline + t;
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cout << printline << std::endl << std::flush;
         printline = "";
     }
@@ -74,7 +76,8 @@ private:
     {
         // Numeric argument
         printline = printline + std::to_string(t);
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cout << printline << std::endl << std::flush;
         printline = "";
     }
@@ -109,7 +112,8 @@ private:
     {
         // String argument
         printline = printline + t;
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cerr << printline << std::endl << std::flush;
         printline = "";
     }
@@ -117,7 +121,8 @@ private:
     {
         // Char argument
         printline = printline + t;
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cerr << printline << std::endl << std::flush;
         printline = "";
     }
@@ -126,7 +131,8 @@ private:
     {
         // Numeric argument
         printline = printline + std::to_string(t);
-        crush(printline);
+        if (isDaemon)
+            crush(printline);
         std::cerr << printline << std::endl << std::flush;
         printline = "";
     }

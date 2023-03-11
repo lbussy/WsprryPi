@@ -1,5 +1,6 @@
 #ifndef _VERSION_H
 #define _VERSION_H
+#pragma once
 
 #define stringify(s) _stringifyDo(s)
 #define _stringifyDo(s) #s
