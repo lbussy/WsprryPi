@@ -539,7 +539,7 @@ createdaemon () {
     dirName="${dirName,,}"
     unitFile="$unitFileLocation/$daemonName.service"
     logFileLocation="$logFileLocation/$dirName"
-    stdLog="$logFileLocation/$daemonName.access.log"
+    stdLog="$logFileLocation/$daemonName.transmit.log"
     errLog="$logFileLocation/$daemonName.error.log"
 
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
