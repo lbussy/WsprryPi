@@ -241,7 +241,7 @@
                                 <div class="col-md-8">
                                     <div class="range-wrap">
                                         <input id="power_level" type="range" class="range" min="0" max="7">
-                                        <output id="rangeText" class="bubble bg-dark"></output>
+                                        <output id="rangeText" class="bubble"></output>
                                     </div>
                                 </div>
                                 <div class="col-md-2"></div>
@@ -321,7 +321,7 @@
                 resetPage();
             });
 
-            // setup an event handler to set the text when the range value is dragged (see event for input) or changed (see event for change)
+            // Handle slider move and bubble value
             $('#power_level').on('input change', function () {
                 $('#rangeText').html(rangeValues[$(this).val()]);
                 const val = $('#power_level').val();
