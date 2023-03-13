@@ -1279,7 +1279,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         temp.str("");
         if (config.self_cal)
         {
-            temp << "- NTP will be used to periodically calibrate the transmission frequency." << std::endl;
+            temp << "- Using NTP to calibrate transmission frequency." << std::endl;
         }
         else if (config.ppm)
         {
