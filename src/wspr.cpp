@@ -1610,7 +1610,7 @@ int main(const int argc, char *const argv[])
                 // Status message before transmission
                 std::stringstream temp;
                 temp << std::setprecision(6) << std::fixed;
-                temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+                temp << "Center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " trans: " << center_freq_desired / 1e6 << " MHz.";
                 llog.logS(temp.str());
 
                 // Wait for WSPR transmission window to arrive.
