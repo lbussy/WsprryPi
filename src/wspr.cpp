@@ -1279,7 +1279,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         temp.str("");
         if (config.self_cal)
         {
-            temp << "- NTP will be used to periodically calibrate the transmission frequency." << std::endl;
+            temp << "- Using NTP to calibrate transmission frequency." << std::endl;
         }
         else if (config.ppm)
         {
@@ -1484,7 +1484,8 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 int main(const int argc, char *const argv[])
 {
     if ( ! parse_commandline(argc, argv) ) return 1;
-    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), "), running on: ", RPiVersion(), ".");
+    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
+    llog.logS("Running on: ", RPiVersion(), ".");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 
