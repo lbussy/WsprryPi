@@ -336,3 +336,31 @@ iframe
 {
   margin-bottom: .25rem;
 }
+
+.range-wrap {
+  position: relative;
+  margin: 0 auto 3rem;
+}
+.range {
+  width: 100%;
+}
+.bubble {
+  background-color: #2c3f50;
+  color: white;
+  padding: 4px 7px;
+  position: absolute;
+  border-radius: 10px;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  border-radius: 10px;
+  background: #2c3f50;
+  top: -5px;
+  left: 50%;
+}
