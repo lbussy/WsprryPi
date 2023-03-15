@@ -111,4 +111,3 @@ function myException($exception) {
     header("HTTP/1.0 500 System Error");
     echo "<b>Error:</b> " . $exception->getMessage();
   }
-?>

@@ -22,8 +22,7 @@
                 &nbsp;
                 Wsprry Pi
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive"
-                aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarResponsive">
@@ -32,12 +31,10 @@
                 </ul>
                 <ul class="navbar-nav ms-md-auto">
                     <li class="nav-item">
-                        <a target="_blank" rel="noopener" class="nav-link" href="https://github.com/lbussy/WsprryPi/"><i
-                                class="fa-brands fa-github"></i>&nbsp;&nbsp;GitHub</a>
+                        <a target="_blank" rel="noopener" class="nav-link" href="https://github.com/lbussy/WsprryPi/"><i class="fa-brands fa-github"></i>&nbsp;&nbsp;GitHub</a>
                     </li>
                     <li class="nav-item">
-                        <a target="_blank" rel="noopener" class="nav-link" href="http://wsprdocs.aa0nt.net"><i
-                                class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
+                        <a target="_blank" rel="noopener" class="nav-link" href="http://wsprdocs.aa0nt.net"><i class="fa-solid fa-book"></i>&nbsp;&nbsp;Documentation</a>
                     </li>
                 </ul>
             </div>
@@ -48,7 +45,7 @@
 
         <div class="card border-primary mb-3">
             <div class="card-header">For server:
-                <?php echo gethostname();?>
+                <?php echo gethostname(); ?>
             </div>
             <div class="card-body">
 
@@ -68,8 +65,7 @@
                                         </div>
                                         <div class="col-md-8">
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="transmit"
-                                                    data-form-type="other">
+                                                <input class="form-check-input" type="checkbox" id="transmit" data-form-type="other">
                                             </div>
                                         </div>
                                     </div>
@@ -81,8 +77,7 @@
                                         </div>
                                         <div class="col-md-8">
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="use_led"
-                                                    data-form-type="other">
+                                                <input class="form-check-input" type="checkbox" id="use_led" data-form-type="other">
                                             </div>
                                         </div>
                                     </div>
@@ -101,9 +96,7 @@
                                             Call Sign:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input minlength="4" type="text" pattern="[-a-zA-Z0-9\/]+"
-                                                class="form-control" id="callsign" placeholder="Enter callsign"
-                                                required>
+                                            <input minlength="4" type="text" pattern="[-a-zA-Z0-9\/]+" class="form-control" id="callsign" placeholder="Enter callsign" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Please enter your callsign.</div>
                                         </div>
@@ -115,9 +108,7 @@
                                             Grid Square:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input minlength="4" maxlength="4" pattern="[a-z,A-Z]{2}[0-9]{2}"
-                                                type="text" class="form-control" id="gridsquare"
-                                                placeholder="Enter gridsquare" required>
+                                            <input minlength="4" maxlength="4" pattern="[a-z,A-Z]{2}[0-9]{2}" type="text" class="form-control" id="gridsquare" placeholder="Enter gridsquare" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Please enter your four-character grid square.
                                             </div>
@@ -139,8 +130,7 @@
                                             Transmit Power:&nbsp;
                                         </div>
                                         <div class="was-validated col-md-9">
-                                            <input type="number" min="-10" max="62" step="1" class="form-control"
-                                                id="dbm" placeholder="Enter transmit power" required>
+                                            <input type="number" min="-10" max="62" step="1" class="form-control" id="dbm" placeholder="Enter transmit power" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Please enter your transmit power in dBm
                                                 (without the 'dBm' suffix.)</div>
@@ -153,13 +143,10 @@
                                             Frequency:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input type="text" class="form-control" id="frequencies"
-                                                placeholder="Enter frequency" oninput="checkFreq();">
+                                            <input type="text" class="form-control" id="frequencies" placeholder="Enter frequency" oninput="checkFreq();">
                                             <div class="valid-feedback">Ok.</div>
                                             <div class="invalid-feedback">Add a single frequency or a space-delimited
-                                                list (see <a
-                                                    href="https://wsprry-pi.readthedocs.io/en/latest/Operations/index.html"
-                                                    target="_blank" rel="noopener noreferrer">documentation</a>.)</div>
+                                                list (see <a href="https://wsprry-pi.readthedocs.io/en/latest/Operations/index.html" target="_blank" rel="noopener noreferrer">documentation</a>.)</div>
                                         </div>
                                     </div>
                                 </div>
@@ -185,8 +172,7 @@
                                             </div>
                                             <div class="col-md-8">
                                                 <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="useoffset"
-                                                        data-form-type="other">
+                                                    <input class="form-check-input" type="checkbox" id="useoffset" data-form-type="other">
                                                 </div>
                                             </div>
                                         </div>
@@ -208,8 +194,7 @@
                                         </div>
                                         <div class="col-md-8">
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="selfcal"
-                                                    data-form-type="other">
+                                                <input class="form-check-input" type="checkbox" id="selfcal" data-form-type="other">
                                             </div>
                                         </div>
                                     </div>
@@ -220,8 +205,7 @@
                                             PPM Offset:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input type="number" min="-200" max="200" step=".000001" class="form-control"
-                                                id="ppm" placeholder="Enter PPM" required>
+                                            <input type="number" min="-200" max="200" step=".000001" class="form-control" id="ppm" placeholder="Enter PPM" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Enter a positive or negative decimal number
                                                 for frequency correction.</div>
@@ -257,7 +241,7 @@
                             <button id="reset" type="button" class="btn btn-secondary">Reset</button>
                         </div>
 
-                    </fieldset>
+                        </fieldset>
                 </form>
             </div>
         </div>
@@ -274,9 +258,7 @@
                     <p>Created by Lee Bussy, AA0NT.</p>
                     <p>Code released under the <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md">GNU
                             General Public License</a>.</p>
-                    <p>Based on <a href="https://getbootstrap.com/" rel="nofollow">Bootstrap</a>. Icons from <a
-                            href="https://fontawesome.com/" rel="nofollow">Font Awesome</a>. Web fonts from <a
-                            href="https://fonts.google.com/" rel="nofollow">Google</a>.</p>
+                    <p>Based on <a href="https://getbootstrap.com/" rel="nofollow">Bootstrap</a>. Icons from <a href="https://fontawesome.com/" rel="nofollow">Font Awesome</a>. Web fonts from <a href="https://fonts.google.com/" rel="nofollow">Google</a>.</p>
                 </div>
             </div>
         </footer>
@@ -289,8 +271,7 @@
         var url = "wspr_ini.php";
         var populateConfigRunning = false;
 
-        var rangeValues =
-        {
+        var rangeValues = {
             // Define range labels for slider
             "0": "2mA<br />-3.4dBm",
             "1": "4mA<br />2.1dBm",
@@ -302,27 +283,27 @@
             "7": "16mA<br />10.6dBm"
         };
 
-        $(document).ready(function () {
+        $(document).ready(function() {
             bindActions();
             loadPage();
         });
 
         function bindActions() {
             // Grab Self Cal Switch
-            $("#selfcal").on("click", function () {
+            $("#selfcal").on("click", function() {
                 clickSelfCal();
             });
 
             // Grab Submit and Reset Buttons
-            $("#submit").click(function () {
+            $("#submit").click(function() {
                 savePage();
             });
-            $("#reset").click(function () {
+            $("#reset").click(function() {
                 resetPage();
             });
 
             // Handle slider move and bubble value
-            $('#power_level').on('input change', function () {
+            $('#power_level').on('input change', function() {
                 $('#rangeText').html(rangeValues[$(this).val()]);
                 const val = $('#power_level').val();
                 let valPct = (val / 7);
@@ -418,8 +399,7 @@
             if (isValid) {
                 $("#frequencies").removeClass("is-invalid");
                 $("#frequencies").addClass("is-valid");
-            }
-            else {
+            } else {
                 $("#frequencies").removeClass("is-valid");
                 $("#frequencies").addClass("is-invalid");
             }
@@ -456,10 +436,10 @@
             if (populateConfigRunning) return;
             populateConfigRunning = true;
 
-            var configJson = $.getJSON(url, function (data) {
-                // Clear any warnings here
-            })
-                .done(function (configJson) {
+            var configJson = $.getJSON(url, function(data) {
+                    // Clear any warnings here
+                })
+                .done(function(configJson) {
                     try {
                         $('#transmit').prop('checked', configJson["Control"]["Transmit"]);
                         $('#use_led').prop('checked', configJson["Extended"]["Use LED"]);
@@ -473,8 +453,7 @@
                         if ($('#selfcal').is(":checked")) {
                             // Disable PPM when using self-cal
                             $('#ppm').prop("disabled", true);
-                        }
-                        else {
+                        } else {
                             // Enable PPM when not using self-cal
                             $('#ppm').prop("disabled", false);
                         }
@@ -497,12 +476,12 @@
                         setTimeout(populateConfig, 10000);
                     }
                 })
-                .fail(function (data) {
+                .fail(function(data) {
                     alert("Unable to retrieve data.")
                     console.log("Unable to retrieve data.");
                     setTimeout(populateConfig, 10000);
                 })
-                .always(function (data) {
+                .always(function(data) {
                     populateConfigRunning = false;
                 });
         };
@@ -534,23 +513,27 @@
                 "Use LED": $('#use_led').is(":checked"),
             };
 
-            var Config = { Control, Common, Extended };
+            var Config = {
+                Control,
+                Common,
+                Extended
+            };
             var json = JSON.stringify(Config);
 
             $.ajax({
-                url: url,
-                data: json,
-                type: 'PUT'
-            })
-                .done(function (data) {
+                    url: url,
+                    data: json,
+                    type: 'PUT'
+                })
+                .done(function(data) {
                     // Done
                 })
-                .fail(function (data) {
+                .fail(function(data) {
                     // Fail
                     alert("Unable to save data.")
                     console.log("Unable to POST data.\n" + data);
                 })
-                .always(function (data) {
+                .always(function(data) {
                     setTimeout(() => {
                         $('#submit').prop("disabled", false);
                         $('#reset').prop("disabled", false);
@@ -571,13 +554,11 @@
             if ($('#selfcal').is(":checked")) {
                 // Disable PPM when using self-cal
                 $('#ppm').prop("disabled", true);
-            }
-            else {
+            } else {
                 // Enable PPM when not using self-cal
                 $('#ppm').prop("disabled", false);
             }
         };
-
     </script>
 </body>
 
