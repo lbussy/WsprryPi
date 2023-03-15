@@ -143,7 +143,7 @@ You may create transmission gaps by specifying a TX frequency of 0.
 
 ### Command Line Entries for Testing
 
-You may transmit a constant test tone at a specific frequency for testing. In this example, wspr will send a tone at 780 kHz (780000 Hz):
+You may transmit a constant tone at a specific frequency for testing. In this example, wspr will send a tone at 780 kHz (780000 Hz):
 
 `wspr --test-tone 780e3`
 
