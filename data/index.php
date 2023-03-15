@@ -18,7 +18,7 @@
     <div class="navbar navbar-expand-lg fixed-top navbar-dark bg-primary">
         <div class="container">
             <a href="../" class="navbar-brand">
-                <img src="ham_white.svg" style="width:30px;height:30px;" />
+                <img src="antenna.svg" style="width:30px;height:30px;" />
                 &nbsp;
                 Wsprry Pi
             </a>
