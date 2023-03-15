@@ -1,4 +1,4 @@
-# Created for WsprryPi version "0.0.1"
+# Created for WsprryPi version "1.1.0"
 /var/log/wsprrypi/wspr.*.log {
     rotate 14
     daily
