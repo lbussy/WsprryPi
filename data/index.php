@@ -237,14 +237,14 @@
                         <p>This sets power on the Pi GPIO only; any amplification must be taken into account.</p>
                         <div class="container">
                             <div class="was-validated row">
-                                <div class="col-md-12">
-                                    <div class="row gx-1 ">
-                                        <class="col-md-12">
-                                            <input type="range" min="0" max="7" step="1" value="7" class="form-range"
-                                                id="power_level" data-form-type="other">
-                                            <div class="form-label text-center" id="rangeText"></div>
+                                <div class="col-md-2"></div>
+                                <div class="col-md-8">
+                                    <div class="range-wrap">
+                                        <input id="power_level" type="range" class="range" min="0" max="7">
+                                        <output id="rangeText" class="bubble"></output>
                                     </div>
                                 </div>
+                                <div class="col-md-2"></div>
                             </div>
                         </div>
                         <p></p>
@@ -321,9 +321,16 @@
                 resetPage();
             });
 
-            // setup an event handler to set the text when the range value is dragged (see event for input) or changed (see event for change)
+            // Handle slider move and bubble value
             $('#power_level').on('input change', function () {
                 $('#rangeText').html(rangeValues[$(this).val()]);
+                const val = $('#power_level').val();
+                let valPct = (val / 7);
+                const min = 0.0095;
+                const max = .984;
+                const range = max - min;
+                valPct = ((valPct * range) + min) * 100;
+                $('#rangeText').attr("style", "left:" + valPct + "%;");
             });
         };
 
@@ -570,6 +577,7 @@
                 $('#ppm').prop("disabled", false);
             }
         };
+
     </script>
 </body>
 
