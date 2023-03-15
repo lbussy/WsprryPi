@@ -15,8 +15,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="main"
-VERSION="1.0.0"
+BRANCH="devel"
+VERSION="0.0.1"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
@@ -34,7 +34,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-BRANCH="main"
+BRANCH="devel"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -220,6 +220,8 @@ uninstall() {
     rm /usr/local/bin/shutdown-button.py
     rm -fr /var/www/html/wspr/
     rm /etc/modprobe.d/alsa-blacklist.conf
+    rm -fr /var/log/wsprrypi
+    rm /etc/logrotate.d/wsprrypi
 }
 
 ############

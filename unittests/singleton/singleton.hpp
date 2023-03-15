@@ -1,3 +1,7 @@
+#ifndef _SINGLETON_H
+#define _SINGLETON_H
+#pragma once
+
 #include <netinet/in.h>
 #include <unistd.h>
 #include <cerrno>
@@ -70,3 +74,5 @@ private:
     int rc;
     uint16_t port;
 };
+
+#endif // _SINGLETON_H

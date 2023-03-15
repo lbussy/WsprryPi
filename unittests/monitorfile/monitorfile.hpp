@@ -1,3 +1,7 @@
+#ifndef _MONITORFILE_H
+#define _MONITORFILE_H
+#pragma once
+
 #include <filesystem>
 #include <iostream>
 
@@ -41,3 +45,5 @@ private:
     fs::file_time_type org_time;
     fs::file_time_type new_time;
 };
+
+#endif // _MONITORFILE_H

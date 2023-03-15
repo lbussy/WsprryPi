@@ -15,8 +15,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="main"
-VERSION="1.0.0"
+BRANCH="devel"
+VERSION="0.0.1"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -25,8 +25,8 @@ PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
 APTPACKAGES="apache2 php"
-WWWFILES="android-chrome-192x192.png android-chrome-512x512.png apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css bootstrap-icons.css custom.min.css favicon-16x16.png favicon-32x32.png favicon.ico ham_white.svg index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
-WWWREMOV=""
+WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
+WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
@@ -37,8 +37,6 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 init() {
     # Set up some project variables we won't have running as a curled script
-BRANCH="main"
-    # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
 
@@ -408,6 +406,27 @@ copy_file() {
 }
 
 ############
+### Copy Log Rotate Config
+### Required:
+############
+
+copy_logd() {
+    local scriptPath scriptName fullName curlFile
+    scriptName="${GITPROJ// /}"
+    scriptName="${logdName,,}"
+    scriptPath="/etc/logrotate.d/"
+    fullName="$scriptPath/$scriptName"
+    curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
+
+    # Download file
+    curl -s "$curlFile" > "$fullName" || warn
+
+    # See if file is an executable
+    chown root:root "$fullName"
+    chmod 0644 "$fullName"
+}
+
+############
 ### Check existence and version of any current script files
 ### Required:  scriptName - Name of script
 ### Returns:  0 to execute, 255 to skip
@@ -507,6 +526,7 @@ checkdaemon() {
 createdaemon () {
     local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell execStart
     unitFileLocation="/etc/systemd/system"
+    logFileLocation="/var/log"
     scriptName="$1"
     scriptPath="$2"
     arguments="$3"
@@ -515,7 +535,12 @@ createdaemon () {
     productName="$6"
     processShell="$7"
     execStart=""
+    dirName="${productName// /}"
+    dirName="${dirName,,}"
     unitFile="$unitFileLocation/$daemonName.service"
+    logFileLocation="$logFileLocation/$dirName"
+    stdLog="$logFileLocation/$daemonName.transmit.log"
+    errLog="$logFileLocation/$daemonName.error.log"
 
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
     if [ -n "$processShell" ]; then
@@ -552,11 +577,14 @@ User=$userName
 Group=$userName
 ExecStart=$execStart
 SyslogIdentifier=$daemonName
+StandardOutput=append:$stdLog
+StandardError=append:$errLog
 
 [Install]
 WantedBy=multi-user.target"
     } > "$unitFile"
 
+    [[ -d "$logFileLocation" ]] || mkdir "$logFileLocation"
     chown root:root "$unitFile"
     chmod 0644 "$unitFile"
     echo -e "Reloading systemd config."

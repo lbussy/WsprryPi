@@ -1,5 +1,6 @@
 #ifndef _GPIO_H
 #define _GPIO_H
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>

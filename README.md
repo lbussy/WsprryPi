@@ -1,5 +1,5 @@
 # Wsprry Pi (Whispery Pi)
-*A bareback LF/MF/HF/VHF WSPR transmitter for the Raspberry Pi*
+*A QRP LF/MF/HF/VHF WSPR transmitter leveraging a Raspberry Pi*
 
 [![Documentation Status](https://readthedocs.org/projects/wsprry-pi/badge/?version=latest)](https://wsprry-pi.readthedocs.io/en/latest/?badge=latest)
 

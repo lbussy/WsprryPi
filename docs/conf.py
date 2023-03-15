@@ -111,7 +111,7 @@ html_theme_options = {
     'titles_only': False
 }
 
-html_logo = '_static/ham_white.svg'
+html_logo = '_static/antenna.svg'
 html_favicon = '_static/favicon.ico'
 # Put the custom.css in the html static path folder (Default is _static folder).
 html_css_files = [

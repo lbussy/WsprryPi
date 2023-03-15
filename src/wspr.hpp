@@ -1,5 +1,6 @@
 #ifndef _WSPR_H
 #define _WSPR_H
+#pragma once
 
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +34,7 @@
 #include "singleton.hpp"
 #include "monitorfile.hpp"
 #include "config.hpp"
+#include "lcblog.hpp"
 
 #ifdef __cplusplus
 extern "C"

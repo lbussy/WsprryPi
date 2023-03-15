@@ -1,4 +1,5 @@
 <?php
+set_exception_handler('myException');
 
 $file = "wspr.ini";
 
@@ -8,7 +9,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'PUT
     $decoded = urldecode($post);
     $data = json_decode($post, true);
     // Write INI
-    write_ini_file($file, $data);
+    if (write_ini_file($file, $data)) {
+        header("Cache-Control: no-cache, must-revalidate");
+        header("HTTP/1.0 200 Ok");
+    } else {
+        ; // Errors written beloe
+    }
 } else {
     // Read and send INI
     read_ini_file($file);
@@ -18,22 +24,29 @@ function read_ini_file($file)
 {
     // Parse with sections
     $ini_array = parse_ini_file($file, true, INI_SCANNER_TYPED);
+    if (! $ini_array) {
+        throw new Exception('Unable to read configuration.');
+    }
     try {
+        header("Cache-Control: no-cache, must-revalidate");
+        header("HTTP/1.0 200 Ok");
         echo json_encode($ini_array);
-    } catch (HttpException $ex) {
-        echo $ex;
+    }
+    // Catch other exceptions
+    catch(Exception $e) {
+        throw new Exception('Unable to process configuration: ' . $e->getMessage());
     }
 }
 
 function write_ini_file($file, $array = []) {
     // check first argument is string
     if (!is_string($file)) {
-        throw new \InvalidArgumentException('Function argument 1 must be a string.');
+        throw new Exception('Function argument 1 must be a string.');
     }
 
     // check second argument is array
     if (!is_array($array)) {
-        throw new \InvalidArgumentException('Function argument 2 must be an array.');
+        throw new Exception('Function argument 2 must be an array.');
     }
 
     // process array
@@ -67,7 +80,7 @@ function write_ini_file($file, $array = []) {
     $max_retries = 100;
 
     if (!$fp) {
-        return false;
+        throw new Exception('Unable to find file.');
     }
 
     // loop until get lock, or reach max retries
@@ -80,7 +93,7 @@ function write_ini_file($file, $array = []) {
 
     // couldn't get the lock
     if ($retries == $max_retries) {
-        return false;
+        throw new Exception('Unable to obtain lock on file.');
     }
 
     // got lock, write data
@@ -93,4 +106,8 @@ function write_ini_file($file, $array = []) {
     return true;
 }
 
-?>
+function myException($exception) {
+    header("Cache-Control: no-cache, must-revalidate");
+    header("HTTP/1.0 500 System Error");
+    echo "<b>Error:</b> " . $exception->getMessage();
+  }

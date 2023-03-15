@@ -24,7 +24,7 @@ void getConfig(std::string inifile)
         std::cout << "Do not use NTP sync:\t\t" << std::boolalpha << (!config.getSelfcal()) << std::endl;
         std::cout << "Check NTP Each Run (default):\t" << std::boolalpha << config.getSelfcal() << std::endl;
         std::cout << "Use Frequency Randomization:\t" << std::boolalpha << config.getOffset() << std::endl;
-        std::cout << "Use LED:\t\t\t" << std::boolalpha << config.useLED() << std::endl;
+        std::cout << "Use LED:\t\t\t" << std::boolalpha << config.getUseLED() << std::endl;
     }
 }
 

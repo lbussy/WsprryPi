@@ -4,7 +4,7 @@
 #include <bcm_host.h>
 
 int ver();
-const char* version();
+const char* RPiVersion();
 unsigned gpioBase();
 
 int ver()
@@ -14,7 +14,7 @@ int ver()
     return bcm_host_get_processor_id();
 }
 
-const char* version()
+const char* RPiVersion()
 {
     const char* vertext[4] = {
                 "Raspberry Pi 1 or Zero Model (BCM2835)",

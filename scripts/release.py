@@ -59,6 +59,7 @@ def edit_files():
     replace_in_file("install.sh", "BRANCH=", branch)
     replace_in_file("uninstall.sh", "BRANCH=", branch)
     replace_in_file("shutdown-button.py", "# Created for " + project + " version ", version)
+    replace_in_file("logrotate.d", "# Created for " + project + " version ", version)
 
 
 def compile():
@@ -80,7 +81,7 @@ def copy(file):
     project_dir_command = "git rev-parse --show-toplevel"
     project_dir = subprocess.check_output(project_dir_command, shell=True).decode().strip()
     source_dir = project_dir + "/src"
-    copy_command = "cp -f " + source_dir + "/wspr " + current_dir
+    copy_command = "cp -f " + source_dir + "/" + file + " " + current_dir
     print("Copying {} to {}.".format(file, current_dir))
     subprocess.check_output(copy_command, shell=True)
 
