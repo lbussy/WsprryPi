@@ -15,6 +15,7 @@ About_Wsprry_Pi/index
 Install/index
 Web_UI_Operations/index
 Command_Line_Operations/index
+Advanced_Operations/index
 Internals/index
 Development/index
 FAQ/index
