@@ -1,4 +1,4 @@
-# Wsprry Pi Operations
+# Web UI Operations
 
 All normal control operations revolve around the Wsprry Pi's configuration file. This file is manipulated by a web UI and accessed by the `wspr` executable. If wspr is running, a change to this file will take effect at the next transmission period, which is the top of an even minute for normal WSPR, or at the top of the quarter hour for -15 operations. If wspr is not actively transmitting and you change the transmit selection, the system will apply the changes at the next proper WSPR window.
 
