@@ -193,7 +193,7 @@ Frequency calibration is required to ensure the WSPR-2 transmission occurs withi
 
 You may specify the power level for exceptional cases where you desire an extremely low one. The options are:
 
-- *Power Level**:
+- **Power Level**:
   - *0*: 2mA or -3.4dBm
   - *1*: 4mA or 2.1dBm
   - *2*: 6mA or 4.9dBm
