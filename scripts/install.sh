@@ -32,6 +32,17 @@ if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 ############
+### Bitness
+############
+
+check_bitness() {
+    if [ "$(getconf LONG_BIT)" == "64" ]; then
+        echo -e "\nRaspbian 64-bit is not currently supported\n"
+        exit 1
+    fi
+}
+
+############
 ### Init
 ############
 
@@ -551,7 +562,7 @@ createdaemon () {
     fi
     if [ -n "$scriptName" ]; then execStart="${execStart}$scriptName"; fi
     if [ -n "$arguments" ]; then execStart="${execStart} $arguments"; fi
-    
+
     if [ -f "$unitFile" ]; then
         echo -e "\nStopping $daemonName daemon.";
         systemctl stop "$daemonName";
@@ -768,6 +779,7 @@ EOF
 
 main() {
     VERBOSE=true  # Do not trim logs
+    check_bitness # make sure we are not 64-bit
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
