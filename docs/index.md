@@ -13,7 +13,9 @@ Wsprry Pi (whispery pie) was developed to enable ham enthusiasts to enter this r
 About_WSPR/index
 About_Wsprry_Pi/index
 Install/index
-Operations/index
+Web_UI_Operations/index
+Command_Line_Operations/index
+Advanced_Operations/index
 Internals/index
 Development/index
 FAQ/index
