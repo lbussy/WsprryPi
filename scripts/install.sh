@@ -411,12 +411,13 @@ copy_file() {
 ############
 
 copy_logd() {
-    local scriptPath scriptName fullName curlFile
+    local scriptPath fullName curlFile
     scriptName="${GITPROJ// /}"
     scriptName="${logdName,,}"
-    scriptPath="/etc/logrotate.d/"
-    fullName="$scriptPath/$scriptName"
+    scriptPath="/etc/logrotate.d"
+    fullName="$scriptPath/wspr"
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
+    echo -e "Creating logrotate.d configuration."
 
     # Download file
     curl -s "$curlFile" > "$fullName" || warn
@@ -792,6 +793,7 @@ main() {
             * ) echo ;;
         esac
     fi
+    copy_logd "$@" # Enable log rotation
     aptPackages # Install any apt packages needed
     doWWW # Download website
     disable_sound
