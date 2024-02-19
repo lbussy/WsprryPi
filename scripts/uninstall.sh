@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2023 Lee C. Bussy (@LBussy)
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
 ############
 ### Global Declarations
@@ -20,7 +20,7 @@ VERSION="1.1.0"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"

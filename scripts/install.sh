@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2023 Lee C. Bussy (@LBussy)
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
 ############
 ### Global Declarations
@@ -15,12 +15,12 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="main"
+BRANCH="devel"
 VERSION="1.1.0"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
