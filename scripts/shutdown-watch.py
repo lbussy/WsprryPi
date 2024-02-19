@@ -1,16 +1,22 @@
 #!/usr/bin/python3
-# Created for WsprryPi version "1.1.0"
+# Created for WsprryPi version 1.1.0
 
 from gpiozero import Button
 from time import sleep
-from os import system, getuid
+from os import system, getuid, path, remove
 from sys import stdout, exit
 
 # Debugging for local work
 debug = False
 
+# Check for TAPR shutdown pin
+doTAPR = True
+
 # Physical pin 35 = BCM19
 stopPin = "BOARD35"
+
+# Filename for web-initiated shutdown
+stopFile = "/var/www/html/wspr/shutdown"
 
 def isRoot():
     if getuid() != 0:
@@ -26,9 +32,11 @@ def main():
 
     try:
         while (True):
-            if stopButton.is_pressed:
+            if (stopButton.is_pressed and doTAPR) or path.isfile(stopFile):
                 sleep(0.5)
-                if stopButton.is_pressed:
+                if stopButton.is_pressed or path.isfile(stopFile):
+                    if path.isfile(stopFile):
+                        remove(stopFile)
                     if (debug):
                         system('wall Shutdown button pressed, system is going down in 60 seconds.')
                         system("shutdown -h")
@@ -43,7 +51,6 @@ def main():
                         print('\nShutdown initiated.')
                         system('wall Shutdown button pressed, system is going down now.')
                         system("shutdown -h now")
-
             sleep(0.1)
 
     except KeyboardInterrupt:

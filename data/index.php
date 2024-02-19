@@ -44,8 +44,15 @@
     <div class="container">
 
         <div class="card border-primary mb-3">
-            <div class="card-header">For server:
-                <?php echo gethostname(); ?>
+            <div class="card-header d-flex">
+                For server: <?php echo gethostname(); ?>
+                <span class="ms-auto text-muted">
+                    <form action="shutdown.php" method="post">
+                        <button type="submit" class="btn-fafa" data-toggle="tooltip" title="Shutdown">
+                            <i class="fa-solid fa-power-off"></i>
+                        </button>
+                    </form>
+                </span>
             </div>
             <div class="card-body">
 
@@ -270,6 +277,10 @@
     <script>
         var url = "wspr_ini.php";
         var populateConfigRunning = false;
+
+        $(function () {
+            $('[data-toggle="tooltip"]').tooltip()
+        })
 
         var rangeValues = {
             // Define range labels for slider
