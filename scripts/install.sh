@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="main"
-VERSION="1.1.0"
+VERSION="1.2.0"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
