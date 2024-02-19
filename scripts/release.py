@@ -92,9 +92,9 @@ def copy(file):
 def main():
     get_git()
     edit_files()
-    # compile()
-    # copy("wspr")
-    # copy("wspr.ini")
+    compile()
+    copy("wspr")
+    copy("wspr.ini")
 
 
 if __name__=="__main__":
