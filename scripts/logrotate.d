@@ -1,5 +1,6 @@
-# Created for WsprryPi version "1.1.0"
-/var/log/wsprrypi/wspr.*.log {
+# Created for WsprryPi version 1.1.0
+
+/var/log/wspr/wspr.*.log {
     rotate 14
     daily
     compress
@@ -11,7 +12,7 @@
     endscript
 }
 
-/var/log/wsprrypi/shutdown-button.*.log {
+/var/log/wspr/shutdown-button.*.log {
     rotate 12
     monthly
     compress

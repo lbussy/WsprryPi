@@ -40,13 +40,16 @@ def get_git():
         branch = "unknown"
 
 
-def replace_in_file(file, string, replace):
+def replace_in_file(file, string, replace, withquotes=True):
     global version
     print("Changing {} to version {}.".format(file, version))
     with FileInput(files=file, inplace=True) as f:
         for line in f:
             if string in line:
-                line = string + "\"" + replace + "\"\n"
+                if not withquotes:
+                    line = string + "" + replace + "\n"
+                else:
+                    line = string + "\"" + replace + "\"\n"
             print(line, end='')
 
 
@@ -58,8 +61,8 @@ def edit_files():
     replace_in_file("uninstall.sh", "VERSION=", version)
     replace_in_file("install.sh", "BRANCH=", branch)
     replace_in_file("uninstall.sh", "BRANCH=", branch)
-    replace_in_file("shutdown-button.py", "# Created for " + project + " version ", version)
-    replace_in_file("logrotate.d", "# Created for " + project + " version ", version)
+    replace_in_file("shutdown-watch.py", "# Created for " + project + " version ", version, False)
+    replace_in_file("logrotate.d", "# Created for " + project + " version ", version, False)
 
 
 def compile():
@@ -89,9 +92,9 @@ def copy(file):
 def main():
     get_git()
     edit_files()
-    compile()
-    copy("wspr")
-    copy("wspr.ini")
+    # compile()
+    # copy("wspr")
+    # copy("wspr.ini")
 
 
 if __name__=="__main__":

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2023 Lee C. Bussy (@LBussy)
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
 ############
 ### Global Declarations
@@ -15,12 +15,12 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="main"
+BRANCH="devel"
 VERSION="1.1.0"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
@@ -33,8 +33,6 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 ############
 
 init() {
-    # Set up some project variables we won't have running as a curled script
-BRANCH="main"
     # Cobble together some strings
     GITPROJ="${PACKAGE,,}"
 }
@@ -210,18 +208,25 @@ die() {
 ############
 
 uninstall() {
-    systemctl stop wspr.service
-    systemctl disable wspr.service
-    rm /etc/systemd/system/wspr.service
-    rm /usr/local/bin/wspr
-    systemctl stop shutdown-button.service
-    systemctl disable shutdown-button.service
-    rm /etc/systemd/system/shutdown-button.service
-    rm /usr/local/bin/shutdown-button.py
-    rm -fr /var/www/html/wspr/
-    rm /etc/modprobe.d/alsa-blacklist.conf
-    rm -fr /var/log/wsprrypi
-    rm /etc/logrotate.d/wsprrypi
+    systemctl stop wspr.service 2>/dev/null
+    systemctl disable wspr.service 2>/dev/null
+    systemctl stop shutdown-button.service 2>/dev/null
+    systemctl stop shutdown-watch.service 2>/dev/null
+    systemctl disable shutdown-button.service 2>/dev/null
+    systemctl disable shutdown-watch.service 2>/dev/null
+    rm -f /etc/systemd/system/wspr.service 2>/dev/null
+    rm -f /usr/local/bin/wspr 2>/dev/null
+    rm -f /usr/local/etc/wspr.ini 2>/dev/null
+    rm -f /etc/systemd/system/shutdown-button.service 2>/dev/null
+    rm -f /etc/systemd/system/shutdown-watch.service 2>/dev/null
+    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown-watch.py 2>/dev/null
+    rm -fr /var/www/html/wspr/ 2>/dev/null
+    sed -i '/blacklist snd_bcm2835/d' /etc/modprobe.d/alsa-blacklist.conf
+    rm -fr /var/log/wsprrypi 2>/dev/null
+    rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
+    rm -fr /var/log/wspr 2>/dev/null
+    rm -f /etc/logrotate.d/wspr 2>/dev/null
 }
 
 ############
@@ -237,9 +242,10 @@ main() {
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
     echo -e "Running on: $sysver\n"
+    echo -e "Uninstalling Wsprry Pi.\n"
     checkroot # Make sure we are su into root
     uninstall # Uninstall services
-    echo -e "\n***Script $THISSCRIPT complete.***\n"
+    echo -e "***Script $THISSCRIPT complete.***\n"
 }
 
 ############
