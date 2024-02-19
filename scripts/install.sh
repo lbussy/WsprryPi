@@ -9,13 +9,13 @@
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
 declare REPLY CMDLINE GITRAW PACKAGENAME VERSION APTPACKAGES
-declare VERBOSE BRANCH WWWFILES
+declare VERBOSE BRANCH WWWFILES REBOOT
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="devel"
+BRANCH="reboot"
 VERSION="1.1.0"
 # Set this script
 THISSCRIPT="install.sh"
@@ -24,7 +24,7 @@ COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
-APTPACKAGES="apache2 php"
+APTPACKAGES="apache2 php libraspberrypi-bin"
 WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php"
 WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
@@ -290,7 +290,7 @@ install paths are. Be aware of this. There is generally no difference between
 
 EOF
     read -n 1 -s -r -p  "Press any key when you are ready to proceed. " < /dev/tty
-    echo -e ""
+    clear
 }
 
 ############
@@ -307,7 +307,7 @@ settime() {
             # Probably never been set
             read -rp "Is this correct? [y/N]: " yn  < /dev/tty
             case "$yn" in
-                [Yy]* ) echo ; break ;;
+                [Yy]* ) break ;;
                 [Nn]* ) dpkg-reconfigure tzdata; break ;;
                 * ) dpkg-reconfigure tzdata; break ;;
             esac
@@ -376,7 +376,6 @@ do_unit() {
     checkscript "$unit$extension"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        echo -e "\n"
         copy_file "$unit" "$extension"
     fi
 
@@ -384,9 +383,9 @@ do_unit() {
     checkdaemon "$unit"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "$PACKAGENAME" "$(which "$executable")"
+        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wspr" "$(which "$executable")"
     else
-        echo -e "\n"
+        eval "systemctl restart $unit"
     fi
 }
 
@@ -422,26 +421,66 @@ copy_file() {
 ############
 
 copy_logd() {
-    local scriptPath fullName curlFile
-    scriptName="${GITPROJ// /}"
-    scriptName="${logdName,,}"
+    local scriptPath fullName curlFile retval
     scriptPath="/etc/logrotate.d"
     fullName="$scriptPath/wspr"
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
-    echo -e "Creating logrotate.d configuration."
+    retval="false"
 
-    # Download file
-    curl -s "$curlFile" > "$fullName" || warn
+    # Remove old version
+    rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
 
-    # See if file is an executable
-    chown root:root "$fullName"
-    chmod 0644 "$fullName"
+    if [ -f "$fullName" ]; then
+        if file "$fullName" | grep -iv python | grep -q executable; then
+            src=$(/usr/local/bin/wspr -v | cut -d " " -f 5)
+        else
+            src=$(grep "^# Created for $PACKAGE version" "$fullName")
+            src=${src##* }
+        fi
+        verchk="$(compare "$src" "$VERSION")"
+        if [ "$verchk" == "lt" ]; then
+            echo -e "Log rotate exists but is an older version" > /dev/tty
+            read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
+            case "$yn" in
+                [Nn]* )
+                    retval="false";;
+                * )
+                    retval="true" ;; # Do overwrite
+            esac
+        elif [ "$verchk" == "eq" ]; then
+            echo -e "\nLog rotate exists and is the same version" > /dev/tty
+            read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
+            case "$yn" in
+                [Yy]* )
+                    retval="true";; # Do overwrite
+                * )
+                    retval="false";;
+            esac
+        elif [ "$verchk" == "gt" ]; then
+            echo -e "\nLog rotate is newer than the version being installed."
+            echo -e "Skipping."
+            retval="false"
+        fi
+    else
+        retval="true"
+    fi
+
+    if [ "$retval" == "true" ]; then
+        echo -e "Creating logrotate.d configuration."
+
+        # Download file
+        curl -s "$curlFile" > "$fullName" || warn
+
+        # See if file is an executable
+        chown root:root "$fullName"
+        chmod 0644 "$fullName"
+    fi
 }
 
 ############
 ### Check existence and version of any current script files
 ### Required:  scriptName - Name of script
-### Returns:  0 to execute, 255 to skip
+### Returns:   0 to execute, 255 to skip
 ############
 
 checkscript() {
@@ -450,14 +489,14 @@ checkscript() {
     scriptFile="/usr/local/bin/$scriptName"
     if [ -f "$scriptFile" ]; then
         if file "$scriptFile" | grep -iv python | grep -q executable; then
-            src=`/usr/local/bin/wspr -v | grep -oE '[^ ]+$'`
+            src=$(/usr/local/bin/wspr -v | cut -d " " -f 5)
         else
             src=$(grep "^# Created for $PACKAGE version" "$scriptFile")
             src=${src##* }
         fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "\nFile: $scriptName exists but is an older version" > /dev/tty
+            echo -e "File: $scriptName exists but is an older version" > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -475,7 +514,8 @@ checkscript() {
                     return 255;;
             esac
         elif [ "$verchk" == "gt" ]; then
-            echo -e "\nFile: $scriptName file is newer than the version being installed."
+            # TODO:  Why is it always gt?  Why not eq?
+            echo -e "\nFile: '$scriptName' is newer than the version being installed."
             echo -e "Skipping."
             return 255
         fi
@@ -499,7 +539,7 @@ checkdaemon() {
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "\nUnit file for $daemonName.service exists but is an older version" > /dev/tty
+            echo -e "Unit file for $daemonName.service exists but is an older version" > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -554,6 +594,9 @@ createdaemon () {
     stdLog="$logFileLocation/$daemonName.transmit.log"
     errLog="$logFileLocation/$daemonName.error.log"
 
+    # Remove old version
+    rm -fr /var/log/wsprrypi 2>/dev/null
+
     # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
     if [ -n "$processShell" ]; then
         execStart="$processShell"
@@ -572,7 +615,7 @@ createdaemon () {
         echo -e "Removing unit file $unitFile";
         rm "$unitFile"
     fi
-    echo -e "\nCreating $productName unit file for $daemonName ($unitFile)."
+    echo -e "\nCreating unit file for $daemonName ($unitFile)."
     {
         echo -e "# Created for $PACKAGE version $VERSION
 
@@ -615,13 +658,24 @@ WantedBy=multi-user.target"
 ############
 
 createini () {
-    local fullName dir file
+    local fullName dir file retval
     file="wspr.ini"
     dir="/usr/local/etc"
     fullName="$dir/$file"
-
-    echo -e "\nCreating configuration file for $PACKAGENAME."
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$file"
+    retval="true"
+
+    if [ -f "$fullName" ]; then
+        echo
+        read -rp "Configuration file exists, overwrite? [y/N]: " yn  < /dev/tty
+        case "$yn" in
+            [Yy]* ) retval="true" ;;
+            * ) echo;retval="false" ;;
+        esac
+    fi
+    if [ "$retval" == "false" ]; then return; fi
+    echo -e "Creating configuration file for $PACKAGENAME."
+    
     # Download file to etc directory
     curl -s "$curlFile" > "$fullName" || warn
 
@@ -727,8 +781,17 @@ doWWW() {
 ############
 
 disable_sound() {
-    echo "blacklist snd_bcm2835" > /etc/modprobe.d/alsa-blacklist.conf
-      cat << EOF
+    local blacklist file retval
+    blacklist="blacklist snd_bcm2835"
+    file="/etc/modprobe.d/alsa-blacklist.conf"
+    if grep -Fxq "$blacklist" "$file"; then
+        REBOOT="false"
+        return
+    fi
+
+    REBOOT="true"
+    echo "$blacklist" > "$file"
+    cat << EOF
 
 *Important Note:*
 
@@ -737,7 +800,7 @@ radio frequencies. This soundcard has been disabled. You must
 reboot the Pi with the following command after install for this
 to take effect:
 
-sudo reboot now
+'sudo reboot'
 
 EOF
     read -rp "Press any key to continue." < /dev/tty
@@ -749,11 +812,17 @@ EOF
 ############
 
 complete() {
-    local sp7 sp11 sp18 sp28 sp49 ip port
+    local sp7 sp11 sp18 sp28 sp49 rebootmessage
+    if [ "$REBOOT" == "true" ]; then
+        rebootmessage=$(echo -e "\nRemember to reboot: (sudo reboot)\n")
+    else
+        rebootmessage=""
+    fi
     sp7="$(printf ' %.0s' {1..7})" sp11="$(printf ' %.0s' {1..11})"
     sp18="$(printf ' %.0s' {1..18})" sp28="$(printf ' %.0s' {1..28})"
     sp49="$(printf ' %.0s' {1..49})"
     # Note:  $(printf ...) hack adds spaces at beg/end to support non-black BG
+    clear
   cat << EOF
 
 $DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
@@ -767,9 +836,7 @@ The WSPR daemon has started.
  - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
                   -or- : http://$(hostname).local/wspr
  - Release version     : $VERSION
-
-Remember to reboot: (sudo reboot now)
-
+$rebootmessage
 Happy DXing!
 EOF
 }
@@ -795,22 +862,30 @@ main() {
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
-    if [ -f /usr/local/bin/shutdown-button.py ]; then
-       do_unit "shutdown-button" "python3"
-    else
-        read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
-        case "$yn" in
-            [Yy]* ) do_unit "shutdown-button" "python3" ;;
-            [Nn]* ) echo ;;
-            * ) echo ;;
-        esac
+    no_tapr=""
+    read -rp "Support system shutdown button (TAPR)? [y/N]: " yn  < /dev/tty
+    case "$yn" in
+        [Yy]* ) no_tapr="false";;
+        [Nn]* ) no_tapr="true";;
+        * ) no_tapr="true";;
+    esac
+    do_unit "shutdown-watch" "python3"
+    # Optional: Turn off TAPR button handling
+    if [ "$no_tapr" == "true" ]; then
+        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown-watch.py
     fi
+    # Remove old service if it exists
+    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
     aptPackages # Install any apt packages needed
     doWWW # Download website
     disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
+}
+
+pause() {
+    read -p "Press enter to continue"
 }
 
 ############

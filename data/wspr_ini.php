@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'PUT
         header("Cache-Control: no-cache, must-revalidate");
         header("HTTP/1.0 200 Ok");
     } else {
-        ; // Errors written beloe
+        ; // Errors written below
     }
 } else {
     // Read and send INI
@@ -110,4 +110,4 @@ function myException($exception) {
     header("Cache-Control: no-cache, must-revalidate");
     header("HTTP/1.0 500 System Error");
     echo "<b>Error:</b> " . $exception->getMessage();
-  }
+}
