@@ -1162,7 +1162,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             return false;
         }
     }
-
+    if (config.useini == false) { config.xmit_enabled = true; }
     return true;
 }
 
