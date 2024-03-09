@@ -24,7 +24,7 @@ COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
-APTPACKAGES="apache2 php libraspberrypi-bin raspberrypi-kernel-headers libraspberrypi-dev"
+APTPACKAGES="apache2 php libraspberrypi-bin raspberrypi-kernel-headers libraspberrypi-dev file"
 WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php shutdown.php"
 WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
@@ -37,7 +37,7 @@ GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 check_bitness() {
     if [ "$(getconf LONG_BIT)" == "64" ]; then
-        echo -e "\nRaspbian 64-bit is not currently supported\n"
+        echo -e "\nRaspbian 64-bit is not currently supported.\n"
         exit 1
     fi
 }
@@ -411,7 +411,7 @@ copy_file() {
         chown root:root "$fullName"
         chmod 0755 "$fullName"
     else
-        echo -e "Script install failed for $fullName"&&die
+        echo -e "Script install failed for $fullName."&&die
     fi
 }
 
@@ -439,7 +439,7 @@ copy_logd() {
         fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "Log rotate exists but is an older version" > /dev/tty
+            echo -e "Log rotate exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -448,7 +448,7 @@ copy_logd() {
                     retval="true" ;; # Do overwrite
             esac
         elif [ "$verchk" == "eq" ]; then
-            echo -e "\nLog rotate exists and is the same version" > /dev/tty
+            echo -e "\nLog rotate exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* )
@@ -496,7 +496,7 @@ checkscript() {
         fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "File: $scriptName exists but is an older version" > /dev/tty
+            echo -e "File: $scriptName exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -505,7 +505,7 @@ checkscript() {
                     return 0 ;; # Do overwrite
             esac
         elif [ "$verchk" == "eq" ]; then
-            echo -e "\nFile: $scriptName exists and is the same version" > /dev/tty
+            echo -e "\nFile: $scriptName exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* )
@@ -539,7 +539,7 @@ checkdaemon() {
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "Unit file for $daemonName.service exists but is an older version" > /dev/tty
+            echo -e "Unit file for $daemonName.service exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -548,7 +548,7 @@ checkdaemon() {
                 return 0 ;; # Do overwrite
             esac
             elif [ "$verchk" == "eq" ]; then
-            echo -e "\nUnit file for $daemonName.service exists and is the same version" > /dev/tty
+            echo -e "\nUnit file for $daemonName.service exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* ) return 0;; # Do overwrite
@@ -612,7 +612,7 @@ createdaemon () {
         systemctl stop "$daemonName";
         echo -e "Disabling $daemonName daemon.";
         systemctl disable "$daemonName";
-        echo -e "Removing unit file $unitFile";
+        echo -e "Removing unit file $unitFile.";
         rm "$unitFile"
     fi
     echo -e "\nCreating unit file for $daemonName ($unitFile)."
@@ -784,7 +784,7 @@ disable_sound() {
     local blacklist file retval
     blacklist="blacklist snd_bcm2835"
     file="/etc/modprobe.d/alsa-blacklist.conf"
-    if grep -Fxq "$blacklist" "$file"; then
+    if grep -Fxq "$blacklist" "$file" 2>/dev/null; then
         REBOOT="false"
         return
     fi
@@ -814,7 +814,7 @@ EOF
 complete() {
     local sp7 sp11 sp18 sp28 sp49 rebootmessage
     if [ "$REBOOT" == "true" ]; then
-        rebootmessage=$(echo -e "\nRemember to reboot: (sudo reboot)\n")
+        rebootmessage=$(echo -e "\nRemember to reboot: (sudo reboot).\n")
     else
         rebootmessage=""
     fi
@@ -854,11 +854,12 @@ main() {
     echo -e "\n***Script $THISSCRIPT starting.***"
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
-    echo -e "\nRunning on: $sysver\n"
+    echo -e "\nRunning on: $sysver.\n"
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
+    aptPackages # Install any apt packages needed
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
@@ -877,7 +878,6 @@ main() {
     # Remove old service if it exists
     rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
-    aptPackages # Install any apt packages needed
     doWWW # Download website
     disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
