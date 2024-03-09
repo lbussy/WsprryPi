@@ -32,12 +32,20 @@ if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 ############
-### Bitness
+### Bitness & OS
 ############
 
 check_bitness() {
     if [ "$(getconf LONG_BIT)" == "64" ]; then
         echo -e "\nRaspbian 64-bit is not currently supported.\n"
+        exit 1
+    fi
+}
+
+check_release() {
+    ver=$(cat /etc/os-release | grep "VERSION_ID" | awk -F "=" '{print $2}' | tr -d '"')
+    if [ "$ver" -lt 11 ]; then
+        echo -e "\nRaspbian older than version 11 (bullseye) not supported.\n"
         exit 1
     fi
 }
@@ -848,6 +856,7 @@ EOF
 main() {
     VERBOSE=true  # Do not trim logs
     check_bitness # make sure we are not 64-bit
+    check_release # make sure we are not some dusty old version
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
