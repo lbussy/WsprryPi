@@ -16,7 +16,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="freq_list"
-VERSION="1.2.1-Alpha.1"
+VERSION="1.2.1-Alpha.3"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
