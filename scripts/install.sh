@@ -795,7 +795,7 @@ disable_sound() {
 
 *Important Note:*
 
-Wsprry Pi uses the same hardware as the sound system to gemerate
+Wsprry Pi uses the same hardware as the sound system to generate
 radio frequencies. This soundcard has been disabled. You must
 reboot the Pi with the following command after install for this
 to take effect:
