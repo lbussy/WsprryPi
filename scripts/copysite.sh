@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1-Beta.1 [devel).
+# Created for WsprryPi version 1.2.1 [devel).
 
 # Get repo root
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
