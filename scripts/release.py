@@ -1,14 +1,18 @@
 #!/usr/bin/python3
 """Module compiles the project and prepares script headers to match the environment."""
 
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.3.0-Working [bookworm-32).
+
 import subprocess
 import os
 import sys
 import locale
+import shutil
 from fileinput import FileInput
 
 # Text-based and executable files in project
-PROJECT_FILES = ["install.sh", "uninstall.sh", "shutdown-watch.py", "shutdown_watch.py"]
+PROJECT_FILES = ["release.py", "install.sh", "uninstall.sh", "shutdown-watch.py", "shutdown_watch.py", "logrotate.d", "copydocs.sh", "copyexe.sh", "copysite.sh"]
 PROJECT_EXES = ["wspr", "wspr.ini"]
 
 
@@ -109,53 +113,81 @@ def replace_in_file(filename, search_string, replace_string):
     with open(filename, "w", encoding = locale_encoding) as file:
         for line in lines:
             if line.startswith(search_string):
-                print(f"Replacing '{line.strip()}' with '{replace_string}'.")
                 file.write(replace_string + os.linesep)
             else:
                 file.write(line)
 
 
-def edit_files(project_directory, project_name, project_branch, project_tag, files):
+def edit_files(project_directory, project_branch, project_tag, files, version_string):
     """Function to iterate a list of files to replace file and script properties with Git info."""
     for file in files:
         print(f"Updating {file}.")
         file_name = project_directory + "/scripts/" + file
-        replace_in_file(file_name, "# Created for ", "# Created for " + project_name + " version " + project_tag)
+        replace_in_file(file_name, "# Created for ", f"# Created for {version_string}.")
         replace_in_file(file_name, "BRANCH=", "BRANCH=" + project_branch)
         replace_in_file(file_name, "VERSION=", "VERSION=" + project_tag)
 
 
-def compile_project(project_directory, project_name, project_tag):
+def compile_project(project_directory, version_string):
     """Function to make current project."""
     current_dir = os.getcwd()
-    source_dir = project_directory + "/src"
+    source_dir = project_directory + "/src/"
+    clean_command = "make clean"
+    make_command = "make"
     os.chdir(source_dir)
-    print(f"Compiling {project_name} version {project_tag}.")
-    compile_command = "make clean && make"
-    subprocess.check_output(compile_command, shell=True)
+
+    # Make clean
+    try:
+        # Run the command and capture output
+        result = subprocess.run(
+            clean_command, shell=True, check=True, text=True, capture_output=True
+        )
+    except FileNotFoundError:
+        print(f"Command '{clean_command}' not found: Ensure the command is correct and available in the environment.")
+    except subprocess.CalledProcessError as e:
+        print(f"'make clean'' failed: {e}.")
+
+    print(f"Compiling {version_string}.")
+    try:
+        # Execute the command and capture the output
+        result = subprocess.run(make_command, check=True, text=True, capture_output=True)
+        print("Make command succeeded.")
+        print("Output:")
+        print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print("Make command failed.")
+        print("Error output:")
+        print(e.stderr)
+        sys.exit(1)
     os.chdir(current_dir)
 
 
 def copy_files(project_directory, files):
-    """Function to stage exe files to scroipts directory."""
+    """Function to stage exe files to scripts directory."""
     for file in files:
-        copy_command = (
-            "cp -f "
-            + project_directory
-            + "src/"
-            + file
-            + " "
-            + project_directory
-            + "scripts/"
-        )
-        print(f"Copying {file} to scripts location.")
-        subprocess.check_output(copy_command, shell=True)
+        # Define the source and destination paths
+        source_file = os.path.abspath(f"{project_directory}/src/{file}")
+        destination_file = os.path.abspath(f"{project_directory}/scripts/{file}")
+
+        # Copy the file
+        try:
+            shutil.copy(source_file, destination_file)
+            print(f"Copying {file} to scripts location.")
+        except FileNotFoundError:
+            print(f"Error: The file {source_file} does not exist.")
+        except PermissionError:
+            print(f"Error: You do not have permission to copy {source_file}.")
+        except shutil.Error as e:
+            print(f"An unexpected error occurred copying {source_file}: {e}")
 
 
 def main():
     """Function handles project compile and file edits."""
+    # Get constants from header of file
     project_files = PROJECT_FILES
     project_exes = PROJECT_EXES
+
+    # Get Git project info
     project_directory = get_git_repo_directory()
     if project_directory is None:
         sys.exit(1)
@@ -172,12 +204,20 @@ def main():
     if project_branch is None:
         sys.exit(1)
 
+    # Concatenate version string
+    version_string = f"{project_name} version {project_tag} [{project_branch})"
+
+    # Begin
+    print(f"Preparing {version_string} for release.")
     # Update ASCII files with current project info
-    edit_files(project_directory, project_name, project_branch, project_tag, project_files)
+    edit_files(project_directory, project_branch, project_tag, project_files, version_string)
     # Make executable
-    #compile_project(project_directory, project_name, project_tag)
+    compile_project(project_directory, version_string)
     # Stage executable and INI to script directory
-    #copy_files(project_directory, project_exes)
+    copy_files(project_directory, project_exes)
+
+    # End
+    print(f"Project prep for {version_string} complete.")
 
 
 if __name__ == "__main__":

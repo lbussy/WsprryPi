@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.3.0-Working [bookworm-32).
+
 # Get repo root
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -z "$repo_root" ]; then
