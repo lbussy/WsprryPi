@@ -222,6 +222,7 @@ uninstall() {
     rm -f /usr/local/bin/wspr 2>/dev/null
     rm -f /usr/local/etc/wspr.ini 2>/dev/null
     rm -f /etc/systemd/system/shutdown-button.service 2>/dev/null
+    rm -f /etc/systemd/system/shutdown_button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown-watch.service 2>/dev/null
     rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     rm -f /usr/local/bin/shutdown-watch.py 2>/dev/null

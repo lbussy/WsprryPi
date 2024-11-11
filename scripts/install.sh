@@ -889,7 +889,7 @@ main() {
         sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown-watch.py
     fi
     # Remove old service if it exists
-    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
     disable_sound
