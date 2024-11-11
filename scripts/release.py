@@ -1,101 +1,167 @@
 #!/usr/bin/python3
+"""Module compiles the project and prepares script headers to match the environment."""
 
-import subprocess, os
+import subprocess
+import os
+import sys
 from fileinput import FileInput
 
-def get_git():
-    print("Getting environment info")
-    # Get Git project name
-    global project
-    projcmd = "git rev-parse --show-toplevel"
+# Text-based and executable files in project
+PROJECT_FILES = ["install.sh", "uninstall.sh", "shutdown-watch.py", "shutdown_watch.py"]
+PROJECT_EXES = ["wspr", "wspr.ini"]
+
+
+def get_git_repo_directory():
+    """Function returns Git repo directory from environment."""
     try:
-        project = subprocess.check_output(projcmd, shell=True).decode().strip()
-        project = project.split("/")
-        project = project[len(project)-1]
-    except:
-        project = "unknown"
+        # Get the root directory of the Git repository
+        repo_dir = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], text=True
+        ).strip()
+        return repo_dir
+    except subprocess.CalledProcessError:
+        print("Error: Not a Git repository.")
+        return None
 
-    # Get 0.0.0 version from latest Git tag
-    global version
-    tagcmd = "git describe --tags --abbrev=0 --always"
+
+def get_git_project_name():
+    """Function returns Git project name from environment."""
     try:
-        version = subprocess.check_output(tagcmd, shell=True).decode().strip()
-    except:
-        version = "0.0.0"
+        # Get the remote origin URL
+        url = subprocess.check_output(
+            ["git", "config", "--get", "remote.origin.url"], text=True
+        ).strip()
+        # Extract the project name from the URL
+        project_name = url.rsplit("/", maxsplit=1)[-1].replace(".git", "")
+        return project_name
+    except subprocess.CalledProcessError:
+        print("Error: Not a Git repository or unable to retrieve project name.")
+        return None
 
-    # Get latest commit short from Git
-    global commit
-    revcmd = "git log --pretty=format:'%h' -n 1"
+
+def get_latest_git_tag():
+    """Function returns latest Git tag from environment."""
     try:
-        commit = subprocess.check_output(revcmd, shell=True).decode().strip()
-    except:
-        commit = "0000000"
+        # Get the latest tag only
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"], text=True
+        ).strip()
+        return tag
+    except subprocess.CalledProcessError:
+        print("Error: No tags found or not a Git repository.")
+        return None
 
-    # Get branch name from Git
-    global branch
-    branchcmd = "git rev-parse --abbrev-ref HEAD"
+
+def get_current_git_short_commit():
+    """Function returns current Git commit hash from environment."""
     try:
-        branch = subprocess.check_output(branchcmd, shell=True).decode().strip()
-    except:
-        branch = "unknown"
+        # Get the short commit hash
+        short_commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], text=True
+        ).strip()
+        return short_commit
+    except subprocess.CalledProcessError:
+        print("Error: Not a Git repository or unable to retrieve commit.")
+        return None
 
 
-def replace_in_file(file, string, replace, withquotes=True):
-    global version
-    print("Changing {} to version {}.".format(file, version))
-    with FileInput(files=file, inplace=True) as f:
-        for line in f:
-            if string in line:
-                if not withquotes:
-                    line = string + "" + replace + "\n"
-                else:
-                    line = string + "\"" + replace + "\"\n"
-            print(line, end='')
+def get_current_git_branch():
+    """Function returns current Git branch from environment."""
+    try:
+        # Get the current branch name
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
+        ).strip()
+        return branch
+    except subprocess.CalledProcessError:
+        print("Error: Not a Git repository or unable to retrieve branch.")
+        return None
 
 
-def edit_files():
-    global version
-    global branch
-    global project
-    replace_in_file("install.sh", "VERSION=", version)
-    replace_in_file("uninstall.sh", "VERSION=", version)
-    replace_in_file("install.sh", "BRANCH=", branch)
-    replace_in_file("uninstall.sh", "BRANCH=", branch)
-    replace_in_file("shutdown-watch.py", "# Created for " + project + " version ", version, False)
-    replace_in_file("logrotate.d", "# Created for " + project + " version ", version, False)
+def replace_in_file(filename, string, replace, quote_word=True):
+    """Function to replace Git info in file headers."""
+    base_name = os.path.basename(filename)
+    try:
+        with FileInput(files=filename, inplace=True) as file_line:
+            for line in file_line:
+                if string in line:
+                    if not quote_word:
+                        line = string + "" + replace + os.linesep
+                    else:
+                        line = string + '"' + replace + '"' + os.linesep
+                print(line, os.linesep)
+    except FileNotFoundError:
+        if base_name not in ["shutdown-watch.py", "shutdown_watch.py"]:
+            print(f"Error: File '{base_name}' not found.")
+            sys.exit(1)
 
 
-def compile():
-    global project
-    global version
+def edit_files(project_directory, project_name, project_branch, project_tag, files):
+    """Function to iterate a list of files to replace file and script properties with Git info."""
+    for file in files:
+        print(f"Updating {file}.")
+        temp_file = project_directory + "/scripts/" + file
+        replace_in_file(
+            temp_file, "# Created for " + project_name + " version ", project_tag, False
+        )
+        replace_in_file(temp_file, "BRANCH=", project_branch)
+        replace_in_file(temp_file, "VERSION=", project_tag)
+
+
+def compile_project(project_directory, project_name, project_tag):
+    """Function to make current project."""
     current_dir = os.getcwd()
-    project_dir_command = "git rev-parse --show-toplevel"
-    project_dir = subprocess.check_output(project_dir_command, shell=True).decode().strip()
-    source_dir = project_dir + "/src"
+    source_dir = project_directory + "/src"
     os.chdir(source_dir)
-    print("Compiling {} version {}.".format(project, version))
+    print(f"Compiling {project_name} version {project_tag}.")
     compile_command = "make clean && make"
     subprocess.check_output(compile_command, shell=True)
     os.chdir(current_dir)
 
 
-def copy(file):
-    current_dir = os.getcwd()
-    project_dir_command = "git rev-parse --show-toplevel"
-    project_dir = subprocess.check_output(project_dir_command, shell=True).decode().strip()
-    source_dir = project_dir + "/src"
-    copy_command = "cp -f " + source_dir + "/" + file + " " + current_dir
-    print("Copying {} to {}.".format(file, current_dir))
-    subprocess.check_output(copy_command, shell=True)
+def copy_files(project_directory, files):
+    """Function to stage exe files to scroipts directory."""
+    for file in files:
+        copy_command = (
+            "cp -f "
+            + project_directory
+            + "src/"
+            + file
+            + " "
+            + project_directory
+            + "scripts/"
+        )
+        print(f"Copying {file} to scripts location.")
+        subprocess.check_output(copy_command, shell=True)
 
 
 def main():
-    get_git()
-    edit_files()
-    compile()
-    copy("wspr")
-    copy("wspr.ini")
+    """Function handles project compile and file edits."""
+    project_files = PROJECT_FILES
+    project_exes = PROJECT_EXES
+    project_directory = get_git_repo_directory()
+    if project_directory is None:
+        sys.exit(1)
+    project_name = get_git_project_name()
+    if project_name is None:
+        sys.exit(1)
+    project_tag = get_latest_git_tag()
+    if project_tag is None:
+        sys.exit(1)
+    project_hash = get_current_git_short_commit()
+    if project_hash is None:
+        sys.exit(1)
+    project_branch = get_current_git_branch()
+    if project_branch is None:
+        sys.exit(1)
+
+    # Update ASCII files with current project info
+    edit_files(project_directory, project_name, project_branch, project_tag, project_files)
+    # Make executable
+    #compile_project(project_directory, project_name, project_tag)
+    # Stage executable and INI to script directory
+    copy_files(project_directory, project_exes)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
