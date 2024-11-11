@@ -5,6 +5,15 @@
 # to native line endings on checkout.
 *.c text
 *.h text
+*.cpp text
+*.hpp text
+*.sh text
+*.py text
+*.bat text
+*.ini text
+*.d text
+*.md text
+*.txt text
 
 # Declare files that will always have CRLF line endings on checkout.
 *.sln text eol=crlf
