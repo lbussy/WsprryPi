@@ -4,6 +4,7 @@
 import subprocess
 import os
 import sys
+import locale
 from fileinput import FileInput
 
 # Text-based and executable files in project
@@ -78,34 +79,50 @@ def get_current_git_branch():
         return None
 
 
-def replace_in_file(filename, string, replace, quote_word=True):
+def replace_in_file(filename, search_string, replace_string):
     """Function to replace Git info in file headers."""
+    local_directory = os.path.dirname(filename)
     base_name = os.path.basename(filename)
+    locale_encoding = locale.getpreferredencoding(False)
+
+    # Load file in memory as lines
     try:
-        with FileInput(files=filename, inplace=True) as file_line:
-            for line in file_line:
-                if string in line:
-                    if not quote_word:
-                        line = string + "" + replace + os.linesep
-                    else:
-                        line = string + '"' + replace + '"' + os.linesep
-                print(line, os.linesep)
+        with open(filename, "r", encoding = locale_encoding) as file:
+            lines = file.readlines()
     except FileNotFoundError:
+        # This is needed because the shutdown script was chanegd to snake-case
         if base_name not in ["shutdown-watch.py", "shutdown_watch.py"]:
-            print(f"Error: File '{base_name}' not found.")
+            print(f"Error: File '{base_name}' not found in {local_directory}.")
             sys.exit(1)
+        else:
+            if base_name == "shutdown-watch.py":
+                if not os.path.exists(local_directory + "/" + "shutdown_watch.py"):
+                    print(f"Error: File 'shutdown_watch.py' not found in {local_directory}.")
+                    sys.exit(1)
+                else:
+                    return
+            else:
+                print(f"Error: File {base_name} not found in {local_directory}.")
+                sys.exit(1)
+
+    # Modify lines that start with 'string'
+    with open(filename, "w", encoding = locale_encoding) as file:
+        for line in lines:
+            if line.startswith(search_string):
+                file.write(replace_string)
+                print(f"Replacing '{line.strip()}' with '{replace_string}'.")
+            else:
+                file.write(line)
 
 
 def edit_files(project_directory, project_name, project_branch, project_tag, files):
     """Function to iterate a list of files to replace file and script properties with Git info."""
     for file in files:
         print(f"Updating {file}.")
-        temp_file = project_directory + "/scripts/" + file
-        replace_in_file(
-            temp_file, "# Created for " + project_name + " version ", project_tag, False
-        )
-        replace_in_file(temp_file, "BRANCH=", project_branch)
-        replace_in_file(temp_file, "VERSION=", project_tag)
+        file_name = project_directory + "/scripts/" + file
+        replace_in_file(file_name, "# Created for ", "# Created for " + project_name + " version " + project_tag)
+        replace_in_file(file_name, "BRANCH=", "BRANCH=" + project_branch)
+        replace_in_file(file_name, "VERSION=", "VERSION=" + project_tag)
 
 
 def compile_project(project_directory, project_name, project_tag):
@@ -160,7 +177,7 @@ def main():
     # Make executable
     #compile_project(project_directory, project_name, project_tag)
     # Stage executable and INI to script directory
-    copy_files(project_directory, project_exes)
+    #copy_files(project_directory, project_exes)
 
 
 if __name__ == "__main__":
