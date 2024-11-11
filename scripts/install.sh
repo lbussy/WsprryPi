@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
+# Created for WsprryPi version 1.2.1-Beta.1 [devel).
 
 ############
 ### Global Declarations
@@ -18,7 +18,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=bookworm-32
+BRANCH=devel
 VERSION=1.2.1-Beta.1
 # Set this script
 THISSCRIPT="install.sh"
