@@ -18,78 +18,15 @@ I use VS Code to develop this environment and connect my workstation to my Pi vi
 These are the extensions I use.  I have no idea if you need all of these; I strongly suspect not.  You may copy/paste these commands to install all of them.  If you have already "moved in" to VS Code, some of these may conflict with the extensions you already have.
 
 ``` bash
-code --install-extension antfu.browse-lite
-code --install-extension antfu.vite
-code --install-extension bierner.github-markdown-preview
-code --install-extension bierner.markdown-checkbox
-code --install-extension bierner.markdown-emoji
-code --install-extension bierner.markdown-footnotes
-code --install-extension bierner.markdown-mermaid
-code --install-extension bierner.markdown-preview-github-styles
-code --install-extension bierner.markdown-yaml-preamble
-code --install-extension yzhang.markdown-all-in-one
-code --install-extension bmewburn.vscode-intelephense-client
-code --install-extension brapifra.phpserver
-code --install-extension christian-kohler.path-intellisense
-code --install-extension cschlosser.doxdocgen
-code --install-extension dbaeumer.vscode-eslint
-code --install-extension eamodio.gitlens
-code --install-extension ecmel.vscode-html-css
-code --install-extension esbenp.prettier-vscode
-code --install-extension formulahendry.auto-close-tag
-code --install-extension formulahendry.auto-rename-tag
-code --install-extension github.vscode-pull-request-github
-code --install-extension jeff-hykin.better-cpp-syntax
-code --install-extension lextudio.restructuredtext
-code --install-extension mikestead.dotenv
-code --install-extension misterj.vue-volar-extention-pack
-code --install-extension ms-python.black-formatter
+code --install-extension davidanson.vscode-markdownlint
+code --install-extension donjayamanne.githistory
+code --install-extension github.vscode-github-actions
 code --install-extension ms-python.debugpy
-code --install-extension ms-python.isort
-code --install-extension ms-python.pylint
 code --install-extension ms-python.python
 code --install-extension ms-python.vscode-pylance
-code --install-extension ms-toolsai.jupyter
-code --install-extension ms-toolsai.jupyter-keymap
-code --install-extension ms-toolsai.jupyter-renderers
-code --install-extension ms-toolsai.vscode-jupyter-cell-tags
-code --install-extension ms-toolsai.vscode-jupyter-slideshow
-code --install-extension ms-vscode-remote.remote-containers
-code --install-extension ms-vscode-remote.remote-ssh
-code --install-extension ms-vscode-remote.remote-ssh-edit
-code --install-extension ms-vscode-remote.remote-wsl
-code --install-extension ms-vscode-remote.vscode-remote-extensionpack
-code --install-extension ms-vscode.cmake-tools
-code --install-extension ms-vscode.cpptools
-code --install-extension ms-vscode.cpptools-extension-pack
-code --install-extension ms-vscode.cpptools-themes
-code --install-extension ms-vscode.live-server
-code --install-extension ms-vscode.makefile-tools
-code --install-extension ms-vscode.powershell
-code --install-extension ms-vscode.remote-explorer
-code --install-extension ms-vscode.remote-server
-code --install-extension ms-vscode.vscode-serial-monitor
-code --install-extension octref.vetur
-code --install-extension platformio.platformio-ide
-code --install-extension rifi2k.format-html-in-php
-code --install-extension ritwickdey.liveserver
-code --install-extension sdras.vue-vscode-snippets
-code --install-extension sibiraj-s.vscode-scss-formatter
-code --install-extension snooty.snooty
-code --install-extension steoates.autoimport
-code --install-extension syler.sass-indented
-code --install-extension symbolk.somanyconflicts
-code --install-extension tamasfe.even-better-toml
-code --install-extension timonwong.shellcheck
-code --install-extension tobermory.es6-string-html
-code --install-extension tomoki1207.pdf
-code --install-extension trond-snekvik.simple-rst
-code --install-extension twxs.cmake
-code --install-extension vue.volar
-code --install-extension wscats.vue
-code --install-extension xabikos.javascriptsnippets
-code --install-extension xdebug.php-debug
 ```
+
+(List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
 
 If the command `code` throws an error, open the Command Palette (F1 or ⇧+⌘+P on Mac) and type `shell command` to find the `Shell Command: Install the 'code' command in PATH` command.
 
