@@ -8,7 +8,7 @@ from time import sleep
 from os import system, getuid, path, remove
 
 try:
-    from gpiozero import Button 
+    from gpiozero import Button
 except ImportError:
     print("The required library 'gpiozero' is not installed.")
     sys.exit(1)
