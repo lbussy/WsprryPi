@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
 
 ############
 ### Global Declarations
 ############
+
+# shellcheck disable=SC2034  # Unused variables left for reusability
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
@@ -15,8 +18,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="freq_list"
-VERSION="1.2.1-Alpha.3"
+BRANCH=bookworm-32
+VERSION=1.2.1-Beta.1
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
@@ -65,6 +68,7 @@ clean() {
     # If we lead the line with our semaphore, return a blank line
     if [[ "$input" == "$dot"* ]]; then echo ""; return; fi
     # Strip color codes
+    # shellcheck disable=SC2001  # Unused variables left for reusability
     input="$(echo "$input" | sed 's,\x1B[[(][0-9;]*[a-zA-Z],,g')"
     # Strip beginning spaces
     input="$(printf "%s" "${input#"${input%%[![:space:]]*}"}")"
@@ -218,6 +222,7 @@ uninstall() {
     rm -f /usr/local/bin/wspr 2>/dev/null
     rm -f /usr/local/etc/wspr.ini 2>/dev/null
     rm -f /etc/systemd/system/shutdown-button.service 2>/dev/null
+    rm -f /etc/systemd/system/shutdown_button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown-watch.service 2>/dev/null
     rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     rm -f /usr/local/bin/shutdown-watch.py 2>/dev/null

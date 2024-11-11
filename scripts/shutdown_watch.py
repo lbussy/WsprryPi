@@ -1,43 +1,53 @@
 #!/usr/bin/python3
-# Created for WsprryPi version 1.2.1-Alpha.3
 
-from gpiozero import Button
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
+
+"""Module providing a function to poll a shutdown button and halt the system if pressed."""
+
+import sys
 from time import sleep
 from os import system, getuid, path, remove
-from sys import stdout, exit
+
+try:
+    from gpiozero import Button
+except ImportError:
+    print("The required library 'gpiozero' is not installed.")
+    sys.exit(1)
 
 # Debugging for local work
-debug = False
+DEBUG = False
 
 # Check for TAPR shutdown pin
-doTAPR = True
+DO_TAPR = True
 
 # Physical pin 35 = BCM19
-stopPin = "BOARD35"
+STOP_PIN = "BOARD35"
 
 # Filename for web-initiated shutdown
-stopFile = "/var/www/html/wspr/shutdown"
+STOP_FILE = "/var/www/html/wspr/shutdown"
 
-def isRoot():
+def is_root():
+    """Function checks for root, exits if not UID 0."""
     if getuid() != 0:
         return False
-    else:
-        return True
+    return True
 
 
 def main():
-    stopButton = Button(stopPin) # defines the button as an object and chooses GPIO pin
-    print("\nMonitoring pin {} for shutdown signal.".format(stopPin))
+    """Function main, handles loop."""
+    stop_button = Button(STOP_PIN) # defines the button as an object and chooses GPIO pin
+    print(f"\nMonitoring pin {STOP_PIN} for shutdown signal.")
     print("Ctrl-C to quit.\n")
 
     try:
-        while (True):
-            if (stopButton.is_pressed and doTAPR) or path.isfile(stopFile):
+        while True:
+            if (stop_button.is_pressed and DO_TAPR) or path.isfile(STOP_FILE):
                 sleep(0.5)
-                if stopButton.is_pressed or path.isfile(stopFile):
-                    if path.isfile(stopFile):
-                        remove(stopFile)
-                    if (debug):
+                if stop_button.is_pressed or path.isfile(STOP_FILE):
+                    if path.isfile(STOP_FILE):
+                        remove(STOP_FILE)
+                    if DEBUG:
                         system('wall Shutdown button pressed, system is going down in 60 seconds.')
                         system("shutdown -h")
                         print('\nShutdown initiated.')
@@ -59,13 +69,11 @@ def main():
     finally:
         pass
 
-    return
-
 
 if __name__ == "__main__":
-    if not (isRoot()):
+    if not is_root():
         print("\nScript must be run as root.")
-        exit(1)
+        sys.exit(1)
     else:
         main()
-        exit(0)
+        sys.exit(0)

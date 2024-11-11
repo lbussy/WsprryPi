@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
 
 ############
 ### Global Declarations
 ############
+
+# shellcheck disable=SC2034  # Unused variables left for reusability
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
@@ -15,8 +18,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="freq_list"
-VERSION="1.2.1-Alpha.3"
+BRANCH=bookworm-32
+VERSION=1.2.1-Beta.1
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -24,7 +27,7 @@ COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
-APTPACKAGES="apache2 php libraspberrypi-bin raspberrypi-kernel-headers libraspberrypi-dev file"
+APTPACKAGES="git apache2 php libraspberrypi-dev raspberrypi-kernel-headers"
 WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php shutdown.php"
 WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
@@ -87,6 +90,7 @@ clean() {
     # If we lead the line with our semaphore, return a blank line
     if [[ "$input" == "$dot"* ]]; then echo ""; return; fi
     # Strip color codes
+    # shellcheck disable=SC2001  # Unused variables left for reusability
     input="$(echo "$input" | sed 's,\x1B[[(][0-9;]*[a-zA-Z],,g')"
     # Strip beginning spaces
     input="$(printf "%s" "${input#"${input%%[![:space:]]*}"}")"
@@ -378,7 +382,7 @@ do_unit() {
         extension=""
         executable=""
     else
-        echo -e "Unknown extension."&&die
+        echo -e "Unknown extension." && die "$@"
     fi
     # Handle script install
     checkscript "$unit$extension"
@@ -701,7 +705,7 @@ aptPackages() {
 
     echo -e "\nUpdating any expired apt keys."
     for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
-	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
+	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net "$K";
     done
 
     echo -e "\nFixing any broken installations."
@@ -879,13 +883,13 @@ main() {
         [Nn]* ) no_tapr="true";;
         * ) no_tapr="true";;
     esac
-    do_unit "shutdown-watch" "python3"
+    do_unit "shutdown_watch" "python3"
     # Optional: Turn off TAPR button handling
     if [ "$no_tapr" == "true" ]; then
-        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown-watch.py
+        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown_watch.py
     fi
     # Remove old service if it exists
-    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
     disable_sound
@@ -894,7 +898,7 @@ main() {
 }
 
 pause() {
-    read -p "Press enter to continue"
+    read -pr "Press enter to continue"
 }
 
 ############
