@@ -16,3 +16,4 @@ sudo rm -fr /var/www/html/wspr/docs
 sudo mkdir /var/www/html/wspr/docs
 sudo cp -R "$repo_root"/docs/_build/html/* /var/www/html/wspr/docs/
 sudo chown -R www-data:www-data /var/www/html/wspr/docs
+echo "Docs copied."

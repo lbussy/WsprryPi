@@ -12,6 +12,7 @@ fi
 
 sudo rm -fr /var/www/html/wspr
 sudo mkdir /var/www/html/wspr
-sudo cp -R "$repo_root"/WsprryPi/data/* /var/www/html/wspr/
+sudo cp -R "$repo_root"/data/* /var/www/html/wspr/
 sudo ln -sf /usr/local/etc/wspr.ini /var/www/html/wspr/wspr.ini
 sudo chown -R www-data:www-data /var/www/html/wspr/
+echo "Website copied."
