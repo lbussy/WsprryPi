@@ -35,7 +35,7 @@ if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 ############
-### Bitness & OS
+### Bitness, Architecture & OS
 ############
 
 check_bitness() {
@@ -49,6 +49,17 @@ check_release() {
     ver=$(cat /etc/os-release | grep "VERSION_ID" | awk -F "=" '{print $2}' | tr -d '"')
     if [ "$ver" -lt 11 ]; then
         echo -e "\nRaspbian older than version 11 (bullseye) not supported.\n"
+        exit 1
+    fi
+}
+
+check_architecture() {
+    # Get the Raspberry Pi model
+    model=$(tr -d '\0' < /proc/device-tree/model)
+
+    # Check if model contains "Raspberry Pi 4" or higher
+    if [[ "$model" =~ "Raspberry Pi 5" ]]; then
+        echo -e "\n$model is not currently supported\.n"
         exit 1
     fi
 }
@@ -859,8 +870,9 @@ EOF
 
 main() {
     VERBOSE=true  # Do not trim logs
-    check_bitness # make sure we are not 64-bit
-    check_release # make sure we are not some dusty old version
+    check_bitness # Make sure we are not 64-bit
+    check_release # Make sure we are not susing some dusty old version
+    check_architecture # Make sure we are not on a Pi 5
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
