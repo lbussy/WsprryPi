@@ -883,10 +883,10 @@ main() {
         [Nn]* ) no_tapr="true";;
         * ) no_tapr="true";;
     esac
-    do_unit "shutdown-watch" "python3"
+    do_unit "shutdown_watch" "python3"
     # Optional: Turn off TAPR button handling
     if [ "$no_tapr" == "true" ]; then
-        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown-watch.py
+        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown_watch.py
     fi
     # Remove old service if it exists
     rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
