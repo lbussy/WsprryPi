@@ -6,6 +6,8 @@
 ### Global Declarations
 ############
 
+# shellcheck disable=SC2034  # Unused variables left for reusability
+
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
 declare REPLY CMDLINE GITRAW PACKAGENAME VERSION
@@ -65,6 +67,7 @@ clean() {
     # If we lead the line with our semaphore, return a blank line
     if [[ "$input" == "$dot"* ]]; then echo ""; return; fi
     # Strip color codes
+    # shellcheck disable=SC2001  # Unused variables left for reusability
     input="$(echo "$input" | sed 's,\x1B[[(][0-9;]*[a-zA-Z],,g')"
     # Strip beginning spaces
     input="$(printf "%s" "${input#"${input%%[![:space:]]*}"}")"

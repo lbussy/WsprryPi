@@ -6,6 +6,8 @@
 ### Global Declarations
 ############
 
+# shellcheck disable=SC2034  # Unused variables left for reusability
+
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
 declare REPLY CMDLINE GITRAW PACKAGENAME VERSION APTPACKAGES
@@ -15,8 +17,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="bookworm-32"
-VERSION="1.3.0-Working"
+BRANCH="main"
+VERSION="1.2.0"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -87,6 +89,7 @@ clean() {
     # If we lead the line with our semaphore, return a blank line
     if [[ "$input" == "$dot"* ]]; then echo ""; return; fi
     # Strip color codes
+    # shellcheck disable=SC2001  # Unused variables left for reusability
     input="$(echo "$input" | sed 's,\x1B[[(][0-9;]*[a-zA-Z],,g')"
     # Strip beginning spaces
     input="$(printf "%s" "${input#"${input%%[![:space:]]*}"}")"
@@ -378,7 +381,7 @@ do_unit() {
         extension=""
         executable=""
     else
-        echo -e "Unknown extension."&&die
+        echo -e "Unknown extension." && die "$@"
     fi
     # Handle script install
     checkscript "$unit$extension"
@@ -701,7 +704,7 @@ aptPackages() {
 
     echo -e "\nUpdating any expired apt keys."
     for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
-	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
+	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net "$K";
     done
 
     echo -e "\nFixing any broken installations."
@@ -894,7 +897,7 @@ main() {
 }
 
 pause() {
-    read -p "Press enter to continue"
+    read -pr "Press enter to continue"
 }
 
 ############
