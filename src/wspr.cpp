@@ -1162,7 +1162,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             return false;
         }
     }
-
+    if (config.useini == false) { config.xmit_enabled = true; }
     return true;
 }
 
@@ -1332,7 +1332,7 @@ bool wait_every(int minute)
     struct tm *ptm;
     for (;;)
     {
-        if (iniMonitor.changed())
+        if (config.useini && iniMonitor.changed())
         {
             // Delay and make sure the file is done changing
             usleep(500000);

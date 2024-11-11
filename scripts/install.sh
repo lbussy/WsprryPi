@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Created for WsprryPi version 1.2.1 [devel).
 
 ############
 ### Global Declarations
 ############
+
+# shellcheck disable=SC2034  # Unused variables left for reusability
 
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
@@ -15,8 +18,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="main"
-VERSION="1.2.0"
+BRANCH=devel
+VERSION=1.2.1
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
@@ -24,7 +27,7 @@ COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
-APTPACKAGES="apache2 php libraspberrypi-bin"
+APTPACKAGES="git apache2 php libraspberrypi-dev raspberrypi-kernel-headers"
 WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php shutdown.php"
 WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
@@ -32,12 +35,31 @@ if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
 
 ############
-### Bitness
+### Bitness, Architecture & OS
 ############
 
 check_bitness() {
     if [ "$(getconf LONG_BIT)" == "64" ]; then
-        echo -e "\nRaspbian 64-bit is not currently supported\n"
+        echo -e "\nRaspbian 64-bit is not currently supported.\n"
+        exit 1
+    fi
+}
+
+check_release() {
+    ver=$(cat /etc/os-release | grep "VERSION_ID" | awk -F "=" '{print $2}' | tr -d '"')
+    if [ "$ver" -lt 11 ]; then
+        echo -e "\nRaspbian older than version 11 (bullseye) not supported.\n"
+        exit 1
+    fi
+}
+
+check_architecture() {
+    # Get the Raspberry Pi model
+    model=$(tr -d '\0' < /proc/device-tree/model)
+
+    # Check if model contains "Raspberry Pi 4" or higher
+    if [[ "$model" =~ "Raspberry Pi 5" ]]; then
+        echo -e "\n$model is not currently supported\.n"
         exit 1
     fi
 }
@@ -79,6 +101,7 @@ clean() {
     # If we lead the line with our semaphore, return a blank line
     if [[ "$input" == "$dot"* ]]; then echo ""; return; fi
     # Strip color codes
+    # shellcheck disable=SC2001  # Unused variables left for reusability
     input="$(echo "$input" | sed 's,\x1B[[(][0-9;]*[a-zA-Z],,g')"
     # Strip beginning spaces
     input="$(printf "%s" "${input#"${input%%[![:space:]]*}"}")"
@@ -370,7 +393,7 @@ do_unit() {
         extension=""
         executable=""
     else
-        echo -e "Unknown extension."&&die
+        echo -e "Unknown extension." && die "$@"
     fi
     # Handle script install
     checkscript "$unit$extension"
@@ -411,7 +434,7 @@ copy_file() {
         chown root:root "$fullName"
         chmod 0755 "$fullName"
     else
-        echo -e "Script install failed for $fullName"&&die
+        echo -e "Script install failed for $fullName."&&die
     fi
 }
 
@@ -439,7 +462,7 @@ copy_logd() {
         fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "Log rotate exists but is an older version" > /dev/tty
+            echo -e "Log rotate exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -448,7 +471,7 @@ copy_logd() {
                     retval="true" ;; # Do overwrite
             esac
         elif [ "$verchk" == "eq" ]; then
-            echo -e "\nLog rotate exists and is the same version" > /dev/tty
+            echo -e "\nLog rotate exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* )
@@ -496,7 +519,7 @@ checkscript() {
         fi
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "File: $scriptName exists but is an older version" > /dev/tty
+            echo -e "File: $scriptName exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -505,7 +528,7 @@ checkscript() {
                     return 0 ;; # Do overwrite
             esac
         elif [ "$verchk" == "eq" ]; then
-            echo -e "\nFile: $scriptName exists and is the same version" > /dev/tty
+            echo -e "\nFile: $scriptName exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* )
@@ -539,7 +562,7 @@ checkdaemon() {
         src=${src##* }
         verchk="$(compare "$src" "$VERSION")"
         if [ "$verchk" == "lt" ]; then
-            echo -e "Unit file for $daemonName.service exists but is an older version" > /dev/tty
+            echo -e "Unit file for $daemonName.service exists but is an older version." > /dev/tty
             read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
             case "$yn" in
                 [Nn]* )
@@ -548,7 +571,7 @@ checkdaemon() {
                 return 0 ;; # Do overwrite
             esac
             elif [ "$verchk" == "eq" ]; then
-            echo -e "\nUnit file for $daemonName.service exists and is the same version" > /dev/tty
+            echo -e "\nUnit file for $daemonName.service exists and is the same version." > /dev/tty
             read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
             case "$yn" in
                 [Yy]* ) return 0;; # Do overwrite
@@ -612,7 +635,7 @@ createdaemon () {
         systemctl stop "$daemonName";
         echo -e "Disabling $daemonName daemon.";
         systemctl disable "$daemonName";
-        echo -e "Removing unit file $unitFile";
+        echo -e "Removing unit file $unitFile.";
         rm "$unitFile"
     fi
     echo -e "\nCreating unit file for $daemonName ($unitFile)."
@@ -693,7 +716,7 @@ aptPackages() {
 
     echo -e "\nUpdating any expired apt keys."
     for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
-	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net $K;
+	    sudo apt-key adv --recv-keys --keyserver keys.gnupg.net "$K";
     done
 
     echo -e "\nFixing any broken installations."
@@ -784,7 +807,7 @@ disable_sound() {
     local blacklist file retval
     blacklist="blacklist snd_bcm2835"
     file="/etc/modprobe.d/alsa-blacklist.conf"
-    if grep -Fxq "$blacklist" "$file"; then
+    if grep -Fxq "$blacklist" "$file" 2>/dev/null; then
         REBOOT="false"
         return
     fi
@@ -795,7 +818,7 @@ disable_sound() {
 
 *Important Note:*
 
-Wsprry Pi uses the same hardware as the sound system to gemerate
+Wsprry Pi uses the same hardware as the sound system to generate
 radio frequencies. This soundcard has been disabled. You must
 reboot the Pi with the following command after install for this
 to take effect:
@@ -814,7 +837,7 @@ EOF
 complete() {
     local sp7 sp11 sp18 sp28 sp49 rebootmessage
     if [ "$REBOOT" == "true" ]; then
-        rebootmessage=$(echo -e "\nRemember to reboot: (sudo reboot)\n")
+        rebootmessage=$(echo -e "\nRemember to reboot: (sudo reboot).\n")
     else
         rebootmessage=""
     fi
@@ -847,18 +870,21 @@ EOF
 
 main() {
     VERBOSE=true  # Do not trim logs
-    check_bitness # make sure we are not 64-bit
+    check_bitness # Make sure we are not 64-bit
+    check_release # Make sure we are not susing some dusty old version
+    check_architecture # Make sure we are not on a Pi 5
     log "$@" # Start logging
     init "$@" # Get constants
     arguments "$@" # Check command line arguments
     echo -e "\n***Script $THISSCRIPT starting.***"
     sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
     sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
-    echo -e "\nRunning on: $sysver\n"
+    echo -e "\nRunning on: $sysver.\n"
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
+    aptPackages # Install any apt packages needed
     do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
@@ -869,15 +895,14 @@ main() {
         [Nn]* ) no_tapr="true";;
         * ) no_tapr="true";;
     esac
-    do_unit "shutdown-watch" "python3"
+    do_unit "shutdown_watch" "python3"
     # Optional: Turn off TAPR button handling
     if [ "$no_tapr" == "true" ]; then
-        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown-watch.py
+        sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown_watch.py
     fi
     # Remove old service if it exists
-    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
-    aptPackages # Install any apt packages needed
     doWWW # Download website
     disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
@@ -885,7 +910,7 @@ main() {
 }
 
 pause() {
-    read -p "Press enter to continue"
+    read -pr "Press enter to continue"
 }
 
 ############

@@ -1,7 +1,7 @@
 prefix = /usr/local
 
 LED_PIN = -DLED_PIN=18
-CXXFLAGS += -Wall -Werror -fmax-errors=5
+CXXFLAGS += -Wall -Werror -fmax-errors=5  -static-libgcc
 CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host
 OUT = wspr
