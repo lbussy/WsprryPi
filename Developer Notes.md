@@ -162,13 +162,11 @@ These are the required libraries for a development environment (assuming you are
 * git
 * apache2
 * php
-* libraspberrypi-bin
-* libraspberrypi-doc
 * libraspberrypi-dev
 * raspberrypi-kernel-headers
 
 ``` bash
-sudo apt-get install --reinstall apache2 php libraspberrypi-bin libraspberrypi-doc libraspberrypi-dev raspberrypi-kernel-headers -y
+sudo apt-get install git apache2 php libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
 
 ## Python

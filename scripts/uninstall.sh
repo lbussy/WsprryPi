@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.3.0-Working [bookworm-32).
+# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
 
 ############
 ### Global Declarations
@@ -19,7 +19,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH=bookworm-32
-VERSION=1.3.0-Working
+VERSION=1.2.1-Beta.1
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project

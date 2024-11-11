@@ -1,4 +1,4 @@
-# Created for WsprryPi version 1.3.0-Working [bookworm-32).
+# Created for WsprryPi version 1.2.1-Beta.1 [bookworm-32).
 
 /var/log/wspr/wspr.*.log {
     rotate 14
