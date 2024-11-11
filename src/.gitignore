@@ -1,2 +1,2 @@
-*.o
+# Ignore locally compiled file
 wspr

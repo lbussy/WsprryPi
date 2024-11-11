@@ -19,3 +19,6 @@ crash when the console screen blanks. The symptom is that WsppryPi works
 for several transmissions and then crashes. The fix is to add "consoleblank=0"
 to /boot/cmdline.txt.
 https://github.com/JamesP6000/WsprryPi/issues/10
+
+1. Documentation says `wspr [options] --test-tone f` but it shoudl be more
+clear that `f` is a frequency:  `wspr --test-tone 780e3`
