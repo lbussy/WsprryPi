@@ -109,8 +109,8 @@ def replace_in_file(filename, search_string, replace_string):
     with open(filename, "w", encoding = locale_encoding) as file:
         for line in lines:
             if line.startswith(search_string):
-                file.write(replace_string)
                 print(f"Replacing '{line.strip()}' with '{replace_string}'.")
+                file.write(replace_string + os.linesep)
             else:
                 file.write(line)
 
