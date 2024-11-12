@@ -70,7 +70,7 @@ LCBLog llog;
 #define WSPR_RAND_OFFSET 80
 #define WSPR15_RAND_OFFSET 8
 
-#define PAGE_SIZE (4 * 1024)
+#define PAGE_SIZE (4 * 1024) // Raspberry Pi 5 utilizes a 16KB memory page size by default
 #define BLOCK_SIZE (4 * 1024)
 
 #define PWM_CLOCKS_PER_ITER_NOMINAL 1000
@@ -280,9 +280,9 @@ void getPLLD()
     // Nominal clock frequencies
     // double f_xtal = 19200000.0;
     // PLLD clock frequency.
-    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
+    // For RPi1, after NTP converges, there is a 2.5 PPM difference between
     // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
+    // the crystal. This 2.5 PPM offset is not present in the RPi2, RPi3, RPi4, or RPi5.
     // This 2.5 PPM offset is compensated for here, but only for the RPi1.
 
     switch (ver())
@@ -296,15 +296,20 @@ void getPLLD()
         config.mem_flag = 0x04;
         config.f_plld_clk = (500000000.0);
         break;
-    case 3: // RPi 4
+    case 3: // RPi4
         config.mem_flag = 0x04;
         config.f_plld_clk = (750000000.0);
+        break;
+    case 4: // RPi5
+        config.mem_flag = 0x04; // TODO:  Figure out if we can use 16KB page here
+        config.f_plld_clk = (3000000000.0);
         break;
     default:
         fprintf(stderr, "Error: Unknown chipset (%d).", ver());
         exit(-1);
     }
 }
+
 
 void allocMemPool(unsigned numpages)
 {

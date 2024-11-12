@@ -25,11 +25,12 @@ int ver()
 
 const char* RPiVersion()
 {
-    const char* vertext[4] = {
+    const char* vertext[5] = {
                 "Raspberry Pi 1 or Zero Model (BCM2835)",
                 "Raspberry Pi 2B (BCM2836)",
                 "Raspberry Pi 2B or 3B (BCM2837)",
-                "Raspberry Pi 4 (BCM2711)"
+                "Raspberry Pi 4 (BCM2711)",
+                "Raspberry Pi 5 (BCM2712)"
             };
     return vertext[ver()];
 }
