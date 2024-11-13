@@ -2,7 +2,7 @@
 #define _VERSION_H
 #pragma once
 
-#include <bcm_host.h>
+#include <fstream>
 
 #define stringify(s) _stringifyDo(s)
 #define _stringifyDo(s) #s
@@ -18,9 +18,27 @@ unsigned gpioBase();
 
 int ver()
 {
-    // Return version ID
-    // See: https://github.com/raspberrypi/firmware/blob/5325b7802ca90ac5c87440e6acbc37c96f08b054/opt/vc/include/bcm_host.h#L93-L99
-    return bcm_host_get_processor_id();
+    std::ifstream cpuinfo("/proc/cpuinfo");
+    if (!cpuinfo.is_open()) {
+        std::cerr << "Unable to open /proc/cpuinfo" << std::endl;
+        return -1;
+    }
+
+    std::string line;
+    while (std::getline(cpuinfo, line)) {
+        if (line.find("Model") != std::string::npos || line.find("Hardware") != std::string::npos) {
+            // Check the model name directly
+            if (line.find("Raspberry Pi 1") != std::string::npos) return 0;
+            if (line.find("Raspberry Pi 2") != std::string::npos) return 1;
+            if (line.find("Raspberry Pi 3") != std::string::npos) return 2;
+            if (line.find("Raspberry Pi 4") != std::string::npos) return 3;
+            if (line.find("Raspberry Pi 5") != std::string::npos) return 4;
+            // Additional models can be added here if needed
+        }
+    }
+
+    cpuinfo.close();
+    return -1; // Return -1 if model is not found or unrecognized
 }
 
 const char* RPiVersion()
@@ -37,7 +55,8 @@ const char* RPiVersion()
 
 unsigned gpioBase()
 {
-    return bcm_host_get_peripheral_address();
+    //return bcm_host_get_peripheral_address();
+    return 0x40000000; // DEBUG to get past this, bcm_host is dead
 }
 
 #endif // _VERSION_H
