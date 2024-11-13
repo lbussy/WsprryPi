@@ -275,34 +275,51 @@ void pinLow(int pin = 0)
 
 // GPIO/DIO Control^
 
+double getMaxCpuFrequency() {
+    std::ifstream freqFile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq");
+    if (!freqFile.is_open()) {
+        std::cerr << "Failed to open scaling_max_freq" << std::endl;
+        return -1;
+    }
+
+    std::string maxFrequencyStr;
+    std::getline(freqFile, maxFrequencyStr);  // Read the frequency in kHz
+    freqFile.close();
+
+    double maxFrequency = std::stod(maxFrequencyStr);  // Convert to double
+    return maxFrequency * 1000.0;  // Multiply by 1000 to convert to Hz
+}
+
 void getPLLD()
 {
     // Nominal clock frequencies
     // double f_xtal = 19200000.0;
     // PLLD clock frequency.
-    // For RPi1, after NTP converges, there is a 2.5 PPM difference between
-    // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2, RPi3, RPi4, or RPi5.
-    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+
 
     switch (ver())
     {
     case 0: // RPi1
         config.mem_flag = 0x0c;
-        config.f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        // For RPi1, after NTP converges, there is a 2.5 PPM difference
+        // between the PPM correction reported by NTP and the actual
+        // frequency offset of the crystal. This 2.5 PPM offset is not
+        // present in the RPi2, RPi3, RPi4, or RPi5. This 2.5 PPM offset
+        // is compensated for on the RPi1.
+        config.f_plld_clk = (getMaxCpuFrequency() * (1 - 2.500e-6));
         break;
     case 1: // RPi2
     case 2: // RPi3
         config.mem_flag = 0x04;
-        config.f_plld_clk = (500000000.0);
+        config.f_plld_clk = getMaxCpuFrequency();
         break;
     case 3: // RPi4
         config.mem_flag = 0x04;
-        config.f_plld_clk = (750000000.0);
+        config.f_plld_clk = getMaxCpuFrequency();
         break;
     case 4: // RPi5
-        config.mem_flag = 0x04; // TODO:  Figure out if we can use 16KB page here
-        config.f_plld_clk = (3000000000.0);
+        config.mem_flag = 0x04;
+        config.f_plld_clk = getMaxCpuFrequency();
         break;
     default:
         fprintf(stderr, "Error: Unknown chipset (%d).", ver());
