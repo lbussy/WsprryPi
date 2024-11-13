@@ -1,6 +1,6 @@
 # Switching to 4KB Pages on RPi5
 
-The Raspberry Pi 5 defaults to a 16KB memory page size to enhance performance. However, some software may require the traditional 4KB page size for compatibility. To switch your Raspberry Pi 5 to use a 4KB page size kernel, follow these steps:
+The Raspberry Pi 5 defaults to a 16KB memory page size to enhance performance. However, some software may require the traditional 4KB page size for compatibility. To switch the Raspberry Pi 5 to use a 4KB page size kernel, follow these steps:
 
 1. Edit the Boot Configuration File:
     * Open the terminal on your Raspberry Pi.
