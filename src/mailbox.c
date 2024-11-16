@@ -57,7 +57,7 @@ void *mapmem(uint32_t base, uint32_t size)
         MAP_SHARED /*|MAP_FIXED*/,
         mem_fd,
         base);
-#ifdef DEBUG
+#ifdef WSPR_DEBUG
     printf("base=0x%x, mem=%p\n", base, mem);
 #endif
     if (mem == MAP_FAILED)
@@ -93,7 +93,7 @@ static int mbox_property(int file_desc, void *buf)
         perror("ioctl_set_msg failed");
     }
 
-#ifdef DEBUG
+#ifdef WSPR_DEBUG
     unsigned *p = buf;
     int i;
     unsigned size = *(unsigned *)buf;
