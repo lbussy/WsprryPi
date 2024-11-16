@@ -5,6 +5,10 @@
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
 
+// Define min and max RPi versions to support
+#define MINPIVERSION 1
+#define MAXPIVERSION 4
+
 // Logging library
 LCBLog llog;
 
@@ -70,7 +74,7 @@ LCBLog llog;
 #define WSPR_RAND_OFFSET 80
 #define WSPR15_RAND_OFFSET 8
 
-#define PAGE_SIZE (4 * 1024)
+#define PAGE_SIZE (4 * 1024) // Raspberry Pi 5 utilizes a 16KB memory page size by default
 #define BLOCK_SIZE (4 * 1024)
 
 #define PWM_CLOCKS_PER_ITER_NOMINAL 1000
@@ -225,8 +229,16 @@ void setupGPIO(int pin = 0)
     if (pin == 0) return;
     // Set up gpio pointer for direct register access
     int mem_fd;
+
     // Set up a memory regions to access GPIO
-    unsigned gpio_base = gpioBase() + 0x200000;
+    unsigned gpio_base;
+    unsigned _base = gpioBase();
+    if (_base != 0) {
+        gpio_base = _base + 0x200000;
+    } else {
+        llog.logE("Fail: Unable to determine GPIO base address.");
+        exit(-1);
+    }
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -275,36 +287,54 @@ void pinLow(int pin = 0)
 
 // GPIO/DIO Control^
 
-void getPLLD()
-{
-    // Nominal clock frequencies
-    // double f_xtal = 19200000.0;
-    // PLLD clock frequency.
-    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
-    // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+double getMaxCpuFrequency() {
+    std::ifstream freqFile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq");
+    if (!freqFile.is_open()) {
+        llog.logE("Failed to open scaling_max_freq");
+        return -1;
+    }
 
-    switch (ver())
+    std::string maxFrequencyStr;
+    std::getline(freqFile, maxFrequencyStr);  // Read the frequency in kHz
+
+    double maxFrequency = std::stod(maxFrequencyStr);  // Convert to double
+    return maxFrequency * 1000.0;  // Multiply by 1000 to convert to Hz
+}
+
+bool getPLLD(int _ver)
+{
+    // Get clock frequency and mem_flag
+    switch (_ver)
     {
-    case 0: // RPi1
+    case 1: // RPi1
         config.mem_flag = 0x0c;
-        config.f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        // For RPi1, after NTP converges, there is a 2.5 PPM difference
+        // between the PPM correction reported by NTP and the actual
+        // frequency offset of the crystal. This 2.5 PPM offset is not
+        // present in the RPi2, RPi3, RPi4, or RPi5. This 2.5 PPM offset
+        // is compensated for on the RPi1.
+        config.f_plld_clk = (getMaxCpuFrequency() * (1 - 2.500e-6));
         break;
-    case 1: // RPi2
-    case 2: // RPi3
+    case 2: // RPi2
+    case 3: // RPi3
         config.mem_flag = 0x04;
-        config.f_plld_clk = (500000000.0);
+        config.f_plld_clk = getMaxCpuFrequency();
         break;
-    case 3: // RPi 4
+    case 4: // RPi4
         config.mem_flag = 0x04;
-        config.f_plld_clk = (750000000.0);
+        config.f_plld_clk = getMaxCpuFrequency();
+        break;
+    case 5: // RPi5
+        config.mem_flag = 0x04;
+        config.f_plld_clk = getMaxCpuFrequency();
         break;
     default:
-        fprintf(stderr, "Error: Unknown chipset (%d).", ver());
-        exit(-1);
+        llog.logE("Error: Unknown chipset (", _ver, ").");
+        return false;
     }
+    return true;
 }
+
 
 void allocMemPool(unsigned numpages)
 {
@@ -1458,7 +1488,17 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // of physical memory.
 
     int mem_fd;
-    unsigned gpio_base = gpioBase();
+
+    // Set up a memory regions to access GPIO
+    unsigned gpio_base;
+    unsigned _base = gpioBase();
+    if (_base != 0) {
+        gpio_base = _base + 0x200000;
+    } else {
+        llog.logE("Fail: Unable to determine GPIO base address.");
+        exit(-1);
+    }
+
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -1481,12 +1521,52 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     close(mem_fd);
 }
 
+bool checkEnv() {
+    if (! isRaspbian()) {
+        llog.logE("Wsprry Pi only runs on Raspbian OS.");
+        return false;
+    }
+
+    // Exit if we can't get the proc info or if unsupported
+    int _ver = ver();
+    if (ver() < 0 || ver() > 6) {
+        llog.logE("Invalid /proc/cpuinfo state.");
+        return false;
+    }
+    const char * _verstring = RPiVersion(_ver);
+    llog.logS("Running on: ", _verstring, ".");
+    if (_ver < MINPIVERSION || _ver > MAXPIVERSION) {
+        llog.logE("Wsprry Pi only runs on Pi versions ", MINPIVERSION, " through ", MAXPIVERSION, ".");
+        return false;
+    }
+    if (std::string(_verstring) == "Unknown") {
+        llog.logE("Unknown processor type.");
+        return false;
+    }
+
+    // Check bitness
+    int _bitness = getBitness();
+    if (_bitness != 32 && _bitness != 64) {
+        llog.logE("Unsupported bitness detected.");
+        return false;
+    }
+    else if (_bitness != 32) {
+        llog.logE("Wsprry Pi does not currently support the 64-bit OS.");
+        return false;
+    }
+    return true;
+}
+
 int main(const int argc, char *const argv[])
 {
     if ( ! parse_commandline(argc, argv) ) return 1;
     llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
-    llog.logS("Running on: ", RPiVersion(), ".");
-    getPLLD(); // Get PLLD Frequency
+    if (! checkEnv()) return -1;
+
+    // Get PLLD Frequency
+    if ( ! getPLLD(ver())) {
+        return -1;
+    }
     setupGPIO(LED_PIN);
 
     if ( ! parseConfigData(argc, argv) ) return 1;
