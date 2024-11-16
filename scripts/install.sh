@@ -33,6 +33,9 @@ WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
 if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
 GITRAW="https://raw.githubusercontent.com/$OWNER"
+GITPATH=""
+# Allow an install from local repo vs GIT
+LOCAL="false"
 
 ############
 ### Bitness, Architecture & OS
@@ -419,15 +422,23 @@ do_unit() {
 ############
 
 copy_file() {
-    local scriptPath scriptName fullName curlFile
+    local scriptPath scriptName fullName curlFile file
     scriptName="$1"
     extension="$2"
+    file="$scriptName$extension"
     scriptPath="/usr/local/bin"
     fullName="$scriptPath/$scriptName$extension"
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/$scriptName$extension"
 
-    # Download file
-    curl -s "$curlFile" > "$fullName" || warn
+    # Copy file to target directory
+    # Switch between local and curl source
+    if [ "$LOCAL" == "true" ]; then
+        # Copy file from local path
+        cp "$GITPATH/scripts/$file" "$fullName" || warn
+    else
+        # Download file
+        curl -s "$curlFile" > "$fullName" || warn
+    fi
 
     # See if file is an executable
     if file "$fullName" | grep -q executable; then
@@ -699,8 +710,15 @@ createini () {
     if [ "$retval" == "false" ]; then return; fi
     echo -e "Creating configuration file for $PACKAGENAME."
     
-    # Download file to etc directory
-    curl -s "$curlFile" > "$fullName" || warn
+    # Copy file to target directory
+    # Switch between local and Git source
+    if [ "$LOCAL" == "true" ]; then
+        # Copy file from local path
+        cp "$GITPATH/scripts/$file" "$fullName" || warn
+    else
+        # Download file
+        curl -s "$curlFile" > "$fullName" || warn
+    fi
 
     chown root:root "$fullName"
     chmod 666 "$fullName"
@@ -870,6 +888,19 @@ EOF
 
 main() {
     VERBOSE=true  # Do not trim logs
+    if [[ "$1" == "-l" || "$1" == "--local" ]]; then
+        echo "Local install triggered."
+        LOCAL="true"
+
+        # Get the root directory of the current Git repository
+        GITPATH=$(git rev-parse --show-toplevel 2>/dev/null)
+
+        # Check that the command was successful or the Git path is empty
+        if [[ $? -ne 0 || -z "$GITPATH" ]]; then
+            echo "This is not a Git repository." 
+            die "$@" 
+        fi
+    fi
     check_bitness # Make sure we are not 64-bit
     check_release # Make sure we are not susing some dusty old version
     check_architecture # Make sure we are not on a Pi 5
@@ -902,15 +933,12 @@ main() {
     fi
     # Remove old service if it exists
     rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
     disable_sound # TODO:  No need for this if we end up using pigpio.h instead of DMA
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
-}
-
-pause() {
-    read -pr "Press enter to continue"
 }
 
 ############
