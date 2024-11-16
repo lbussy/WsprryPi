@@ -904,7 +904,7 @@ main() {
     rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
-    disable_sound
+    disable_sound # TODO:  No need for this if we end up using pigpio.h instead of DMA
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
 }
