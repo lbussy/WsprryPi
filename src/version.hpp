@@ -82,33 +82,21 @@ int getBitness() {
 }
 
 unsigned gpioBase() {
-    std::ifstream cpuinfo("/proc/cpuinfo");
-    if (!cpuinfo.is_open()) {
-        std::cerr << "Unable to open /proc/cpuinfo" << std::endl;
+    int _ver = ver();
+    unsigned base[7] = {
+                0,
+                0x20000000,
+                0x3F000000,
+                0x3F000000,
+                0x3F000000,
+                0x3F000000,
+                0
+            };
+    if (_ver) {
+        return base[_ver];
+    } else {
         return 0;
     }
-
-    std::string line;
-    while (std::getline(cpuinfo, line)) {
-        // Look for the "Model" line in /proc/cpuinfo to identify the Raspberry Pi model
-        if (line.find("Model") != std::string::npos) {
-            // Identify the model and return the corresponding peripheral base address
-            if (line.find("Raspberry Pi 5") != std::string::npos) {
-                return 0x3F000000;  // Raspberry Pi 5 (BCM2712) peripheral base address
-            } else if (line.find("Raspberry Pi 4") != std::string::npos) {
-                return 0x3F000000;  // Raspberry Pi 4 (BCM2711) peripheral base address
-            } else if (line.find("Raspberry Pi 3") != std::string::npos) {
-                return 0x3F000000;  // Raspberry Pi 3 (BCM2837) peripheral base address
-            } else if (line.find("Raspberry Pi 2") != std::string::npos) {
-                return 0x3F000000;  // Raspberry Pi 2 (BCM2836) peripheral base address
-            } else if (line.find("Raspberry Pi") != std::string::npos) {
-                return 0x20000000;  // Raspberry Pi 1 (BCM2835) peripheral base address
-            }
-        }
-    }
-
-    std::cerr << "Unable to determine Raspberry Pi model" << std::endl;
-    return 0;  // Default to 0 if model not found
 }
 
 #endif // _VERSION_H

@@ -229,8 +229,16 @@ void setupGPIO(int pin = 0)
     if (pin == 0) return;
     // Set up gpio pointer for direct register access
     int mem_fd;
+
     // Set up a memory regions to access GPIO
-    unsigned gpio_base = gpioBase() + 0x200000;
+    unsigned gpio_base;
+    unsigned _base = gpioBase();
+    if (_base != 0) {
+        gpio_base = _base + 0x200000;
+    } else {
+        llog.logE("Fail: Unable to determine GPIO base address.");
+        exit(-1);
+    }
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -282,13 +290,12 @@ void pinLow(int pin = 0)
 double getMaxCpuFrequency() {
     std::ifstream freqFile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq");
     if (!freqFile.is_open()) {
-        std::cerr << "Failed to open scaling_max_freq" << std::endl;
+        llog.logE("Failed to open scaling_max_freq");
         return -1;
     }
 
     std::string maxFrequencyStr;
     std::getline(freqFile, maxFrequencyStr);  // Read the frequency in kHz
-    freqFile.close();
 
     double maxFrequency = std::stod(maxFrequencyStr);  // Convert to double
     return maxFrequency * 1000.0;  // Multiply by 1000 to convert to Hz
@@ -1481,7 +1488,17 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // of physical memory.
 
     int mem_fd;
-    unsigned gpio_base = gpioBase();
+
+    // Set up a memory regions to access GPIO
+    unsigned gpio_base;
+    unsigned _base = gpioBase();
+    if (_base != 0) {
+        gpio_base = _base + 0x200000;
+    } else {
+        llog.logE("Fail: Unable to determine GPIO base address.");
+        exit(-1);
+    }
+
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
