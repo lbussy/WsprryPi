@@ -62,7 +62,7 @@ check_architecture() {
 
     # Check if model contains "Raspberry Pi 4" or higher
     if [[ "$model" =~ "Raspberry Pi 5" ]]; then
-        echo -e "\n$model is not currently supported\n."
+        echo -e "\n$model is not currently supported.\n"
         exit 1
     fi
 }
