@@ -1521,47 +1521,50 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     close(mem_fd);
 }
 
-int main(const int argc, char *const argv[])
-{
-    if ( ! parse_commandline(argc, argv) ) return 1;
-    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
-
+bool checkEnv() {
     if (! isRaspbian()) {
-       llog.logE("Wsprry Pi only runs on Raspbian OS.");
-        return -1;
+        llog.logE("Wsprry Pi only runs on Raspbian OS.");
+        return false;
     }
 
     // Exit if we can't get the proc info or if unsupported
     int _ver = ver();
     if (ver() < 0 || ver() > 6) {
         llog.logE("Invalid /proc/cpuinfo state.");
-        return -1;
+        return false;
     }
     const char * _verstring = RPiVersion(_ver);
     llog.logS("Running on: ", _verstring, ".");
     if (_ver < MINPIVERSION || _ver > MAXPIVERSION) {
         llog.logE("Wsprry Pi only runs on Pi versions ", MINPIVERSION, " through ", MAXPIVERSION, ".");
-        return -1;
+        return false;
     }
     if (std::string(_verstring) == "Unknown") {
         llog.logE("Unknown processor type.");
-        return -1;
+        return false;
     }
-    delete[] _verstring;
 
     // Check bitness
     int _bitness = getBitness();
     if (_bitness != 32 && _bitness != 64) {
         llog.logE("Unsupported bitness detected.");
-        return -1;
+        return false;
     }
     else if (_bitness != 32) {
         llog.logE("Wsprry Pi does not currently support the 64-bit OS.");
-        return -1;
+        return false;
     }
+    return true;
+}
+
+int main(const int argc, char *const argv[])
+{
+    if ( ! parse_commandline(argc, argv) ) return 1;
+    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
+    if (! checkEnv()) return -1;
 
     // Get PLLD Frequency
-    if ( ! getPLLD(_ver)) {
+    if ( ! getPLLD(ver())) {
         return -1;
     }
     setupGPIO(LED_PIN);
