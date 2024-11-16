@@ -36,7 +36,7 @@ bool isRaspbian() {
 
 int ver()
 {
-    std::ifstream cpuinfo("/proc/cpuinfo"); // ifstream closes when out of scope
+    std::ifstream cpuinfo("/proc/cpuinfo");
     if (!cpuinfo.is_open()) {
         std::cerr << "Unable to open /proc/cpuinfo" << std::endl;
         return -1;
