@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Created for WsprryPi version 1.2.1 [no_bcm).
 
 """Module providing a function to poll a shutdown button and halt the system if pressed."""
 

@@ -106,6 +106,15 @@ These are the required libraries for a development environment (assuming you are
 sudo apt-get install git apache2 php libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
 
+Referenced Libs on Bookworm Lite 32-bit:
+
+``` bash
+The following additional packages will be installed:
+  libraspberrypi0
+The following NEW packages will be installed:
+  libraspberrypi-dev libraspberrypi0 raspberrypi-kernel-headers
+```
+
 ## Python
 
 Some tools in `./scripts/` are Python, so I use a virtual environment for development.  I have created a `requirements.txt` for any dependencies.

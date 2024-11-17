@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Created for WsprryPi version 1.2.1 [no_bcm).
 
 ############
 ### Global Declarations
@@ -18,7 +18,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=main
+BRANCH=no_bcm
 VERSION=1.2.1
 # Set this script
 THISSCRIPT="uninstall.sh"

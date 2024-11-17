@@ -2,7 +2,7 @@
 """Module compiles the project and prepares script headers to match the environment."""
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Created for WsprryPi version 1.2.1 [no_bcm).
 
 import subprocess
 import os
