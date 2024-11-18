@@ -69,7 +69,11 @@ Remote development is greatly simplified if you exchange keys:
  [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
  ```
 
-2.  Copy the key to your Pi: `ssh-copy-id pi@{hostname}.local`
+2.  Copy the key to your Pi:
+
+  ``` bash
+  ssh-copy-id pi@{hostname}.local
+  ```
 
 3.  If you want to turn off password authentication on your Pi, edit your `/etc/ssh/sshd_config`, uncomment the line starting with `PasswordAuthentication`, and set the value to `no`.
 
@@ -134,6 +138,8 @@ To activate in subsequent sessions:
 If you use VSCode, it should automatically activate your `venv` when you open the project.  If it prompts you to accept it instead, do so now.
 
 ## Repo Tools and Scripts
+
+More information about using the release scripts are in the [RELEASE.md](./scripts/RELEASE.md) document.
 
 * `./scripts/copydocs.sh` - Compile the project Sphinx docs and place them in http://{hostname}.local/wspr/docs/
 * `./scripts/copyexe.sh` - After the initial install, this will update the local system with new executable files in `./scripts/`.
