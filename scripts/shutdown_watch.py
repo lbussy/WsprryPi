@@ -5,7 +5,7 @@ Module providing a function to poll a shutdown button and halt the system if pre
 """
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-69995bb [new_release_proc].
+# Created for WsprryPi project, version 1.2.1-9e6e021 [new_release_proc].
 
 import sys
 from time import sleep

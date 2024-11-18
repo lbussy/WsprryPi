@@ -41,16 +41,16 @@ class Config:
     DRY_RUN = False
     
     # Enable or disable debugging (True = detailed logs, False = standard logs)
-    DEBUG = True
+    DEBUG = False
 
     # Enable or disable logging (True = logging enabled, False = logging disabled)
     ENABLE_LOGGING = False
 
     # Flag to enable/disable project compilation
-    ENABLE_COMPILATION = False
+    ENABLE_COMPILATION = True
 
     # Flag to enable/disable copying of executable files after compilation
-    ENABLE_COPY = False
+    ENABLE_COPY = True
 
     # Flag to enable/disable file backup (if True, backup files are created before changes)
     ENABLE_BACKUP = False

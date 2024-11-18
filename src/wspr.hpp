@@ -36,7 +36,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-69995bb [new_release_proc].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9e6e021 [new_release_proc].
 */
 
 #include <stdio.h>
