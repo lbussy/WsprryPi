@@ -1,5 +1,10 @@
 # GitIgnore for WsprryPi
 
+## Relase.py ignores:
+src/**/*.bak
+scripts/**/*.bak
+scripts/logs/
+
 ## OS ignores
 .DS_Store
 
