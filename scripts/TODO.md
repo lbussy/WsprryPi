@@ -5,9 +5,10 @@
 - Make a log viewing page
 - Do we need a venv for shutdown_watch.py
 - Suggest to clone git repo after required libs (devel notes)
-- Use copy-able code blocks in all of the Developer notes (devel notes)
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
 - Put in a redirect to /wspr if nothing is in web root.
+- Documentation says `wspr [options] --test-tone f` but it should be more
+clear that `f` is a frequency:  `wspr --test-tone 780e3
 
 # Previous Issues
 
@@ -31,6 +32,3 @@ crash when the console screen blanks. The symptom is that WsppryPi works
 for several transmissions and then crashes. The fix is to add "consoleblank=0"
 to /boot/cmdline.txt.
 https://github.com/JamesP6000/WsprryPi/issues/10
-
-1. Documentation says `wspr [options] --test-tone f` but it shoudl be more
-clear that `f` is a frequency:  `wspr --test-tone 780e3`
