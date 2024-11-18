@@ -2,6 +2,43 @@
 #define _INIREADER_H
 #pragma once
 
+/*
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/*
+ * WsprryPi
+ * Updated and maintained by Lee C. Bussy
+ *
+ * Originally forked from threeme3/WsprryPi (no longer active), this
+ * project has been significantly updated, improved, and documented for
+ * ease of use.
+ *
+ * Inspired by a conversation with Bruce Raymond of TAPR, this fork has
+ * diverged substantially from its origins and operates as an independent
+ * project.
+ *
+ * Contributors:
+ *   - threeme3 (Original Author)
+ *   - Bruce Raymond (Inspiration and Guidance)
+ *   - Lee Bussy, aa0nt@arrl.net
+ *
+ * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-69995bb [new_release_proc].
+*/
+
 #ifdef __cplusplus
 extern "C" {
 #endif
