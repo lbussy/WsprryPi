@@ -2,6 +2,7 @@
 # Developer Notes
 
 - [VS Code](#vs-code)
+  - [Extensions installed on SSH: wspr.local](#extensions-installed-on-ssh-wsprlocal)
 - [Optional Aliases](#optional-aliases)
 - [Passwordless (public key) Login to Pi](#passwordless-public-key-login-to-pi)
 - [Required Libs](#required-libs)
@@ -17,13 +18,15 @@ I use VS Code to develop this environment and connect my workstation to my Pi vi
 
 These are the extensions I use.  I have no idea if you need all of these; I strongly suspect not.  You may copy/paste these commands to install all of them.  If you have already "moved in" to VS Code, some of these may conflict with the extensions you already have.
 
+### Extensions installed on SSH: wspr.local
+
 ``` bash
-code --install-extension davidanson.vscode-markdownlint
-code --install-extension donjayamanne.githistory
-code --install-extension github.vscode-github-actions
+code --install-extension 
 code --install-extension ms-python.debugpy
 code --install-extension ms-python.python
 code --install-extension ms-python.vscode-pylance
+code --install-extension ms-vscode.makefile-tools
+code --install-extension yzhang.markdown-all-in-one
 ```
 
 (List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
