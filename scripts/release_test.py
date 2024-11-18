@@ -1,92 +1,95 @@
 """
 Test Suite for Project Header Update Script
 
-This module contains the test suite for validating the behavior of the Project Header Update Script.
-It uses the `unittest` framework to test key functionalities such as copyright year updates, version line changes,
-file backup logic, Git information retrieval, and more. The tests ensure that the script correctly processes different
-types of files, handles errors, and respects configuration flags like `DRY_RUN` and `ENABLE_BACKUP`.
+This module contains unit tests for validating the functionality of the Project Header Update Script.
+It uses the `unittest` framework to test key features such as copyright year updates, version line changes,
+file backup creation, Git information retrieval, and file processing. These tests ensure that the script
+functions as expected across different scenarios, including handling errors, respecting configuration flags
+like `DRY_RUN` and `ENABLE_BACKUP`, and updating files correctly.
 
-Key Tests:
-- Copyright Year Update: Ensures the copyright year is updated correctly from a single year or year range.
-- Version Line Update: Ensures the version line is updated with the correct Git tag, commit hash, and branch information.
-- Backup Logic: Validates the file backup mechanism, ensuring backups are created when necessary and skipped if they already exist.
-- Dry Run Mode: Tests the behavior of the script when the `DRY_RUN` flag is set, ensuring no changes are written to files during testing.
-- Git Information Retrieval: Tests the retrieval of Git repository information (such as branch, tag, and commit hash).
-- File Handling: Validates that the script processes files correctly, including handling large files and files with multiple sections that need to be updated.
-- Permission Errors: Simulates permission-related errors to ensure the script handles them gracefully.
-
-Constants:
-- `TESTED_FILE_NAME`: The name of the file being tested (default is "release.py").
-   - This constant allows for easy changes to the file being tested without having to modify individual test cases.
+Key Features Tested:
+---------------------
+- **Copyright Year Update**: Ensures the copyright year is correctly updated from a single year or a year range.
+- **Version Line Update**: Validates that the version line is updated with the correct Git tag, commit hash, and branch.
+- **File Backup Logic**: Confirms that backup files are created when necessary and that no backups are made if disabled.
+- **Dry Run Mode**: Ensures no changes are made to files when `DRY_RUN` is enabled.
+- **Git Information Retrieval**: Validates the retrieval of Git repository details (e.g., branch, tag, commit hash).
+- **File Handling**: Ensures correct processing of files, including large files and files with multiple sections to update.
+- **Permission Handling**: Simulates file permission errors to check proper error handling.
 
 Test Coverage:
-The test suite covers edge cases for file parsing, backup handling, large file handling, and dry-run functionality.
-It also includes tests for various file formats and permission errors.
+--------------
+The test suite includes scenarios for various file formats, edge cases for file processing, large file handling,
+dry-run operations, and excluded section handling. It also checks that all configurations in `release_config.py`
+are respected.
 
 Usage:
 ------
-To run the full test suite, use the following command in the terminal:
+To run the full test suite, use:
     python -m unittest release_test.py
 
-To run a specific test case or method, use this format:
-    python -m unittest release_test.TestProjectFunctions.test_update_copyright_year_single
+To run a specific test case or method:
+    python -m unittest release_test.TestReleaseFunctions.test_update_copyright_year_single
 
 Test Results:
 -------------
-The test results will be displayed in the terminal, showing whether all tests passed or if any tests failed.
-The output includes logs for dry-run executions, file processing steps, and error messages.
+The test results will display in the terminal, indicating which tests pass or fail. Detailed logs are available
+for dry-run executions, file processing steps, and error messages.
 
 Requirements:
 -------------
 - Python 3.x
 - `unittest` module (standard in Python 3.x)
-"""
 
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-4eb6dd1 [new_release_proc].
+Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+
+Created for WsprryPi project, version 1.2.1-5b50d3c [new_release_proc].
+"""
 
 import unittest
 from unittest.mock import patch, mock_open
 from pathlib import Path
-import logging
-from release_config import Config  # Import the config module
-
+from release_config import Config  # Import the configuration module
 
 class TestReleaseFunctions(unittest.TestCase):
     """
-    Unit tests for the `release.py` script, testing key functionalities such as logging, dry-run mode,
-    file backup, compilation, file copying, and error handling.
+    Unit tests for `release.py` script functionalities, covering areas like logging, dry-run mode, file backup,
+    compilation, file copying, and error handling.
     """
 
     @patch("logging.basicConfig")
     def test_logging_enabled(self, mock_logging):
         """
         Test that logging is enabled when `Config.ENABLE_LOGGING` is True.
+        Verifies that logging is properly set up when logging is enabled in the configuration.
         """
         Config.ENABLE_LOGGING = True
-        import release  # Re-import to apply the new config setting
+        import release  # Re-import the release script to apply the updated configuration
 
-        release.main()  # Run the main function, which will call logging
+        release.main()  # Run the main function, which will trigger logging setup
 
+        # Verify that logging setup was called
         mock_logging.assert_called_once()
 
     @patch("logging.basicConfig")
     def test_logging_disabled(self, mock_logging):
         """
-        Test that logging is not enabled when `Config.ENABLE_LOGGING` is False.
+        Test that logging is disabled when `Config.ENABLE_LOGGING` is False.
+        Verifies that no logging setup occurs when logging is disabled in the configuration.
         """
         Config.ENABLE_LOGGING = False
-        import release  # Re-import to apply the new config setting
+        import release  # Re-import the release script to apply the updated configuration
 
-        release.main()  # Run the main function, which should not call logging
+        release.main()  # Run the main function, which should not call logging setup
 
+        # Verify that logging setup was not called
         mock_logging.assert_not_called()
 
     @patch("builtins.open", new_callable=mock_open)
     def test_dry_run(self, mock_open):
         """
-        Test that no file changes happen when `Config.DRY_RUN` is True.
-        The dry-run mode ensures that the script only prints the changes without modifying files.
+        Test the `DRY_RUN` mode, where no file changes are made.
+        Ensures that no changes are written to files when `Config.DRY_RUN` is set to True.
         """
         Config.DRY_RUN = True
         mock_open.return_value.read.return_value = "line 1\nline 2\nline 3"
@@ -94,45 +97,55 @@ class TestReleaseFunctions(unittest.TestCase):
         with patch("release.update_files") as mock_update:
             mock_update(Path("/mock/project"), "main", "v1.2.4", "abcd123")
 
+        # Ensure that the file is not written to during dry-run mode
         mock_open.return_value.write.assert_not_called()
 
     @patch("shutil.copy")
     def test_backup_file(self, mock_copy):
         """
-        Test that file backup is created when `Config.ENABLE_BACKUP` is True.
+        Test that a backup is created when `Config.ENABLE_BACKUP` is True.
+        Ensures that a backup file is copied to the `scripts/bkp` directory if backups are enabled.
         """
         Config.ENABLE_BACKUP = True
         file_path = Path("test_file.py")
 
+        # Call the backup function from the `release` script
         from release import backup_file
         backup_file(file_path)
 
+        # Verify that the backup was copied
         mock_copy.assert_called_once()
 
     @patch("shutil.copy")
     def test_backup_file_no_backup(self, mock_copy):
         """
-        Test that no backup is made when `Config.ENABLE_BACKUP` is False.
+        Test that no backup is created when `Config.ENABLE_BACKUP` is False.
+        Ensures that no backup is made if the backup option is disabled in the configuration.
         """
         Config.ENABLE_BACKUP = False
         file_path = Path("test_file.py")
 
+        # Call the backup function
         from release import backup_file
         backup_file(file_path)
 
+        # Ensure no backup was made
         mock_copy.assert_not_called()
 
     @patch("subprocess.run")
     def test_compile_project(self, mock_run):
         """
-        Test that project compilation happens when `Config.ENABLE_COMPILATION` is True.
+        Test that project compilation occurs when `Config.ENABLE_COMPILATION` is True.
+        Verifies that the `make clean` and `make` commands are run when compilation is enabled.
         """
         Config.ENABLE_COMPILATION = True
         project_directory = Path("/mock/project")
 
+        # Simulate the compile project function call
         from release import compile_project
         compile_project(project_directory)
 
+        # Ensure that the 'make' command was run as expected
         mock_run.assert_any_call("make clean", cwd=project_directory / "src")
         mock_run.assert_any_call("make", cwd=project_directory / "src")
 
@@ -140,13 +153,16 @@ class TestReleaseFunctions(unittest.TestCase):
     def test_copy_files(self, mock_copy):
         """
         Test that executable files are copied when `Config.ENABLE_COPY` is True.
+        Ensures that the specified executable files are copied to the scripts directory.
         """
         Config.ENABLE_COPY = True
         project_directory = Path("/mock/project")
 
+        # Simulate the file copy operation
         from release import copy_files
         copy_files(project_directory, ["wspr", "wspr.ini"])
 
+        # Verify that files are copied as expected
         mock_copy.assert_any_call(project_directory / "src" / "wspr", project_directory / "scripts" / "wspr")
         mock_copy.assert_any_call(project_directory / "src" / "wspr.ini", project_directory / "scripts" / "wspr.ini")
 
@@ -154,6 +170,7 @@ class TestReleaseFunctions(unittest.TestCase):
     def test_file_permission_error(self, mock_open):
         """
         Test that permission errors are correctly raised and handled.
+        Simulates a `PermissionError` to verify that it is caught and handled by the script.
         """
         mock_open.side_effect = PermissionError("Permission denied")
 
@@ -165,9 +182,10 @@ class TestReleaseFunctions(unittest.TestCase):
     def test_multiple_changes_in_file(self, mock_open):
         """
         Test that multiple changes (copyright and version) are correctly applied to a file.
+        Ensures that both the copyright and version lines are updated when applicable.
         """
         content = """# Copyright (C) 2020 @LBussy
-        version 1.0.0
+        version 1.2.1-5b50d3c [new_release_proc]
         Some other content here"""
         mock_open.return_value.read.return_value = content
         with patch("release.update_files") as mock_update:
@@ -181,6 +199,7 @@ class TestReleaseFunctions(unittest.TestCase):
     def test_excluded_section(self, mock_open):
         """
         Test that excluded sections (e.g., GPL) are not updated in the file.
+        Ensures that sections containing license information (e.g., GPL) are excluded from header updates.
         """
         content = """# Copyright (C) 2020 @LBussy
         # GNU General Public License
@@ -191,19 +210,22 @@ class TestReleaseFunctions(unittest.TestCase):
 
         updated_content = mock_open.return_value.write.call_args[0][0]
         self.assertIn("Copyright (C) 2020-2024 @LBussy", updated_content)
-        self.assertNotIn("GNU General Public License", updated_content)
+        self.assertNotIn("GNU General Public License", updated_content)  # Ensure GPL section is skipped
         self.assertIn("version v1.2.4-abcd123 [main]", updated_content)
 
     @patch("builtins.open", new_callable=mock_open)
     def test_large_file(self, mock_open):
         """
         Test that only the first `MAX_PROCESS_LINES` lines of a file are processed.
+        Ensures that the script correctly limits the number of lines processed in large files.
         """
+        # Simulate a file with 100 lines
         content = "\n".join([f"line {i}" for i in range(1, 101)])
         mock_open.return_value.read.return_value = content
         with patch("release.update_files") as mock_update:
             mock_update(Path("/mock/project"), "main", "v1.2.4", "abcd123")
 
+        # Ensure only the first 50 lines were processed (assuming MAX_PROCESS_LINES is set to 50)
         updated_content = mock_open.return_value.write.call_args[0][0]
         lines = updated_content.splitlines()
         self.assertEqual(len(lines), 50)  # Ensure only 50 lines were processed
@@ -213,17 +235,15 @@ class TestReleaseFunctions(unittest.TestCase):
     def test_dry_run_with_diff(self, mock_stdout, mock_open):
         """
         Test that the diff is printed in dry-run mode without making file changes.
+        Ensures that changes are displayed in the console when `DRY_RUN` is enabled, without modifying the file.
         """
         Config.DRY_RUN = True
         mock_open.return_value.read.return_value = "line 1\nline 2\nline 3"
 
-        from release import colorized_diff
+        from release import update_file_content, colorized_diff
         original_content = mock_open.return_value.read.return_value
         updated_content = "line 1\nline 2 updated\nline 3"
 
+        # Perform dry-run diff test
         diff = colorized_diff(original_content, updated_content)
-        mock_stdout.write.assert_called_with(diff + "\n")  # Verify diff is printed with newline
-
-
-if __name__ == "__main__":
-    unittest.main()
+        mock_stdout.write.assert_called_with(diff + "\n")  # Verify that the diff is printed with newline
