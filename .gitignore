@@ -4,6 +4,7 @@
 src/**/*.bak
 scripts/**/*.bak
 scripts/logs/
+scripts/bkp/
 
 ## OS ignores
 .DS_Store
