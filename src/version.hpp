@@ -2,15 +2,37 @@
 #define _VERSION_H
 #pragma once
 
+// This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
+
+/*
+ * WsprryPi
+ * Updated and maintained by Lee C. Bussy
+ *
+ * Originally forked from threeme3/WsprryPi (no longer active), this
+ * project has been significantly updated, improved, and documented for
+ * ease of use.
+ *
+ * Inspired by a conversation with Bruce Raymond of TAPR, this fork has
+ * diverged substantially from its origins and operates as an independent
+ * project.
+ *
+ * Contributors:
+ *   - threeme3 (Original Author)
+ *   - Bruce Raymond (Inspiration and Guidance)
+ *   - Lee Bussy, aa0nt@arrl.net
+ *
+ * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+*/
+
 #include <bcm_host.h>
 
-#define stringify(s) _stringifyDo(s)
-#define _stringifyDo(s) #s
+#define stringify(x) #x
+#define macro_to_string(x) stringify(x)
 
-// const char *project() { return stringify(MAKE_SRC_NAM); }
-const char *exeversion() { return stringify(MAKE_SRC_TAG); }
-// const char *commit() { return stringify(MAKE_SRC_REV); }
-const char *branch() { return stringify(MAKE_SRC_BRH); }
+const char *exeversion() { return macro_to_string(MAKE_SRC_TAG); }
+const char *branch() { return macro_to_string(MAKE_SRC_BRH); }
 
 int ver();
 const char* RPiVersion();
@@ -18,7 +40,6 @@ unsigned gpioBase();
 
 int ver()
 {
-    // Return version ID
     // See: https://github.com/raspberrypi/firmware/blob/5325b7802ca90ac5c87440e6acbc37c96f08b054/opt/vc/include/bcm_host.h#L93-L99
     return bcm_host_get_processor_id();
 }

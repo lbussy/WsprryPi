@@ -2,6 +2,7 @@
 # Developer Notes
 
 - [VS Code](#vs-code)
+  - [Extensions installed on SSH: wspr.local](#extensions-installed-on-ssh-wsprlocal)
 - [Optional Aliases](#optional-aliases)
 - [Passwordless (public key) Login to Pi](#passwordless-public-key-login-to-pi)
 - [Required Libs](#required-libs)
@@ -17,13 +18,15 @@ I use VS Code to develop this environment and connect my workstation to my Pi vi
 
 These are the extensions I use.  I have no idea if you need all of these; I strongly suspect not.  You may copy/paste these commands to install all of them.  If you have already "moved in" to VS Code, some of these may conflict with the extensions you already have.
 
+### Extensions installed on SSH: wspr.local
+
 ``` bash
-code --install-extension davidanson.vscode-markdownlint
-code --install-extension donjayamanne.githistory
-code --install-extension github.vscode-github-actions
+code --install-extension 
 code --install-extension ms-python.debugpy
 code --install-extension ms-python.python
 code --install-extension ms-python.vscode-pylance
+code --install-extension ms-vscode.makefile-tools
+code --install-extension yzhang.markdown-all-in-one
 ```
 
 (List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
@@ -66,7 +69,11 @@ Remote development is greatly simplified if you exchange keys:
  [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
  ```
 
-2.  Copy the key to your Pi: `ssh-copy-id pi@{hostname}.local`
+2.  Copy the key to your Pi:
+
+  ``` bash
+  ssh-copy-id pi@{hostname}.local
+  ```
 
 3.  If you want to turn off password authentication on your Pi, edit your `/etc/ssh/sshd_config`, uncomment the line starting with `PasswordAuthentication`, and set the value to `no`.
 
@@ -131,6 +138,8 @@ To activate in subsequent sessions:
 If you use VSCode, it should automatically activate your `venv` when you open the project.  If it prompts you to accept it instead, do so now.
 
 ## Repo Tools and Scripts
+
+More information about using the release scripts are in the [RELEASE.md](./scripts/RELEASE.md) document.
 
 * `./scripts/copydocs.sh` - Compile the project Sphinx docs and place them in http://{hostname}.local/wspr/docs/
 * `./scripts/copyexe.sh` - After the initial install, this will update the local system with new executable files in `./scripts/`.
