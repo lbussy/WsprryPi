@@ -8,7 +8,7 @@
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
 - Put in a redirect to /wspr if nothing is in web root.
 - Documentation says `wspr [options] --test-tone f` but it should be more
-clear that `f` is a frequency:  `wspr --test-tone 780e3
+clear that `f` is a frequency:  `wspr --test-tone 780e3`
 
 # Previous Issues
 
