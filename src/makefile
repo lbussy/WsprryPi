@@ -1,3 +1,4 @@
+# This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 # Created for WsprryPi version 1.2.1-4c76705 [devel].
 
