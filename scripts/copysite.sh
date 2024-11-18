@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Created for WsprryPi project, version 1.2.1-69995bb [new_release_proc].
 
-# Get repo root
+# Begin
+#
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
 if [ -z "$repo_root" ]; then
     echo "Not in a Git repository."

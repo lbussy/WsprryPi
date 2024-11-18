@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Created for WsprryPi project, version 1.2.1-69995bb [new_release_proc].
 
 ############
 ### Global Declarations
