@@ -930,7 +930,8 @@ bool getINIValues(bool reload = false)
         config.callsign = iniConfig.getCallsign();
         config.grid_square = iniConfig.getGridsquare();
         config.tx_power = iniConfig.getTxpower();
-        config.frequency_string = iniConfig.getFrequency();
+        config.frequency_string.clear(); // Ensure previous data is cleared
+        config.frequency_string = iniConfig.getFrequency(); // Assign the new value
         config.ppm = iniConfig.getPpm();
         config.self_cal = iniConfig.getSelfcal();
         config.random_offset = iniConfig.getOffset();
