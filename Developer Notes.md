@@ -10,6 +10,7 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
   - [Do It All](#do-it-all)
 - [VS Code](#vs-code)
 - [Required Libs](#required-libs)
+- [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
 
 ## Set up SSH to your PI
@@ -69,7 +70,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
     ssh-copy-id pi@{hostname}.local
     ```
 
-5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this:
+5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this - be sure to mind the indentation:
 
     ``` bash
         Host {hostname}.local
@@ -127,7 +128,7 @@ curl https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/
 
 It will:
 
-* Add the above described aliases to your `~/.bash_rc`
+* Add the above described aliases to your `~/.bash_aliases`
 
 * Source (add to the environment) the new aliases.
 
@@ -157,7 +158,7 @@ Either:
         sudo apt install git -y
         git clone https://github.com/lbussy/WsprryPi.git
         cd ~/WsprryPi/
-        ./scripts/install.sh
+        sudo ./scripts/install.sh -l
         ```
 
 (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
@@ -170,16 +171,16 @@ Or:
         cd ~/WsprryPi/
         ```
   
-(This lets the installer install everything, but then you still need to clone the repo after.)
+(This lets the installer install everything, but then you clone the repo after.)
 
-6. You should be in your git repo directory.  Set up the Git global environment.  Replace placeholders with your Git username and email:
+1. You should be in your git repo directory.  Set up the Git global environment.  Replace placeholders with your Git username and email:
 
     ``` bash
     git config --global user.email "you@example.com"
     git config --global user.name "Your Name"
     ```
 
-7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
+2. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
 
     ``` bash
     code --install-extension ms-python.debugpy
@@ -211,6 +212,15 @@ Or:
 
 11. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
+Keep in mind that the **Wsprry Pi** and optional **Shutdown Watch** systemd daemons are running at this point.  If oyu will be executing from your dev environment you may receive an error that `wspr` is already running.  You can stop and disable these with:
+
+``` bash
+sudo systemctl stop wspr
+sudo systemctl disable wspr
+sudo systemctl stop shutdown_watch
+sudo systemctl disable shutdown_watch
+```
+
 ## Required Libs
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you will need some libs to compile the project:
@@ -226,6 +236,10 @@ Install these with:
 ``` bash
 sudo apt-get install git apache2 php libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
+
+## Reboot
+
+The installer blacklists the onboard snd_bcm2835 device as this is used for generating the signal.  You will need a reboot at some point before expecting Wsprry Pi to work corectly.
 
 ## Working with the Project
 
