@@ -1,107 +1,219 @@
 <!-- omit in toc -->
 # Developer Notes
 
+I use VS Code installed on my working laptop (Windows or Mac) and the [Visual Studio Code Remote—SSH](https://code.visualstudio.com/docs/remote/ssh) extension to access VS Code's feature set on a Raspberry Pi from a familiar Dev UI on my laptop.
+
+- [Set up SSH to your PI](#set-up-ssh-to-your-pi)
+- [Optional Housekeeping](#optional-housekeeping)
+  - [Aliases Deployed](#aliases-deployed)
+  - [Install Helpful Packages](#install-helpful-packages)
+  - [Do It All](#do-it-all)
 - [VS Code](#vs-code)
-  - [Extensions installed on SSH: wspr.local](#extensions-installed-on-ssh-wsprlocal)
-- [Optional Aliases](#optional-aliases)
-- [Passwordless (public key) Login to Pi](#passwordless-public-key-login-to-pi)
 - [Required Libs](#required-libs)
-  - [Cleanup Existing Environment and Libs](#cleanup-existing-environment-and-libs)
-  - [Install Required Libs](#install-required-libs)
-- [Python](#python)
-- [Repo Tools and Scripts](#repo-tools-and-scripts)
+- [Working with the Project](#working-with-the-project)
 
+## Set up SSH to your PI
 
-## VS Code
+Any references to `{hostname}` should be replaced with the hostname of your target Pi.
 
-I use VS Code to develop this environment and connect my workstation to my Pi via the [VS Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview) option.  This tool makes compiling and testing on the Pi very easy as I work from my laptop.
+1. If you are on Windows, have [Open SSH](https://windowsloop.com/install-openssh-server-windows-11/) installed.
+   
+2. Check that you have an SSH key generated on your system:
 
-These are the extensions I use.  I have no idea if you need all of these; I strongly suspect not.  You may copy/paste these commands to install all of them.  If you have already "moved in" to VS Code, some of these may conflict with the extensions you already have.
+   * Linux or Mac:
 
-### Extensions installed on SSH: wspr.local
+        ``` bash
+        [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
+        ```
+
+   * Windows PowerShell:
+
+        ``` PowerShell
+        if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
+            Write-Host "SSH keys already exist."
+        } else {
+            ssh-keygen
+        }
+        ```
+
+   * Windows Command Line:
+
+        ``` cmd
+        @echo off
+        if exist "%USERPROFILE%\\.ssh" (
+            if exist "%USERPROFILE%\.ssh\*.pub" (
+                echo SSH keys already exist.
+            ) else (
+                ssh-keygen
+            )
+        ) else (
+            ssh-keygen
+        )
+        ```
+
+3. `ssh` to your `pi@{hostname}.local` with the target host password to ensure your `ssh` client and name resolution via zeroconf or mDNS. If you see:
+
+    ```
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    ```
+
+   * Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
+   * "Yes" to a prompt to continue connecting
+   * Exit back out
+
+4. Copy keys to host with (enter target host password when asked):
+   
+    ``` bash
+    ssh-copy-id pi@{hostname}.local
+    ```
+
+5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this:
+
+    ``` bash
+        Host {hostname}.local
+            HostName {hostname}.local
+            User pi
+            Port 22
+            PreferredAuthentications publickey
+    ```
+
+6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwordless) logins.
+
+## Optional Housekeeping
+
+I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
+
+Scroll down to the [Do It All](#do-it-all) section to find the command to set all this up.
+
+### Aliases Deployed
+
+1. **`alias cd..='cd ..'`**:
+   - This alias creates a shorthand for the `cd ..` command, which moves up one directory in the filesystem. Typing `cd..` normally results in a "command not found" error, but this alias resolves that by making `cd..` function as `cd ..`. I typo that often.
+
+2. **`alias diff='colordiff'`**:
+   - This alias replaces the `diff` command with `colordiff`. The `colordiff` command is a colorized version of `diff`, which makes it easier to compare files, highlighting differences using color visually.
+
+3. **`alias ping='ping -c 3'`**:
+   - This alias modifies the `ping` command to send only three packets by default (`ping -c 3`), stopping after three pings instead of running indefinitely. I find this useful for quick network checks without stopping the command manually.
+
+4. **`alias update='sudo apt update && sudo apt --fix-broken install -y && sudo apt autoremove --purge -y && sudo apt autoclean -y && sudo apt full-upgrade -y && sudo deborphan | xargs sudo apt-get -y remove --purge'`**:
+   - This alias combines multiple package management tasks into one command, making it easier to keep the system updated and cleaned up:
+     - `sudo apt update`: Updates the list of available packages.
+     - `sudo apt --fix-broken install -y`: Fixes any broken package dependencies.
+     - `sudo apt autoremove --purge -y`: Removes unnecessary packages and their configuration files.
+     - `sudo apt autoclean -y': Removes outdated package files from the cache.
+     - `sudo apt full-upgrade -y': Upgrades all installed packages, possibly installing or removing packages to satisfy dependencies.
+     - `sudo deborphan | xargs sudo apt-get -y remove --purge`: Removes orphaned packages (unused libraries and dependencies) that are no longer needed.
+
+5. **`alias upgrade='update'`**:
+   - This alias makes `upgrade` a shortcut for the `update` alias. Essentially, when you type `upgrade`, it will run the same commands as `update`. It allows users to perform the full update and cleanup process using a more intuitive command (`upgrade` instead of `update`).
+
+### Install Helpful Packages
+
+* `colordiff`: A colorized version of the diff command, making it easier to compare file differences with color highlighting visually.
+
+* `deborphan`: A tool to find orphaned packages (i.e., libraries or dependencies no longer needed by any other installed package) and allows you to remove them.
+
+### Do It All
+
+To handle all of the above aliasing and package installs, paste in this command:
 
 ``` bash
-code --install-extension 
-code --install-extension ms-python.debugpy
-code --install-extension ms-python.python
-code --install-extension ms-python.vscode-pylance
-code --install-extension ms-vscode.makefile-tools
-code --install-extension yzhang.markdown-all-in-one
-```
-
-(List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
-
-If the command `code` throws an error, open the Command Palette (F1 or ⇧+⌘+P on Mac) and type `shell command` to find the `Shell Command: Install the 'code' command in PATH` command.
-
-After executing the command, restart the terminal for the new `$PATH` value to take effect.
-
-## Optional Aliases
-
-I use these aliases on my Pi's:
-
-``` bash
-# Add to ~/.bash_aliases
-#
-# Random helpers
-alias cd..='cd ..' # Get rid of command not found error
-alias diff='colordiff' # Colorize diff output
-alias ping='ping -c 3' # Stop pings after three
-
-# Do system update/upgrade and cleanup in one shot
-alias update='sudo apt update && sudo apt --fix-broken install -y && sudo apt autoremove --purge -y && sudo apt clean && sudo apt autoclean -y && sudo apt upgrade -y'
-alias upgrade='update'
-```
-
-To install them quickly and activate them in the current shell:
-
-``` bash
-curl https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/cee00ee532753d971d64a107b9ca5d58d39f81c6/.bash_aliases -o ~/.bash_aliases
+curl https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/2fb062a9ab7b374b72674775971ca699da901afb/install_aliases.sh -o ~/.bash_aliases
 . ~/.bash_aliases
 ```
 
-## Passwordless (public key) Login to Pi
+It will:
 
-Remote development is greatly simplified if you exchange keys:
+* Add the above described aliases to your `~/.bash_rc`
 
-1. Make sure you have a key-pair (e.g. id_ed25519 and id_ed25519.pub) in `~/ssh/`.  If it is not there, generate one with `ssh-keygen`.  You can use this one-liner to check for the existence of a public key (which implies you have a private one) and generate one if not:
+* Source (add to the environment) the new aliases.
 
- ``` bash
- [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
- ```
+* Issue the aliased command `update` to update all installed software and clean the local repository.
+  
+* It will install `colordiff` and `deborphan` that are in the aliases.
 
-2.  Copy the key to your Pi:
+## VS Code
 
-  ``` bash
-  ssh-copy-id pi@{hostname}.local
-  ```
+I use VS Code to develop this environment and connect my workstation to my Pi via the [VS Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview) option. This tool makes compiling and testing on the Pi very easy as I work from my laptop.
 
-3.  If you want to turn off password authentication on your Pi, edit your `/etc/ssh/sshd_config`, uncomment the line starting with `PasswordAuthentication`, and set the value to `no`.
+If you are going to use VS Code from your workstation:
+
+1. In VS Code, install the "Remote Development" extension.
+
+2. View -> Command Pallete -> >Remote-SSH:Connect Current Window to Host
+
+3. Select or enter your {hostname}.local
+
+4. The local VS Code engine will install the VS Code Server on the Pi.
+
+5. Once done and the terminal screen in VS Code is connected to the Pi:
+
+Either:
+
+        ``` bash
+        sudo apt install git -y
+        git clone https://github.com/lbussy/WsprryPi.git
+        cd ~/WsprryPi/
+        ./scripts/install.sh
+        ```
+
+(This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
+
+Or:
+
+        ``` bash
+        curl -L installwspr.aa0nt.net | sudo bash
+        git clone https://github.com/lbussy/WsprryPi.git
+        cd ~/WsprryPi/
+        ```
+  
+(This lets the installer install everything, but then you still need to clone the repo after.)
+
+6. You should be in your git repo directory.  Set up the Git global environment.  Replace placeholders with your Git username and email:
+
+    ``` bash
+    git config --global user.email "you@example.com"
+    git config --global user.name "Your Name"
+    ```
+
+7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
+
+    ``` bash
+    code --install-extension ms-python.debugpy
+    code --install-extension ms-python.python
+    code --install-extension ms-python.vscode-pylance
+    code --install-extension ms-vscode.cmake-tools
+    code --install-extension ms-vscode.cpptools
+    code --install-extension ms-vscode.cpptools-extension-pack
+    code --install-extension ms-vscode.cpptools-themes
+    code --install-extension ms-vscode.makefile-tools
+    code --install-extension twxs.cmake
+    code --install-extension yzhang.markdown-all-in-one
+    ```
+
+(List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
+
+8. Set up the `venv`:
+
+    ``` bash
+    python3 -m venv ./.venv
+    . ./.venv/bin/activate
+    python -m pip install --upgrade pip
+    pip install -r ./requirements.txt
+    ```
+
+9. For Python script and document development, always use `venv` (VS Code should do this or prompt you select it).
+
+10. Use the "Open Folder" button and select the root of your your repo on the Pi.
+
+11. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
 ## Required Libs
 
-### Cleanup Existing Environment and Libs
-
-On an older Pi image, you may want to update the Kernel and Bootloader:
-
-``` bash
-sudo apt-get --reinstall install raspberrypi-kernel
-sudo apt-get --reinstall install raspberrypi-bootloader
-```
-
-I use this series of `apt` commands to clean up the local library situation before installing the required libs.
-
-``` bash
-sudo apt-get update
-sudo apt-get clean -y
-sudo apt-get autoclean -y
-sudo apt-get autoremove -y
-sudo apt-get --fix-broken install -y
-sudo apt-get upgrade -y
-```
-
-### Install Required Libs
-
-These are the required libraries for a development environment (assuming you are starting with Raspbian Lite.)
+If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you will need some libs to compile the project:
 
 * git
 * apache2
@@ -109,45 +221,12 @@ These are the required libraries for a development environment (assuming you are
 * libraspberrypi-dev
 * raspberrypi-kernel-headers
 
+Install these with:
+
 ``` bash
 sudo apt-get install git apache2 php libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
 
-## Python
+## Working with the Project
 
-Some tools in `./scripts/` are Python, so I use a virtual environment for development.  I have created a `requirements.txt` for any dependencies.
-
-To create the `venv`, from the root of your Pi's WsprryPi repository, execute these commands:
-
-``` bash
-python3 -m venv ./.venv
-. ./.venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r ./requirements.txt
-```
-Your virtual Python environment is installed and activated.  Your prompt will change similar to this:
-
-``` bash
-(.venv) pi@wspr:~/WsprryPi $
-```
-To activate in subsequent sessions:
-``` bash
-. ./.venv/bin/activate
-```
-
-If you use VSCode, it should automatically activate your `venv` when you open the project.  If it prompts you to accept it instead, do so now.
-
-## Repo Tools and Scripts
-
-More information about using the release scripts are in the [RELEASE.md](./scripts/RELEASE.md) document.
-
-* `./scripts/copydocs.sh` - Compile the project Sphinx docs and place them in http://{hostname}.local/wspr/docs/
-* `./scripts/copyexe.sh` - After the initial install, this will update the local system with new executable files in `./scripts/`.
-* `./scripts/copysite.sh` - After the initial install, this will update the local web UI with files in `./data/`.
-* `./scripts/install.sh` - This is the installer the end user will execute.  Your development Pi should have installed WsprryPi once for any executable upgrades during development to apply correctly.
-* `./scripts/logrotate.d` - This is the systemd file for the logrotate function.  It copies when you install the application.
-* `./scripts/release.py` - This script compiles the wspr executable.  It will also read Git properties for the project name, version (tag), commit, and branch, then use these to update specific file properties.
-* `./scripts/shutdown_watch.py` - This script is optionally installed to utilize a shutdown button on physical pin 35/BCM19.  A press will halt the system.
-* `./scripts/uninstall.sh` - This script uninstalls the WsprryPi environment.  It is run from the web by a user, however it will work from the repo as well.
-* `./scripts/wspr` - This is the primary WsprryPi executable.  It lives here to be installed from the repo when a user performs an installation.  This file is also updated when `release.py` is executed.
-* `./scripts/wspr.ini` - This is the default configuration for the WsprryPi executable.  It lives here to be installed from the repo when a user performs an installation.
+See [RELEASE.md](./scripts/RELEASE.md) for information about the project development tools.
