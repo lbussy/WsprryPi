@@ -12,6 +12,7 @@ scripts/bkp/
 ## Project Ignores
 *.log
 docs/_build/
+.vscode/
 
 ## VS Code Ignores
 #
