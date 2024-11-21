@@ -69,13 +69,13 @@ The "-15" suffix indicates the WSPR-15 region of the band.
 You may create transmission gaps by specifying a TX frequency of 0.
 ```
 
-### Command Line Entries for Testing
+## Command Line Entries for Testing
 
 You may transmit a constant tone at a specific frequency for testing. In this example, wspr will send a tone at 780 kHz (780000 Hz):
 
 `wspr --test-tone 780e3`
 
-### Example Usage
+## Example Usage
 
 Remember that anything that creates a transmission will require you to use `sudo`.
 

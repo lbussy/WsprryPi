@@ -13,7 +13,7 @@ fi
 (cd "$repo_root"/docs || exit; make clean)
 (cd "$repo_root"/docs || exit; make html)
 sudo rm -fr /var/www/html/wspr/docs
-sudo mkdir /var/www/html/wspr/docs
+sudo mkdir -p /var/www/html/wspr/docs
 sudo cp -R "$repo_root"/docs/_build/html/* /var/www/html/wspr/docs/
 sudo chown -R www-data:www-data /var/www/html/wspr/docs
 echo "Docs copied."
