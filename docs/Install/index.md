@@ -18,6 +18,8 @@ You will need the following:
 - An SD card for the OS image
 - A power supply for the Pi. Pay attention here to potentially noisy power supplies. You will benefit from a well-regulated supply with sufficient ripple suppression. You may see supply ripple as mixing products centered around the transmit carrier, typically at 100/120Hz.
 
+**NOTE: The Raspberry Pi 5 is not supported.**
+
 ## Prerequisites
 
 This section may be the most challenging part of the whole installation.  *You must have a working Raspberry Pi with Internet access.*  It can be hard-wired or on Wi-Fi. There is no better place to learn how to set up your new Pi than the people who make it themselves. [Go here](https://www.raspberrypi.com/documentation/computers/getting-started.html), and learn how to install the operating system with the [Raspberry Pi Imager](https://www.raspberrypi.com/software/). To enable SSH access, you can pre-configure your image with your local/time zone, Wi-Fi credentials, and a different hostname.
