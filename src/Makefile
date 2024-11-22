@@ -20,15 +20,16 @@ BRH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # Define source files
 C_SOURCES := ini.c mailbox.c
-CPP_SOURCES := ini_reader.cpp wspr_message.cpp utils.cpp main.cpp
+CPP_SOURCES := config.cpp ini_reader.cpp singleton.cpp utils.cpp version.cpp wspr_message.cpp main.cpp
 
 # Generate object files from source files
 C_OBJECTS := $(C_SOURCES:.c=.o)
 CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
 
-# Additional executables to clean
-EXECUTABLES := $(OUT) wspr
+# Generate executables by stripping extensions from all sources
+SOURCES := $(C_SOURCES) $(CPP_SOURCES)
+EXECUTABLES := $(basename $(SOURCES))
 
 # Default target
 all: $(OUT)

@@ -3,7 +3,10 @@
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file version.hpp
+ * @brief Provides versioning and Raspberry Pi-specific hardware information.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -23,12 +26,22 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
+ */
 
 #include <bcm_host.h>
 
-// Utility macros to stringify
+/**
+ * @brief Converts a macro or value to a string.
+ * @param x The value or macro to stringify.
+ * @return A string representation of the value or macro.
+ */
 #define stringify(x) #x
+
+/**
+ * @brief Converts a macro to a string.
+ * @param x The macro to stringify.
+ * @return A string representation of the macro.
+ */
 #define macro_to_string(x) stringify(x)
 
 // Fallback values in case macros are not defined
@@ -40,34 +53,49 @@
 #define MAKE_SRC_BRH "unknown"
 #endif
 
-// Functions to return version and branch
-const char *exeversion() { return macro_to_string(MAKE_SRC_TAG); }
-const char *branch() { return macro_to_string(MAKE_SRC_BRH); }
+/**
+ * @brief Retrieves the source version tag.
+ * @return A C-string representing the version tag.
+ */
+inline const char* exeversion() { return macro_to_string(MAKE_SRC_TAG); }
 
-int ver();
-const char* RPiVersion();
-unsigned gpioBase();
+/**
+ * @brief Retrieves the source branch name.
+ * @return A C-string representing the branch name.
+ */
+inline const char* branch() { return macro_to_string(MAKE_SRC_BRH); }
 
-int ver()
+/**
+ * @brief Retrieves the Raspberry Pi processor ID.
+ * @return An integer representing the processor ID.
+ */
+inline int ver() { return bcm_host_get_processor_id(); }
+
+/**
+ * @brief Retrieves a string describing the Raspberry Pi version.
+ * @return A C-string describing the Raspberry Pi version.
+ */
+inline const char* RPiVersion()
 {
-    // See: https://github.com/raspberrypi/firmware/blob/5325b7802ca90ac5c87440e6acbc37c96f08b054/opt/vc/include/bcm_host.h#L93-L99
-    return bcm_host_get_processor_id();
+    static const char* vertext[] = {
+        "Raspberry Pi 1 or Zero Model (BCM2835)",
+        "Raspberry Pi 2B (BCM2836)",
+        "Raspberry Pi 2B or 3B (BCM2837)",
+        "Raspberry Pi 4 (BCM2711)"
+    };
+
+    int id = ver();
+    if (id < 0 || id >= static_cast<int>(sizeof(vertext) / sizeof(vertext[0]))) {
+        return "Unknown Raspberry Pi Version";
+    }
+
+    return vertext[id];
 }
 
-const char* RPiVersion()
-{
-    const char* vertext[4] = {
-                "Raspberry Pi 1 or Zero Model (BCM2835)",
-                "Raspberry Pi 2B (BCM2836)",
-                "Raspberry Pi 2B or 3B (BCM2837)",
-                "Raspberry Pi 4 (BCM2711)"
-            };
-    return vertext[ver()];
-}
-
-unsigned gpioBase()
-{
-    return bcm_host_get_peripheral_address();
-}
+/**
+ * @brief Retrieves the GPIO base address for the Raspberry Pi.
+ * @return An unsigned integer representing the GPIO base address.
+ */
+inline unsigned gpioBase() { return bcm_host_get_peripheral_address(); }
 
 #endif // _VERSION_H
