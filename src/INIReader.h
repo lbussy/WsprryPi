@@ -1,6 +1,5 @@
 #ifndef _INIREADER_H
 #define _INIREADER_H
-#pragma once
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 

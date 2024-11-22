@@ -1,6 +1,5 @@
 #ifndef _MONITORFILE_H
 #define _MONITORFILE_H
-#pragma once
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
