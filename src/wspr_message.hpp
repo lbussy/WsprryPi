@@ -1,5 +1,5 @@
-#ifndef _WSPR_ENCODER_H
-#define _WSPR_ENCODER_H
+#ifndef WSPR_MESSAGE_H
+#define WSPR_MESSAGE_H 
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
@@ -23,25 +23,31 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
-
-#include <string>
-
-// Test compile:
-// g++ -Wall -Werror -std=c++11 -DDEBUG_MAIN_ENCODER wspr_encoder.cpp utils.cpp -o wspr_encoder
-
-/**
- * @brief Encodes WSPR payload data.
- *
- * Packs the callsign, grid square, and power level into a 50-bit payload,
- * performs convolutional encoding, and interleaves the resulting symbols
- * for transmission.
- *
- * @param call Callsign (e.g., "K1ABC").
- * @param l_pre Locator prefix (e.g., "FN42").
- * @param dbm Transmission power level in dBm.
- * @param symbols Output array to hold the encoded symbols.
  */
-void wspr(const char* call, const char* l_pre, const char* dbm, unsigned char* symbols);
 
-#endif
+#include <cstdint>
+#include <cstring>
+#include <cctype>
+
+#define MSG_SIZE 162
+
+class WsprMessage {
+
+private:
+
+  int getCharValue(unsigned char ch);
+  int calculateParity(uint32_t ch);
+  unsigned char reverseAddress(unsigned char &reverseAddressIndex);
+  unsigned char reverseBits(unsigned char b);
+  void generateSymbols(char * callsign, char * location, int power);
+
+public:
+
+  WsprMessage(char * callsign, char * location, int power);
+  ~WsprMessage(); // Destructor to free allocated memory
+  unsigned char * symbols;
+
+  static constexpr int size = MSG_SIZE; // Static constant member
+};
+
+#endif // _WSPR_MESSAGE_HPP

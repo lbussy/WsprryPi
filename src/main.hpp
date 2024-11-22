@@ -53,14 +53,6 @@
 #include <sys/timex.h>
 #include <iterator>
 
-#include "version.hpp"
-#include "singleton.hpp"
-#include "monitorfile.hpp"
-#include "config.hpp"
-#include "lcblog.hpp"
-#include "utils.hpp"
-#include "wspr_encoder.hpp"
-
 #ifdef __cplusplus
 extern "C"
 {

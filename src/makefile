@@ -15,7 +15,7 @@ VER := $(shell git describe --tags --always --dirty="-dirty" | sed -E 's/-([0-9]
 BRH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # List of source files and their corresponding object files
-SOURCES := mailbox.c wspr_encoder.cpp utils.cpp main.cpp
+SOURCES := mailbox.c wspr_message.cpp utils.cpp main.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 OBJECTS := $(OBJECTS:.c=.o)
 

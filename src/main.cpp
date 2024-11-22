@@ -22,9 +22,17 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
 */
 
+#include "version.hpp"
+#include "singleton.hpp"
+#include "monitorfile.hpp"
+#include "config.hpp"
+#include "lcblog.hpp"
+#include "utils.hpp"
+#include "wspr_message.hpp"
+
 #include "main.hpp"
 
-// #define WSPR_DEBUG
+#define WSPR_DEBUG
 
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
@@ -1453,20 +1461,25 @@ int main(const int argc, char *const argv[])
         // WSPR mode
         for (;;)
         { // Reload Loop >
-            // Create WSPR symbols
-            unsigned char symbols[162];
-            wspr(config.callsign.c_str(), config.grid_square.c_str(), config.tx_power.c_str(), symbols);
+            // Initialize WSPR Message (message)
+            WsprMessage message(
+                const_cast<char *>(config.callsign.c_str()),
+                const_cast<char *>(config.grid_square.c_str()),
+                std::stoi(config.tx_power)
+            );
+
+            // Access the generated symbols
+            unsigned char* symbols = message.symbols;
 
 #ifdef WSPR_DEBUG
-            // Print encodeed packet
-            printf("WSPR codeblock: ");
-            for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
-            if (i) {
-                std::cout << ",";
+            // Print encoded packet
+            std::cout << "WSPR codeblock:";
+            std::cout << std::endl;
+            for (int i = 0; i < WsprMessage::size; i++) {
+                if (i) std::cout << ",";
+                std::cout << static_cast<int>(symbols[i]);
             }
-            printf("%d", symbols[i]);
-            }
-            printf(std::endl);
+            std::cout << std::endl;
 #endif
 
             llog.logS("Ready to transmit (setup complete).");
