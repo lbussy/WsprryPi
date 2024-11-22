@@ -23,6 +23,13 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+References:
+https://github.com/raspberrypi/firmware/wiki/Mailboxes
+https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface
+https://bitbanged.com/posts/understanding-rpi/the-mailbox/
+*/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
