@@ -7,8 +7,9 @@
 - Suggest to clone git repo after required libs (devel notes)
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
 - Put in a redirect to /wspr if nothing is in web root.
-- Documentation says `wspr [options] --test-tone f` but it should be more
-clear that `f` is a frequency:  `wspr --test-tone 780e3`
+- Documentation says `wspr [options] --test-tone f` but it should be more clear that `f` is a frequency:  `wspr --test-tone 780e3`
+- "Exiting, caught signal: 18" when stopping wspr
+- (Issue #61) This is too long:  2024-11-19 19:45:52 GMT - Using NTP to calibrate transmission frequency. - A small random frequency offset will be added to all transmissions.
 
 # Previous Issues
 
