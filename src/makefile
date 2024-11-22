@@ -15,12 +15,14 @@ VER := $(shell git describe --tags --always --dirty="-dirty" | sed -E 's/-([0-9]
 BRH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # List of source files and their corresponding object files
-SOURCES := mailbox.c main.cpp wspr_encoder.cpp utils.cpp
+SOURCES := mailbox.c wspr_encoder.cpp utils.cpp main.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 OBJECTS := $(OBJECTS:.c=.o)
 
-# List of executable files to clean
-EXECUTABLES := $(OUT) wspr_encoder utils wspr
+# Derive the list of executable files from SOURCES by removing file extensions
+EXECUTABLES := $(basename $(SOURCES))
+# Additional executables to clean
+EXECUTABLES += $(OUT) wspr
 
 all: $(OUT)
 
