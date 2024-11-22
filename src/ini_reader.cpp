@@ -1,6 +1,9 @@
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file ini_reader.cpp
+ * @brief Implementation of the INIReader class for reading and managing INI files.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -20,25 +23,24 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
+ */
 
 // Unit testing:
-// g++ -Wall -Werror -fmax-errors=5 -std=c++17 -DDEBUG_MAIN_READER ini_reader.cpp -o ini_reader
+// g++ -Wall -Werror -fmax-errors=5 -std=c++17 -DDEBUG_MAIN_READER ini_reader.cpp ini.c -o ini_reader
 
 #include "ini_reader.hpp"
 #include "ini.h"
-#include <algorithm>  // For std::transform, std::remove_if
-#include <cctype>     // For ::tolower, ::isspace
+#include <algorithm>  // For std::transform
+#include <cctype>     // For ::tolower
 #include <iostream>
 #include <fstream>
 
 /**
- * @brief Constructor for INIReader.
+ * @brief Constructs an INIReader and parses the specified file.
  *
- * Parses an INI file specified by the given filename. If the file does not exist,
- * it creates a new one with default values and comments.
+ * If the file does not exist, it is created with default values and comments.
  *
- * @param filename Path to the INI file to parse.
+ * @param filename The path to the INI file to parse.
  */
 INIReader::INIReader(const std::string& filename) {
     std::ifstream file_check(filename);
@@ -50,41 +52,41 @@ INIReader::INIReader(const std::string& filename) {
 }
 
 /**
- * @brief Constructor for INIReader from a FILE* stream.
+ * @brief Constructs an INIReader using an open file stream.
  *
- * Parses an INI file from an already opened FILE* stream.
+ * Parses the INI data from the provided FILE pointer.
  *
- * @param file Pointer to the FILE* stream containing the INI file data.
+ * @param file Pointer to the open FILE stream containing the INI data.
  */
 INIReader::INIReader(FILE* file) {
     _error = ini_parse_file(file, ValueHandler, this);
 }
 
 /**
- * @brief Get the parsing error state.
+ * @brief Retrieves the parsing error state.
  *
- * @return 0 if parsing succeeded, a positive line number for the first parse error, or -1 for file open errors.
+ * @return 0 if parsing succeeded, a positive line number for the first parse error, or -1 if the file could not be opened.
  */
 int INIReader::ParseError() const {
     return _error;
 }
 
 /**
- * @brief Get all sections found in the INI file.
+ * @brief Gets all sections found in the INI file.
  *
- * @return A const reference to a set of section names.
+ * @return A constant reference to a set of section names.
  */
 const std::set<std::string>& INIReader::Sections() const {
     return _sections;
 }
 
 /**
- * @brief Retrieve a value as a string.
+ * @brief Retrieves a value as a string.
  *
  * @param section The section name.
  * @param name The key name.
- * @param default_value The default value to return if the key is not found.
- * @return The value associated with the key, or the default value if the key is not found.
+ * @param default_value The default value if the key is not found.
+ * @return The value associated with the key or the default value if the key is not found.
  */
 std::string INIReader::Get(const std::string& section, const std::string& name, const std::string& default_value) const {
     std::string key = MakeKey(section, name);
@@ -92,12 +94,12 @@ std::string INIReader::Get(const std::string& section, const std::string& name, 
 }
 
 /**
- * @brief Retrieve a value as an integer.
+ * @brief Retrieves a value as an integer.
  *
  * @param section The section name.
  * @param name The key name.
- * @param default_value The default value to return if the key is not found or invalid.
- * @return The integer value associated with the key, or the default value if the key is not found or invalid.
+ * @param default_value The default value if the key is not found or invalid.
+ * @return The integer value or the default value if the key is not found or invalid.
  */
 long INIReader::GetInteger(const std::string& section, const std::string& name, long default_value) const {
     std::string valstr = Get(section, name, "");
@@ -108,12 +110,12 @@ long INIReader::GetInteger(const std::string& section, const std::string& name, 
 }
 
 /**
- * @brief Retrieve a value as a double.
+ * @brief Retrieves a value as a double.
  *
  * @param section The section name.
  * @param name The key name.
- * @param default_value The default value to return if the key is not found or invalid.
- * @return The double value associated with the key, or the default value if the key is not found or invalid.
+ * @param default_value The default value if the key is not found or invalid.
+ * @return The double value or the default value if the key is not found or invalid.
  */
 double INIReader::GetReal(const std::string& section, const std::string& name, double default_value) const {
     std::string valstr = Get(section, name, "");
@@ -124,12 +126,12 @@ double INIReader::GetReal(const std::string& section, const std::string& name, d
 }
 
 /**
- * @brief Retrieve a value as a boolean.
+ * @brief Retrieves a value as a boolean.
  *
  * @param section The section name.
  * @param name The key name.
- * @param default_value The default value to return if the key is not found or invalid.
- * @return True for values like "true", "yes", "on", or "1". False for "false", "no", "off", or "0". Otherwise, returns the default value.
+ * @param default_value The default value if the key is not found or invalid.
+ * @return True or False based on the parsed value or the default value if invalid.
  */
 bool INIReader::GetBoolean(const std::string& section, const std::string& name, bool default_value) const {
     std::string valstr = Get(section, name, "");
@@ -144,25 +146,24 @@ bool INIReader::GetBoolean(const std::string& section, const std::string& name, 
 }
 
 /**
- * @brief Check if a key exists in a section.
+ * @brief Checks if a key exists in a section.
  *
  * @param section The section name.
  * @param name The key name.
- * @return True if the key exists, False otherwise.
+ * @return True if the key exists, otherwise False.
  */
 bool INIReader::KeyExists(const std::string& section, const std::string& name) const {
     return _values.find(MakeKey(section, name)) != _values.end();
 }
 
 /**
- * @brief Create a case-insensitive key from a section and name.
+ * @brief Combines section and name into a lowercase key.
  *
- * Combines the section and key names into a single string for use as a map key.
- * The resulting key is case-insensitive by converting all characters to lowercase.
+ * Used internally for creating keys for the internal `_values` map.
  *
  * @param section The section name.
  * @param name The key name.
- * @return A combined key in lowercase.
+ * @return A combined lowercase key string.
  */
 std::string INIReader::MakeKey(const std::string& section, const std::string& name) {
     std::string key = section + "=" + name;
@@ -171,19 +172,19 @@ std::string INIReader::MakeKey(const std::string& section, const std::string& na
 }
 
 /**
- * @brief Callback handler for ini_parse.
+ * @brief Processes section, key, and value during INI parsing.
  *
- * Processes each section, key, and value encountered during parsing.
+ * Handles each section, key, and value encountered by the parser.
  *
  * @param user Pointer to the INIReader instance.
  * @param section The section name being parsed.
  * @param name The key name being parsed.
- * @param value The value associated with the key.
- * @return 1 on success, 0 on failure.
+ * @param value The associated value.
+ * @return 1 on success, otherwise 0.
  */
 int INIReader::ValueHandler(void* user, const char* section, const char* name, const char* value) {
     INIReader* reader = reinterpret_cast<INIReader*>(user);
-    std::string key = MakeKey(section, name);
+    std::string key = reader->MakeKey(section, name);
     if (!reader->_values[key].empty()) {
         reader->_values[key] += "\n";  // Handle multi-line values
     }
@@ -193,12 +194,9 @@ int INIReader::ValueHandler(void* user, const char* section, const char* name, c
 }
 
 /**
- * @brief Create the INI file with default values and helpful comments.
+ * @brief Creates a new INI file with default values and comments.
  *
- * If the specified INI file does not exist, this method creates it with default values and
- * user-friendly comments to guide manual edits.
- *
- * @param filename Path to the INI file to create.
+ * @param filename The name of the INI file to create.
  */
 void INIReader::CreateDefaultINI(const std::string& filename) {
     std::ofstream ini_file(filename);
@@ -218,19 +216,19 @@ void INIReader::CreateDefaultINI(const std::string& filename) {
         ini_file << "Grid Square = ZZ99\n";
         ini_file << "# TX Power: Transmitter power in dBm (integer, e.g., 20).\n";
         ini_file << "TX Power = 20\n";
-        ini_file << "# Frequency: Transmission frequency in meters (e.g., '20m') or Hz (e.g., '450000000').\n";
+        ini_file << "# Frequency: Transmission frequency in meters (e.g., '20m') or Hz.\n";
         ini_file << "Frequency = 20m\n\n";
 
         ini_file << "[Extended]\n";
-        ini_file << "# PPM: Frequency offset in parts per million (floating-point).\n";
+        ini_file << "# PPM: Frequency offset in parts per million.\n";
         ini_file << "PPM = 0.0\n";
-        ini_file << "# Self Cal: Set to True to enable self-calibration, False to disable.\n";
+        ini_file << "# Self Cal: Set to True to enable self-calibration.\n";
         ini_file << "Self Cal = True\n";
-        ini_file << "# Offset: Set to True to enable frequency offset correction, False to disable.\n";
+        ini_file << "# Offset: Set to True to enable frequency offset correction.\n";
         ini_file << "Offset = False\n";
-        ini_file << "# Use LED: Set to True to enable LED usage, False to disable.\n";
+        ini_file << "# Use LED: Set to True to enable LED usage.\n";
         ini_file << "Use LED = False\n";
-        ini_file << "# Power Level: Output power level (integer from 0 to 7, where 7 is maximum).\n";
+        ini_file << "# Power Level: Output power level (integer from 0 to 7).\n";
         ini_file << "Power Level = 7\n";
 
         ini_file.close();
@@ -243,8 +241,13 @@ void INIReader::CreateDefaultINI(const std::string& filename) {
 #ifdef DEBUG_MAIN_READER
 #include <iostream>
 
+/**
+ * @brief Main function for unit testing the INIReader class.
+ *
+ * @return Exit status.
+ */
 int main() {
-    const char* ini_file = "wspr.ini"; // Path to the INI file for testing
+    const char* ini_file = "wspr.ini";  // Path to the INI file for testing
     INIReader reader(ini_file);
 
     if (reader.ParseError() != 0) {

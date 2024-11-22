@@ -1,6 +1,9 @@
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file ini_reader.hpp
+ * @brief A class to parse and manage INI files.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -20,10 +23,10 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
+ */
 
-#ifndef _INI_READER_HPP
-#define _INI_READER_HPP
+#ifndef INI_READER_HPP
+#define INI_READER_HPP
 
 #include <map>
 #include <set>
@@ -63,7 +66,12 @@ public:
     /**
      * @brief Get the parsing error state.
      *
-     * @return 0 if parsing succeeded, a positive line number for the first parse error, or -1 for file open errors.
+     * Error codes:
+     * - `0`: Parsing succeeded.
+     * - Positive integer: Line number of the first parse error.
+     * - `-1`: File open error.
+     *
+     * @return Parsing error code.
      */
     int ParseError() const;
 
@@ -117,16 +125,6 @@ public:
     double GetReal(const std::string& section, const std::string& name, double default_value) const;
 
     /**
-     * @brief Retrieve a value as a float.
-     *
-     * @param section The section name.
-     * @param name The key name.
-     * @param default_value The default value to return if the key is not found or invalid.
-     * @return The float value associated with the key, or the default value if the key is not found or invalid.
-     */
-    float GetFloat(const std::string& section, const std::string& name, float default_value) const;
-
-    /**
      * @brief Retrieve a value as a boolean.
      *
      * @param section The section name.
@@ -173,9 +171,9 @@ private:
      */
     static int ValueHandler(void* user, const char* section, const char* name, const char* value);
 
-    int _error{0};  ///< Error code from parsing.
+    int _error;  ///< Error code from parsing.
     std::map<std::string, std::string> _values;  ///< Parsed key-value pairs.
     std::set<std::string> _sections;  ///< Parsed sections.
 };
 
-#endif  // _INI_READER_HPP
+#endif  // INI_READER_HPP
