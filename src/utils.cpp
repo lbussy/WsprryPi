@@ -20,13 +20,21 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
+ */
 
-#include <cctype> // For std::toupper
+#include <cctype>   // For std::toupper
 #include <iostream> // For std::cout and std::endl
 
 #include "utils.hpp"
 
+/**
+ * @brief Converts a C-string to uppercase in place.
+ *
+ * This function modifies the provided string by converting each character
+ * to uppercase using std::toupper.
+ *
+ * @param str A pointer to a null-terminated C-string.
+ */
 void to_upper(char* str) {
     while (*str) {
         *str = static_cast<char>(std::toupper(*str)); // Safely cast to char

@@ -1,5 +1,5 @@
-#ifndef _UTILS_CPP
-#define _WSPR_H
+#ifndef _UTILS_HPP
+#define _UTILS_HPP
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
@@ -23,11 +23,11 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
-*/
+ */
 
 // Test compile:
 // g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN_UTILS -g utils.cpp -o utils
 
 void to_upper(char* str);
 
-#endif
+#endif // _UTILS_HPP
