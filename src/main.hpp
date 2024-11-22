@@ -1,6 +1,5 @@
 #ifndef _WSPR_H
 #define _WSPR_H
-#pragma once
 
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
@@ -59,6 +58,8 @@
 #include "monitorfile.hpp"
 #include "config.hpp"
 #include "lcblog.hpp"
+#include "utils.hpp"
+#include "wspr_encoder.hpp"
 
 #ifdef __cplusplus
 extern "C"
