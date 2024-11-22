@@ -168,7 +168,7 @@ void wspr(
 }
 
 // Debug-only main function
-#ifdef DEBUG_MAIN
+#ifdef DEBUG_MAIN_ENCODER
 int main() {
     const char* call = "K1ABC";
     const char* grid = "FN42";

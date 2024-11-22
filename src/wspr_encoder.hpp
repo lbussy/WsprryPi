@@ -28,7 +28,7 @@
 #include <string>
 
 // Test compile:
-// g++ -Wall -Werror -std=c++11 -DDEBUG_MAIN wspr_encoder.cpp utils.cpp -o wspr_encoder
+// g++ -Wall -Werror -std=c++11 -DDEBUG_MAIN_ENCODER wspr_encoder.cpp utils.cpp -o wspr_encoder
 
 /**
  * @brief Encodes WSPR payload data.

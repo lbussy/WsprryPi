@@ -35,7 +35,7 @@ void to_upper(char* str) {
 }
 
 // Debug-only main function
-#ifdef DEBUG_MAIN
+#ifdef DEBUG_MAIN_UTILS
 int main() {
     char testStr[] = "hello, world!";
     std::cout << "Before: " << testStr << std::endl;

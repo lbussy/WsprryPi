@@ -26,7 +26,7 @@
 */
 
 // Test compile:
-// g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN -g utils.cpp -o utils
+// g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN_UTILS -g utils.cpp -o utils
 
 void to_upper(char* str);
 
