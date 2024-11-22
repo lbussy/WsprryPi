@@ -6,8 +6,16 @@ Thumbs.db
 *.log
 *.bak
 
-## Ignore files without extensions in /src
-/src/[^/]*[^.][^/]*$
+# Ignore all files without extensions in src/
+src/[^/]*[^.][^/]*$
+
+# Ignore executable files without extensions (common in C/C++ projects)
+src/*
+!src/*.*
+
+# Ensure .o files remain ignored even with the rule above
+*.o
+
 
 ## Allow specific files in /src
 !/src/makefile

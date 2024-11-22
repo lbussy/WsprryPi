@@ -1380,7 +1380,7 @@ int main(const int argc, char *const argv[])
     if ( ! parseConfigData(argc, argv) ) return 1;
 
     // Make sure we're the only one
-    SingletonProcess singleton(SINGLETON_PORT);
+    wspr::SingletonProcess singleton(SINGLETON_PORT);
     if (!singleton())
     {
         llog.logE("Process already running; see ", singleton.GetLockFileName());
