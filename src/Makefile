@@ -2,28 +2,35 @@
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 # Created for WsprryPi version 1.2.1-4c76705 [devel].
 
+# Installation prefix
 prefix = /usr/local
 
+# Compiler settings and flags
 LED_PIN = -DLED_PIN=18
 CXXFLAGS += -Wall -Werror -fmax-errors=5 -static-libgcc
 CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17 $(LED_PIN)
 LDLIBS += -lm -lbcm_host
+
+# Output binary name
 OUT = wspr
 
 # Get version and branch directly using shell commands
 VER := $(shell git describe --tags --always --dirty="-dirty" | sed -E 's/-([0-9]+)-g([a-f0-9]+)/-\2/')
 BRH := $(shell git rev-parse --abbrev-ref HEAD)
 
-# List of source files and their corresponding object files
-SOURCES := mailbox.c wspr_message.cpp utils.cpp main.cpp
-OBJECTS := $(SOURCES:.cpp=.o)
-OBJECTS := $(OBJECTS:.c=.o)
+# Define source files
+C_SOURCES := ini.c mailbox.c
+CPP_SOURCES := ini_reader.cpp wspr_message.cpp utils.cpp main.cpp
 
-# Derive the list of executable files from SOURCES by removing file extensions
-EXECUTABLES := $(basename $(SOURCES))
+# Generate object files from source files
+C_OBJECTS := $(C_SOURCES:.c=.o)
+CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
+OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
+
 # Additional executables to clean
-EXECUTABLES += $(OUT) wspr
+EXECUTABLES := $(OUT) wspr
 
+# Default target
 all: $(OUT)
 
 # Rule for creating the final binary
@@ -36,26 +43,29 @@ $(OUT): $(OBJECTS)
 
 # Pattern rule for compiling C source files
 %.o: %.c
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean up intermediate and additional files
 .PHONY: clean
 clean:
-	$(RM) *.o $(EXECUTABLES) *~ *.log core dump.*
+	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(EXECUTABLES) *~ *.log core dump.*
 
 # Rule for building the debug version
 .PHONY: debug
 debug: CXXFLAGS += -DWSPR_DEBUG
 debug: $(OUT)
 
+# Install the binary to the specified prefix
 .PHONY: install
 install: $(OUT)
 	install -m 0755 $(OUT) $(prefix)/bin
 
+# Uninstall the binary
 .PHONY: uninstall
 uninstall:
 	$(RM) $(prefix)/bin/$(OUT)
 
+# Print debug information about version and branch
 .PHONY: print-debug
 print-debug:
 	@echo VER: $(VER)

@@ -28,7 +28,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
-#include "INIReader.h"
+#include "ini_reader.hpp"
 #include <string>
 
 class WSPRConfig
