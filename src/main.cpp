@@ -1384,13 +1384,21 @@ int main(const int argc, char *const argv[])
 
     if ( ! parseConfigData(argc, argv) ) return 1;
 
-    // Make sure we're the only one
+    // Make sure we're the only wspr process
     wspr::SingletonProcess singleton(SINGLETON_PORT);
-    if (!singleton())
+    try
     {
-        llog.logE("Process already running; see ", singleton.GetLockFileName());
-        return 1;
+        if (!singleton())
+        {
+            llog.logE("Process already running; see ", singleton.GetLockFileName());
+            return 1;
+        }
     }
+    catch (const std::exception& e)
+    {
+        llog.logE("Failed to enforce singleton: ", e.what());
+        return 1;
+}
 
     // Catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
     for (int i = 0; i < 64; i++)
