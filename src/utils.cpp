@@ -22,6 +22,9 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
 */
 
+#include <cctype> // For std::toupper
+#include <iostream> // For std::cout and std::endl
+
 #include "utils.hpp"
 
 void to_upper(char* str) {
@@ -30,3 +33,14 @@ void to_upper(char* str) {
         ++str;
     }
 }
+
+// Debug-only main function
+#ifdef DEBUG_MAIN
+int main() {
+    char testStr[] = "hello, world!";
+    std::cout << "Before: " << testStr << std::endl;
+    to_upper(testStr);
+    std::cout << "After: " << testStr << std::endl;
+    return 0;
+}
+#endif

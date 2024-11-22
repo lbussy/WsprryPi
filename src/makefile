@@ -20,7 +20,7 @@ OBJECTS := $(SOURCES:.cpp=.o)
 OBJECTS := $(OBJECTS:.c=.o)
 
 # List of executable files to clean
-EXECUTABLES := $(OUT) wspr_encoder wspr
+EXECUTABLES := $(OUT) wspr_encoder utils wspr
 
 all: $(OUT)
 
