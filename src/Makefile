@@ -23,7 +23,7 @@ CPP_SOURCES := config.cpp ini_reader.cpp singleton.cpp utils.cpp version.cpp wsp
 
 # Generate object files from source files
 C_OBJECTS := $(C_SOURCES:.c=.o)
-CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
+CPP_OBJECTS := $(CPP_SOURCES:.cpp:.o)
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
 
 # Generate executables by stripping extensions from all sources
@@ -56,7 +56,7 @@ main.o: main.cpp
 # Clean up intermediate and additional files
 .PHONY: clean
 clean:
-	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(EXECUTABLES) *~ *.log core dump.*
+	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(EXECUTABLES) $(OUT) *~ *.log core dump.*
 
 # Rule for building the debug version
 .PHONY: debug
