@@ -19,6 +19,9 @@ SOURCES := mailbox.c main.cpp wspr_encoder.cpp utils.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 OBJECTS := $(OBJECTS:.c=.o)
 
+# List of executable files to clean
+EXECUTABLES := $(OUT) wspr_encoder wspr
+
 all: $(OUT)
 
 # Rule for creating the final binary
@@ -33,8 +36,9 @@ $(OUT): $(OBJECTS)
 %.o: %.c
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# Clean up intermediate and additional files
 clean:
-	$(RM) *.o $(OUT)
+	$(RM) *.o $(EXECUTABLES) *~ *.log core dump.*
 
 .PHONY: install
 install: $(OUT)
