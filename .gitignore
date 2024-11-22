@@ -18,7 +18,7 @@ src/*
 
 
 ## Allow specific files in /src
-!/src/makefile
+!/src/Makefile
 
 ## C/C++ Ignores
 *.d            # Dependency files

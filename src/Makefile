@@ -39,8 +39,14 @@ $(OUT): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Clean up intermediate and additional files
+.PHONY: clean
 clean:
 	$(RM) *.o $(EXECUTABLES) *~ *.log core dump.*
+
+# Rule for building the debug version
+.PHONY: debug
+debug: CXXFLAGS += -DWSPR_DEBUG
+debug: $(OUT)
 
 .PHONY: install
 install: $(OUT)
@@ -50,6 +56,7 @@ install: $(OUT)
 uninstall:
 	$(RM) $(prefix)/bin/$(OUT)
 
+.PHONY: print-debug
 print-debug:
 	@echo VER: $(VER)
 	@echo BRH: $(BRH)
