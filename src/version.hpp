@@ -27,9 +27,20 @@
 
 #include <bcm_host.h>
 
+// Utility macros to stringify
 #define stringify(x) #x
 #define macro_to_string(x) stringify(x)
 
+// Fallback values in case macros are not defined
+#ifndef MAKE_SRC_TAG
+#define MAKE_SRC_TAG "unknown"
+#endif
+
+#ifndef MAKE_SRC_BRH
+#define MAKE_SRC_BRH "unknown"
+#endif
+
+// Functions to return version and branch
 const char *exeversion() { return macro_to_string(MAKE_SRC_TAG); }
 const char *branch() { return macro_to_string(MAKE_SRC_BRH); }
 

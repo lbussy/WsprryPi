@@ -33,9 +33,12 @@ EXECUTABLES := $(OUT) wspr
 # Default target
 all: $(OUT)
 
+# Add the macros to CXXFLAGS so they are available during compilation
+CXXFLAGS += -DMAKE_SRC_TAG=$(VER) -DMAKE_SRC_BRH=$(BRH)
+
 # Rule for creating the final binary
 $(OUT): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -DMAKE_SRC_TAG="$(VER)" -DMAKE_SRC_BRH="$(BRH)" $(OBJECTS) -o $(OUT) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS)
 
 # Pattern rule for compiling C++ source files
 %.o: %.cpp
