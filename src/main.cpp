@@ -34,11 +34,6 @@
 
 // #define WSPR_DEBUG
 
-// Define LED_PIN if not defined:
-#ifndef LED_PIN
-#define LED_PIN 18
-#endif
-
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
 

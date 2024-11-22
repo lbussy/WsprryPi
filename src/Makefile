@@ -6,9 +6,8 @@
 prefix = /usr/local
 
 # Compiler settings and flags
-LED_PIN = -DLED_PIN=18
 CXXFLAGS += -Wall -Werror -fmax-errors=5 -static-libgcc
-CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17 $(LED_PIN)
+CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host
 
 # Output binary name
@@ -34,14 +33,19 @@ EXECUTABLES := $(basename $(SOURCES))
 # Default target
 all: $(OUT)
 
-# Add the macros to CXXFLAGS so they are available during compilation
-CXXFLAGS += -DMAKE_SRC_TAG=$(VER) -DMAKE_SRC_BRH=$(BRH)
-
 # Rule for creating the final binary
 $(OUT): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS)
 
-# Pattern rule for compiling C++ source files
+# Rule for version.o with additional macros
+version.o: version.cpp
+	$(CXX) $(CXXFLAGS) -DMAKE_SRC_TAG=$(VER) -DMAKE_SRC_BRH=$(BRH) -c $< -o $@
+
+# Rule for main.o with additional macros
+main.o: main.cpp
+	$(CXX) $(CXXFLAGS) -DLED_PIN=18 -c $< -o $@
+
+# Pattern rule for compiling other C++ source files
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
