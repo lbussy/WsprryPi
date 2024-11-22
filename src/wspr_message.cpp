@@ -22,6 +22,9 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
 
+// Unit testing:
+// g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_MESSAGE wspr_message.cpp -o wspr_message -lm -lbcm_host
+
 #include "wspr_message.hpp"
 #include <cstdint>
 #include <iostream>   // For std::cout, std::endl

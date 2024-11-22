@@ -25,9 +25,6 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
 
-// Test compile:
-// g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN_UTILS -g utils.cpp -o utils
-
 void to_upper(char* str);
 
 #endif // _UTILS_HPP

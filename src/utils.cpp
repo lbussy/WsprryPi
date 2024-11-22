@@ -22,6 +22,9 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
 
+// Unit testing:
+// g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN_UTILS -g utils.cpp -o utils
+
 #include <cctype>   // For std::toupper
 #include <iostream> // For std::cout and std::endl
 
