@@ -1,5 +1,11 @@
 # GitIgnore for WsprryPi
 
+# Ignore all files without extensions in /src
+/src/*[^.]*
+
+# Allow makefile in /src
+!/src/makefile
+
 ## Relase.py ignores:
 src/**/*.bak
 scripts/**/*.bak
