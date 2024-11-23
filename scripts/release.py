@@ -15,7 +15,7 @@ Logging and file processing actions are controlled via the configuration setting
 
 Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
+Created for WsprryPi project, version 1.2.1-32d490b [refactoring].
 """
 
 import os
@@ -62,11 +62,6 @@ if Config.ENABLE_LOGGING:
 # Set the logging level (both handlers)
 logger.setLevel(logging.INFO)
 
-# Add debug-level logging if Config.DEBUG is True
-if Config.DEBUG:
-    logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG to capture debug logs
-
-
 def run_command(command, cwd=None):
     """
     Run a shell command and return the output.
@@ -88,14 +83,12 @@ def run_command(command, cwd=None):
     """
     try:
         result = subprocess.run(
-            command, shell=True, check=True, text=True, capture_output=True, cwd=cwd
+            command, shell=True, check=True, text=True, capture_output=True, cwd=cwd, env=os.environ
         )
-        logger.debug(f"Command '{command}' executed successfully: {result.stdout.strip()}")
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed: {command}\nError: {e.stderr.strip()}")
         return None
-
 
 def get_git_info():
     """
@@ -121,7 +114,6 @@ def get_git_info():
     except ValueError as e:
         logger.error(f"Error: {e}")
         sys.exit(1)
-
 
 def update_copyright_year(line, current_year):
     """
@@ -153,7 +145,6 @@ def update_copyright_year(line, current_year):
         updated_year = f"{start_year}-{current_year}" if start_year != current_year else f"{start_year}-{current_year}"
         return line.replace(match.group(0), f"{match.group(1)}{updated_year}")
     return line
-
 
 def update_version_line(line, current_tag, commit_short_hash, current_branch, inside_excluded_section):
     """
@@ -189,7 +180,6 @@ def update_version_line(line, current_tag, commit_short_hash, current_branch, in
         return re.sub(pattern, replacement, line, flags=re.IGNORECASE)
     return line
 
-
 def backup_file(file_path):
     """
     Create a backup of the file before making changes.
@@ -206,26 +196,22 @@ def backup_file(file_path):
         logger.info("Backup is disabled. Skipping backup creation.")
         return
 
-    # Get the script directory and calculate the backup directory path
     script_dir = Path(__file__).parent
     backup_dir = script_dir / "bkp"  # Backup directory directly under the script directory
 
     logger.debug(f"Calculated backup directory: {backup_dir}")
 
-    # Ensure the backup directory exists (create it if it doesn't)
     try:
-        backup_dir.mkdir(parents=True, exist_ok=True)  # Ensure backup directory exists
+        backup_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Backup directory created or already exists: {backup_dir}")
     except Exception as e:
         logger.error(f"Error creating backup directory: {e}")
         return
 
-    # Define the backup file path
     backup_path = backup_dir / file_path.name
     logger.debug(f"Backup file path: {backup_path}")
 
     try:
-        # Check if the backup file already exists
         if not backup_path.exists():
             shutil.copy(file_path, backup_path)
             logger.info(f"Backup created: {backup_path}")
@@ -235,7 +221,6 @@ def backup_file(file_path):
         logger.error(f"Error creating backup for {file_path}: {e}")
     except Exception as e:
         logger.error(f"Unexpected error while creating backup for {file_path}: {e}")
-
 
 def colorized_diff(original, updated):
     """
@@ -269,7 +254,6 @@ def colorized_diff(original, updated):
         result.append("")
 
     return "\n".join(result)
-
 
 def update_file_content(file_path, current_year, current_tag, commit_short_hash, current_branch):
     """
@@ -307,26 +291,21 @@ def update_file_content(file_path, current_year, current_tag, commit_short_hash,
     for i, line in enumerate(lines):
         stripped_line = line.strip()
 
-        # For Python files, stop processing if we encounter the first import or constant (any assignment like =)
         if python_file:
             if stripped_line.startswith(("import", "from")) or "=" in stripped_line:
                 updated_lines.append(line)
                 continue
 
-        # Detect start of multi-line comment
         if stripped_line.startswith(("/*", '"')) and not inside_multiline_comment:
             inside_multiline_comment = True
 
-        # Detect end of multi-line comment
         if inside_multiline_comment and stripped_line.endswith("*/"):
             inside_multiline_comment = False
-            inside_excluded_section = False  # Reset excluded section flag
+            inside_excluded_section = False
 
-        # Detect excluded sections
         if any(keyword in stripped_line for keyword in Config.LICENSE_PATTERNS):
             inside_excluded_section = True
 
-        # Only process lines that are part of comments
         if inside_multiline_comment or stripped_line.startswith(("#", "//")):
             if "Copyright (C)" in line:
                 updated_lines.append(update_copyright_year(line, current_year))
@@ -338,7 +317,6 @@ def update_file_content(file_path, current_year, current_tag, commit_short_hash,
             updated_lines.append(line)
 
     return updated_lines
-
 
 def update_files(project_directory, current_branch, current_tag, commit_short_hash):
     """
@@ -356,7 +334,7 @@ def update_files(project_directory, current_branch, current_tag, commit_short_ha
     current_tag : str
         The current Git tag.
     commit_short_hash : str
-        The current short Git commit hash.
+        The current Git commit hash.
     """
     current_year = datetime.now().year
 
@@ -372,12 +350,9 @@ def update_files(project_directory, current_branch, current_tag, commit_short_ha
                         updated_content = "".join(updated_lines)
 
                         if updated_content != original_content:
-                            # Log file path being updated
                             logger.debug(f"Updating file: {file_path}")
 
                             if Config.ENABLE_BACKUP:
-                                # Call backup_file explicitly for the updated file
-                                logger.debug(f"Calling backup for file: {file_path}")
                                 backup_file(file_path)
 
                             if Config.DRY_RUN:
@@ -397,7 +372,6 @@ def update_files(project_directory, current_branch, current_tag, commit_short_ha
                     except Exception as e:
                         logger.error(f"Error processing {file_path}: {e}")
 
-
 def compile_project(project_directory):
     """Compile the project using make."""
     if not Config.ENABLE_COMPILATION:
@@ -405,10 +379,9 @@ def compile_project(project_directory):
         return
     src_dir = project_directory / "src"
     logger.info("Cleaning build...")
-    run_command("make clean", cwd=src_dir)
+    run_command("make clean", cwd=src_dir)  # Suppress the output
     logger.info("Compiling project...")
     run_command("make", cwd=src_dir)
-
 
 def copy_files(project_directory, files):
     """Copy executable files to the scripts directory."""
@@ -426,37 +399,32 @@ def copy_files(project_directory, files):
         except Exception as e:
             logger.error(f"Unexpected error while copying {src}: {e}")
 
-
 def main():
     """Main function."""
-    if Config.DEBUG:
-        logger.debug(f"Configuration class settings:")
-        logger.debug(f"DRY_RUN: {'Enabled' if Config.DRY_RUN else 'Disabled'}")
-        logger.debug(f"ENABLE_LOGGING: {'Enabled' if Config.ENABLE_LOGGING else 'Disabled'}")
-        logger.debug(f"ENABLE_COMPILATION: {'Enabled' if Config.ENABLE_COMPILATION else 'Disabled'}")
-        logger.debug(f"ENABLE_COPY: {'Enabled' if Config.ENABLE_COPY else 'Disabled'}")
-        logger.debug(f"ENABLE_BACKUP: {'Enabled' if Config.ENABLE_BACKUP else 'Disabled'}")
-        logger.debug(f"SUPPORTED_EXTENSIONS: {Config.SUPPORTED_EXTENSIONS}")
-        logger.debug(f"DIRECTORIES_TO_PROCESS: {Config.DIRECTORIES_TO_PROCESS}")
-        logger.debug(f"PROJECT_EXES: {Config.PROJECT_EXES}")
-        logger.debug(f"LOG_DIR: {Config.LOG_DIR}")
-        logger.debug(f"LOG_FILE_PREFIX: {Config.LOG_FILE_PREFIX}")
-        logger.debug(f"NAME_TAG: {Config.NAME_TAG}")
-        logger.debug(f"LICENSE_PATTERNS: {Config.LICENSE_PATTERNS}")
-
     project_directory, project_name, current_branch, current_tag, commit_short_hash = get_git_info()
 
     logger.info(f"Preparing {project_name} version {current_tag}-{commit_short_hash} [{current_branch}] for release...")
 
     update_files(Path(project_directory), current_branch, current_tag, commit_short_hash)
 
+    src_dir = Path(project_directory) / "src"
+    
+    logger.info(f"Cleaning project in {src_dir}...")
+    
+    if not src_dir.exists():
+        logger.error(f"Error: The src directory {src_dir} does not exist!")
+    else:
+        logger.info(f"Directory exists: {src_dir}")
+        run_command("make clean", cwd=src_dir)  # Suppress the output
+
     # Compilation and file copying
     if Config.ENABLE_COMPILATION:
         compile_project(Path(project_directory))
         if Config.ENABLE_COPY:
             copy_files(Path(project_directory), Config.PROJECT_EXES)
-    else:
-        logger.info("Compilation is disabled. Skipping compilation and file copying.")
+
+    logger.info(f"Cleaning project again in {src_dir} after copying files...")
+    run_command("make clean", cwd=src_dir)  # Suppress the output
 
     logger.info(f"Project prep for {project_name} version {current_tag}-{commit_short_hash} [{current_branch}] complete.")
 
