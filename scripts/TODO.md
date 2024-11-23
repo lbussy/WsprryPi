@@ -17,6 +17,7 @@
     Try: wspr --help
     2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
 - If in daemon mode, do not suppress SIGINT
+- See if we can include libs in compile
 
 # Previous Issues
 
