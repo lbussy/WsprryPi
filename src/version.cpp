@@ -27,6 +27,8 @@
 
 // Unit testing:
 // g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_VERSION -DMAKE_SRC_TAG=\"1.2.1-abc123\" -DMAKE_SRC_BRH=\"main\" version.cpp -o version -lbcm_host
+// Test command:
+// ./version
 
 #ifdef DEBUG_MAIN_VERSION
 

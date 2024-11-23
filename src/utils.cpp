@@ -27,6 +27,8 @@
 
 // Unit testing:
 // g++ -Wall -Werror -std=c++17 -DDEBUG_MAIN_UTILS -g utils.cpp -o utils
+// Test command:
+// ./utils
 
 #include <cctype>   // For std::toupper
 #include <iostream> // For std::cout and std::endl

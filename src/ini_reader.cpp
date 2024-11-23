@@ -27,6 +27,8 @@
 
 // Unit testing:
 // g++ -Wall -Werror -fmax-errors=5 -std=c++17 -DDEBUG_MAIN_READER ini_reader.cpp ini.c -o ini_reader
+// Test command:
+// ./ini_reader wspr.ini
 
 #include "ini_reader.hpp"
 #include "ini.h"
@@ -246,8 +248,13 @@ void INIReader::CreateDefaultINI(const std::string& filename) {
  *
  * @return Exit status.
  */
-int main() {
-    const char* ini_file = "wspr.ini";  // Path to the INI file for testing
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <ini-file>" << std::endl;
+        return 1;
+    }
+
+    const char* ini_file = argv[1];  // Get the INI file name from the command line argument
     INIReader reader(ini_file);
 
     if (reader.ParseError() != 0) {

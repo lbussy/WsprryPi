@@ -48,7 +48,7 @@
 // Unit test:
 // gcc -Wall -Werror -g -DDEBUG_MAIN_INI -o ini ini.c
 // Test command:
-// ./ini test.ini
+// ./ini wspr.ini
 
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS

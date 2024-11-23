@@ -27,6 +27,8 @@
 
 // Unit testing:
 // g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_SINGLETON singleton.cpp -o singleton
+// Test command:
+// ./singleton
 
 #ifdef DEBUG_MAIN_SINGLETON
 
