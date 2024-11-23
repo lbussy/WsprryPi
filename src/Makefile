@@ -52,7 +52,7 @@ main.o: main.cpp
 .PHONY: clean
 clean:
 	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.
-	$(RM) $(C_SOURCES:.c=) $(CPP_SOURCES:.cpp=)
+	$(RM) $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
 
 # Rule for building the debug version
 .PHONY: debug
