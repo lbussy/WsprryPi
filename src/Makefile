@@ -6,6 +6,9 @@
 prefix = /usr/local
 
 # Compiler settings and flags
+CXX = g++
+CC = gcc
+CFLAGS += -Wall -Werror -fmax-errors=5
 CXXFLAGS += -Wall -Werror -fmax-errors=5 -static-libgcc
 CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host
@@ -23,12 +26,8 @@ CPP_SOURCES := config.cpp ini_reader.cpp singleton.cpp utils.cpp version.cpp wsp
 
 # Generate object files from source files
 C_OBJECTS := $(C_SOURCES:.c=.o)
-CPP_OBJECTS := $(CPP_SOURCES:.cpp:.o)
+CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
-
-# Generate executables by stripping extensions from all sources
-SOURCES := $(C_SOURCES) $(CPP_SOURCES)
-EXECUTABLES := $(basename $(SOURCES))
 
 # Default target
 all: $(OUT)
@@ -39,7 +38,7 @@ $(OUT): $(OBJECTS)
 
 # Rule for version.o with additional macros
 version.o: version.cpp
-	$(CXX) $(CXXFLAGS) -DMAKE_SRC_TAG=$(VER) -DMAKE_SRC_BRH=$(BRH) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -DMAKE_SRC_TAG=\"$(VER)\" -DMAKE_SRC_BRH=\"$(BRH)\" -c $< -o $@
 
 # Rule for main.o with additional macros
 main.o: main.cpp
@@ -56,7 +55,7 @@ main.o: main.cpp
 # Clean up intermediate and additional files
 .PHONY: clean
 clean:
-	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(EXECUTABLES) $(OUT) *~ *.log core dump.*
+	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.*
 
 # Rule for building the debug version
 .PHONY: debug
