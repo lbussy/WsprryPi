@@ -22,6 +22,8 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-32d490b [refactoring].
 */
 
+#include <termios.h>
+
 #include "version.hpp"
 #include "singleton.hpp"
 #include "monitorfile.hpp"
@@ -570,7 +572,6 @@ void unSetupDMA()
     {
         return;
     }
-    // cout << "Exiting." << std::endl;
     struct DMAregs *DMA0 = (struct DMAregs *)&(ACCESS_BUS_ADDR(DMA_BUS_BASE));
     DMA0->CS = 1 << 31; // reset dma controller
     txoff();
@@ -1319,12 +1320,136 @@ void cleanup()
     unlink(LOCAL_DEVICE_FILE_NAME);
 }
 
+// Handle cleanup and exiting based on signal
 void cleanupAndExit(int sig)
 {
-    // Called when a signal is received. Automatically calls cleanup().
-    llog.logS("Exiting, caught signal: ", sig);
+    // Suppress the default action (printing the signal message to the terminal)
+    // Log the signal information
+    const char* sig_description = strsignal(sig); // Get the signal name/description
+    std::string log_message;
+
+    // Check if we are in daemon mode to log with logS
+    bool should_log_normal = config.daemon_mode;
+
+    switch (sig) {
+        case SIGINT:
+            log_message = "Exiting due to interrupt (Ctrl+C).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+        case SIGTERM:
+            log_message = "Exiting due to termination request (SIGTERM).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+        case SIGUSR1:
+            log_message = "Exiting due to user-defined signal 1 (SIGUSR1).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+        case SIGUSR2:
+            log_message = "Exiting due to user-defined signal 2 (SIGUSR2).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+        case SIGQUIT:
+            log_message = "Exiting due to quit signal (SIGQUIT).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+        case SIGPWR:
+            log_message = "Exiting due to power failure signal (SIGPWR).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(0); // User-initiated action, normal exit
+            break;
+
+        // System or error signals
+        case SIGKILL:
+            log_message = "Exiting due to kill signal (SIGKILL).";
+            if (should_log_normal) {
+                llog.logS(log_message);
+            }
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for SIGKILL
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // System error condition, abnormal exit
+            break;
+        case SIGSEGV:
+            log_message = "Exiting due to segmentation fault (SIGSEGV).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for segmentation fault
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Critical system error, abnormal exit
+            break;
+        case SIGBUS:
+            log_message = "Exiting due to bus error (SIGBUS).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for bus error
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Critical system error, abnormal exit
+            break;
+        case SIGFPE:
+            log_message = "Exiting due to floating point exception (SIGFPE).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for floating point exception
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Critical system error, abnormal exit
+            break;
+        case SIGILL:
+            log_message = "Exiting due to illegal instruction (SIGILL).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for illegal instruction
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Critical system error, abnormal exit
+            break;
+        case SIGHUP:
+            log_message = "Exiting due to hangup signal (SIGHUP).";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            exit(-1); // System error condition, abnormal exit
+            break;
+
+        // Catch-all for unhandled signals
+        default:
+            log_message = "Exiting due to unknown signal.";
+            llog.logS(log_message);
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message);
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Abnormal exit for unknown signals
+            break;
+    }
+    // Call cleanup function
     cleanup();
-    exit(-1);
 }
 
 void setSchedPriority(int priority)
@@ -1370,8 +1495,56 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     close(mem_fd);
 }
 
+// Set up the signal handler
+void setup_signal_handlers()
+{
+    struct sigaction sa;
+    sa.sa_handler = cleanupAndExit;
+    sa.sa_flags = SA_RESTART;  // Keep this if you want to restart syscalls interrupted by signals
+    sigemptyset(&sa.sa_mask);
+
+    // Set up the signal handler to intercept all relevant signals
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
+    sigaction(SIGPWR, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+    sigaction(SIGKILL, &sa, NULL);  // Note: SIGKILL cannot be caught by the program but is included for completeness
+}
+
+// Function to set terminal attributes to suppress `^C`
+void disableSignalEcho()
+{
+    struct termios term;
+    if (tcgetattr(STDIN_FILENO, &term) == 0)
+    {
+        term.c_lflag &= ~ECHOCTL; // Disable echoing control characters like ^C
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
+}
+
+// Function to restore terminal attributes
+void restoreTerminalAttributes()
+{
+    struct termios term;
+    if (tcgetattr(STDIN_FILENO, &term) == 0)
+    {
+        term.c_lflag |= ECHOCTL; // Re-enable echoing control characters
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
+}
+
 int main(const int argc, char *const argv[])
 {
+    disableSignalEcho(); // Disable echo for signals like Ctrl+C
+    atexit(restoreTerminalAttributes); // Ensure terminal settings are restored on exit
+
     if ( ! parse_commandline(argc, argv) ) return 1;
     llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
     llog.logS("Running on: ", RPiVersion(), ".");
@@ -1396,15 +1569,10 @@ int main(const int argc, char *const argv[])
         return 1;
 }
 
-    // Catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
-    for (int i = 0; i < 64; i++)
-    {
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = cleanupAndExit;
-        sigaction(i, &sa, NULL);
-    }
+    // Set up custom signal handlers
+    setup_signal_handlers();
     atexit(cleanup);
+
     setSchedPriority(30);
 
     // Initialize the RNG
