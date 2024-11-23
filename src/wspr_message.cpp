@@ -18,7 +18,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-32d490b [refactoring].
  */
 
 // Unit testing:
