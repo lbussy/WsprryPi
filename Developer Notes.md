@@ -86,7 +86,7 @@ I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d
 To handle all of these aliases and package installs, paste in this command:
 
 ``` bash
-curl -sSL curl -sSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/1544c3df479cbebb2c9d8f131d718e9b92a7be46/install_aliases.sh | bash
+curl -sSL curl -sSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/25835fe54b3b907fb978926e3358cac174f11c87/install_aliases.sh | bash
 ```
 
 See the Gist for more info.
