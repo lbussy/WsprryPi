@@ -1,6 +1,9 @@
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file utils.cpp
+ * @brief Implementation of utility functions for WsprryPi.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -34,9 +37,9 @@
  * @brief Converts a C-string to uppercase in place.
  *
  * This function modifies the provided string by converting each character
- * to uppercase using std::toupper.
+ * to uppercase using `std::toupper`.
  *
- * @param str A pointer to a null-terminated C-string.
+ * @param str A pointer to a null-terminated C-string. The string is modified in place.
  */
 void to_upper(char* str) {
     while (*str) {
@@ -45,8 +48,16 @@ void to_upper(char* str) {
     }
 }
 
-// Debug-only main function
 #ifdef DEBUG_MAIN_UTILS
+
+/**
+ * @brief Debug-only main function to test the `to_upper` utility.
+ *
+ * This function tests the `to_upper` function with a sample string and outputs
+ * the result to the console. Included only when `DEBUG_MAIN_UTILS` is defined.
+ *
+ * @return Exit status of the program.
+ */
 int main() {
     char testStr[] = "hello, world!";
     std::cout << "Before: " << testStr << std::endl;
@@ -54,4 +65,5 @@ int main() {
     std::cout << "After: " << testStr << std::endl;
     return 0;
 }
-#endif
+
+#endif // DEBUG_MAIN_UTILS

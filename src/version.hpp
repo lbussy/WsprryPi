@@ -1,6 +1,3 @@
-#ifndef _VERSION_H
-#define _VERSION_H
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /**
@@ -28,10 +25,13 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
 
+#ifndef VERSION_H
+#define VERSION_H
+
 #include <bcm_host.h>
 
 /**
- * @brief Converts a macro or value to a string.
+ * @brief Converts a value or macro to a string.
  * @param x The value or macro to stringify.
  * @return A string representation of the value or macro.
  */
@@ -44,7 +44,7 @@
  */
 #define macro_to_string(x) stringify(x)
 
-// Fallback values in case macros are not defined
+// Provide fallback values in case macros are not defined
 #ifndef MAKE_SRC_TAG
 #define MAKE_SRC_TAG "unknown"
 #endif
@@ -54,26 +54,29 @@
 #endif
 
 /**
- * @brief Retrieves the source version tag.
+ * @brief Retrieves the executable's version tag from the build system.
  * @return A C-string representing the version tag.
  */
 inline const char* exeversion() { return macro_to_string(MAKE_SRC_TAG); }
 
 /**
- * @brief Retrieves the source branch name.
+ * @brief Retrieves the branch name from the build system.
  * @return A C-string representing the branch name.
  */
 inline const char* branch() { return macro_to_string(MAKE_SRC_BRH); }
 
 /**
- * @brief Retrieves the Raspberry Pi processor ID.
+ * @brief Retrieves the processor ID of the Raspberry Pi.
  * @return An integer representing the processor ID.
  */
 inline int ver() { return bcm_host_get_processor_id(); }
 
 /**
- * @brief Retrieves a string describing the Raspberry Pi version.
- * @return A C-string describing the Raspberry Pi version.
+ * @brief Provides a description of the Raspberry Pi model based on its processor ID.
+ *
+ * This function maps processor IDs to descriptive text for different Raspberry Pi models.
+ *
+ * @return A C-string describing the Raspberry Pi version or "Unknown Raspberry Pi Version" if the ID is invalid.
  */
 inline const char* RPiVersion()
 {
@@ -98,4 +101,4 @@ inline const char* RPiVersion()
  */
 inline unsigned gpioBase() { return bcm_host_get_peripheral_address(); }
 
-#endif // _VERSION_H
+#endif // VERSION_H

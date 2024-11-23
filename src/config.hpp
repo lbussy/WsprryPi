@@ -1,6 +1,3 @@
-#ifndef _CONFIG_H
-#define _CONFIG_H
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /**
@@ -27,6 +24,9 @@
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
+
+#ifndef CONFIG_H
+#define CONFIG_H
 
 #include <iostream>
 #include <fstream>
@@ -173,4 +173,4 @@ private:
     int power_level;          ///< The configured power level.
 };
 
-#endif // _CONFIG_H
+#endif // CONFIG_H

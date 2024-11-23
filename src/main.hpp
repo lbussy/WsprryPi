@@ -1,6 +1,3 @@
-#ifndef _WSPR_H
-#define _WSPR_H
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /*
@@ -24,6 +21,9 @@
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
 */
+
+#ifndef MAIN_H
+#define MAIN_H
 
 #include <stdio.h>
 #include <string.h>
@@ -60,4 +60,4 @@ extern "C"
 }
 #endif /* __cplusplus */
 
-#endif // _WSPR_H
+#endif // MAIN_H

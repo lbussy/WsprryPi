@@ -35,7 +35,7 @@
 
 /**
  * @brief Prints the configuration values to the console.
- * @param config The WSPRConfig instance.
+ * @param config The WSPRConfig instance containing the configuration.
  */
 void printConfig(const WSPRConfig& config)
 {
@@ -55,6 +55,11 @@ void printConfig(const WSPRConfig& config)
 
 /**
  * @brief Main function for unit testing the WSPRConfig class.
+ *
+ * This function initializes a WSPRConfig instance using a configuration
+ * file specified as a command-line argument. It prints the configuration
+ * values to the console for verification.
+ *
  * @param argc The argument count.
  * @param argv The argument values.
  * @return Exit status.

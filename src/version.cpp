@@ -34,8 +34,15 @@
 #include "version.hpp"
 
 /**
- * @brief Runs unit tests for versioning and Raspberry Pi-specific functions.
- * @return Exit status (0 on success).
+ * @brief Main function to test versioning and Raspberry Pi hardware information.
+ *
+ * This function tests various version-related functions and outputs their results
+ * for validation. Specifically, it tests:
+ * - Executable version and branch information.
+ * - Raspberry Pi processor ID and version.
+ * - GPIO base address.
+ *
+ * @return Exit status (0 for success, non-zero for failure).
  */
 int main()
 {

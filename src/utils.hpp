@@ -1,9 +1,9 @@
-#ifndef _UTILS_HPP
-#define _UTILS_HPP
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file utils.hpp
+ * @brief Utility functions for WsprryPi.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -25,6 +25,18 @@
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
 
+#ifndef _UTILS_HPP
+#define _UTILS_HPP
+
+/**
+ * @brief Converts a C-string to uppercase in place.
+ *
+ * This function modifies the input string by converting each character
+ * to its uppercase equivalent using `std::toupper`. The string must be
+ * null-terminated.
+ *
+ * @param str Pointer to the null-terminated string to convert.
+ */
 void to_upper(char* str);
 
 #endif // _UTILS_HPP

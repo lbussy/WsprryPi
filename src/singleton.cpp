@@ -36,6 +36,10 @@
 
 /**
  * @brief Tests the SingletonProcess class with a given port.
+ *
+ * Verifies whether the SingletonProcess instance can be created and whether
+ * binding to the same port is prevented as expected.
+ *
  * @param port The port number to use for testing.
  */
 void test_singleton(uint16_t port)
@@ -67,6 +71,9 @@ void test_singleton(uint16_t port)
 
 /**
  * @brief Simulates a permission error by trying to bind to a restricted port.
+ *
+ * Attempts to create a SingletonProcess instance on a port that typically
+ * requires root privileges (e.g., port 80) to ensure the proper error is raised.
  */
 void simulate_permission_error()
 {
@@ -77,7 +84,6 @@ void simulate_permission_error()
 
         wspr::SingletonProcess singleton(restricted_port);
 
-        // Check return value to avoid nodiscard warnings.
         if (singleton()) {
             std::cerr << "Error: Should not be able to bind to a restricted port without root privileges!\n";
         }
@@ -88,14 +94,18 @@ void simulate_permission_error()
 
 /**
  * @brief Main function to run SingletonProcess tests.
+ *
+ * Executes tests for SingletonProcess class functionality, including creating
+ * an instance on a user-specified port and simulating a permission error on a
+ * restricted port.
+ *
  * @param argc The argument count.
  * @param argv The argument values.
- * @return Exit status.
+ * @return Exit status (0 for success, non-zero for error).
  */
 int main(int argc, char* argv[])
 {
-    // Test using a user-specified port or default to 8080
-    uint16_t test_port = 8080;
+    uint16_t test_port = 8080; // Default test port
     if (argc > 1) {
         test_port = static_cast<uint16_t>(std::atoi(argv[1]));
         if (test_port == 0) {

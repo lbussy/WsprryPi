@@ -1,6 +1,3 @@
-#ifndef _MONITORFILE_H
-#define _MONITORFILE_H
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /*
@@ -24,6 +21,9 @@
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
+
+#ifndef MONITORFILE_H
+#define MONITORFILE_H
 
 #include <filesystem>
 #include <iostream>
@@ -69,4 +69,4 @@ private:
     fs::file_time_type new_time;
 };
 
-#endif // _MONITORFILE_H
+#endif // MONITORFILE_H

@@ -1,6 +1,3 @@
-#ifndef _WSPR_SINGLETON_H
-#define _WSPR_SINGLETON_H
-
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /**
@@ -27,6 +24,9 @@
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-55ad7f3 [fix_57].
  */
+
+#ifndef SINGLETON_H
+#define SINGLETON_H
 
 #include <netinet/in.h>
 #include <unistd.h>
@@ -121,4 +121,4 @@ private:
 
 } // namespace wspr
 
-#endif // _WSPR_SINGLETON_H
+#endif // SINGLETON_H
