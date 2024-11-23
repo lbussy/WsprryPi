@@ -1,7 +1,3 @@
-# This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1-4c76705 [devel].
-
 # Installation prefix
 prefix = /usr/local
 
@@ -14,7 +10,7 @@ CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host
 
 # Output binary name
-OUT = wspr
+OUT = ini
 
 # Get version and branch directly using shell commands
 VER := $(shell git describe --tags --always --dirty="-dirty" | sed -E 's/-([0-9]+)-g([a-f0-9]+)/-\2/')
@@ -55,7 +51,8 @@ main.o: main.cpp
 # Clean up intermediate and additional files
 .PHONY: clean
 clean:
-	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.*
+	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.
+	$(RM) $(C_SOURCES:.c=) $(CPP_SOURCES:.cpp=)
 
 # Rule for building the debug version
 .PHONY: debug
