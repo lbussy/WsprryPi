@@ -10,6 +10,10 @@
 - Documentation says `wspr [options] --test-tone f` but it should be more clear that `f` is a frequency:  `wspr --test-tone 780e3`
 - "Exiting, caught signal: 18" when stopping wspr
 - (Issue #61) This is too long:  2024-11-19 19:45:52 GMT - Using NTP to calibrate transmission frequency. - A small random frequency offset will be added to all transmissions.
+- Exiting, caught signal: 28?
+- Need to lint main
+- Need to split, unit test and lint monitor file
+- Need to add unit tests for mailbox
 
 # Previous Issues
 
