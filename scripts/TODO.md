@@ -4,14 +4,19 @@
 
 - Make a log viewing page
 - Do we need a venv for shutdown_watch.py
-- Suggest to clone git repo after required libs (devel notes)
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
 - Put in a redirect to /wspr if nothing is in web root.
-- "Exiting, caught signal: 18" when stopping wspr
-- Exiting, caught signal: 28?
 - Need to lint main
 - Need to split, unit test and lint monitor file
 - Need to add unit tests for mailbox
+- Get rid of whitespace logs to logE and logS
+- Review the wspr.service file
+- Error in log:
+    2024-11-23 12:58:22 GMT Use LED: false
+    Error: must specify callsign, gridsquare, dBm, and at least one frequency.
+    Try: wspr --help
+    2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
+- If in daemon mode, do not suppress SIGINT
 
 # Previous Issues
 
