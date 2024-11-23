@@ -17,7 +17,7 @@ To run wspr from the command line, a complete listing of command line options is
 Usage:
   wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
     OR
-  wspr [options] --test-tone f
+  wspr [options] --test-tone {frequency}
 
 Options:
   -h --help

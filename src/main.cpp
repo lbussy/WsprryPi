@@ -731,7 +731,7 @@ void print_usage()
     llog.logS("Usage:");
     llog.logS("  wspr [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
     llog.logS("    OR");
-    llog.logS("  wspr [options] --test-tone f");
+    llog.logS("  wspr [options] --test-tone {frequency}");
     llog.logS("");
     llog.logS("Options:");
     llog.logS("  -h --help");
