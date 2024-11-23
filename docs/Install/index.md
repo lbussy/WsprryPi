@@ -68,7 +68,6 @@ Aside from the obvious, installing Wsprry Pi, the install script will do the fol
 - **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers. The [Apache Software Foundation](https://www.apache.org/) maintains Apache. Apache is used to control wspr from an easy-to-use web page.
 - **Install PHP**, a popular general-purpose scripting language especially suited to web development. The [PHO Group](https://www.php.net/) maintains PHP. I wrote the web pages in PHP.
 - **Install Raspberry Pi development libraries**, `libraspberrypi-dev` `raspberrypi-kernel-headers`.
-- **Git for Debian**, for no other reason than it is easier for me to develop on a system with Git. Since this is free, you get to put up with me being lazy about this part. :)
 - Optionally install support for TAPR's shutdown button.
 - Disable the Raspberry Pi's built-in sound card. Wsprry Pi uses the RPi PWM peripheral to time the frequency transitions of the output clock. The Pi's sound system also uses this peripheral; any sound events during a WSPR transmission will interfere with WSPR transmissions.
 

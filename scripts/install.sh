@@ -27,7 +27,7 @@ COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
-APTPACKAGES="git apache2 php libraspberrypi-dev raspberrypi-kernel-headers"
+APTPACKAGES="apache2 php libraspberrypi-dev raspberrypi-kernel-headers"
 WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php shutdown.php"
 WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
 # This should not change
