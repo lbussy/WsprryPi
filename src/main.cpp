@@ -1152,43 +1152,44 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     // Print a summary of the parsed options
     if (config.mode == WSPR)
     {
-        llog.logS("WSPR packet payload:");
-        llog.logS("- Callsign: ", config.callsign);
-        llog.logS("- Locator:  ", config.grid_square);
-        llog.logS("- Power:    ", config.tx_power, " dBm");
-        llog.logS("Requested TX frequencies:");
-        std::stringstream temp;
+        std::stringstream log_message;
+        log_message << "WSPR packet payload:" << std::endl;
+        log_message << "- Callsign: " << config.callsign << std::endl;
+        log_message << "- Locator:  " << config.grid_square << std::endl;
+        log_message << "- Power:    " << config.tx_power << " dBm" << std::endl;
+        log_message << "Requested TX frequencies:" << std::endl;
+
         for (unsigned int t = 0; t < config.center_freq_set.size(); t++)
         {
-            temp << std::setprecision(6) << std::fixed;
-            temp << "- " << config.center_freq_set[t] / 1e6 << " MHz" << std::endl;
+            log_message << "- " << std::setprecision(6) << std::fixed << config.center_freq_set[t] / 1e6 << " MHz" << std::endl;
         }
-        llog.logS(temp.str());
-        temp.str("");
+
         if (config.self_cal)
         {
-            temp << "- Using NTP to calibrate transmission frequency." << std::endl;
+            log_message << "- Using NTP to calibrate transmission frequency." << std::endl;
         }
         else if (config.ppm)
         {
-            temp << "- PPM value to be used for all transmissions: " << config.ppm << std::endl;
+            log_message << "- PPM value to be used for all transmissions: " << config.ppm << std::endl;
         }
+
         if (config.terminate > 0)
         {
-            temp << "- TX will stop after " << config.terminate << " transmissions." << std::endl;
+            log_message << "- TX will stop after " << config.terminate << " transmissions." << std::endl;
         }
-        else if (config.repeat && ! config.daemon_mode)
+        else if (config.repeat && !config.daemon_mode)
         {
-            temp << "- Transmissions will continue forever until stopped with CTRL-C." << std::endl;
+            log_message << "- Transmissions will continue forever until stopped with CTRL-C." << std::endl;
         }
+
         if (config.random_offset)
         {
-            temp << "- A small random frequency offset will be added to all transmissions." << std::endl;
+            log_message << "- A small random frequency offset will be added to all transmissions." << std::endl;
         }
-        if (temp.str().length())
+
+        if (log_message.str().length())
         {
-            llog.logS("Extra options:");
-            llog.logS(temp.str());
+            llog.logS(log_message.str());
         }
     }
     else
@@ -1321,7 +1322,7 @@ void cleanup()
 void cleanupAndExit(int sig)
 {
     // Called when a signal is received. Automatically calls cleanup().
-    llog.logE("Exiting, caught signal: ", sig);
+    llog.logS("Exiting, caught signal: ", sig);
     cleanup();
     exit(-1);
 }
