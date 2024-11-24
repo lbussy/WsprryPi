@@ -2,14 +2,8 @@
 
 ## Stuff to Remember
 
-- Make a log viewing page
-- Do we need a venv for shutdown_watch.py
-- No need to disable_sound() on Pi 5 and up (install and uninstall)
-- Put in a redirect to /wspr if nothing is in web root.
-- Need to lint main
-- Need to split, unit test and lint monitor file
-- Need to add unit tests for mailbox
-- Get rid of whitespace logs to logE and logS
+### Fis in this iteration
+
 - Review the wspr.service file
 - Error in log:
     2024-11-23 12:58:22 GMT Use LED: false
@@ -18,8 +12,18 @@
     2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
 - If in daemon mode, do not suppress SIGINT
 - See if we can include libs in compile
+- Put in a redirect to /wspr if nothing is in web root.
+- Need to lint main
+- Need to split, unit test and lint monitor file
+- Need to add unit tests for mailbox
+- Do we need a venv for shutdown_watch.py
 
-# Previous Issues
+### Nice to Do
+
+- Make a log viewing page
+- No need to disable_sound() on Pi 5 and up (install and uninstall)
+
+## Previous Issues
 
 *These are from the original distro and I am not sure they are still valid.*
 
