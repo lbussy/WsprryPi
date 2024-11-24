@@ -3,8 +3,8 @@
  * @brief A simple INI file parser implementation.
  *
  * This file provides an implementation of functions for parsing INI-style configuration files.
- * The parser supports handling sections and key-value pairs, with options to handle comments, 
- * inline comments, and multi-line values. It also provides support for various platforms, 
+ * The parser supports handling sections and key-value pairs, with options to handle comments,
+ * inline comments, and multi-line values. It also provides support for various platforms,
  * including Windows and UNIX-like systems, through configurable visibility symbols.
  *
  * The parser functions read INI files from different sources: files, strings, or custom streams.

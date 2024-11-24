@@ -1071,7 +1071,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         std::istringstream s ( config.frequency_string );
         freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
-        for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f) 
+        for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f)
         {
             std::string fString{ *f };
             const char * fs = fString.c_str();
@@ -1761,7 +1761,7 @@ int main(const int argc, char *const argv[])
                     llog.logS("Skipping transmission.");
                     usleep(1000000);
                 }
-                
+
                 // Advance to next band
                 band = (band + 1) % nbands;
                 if ((band == 0) && !config.repeat)

@@ -18,7 +18,7 @@ BRH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # Define source files
 C_SOURCES := ini.c mailbox.c
-CPP_SOURCES := config.cpp ini_reader.cpp singleton.cpp utils.cpp version.cpp wspr_message.cpp main.cpp
+CPP_SOURCES := config.cpp ini_reader.cpp lcblog.cpp singleton.cpp utils.cpp version.cpp wspr_message.cpp main.cpp
 
 # Generate object files from source files
 C_OBJECTS := $(C_SOURCES:.c=.o)
@@ -52,7 +52,7 @@ main.o: main.cpp
 .PHONY: clean
 clean:
 	$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.
-	$(RM) $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
+	$(RM) $(C_SOURCES:.c=) $(CPP_SOURCES:.cpp=)
 
 # Rule for building the debug version
 .PHONY: debug

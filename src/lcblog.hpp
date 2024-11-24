@@ -20,23 +20,36 @@
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-32d490b [refactoring].
-*/
+ */
 
-#ifndef LOGGING_HPP
-#define LOGGING_HPP
+#ifndef _LOGGING_HPP
+#define _LOGGING_HPP
 
 #include <iostream>
 #include <string>
 #include <regex>
+#include <ctime>
 
+/**
+ * @brief A logging class to handle standard output and error output with optional timestamping.
+ */
 class LCBLog
 {
 public:
+    /**
+     * @brief Set daemon mode to enable or disable timestamps.
+     * @param daemonmode True to enable daemon mode; false otherwise.
+     */
     void setDaemon(bool daemonmode)
     {
         isDaemon = daemonmode;
     }
 
+    /**
+     * @brief Log a single message to standard output.
+     * @tparam T The type of the message.
+     * @param t The message to log.
+     */
     template <typename T>
     void logS(T t)
     {
@@ -45,7 +58,14 @@ public:
         prtStd(t);
     }
 
-    template<typename T, typename... Args>
+    /**
+     * @brief Log multiple messages to standard output.
+     * @tparam T The type of the first message.
+     * @tparam Args The types of the additional messages.
+     * @param t The first message.
+     * @param args Additional messages.
+     */
+    template <typename T, typename... Args>
     void logS(T t, Args... args)
     {
         if (isDaemon)
@@ -53,6 +73,11 @@ public:
         prtStd(t, args...);
     }
 
+    /**
+     * @brief Log a single message to standard error.
+     * @tparam T The type of the message.
+     * @param t The message to log.
+     */
     template <typename T>
     void logE(T t)
     {
@@ -61,7 +86,14 @@ public:
         prtStd(t);
     }
 
-    template<typename T, typename... Args>
+    /**
+     * @brief Log multiple messages to standard error.
+     * @tparam T The type of the first message.
+     * @tparam Args The types of the additional messages.
+     * @param t The first message.
+     * @param args Additional messages.
+     */
+    template <typename T, typename... Args>
     void logE(T t, Args... args)
     {
         if (isDaemon)
@@ -69,140 +101,101 @@ public:
         prtStd(t, args...);
     }
 
-private:
-    bool isDaemon = false;
-    std::string printline = "";
+    /**
+     * @brief Public wrapper to test the private crush function.
+     * @param s The string to be processed.
+     */
+    void testCrush(std::string &s)
+    {
+        crush(s);
+    }
 
-    // Standard Out Printline
-    //
-    // Single arguments
-    void prtStd(std::string t)
+private:
+    bool isDaemon = false; /**< Indicates whether daemon mode is enabled. */
+    std::string printline = ""; /**< Buffer for the log message. */
+
+    /**
+     * @brief Print a single message to standard output.
+     * @param t The message to print.
+     */
+    void prtStd(const std::string &t)
     {
-        // String argument
-        printline = printline + t;
-        if (isDaemon)
-            crush(printline);
-        std::cout << printline << std::endl << std::flush;
-        printline = "";
+        printline += t;
+        finalizeOutput(std::cout);
     }
-    void prtStd(const char * t)
+
+    /**
+     * @brief Print a single message to standard output.
+     * @param t The message to print.
+     */
+    void prtStd(const char *t)
     {
-        // Char argument
-        printline = printline + t;
-        if (isDaemon)
-            crush(printline);
-        std::cout << printline << std::endl << std::flush;
-        printline = "";
+        printline += t;
+        finalizeOutput(std::cout);
     }
+
+    /**
+     * @brief Print a single numeric message to standard output.
+     * @tparam T The type of the message.
+     * @param t The message to print.
+     */
     template <typename T>
     void prtStd(T t)
     {
-        // Numeric argument
-        printline = printline + std::to_string(t);
-        if (isDaemon)
-            crush(printline);
-        std::cout << printline << std::endl << std::flush;
-        printline = "";
+        printline += std::to_string(t);
+        finalizeOutput(std::cout);
     }
-    //
-    // Multiple arguments
-    template <typename... Args>
-    void prtStd(std::string t, Args... args)
-    {
-        // First argument is a string
-        printline = printline + t;
-        prtStd(args...);
-    }
-    template <typename... Args>
-    void prtStd(const char * t, Args... args)
-    {
-        // First argument is a char
-        printline = printline + t;
-        prtStd(args...);
-    }
+
+    /**
+     * @brief Handle multiple arguments for standard output.
+     * @tparam T The type of the first argument.
+     * @tparam Args The types of the additional arguments.
+     * @param t The first argument.
+     * @param args Additional arguments.
+     */
     template <typename T, typename... Args>
     void prtStd(T t, Args... args)
     {
-        // First argument is numeric
-        printline = printline + std::to_string(t);
+        prtStd(t);
         prtStd(args...);
     }
 
-    // Standard Error Printline
-    //
-    // Single arguments
-    void prtErr(std::string t)
+    /**
+     * @brief Finalize the log output to the specified stream.
+     * @param os The output stream (e.g., std::cout or std::cerr).
+     */
+    void finalizeOutput(std::ostream &os)
     {
-        // String argument
-        printline = printline + t;
+        if (printline.empty())
+            return; // Do not print if the line is empty
         if (isDaemon)
             crush(printline);
-        std::cerr << printline << std::endl << std::flush;
-        printline = "";
-    }
-    void prtErr(const char * t)
-    {
-        // Char argument
-        printline = printline + t;
-        if (isDaemon)
-            crush(printline);
-        std::cerr << printline << std::endl << std::flush;
-        printline = "";
-    }
-    template <typename T>
-    void prtErr(T t)
-    {
-        // Numeric argument
-        printline = printline + std::to_string(t);
-        if (isDaemon)
-            crush(printline);
-        std::cerr << printline << std::endl << std::flush;
-        printline = "";
-    }
-    //
-    // Multiple arguments
-    template <typename... Args>
-    void prtErr(std::string t, Args... args)
-    {
-        // First argument is a string
-        printline = printline + t;
-        prtErr(args...);
-    }
-    template <typename... Args>
-    void prtErr(const char * t, Args... args)
-    {
-        // First argument is a char
-        printline = printline + t;
-        prtErr(args...);
-    }
-    template <typename T, typename... Args>
-    void prtErr(T t, Args... args)
-    {
-        // First argument is numeric
-        printline = printline + std::to_string(t);
-        prtErr(args...);
+        os << printline << std::endl << std::flush;
+        printline.clear();
     }
 
-    // Clean string of extraeneous whitespace 
+    /**
+     * @brief Remove extraneous whitespace from a string.
+     * @param s The string to clean.
+     */
     void crush(std::string &s)
     {
-        // Remove multiple whitespace down to a single space
         s = std::regex_replace(s, std::regex("\\s+"), " ");
-        // Remove leading and trailing whitespace
         s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
     }
 
+    /**
+     * @brief Get the current timestamp as a string.
+     * @return The formatted timestamp.
+     */
     std::string getStamp()
     {
         char dts[24];
         time_t t = time(0);
-        struct tm *tm;
-
-        tm = gmtime(&t);
+        struct tm *tm = gmtime(&t);
         strftime(dts, sizeof(dts), "%F %T %Z", tm);
-        std::string str(dts);
-        return str;
+        return std::string(dts);
     }
 };
 
-#endif // LOGGING_HPP
+#endif // _LOGGING_HPP

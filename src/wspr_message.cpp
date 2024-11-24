@@ -31,7 +31,7 @@
 #include <iostream> // For std::cout, std::endl
 #include "utils.hpp"
 
-/** 
+/**
  * @brief 162-bit synchronization vector.
  */
 const unsigned char sync[] = {

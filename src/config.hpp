@@ -43,7 +43,7 @@ public:
     /**
      * @brief Default constructor for WSPRConfig.
      */
-    WSPRConfig() : isinitialized(false), transmit(false), repeat(false), ppm(0.0), 
+    WSPRConfig() : isinitialized(false), transmit(false), repeat(false), ppm(0.0),
                    selfcal(false), offset(false), use_led(false), power_level(7) {}
 
     /**

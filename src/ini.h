@@ -4,7 +4,7 @@
  *
  * This file defines the interface for parsing INI-style configuration files.
  * The library supports reading INI files, handling sections and key-value pairs,
- * and provides an API for users to process INI files in various formats (from 
+ * and provides an API for users to process INI files in various formats (from
  * files, strings, or custom streams).
  *
  * This library is licensed under the GNU General Public License v3.0.
