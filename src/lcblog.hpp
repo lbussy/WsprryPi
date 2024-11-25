@@ -182,7 +182,6 @@ private:
         // Clean up the log message
         crush(printline);
 
-        std::cerr << "DEBUG: printline = '" << printline << "'" << std::endl;
         os << printline << std::endl << std::flush;
 
         // Clear the buffer for the next message
