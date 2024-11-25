@@ -5,7 +5,7 @@
 ### Fis in this iteration
 
 - Review the wspr.service file
-- Error in log:
+- Error in log: (maybe just say it is not set up yet?)
     2024-11-23 12:58:22 GMT Use LED: false
     Error: must specify callsign, gridsquare, dBm, and at least one frequency.
     Try: wspr --help
@@ -14,7 +14,6 @@
 - See if we can include libs in compile
 - Put in a redirect to /wspr if nothing is in web root.
 - Need to lint main
-- Need to split, unit test and lint monitor file
 - Need to add unit tests for mailbox
 - Do we need a venv for shutdown_watch.py
 - Figure out what happens if I add sections or items to the INI

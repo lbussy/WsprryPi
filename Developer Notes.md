@@ -18,44 +18,44 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
    
 2. Check that you have an SSH key generated on your system:
 
-   * Linux or Mac:
+   * Linux or Mac (one line):
 
- ``` bash
-        [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
- ```
+      ``` bash
+      [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
+      ```
 
    * Windows PowerShell:
 
- ``` PowerShell
-        if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
+      ``` PowerShell
+      if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
             Write-Host "SSH keys already exist."
-        } else {
+      } else {
          ssh-keygen
-        }
- ```
+      }
+      ```
 
    * Windows Command Line:
 
- ``` cmd
- @echo off
- if exist "%USERPROFILE%\\.ssh" (
- if exist "%USERPROFILE%\.ssh\*.pub" (
- echo SSH keys already exist.
- ) else (
- ssh-keygen
- )
- ) else (
- ssh-keygen
- )
- ```
+      ``` cmd
+      @echo off
+      if exist "%USERPROFILE%\\.ssh" (
+         if exist "%USERPROFILE%\.ssh\*.pub" (
+            echo SSH keys already exist.
+         ) else (
+            ssh-keygen
+         )
+      ) else (
+         ssh-keygen
+      )
+      ```
 
 3. `ssh` to your `pi@{hostname}.local` with the target host password to ensure your `ssh` client and name resolution via zeroconf or mDNS. If you see:
 
- ```
- @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
- @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
- @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
- ```
+   ```
+   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+   @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+   ```
 
    * Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
    * "Yes" to a prompt to continue connecting
@@ -63,19 +63,19 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 4. Copy keys to host with (enter target host password when asked):
    
- ``` bash
-    ssh-copy-id pi@{hostname}.local
- ```
+   ``` bash
+   ssh-copy-id pi@{hostname}.local
+   ```
 
 5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this - be sure to mind the indentation:
 
- ``` bash
-     Host {hostname}.local
-     HostName {hostname}.local
-     User pi
-     Port 22
-     PreferredAuthentications publickey
- ```
+   ``` bash
+   Host {hostname}.local
+      HostName {hostname}.local
+      User pi
+      Port 22
+      PreferredAuthentications publickey
+   ```
 
 6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwordless) logins.
 
@@ -86,10 +86,10 @@ I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d
 To handle all of these aliases and package installs, paste in this command:
 
 ``` bash
-curl -sSL curl -sSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/25835fe54b3b907fb978926e3358cac174f11c87/install_aliases.sh | bash
+curl -fsSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/57ba6f5052768a4124fdeee03d3bc900e4d96b3a/install_aliases.sh | bash
 ```
 
-See the Gist for more info.
+See the [Gist](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) for more info if you have never used these.
 
 ## VS Code
 
@@ -107,59 +107,59 @@ If you are going to use VS Code from your workstation:
 
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
- Either:
+   Either:
 
- ``` bash
-    sudo apt install git -y
-    git clone https://github.com/lbussy/WsprryPi.git
-    cd ~/WsprryPi/
-    sudo ./scripts/install.sh -l
- ```
+   ``` bash
+   sudo apt install git -y
+   git clone https://github.com/lbussy/WsprryPi.git
+   cd ~/WsprryPi/
+   sudo ./scripts/install.sh -l
+   ```
 
- (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
+   (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
 
- Or:
+   Or:
 
- ``` bash
-    curl -L installwspr.aa0nt.net | sudo bash
-    git clone https://github.com/lbussy/WsprryPi.git
-    cd ~/WsprryPi/
- ```
+   ``` bash
+   curl -L installwspr.aa0nt.net | sudo bash
+   git clone https://github.com/lbussy/WsprryPi.git
+   cd ~/WsprryPi/
+   ```
   
- (This lets the installer install everything, but then you clone the repo after.)
+   (This lets the installer install everything, but then you clone the repo after.)
 
 6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
 
- ``` bash
-    git config --global user.email "you@example.com"
-    git config --global user.name "Your Name"
- ```
+   ``` bash
+   git config --global user.email "you@example.com"
+   git config --global user.name "Your Name"
+   ```
 
 7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
 
- ``` bash
-    code --install-extension ms-python.debugpy
-    code --install-extension ms-python.python
-    code --install-extension ms-python.vscode-pylance
-    code --install-extension ms-vscode.cmake-tools
-    code --install-extension ms-vscode.cpptools
-    code --install-extension ms-vscode.cpptools-extension-pack
-    code --install-extension ms-vscode.cpptools-themes
-    code --install-extension ms-vscode.makefile-tools
-    code --install-extension twxs.cmake
-    code --install-extension yzhang.markdown-all-in-one
- ```
+   ``` bash
+   code --install-extension ms-python.debugpy
+   code --install-extension ms-python.python
+   code --install-extension ms-python.vscode-pylance
+   code --install-extension ms-vscode.cmake-tools
+   code --install-extension ms-vscode.cpptools
+   code --install-extension ms-vscode.cpptools-extension-pack
+   code --install-extension ms-vscode.cpptools-themes
+   code --install-extension ms-vscode.makefile-tools
+   code --install-extension twxs.cmake
+   code --install-extension yzhang.markdown-all-in-one
+   ```
 
- (List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
+   (List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
 
 8. Set up the `venv`:
 
- ``` bash
-    python3 -m venv ./.venv
-    . ./.venv/bin/activate
-    python -m pip install --upgrade pip
-    pip install -r ./requirements.txt
- ```
+   ``` bash
+   python3 -m venv ./.venv
+   . ./.venv/bin/activate
+   python -m pip install --upgrade pip
+   pip install -r ./requirements.txt
+   ```
 
 9. For Python script and document development, always use `venv` (VS Code should do this or prompt you to select it).
 
