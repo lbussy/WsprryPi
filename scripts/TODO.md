@@ -17,6 +17,8 @@
 - Need to split, unit test and lint monitor file
 - Need to add unit tests for mailbox
 - Do we need a venv for shutdown_watch.py
+- Figure out what happens if I add sections or items to the INI
+- Move shutdown watch to C++
 
 ### Nice to Do
 
