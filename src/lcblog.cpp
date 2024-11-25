@@ -30,6 +30,7 @@
 // Test command:
 // ./lcblog
 
+#ifdef DEBUG_MAIN_LCBLOG
 #include "lcblog.hpp"
 #include <iostream>
 #include <cassert>
@@ -115,7 +116,6 @@ void testLogging()
     testEmptyLogging();
 }
 
-#ifdef DEBUG_MAIN_LCBLOG
 /**
  * @brief Main function to run unit tests for LCBLog.
  */

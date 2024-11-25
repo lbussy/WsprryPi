@@ -1,6 +1,9 @@
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
-/*
+/**
+ * @file lcblog.cpp
+ * @brief Provides unit tests for the LCBLog class.
+ *
  * WsprryPi
  * Updated and maintained by Lee C. Bussy
  *
@@ -37,7 +40,7 @@ class LCBLog
 {
 public:
     /**
-     * @brief Set daemon mode to enable or disable timestamps.
+     * @brief Enable or disable daemon mode for logging.
      * @param daemonmode True to enable daemon mode; false otherwise.
      */
     void setDaemon(bool daemonmode)
@@ -47,7 +50,7 @@ public:
 
     /**
      * @brief Log a single message to standard output.
-     * @tparam T The type of the message.
+     * @tparam T The type of the message to log.
      * @param t The message to log.
      */
     template <typename T>
@@ -56,14 +59,15 @@ public:
         if (isDaemon)
             std::cout << getStamp() << "\t";
         prtStd(t);
+        finalizeOutput(std::cout);
     }
 
     /**
-     * @brief Log multiple messages to standard output.
-     * @tparam T The type of the first message.
-     * @tparam Args The types of the additional messages.
-     * @param t The first message.
-     * @param args Additional messages.
+     * @brief Log multiple concatenated messages to standard output.
+     * @tparam T The type of the first message to log.
+     * @tparam Args The types of additional messages to log.
+     * @param t The first message to log.
+     * @param args Additional messages to log.
      */
     template <typename T, typename... Args>
     void logS(T t, Args... args)
@@ -71,11 +75,12 @@ public:
         if (isDaemon)
             std::cout << getStamp() << "\t";
         prtStd(t, args...);
+        finalizeOutput(std::cout);
     }
 
     /**
      * @brief Log a single message to standard error.
-     * @tparam T The type of the message.
+     * @tparam T The type of the message to log.
      * @param t The message to log.
      */
     template <typename T>
@@ -84,14 +89,15 @@ public:
         if (isDaemon)
             std::cerr << getStamp() << "\t";
         prtStd(t);
+        finalizeOutput(std::cerr);
     }
 
     /**
-     * @brief Log multiple messages to standard error.
-     * @tparam T The type of the first message.
-     * @tparam Args The types of the additional messages.
-     * @param t The first message.
-     * @param args Additional messages.
+     * @brief Log multiple concatenated messages to standard error.
+     * @tparam T The type of the first message to log.
+     * @tparam Args The types of additional messages to log.
+     * @param t The first message to log.
+     * @param args Additional messages to log.
      */
     template <typename T, typename... Args>
     void logE(T t, Args... args)
@@ -99,11 +105,12 @@ public:
         if (isDaemon)
             std::cerr << getStamp() << "\t";
         prtStd(t, args...);
+        finalizeOutput(std::cerr);
     }
 
     /**
-     * @brief Public wrapper to test the private crush function.
-     * @param s The string to be processed.
+     * @brief Test the `crush` function directly with a given string.
+     * @param s The string to process using `crush`.
      */
     void testCrush(std::string &s)
     {
@@ -112,46 +119,49 @@ public:
 
 private:
     bool isDaemon = false; /**< Indicates whether daemon mode is enabled. */
-    std::string printline = ""; /**< Buffer for the log message. */
+    std::string printline = ""; /**< Accumulated log message. */
 
     /**
-     * @brief Print a single message to standard output.
-     * @param t The message to print.
+     * @brief Append a message to the log buffer.
+     * @param t The message to append.
      */
     void prtStd(const std::string &t)
     {
+        if (!printline.empty())
+            printline += " ";
         printline += t;
-        finalizeOutput(std::cout);
     }
 
     /**
-     * @brief Print a single message to standard output.
-     * @param t The message to print.
+     * @brief Append a message to the log buffer.
+     * @param t The message to append.
      */
     void prtStd(const char *t)
     {
+        if (!printline.empty())
+            printline += " ";
         printline += t;
-        finalizeOutput(std::cout);
     }
 
     /**
-     * @brief Print a single numeric message to standard output.
-     * @tparam T The type of the message.
-     * @param t The message to print.
+     * @brief Append a numeric message to the log buffer.
+     * @tparam T The numeric type of the message.
+     * @param t The numeric message to append.
      */
     template <typename T>
     void prtStd(T t)
     {
+        if (!printline.empty())
+            printline += " ";
         printline += std::to_string(t);
-        finalizeOutput(std::cout);
     }
 
     /**
-     * @brief Handle multiple arguments for standard output.
-     * @tparam T The type of the first argument.
-     * @tparam Args The types of the additional arguments.
-     * @param t The first argument.
-     * @param args Additional arguments.
+     * @brief Append multiple concatenated messages to the log buffer.
+     * @tparam T The type of the first message.
+     * @tparam Args The types of additional messages.
+     * @param t The first message.
+     * @param args Additional messages.
      */
     template <typename T, typename... Args>
     void prtStd(T t, Args... args)
@@ -161,32 +171,60 @@ private:
     }
 
     /**
-     * @brief Finalize the log output to the specified stream.
+     * @brief Finalize and print the accumulated log message to the output stream.
      * @param os The output stream (e.g., std::cout or std::cerr).
      */
     void finalizeOutput(std::ostream &os)
     {
         if (printline.empty())
-            return; // Do not print if the line is empty
-        if (isDaemon)
-            crush(printline);
+            return;
+
+        // Clean up the log message
+        crush(printline);
+
+        std::cerr << "DEBUG: printline = '" << printline << "'" << std::endl;
         os << printline << std::endl << std::flush;
+
+        // Clear the buffer for the next message
         printline.clear();
     }
 
     /**
-     * @brief Remove extraneous whitespace from a string.
+     * @brief Clean up a string by removing extraneous spaces and fixing formatting issues.
      * @param s The string to clean.
      */
     void crush(std::string &s)
     {
+        // Trim leading and trailing spaces
+        s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
+
+        // Replace multiple spaces with a single space
+        s = std::regex_replace(s, std::regex("\\s+"), " ");
+
+        // Remove spaces directly inside parentheses/brackets
+        s = std::regex_replace(s, std::regex("\\(\\s+"), "(");
+        s = std::regex_replace(s, std::regex("\\s+\\)"), ")");
+        s = std::regex_replace(s, std::regex("\\[\\s+"), "[");
+        s = std::regex_replace(s, std::regex("\\s+\\]"), "]");
+
+        // Remove spaces before punctuation
+        s = std::regex_replace(s, std::regex("\\s+([.,!?])"), "$1");
+
+        // Add space before opening parentheses/brackets if missing
+        s = std::regex_replace(s, std::regex("([a-zA-Z0-9])\\("), "$1 (");
+        s = std::regex_replace(s, std::regex("([a-zA-Z0-9])\\["), "$1 [");
+
+        // Remove spaces before closing parentheses/brackets
+        s = std::regex_replace(s, std::regex("\\s+([)}\\]])"), "$1");
+
+        // Final cleanup
         s = std::regex_replace(s, std::regex("\\s+"), " ");
         s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
     }
 
     /**
-     * @brief Get the current timestamp as a string.
-     * @return The formatted timestamp.
+     * @brief Get the current timestamp formatted as a string.
+     * @return A string representing the current timestamp in the format "YYYY-MM-DD HH:MM:SS TZ".
      */
     std::string getStamp()
     {

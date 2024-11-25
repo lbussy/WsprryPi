@@ -44,7 +44,7 @@
  */
 #define macro_to_string(x) stringify(x)
 
-// Provide fallback values in case macros are not defined
+// Fallback values for version and branch
 #ifndef MAKE_SRC_TAG
 #define MAKE_SRC_TAG "unknown"
 #endif
@@ -53,17 +53,21 @@
 #define MAKE_SRC_BRH "unknown"
 #endif
 
+// Ensure sanitized version of macros (trim excess whitespace)
+#define SANITIZED_TAG macro_to_string(MAKE_SRC_TAG)
+#define SANITIZED_BRH macro_to_string(MAKE_SRC_BRH)
+
 /**
  * @brief Retrieves the executable's version tag from the build system.
  * @return A C-string representing the version tag.
  */
-inline const char* exeversion() { return macro_to_string(MAKE_SRC_TAG); }
+inline const char* exeversion() { return SANITIZED_TAG; }
 
 /**
  * @brief Retrieves the branch name from the build system.
  * @return A C-string representing the branch name.
  */
-inline const char* branch() { return macro_to_string(MAKE_SRC_BRH); }
+inline const char* branch() { return SANITIZED_BRH; }
 
 /**
  * @brief Retrieves the processor ID of the Raspberry Pi.
