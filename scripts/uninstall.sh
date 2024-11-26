@@ -9,6 +9,9 @@
 
 # shellcheck disable=SC2034  # Unused variables left for reusability
 
+# TODO:  Reload system daemon after uninstall
+# TODO:  Remove the shutdown_watch unit file
+
 # General constants
 declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
 declare REPLY CMDLINE GITRAW PACKAGENAME VERSION

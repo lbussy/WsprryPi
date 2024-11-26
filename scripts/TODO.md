@@ -13,6 +13,7 @@
 - Move shutdown watch to C++
 - Add --debug for runtime debugging
 - Log rotate skipping (newer)
+- Local installer went away
 
 ### Fis in this iteration
 
