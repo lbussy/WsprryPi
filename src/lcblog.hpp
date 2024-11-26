@@ -1,7 +1,7 @@
 // This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
 
 /**
- * @file lcblog.cpp
+ * @file lcblog.hpp
  * @brief Provides unit tests for the LCBLog class.
  *
  * WsprryPi
@@ -22,7 +22,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-7f4c707 [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-1a53e0c [logfile_wrap].
  */
 
 #ifndef _LOGGING_HPP
@@ -54,10 +54,14 @@ public:
      * @param t The message to log.
      */
     template <typename T>
-    void logS(T t)
-    {
-        if (isDaemon)
-            std::cout << getStamp() << "\t";
+    void logS(T t) {
+        if (!printline.empty()) { // If there's an incomplete log message, flush it first
+            finalizeOutput(std::cout);
+        }
+
+        if (isDaemon) {
+            std::cout << getStamp() << "\t"; // Add timestamp and tab for Daemon mode
+        }
         prtStd(t);
         finalizeOutput(std::cout);
     }
@@ -70,10 +74,14 @@ public:
      * @param args Additional messages to log.
      */
     template <typename T, typename... Args>
-    void logS(T t, Args... args)
-    {
-        if (isDaemon)
-            std::cout << getStamp() << "\t";
+    void logS(T t, Args... args) {
+        if (!printline.empty()) { // Flush any pending messages before starting new one
+            finalizeOutput(std::cout);
+        }
+
+        if (isDaemon) {
+            std::cout << getStamp() << "\t"; // Add timestamp and tab for Daemon mode
+        }
         prtStd(t, args...);
         finalizeOutput(std::cout);
     }
@@ -174,18 +182,13 @@ private:
      * @brief Finalize and print the accumulated log message to the output stream.
      * @param os The output stream (e.g., std::cout or std::cerr).
      */
-    void finalizeOutput(std::ostream &os)
-    {
+    void finalizeOutput(std::ostream &os) {
         if (printline.empty())
             return;
 
-        // Clean up the log message
-        crush(printline);
-
-        os << printline << std::endl << std::flush;
-
-        // Clear the buffer for the next message
-        printline.clear();
+        crush(printline); // Clean up the accumulated log message
+        os << printline << std::endl << std::flush; // Ensure newline
+        printline.clear(); // Clear the buffer after output
     }
 
     /**

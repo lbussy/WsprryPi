@@ -5,6 +5,7 @@
 Thumbs.db
 *.log
 *.bak
+*.zip
 
 # Ignore all files without extensions in src/
 src/[^/]*[^.][^/]*$
@@ -15,7 +16,6 @@ src/*
 
 # Ensure .o files remain ignored even with the rule above
 *.o
-
 
 ## Allow specific files in /src
 !/src/Makefile
