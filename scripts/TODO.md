@@ -12,10 +12,11 @@
 - Figure out what happens if I add sections or items to the INI
 - Move shutdown watch to C++
 - Add --debug for runtime debugging
+- Log rotate skipping (newer)
 
 ### Fis in this iteration
 
-- Move copying ini file before the wspr daemon restarts
+- Move copying ini file before the wspr daemon restarts (called "configuration file")
 
 ### Nice to Do
 

@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-218cc4d [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f5cad8 [refactoring].
 */
 
 #include <termios.h>
@@ -1592,6 +1592,8 @@ int main(const int argc, char *const argv[])
 #endif
 
     if ( ! parseConfigData(argc, argv) ) return 1;
+
+    printf("DEBUG:  PID: %d\n", getpid()); // Print PID as a debug tool
 
     // Make sure we're the only wspr process
     wspr::SingletonProcess singleton(SINGLETON_PORT);
