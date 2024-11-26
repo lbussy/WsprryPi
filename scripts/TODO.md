@@ -15,12 +15,7 @@
 
 ### Fis in this iteration
 
-- Error in log: (No idea when this happened))
-    2024-11-23 12:58:22 GMT Use LED: false
-    Error: must specify callsign, gridsquare, dBm, and at least one frequency.
-    Try: wspr --help
-    2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
-- Move copying ini file before the service restarts
+- Move copying ini file before the wspr daemon restarts
 
 ### Nice to Do
 

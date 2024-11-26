@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-1a53e0c [logfile_wrap].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-218cc4d [refactoring].
 */
 
 #include <termios.h>
@@ -1333,6 +1333,22 @@ void cleanup()
 // Handle cleanup and exiting based on signal
 void cleanupAndExit(int sig)
 {
+    // Raspberry Pi SIG list (kill -l):
+    //  1) SIGHUP       2) SIGINT       3) SIGQUIT      4) SIGILL       5) SIGTRAP
+    //  6) SIGABRT      7) SIGBUS       8) SIGFPE       9) SIGKILL     10) SIGUSR1
+    // 11) SIGSEGV     12) SIGUSR2     13) SIGPIPE     14) SIGALRM     15) SIGTERM
+    // 16) SIGSTKFLT   17) SIGCHLD     18) SIGCONT     19) SIGSTOP     20) SIGTSTP
+    // 21) SIGTTIN     22) SIGTTOU     23) SIGURG      24) SIGXCPU     25) SIGXFSZ
+    // 26) SIGVTALRM   27) SIGPROF     28) SIGWINCH    29) SIGIO       30) SIGPWR
+    // 31) SIGSYS      34) SIGRTMIN    35) SIGRTMIN+1  36) SIGRTMIN+2  37) SIGRTMIN+3
+    // 38) SIGRTMIN+4  39) SIGRTMIN+5  40) SIGRTMIN+6  41) SIGRTMIN+7  42) SIGRTMIN+8
+    // 43) SIGRTMIN+9  44) SIGRTMIN+10 45) SIGRTMIN+11 46) SIGRTMIN+12 47) SIGRTMIN+13
+    // 48) SIGRTMIN+14 49) SIGRTMIN+15 50) SIGRTMAX-14 51) SIGRTMAX-13 52) SIGRTMAX-12
+    // 53) SIGRTMAX-11 54) SIGRTMAX-10 55) SIGRTMAX-9  56) SIGRTMAX-8  57) SIGRTMAX-7
+    // 58) SIGRTMAX-6  59) SIGRTMAX-5  60) SIGRTMAX-4  61) SIGRTMAX-3  62) SIGRTMAX-2
+    // 63) SIGRTMAX-1  64) SIGRTMAX
+    // e.g.: 'kill -SIGCONT $(pgrep wspr)'
+
     // Suppress the default action (printing the signal message to the terminal)
     // Log the signal information
     const char* sig_description = strsignal(sig); // Get the signal name/description
@@ -1342,42 +1358,42 @@ void cleanupAndExit(int sig)
     bool should_log_normal = config.daemon_mode;
 
     switch (sig) {
-        case SIGINT:
+        case SIGINT: // 2
             log_message = "Exiting due to interrupt (Ctrl+C).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
             llog.logS("Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
-        case SIGTERM:
+        case SIGTERM: // 15
             log_message = "Exiting due to termination request (SIGTERM).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
             llog.logS("Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
-        case SIGUSR1:
+        case SIGUSR1: // 10
             log_message = "Exiting due to user-defined signal 1 (SIGUSR1).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
             llog.logS("Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
-        case SIGUSR2:
+        case SIGUSR2: // 12
             log_message = "Exiting due to user-defined signal 2 (SIGUSR2).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
             llog.logS("Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
-        case SIGQUIT:
+        case SIGQUIT: // 3
             log_message = "Exiting due to quit signal (SIGQUIT).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
             llog.logS("Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
-        case SIGPWR:
+        case SIGPWR: // 30
             log_message = "Exiting due to power failure signal (SIGPWR).";
             llog.logS(log_message);
             llog.logS("Signal: ", sig);
@@ -1386,6 +1402,18 @@ void cleanupAndExit(int sig)
             break;
 
         // System or error signals
+        case SIGCONT:
+            log_message = "Exiting due to stop signal (SIGCONT).";
+            if (should_log_normal) {
+                llog.logS(log_message);
+            }
+            llog.logS("Signal: ", sig);
+            llog.logS("Description: ", sig_description);
+            llog.logE(log_message); // Log error for SIGCONT
+            llog.logE("Signal: ", sig);
+            llog.logE("Description: ", sig_description);
+            exit(-1); // Daemon shutdown
+            break;
         case SIGKILL:
             log_message = "Exiting due to kill signal (SIGKILL).";
             if (should_log_normal) {

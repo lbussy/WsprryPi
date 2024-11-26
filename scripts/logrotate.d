@@ -1,5 +1,5 @@
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-1a53e0c [logfile_wrap].
+# Created for WsprryPi project, version 1.2.1-218cc4d [refactoring].
 
 /var/log/wspr/wspr.*.log {
     rotate 14
