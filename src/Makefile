@@ -1,3 +1,6 @@
+# Define macros and variables
+LED_PIN = 18
+
 # Installation prefix
 prefix = /usr/local
 
@@ -37,7 +40,7 @@ $(OUT): $(OBJECTS)
 
 # Rule for main.o with additional macros
 main.o: main.cpp
-	$(CXX) $(CXXFLAGS) -DLED_PIN=18 -c $< -o $@
+	$(CXX) $(CXXFLAGS) -DLED_PIN=$(LED_PIN) -c $< -o $@
 
 # Pattern rule for compiling other C++ source files
 %.o: %.cpp

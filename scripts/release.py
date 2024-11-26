@@ -15,7 +15,7 @@ Logging and file processing actions are controlled via the configuration setting
 
 Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-09f6848 [refactoring].
+Created for WsprryPi project, version 1.2.1-2bf574e [refactoring].
 """
 
 import os
