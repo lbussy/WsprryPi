@@ -2,7 +2,7 @@ from pathlib import Path
 """
 Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-2bf574e [refactoring].
+Created for WsprryPi project, version 1.2.1-7f4c707 [refactoring].
 """
 
 class Config:

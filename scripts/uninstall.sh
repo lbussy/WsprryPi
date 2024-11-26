@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-2bf574e [refactoring].
+# Created for WsprryPi project, version 1.2.1-7f4c707 [refactoring].
 
 ############
 ### Global Declarations
@@ -170,9 +170,8 @@ checkroot() {
         sudo -n true 2> /dev/null
         retval="$?"
         if [ "$retval" -eq 0 ]; then
-            echo -e "\nNot running as root, relaunching correctly."
+            echo -e "\nNot running as root, re-run using 'sudo'."
             sleep 2
-            eval "$CMDLINE"
             exit "$?"
         else
             # sudo not available, give instructions

@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-2bf574e [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-7f4c707 [refactoring].
 */
 
 #include <termios.h>
@@ -1165,8 +1165,8 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         llog.logS("- Power:    ", config.tx_power, " dBm");
         llog.logS("Requested TX frequencies:");
 
+        // Concatenate a message
         std::ostringstream log_message;
-
         for (unsigned int t = 0; t < config.center_freq_set.size(); t++) {
             log_message << "- " << std::setprecision(6) << std::fixed
                         << config.center_freq_set[t] / 1e6 << " MHz\n";
