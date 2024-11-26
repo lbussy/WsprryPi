@@ -1153,51 +1153,51 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     // Print a summary of the parsed options
     if (config.mode == WSPR)
     {
-        std::stringstream log_message;
-        log_message << "WSPR packet payload:" << std::endl;
-        log_message << "- Callsign: " << config.callsign << std::endl;
-        log_message << "- Locator:  " << config.grid_square << std::endl;
-        log_message << "- Power:    " << config.tx_power << " dBm" << std::endl;
-        log_message << "Requested TX frequencies:" << std::endl;
+        llog.logS("WSPR packet payload:");
+        llog.logS("- Callsign: ", config.callsign);
+        llog.logS("- Locator:  ", config.grid_square);
+        llog.logS("- Power:    ", config.tx_power, " dBm");
+        llog.logS("Requested TX frequencies:");
 
-        for (unsigned int t = 0; t < config.center_freq_set.size(); t++)
-        {
-            log_message << "- " << std::setprecision(6) << std::fixed << config.center_freq_set[t] / 1e6 << " MHz" << std::endl;
+        std::ostringstream log_message;
+
+        for (unsigned int t = 0; t < config.center_freq_set.size(); t++) {
+            log_message << "- " << std::setprecision(6) << std::fixed
+                        << config.center_freq_set[t] / 1e6 << " MHz\n";
         }
+
+        // Log the concatenated message
+        llog.logS(log_message.str());
+
 
         if (config.self_cal)
         {
-            log_message << "- Using NTP to calibrate transmission frequency." << std::endl;
+            llog.logS("- Using NTP to calibrate transmission frequency.");
         }
         else if (config.ppm)
         {
-            log_message << "- PPM value to be used for all transmissions: " << config.ppm << std::endl;
+            llog.logS("- PPM value to be used for all transmissions: ", config.ppm);
         }
 
         if (config.terminate > 0)
         {
-            log_message << "- TX will stop after " << config.terminate << " transmissions." << std::endl;
+            llog.logS("- TX will stop after ", config.terminate);
         }
         else if (config.repeat && !config.daemon_mode)
         {
-            log_message << "- Transmissions will continue forever until stopped with CTRL-C." << std::endl;
+            llog.logS("- Transmissions will continue forever until stopped with CTRL-C.");
         }
 
         if (config.random_offset)
         {
-            log_message << "- A small random frequency offset will be added to all transmissions." << std::endl;
-        }
-
-        if (log_message.str().length())
-        {
-            llog.logS(log_message.str());
+            llog.logS("- A small random frequency offset will be added to all transmissions.");
         }
     }
     else
     {
-        std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "A test tone will be generated at frequency " << config.test_tone / 1e6 << " MHz.";
-        llog.logS(temp.str());
+        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed 
+                                 << "A test tone will be generated at frequency " 
+                                 << config.test_tone / 1e6 << " MHz.").str());
         if (config.self_cal)
         {
             llog.logS("NTP will be used to calibrate the tone frequency.");
@@ -1242,7 +1242,7 @@ bool wait_every(int minute)
     return true; // OK to proceed
 }
 
-void update_ppm()
+bool update_ppm()
 {
     // Call ntp_adjtime() to obtain the latest calibration coefficient.
 
@@ -1255,14 +1255,15 @@ void update_ppm()
 
     if (status != TIME_OK)
     {
-        // cerr << "Error: clock not synchronized" << std::endl;
-        // return;
+        llog.logE("Error: Clock not synchronized.");
+        return false;
     }
 
     ppm_new = (double)ntx.freq / (double)(1 << 16); /* frequency scale */
     if (abs(ppm_new) > 200)
     {
         llog.logE("Warning: Absolute ppm value is greater than 200 and is being ignored.");
+        return false;
     }
     else
     {
@@ -1271,6 +1272,7 @@ void update_ppm()
             llog.logS("Obtained new ppm value: ", ppm_new);
         }
         config.ppm = ppm_new;
+        return true;
     }
 }
 
@@ -1613,7 +1615,7 @@ int main(const int argc, char *const argv[])
         {
             if (config.self_cal)
             {
-                update_ppm();
+                if (! update_ppm()) cleanupAndExit(-1);
             }
             if (config.ppm != ppm_prev)
             {
@@ -1704,7 +1706,7 @@ int main(const int argc, char *const argv[])
                 // Update crystal calibration information
                 if (config.self_cal)
                 {
-                    update_ppm();
+                    if (! update_ppm()) cleanupAndExit(-1);
                 }
 
                 // Create the DMA table for this center frequency
