@@ -5,7 +5,7 @@
 - Review the wspr.service file
 - See if we can include libs in compile
 - If in daemon mode, do not suppress SIGINT
-- Put in a redirect to /wspr if nothing is in web root.
+- Inline the apache_tool into install.
 - Need to lint main
 - Need to add unit tests for mailbox
 - Do we need a venv for shutdown_watch.py
@@ -15,11 +15,12 @@
 
 ### Fis in this iteration
 
-- Error in log: (maybe just say it is not set up yet?)
+- Error in log: (No idea when this happened))
     2024-11-23 12:58:22 GMT Use LED: false
     Error: must specify callsign, gridsquare, dBm, and at least one frequency.
     Try: wspr --help
     2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
+- Move copying ini file before the service restarts
 
 ### Nice to Do
 

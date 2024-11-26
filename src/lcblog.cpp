@@ -22,7 +22,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-7f4c707 [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-1a53e0c [logfile_wrap].
  */
 
 // Unit tests:
@@ -34,9 +34,124 @@
 #include "lcblog.hpp"
 #include <iostream>
 #include <cassert>
+#include <sstream>
+#include <streambuf>
+
+/**
+ * @brief Unit test for checking multiple logS calls in Daemon mode.
+ * 
+ * This function logs multiple messages to test whether each log message
+ * appears on a separate line in Daemon mode.
+ */
+void testDaemonLoggingMultipleCalls()
+{
+    LCBLog logger;
+
+    // Enable Daemon mode
+    logger.setDaemon(true);
+
+    // Redirect std::cout to capture output
+    std::ostringstream capturedOutput;
+    std::streambuf *originalCoutBuffer = std::cout.rdbuf();
+    std::cout.rdbuf(capturedOutput.rdbuf());
+
+    // Log multiple messages
+    logger.logS("- Using NTP to calibrate transmission frequency.");
+    logger.logS("- A small random frequency offset will be added to all transmissions.");
+
+    // Restore std::cout
+    std::cout.rdbuf(originalCoutBuffer);
+
+    // Get the captured output
+    std::string output = capturedOutput.str();
+
+    // Validate the output
+    std::regex logPattern("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\w+\\t(.*)$");
+    std::istringstream outputStream(output);
+    std::string line;
+    bool firstMessageFound = false;
+    bool secondMessageFound = false;
+
+    while (std::getline(outputStream, line)) {
+        std::smatch match;
+        if (std::regex_match(line, match, logPattern)) {
+            // Check if the first and second log messages appear on separate lines
+            if (match[1] == "- Using NTP to calibrate transmission frequency.") {
+                firstMessageFound = true;
+            }
+            if (match[1] == "- A small random frequency offset will be added to all transmissions.") {
+                secondMessageFound = true;
+            }
+        }
+    }
+
+    // Ensure both messages are found
+    assert(firstMessageFound && "The first log message was not found in the output.");
+    assert(secondMessageFound && "The second log message was not found in the output.");
+
+    std::cout << "Daemon mode multiple logS calls test passed!" << std::endl;
+}
+
+/**
+ * @brief Unit test for Daemon mode logging behavior.
+ * 
+ * This function logs multiple messages in Daemon mode and validates whether
+ * the log messages appear on separate lines.
+ */
+void testDaemonLogging()
+{
+    LCBLog logger;
+
+    // Enable Daemon mode
+    logger.setDaemon(true);
+
+    // Redirect std::cout to capture output
+    std::ostringstream capturedOutput;
+    std::streambuf *originalCoutBuffer = std::cout.rdbuf();
+    std::cout.rdbuf(capturedOutput.rdbuf());
+
+    // Log messages
+    logger.logS("First log message.");
+    logger.logS("- A small random frequency offset will be added to all transmissions.");
+    logger.logS("Third log message.");
+
+    // Restore std::cout
+    std::cout.rdbuf(originalCoutBuffer);
+
+    // Get the captured output
+    std::string output = capturedOutput.str();
+
+    // Validate the output
+    std::regex logPattern("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\w+\\t(.*)$");
+    std::istringstream outputStream(output);
+    std::string line;
+    std::vector<std::string> expectedMessages = {
+        "First log message.",
+        "- A small random frequency offset will be added to all transmissions.",
+        "Third log message."
+    };
+
+    int i = 0;
+    while (std::getline(outputStream, line)) {
+        std::smatch match;
+        if (std::regex_match(line, match, logPattern)) {
+            // Ensure the message matches the expected log
+            assert(match[1] == expectedMessages[i]);
+            i++;
+        }
+    }
+
+    // Ensure all expected messages were validated
+    assert(i == expectedMessages.size());
+
+    std::cout << "Daemon mode logging test passed!" << std::endl;
+}
 
 /**
  * @brief Unit tests for the LCBLog class.
+ * 
+ * This function tests the `crush` function, which processes a string to 
+ * remove extraneous spaces and fix formatting issues.
  */
 void testCrush()
 {
@@ -81,6 +196,9 @@ void testCrush()
 
 /**
  * @brief Unit tests for empty string logging behavior.
+ * 
+ * This function simulates the behavior of logging an empty string and 
+ * validates the output.
  */
 void testEmptyLogging()
 {
@@ -93,6 +211,9 @@ void testEmptyLogging()
 
 /**
  * @brief Unit tests for logging functionality.
+ * 
+ * This function tests standard and error output logging in both Daemon mode
+ * and non-Daemon mode.
  */
 void testLogging()
 {
@@ -118,6 +239,9 @@ void testLogging()
 
 /**
  * @brief Main function to run unit tests for LCBLog.
+ * 
+ * This function runs all unit tests to ensure the logging system works
+ * as expected.
  */
 int main()
 {
@@ -125,6 +249,8 @@ int main()
 
     testCrush();
     testLogging();
+    testDaemonLogging();
+    testDaemonLoggingMultipleCalls();
 
     std::cout << "All tests passed successfully!" << std::endl;
     return 0;
