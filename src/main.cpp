@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-32d490b [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-09f6848 [refactoring].
 */
 
 #include <termios.h>

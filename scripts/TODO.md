@@ -2,22 +2,24 @@
 
 ## Stuff to Remember
 
-### Fis in this iteration
-
 - Review the wspr.service file
-- Error in log: (maybe just say it is not set up yet?)
-    2024-11-23 12:58:22 GMT Use LED: false
-    Error: must specify callsign, gridsquare, dBm, and at least one frequency.
-    Try: wspr --help
-    2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
-- If in daemon mode, do not suppress SIGINT
 - See if we can include libs in compile
+- If in daemon mode, do not suppress SIGINT
 - Put in a redirect to /wspr if nothing is in web root.
 - Need to lint main
 - Need to add unit tests for mailbox
 - Do we need a venv for shutdown_watch.py
 - Figure out what happens if I add sections or items to the INI
 - Move shutdown watch to C++
+- Add --debug for runtime debugging
+
+### Fis in this iteration
+
+- Error in log: (maybe just say it is not set up yet?)
+    2024-11-23 12:58:22 GMT Use LED: false
+    Error: must specify callsign, gridsquare, dBm, and at least one frequency.
+    Try: wspr --help
+    2024-11-23 12:58:27 GMT Wsprry Pi v1.2.1 (main).
 
 ### Nice to Do
 
