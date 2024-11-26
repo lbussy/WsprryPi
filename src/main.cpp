@@ -36,6 +36,8 @@
 
 // #define WSPR_DEBUG
 
+
+
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
 
@@ -418,7 +420,9 @@ void disable_clock()
 void txon(bool led = false, int power_level = 7)
 {
     // Turn on TX
+#ifdef LED_PIN
     if (led) pinHigh(LED_PIN);
+#endif
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -479,7 +483,9 @@ void txoff(bool led = false)
     // Turn transmitter on
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
+#ifdef LED_PIN
     if (led) pinLow(LED_PIN);
+#endif
     disable_clock();
 }
 
@@ -1315,7 +1321,9 @@ void open_mbox()
 void cleanup()
 {
     // Called when exiting or when a signal is received.
+#ifdef LED_PIN
     pinLow(LED_PIN);
+#endif
     disable_clock();
     unSetupDMA();
     deallocMemPool();
@@ -1551,7 +1559,9 @@ int main(const int argc, char *const argv[])
     llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
     llog.logS("Running on: ", RPiVersion(), ".");
     getPLLD(); // Get PLLD Frequency
+#ifdef LED_PIN
     setupGPIO(LED_PIN);
+#endif
 
     if ( ! parseConfigData(argc, argv) ) return 1;
 
