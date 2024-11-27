@@ -2,6 +2,13 @@
 
 ## Stuff to Remember
 
+### Branches:
+
+- Working on update_installer
+- It will go back into refactoring
+
+### Stuff to do:
+
 - Review the wspr.service file
 - See if we can include libs in compile
 - If in daemon mode, do not suppress SIGINT
