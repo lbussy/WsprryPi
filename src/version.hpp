@@ -22,13 +22,14 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f5cad8 [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-36ba1cd-dirty [sigterm].
  */
 
 #ifndef VERSION_H
 #define VERSION_H
 
 #include <bcm_host.h>
+#include <string>
 
 /**
  * @brief Converts a value or macro to a string.
@@ -44,30 +45,61 @@
  */
 #define macro_to_string(x) stringify(x)
 
-// Fallback values for version and branch
-#ifndef MAKE_SRC_TAG
-#define MAKE_SRC_TAG "unknown"
+// Fallback values for version, branch, executable, and project
+#ifndef MAKE_TAG
+#define MAKE_TAG "unknown"
 #endif
 
-#ifndef MAKE_SRC_BRH
-#define MAKE_SRC_BRH "unknown"
+#ifndef MAKE_BRH
+#define MAKE_BRH "unknown"
+#endif
+
+#ifndef MAKE_EXE
+#define MAKE_EXE "unknown"
+#endif
+
+#ifndef MAKE_PRJ
+#define MAKE_PRJ "unknown"
 #endif
 
 // Ensure sanitized version of macros (trim excess whitespace)
-#define SANITIZED_TAG macro_to_string(MAKE_SRC_TAG)
-#define SANITIZED_BRH macro_to_string(MAKE_SRC_BRH)
+#define SANITIZED_TAG macro_to_string(MAKE_TAG)
+#define SANITIZED_BRH macro_to_string(MAKE_BRH)
+#define SANITIZED_EXE macro_to_string(MAKE_EXE)
+#define SANITIZED_PRJ macro_to_string(MAKE_PRJ)
 
 /**
  * @brief Retrieves the executable's version tag from the build system.
  * @return A C-string representing the version tag.
  */
-inline const char* exeversion() { return SANITIZED_TAG; }
+inline const char* exe_version() { return SANITIZED_TAG; }
 
 /**
  * @brief Retrieves the branch name from the build system.
  * @return A C-string representing the branch name.
  */
 inline const char* branch() { return SANITIZED_BRH; }
+
+/**
+ * @brief Retrieves the executable name from the build system.
+ * @return A C-string representing the executable name.
+ */
+inline const char* exe_name() { return SANITIZED_EXE; }
+
+/**
+ * @brief Retrieves the project name from the build system.
+ * @return A C-string representing the project name.
+ */
+inline const char* project_name() { return SANITIZED_PRJ; }
+
+/**
+ * @brief Constructs a full version string.
+ * @return A C-string representing the full version string.
+ */
+inline const char* version_string() {
+    static std::string version = std::string(project_name()) + " version " + exe_version() + " (" + branch() + ").";
+    return version.c_str();
+}
 
 /**
  * @brief Retrieves the processor ID of the Raspberry Pi.

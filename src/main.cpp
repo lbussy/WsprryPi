@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f5cad8 [refactoring].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-36ba1cd-dirty [sigterm]-dirty [sigterm]-dirty [sigterm].
 */
 
 #include <termios.h>
@@ -810,7 +810,7 @@ bool getINIValues(bool reload = false)
 
         if (! config.daemon_mode )
             llog.logS("\n============================================");
-        llog.logS("Config ", ((reload) ? "re" : ""), "loaded from: ", config.inifile);
+        llog.logS("Config ", ((reload) ? "re-loaded" : "loaded"), "from: ", config.inifile);
         if (! config.daemon_mode )
             llog.logS("============================================");
         llog.logS("Transmit Enabled:\t\t", ((config.xmit_enabled) ? "true" : "false"));
@@ -967,7 +967,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            llog.logS("Wsprry Pi (wspr) version ", exeversion(), " (", branch(), ").");
+            llog.logS(version_string());
             return false;
             break;
         case 'p':
@@ -1584,16 +1584,17 @@ int main(const int argc, char *const argv[])
     atexit(restoreTerminalAttributes); // Ensure terminal settings are restored on exit
 
     if ( ! parse_commandline(argc, argv) ) return 1;
-    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
+
+    llog.logS(version_string());
     llog.logS("Running on: ", RPiVersion(), ".");
+
     getPLLD(); // Get PLLD Frequency
+
 #ifdef LED_PIN
     setupGPIO(LED_PIN);
 #endif
 
     if ( ! parseConfigData(argc, argv) ) return 1;
-
-    printf("DEBUG:  PID: %d\n", getpid()); // Print PID as a debug tool
 
     // Make sure we're the only wspr process
     wspr::SingletonProcess singleton(SINGLETON_PORT);
@@ -1609,7 +1610,7 @@ int main(const int argc, char *const argv[])
     {
         llog.logE("Failed to enforce singleton: ", e.what());
         return 1;
-}
+    }
 
     // Set up custom signal handlers
     setup_signal_handlers();
@@ -1633,6 +1634,9 @@ int main(const int argc, char *const argv[])
     txon(false, 0);
     setupDMA(constPage, instrPage, instrs);
     txoff();
+
+    // Display the PID:
+    llog.logS("Process PID: ", getpid());
 
     if (config.mode == TONE)
     {

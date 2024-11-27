@@ -14,10 +14,33 @@
 - Add --debug for runtime debugging
 - Log rotate skipping (newer)
 - Local installer went away
+- Update local files with branch and version
+    ``` bash
+    # Set branch
+    BRANCH=sigterm
+    VERSION=1.2.1
+```
+- Add notes about gh:
+
+    ``` bash
+    $ gh auth login
+    ? What account do you want to log into? GitHub.com
+    ? What is your preferred protocol for Git operations? HTTPS
+    ? Authenticate Git with your GitHub credentials? Yes
+    ? How would you like to authenticate GitHub CLI? Login with a web browser
+
+    ! First copy your one-time code: XXXX-XXXX
+    Press Enter to open github.com in your browser... 
+    ✓ Authentication complete.
+    - gh config set -h github.com git_protocol https
+    ✓ Configured git protocol
+    ✓ Logged in as foo
+    ```
 
 ### Fis in this iteration
 
 - Move copying ini file before the wspr daemon restarts (called "configuration file")
+- logrotate.d must be called 'wspr' and put it in /etc/logrotate.d/
 
 ### Nice to Do
 
