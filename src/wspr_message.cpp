@@ -1,24 +1,25 @@
-// This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
-
 /**
  * @file wspr_message.cpp
- * @brief WSPR message generation and encoding.
- *
- * Updated and maintained by Lee C. Bussy.
- *
- * Originally forked from threeme3/WsprryPi (no longer active), this project
- * has been significantly updated, improved, and documented for ease of use.
- * Inspired by a conversation with Bruce Raymond of TAPR, this fork operates
- * as an independent project.
- *
- * Contributors:
- * - threeme3 (Original Author)
- * - Bruce Raymond (Inspiration and Guidance)
- * - Lee Bussy (@LBussy)
- *
+ * @brief WSPR message generation and encoding
+ * 
+ * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
+ * active).
+ * 
+ * Copyright (C) @threeme3 (unknown dates)
  * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
- *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f5cad8 [refactoring].
+ * 
+ * WsprryPi is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 // Unit testing:
