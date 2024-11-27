@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-9f5cad8 [refactoring].
+# Created for the WsprryPi project, version 1.2.1-8c2314a-dirty [version_exe]
 
 : <<'EOF'
 This script manages Apache2 configurations and settings for the Wsprry Pi project.

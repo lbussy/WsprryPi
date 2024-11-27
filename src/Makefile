@@ -21,8 +21,8 @@ EXE = $(OUT)
 # Project name derived from the Git repository name
 PRJ := $(shell git config --local remote.origin.url | sed -n 's#.*/\([^.]*\)\.git#\1#p')
 
-# Get the current branch name and sanitize it by replacing special characters with underscores
-BRH := $(shell git rev-parse --abbrev-ref HEAD | sed -E 's/[-.+]/_/g')
+# Get the current branch name and sanitize it by replacing non-alphanumeric characters with hyphens
+BRH := $(shell git rev-parse --abbrev-ref HEAD | sed -E 's/[^a-zA-Z0-9]/-/g')
 
 # Extract the semantic version from the latest Git tag, handling tags with or without a "v" prefix
 VER := $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+)/\1/')
