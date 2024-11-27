@@ -14,8 +14,9 @@ src/[^/]*[^.][^/]*$
 src/*
 !src/*.*
 
-# Ensure .o files remain ignored even with the rule above
-*.o
+# Ensure .o and .d files remain ignored even with the rule above
+src/*.o
+src/*.d
 
 ## Allow specific files in /src
 !/src/Makefile
