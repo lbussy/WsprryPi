@@ -6,22 +6,16 @@
 - See if we can include libs in compile
 - If in daemon mode, do not suppress SIGINT
 - Inline the apache_tool into install.
-- Need to lint main
+- Need to lint and unit test main
 - Need to add unit tests for mailbox
 - Do we need a venv for shutdown_watch.py
 - Figure out what happens if I add sections or items to the INI
 - Move shutdown watch to C++
 - Add --debug for runtime debugging
-- Log rotate skipping (newer)
-- Local installer went away
-- Update local files with branch and version
-    ``` bash
-    # Set branch
-    BRANCH=sigterm
-    VERSION=1.2.1
-```
+- Log rotate skipping (newer) (dafuq did I mean with this?)
+- Implement get_version in installer
+- Update release.py to update versions, branches, etc.
 - Add notes about gh:
-
     ``` bash
     $ gh auth login
     ? What account do you want to log into? GitHub.com
@@ -41,11 +35,14 @@
 
 - Move copying ini file before the wspr daemon restarts (called "configuration file")
 - logrotate.d must be called 'wspr' and put it in /etc/logrotate.d/
+- Fix this:  2024-11-27 22:16:15 GMT Do not use NTP sync: false
 
 ### Nice to Do
 
 - Make a log viewing page
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
+- Move LED to differnet code with pigpio.h
+- Implement freq_test
 
 ## Previous Issues
 

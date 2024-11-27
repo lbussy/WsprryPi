@@ -42,7 +42,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=sigterm
+BRANCH=update_installer
 VERSION=1.2.1-36ba1cd-dirty
 # Set this script
 THISSCRIPT="install.sh"
@@ -498,7 +498,7 @@ copy_file() {
 
 copy_logd() {
     local fullName remoteURL
-    fullName="/etc/logrotate./wspr"
+    fullName="/etc/logrotate.d/wspr"
     remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/scripts"
 
     copy_file_generic "logrotate.conf" "$LOCAL_SCRIPTS_DIR" "$fullName" "$remoteURL"
