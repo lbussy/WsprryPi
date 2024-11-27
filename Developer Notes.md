@@ -181,6 +181,7 @@ sudo systemctl disable shutdown_watch
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you would need some libs to compile the project:
 
 * git
+* gh
 * apache2
 * php
 * colordiff
@@ -190,7 +191,7 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 Install these with:
 
 ``` bash
-sudo apt-get install git apache2 php colordiff libraspberrypi-dev raspberrypi-kernel-headers -y
+sudo apt-get install git gh apache2 php colordiff libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
 
 ## Reboot

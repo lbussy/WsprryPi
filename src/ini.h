@@ -1,30 +1,24 @@
 /**
  * @file ini.h
- * @brief A simple INI file parser library.
- *
- * This file defines the interface for parsing INI-style configuration files.
- * The library supports reading INI files, handling sections and key-value pairs,
- * and provides an API for users to process INI files in various formats (from
- * files, strings, or custom streams).
- *
- * This library is licensed under the GNU General Public License v3.0.
- * See the LICENSE file for details about the project's license.
- *
+ * @brief A simple INI file parser implementation.
+ * 
+ * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
+ * active).
+ * 
  * However, the inih library itself is distributed under the New BSD license:
- * Copyright (c) 2009-2020, Ben Hoyt
- * All rights reserved.
- *
+ * Copyright (c) 2009-2020, Ben Hoyt, All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
+ *       notice, this list of conditions, and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
  *     * Neither the name of Ben Hoyt nor the names of its contributors
  *       may be used to endorse or promote products derived from this software
  *       without specific prior written permission.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY BEN HOYT ''AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -35,9 +29,9 @@
  * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * 
  * For more information about inih, see: https://github.com/benhoyt/inih
- *
+ * 
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
