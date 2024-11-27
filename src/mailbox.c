@@ -32,11 +32,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
+/*
  * References:
  * - https://github.com/raspberrypi/firmware/wiki/Mailboxes
  * - https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface
  * - https://bitbanged.com/posts/understanding-rpi/the-mailbox/
+ * - http://www.freenos.org/doxygen/classBroadcomMailbox.html
  */
 
 #include <stdio.h>
