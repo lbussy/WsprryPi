@@ -111,11 +111,11 @@ determine_file_type() {
 # Function: Process a single file
 process_file() {
   local FILE="$1"
+  local BASENAME=$(basename "$FILE")  # Extract only the filename
   local FILETYPE=$(determine_file_type "$FILE")
-  echo -e "${GOLD}$FILE${RESET}: ${GREEN}$FILETYPE${RESET}"
+  echo -e "${GOLD}$BASENAME${RESET}: ${GREEN}$FILETYPE${RESET}"
 }
 
-# Function: Process files or directories
 # Function: Process files or directories
 process_files() {
   local TARGET="$1"
@@ -145,8 +145,6 @@ process_files() {
     done
   fi
 }
-
-#!/bin/bash
 
 # Main function
 main() {
