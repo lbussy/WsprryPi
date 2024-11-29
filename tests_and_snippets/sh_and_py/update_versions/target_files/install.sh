@@ -42,8 +42,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=update_installer
-VERSION=1.2.1-36ba1cd-dirty
+BRANCH="version_files"
+VERSION="1.2.1-version-files+90.43503fc-dirty"
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
