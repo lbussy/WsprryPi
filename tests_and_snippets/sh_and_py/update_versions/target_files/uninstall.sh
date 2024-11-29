@@ -36,7 +36,7 @@ declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
 BRANCH="version_files"
-VERSION="1.2.1-version-files+91.3bef855-dirty"
+VERSION="1.2.1-version-files+90.43503fc-dirty"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project

@@ -95,7 +95,7 @@ clean:
 	$(Q)$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump. $(OBJECTS:.o=.d) >/dev/null 2>&1 || true
 
 # Debug target to print detected files and variables
-.PHONY: debug
+.PHONY: files
 debug:
 	@echo "C_SOURCES:\t$(C_SOURCES)"
 	@echo "CPP_SOURCES:\t$(CPP_SOURCES)"
@@ -103,13 +103,22 @@ debug:
 	@echo "CPP_OBJECTS:\t$(CPP_OBJECTS)"
 	@echo "OBJECTS:\t$(OBJECTS)"
 
+# Show only user-defined macros from the Makefile
+.PHONY: defines
+defines:
+	@echo "Showing user-defined macros for the C++ compiler:"
+	@$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
+	@echo "Showing user-defined macros for the C compiler:"
+	@$(CC) $(CFLAGS) -dM -E -x c /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
+
 # Display available make targets
 .PHONY: help
 help:
 	@echo "Available targets:"
 	@echo "  all        Build the project."
 	@echo "  clean      Remove build artifacts."
-	@echo "  debug      Show detected source and object files."
+	@echo "  files      Show detected source and object files."
+	@echo "  defines    Show all defined macros"
 #	@echo "  install    Install the binary to $(prefix)/bin."
 #	@echo "  uninstall  Remove the installed binary."
 #	@echo "  test       Run tests (if available)."
