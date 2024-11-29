@@ -35,8 +35,8 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=main
-VERSION=1.2.1
+BRANCH="version_files"
+VERSION="1.2.1-version-files+91.3bef855-dirty"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project

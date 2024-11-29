@@ -15,7 +15,7 @@ update_file_list = [
 ]
 
 # Directory containing the target files to update
-target_file_directory = "tests_and_snippets/sh_and_py/update_versions/target_files"
+target_file_directory = "scripts"
 
 
 def get_git_root():
