@@ -138,15 +138,14 @@ If you are going to use VS Code from your workstation:
 7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
 
    ``` bash
+   # Extensions installed on SSH: wspr.local:
    code --install-extension ms-python.debugpy
    code --install-extension ms-python.python
    code --install-extension ms-python.vscode-pylance
-   code --install-extension ms-vscode.cmake-tools
    code --install-extension ms-vscode.cpptools
    code --install-extension ms-vscode.cpptools-extension-pack
    code --install-extension ms-vscode.cpptools-themes
    code --install-extension ms-vscode.makefile-tools
-   code --install-extension twxs.cmake
    code --install-extension yzhang.markdown-all-in-one
    ```
 
@@ -156,7 +155,7 @@ If you are going to use VS Code from your workstation:
 
    ``` bash
    python3 -m venv ./.venv
-   . ./.venv/bin/activate
+   source ./.venv/bin/activate
    python -m pip install --upgrade pip
    pip install -r ./requirements.txt
    ```
