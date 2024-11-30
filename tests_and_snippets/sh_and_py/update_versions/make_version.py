@@ -31,10 +31,25 @@ import subprocess
 import re
 import argparse
 import os
+import sys
 
 __version__ = "1.2.3"
 default_branches=["main", "master"]
 default_version="0.0.0"
+
+
+def get_script_name():
+    """
+    Get the name of the script being run, whether executed directly or imported.
+
+    @return Name of the script.
+    """
+    if __name__ == "__main__":
+        # Script is executed directly
+        return os.path.basename(__file__)
+    else:
+        # Script is imported; return the entry-point script name
+        return os.path.basename(sys.argv[0])
 
 
 def run_git_command(command):
@@ -192,15 +207,50 @@ def generate_version_string():
     return version_string
 
 
+class CustomArgumentParser(argparse.ArgumentParser):
+    def format_usage(self):
+        """
+        Override the format_usage method to capitalize the "Usage:" wording.
+        """
+        return f"Usage: {self.usage}\n"
+
+    def format_help(self):
+        """
+        Override the format_help method to ensure the usage line in help output
+        also uses the capitalized "Usage:".
+        """
+        help_text = self.format_usage()  # Use custom format_usage
+        help_text += f"\n{self.description}\n\n"
+        help_text += "Options:\n"
+        help_text += self.format_options()
+        return help_text
+
+    def format_options(self):
+        """
+        Format the options section of the help message.
+        """
+        formatter = self._get_formatter()
+        for action in self._actions:
+            formatter.add_argument(action)
+        return formatter.format_help()
+
+
 def handle_arguments():
     """
     Handle command-line arguments.
 
     @return Parsed arguments.
     """
-    parser = argparse.ArgumentParser(
+    parser = CustomArgumentParser(
         description="Generate a version string based on the Git repository state.",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
+        usage=f"{get_script_name()} [-h] [-d] [-v] [-w]",  # Custom usage line
+        add_help=False,  # Disable default help argument
+    )
+    parser.add_argument(
+        "-h", "--help",
+        action="help",
+        help="Display this help message and exit."
     )
     parser.add_argument(
         "-v", "--version",
@@ -212,8 +262,8 @@ def handle_arguments():
         "-g", "--generate",
         action="store_true",
         help=(
-            "Generate a version string based\n"
-            "on the current Git state."
+            "Generate a version string based on\n"
+            "the current Git state."
         )
     )
     return parser.parse_args()

@@ -37,7 +37,7 @@ from os import system, getuid, path, remove
 import signal
 from gpiozero import Button
 
-__version__ = "1.2.1-version-files+90.43503fc-dirty"
+__version__ = "1.2.1-update-copyright+84.d160d4b-dirty"
 
 # Constants
 STOP_PIN = 17  # GPIO pin for the shutdown button
