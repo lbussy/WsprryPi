@@ -1,176 +1,135 @@
-from pathlib import Path
-"""
-Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# This file is part of WsprryPi.
+#
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+#
+# WsprryPi is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-Created for WsprryPi project, version 1.2.1-1a53e0c [logfile_wrap].
 """
+WsprryPi - Header Update Configuration Script
+
+This script is part of the WsprryPi project and manages configurations for updating
+headers in project files, including dry-run functionality, logging, and license exclusions.
+
+Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+"""
+
+from pathlib import Path
 
 class Config:
     """
-    Configuration class for the Project Header Update Script.
+    Configuration class for the WsprryPi project header update script.
 
-    This class holds all configuration constants and flags for controlling
-    the behavior of the script, such as logging, dry-run mode, file extensions,
-    directories to process, and exclusion patterns for license blocks.
+    This class contains all configuration constants and methods for controlling the behavior
+    of the script, including logging, compilation, file processing, and license exclusions.
 
-    Attributes:
-    -----------
+    Attributes
+    ----------
     DRY_RUN : bool
-        If True, no changes are made to the files. Used for testing purposes.
+        If True, simulates updates without making changes to files.
     ENABLE_COMPILATION : bool
-        If True, the project will be compiled after updates are applied.
+        If True, enables project compilation after updates.
     ENABLE_COPY : bool
-        If True, executable files will be copied after compilation.
+        If True, copies executables after compilation.
     ENABLE_BACKUP : bool
-        If True, backups of modified files will be created before updates.
+        If True, creates backups of modified files.
     ENABLE_LOGGING : bool
-        If True, logging to a file will be enabled.
+        If True, logs actions to a file.
     DEBUG : bool
-        If True, detailed debug logs will be generated.
+        If True, enables detailed debug logging.
     SUPPORTED_EXTENSIONS : list
         List of file extensions to process.
     DIRECTORIES_TO_PROCESS : list
-        List of directories to search for files to update.
+        Directories to scan for files to update.
     PROJECT_EXES : list
-        List of project executables to copy after compilation.
+        List of project executables to copy post-compilation.
     NAME_TAG : str
-        The name tag used in the copyright headers of the files.
+        Name tag used in copyright headers.
     LOG_DIR : Path
-        The directory where log files will be stored.
+        Directory for storing log files.
     LOG_FILE_PREFIX : str
-        Prefix for the log file names.
+        Prefix for log file names.
     LICENSE_PATTERNS : list
-        Regular expressions for open-source licenses that should be excluded from updates.
-"""
+        Regular expressions to exclude license blocks from updates.
 
-    # ============================
+    Methods
+    -------
+    get_license_exclusion_patterns():
+        Compiles and returns regex patterns for license exclusion.
+    """
+
     # General Configuration
-    # ============================
-    DRY_RUN = False
-    """
-    Flag to enable or disable dry-run mode.
-
-    If True, the script will simulate file updates without making any changes to the actual files. This is useful for testing purposes.
-    """
-
+    DRY_RUN = True
     ENABLE_COMPILATION = True
-    """
-    Flag to enable or disable project compilation.
-
-    If True, the project will be compiled after all updates are applied. This can be used to automate compilation post-header updates.
-    """
-
     ENABLE_COPY = True
-    """
-    Flag to enable or disable copying of executable files after compilation.
-
-    If True, executable files specified in `PROJECT_EXES` will be copied to the designated script directory after compilation.
-    """
-
     ENABLE_BACKUP = False
-    """
-    Flag to enable or disable the creation of backups before updating files.
-
-    If True, the script will create a backup file (with a `.bak` suffix) for each file that is updated.
-    """
-
     ENABLE_LOGGING = False
-    """
-    Flag to enable or disable logging to a file.
+    DEBUG = True
 
-    If True, the script will log its actions to a file. The log file will be stored in the directory specified by `LOG_DIR`.
-    """
-
-    DEBUG = False
-    """
-    Flag to enable or disable detailed debug logs.
-
-    If True, the script will generate detailed debug logs for troubleshooting and verbose information about the execution.
-    """
-
-    # ============================
-    # File Processing
-    # ============================
+    # File Processing Configuration
     SUPPORTED_EXTENSIONS = [".sh", ".py", ".d", ".h", ".c", ".hpp", ".cpp"]
-    """
-    List of file extensions to process.
-
-    The script will only process files with extensions specified in this list. These files will have their headers updated
-    based on the configuration settings.
-    """
-
     DIRECTORIES_TO_PROCESS = ["scripts", "src"]
-    """
-    List of directories to scan for files to update.
-
-    The script will search for files in these directories and update their headers based on the configuration settings.
-    """
-
     PROJECT_EXES = ["wspr", "wspr.ini"]
-    """
-    List of executables to copy after compilation.
-
-    The script will copy these executable files to the designated script directory once the project has been compiled.
-    """
-
     NAME_TAG = "@LBussy"
-    """
-    Name tag used in the copyright headers.
 
-    This tag is used to identify the author of the project in the header comments. It will be inserted or updated in the copyright lines.
-    """
-
-    # ============================
     # Logging Configuration
-    # ============================
     LOG_DIR = Path(__file__).parent / "logs"
-    """
-    Directory where log files will be stored.
-
-    The script will store its log files in this directory. By default, it points to a `logs` directory in the current working directory.
-    """
-
     LOG_FILE_PREFIX = "release_log_"
-    """
-    Prefix for the log file names.
 
-    This prefix will be added to the log file names created during execution. The script will append a timestamp to this prefix to create unique log files.
-    """
-
-    # ============================
     # License Exclusion Configuration
-    # ============================
     LICENSE_PATTERNS = [
-        r"MIT License",                   # MIT License
-        r"GNU General Public License",    # GPL License
-        r"Apache License",                # Apache License
-        r"BSD License",                   # BSD License
-        r"Mozilla Public License",        # Mozilla License
-        r"Creative Commons Attribution", # Creative Commons
-        r"Public Domain",                 # Public Domain
+        r"MIT License",
+        r"GNU General Public License",
+        r"Apache License",
+        r"BSD License",
+        r"Mozilla Public License",
+        r"Creative Commons Attribution",
+        r"Public Domain",
     ]
-    """
-    List of regular expressions for open-source licenses to exclude from file processing.
 
-    These patterns are used to identify sections of a file containing open-source licenses. The script will exclude these sections from header updates.
-    """
-
-    # ============================
-    # Helper Method for License Exclusions
-    # ============================
     @staticmethod
     def get_license_exclusion_patterns():
         """
-        Get the compiled regex patterns for excluding license sections.
+        Compile regex patterns for excluding license sections.
 
-        This method compiles the LICENSE_PATTERNS regular expressions for efficient
-        matching when checking file contents. The patterns are used to detect
-        well-known open-source licenses and exclude them from processing.
+        Compiles LICENSE_PATTERNS into regex objects for efficient matching
+        during file processing to exclude open-source license blocks.
 
-        Returns:
-        --------
+        Returns
+        -------
         list
-            A list of compiled regular expressions for matching open-source license blocks.
+            A list of compiled regex patterns.
         """
         import re
         return [re.compile(pattern) for pattern in Config.LICENSE_PATTERNS]
+
+
+def main():
+    """
+    Main function to list all properties of the Config class.
+
+    Iterates through all attributes of the Config class and prints their names and values.
+    """
+    print("Listing all configuration properties of the Config class:")
+    for attribute in dir(Config):
+        # Filter out methods and special attributes
+        if not attribute.startswith("__") and not callable(getattr(Config, attribute)):
+            value = getattr(Config, attribute)
+            print(f"{attribute}: {value}")
+
+
+if __name__ == "__main__":
+    main()
