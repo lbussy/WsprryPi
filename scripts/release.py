@@ -355,24 +355,25 @@ def main():
 
     update_files(Path(project_directory), project_name, current_branch, current_tag, commit_short_hash)
 
-    src_dir = Path(project_directory) / "src"
+    if not Config.DRY_RUN:
+        src_dir = Path(project_directory) / "src"
 
-    logger.info(f"Cleaning project in {src_dir}...")
+        logger.info(f"Cleaning project in {src_dir}...")
 
-    if not src_dir.exists():
-        logger.error(f"Error: The src directory {src_dir} does not exist!")
-    else:
-        logger.info(f"Directory exists: {src_dir}")
+        if not src_dir.exists():
+            logger.error(f"Error: The src directory {src_dir} does not exist!")
+        else:
+            logger.info(f"Directory exists: {src_dir}")
+            run_command("make clean", cwd=src_dir)  # Suppress the output
+
+        # Compilation and file copying
+        if Config.ENABLE_COMPILATION:
+            compile_project(Path(project_directory))
+            if Config.ENABLE_COPY:
+                copy_files(Path(project_directory), Config.PROJECT_EXES)
+
+        logger.info(f"Cleaning project again in {src_dir} after copying files...")
         run_command("make clean", cwd=src_dir)  # Suppress the output
-
-    # Compilation and file copying
-    if Config.ENABLE_COMPILATION:
-        compile_project(Path(project_directory))
-        if Config.ENABLE_COPY:
-            copy_files(Path(project_directory), Config.PROJECT_EXES)
-
-    logger.info(f"Cleaning project again in {src_dir} after copying files...")
-    run_command("make clean", cwd=src_dir)  # Suppress the output
 
     logger.info(f"Project prep for {project_name} version {current_tag}-{commit_short_hash} [{current_branch}] complete.")
 
