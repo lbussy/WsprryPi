@@ -404,38 +404,18 @@ compare() {
 ############
 
 do_unit() {
-    local unit executable ext extension executable retval
-    path="/usr/local/bin"
-    unit="$1"
-    ext="$2"
-    arg="$3"
-    systemctl stop "$unit" &> /dev/null
-    if [ "$ext" == "bash" ]; then
-        extension=".sh"
-        executable="bash"
-    elif [ "$ext" == "python3" ]; then
-        extension=".py"
-        executable="python3"
-    elif [ "$ext" == "exe" ]; then
-        extension=""
-        executable=""
-    else
-        echo -e "Unknown extension." && die "$@"
-    fi
+    local unit retval
+    ext="$1"
+
     # Handle script install
     checkscript "$unit$extension"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
+        systemctl stop "$unit" &> /dev/null
         copy_file "$unit" "$extension"
-    fi
-
-    # Handle Unit file install
-    checkdaemon "$unit"
-    retval="$?"
-    if [[ "$retval" == 0 ]]; then
-        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wspr" "$(which "$executable")"
-    else
-        eval "systemctl restart $unit"
+        copy_file "$unit" ".service"
+        eval "sudo systemctl daemon-reload" &> /dev/null
+        eval "systemctl start $unit" &> /dev/null
     fi
 }
 
@@ -484,6 +464,7 @@ copy_file() {
     copy_file_generic "$scriptName$extension" "$LOCAL_SCRIPTS_DIR" "$fullName" "$remoteURL"
 
     # Set permissions
+    chmod +x "$fullName"
     if file "$fullName" | grep -q executable; then
         chown root:root "$fullName"
         chmod 0755 "$fullName"
@@ -572,140 +553,6 @@ checkscript() {
         echo "File: $scriptName does not exist. Proceeding with installation." > /dev/tty
         return 0  # File does not exist, proceed with installation
     fi
-}
-
-############
-### Check existence and version of any current unit files
-### Required:  daemonName - Name of Unit
-### Returns:  0 to execute, 255 to skip
-############
-
-checkdaemon() {
-    local daemonName unitFile src verchk
-    daemonName="${1,,}"
-    unitFile="/etc/systemd/system/$daemonName.service"
-
-    if systemctl list-unit-files | grep -q "^$daemonName.service"; then
-        # Extract the version
-        src=$(grep "^# Created for $PACKAGE version" "$unitFile" | awk '{print $NF}')
-        if [ -z "$src" ]; then
-            src="unknown"
-        fi
-
-        # Compare versions
-        verchk="$(compare "$src" "$VERSION")"
-        case "$verchk" in
-            lt)
-                echo -e "\nThe unit file for the $daemonName.service exists but is an older version." > /dev/tty
-                read -rp "($src vs. $VERSION). Upgrade to newest? [Y/n]: " yn < /dev/tty
-                case "$yn" in
-                    [Nn]* ) return 255 ;;
-                    * ) return 0 ;;
-                esac
-                ;;
-            eq)
-                echo -e "\nThe unit file for the $daemonName.service exists and is the same version ($src)."
-
-                read -rp "($src vs. $VERSION). Overwrite anyway? [y/N]: " yn < /dev/tty
-                case "$yn" in
-                    [Yy]* ) return 0 ;;
-                    * ) return 255 ;;
-                esac
-                ;;
-            gt)
-                echo -e "\nUnit file for $daemonName.service is newer than the version being installed." > /dev/tty
-                return 255 ;;
-        esac
-    else
-        return 0
-    fi
-}
-
-############
-### Create systemd unit file
-### Required:
-###   scriptName - Name of script to run under Bash
-###   scriptPath - Path to scriptName
-###   daemonName - Name to be used for Unit
-###   userName - Context under which daemon shall be run
-###   productName - Common name for the daemon
-###   processShell - Executable under which the script shall run
-############
-
-createdaemon () {
-    local scriptName scriptPath daemonName userName unitFile unitFileLocation productName processShell execStart
-    unitFileLocation="/etc/systemd/system"
-    logFileLocation="/var/log"
-    scriptName="$1"
-    scriptPath="$2"
-    arguments="$3"
-    daemonName="${4,,}"
-    userName="$5"
-    productName="$6"
-    processShell="$7"
-    execStart=""
-    dirName="${productName// /}"
-    dirName="${dirName,,}"
-    unitFile="$unitFileLocation/$daemonName.service"
-    logFileLocation="$logFileLocation/$dirName"
-    stdLog="$logFileLocation/$daemonName.transmit.log"
-    errLog="$logFileLocation/$daemonName.error.log"
-
-    # Remove old version
-    rm -fr /var/log/wsprrypi 2>/dev/null
-
-    # ExecStart=$processShell $envSet $scriptPath/$scriptName $arguments
-    if [ -n "$processShell" ]; then
-        execStart="$processShell"
-        if [ -n "$scriptPath" ]; then execStart="${execStart} $scriptPath/"; fi
-    else
-        if [ -n "$scriptPath" ]; then execStart="$scriptPath/"; fi
-    fi
-    if [ -n "$scriptName" ]; then execStart="${execStart}$scriptName"; fi
-    if [ -n "$arguments" ]; then execStart="${execStart} $arguments"; fi
-
-    if [ -f "$unitFile" ]; then
-        echo -e "\nStopping $daemonName daemon.";
-        systemctl stop "$daemonName";
-        echo -e "Disabling $daemonName daemon.";
-        systemctl disable "$daemonName";
-        echo -e "Removing unit file $unitFile.";
-        rm "$unitFile"
-    fi
-    echo -e "\nCreating unit file for $daemonName ($unitFile)."
-    {
-        echo -e "# Created for $PACKAGE version $VERSION
-
-[Unit]
-Description=$productName daemon for: $daemonName
-Documentation=https://github.com/lbussy/WsprryPi/discussions
-After=multi-user.target
-
-[Service]
-Type=simple
-Restart=on-failure
-RestartSec=5
-User=$userName
-Group=$userName
-ExecStart=$execStart
-SyslogIdentifier=$daemonName
-StandardOutput=append:$stdLog
-StandardError=append:$errLog
-
-[Install]
-WantedBy=multi-user.target"
-    } > "$unitFile"
-
-    [[ -d "$logFileLocation" ]] || mkdir "$logFileLocation"
-    chown root:root "$unitFile"
-    chmod 0644 "$unitFile"
-    echo -e "Reloading systemd config."
-    systemctl daemon-reload
-    echo -e "Enabling $daemonName daemon."
-    eval "systemctl enable $daemonName"
-    echo -e "Starting $daemonName daemon."
-    eval "systemctl restart $daemonName"
-    echo
 }
 
 ############
@@ -849,7 +696,7 @@ support_shutdown_button() {
                 case "$verchk" in
                     lt)
                         echo -e "\nThe current version of shutdown_watch is older than the version being installed. Upgrading to the latest version."
-                        do_unit "shutdown_watch" "python3"  # Upgrade the service
+                        do_unit "shutdown_watch" ".py" # Upgrade the service
                         ;;
                     eq)
                         echo -e "\nThe version of shutdown_watch is already up to date."
@@ -866,7 +713,7 @@ support_shutdown_button() {
         case "$yn" in
             [Yy]* )
                 echo "Enabling TAPR shutdown button support."
-                do_unit "shutdown_watch" "python3"
+                do_unit "shutdown_watch" ".py"
                 ;;
             * )
                 echo "TAPR shutdown button support remains disabled."
@@ -961,7 +808,7 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     # DEBUG TODO aptPackages # Install any apt packages needed
-    do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
+    do_unit "wspr" "" # Install/upgrade wspr daemon
     createini # Create ini file
     support_shutdown_button # Handle TAPR shutdown button
     copy_logd "$@" # Enable log rotation
