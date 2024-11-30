@@ -6,6 +6,9 @@ import sys
 import subprocess
 from make_version import generate_version_string
 
+__version__ = "1.2.3"
+
+
 # List of files to update
 update_file_list = [
     "install.sh",           # Installer script

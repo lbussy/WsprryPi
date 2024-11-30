@@ -1,4 +1,22 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# This file is part of WsprryPi.
+#
+# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+#
+# WsprryPi is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
 @file make_version.py
@@ -11,6 +29,12 @@ principles when applicable.
 
 import subprocess
 import re
+import argparse
+import os
+
+__version__ = "1.2.3"
+default_branches=["main", "master"]
+default_version="0.0.0"
 
 
 def run_git_command(command):
@@ -125,25 +149,24 @@ def generate_version_string():
     """
     Generate a version string based on the Git repository state.
 
-    - If no tags exist on `main` or `master`, the version string will use an extended format.
+    - If no tags exist on default branches, the version string will use an extended format.
     - For other branches or tagged states, it adheres to semantic versioning principles.
 
     @return Generated version string.
     """
     if not is_git_repository():
-        return "0.0.0-detached"
+        return "{default_version}-detached"
 
     branch_name = get_branch_name()
     tag = get_last_tag()
-    sem_ver = tag if is_semantic_version(tag) else "0.0.0"
+    sem_ver = tag if is_semantic_version(tag) else "{default_version}"
     pre_release = get_pre_release_info(tag)
     num_commits = get_num_commits_since_tag(tag) or 0
     short_hash = get_short_hash()
     dirty = "-dirty" if has_uncommitted_changes() else ""
 
-    # Use extended format when on main or master with no tags
-    if branch_name in ["main", "master"] and not tag:
-        version_string = f"0.0.0-{branch_name}"
+    if branch_name in default_branches and not tag:
+        version_string = f"{default_version}-{branch_name}"
         if num_commits > 0 and short_hash:
             version_string += f"+{num_commits}.{short_hash}"
         elif num_commits > 0:
@@ -151,10 +174,9 @@ def generate_version_string():
         version_string += dirty
         return version_string
 
-    # Construct the version string
     version_string = sem_ver
 
-    if branch_name not in ["main", "master"]:
+    if branch_name not in default_branches:
         version_string += f"-{branch_name}"
 
     if pre_release:
@@ -170,5 +192,53 @@ def generate_version_string():
     return version_string
 
 
+def handle_arguments():
+    """
+    Handle command-line arguments.
+
+    @return Parsed arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate a version string based on the Git repository state.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=f"%(prog)s: {__version__}",
+        help="Show the script version and exit."
+    )
+    parser.add_argument(
+        "-g", "--generate",
+        action="store_true",
+        help=(
+            "Generate a version string based\n"
+            "on the current Git state."
+        )
+    )
+    return parser.parse_args()
+
+
+def process_arguments(args):
+    """
+    Process the parsed arguments.
+
+    @param args Parsed arguments from the argument parser.
+    """
+    if args.generate:
+        print(generate_version_string())
+    else:
+        print("Invalid or no arguments provided.")
+        print("Use -h or --help to see available options.")
+
+
+def main():
+    """
+    Main entry point of the script.
+    """
+    args = handle_arguments()
+    process_arguments(args)
+
+
 if __name__ == "__main__":
-    print(generate_version_string())
+    main()
