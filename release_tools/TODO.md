@@ -37,6 +37,7 @@
     ✓ Configured git protocol
     ✓ Logged in as foo
     ```
+- See if we can implement something like daemonize instead of Singleton
 
 ### Fis in this iteration
 

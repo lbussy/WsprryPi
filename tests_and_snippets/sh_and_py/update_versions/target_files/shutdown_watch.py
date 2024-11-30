@@ -20,138 +20,324 @@
 
 """
 @file shutdown_watch.py
-@brief Script to monitor GPIO for shutdown signals on a Raspberry Pi.
+@brief Monitor GPIO and file signals for a shutdown request on a Raspberry Pi.
 
-This script monitors a GPIO pin and a STOP_FILE to detect shutdown requests. If a shutdown
-signal is detected via a button press or the presence of the STOP_FILE, it initiates a system
-shutdown. It also supports debug mode for detailed logging.
+This script monitors a GPIO pin and a STOP_FILE to detect shutdown requests.
+If a shutdown signal is detected via a button press or the presence of the
+STOP_FILE, it initiates a system shutdown. It also supports a debug mode
+to test behavior without actually shutting down the system.
 
-@note This script must be run with root privileges to access GPIO and shutdown functionalities.
+@note This script must be run with root privileges to access GPIO and 
+shutdown functionalities.
 """
 
 import sys
 import argparse
 import logging
-from time import sleep
-from os import system, getuid, path, remove
+import os
+import time
 import signal
-from gpiozero import Button
+import termios
+import subprocess
 
-__version__ = "1.2.1-version-files+90.43503fc-dirty"
+try:
+    import gpiozero
+except ImportError:
+    sys.exit("Failed to import gpiozero. Ensure it is installed and available.")
 
-# Constants
-STOP_PIN = 17  # GPIO pin for the shutdown button
-STOP_FILE = "/tmp/stop"  # Path to the STOP_FILE
-DO_TAPR = True  # Enable shutdown on button press
+# Version
+__version__ = "0.0.1"
 
-# Logger setup
-logger = None
-DEBUG = False
+# Global Constants
+STOP_PIN = 19           # GPIO pin for the shutdown button
+STOP_FILE = "/tmp/stop" # Path to the STOP_FILE
+
+# Global Variables
+logger = None           # Logger instance
+stop_button = None      # GPIO resource
+original_termios = None # Handle terminal I/O
 
 
-def parse_args():
+def get_script_name():
     """
-    @brief Parse command-line arguments.
+    Get the name of the script being executed.
 
-    Processes the `--debug` flag from the command line to enable debug logging.
-
-    @return argparse.Namespace: Parsed arguments with the `debug` flag.
+    @return str: The name of the script.
     """
-    parser = argparse.ArgumentParser(description="Shutdown Watcher for Raspberry Pi")
-    parser.add_argument('--debug', action='store_true', help="Enable debug mode")
-    return parser.parse_args()
+    return os.path.basename(__file__)
 
 
 def is_root():
     """
-    @brief Check if the script is run as the root user.
+    Check if the script is running with root privileges.
 
-    Verifies that the script is executed with root privileges (UID 0). Logs an error if the
-    user is not root and exits the script.
-
-    @return bool: True if the script is run as root, False otherwise.
+    @return bool: True if the script is running as root, False otherwise.
     """
-    if getuid() != 0:
+    if os.getuid() != 0:
         logger.error("Script must be run as root.")
         return False
     return True
 
 
-def cleanup(signal, frame):
+def initiate_shutdown():
     """
-    @brief Gracefully terminate the script on receiving a termination signal.
+    Forks a shutdown command into a detached child process.
+    """
+    try:
+        # Use Popen to fork and detach the shutdown command
+        subprocess.Popen(
+            ["sh", "-c", "sleep 1 && shutdown -h now"], # Shell command with delay
+            stdout=subprocess.DEVNULL,                  # Suppress standard output
+            stderr=subprocess.DEVNULL,                  # Suppress error output
+            preexec_fn=os.setsid,                       # Detach from parent process
+        )
+    except Exception as e:
+        logger.error(f"Failed to initiate shutdown: {e}")
 
-    Handles cleanup tasks when the script receives a termination signal (e.g., SIGINT or SIGTERM).
-    Logs the termination event and exits the program.
 
-    @param signal (int): The signal number.
+def cleanup(signal_received=None, frame=None):
+    """
+    Gracefully terminate the script and clean up resources.
+
+    - Closes GPIO resources.
+    - Logs the termination event.
+    - Exits the script cleanly.
+
+    @param signal_received (int): The signal number received.
     @param frame (frame): The current stack frame.
     """
+    global stop_button
+    logger.info("Cleaning up resources...")
+
+    if stop_button is not None:
+        stop_button.close()  #: Release GPIO resources
+        logger.info("GPIO resources released.")
+
     logger.info("Shutdown watch script terminating.")
     sys.exit(0)
 
 
-def main():
+def watch(debug, daemon):
     """
-    @brief Main function to monitor the shutdown button and the STOP_FILE.
+    Monitor the GPIO pin and STOP_FILE for shutdown requests.
 
-    Monitors the specified GPIO pin (`STOP_PIN`) for button presses and the `STOP_FILE` for shutdown requests.
-    If a shutdown signal is detected, initiates a system shutdown with appropriate logging.
+    Continuously checks for a button press or the presence of the STOP_FILE.
+    If a shutdown signal is detected, it initiates a system shutdown.
 
-    The loop runs indefinitely until terminated via a signal (e.g., Ctrl-C) or another interruption.
+    @param debug (bool): Flag indicating whether to run in debug mode.
     """
-    stop_button = Button(STOP_PIN)  # Initialize GPIO button
+    global stop_button
+
+    try:
+        stop_button = gpiozero.Button(STOP_PIN)
+    except Exception as e:
+        logger.error(f"Failed to initialize GPIO pin {STOP_PIN}: {e}")
+        cleanup()
+
     logger.info(f"Monitoring pin {STOP_PIN} for shutdown signal.")
-    logger.info("Press Ctrl-C to quit.\n")
+    if not daemon: logger.info("Press Ctrl-C to quit.")
 
     try:
         while True:
-            # Check for shutdown button press or STOP_FILE existence
-            if (stop_button.is_pressed and DO_TAPR) or path.isfile(STOP_FILE):
-                sleep(0.5)
-                if stop_button.is_pressed or path.isfile(STOP_FILE):
-                    if path.isfile(STOP_FILE):
-                        remove(STOP_FILE)  # Remove the STOP_FILE after detection
-                    shutdown_msg = "Shutdown initiated by button press or web request."
-                    if DEBUG:
-                        system(f'wall {shutdown_msg} The system will shut down in 60 seconds.')
-                        logger.info(f'{shutdown_msg} The system is going down in 60 seconds.')
-                        sleep(30)
-                        system('wall Shutdown button pressed, system is going down in 30 seconds.')
-                        sleep(20)
-                        system('wall Shutdown button pressed, system is going down in 10 seconds.')
-                        sleep(9)
-                        system('wall Shutdown button pressed, system is going down now.')
-                    else:
-                        logger.info(shutdown_msg)
-                        system(f'wall {shutdown_msg}')
-                        system("shutdown -h now")
-            sleep(0.1)
+            # Check for shutdown signals
+            if stop_button.is_pressed or os.path.isfile(STOP_FILE):
+                if os.path.isfile(STOP_FILE):
+                    os.remove(STOP_FILE)
+
+                logger.info(f"Shutdown initiated by button press on pin {STOP_PIN} or presence of {STOP_FILE}.")
+
+                if debug: logger.debug("Debug mode enabled. No action will be taken.")
+                else:
+                    initiate_shutdown() # Fork a process to shutdown in 1 second
+                cleanup()               # Hurry and cleanup during that one second
+
+            time.sleep(0.1)  #: Poll interval
 
     except KeyboardInterrupt:
-        logger.info('Shutdown watch script interrupted by keyboard.')
+        logger.info("Shutdown watch script interrupted by keyboard.")
 
-    finally:
-        logger.info("Shutdown watch script exiting.")
+
+def setup_logger(debug, daemon):
+    """
+    Configure the logger for the script.
+
+    The logger can operate in debug or normal mode based on the debug parameter.
+    If daemon mode is enabled, logs will include a date/time stamp.
+
+    @param debug (bool): Flag indicating whether to run in debug mode.
+    @param daemon (bool): Flag indicating whether to include date/time stamps in logs.
+    """
+    global logger
+    log_level = logging.DEBUG if debug else logging.INFO
+    log_format = (
+        "%(asctime)s - %(levelname)s - %(message)s" if daemon
+        else "%(levelname)s - %(message)s"
+    )
+    logging.basicConfig(level=log_level, format=log_format)
+    logger = logging.getLogger()
+
+
+def register_signals():
+    """
+    Register handlers for relevant signals to suppress unwanted terminal outputs.
+    """
+    signals_to_handle = [
+        signal.SIGINT,   # Ctrl+C
+        signal.SIGTERM,  # Termination signal
+        signal.SIGHUP,   # Terminal hang-up
+        signal.SIGUSR1,  # User-defined signal 1
+        signal.SIGUSR2   # User-defined signal 2
+    ]
+    for sig in signals_to_handle:
+        signal.signal(sig, handle_signal)
+
+
+def disable_ctrlc_echo():
+    """
+    Disable the terminal's default echo of `^C` when SIGINT is received.
+    """
+    global original_termios
+    original_termios = termios.tcgetattr(sys.stdin)
+    new_termios = termios.tcgetattr(sys.stdin)
+    new_termios[3] = new_termios[3] & ~termios.ECHO  # Disable ECHO
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_termios)
+
+
+def restore_terminal():
+    """
+    Restore the terminal settings to their original state.
+    """
+    if original_termios is not None:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_termios)
+
+
+def handle_signal(signal_received, frame):
+    """
+    Custom signal handler to capture and suppress terminal outputs.
+
+    @param signal_received (int): The signal number received.
+    @param frame (frame): The current stack frame.
+    """
+    signal_names = {
+        signal.SIGINT: "SIGINT (Ctrl+C)",
+        signal.SIGTERM: "SIGTERM",
+        signal.SIGHUP: "SIGHUP"
+    }
+    signal_name = signal_names.get(signal_received, f"Signal {signal_received}")
+    logger.info(f"Received {signal_name}. Exiting gracefully.")
+    restore_terminal()  # Ensure terminal settings are restored
+    cleanup()
+
+
+class CustomArgumentParser(argparse.ArgumentParser):
+    """
+    Custom argument parser with enhanced usage and help formatting.
+    """
+
+    def format_usage(self):
+        """
+        Override the format_usage method to capitalize the "Usage:" wording.
+        """
+        return f"Usage: {self.usage}\n"
+
+    def format_help(self):
+        """
+        Override the format_help method to ensure the usage line in help output
+        also uses the capitalized "Usage:".
+        """
+        help_text = self.format_usage()
+        help_text += f"\n{self.description}\n\n"
+        help_text += "Options:\n"
+        help_text += self.format_options()
+        return help_text
+
+    def format_options(self):
+        """
+        Format the options section of the help message.
+        """
+        formatter = self._get_formatter()
+        for action in self._actions:
+            formatter.add_argument(action)
+        return formatter.format_help()
+
+
+def process_arguments():
+    """
+    Handle command-line arguments.
+
+    @return argparse.Namespace: Parsed arguments.
+    """
+    parser = CustomArgumentParser(
+        description="Shutdown Watcher for Raspberry Pi.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        usage=f"{get_script_name()} [-h] [-d] [-D] [-w] [-v]",
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h", "--help",
+        action="help",
+        help="Display this help message and exit."
+    )
+    parser.add_argument(
+        "-d", "--debug",
+        action="store_true",
+        help="Enable debug mode. Logs actions but takes no shutdown actions."
+    )
+    parser.add_argument(
+        "-D", "--daemon", 
+        action="store_true",
+        help="Enable daemon mode. Output/logs will have date/time stamp."
+    )
+    parser.add_argument(
+        "-w", "--watch",
+        action="store_true",
+        help="Start monitoring for shutdown signals and take action."
+    )
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=f"%(prog)s: {__version__}",
+        help="Show the script version and exit."
+    )
+    return parser.parse_args()
+
+
+def handle_arguments():
+    """
+    Process the parsed arguments and execute the appropriate functionality.
+    """
+    # Get arguments
+    args = process_arguments()
+    setup_logger(args.debug, args.daemon)  # Pass the daemon flag
+
+    if args.watch:
+        if not is_root(): sys.exit(-1)
+        if args.debug: logger.info("Debug mode enabled. No actions will be taken.")
+        logger.info("Starting shutdown watcher...")
+        watch(args.debug, args.daemon)
+    else:
+        print("At least '-w' is required to enter loop.")
+        print("Use -h or --help to see available options.")
+
+
+def main():
+    """
+    Main entry point of the script.
+
+    Parses command-line arguments, sets up logging, and initiates monitoring.
+    """
+    handle_arguments()
 
 
 if __name__ == "__main__":
-    # Parse arguments and set debug flag
-    args = parse_args()
-    DEBUG = args.debug
+    # Register signal handlers
+    import atexit
+    atexit.register(restore_terminal)
+    register_signals()
+    disable_ctrlc_echo()
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGHUP, handle_signal)
 
-    # Configure logging
-    logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger()
-
-    # Register termination signals
-    signal.signal(signal.SIGINT, cleanup)
-    signal.signal(signal.SIGTERM, cleanup)
-
-    # Run the main function if the user is root
-    if not is_root():
-        sys.exit(1)
-    else:
-        main()
-        sys.exit(0)
+    # Run the main function
+    main()

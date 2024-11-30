@@ -111,6 +111,8 @@ html_theme_options = {
     'titles_only': False
 }
 
+# disable epub mimetype warnings
+suppress_warnings = ["epub.unknown_project_files"]
 html_logo = '_static/antenna.svg'
 html_favicon = '_static/favicon.ico'
 # Put the custom.css in the html static path folder (Default is _static folder).
