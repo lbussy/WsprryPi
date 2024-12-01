@@ -22,6 +22,7 @@ declare -A LOG_PROPERTIES=(
 ```
 
 ## Functions
+
 ``` bash
 default_color()
 init_colors()
