@@ -163,11 +163,19 @@ arguments() {
             --h* )
             usage; exit 0 ;;
             --v* )
-            version; exit 0 ;;
+            show_version; exit 0 ;;
             * )
             break;;
         esac
     done
+}
+
+############
+### Function to display the version
+############
+
+show_version() {
+  echo "$THISSCRIPT: $VERSION"
 }
 
 ############

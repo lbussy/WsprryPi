@@ -23,40 +23,29 @@
 
 # shellcheck disable=SC2034  # Unused variables left for reusability
 
-# Determine the root directory of the current Git repository
-LOCAL_SOURCE_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -z "$LOCAL_SOURCE_DIR" ]; then
-    echo "Error: This script must be run from within a Git repository."
-    exit 1
-fi
-LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data" # Data directory under the Git repo root
-LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts" # Scripts directory under the Git repo root
+LOCAL_SOURCE_DIR=""
 USE_LOCAL=false  # Default to not using local files
 
 # General constants
-declare THISSCRIPT GITBRNCH GITPROJ PACKAGE VERBOSE OWNER COPYRIGHT
-declare REPLY CMDLINE GITRAW PACKAGENAME VERSION APTPACKAGES
-declare VERBOSE BRANCH WWWFILES REBOOT
+declare VERBOSE REBOOT
 # Color/character codes
 declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH="version_files"
-VERSION="1.2.1-version-files+91.3bef855-dirty"
+readonly GIT_BRCH="version_files"
+readonly VERSION="1.2.1-version-files+91.3bef855-dirty"
 # Set this script
-THISSCRIPT="install.sh"
+readonly THISSCRIPT="install.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
-PACKAGE="WsprryPi"
-PACKAGENAME="Wsprry Pi"
-OWNER="lbussy"
-APTPACKAGES="apache2 php libraspberrypi-dev raspberrypi-kernel-headers"
-WWWFILES="android-chrome-192x192.png android-chrome-512x512.png antenna.svg apple-touch-icon.png bootstrap.bundle.min.js bootstrap.css custom.css fa.js favicon-16x16.png favicon-32x32.png favicon.ico .gitignore index.php jquery-3.6.3.min.js site.webmanifest wspr_ini.php shutdown.php"
-WWWREMOV="bootstrap-icons.css custom.min.css ham_white.svg README.md"
+readonly COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
+readonly PACKAGE="WsprryPi"
+readonly PACKAGENAME="Wsprry Pi"
+readonly OWNER="lbussy"
+readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
 # This should not change
-if [ -z "$BRANCH" ]; then GITBRNCH="main"; else GITBRNCH="$BRANCH"; fi
-GITRAW="https://raw.githubusercontent.com/$OWNER"
+readonly GIT_RAW="https://raw.githubusercontent.com/$OWNER/$PACKAGE"
+readonly GIT_API="https://api.github.com/repos/$OWNER/$PACKAGE"
 
 ############
 ### Bitness, Architecture & OS
@@ -72,7 +61,7 @@ check_bitness() {
 check_release() {
     ver=$(cat /etc/os-release | grep "VERSION_ID" | awk -F "=" '{print $2}' | tr -d '"')
     if [ "$ver" -lt 11 ]; then
-        echo -e "\nRaspbian older than version 1.2.1-36ba1cd-dirty [sigterm]-dirty [sigterm]-dirty [sigterm] (bullseye) not supported.\n"
+        echo -e "\nRaspbian older than version 11 (bullseye) not supported.\n"
         exit 1
     fi
 }
@@ -89,28 +78,20 @@ check_architecture() {
 }
 
 ############
-### Init
-############
-
-init() {
-    # Set up some project variables we won't have running as a curled script
-    GITPROJ="${PACKAGE,,}"
-}
-
-############
 ### Handle logging
 ############
 
 timestamp() {
+    local reply
     # Add date in '2019-02-26 08:19:22' format to log
     [[ "$VERBOSE" == "true" ]] && length=999 || length=60 # Allow full logging
-    while read -r; do
+    while read -rp; do
         # Clean and trim line to 60 characters to allow for timestamp on one line
-        REPLY="$(clean "$REPLY" "$length")"
+        reply="$(clean "$reply" "$length")"
         # Strip blank lines
-        if [ -n "$REPLY" ]; then
+        if [ -n "$reply" ]; then
             # Add date in '2019-02-26 08:19:22' format to log
-            printf '%(%Y-%m-%d %H:%M:%S)T %s\n' -1 "$REPLY"
+            printf '%(%Y-%m-%d %H:%M:%S)T %s\n' -1 "$reply"
         fi
     done
 }
@@ -176,41 +157,34 @@ Usage: sudo ./$THISSCRIPT"
 EOF
 }
 
-# version outputs to stdout the --version message.
-version() {
-cat << EOF
-
-$THISSCRIPT ($PACKAGE)
-
-$COPYRIGHT
-
-This is free software: you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published
-by the Free Software Foundation, either version 3 of the License,
-or (at your option) any later version.
-<https://www.gnu.org/licenses/>
-
-There is NO WARRANTY, to the extent permitted by law.
-EOF
-}
-
 # Parse arguments and call usage or version
 arguments() {
     local arg
     while [[ "$#" -gt 0 ]]; do
         arg="$1"
         case "$arg" in
-            --h* )
-            usage; exit 0 ;;
-            --v* )
-            version; exit 0 ;;
-            -l )
-            USE_LOCAL=true ;; # Enable local file usage
+            -h|--help )
+                usage; exit 0 ;;
+            -v|--version )
+                show_version; exit 0 ;;
+            -l|--local )
+                USE_LOCAL=true ;; # Enable local file usage
             * )
-            break;;
+                echo "Unknown option: $arg"
+                usage
+                exit 1 ;;
         esac
         shift
     done
+}
+
+
+############
+### Function to display the version
+############
+
+show_version() {
+  echo "$THISSCRIPT: $VERSION"
 }
 
 ############
@@ -227,19 +201,8 @@ checkroot() {
     fi
     ### Check if we have root privs to run
     if [[ "$EUID" -ne 0 ]]; then
-        sudo -n true 2> /dev/null
-        retval="$?"
-        if [ "$retval" -eq 0 ]; then
-            echo -e "\nNot running as root, re-run using 'sudo'."
-            sleep 2
-            exit "$?"
-        else
-            # sudo not available, give instructions
-            echo -e "\nThis script must be run with root privileges."
-            echo -e "Enter the following command as one line:"
-            echo -e "$CMDLINE" 1>&2
-            exit 1
-        fi
+        echo -e "\nNot running as root, re-run using 'sudo'."
+        exit 1
     fi
 }
 
@@ -307,6 +270,40 @@ die() {
 }
 
 ############
+### Adds dot to file extension if needed
+############
+
+add_dot() {
+    local input="$1"
+    if [[ "$input" != .* ]]; then
+        input=".$input"
+    fi
+    echo "$input"
+}
+
+remove_dot() {
+    local input="$1"
+    if [[ "$input" == .* ]]; then
+        input="${input#.}"
+    fi
+    echo "$input"
+}
+
+add_slash() {
+    local input="$1"
+    if [[ "$input" != */ ]]; then
+        input="$input/"
+    fi
+    echo "$input"
+}
+
+remove_slash() {
+  local input="$1"
+  [[ "$input" == */ ]] && input="${input%/}"
+  echo "$input"
+}
+
+############
 ### Instructions
 ############
 
@@ -347,7 +344,7 @@ EOF
 ###########
 
 settime() {
-    local date tz
+    local date tz yn
     date=$(date)
     while true; do
         echo -e "\n\nThe time is currently set to $date."
@@ -373,49 +370,33 @@ settime() {
 }
 
 ############
-### Daemon Functions
-############
-
-############
-### Compare source vs. target
-### Arguments are $source and $target
-### Return eq, lt, gt based on "version" comparison
-############
-
-compare() {
-    local src tgt
-    src="$1"
-    tgt="$2"
-
-    if dpkg --compare-versions "$src" eq "$tgt"; then
-        echo "eq"
-    elif dpkg --compare-versions "$src" lt "$tgt"; then
-        echo "lt"
-    else
-        echo "gt"
-    fi
-}
-
-############
 ### Call the creation of unit files
 ### Required:
 ###   unit - Name of systemd unit
 ###   ext - Type of controlling script (e.g. "bash" or "python3")
 ############
 
-do_unit() {
-    local unit retval
-    ext="$1"
+do_service() {
+    local file_name extension retval
+    file_name="$1"
+    extension=$(add_dot "$2")
+    script_path=$(remove_slash "$3")
 
     # Handle script install
-    checkscript "$unit$extension"
+    check_file "$file_name" "$extension" "$script_path"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        systemctl stop "$unit" &> /dev/null
-        copy_file "$unit" "$extension"
-        copy_file "$unit" ".service"
+        systemctl stop "$file_name" &> /dev/null
+        systemctl disable "$file_name" &> /dev/null
+        copy_file "$file_name" "$extension" "$script_path"
+        copy_file "$file_name" ".service" "/etc/systemd/system"
+        if [[ "$file_name" == "wspr" ]]; then
+            do_ini "wspr" "ini" "/usr/local/etc"
+            copy_file "logrotate" "conf" "/etc/logrotate.d/"
+        fi
         eval "sudo systemctl daemon-reload" &> /dev/null
-        eval "systemctl start $unit" &> /dev/null
+        systemctl enable "$file_name" &> /dev/null
+        eval "systemctl start $file_name" &> /dev/null
     fi
 }
 
@@ -429,128 +410,160 @@ do_unit() {
 ############
 
 copy_file_generic() {
-    local srcFile localDir targetFile remoteURL
-    localDir="$2"
-    targetFile="$3"
-    remoteURL="$4"
+    local file_name extension local_script_path file_path remote_url
+    local source_file target_file
+    file_name="$1"
+    extension=$(remove_dot "$2")
+    local_script_path=$(remove_slash "$3")
+    file_path=$(remove_slash "$4")
+    remote_url=$(remove_slash "$5")
+
+    target_file="$file_path/$file_name.$extension"
 
     if [ "$USE_LOCAL" == "true" ]; then
         # Use local file
-        srcFile="$localDir/$1"
-        if [ ! -f "$srcFile" ]; then
-            echo "Local file $srcFile not found." && die
+        source_file="$local_script_path/$file_name.$extension"
+        if [ ! -f "$source_file" ]; then
+            echo "Local file $source_file not found." && die
         fi
-        cp "$srcFile" "$targetFile" || die
+        cp "$source_file" "$target_file" || die
     else
         # Download from GitHub
-        curl -s "$remoteURL/$1" > "$targetFile" || die
+        source_file="$remote_url/$file_name.$extension"
+        curl -s "$source_file" > "$target_file" || die
     fi
 }
 
 ############
 ### Copy daemon scripts
 ### Required:
-###   scriptName - Name of script to run under systemd
+###   file_name - Name of script to run under systemd
 ############
 
 copy_file() {
-    local scriptName extension scriptPath fullName remoteURL
-    scriptName="$1"
-    extension="$2"
-    scriptPath="/usr/local/bin"
-    fullName="$scriptPath/$scriptName$extension"
-    remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/scripts"
+    local file_name extension script_path file_path remote_url local_scripts_dir
+    file_name="$1"
+    extension=$(remove_dot "$2")
+    script_path=$(remove_slash "$3")
+    local_scripts_dir=$(remove_slash "$LOCAL_SCRIPTS_DIR")
 
-    copy_file_generic "$scriptName$extension" "$LOCAL_SCRIPTS_DIR" "$fullName" "$remoteURL"
+    git_raw=$(remove_slash "$GIT_RAW")
+    git_repo=$(remove_slash "$GIT_BRCH")
+    
+    file_path="$script_path/$file_name.$extension"
+    remote_url="$git_raw/$git_repo/scripts"
+
+    copy_file_generic "$file_name" "$extension" "$local_scripts_dir" "$file_path" "$remote_url"
 
     # Set permissions
-    chmod +x "$fullName"
-    if file "$fullName" | grep -q executable; then
-        chown root:root "$fullName"
-        chmod 0755 "$fullName"
+    chown root:root "$file_path"
+    if file "$file_path" | grep -q executable; then
+        chmod 0755 "$file_path"
     else
-        echo "Script install failed for $fullName." && die
+        chmod 0644 "$file_path"
     fi
 }
 
 ############
-### Copy Log Rotate Config
-############
-
-copy_logd() {
-    local fullName remoteURL
-    fullName="/etc/logrotate.d/wspr"
-    remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/scripts"
-
-    copy_file_generic "logrotate.conf" "$LOCAL_SCRIPTS_DIR" "$fullName" "$remoteURL"
-
-    chown root:root "$fullName"
-    chmod 0644 "$fullName"
-}
-
-############
 ### Check existence and version of any current script files
-### Required:  scriptName - Name of script
+### Required:
+###     file_name - Name of script
+###     extension - Script extension
 ### Returns:   0 to execute, 255 to skip
 ############
 
-# TODO: Simplify script version checking
+extract_semantic_version() {
+    # Function to extract semantic version from a string
+  local line="$1"
+  echo "$line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?' || echo "unknown"
+}
 
-checkscript() {
-    local scriptName scriptFile src verchk
-    scriptName="${1,,}"
-    scriptFile="/usr/local/bin/$scriptName"
+strip_pre_release() {
+    # Function to strip unknown pre-release info
+  local input_version="$1"
 
-    if [ -f "$scriptFile" ]; then
-        # Handle version extraction based on script name
-        if [[ "$scriptName" == "shutdown_watch" ]]; then
-            # Extract version for shutdown_watch.py from the comment line
-            src=$(grep -Pzo "Created for the WsprryPi project, version [\d\.]+[-\w]*\s*(\[[^\]]*\])?" "$scriptFile" | \
-                  sed -E 's/.*version ([^ ]+).*/\1/')
-            if [ -z "$src" ]; then
-                # Fallback: Try to extract the version by running the script with a flag if no comment is found
-                src=$(python3 "$scriptFile" -v 2>&1 | grep -oP 'version \K[^\s]+')
-            fi
-        elif [[ "$scriptName" == "wspr" ]]; then
-            # Extract version for wspr using the -v command output
-            src=$(wspr -v | grep -oP 'version \K[^\s]+')
-        else
-            # General case for other scripts with version info in a comment line
-            src=$(grep -Eo "^# Created for the WsprryPi project, version [^ ]+" "$scriptFile" | \
-                  sed -E 's/^.*version //')
-        fi
+  # Match the base version and allowed pre-release types
+  if [[ "$input_version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-(alpha|beta|rc[0-9]*|final))?$ ]]; then
+    # If it matches, return the base version with allowed pre-release types
+    echo "${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+    return 0
+  else
+    # Otherwise, strip pre-release metadata and append "-development"
+    echo "${input_version%%-*}-development"
+    return 0
+  fi
+}
 
-        # If no version is found, skip further checks and default to overwrite
-        if [ -z "$src" ]; then
-            echo -e "\nVersion info not found in $scriptName. Skipping version check and proceeding with overwrite."
-            return 0  # Default to overwrite
-        fi
+check_file() {
+    local file_name script_path verchk yn file_path
+    local installed_version stripped_installed_version
+    local available_version stripped_available_version
+    file_name="$1"
+    extension=$(remove_dot "$2")
+    file_name="$file_name.$extension"
+    script_path=$(remove_slash "$3")
+    file_path="$script_path/$file_name"
+
+    if [ -f "$file_path" ]; then
+        # Get semantic versions
+        installed_version=$("$script_path" -v)
+        installed_version=$(extract_semantic_version "$installed_version")
+        stripped_installed_version=$(strip_pre_release "$installed_version")
+        available_version="$VERSION"
+        available_version=$(extract_semantic_version "$available_version")
+        stripped_available_version=$(strip_pre_release "$available_version")
 
         # Compare versions
-        verchk="$(compare "$src" "$VERSION")"
-        case "$verchk" in
-            lt)
-                echo -e "\nFile: $scriptName exists but is an older version ($src vs. $VERSION)." > /dev/tty
+        if [[ -z "$stripped_installed_version" || -z "$stripped_available_version" ]]; then
+            # One or both versions vailed to return a proper semantic version
+            echo -e "Error: Failed to parse semantic version for:"
+            [[ -z "$stripped_installed_version" ]] && echo "- Installed version: $installed_version"
+            [[ -z "$stripped_available_version" ]] && echo "- Available version: $available_version"
+            read -rp "Proceed with overwrite? [Y/n]: " yn < /dev/tty
+            case "$yn" in
+                [Nn]* ) return 255 ;;  # Skip Overwrite
+                * ) return 0 ;;    # Overwrite (default to YEs)
+            esac
+        elif [[ "$stripped_installed_version" == *"development"* && "$stripped_available_version" == *"development"* ]]; then
+            # Both of the versions shows as development
+            echo -e "\nFile: $file_name exists and both it and the available file are a development version."
+            read -rp "Overwrite anyway? [y/N]: " yn < /dev/tty
+            case "$yn" in
+                [Yy]* ) return 0 ;;  # Overwrite
+                * ) return 255 ;;    # Skip overwrite (default to No)
+            esac
+        elif [[ "$stripped_installed_version" == *"development"* && "$stripped_available_version" != *"development"* ]]; then
+                echo -e "\nFile: $file_name exists but is an older version ($installed_version vs. $available_version)." > /dev/tty
+                read -rp "Upgrade to newest? [Y/n]: " yn < /dev/tty
+                case "$yn" in
+                    [Nn]* ) return 255 ;;  # Skip Overwwrite
+                    * ) return 0 ;;        # Do overwrite (default to Yes)
+                esac
+        elif [[ "$stripped_installed_version" != *"development"* && "$stripped_available_version" == *"development"* ]]; then
+            echo -e "\nFile: $file_name is newer than the version being installed ($installed_version vs. $available_version)." > /dev/tty
+            return 255  # Skip update
+        else
+            if dpkg --compare-versions "$stripped_installed_version" lt "$stripped_available_version"; then
+                echo -e "\nFile: $file_name exists but is an older version ($installed_version vs. $available_version)." > /dev/tty
                 read -rp "Upgrade to newest? [Y/n]: " yn < /dev/tty
                 case "$yn" in
                     [Nn]* ) return 255 ;;  # Skip update
-                    * ) return 0 ;;        # Do overwrite
+                    * ) return 0 ;;        # Do overwrite (default to Yes)
                 esac
-                ;;
-            eq)
-                echo -e "\nFile: $scriptName exists and is the same version ($src)."
+            elif dpkg --compare-versions "$stripped_installed_version" gt "$stripped_available_version"; then
+                echo -e "\nFile: $file_name is newer than the version being installed ($installed_version vs. $available_version)." > /dev/tty
+                return 255 # Skip update
+            else
+                echo -e "\nFile: $file_name exists and is the same version as the available version ($installed_version)."
                 read -rp "Overwrite anyway? [y/N]: " yn < /dev/tty
                 case "$yn" in
                     [Yy]* ) return 0 ;;  # Overwrite
                     * ) return 255 ;;    # Skip overwrite (default to No)
                 esac
-                ;;
-            gt)
-                echo -e "\nFile: $scriptName is newer than the version being installed ($src vs. $VERSION)." > /dev/tty
-                return 255 ;;  # Skip update
-        esac
+            fi
+        fi
     else
-        echo "File: $scriptName does not exist. Proceeding with installation." > /dev/tty
+        echo "File: $file_name does not exist. Proceeding with installation." > /dev/tty
         return 0  # File does not exist, proceed with installation
     fi
 }
@@ -561,35 +574,37 @@ checkscript() {
 ###   none
 ############
 
-createini() {
-    local fullName
-    fullName="/usr/local/etc/wspr.ini"
+do_ini() {
+    local file_name extension path file_path remote_url yn
+    file_name="$1"
+    extension=$(remove_dot "$2")
+    path=$(remove_slash "$3")
+    file_path="$path/$file_name.$extension"
 
-    if [ -f "$fullName" ]; then
-        echo
-        read -rp "Configuration file exists, overwrite? [y/N/s (skip)]: " yn < /dev/tty
+    if [ -f "$file_path" ]; then
+        echo -e "\nYour configuration can be reset to stock. "
+        read -rp "Overwrite? [y/N]: " yn < /dev/tty
         case "$yn" in
             [Yy]* )
-                echo "Overwriting configuration file." ;;
-            [Ss]* )
-                echo "Skipping configuration file setup."
-                return ;;  # Skip this step
+                echo "Overwriting configuration file."
+                ;;
             * )
-                echo "Keeping existing configuration file."
-                return ;;
+                echo "Skipping configuration file setup."
+                return
+                ;;  # Skip this step
         esac
+    else
+        echo "Creating configuration file."
     fi
-
-    echo "Creating configuration file for $PACKAGENAME."
-    # Rest of the function logic here
+    copy_file "$file_name" "$extension" "$path" # Create ini file
 }
 
 ############
 ### Install apt packages
 ############
 
-aptPackages() {
-    local lastUpdate nowTime pkgOk upgradesAvail pkg
+apt_packages() {
+    local last_update now_time pkg_ok upgrades_avail pkg
 
     echo -e "\nUpdating any expired apt keys."
     for K in $(apt-key list 2> /dev/null | grep expired | cut -d'/' -f2 | cut -d' ' -f1); do
@@ -599,9 +614,9 @@ aptPackages() {
     echo -e "\nFixing any broken installations."
     sudo apt-get --fix-broken install -y||die
     # Run 'apt update' if last run was > 1 week ago
-    lastUpdate=$(stat -c %Y /var/lib/apt/lists)
-    nowTime=$(date +%s)
-    if [ $((nowTime - lastUpdate)) -gt 604800 ]; then
+    last_update=$(stat -c %Y /var/lib/apt/lists)
+    now_time=$(date +%s)
+    if [ $((now_time - last_update)) -gt 604800 ]; then
         echo -e "\nLast apt update was over a week ago. Running apt update before updating"
         echo -e "dependencies."
         apt-get update -yq||die
@@ -610,21 +625,21 @@ aptPackages() {
     # Now install any necessary packages if they are not installed
     echo -e "\nChecking and installing required dependencies via apt."
     for pkg in $APTPACKAGES; do
-        pkgOk=$(dpkg-query -W --showformat='${Status}\n' "$pkg" | \
+        pkg_ok=$(dpkg-query -W --showformat='${Status}\n' "$pkg" | \
         grep "install ok installed")
-        if [ -z "$pkgOk" ]; then
+        if [ -z "$pkg_ok" ]; then
             echo -e "\nInstalling '$pkg'."
             apt-get install "$pkg" -y -q=2||die
         fi
     done
 
     # Get list of installed packages with updates available
-    upgradesAvail=$(dpkg --get-selections | xargs apt-cache policy {} | \
+    upgrades_avail=$(dpkg --get-selections | xargs apt-cache policy {} | \
         grep -1 Installed | sed -r 's/(:|Installed: |Candidate: )//' | \
     uniq -u | tac | sed '/--/I,+1 d' | tac | sed '$d' | sed -n 1~2p)
     # Loop through the required packages and see if they need an upgrade
     for pkg in $APTPACKAGES; do
-        if [[ "$upgradesAvail" == *"$pkg"* ]]; then
+        if [[ "$upgrades_avail" == *"$pkg"* ]]; then
             echo -e "\nUpgrading '$pkg'."
             apt-get install "$pkg" -y -q=2||die
         fi
@@ -638,48 +653,68 @@ aptPackages() {
 ### Install website
 ############
 
-doWWW() {
-    local file dir fullName remoteURL
-    dir="/var/www/html/wspr"
-    remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/data"
+do_www() {
+    local www_dir local_dir directory git_raw git_repo api_url local_files file
+    # Arguments
+    www_dir=$(remove_slash "$1")
+    local_dir=$(remove_slash "$2")
+    # Configuration
+    directory="data"
+    git_raw=$(remove_slash "$GIT_RAW")
+    git_raw="$git_raw/$BRANCH"
+    git_repo=$(remove_slash "$GIT_BRCH")
 
     # Delete old files
-    echo -e "\nDeleting any deprecated files."
-    for file in $WWWREMOV; do
-        if [ -f "$dir/$file" ]; then
-            rm -f "$dir/$file"
-        fi
-    done
+    echo -e "\nDeleting old files."
+    rm -f "$www_dir/"
 
     # Copy down web pages
-    echo -e "\nChecking and installing web pages."
-    if [ ! -d "$dir" ]; then
-        mkdir "$dir"
+    echo -e "\nChecking and installing website."
+    if [ ! -d "$www_dir" ]; then
+        mkdir "$www_dir"
+    fi
+    
+    # Get the list of files
+    api_url=$(remove_slash "$GIT_API")
+    api_url="$api_url/contents/$directory?ref=$BRANCH"
+
+    if [ "$USE_LOCAL" == "true" ]; then
+        local_files=$("find $local_dir -type f -exec realpath {} \;")
+        for file in $local_files; do
+            echo "Copying $file..."
+            cp "$file" "$www_dir/$file"
+        done
+    else
+        github_files=$(curl -s "$api_url" | jq -r '.[] | select(.type == "file") | .name')
+        for file in $github_files; do
+            echo "Downloading $file..."
+            curl "$git_raw/$directory/$file" -o "$www_dir/$file"
+        done
     fi
 
-    for file in $WWWFILES; do
-        fullName="$dir/$file"
-        copy_file_generic "$file" "$LOCAL_WWW_DIR" "$fullName" "$remoteURL"
-    done
+    echo "Website copy complete."
 
     # Set the permissions
-    echo -e "\nFixing file permissions for $dir."
-    chown -R www-data:www-data "$dir" || die
-    find "$dir" -type d -exec chmod 2770 {} \; || die
-    find "$dir" -type f -exec chmod 660 {} \; || die
+    echo -e "\nFixing file permissions for $www_dir."
+    chown -R www-data:www-data "$www_dir" || die
+    find "$www_dir" -type d -exec chmod 2770 {} \; || die
+    find "$www_dir" -type f -exec chmod 660 {} \; || die
 }
 
 ############
 ### TAPR Shutdown Button Support
 ############
 
-support_shutdown_button() {
-    local yn
+do_shutdown_button() {
+    local yn file_name extension script_path
+    file_name="$1"
+    extension=$(add_dot "$2")
+    script_path=$(remove_slash "$3")
     echo
     # Check if the shutdown_watch service is already enabled
     if systemctl is-enabled shutdown_watch.service &>/dev/null; then
         echo "TAPR shutdown button support is already enabled."
-        read -p "Do you want to disable TAPR shutdown button support? [y/N]: " yn < /dev/tty
+        read -rp "Do you want to disable TAPR shutdown button support? [y/N]: " yn < /dev/tty
         case "$yn" in
             [Yy]* )
                 echo "Disabling TAPR shutdown button support."
@@ -688,38 +723,26 @@ support_shutdown_button() {
                 rm -f /etc/systemd/system/shutdown_watch.service
                 echo "Reloading systemd daemon configuration."
                 systemctl daemon-reload
+                return
                 ;;
             * )
                 echo "Keeping TAPR shutdown button support enabled."
-                # Check version of the shutdown_watch service
-                verchk="$(compare "$(systemctl show -p Version shutdown_watch.service)" "$VERSION")"
-                case "$verchk" in
-                    lt)
-                        echo -e "\nThe current version of shutdown_watch is older than the version being installed. Upgrading to the latest version."
-                        do_unit "shutdown_watch" ".py" # Upgrade the service
-                        ;;
-                    eq)
-                        echo -e "\nThe version of shutdown_watch is already up to date."
-                        ;;
-                    gt)
-                        echo -e "\nThe version of shutdown_watch is newer than the version being installed. Skipping upgrade."
-                        ;;
-                esac
                 ;;
         esac
     else
         # Prompt user to enable support
-        read -p "Support system shutdown button (TAPR)? [y/N]: " yn < /dev/tty
+        read -rp "Support system shutdown button (TAPR)? [y/N]: " yn < /dev/tty
         case "$yn" in
             [Yy]* )
                 echo "Enabling TAPR shutdown button support."
-                do_unit "shutdown_watch" ".py"
                 ;;
             * )
                 echo "TAPR shutdown button support remains disabled."
+                return
                 ;;
         esac
     fi
+    do_service "shutdown_watch" ".py" "/usr/local/bin" # Upgrade the service
 }
 
 ############
@@ -793,26 +816,36 @@ EOF
 
 main() {
     VERBOSE=true  # Do not trim logs
+    local sysver
     check_bitness # Make sure we are not 64-bit
     check_release # Make sure we are not using some dusty old version
     check_architecture # Make sure we are not on a Pi 5
+    command -v dpkg >/dev/null 2>&1 || { echo "dpkg not found. Exiting." >&2; return 1; }
     log "$@" # Start logging
-    init "$@" # Get constants
     arguments "$@" # Check command line arguments
+
+    if [ "$USE_LOCAL" == "true" ]; then
+        # Determine the root directory of the current Git repository
+        LOCAL_SOURCE_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
+        if [ -z "$LOCAL_SOURCE_DIR" ]; then
+            echo "Error: This script must be run from within a Git repository."
+            exit 1
+        fi
+        LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data" # Data directory under the Git repo root
+        LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts" # Scripts directory under the Git repo root
+    fi
+
     echo -e "\n***Script $THISSCRIPT starting.***"
-    sysver="$(cat "/etc/os-release" | grep 'PRETTY_NAME' | cut -d '=' -f2)"
-    sysver="$(sed -e 's/^"//' -e 's/"$//' <<<"$sysver")"
+    sysver=$(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')
     echo -e "\nRunning on: $sysver.\n"
     checkroot # Make sure we are su into root
     term # Add term command constants
     instructions # Show instructions
     settime # Set timezone
-    # DEBUG TODO aptPackages # Install any apt packages needed
-    do_unit "wspr" "" # Install/upgrade wspr daemon
-    createini # Create ini file
-    support_shutdown_button # Handle TAPR shutdown button
-    copy_logd "$@" # Enable log rotation
-    doWWW # Download website
+    apt_packages # Install any apt packages needed
+    do_service "wspr" "" "/usr/local/bin" # Install/upgrade wspr daemon
+    do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
+    do_www "/var/www/html/wspr" "$LOCAL_WWW_DIR" # Download website
     disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete
