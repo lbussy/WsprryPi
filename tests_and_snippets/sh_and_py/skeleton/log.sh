@@ -30,9 +30,14 @@
 trap 'echo "ERROR: An unexpected error occurred in ${FUNCNAME[0]:-main} at line $LINENO. Exiting." >&2; exit 1' ERR
 
 # Global Constants
-readonly THISSCRIPT=$(basename "$0")       # Name of the script
-readonly VERSION="1.2.1-version-files+91.3bef855-dirty"  # Script version
-readonly GIT_BRCH="version_files"         # Git branch
+THISSCRIPT=$(basename "$0")                     # Name of the script
+VERSION="1.2.1-version-files+91.3bef855-dirty"  # Script version
+GIT_BRCH="version_files"                        # Git branch
+readonly THISSCRIPT
+# shellcheck disable=SC2034  # Unused variables left for readability
+readonly VERSION
+# shellcheck disable=SC2034  # Unused variables left for readability
+readonly GIT_BRCH
 
 # Logging configuration
 declare LOG_FILE=""                       # Path to the log file (modifiable)
@@ -63,6 +68,7 @@ default_color() {
 # Sets up variables for foreground, background colors, and formatting styles.
 ##
 init_colors() {
+    # shellcheck disable=SC2034  # Unused variables left for readability
     if tput colors > /dev/null 2>&1; then
         # General text attributes
         RESET=$(default_color sgr0)
@@ -235,7 +241,7 @@ print_log_entry() {
 
     # Always print to the terminal if in an interactive shell
     if is_interactive; then
-        echo -e "${BOLD}${color}[${level}]${RESET}\t[$THISSCRIPT:$lineno]\t$message"
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
         [[ -n "$details" ]] && echo -e "${BOLD}${color}[${level}]${RESET}\t[$THISSCRIPT:$lineno]\tDetails: $details"
     fi
 }
