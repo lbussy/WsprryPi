@@ -38,6 +38,34 @@
     ✓ Logged in as foo
     ```
 - See if we can implement something like daemonize instead of Singleton
+- Add a .wspr-alias file and source it from the .bash_aliases
+- MOTD?
+    ``` bash
+    Linux wpsd 6.1.0-rpi7-rpi-v7 #1 SMP Raspbian 1:6.1.63-1+rpt1 (2023-11-24) armv7l
+    _      _____  _______ 
+    | | /| / / _ \/ __/ _ \
+    | |/ |/ / ___/\ \/ // /
+    |__/|__/_/  /___/____/
+
+    Version Status
+    ---------------
+    • WPSD Digital Voice Dashboard Software:
+        Ver. # 0f0841942a
+    • WPSD Support Utilites and Programs:
+        Ver. # 8382226eec
+    • WPSD Digital Voice and Related Binaries:
+        Ver. # 80c2f986cf
+
+    [?] Your WPSD dashboard can be accesed from:
+        • http://wpsd.local/
+        • http://wpsd/
+        • http://10.0.0.38/
+
+    [i] WPSD command-line tools are all prefixed with "wpsd-".
+        Simply type wpsd- and then the TAB key twice to see a list.
+
+    pi-star@wpsd:~ 
+    ```
 
 ### Fis in this iteration
 
