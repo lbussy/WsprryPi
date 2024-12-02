@@ -1,5 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2034
+#
 # This script is designed for Bash (>= 4.x) and uses Bash-specific features.
 # It is not intended to be POSIX-compliant.
 #

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034
 #
 # This script is designed for Bash (>= 4.x) and uses Bash-specific features.
 # It is not intended to be POSIX-compliant.
@@ -40,6 +41,7 @@
 #
 # @return None (exits the script with an error code).
 ##
+# shellcheck disable=SC2329
 trap_error() {
     local func="${FUNCNAME[1]:-main}"  # Get the calling function name (default: "main")
     local line="$1"                   # Line number where the error occurred
@@ -147,11 +149,12 @@ declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
 #
 # @return None
 ##
+# shellcheck disable=SC2329
 warn() {
     local lineno="${BASH_LINENO[0]}"  # Line number where the warning occurred
     local message="$1"               # Warning message
     shift
-    local details="$@"               # Additional details (optional)
+    local details="$*"               # Additional details (optional)
 
     # Log and print the warning message
     log_message "WARNING" "$message" "$details"
@@ -179,7 +182,7 @@ die() {
     shift
     local message="$1"                  # Error message
     shift
-    local details="$@"                  # Additional details (optional)
+    local details="$*"                  # Additional details (optional)
 
     # Log the fatal error message
     log_message "CRITICAL" "$message" "$details"
@@ -201,6 +204,7 @@ die() {
 # @param $1 The input string to process.
 # @return The modified string with a leading dot, or an error if the input is invalid.
 ##
+# shellcheck disable=SC2329
 add_dot() {
     local input="$1"  # Input string to process
 
@@ -225,6 +229,7 @@ add_dot() {
 # @param $1 The input string to process.
 # @return The modified string without a leading dot, or an error if the input is invalid.
 ##
+# shellcheck disable=SC2329
 remove_dot() {
     local input="$1"  # Input string to process
 
@@ -249,6 +254,7 @@ remove_dot() {
 # @param $1 The input string to process.
 # @return The modified string with a trailing slash, or an error if the input is invalid.
 ##
+# shellcheck disable=SC2329
 add_slash() {
     local input="$1"  # Input string to process
 
@@ -273,6 +279,7 @@ add_slash() {
 # @param $1 The input string to process.
 # @return The modified string without a trailing slash, or an error if the input is invalid.
 ##
+# shellcheck disable=SC2329
 remove_slash() {
     local input="$1"  # Input string to process
 
@@ -642,7 +649,7 @@ main() {
     check_bash_version
     # Logging should go here
     validate_dependencies
-    parse_args $@ 
+    parse_args "$@"
     check_bitness
     check_release
     check_architecture
