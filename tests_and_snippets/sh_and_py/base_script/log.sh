@@ -84,8 +84,14 @@ print_log_entry() {
 
     # Always print to the terminal if in an interactive shell
     if is_interactive; then
+        # Print the main log message
         echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
-        [[ -n "$details" ]] && echo -e "${BOLD}${color}[${level}]${RESET}\t[$THISSCRIPT:$lineno]\tDetails: $details"
+
+        # Print the details if provided, using the EXTENDED log level color and format
+        if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+            IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$lineno]${RESET}\tDetails: $details"
+        fi
     fi
 }
 
