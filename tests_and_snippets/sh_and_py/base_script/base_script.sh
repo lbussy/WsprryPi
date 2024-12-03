@@ -25,7 +25,7 @@
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
-#   - Find a way to show pending / completed actions, e.g.:
+#   - Find a way to show pending / completed actions (look at Fermentrack), e.g.:
 #       - "Start (this command)." message
 #       - "(this command) complete." message
 
@@ -88,6 +88,9 @@ readonly GIT_BRCH="version_files"                                    # Current G
 # supported Bash version, OS versions, and system bitness.
 ##
 
+# Require Internet to run the script
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Set to true if the script requires root privileges
+
 # Require root privileges to run the script
 readonly REQUIRE_SUDO=false  # Set to true if the script requires root privileges
 
@@ -141,13 +144,36 @@ declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
 
 # List of required external dependencies for skeleton
-declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
+declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "curl")
 # List of required external dependencies for logging
 declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami")
 
 ############
 ### Skeleton Functions
 ############
+
+##
+# @brief Check if the system has an internet connection by making an HTTP request.
+# @details Uses curl to send a request to google.com and checks the response status to determine if the system is online.
+#          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
+#
+# @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
+#
+# @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
+##
+check_internet() {
+    # Skip check if REQUIRE_INTERNET is not true
+    if [ "$REQUIRE_INTERNET" != "true" ]; then
+        return
+    fi
+
+    # Check for internet connectivity using curl
+    if curl -s --head http://google.com | grep "HTTP/1\.[01] [23].." > /dev/null; then
+        logD "Internet is available."
+    else
+        die 1 "No Internet connection detected."
+    fi
+}
 
 ##
 # @brief Print a warning message with optional details.
@@ -500,6 +526,7 @@ Environment Variables:
   LOG_FILE                    Path to the log file.
   LOG_LEVEL                   Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
   LOG_TO_FILE                 Whether to log to file (true, false, or unset).
+  REQUIRE_INTERNET            Whether Internet access is required.
 
 Examples:
   1. Run the script in dry-run mode:
@@ -512,6 +539,27 @@ EOF
 
     # Exit with success
     exit 0
+}
+
+##
+# @brief Print the system information to the log.
+# @details Extracts and logs the system's name and version using information
+#          from `/etc/os-release`.
+#
+# @global None
+# @return None
+##
+print_system() {
+    # Extract system name and version from /etc/os-release
+    local system_name
+    system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
+
+    # Check if system_name is empty
+    if [[ -z "$system_name" ]]; then
+        logI "System: Unknown (could not extract system information)."
+    else
+        logI "System: $system_name."
+    fi
 }
 
 ##
@@ -537,19 +585,40 @@ print_version() {
 }
 
 ##
-# @brief Parse command-line arguments.
-# @details Processes the command-line arguments passed to the script. Supports options for
-#          dry-run mode, displaying the script version, and showing the usage message.
+# @brief Parse command-line arguments and set configuration variables.
+##
+# @brief Parse command-line arguments and set configuration variables.
+# @details Processes command-line arguments passed to the script and assigns
+#          values to corresponding global variables.
 #
-# @param $@ The command-line arguments passed to the script.
+# @param[in] "$@" The command-line arguments passed to the script.
 #
-# @global DRY_RUN Sets this variable to true if the dry-run option is specified.
-# @global print_version Function to display the script version and exit.
-# @global usage Function to display the usage message and exit.
+# Supported options:
+# - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
+# - `--version` or `-v`: Display the version information and exit.
+# - `--help` or `-h`: Show the usage information and exit.
+# - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
+# - `--log-level` or `-ll <level>`: Set the logging verbosity level.
+# - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
 #
-# @return None Exits the script with an error if an unknown or unexpected argument is provided.
+# @return
+# - Exits with code 0 on success.
+# - Exits with code 1 if an invalid argument or option is provided.
+#
+# @note
+# - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
+# - Paths provided to `--log-file` are resolved to their absolute forms.
+#
+#
+# @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
+# @global LOG_FILE           Path to the log file.
+# @global LOG_LEVEL          Logging verbosity level.
+# @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
+#
+# @return None Exits with an error if invalid arguments or options are provided.
 ##
 parse_args() {
+    # Local variable declarations
     local arg  # Iterator for arguments
 
     # Iterate through the provided arguments
@@ -565,34 +634,61 @@ parse_args() {
                 ;;
             --help|-h)
                 usage
+                exit 0
                 ;;
             --log-file|-lf)
-                LOG_FILE="$2"
-                shift 2
+                if [[ -n "$2" ]]; then
+                    # Resolve full path and expand '~'
+                    LOG_FILE=$(realpath -m "$2" 2>/dev/null)
+                    if [[ -z "$LOG_FILE" ]]; then
+                        echo "ERROR: Invalid path '$2' for --log-file." >&2
+                        exit 1
+                    fi
+                    LOG_TO_FILE="true"  # Automatically enable logging to file
+                    shift 2
+                else
+                    echo "ERROR: --log-file requires a file path argument." >&2
+                    exit 1
+                fi
                 ;;
             --log-level|-ll)
-                LOG_LEVEL="$2"
-                shift 2
+                if [[ -n "$2" ]]; then
+                    LOG_LEVEL="$2"
+                    shift 2
+                else
+                    echo "ERROR: --log-level requires a level argument." >&2
+                    exit 1
+                fi
                 ;;
             --log-to-file|-tf)
-                LOG_TO_FILE="$2"
-                shift 2
+                if [[ -n "$LOG_FILE" ]]; then
+                    # Skip processing --log-to-file if --log-file is set
+                    echo "INFO: Ignoring --log-to-file because --log-file is set." >&2
+                else
+                    if [[ -n "$2" ]]; then
+                        LOG_TO_FILE="$2"
+                        shift 2
+                    else
+                        echo "ERROR: --log-to-file requires a value (e.g., true/false)." >&2
+                        exit 1
+                    fi
+                fi
                 ;;
             -*)
-                # Handle unknown options
-                echo -e "ERROR: Unknown option: $arg in ${FUNCNAME[0]}" >&2
-                echo -e "Use -h or --help to see available options."
+                echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
                 exit 1
                 ;;
             *)
-                # Handle unexpected arguments
-                echo -e "ERROR: Unexpected argument: $arg in ${FUNCNAME[0]}" >&2
+                echo "ERROR: Unexpected argument '$arg'." >&2
                 exit 1
                 ;;
         esac
-        # Move to the next argument
         shift
     done
+
+    # Export and make relevant global variables readonly
+    readonly DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE USE_LOCAL
+    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE USE_LOCAL
 }
 
 ##
@@ -866,12 +962,12 @@ default_color() {
 # @brief Determine if the script is running in an interactive shell.
 #
 # This function checks if the script is connected to a terminal by testing
-# whether standard output (file descriptor 1) is a terminal.
+# whether standard input and output (file descriptor 1 & 0) is a terminal.
 #
 # @return 0 (true) if the script is running interactively; non-zero otherwise.
 ##
 is_interactive() {
-    [[ -t 1 ]]  # Check if stdout is a terminal
+    [[ -t 1 ]] && [[ -t 0 ]]
 }
 
 ##
@@ -1069,7 +1165,10 @@ main() {
     check_release
     check_architecture
     enforce_sudo
-    print_version true
+    check_internet
+    # Informational/debug lines
+    print_system
+    print_version
 
     # Log script start and system information
     logI "Syten: $(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')."
