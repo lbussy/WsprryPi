@@ -28,8 +28,9 @@
 declare THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use the provided THISSCRIPT or derive from basename
 
 # Logging configuration
-declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
+declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank.
+declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set.
+declare NO_CONSOLE="${NO_CONSOLE:-false}" # Default to false if not set.  Turns off terminal logging.
 
 # Global variable to control file logging
 # LOG_TO_FILE options:
@@ -62,32 +63,15 @@ print_log_entry() {
     local message="$5"
     local details="$6"
 
-    # Determine if logging to file is enabled
-    local should_log_to_file=false
+    # Write to log file if enabled
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
-        should_log_to_file=true
-    elif [[ "${LOG_TO_FILE,,}" == "false" ]]; then
-        should_log_to_file=false
-    else
-        if ! is_interactive; then
-            should_log_to_file=true
-        else
-            should_log_to_file=false
-        fi
+        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$message" >&5
+        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$details" >&5
     fi
 
-    # Log to file if applicable
-    if "$should_log_to_file"; then
-        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$message" >> "$LOG_FILE"
-        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$details" >> "$LOG_FILE"
-    fi
-
-    # Always print to the terminal if in an interactive shell
-    if is_interactive; then
-        # Print the main log message
+    # Write to console if enabled
+    if [[ "${NO_CONSOLE,,}" != "true" ]] && is_interactive; then
         echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
-
-        # Print the details if provided, using the EXTENDED log level color and format
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
             echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$lineno]${RESET}\tDetails: $details"
@@ -116,11 +100,10 @@ prepare_log_context() {
     # Return the pipe-separated timestamp and line number
     echo "$timestamp|$lineno"
 }
-
 ##
 # @brief Log a message with the specified log level.
 #
-# This function logs a message with details such as timestamp, log level, line number, 
+# This function logs a message with details such as timestamp, log level, line number,
 # and optional extended details. It respects the configured log level threshold.
 #
 # @param $1 Log level (e.g., DEBUG, INFO, ERROR).
@@ -131,7 +114,7 @@ prepare_log_context() {
 ##
 log_message() {
     # Convert log level to uppercase for consistency
-    local level="${1^^}"  
+    local level="${1^^}"
     local message="$2"
     local details="$3"
 
@@ -144,8 +127,7 @@ log_message() {
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
-        echo "ERROR: Invalid log level or empty message." >&2
-        return 1
+        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[0]}." >&2 && exit 1
     fi
 
     # Extract log properties for the specified level
@@ -231,42 +213,62 @@ logC() {
 }
 
 ##
-# @brief Ensure the log file exists and is writable.
+# @brief Initialize the log file and ensure it's writable.
 #
-# This function validates that the log directory exists and is writable. If the specified
-# log directory is invalid or inaccessible, it attempts to create the directory. If all
-# else fails, it falls back to creating a temporary log file in `/tmp`.
+# Determines the log file location, ensures the directory exists,
+# and verifies that the log file is writable. Falls back to a temporary log
+# file in `/tmp` if necessary.
+#
+# Global Behavior:
+# - If `LOG_FILE` is not explicitly specified:
+#   - The log file is created in the current user's home directory.
+#   - The default name of the log file is derived from the script's name (without extension),
+#     e.g., `<script_name>.log`.
+#   - If the home directory is unavailable or unwritable, a temporary file is created in `/tmp`.
+#
+# Global Variables:
+#   LOG_FILE (out) - Path to the log file used by the script.
+#   THISSCRIPT (in) - Name of the current script, used to derive default log file name.
+#
+# Environment Variables:
+#   SUDO_USER - Used to determine the home directory of the invoking user.
+#
+# @return void
 ##
 init_log() {
-    # Local variables
     local scriptname="${THISSCRIPT%%.*}"  # Extract script name without extension
     local homepath                        # Home directory of the current user
     local log_dir                         # Directory of the log file
 
-    # Get the home directory of the current user
-    homepath=$(getent passwd "${SUDO_USER:-$(whoami)}" | { IFS=':'; read -r _ _ _ _ _ homedir _; echo "$homedir"; })
+    # Determine home directory
+    homepath=$(getent passwd "${SUDO_USER:-$(whoami)}" | { IFS=':'; read -r _ _ _ _ _ homedir _; echo "$homedir"; }) || homepath="/tmp"
 
-    # Determine the log file location
+    # Set log file path
     LOG_FILE="${LOG_FILE:-$homepath/$scriptname.log}"
-
-    # Extract the log directory from the log file path
     log_dir=$(dirname "$LOG_FILE")
 
-    # Ensure the log directory exists
+    # Ensure log directory exists and is writable
     if [[ ! -d "$log_dir" ]]; then
         echo "ERROR: Log directory does not exist: $log_dir" >&2
-        mkdir -p "$log_dir" || die "Failed to create log directory: $log_dir"
+        if ! mkdir -p "$log_dir"; then
+            echo "ERROR: Failed to create log directory. Falling back to /tmp." >&2
+            LOG_FILE=$(mktemp "/tmp/${scriptname}_log_XXXXXX.log")
+        fi
     fi
 
-    # Check if the log directory is writable
     if [[ ! -w "$log_dir" ]]; then
-        echo "ERROR: Log directory is not writable: $log_dir" >&2
+        echo "ERROR: Log directory is not writable: $log_dir. Falling back to /tmp." >&2
         LOG_FILE=$(mktemp "/tmp/${scriptname}_log_XXXXXX.log")
-        echo "Using fallback log file: $LOG_FILE" >&2
     fi
 
-    # Attempt to create the log file
-    touch "$LOG_FILE" || die "Cannot create log file: $LOG_FILE"
+    # Ensure the log file is writable
+    if ! touch "$LOG_FILE" 2>/dev/null; then
+        echo "ERROR: Cannot create log file: $LOG_FILE. Falling back to /tmp." >&2
+        LOG_FILE=$(mktemp "/tmp/${scriptname}_log_XXXXXX.log")
+    fi
+
+    # Initialize file descriptor for writing
+    exec 5>>"$LOG_FILE" || die "Failed to open $LOG_FILE for writing."
 }
 
 ##
@@ -372,72 +374,149 @@ init_colors() {
     export DOT HHR LHR
 }
 
-# TODO:
+##
+# @brief Toggle the NO_CONSOLE variable on or off.
 #
-# This resides in "skeleton.sh", so merge these choices in
+# This function updates the global NO_CONSOLE variable to either "true" (off)
+# or "false" (on) based on the input argument.
 #
+# @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
+# @return 0 on success, 1 on invalid input.
+##
+toggle_console_log() {
+    local state="${1,,}"  # Convert input to lowercase for consistency
+
+    case "$state" in
+        on)
+            NO_CONSOLE="false"
+            logD "Console logging enabled."
+            ;;
+        off)
+            NO_CONSOLE="true"
+            logD "Console logging disabled."
+            ;;
+        *)
+            logW "ERROR: Invalid argument for toggle_console_log." >&2
+            return 1
+            ;;
+    esac
+
+    export NO_CONSOLE
+    return 0
+}
+
 ##
 # @brief Display usage information for the script.
 #
-# This function provides guidance on how to use the script, including
-# options, environment variables, and examples.
+# Provides guidance on how to use the script, including options, environment
+# variables, default behaviors, and examples.
 ##
 usage() {
     cat <<EOF
 Usage: $THISSCRIPT [options]
 
 Options:
-  -lf, --log-file <path>      Specify the log file location (default: environment variable LOG_FILE or auto-generated).
-  -ll, --log-level <level>    Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  -tf, --log-to-file <bool>   Set whether to log to file (true, false, or unset to auto-detect interactive).
+  -lf, --log-file <path>      Specify the log file location.
+                              Default: User's home directory with the name <script_name>.log,
+                              or a temporary file in /tmp if unavailable.
+  -ll, --log-level <level>    Set the log level. Available levels:
+                              DEBUG, INFO, WARNING, ERROR, CRITICAL.
+                              Default: DEBUG.
+  -tf, --log-to-file <bool>   Set whether to log to a file.
+                              Options: true, false, unset (auto-detect based on interactivity).
+                              Default: unset.
+  -nc, --no-console           Disable console logging.
+                              Default: Console logging is enabled.
   -h, --help                  Display this help message and exit.
 
 Environment Variables:
-  LOG_FILE                    Path to the log file.
-  LOG_LEVEL                   Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  LOG_TO_FILE                 Whether to log to file (true, false, or unset).
+  LOG_FILE                    Specify the log file path. Overrides the default location.
+  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+  LOG_TO_FILE                 Control file logging (true, false, unset).
+  NO_CONSOLE                  Set to "true" to disable console logging.
+
+Defaults:
+  - If no log file is specified, the log file is created in the user's home directory as <script_name>.log.
+  - If the home directory is unavailable or unwritable, a temporary log file is created in /tmp.
 
 Example:
   $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
 EOF
 }
 
-# TODO:
-#
-# This resides in "skeleton.sh", so merge these choices in
-#
 ##
 # @brief Parse command-line options and set corresponding variables.
 #
-# This function processes the script's command-line arguments and sets
-# corresponding global variables.
+# Processes the script's command-line arguments, sets global variables,
+# and validates required arguments for specific options.
+#
+# @param $@ Command-line arguments.
 ##
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -lf|--log-file)
+            --log-file|-lf)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Please provide a valid file path." >&2
+                    exit 1
+                fi
                 LOG_FILE="$2"
                 shift 2
                 ;;
-            -ll|--log-level)
+            --log-level|-ll)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                    exit 1
+                fi
                 LOG_LEVEL="$2"
+                case "$LOG_LEVEL" in
+                    DEBUG|INFO|WARNING|ERROR|CRITICAL) ;;  # Valid levels
+                    *)
+                        echo "ERROR: Invalid log level: $LOG_LEVEL. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                        exit 1
+                        ;;
+                esac
                 shift 2
                 ;;
-            -tf|--log-to-file)
+            --log-to-file|-tf)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false, unset." >&2
+                    exit 1
+                fi
                 LOG_TO_FILE="$2"
+                case "${LOG_TO_FILE,,}" in
+                    true|false|unset) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $LOG_TO_FILE. Valid options are: true, false, unset." >&2
+                        exit 1
+                        ;;
+                esac
                 shift 2
+                ;;
+            --no-console|-nc)
+                NO_CONSOLE="true"
+                shift
                 ;;
             -h|--help)
                 usage
                 exit 0
                 ;;
             *)
-                echo "ERROR: Invalid option '$1'" >&2
-                usage
+                echo "ERROR: Invalid option '$1'. Use -h or --help for usage information." >&2
                 exit 1
                 ;;
         esac
     done
+
+    # Set default values if not provided
+    LOG_FILE="${LOG_FILE:-}"
+    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
+    NO_CONSOLE="${NO_CONSOLE:-false}"
+
+    # Export and make relevant global variables readonly
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL
+    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
 }
 
 ##
@@ -475,13 +554,8 @@ validate_log_level() {
 # @return void
 ##
 setup_logging_environment() {
-    # Initialize terminal colors
     init_colors
-
-    # Initialize logging environment
     init_log
-
-    # Define log properties (severity, colors, and labels)
     declare -gA LOG_PROPERTIES=(
         ["DEBUG"]="DEBUG|${FGCYN}|0"
         ["INFO"]="INFO|${FGGRN}|1"
@@ -490,8 +564,6 @@ setup_logging_environment() {
         ["CRITICAL"]="CRIT|${FGMAG}|4"
         ["EXTENDED"]="EXTD|${FGCYN}|0"
     )
-
-    # Validate the log level and log properties
     validate_log_level
 }
 
@@ -529,6 +601,9 @@ main() {
     logE "This is an error-level message."
     logC "This is a critical-level message."
     logC "This is a critical-level message with extended details." "Additional information about the critical issue."
+    toggle_console_log off
+    logI "This is a message that will only be in the log file."
+    toggle_console_log on
 
     # Log the script completion
     logI "Script execution complete."
