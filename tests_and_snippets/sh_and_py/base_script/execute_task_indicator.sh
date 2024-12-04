@@ -67,10 +67,12 @@ init_colors() {
 ##
 # @brief Print the task status with start and end messages.
 #
-# This function prints the "[ ]" start message, then simulates a task, and finally
-# moves the cursor up and rewrites the line with the "[✔]" end message.
+# This function prints the "[ ]" start message, executes the provided command, 
+# and then moves the cursor up and rewrites the line with either the "[✔]" 
+# or "[✘]" end message depending on the command's success or failure.
 #
-# @param message The task message to display.
+# @param command_text The description of the task.
+# @param command The command to execute.
 ##
 execute_task_indicator() {
     local start_indicator="${FGGLD}[-]${RESET}"
@@ -86,16 +88,17 @@ execute_task_indicator() {
     local fail_pre="Executing:"
     local fail_post="failed."
 
-    # Put consistent single quotes around the comamnd text
+    # Put consistent single quotes around the command text
     command_text="'$command_text'"
 
-    # Set the intial message with $running_pre $command_text $running_post
+    # Set the initial message with $running_pre $command_text $running_post
     status_message="$running_pre $command_text $running_post"
 
     # Print the initial status
     printf "%s %s\n" "$start_indicator" "$status_message"
 
     # Execute the command and capture both stdout and stderr
+    # TODO:  Maybe log this to file only?
     output=$(eval "$command 2>&1")  # Capture both stdout and stderr
 
     # Capture the exit status of the command
@@ -119,12 +122,12 @@ execute_task_indicator() {
 # Initialize terminal colors
 init_colors
 
-# Call the function with the message and the command
+# Example command: Replace with any command you'd like to run
 command="sleep 2 && foo"  # This will fail
 command_text="data processing fail"
 execute_task_indicator "$command_text" "$command"
 
-# Call the function with the message and the command
-command="sleep 2"  # This will fail
+# Example command: Replace with any command you'd like to run
+command="sleep 2"  # This will succeed
 command_text="data processing success"
 execute_task_indicator "$command_text" "$command"
