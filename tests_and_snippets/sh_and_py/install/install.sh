@@ -22,6 +22,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # TODO:
+#   - Change the line number in log_message to be the one calling the message
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
@@ -68,7 +69,8 @@ trap_error() {
 #
 # @global THISSCRIPT The name of the script.
 ##
-declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, script basename, or default to "script.sh"
+declare THISSCRIPT="${THISSCRIPT:-install.sh}" # Use existing value, or default to "install.sh".
+#readonly THISSCRIPT="${THISSCRIPT:-$(basename "$0")}" # Use existing value, or default to script basename.
 
 ##
 # @brief Project metadata constants used throughout the script.
@@ -76,11 +78,8 @@ declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, s
 # versioning, and project details. All are marked as read-only.
 ##
 readonly COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"  # Copyright notice
-readonly PACKAGE="WsprryPi"                                          # Project package name (short)
-readonly PACKAGENAME="Wsprry Pi"                                     # Project package name (formatted)
-readonly OWNER="lbussy"                                              # Project owner or maintainer
 readonly VERSION="1.2.1-version-files+91.3bef855-dirty"              # Current script version
-readonly GIT_BRCH="version_files"                                    # Current Git branch
+declare GIT_BRCH="version_files"                                     # Current Git branch
 
 ##
 # @brief Configuration constants for script requirements and compatibility.
@@ -92,7 +91,8 @@ readonly GIT_BRCH="version_files"                                    # Current G
 readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Set to true if the script requires root privileges
 
 # Require root privileges to run the script
-readonly REQUIRE_SUDO=false  # Set to true if the script requires root privileges
+# Set to true if the script requires root privileges
+declare REQUIRE_SUDO="${REQUIRE_SUDO:-false}"   # Default to false if not specified
 
 # Minimum supported Bash version (set to "none" to disable version checks)
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified
@@ -138,15 +138,25 @@ readonly SUPPORTED_MODELS
 # - "false": Never log to the file
 # - unset: Follow logic defined in the is_interactive() function
 declare LOG_TO_FILE="${LOG_TO_FILE:-}"    # Default to blank if not set
-
 # Logging configuration
 declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
 
+# Glogal variables to control installer
+declare USE_LOCAL="${USE_LOCAL:-false}"         # Default to false if not set
+declare PACKAGE="${PACKAGE:-WsprryPi}"          # Default to WsprryPi if not set
+declare OWNER="${OWNER:-lbussy}"                # Default to lbussy if not set
+declare GIT_BRCH="${OWNER:-version_file}"       # Default if not set
+
+# Required packages
+readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
+
 # List of required external dependencies for skeleton
-declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "curl")
+declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
 # List of required external dependencies for logging
-declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami")
+declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "realpath")
+# List of required external dependencies for installer
+declare DEPENDENCIES+=("dpkg" "git" "dpkg-reconfigure" "curl")
 
 ############
 ### Skeleton Functions
@@ -174,6 +184,7 @@ check_internet() {
         die 1 "No Internet connection detected."
     fi
 }
+
 
 ##
 # @brief Print a warning message with optional details.
@@ -517,24 +528,33 @@ Options:
                               Useful for testing the script without side effects.
   -v, --version               Display the script version and exit.
   -h, --help                  Display this help message and exit.
-  -lf, --log-file <path>      Specify the log file location (default: environment variable LOG_FILE or auto-generated).
+  -lf, --log-file <path>      Specify the log file location.
+                              When set, implies --log-to-file true.
   -ll, --log-level <level>    Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  -tf, --log-to-file <bool>   Set whether to log to file (true, false, or unset to auto-detect interactive).
-  -h, --help                  Display this help message and exit.
+  -tf, --log-to-file <value>  Enable or disable logging to a file explicitly (true/false).
+                              If --log-file is set, this option is ignored.
+  -l, --local                 Enable local mode for installation from a local git repository.
+  -t, --terse                 Enable terse mode. Reduces output verbosity for a quieter run.
 
 Environment Variables:
-  LOG_FILE                    Path to the log file.
+  USE_LOCAL                   Enable local installation mode (equivalent to --local).
+  LOG_FILE                    Path to the log file. Overrides default logging behavior.
   LOG_LEVEL                   Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  LOG_TO_FILE                 Whether to log to file (true, false, or unset).
-  REQUIRE_INTERNET            Whether Internet access is required.
+  LOG_TO_FILE                 Whether to log to a file (true, false, or unset).
+  TERSE                       Enable terse mode (equivalent to --terse).
 
 Examples:
   1. Run the script in dry-run mode:
      $THISSCRIPT --dry-run
   2. Check the script version:
      $THISSCRIPT --version
-  3. Log to /tmp/example.log at INFO level and log to file even if interactive
+  3. Log to /tmp/example.log at INFO level and explicitly log to file:
      $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
+  4. Enable local installation mode:
+     $THISSCRIPT --local
+  5. Run the script in terse mode:
+     $THISSCRIPT --terse
+
 EOF
 
     # Exit with success
@@ -556,36 +576,34 @@ print_system() {
 
     # Check if system_name is empty
     if [[ -z "$system_name" ]]; then
-        logI "System: Unknown (could not extract system information)."
+        logW "System: Unknown (could not extract system information)."
     else
-        logI "System: $system_name."
+        logD "System: $system_name."
     fi
 }
 
 ##
 # @brief Print the script version and optionally log it.
 # @details This function displays the version of the script stored in the global 
-# variable `VERSION` and optionally logs it if an argument is passed equal to "true".
+#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise 
+#          it uses `logI`.
 #
 # @global THISSCRIPT The name of the script.
 # @global VERSION The version of the script.
 #
-# @param $1 (optional) If set to "true", logs the version using logI.
-#
-# @return None (exits the script).
+# @return None
 ##
 print_version() {
-    local log_version="${1:-false}" # Default to false if no argument is passed
+    # Check the name of the calling function
+    local caller="${FUNCNAME[1]}"
 
-    if [[ "$log_version" == "true" ]]; then
-        logI "Running $THISSCRIPT version $VERSION"
-    else
+    if [[ "$caller" == "parse_args" ]]; then
         echo -e "$THISSCRIPT: version $VERSION" # Display the script name and version
+    else
+        logD "Running $THISSCRIPT version $VERSION"
     fi
 }
 
-##
-# @brief Parse command-line arguments and set configuration variables.
 ##
 # @brief Parse command-line arguments and set configuration variables.
 # @details Processes command-line arguments passed to the script and assigns
@@ -600,6 +618,8 @@ print_version() {
 # - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
 # - `--log-level` or `-ll <level>`: Set the logging verbosity level.
 # - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
+# - `--local` or `-l`: Enable local mode.
+# - `--terse` or `-t`: Enable terse mode, reducing output verbosity.
 #
 # @return
 # - Exits with code 0 on success.
@@ -609,11 +629,12 @@ print_version() {
 # - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
 # - Paths provided to `--log-file` are resolved to their absolute forms.
 #
-#
 # @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
 # @global LOG_FILE           Path to the log file.
 # @global LOG_LEVEL          Logging verbosity level.
 # @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
+# @global USE_LOCAL          Boolean flag indicating whether local mode is enabled.
+# @global TERSE              Boolean flag indicating whether terse mode is enabled.
 #
 # @return None Exits with an error if invalid arguments or options are provided.
 ##
@@ -674,6 +695,12 @@ parse_args() {
                     fi
                 fi
                 ;;
+            --local|-l)
+                USE_LOCAL="true"
+                ;;
+            --terse|-t)
+                TERSE="true"
+                ;;
             -*)
                 echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
                 exit 1
@@ -687,8 +714,8 @@ parse_args() {
     done
 
     # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE USE_LOCAL
-    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE USE_LOCAL
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL TERSE
+    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL TERSE
 }
 
 ##
@@ -716,6 +743,54 @@ validate_dependencies() {
 
     if ((missing > 0)); then
         echo -e "ERROR: Missing $missing dependencies in ${FUNCNAME[0]}. Install them and re-run the script."
+        exit 1
+    fi
+}
+
+##
+# @brief Check if the current Bash version meets the minimum required version.
+# @details Compares the current Bash version against a required version specified
+# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
+# the check is skipped.
+#
+# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
+# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
+# @global die Function to handle fatal errors and exit the script.
+#
+# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
+##
+check_bash_version() {
+    # Ensure MIN_BASH_VERSION is defined; default to "none"
+    local required_version="${MIN_BASH_VERSION:-none}"
+
+    # Skip the check if the minimum version is set to "none"
+    if [[ "$required_version" == "none" ]]; then
+        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+        return
+    fi
+
+    # Compare the current Bash version against the required version
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
+         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+          BASH_VERSINFO[1] < ${required_version##*.}))); then
+        die 1 "This script requires Bash version $required_version or newer."
+    fi
+
+    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+}
+
+##
+# @brief Check if the script is running in a Bash shell.
+# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
+# Logs an error message and exits if not running in Bash.
+#
+# @global BASH_VERSION The version of the Bash shell being used.
+#
+# @return None (exits the script if not running in Bash).
+##
+check_bash() {
+    if [ -z "$BASH_VERSION" ]; then
+        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
         exit 1
     fi
 }
@@ -942,6 +1017,9 @@ init_log() {
 
     # Attempt to create the log file
     touch "$LOG_FILE" >&2 || (echo -e "ERROR: Cannot create log file: $LOG_FILE in ${FUNCNAME[0]}" && exit 1)
+
+    readonly LOG_FILE
+    export LOG_FILE
 }
 
 ##
@@ -1102,62 +1180,380 @@ setup_logging_environment() {
 }
 
 ############
-### More Skeleton Functions
+### Install Functions
 ############
 
 ##
-# @brief Check if the current Bash version meets the minimum required version.
-# @details Compares the current Bash version against a required version specified
-# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
-# the check is skipped.
+# @brief Configure local mode or remote mode based on the Git repository context.
+# @details Configures relevant variables for local mode if `USE_LOCAL` is true,
+#          including fetching the package name and branch name from Git.
+#          Sets default remote URLs if `USE_LOCAL` is not set.
 #
-# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
-# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
-# @global die Function to handle fatal errors and exit the script.
+# @global USE_LOCAL           Boolean flag indicating whether local mode is enabled.
+# @global LOCAL_SOURCE_DIR    The root directory of the current Git repository.
+# @global LOCAL_WWW_DIR       Path to the data directory under the Git repo root.
+# @global LOCAL_SCRIPTS_DIR   Path to the scripts directory under the Git repo root.
+# @global GIT_RAW             Base URL for accessing raw files in the repository.
+# @global GIT_API             Base URL for accessing the repository API.
+# @global PACKAGE             The name of the current package (repository name).
+# @global GIT_BRCH            The current branch name in the Git repository.
+# @global THISSCRIPT          The name of the current script.
 #
-# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
+# @return None Exits with an error if `USE_LOCAL` is true and the script is not
+#               run from within a Git repository or if `git` is not available.
 ##
-check_bash_version() {
-    # Ensure MIN_BASH_VERSION is defined; default to "none"
-    local required_version="${MIN_BASH_VERSION:-none}"
+set_parameters() {
+    local script_path package_name branch_name
 
-    # Skip the check if the minimum version is set to "none"
-    if [[ "$required_version" == "none" ]]; then
-        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+    if [[ "$USE_LOCAL" == "true" ]]; then
+        # Set the name of the current script
+        THISSCRIPT=$(basename "$0")
+
+        # Determine the root directory of the current Git repository
+        LOCAL_SOURCE_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
+        if [[ -z "$LOCAL_SOURCE_DIR" ]]; then
+            die 1 "This script must be run from within a Git repository." >&2
+        fi
+
+        # Set directories under the Git repository root
+        LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data"        # Data directory under the Git repo root
+        LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts" # Scripts directory under the Git repo root
+
+        # Get the repository name (package) and current branch name
+        package_name=$(git rev-parse --show-toplevel | xargs basename)
+        branch_name=$(git rev-parse --abbrev-ref HEAD)
+
+        # Set global variables
+        PACKAGE="$package_name"
+        GIT_BRCH="$branch_name"
+
+    else
+        # Default remote URLs for raw files and API access
+        GIT_RAW="https://raw.githubusercontent.com/$OWNER/$PACKAGE"
+        GIT_API="https://api.github.com/repos/$OWNER/$PACKAGE"
+    fi
+
+    # Export and make variables readonly
+    readonly THISSCRIPT GIT_RAW GIT_API LOCAL_SOURCE_DIR LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR PACKAGE GIT_BRCH
+    export THISSCRIPT GIT_RAW GIT_API LOCAL_SOURCE_DIR LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR PACKAGE GIT_BRCH
+}
+
+##
+# @brief Display installation instructions or log the start of the installation in non-interactive or terse mode.
+# @details Provides an overview of the choices the user will encounter during installation
+#          if running interactively and not in terse mode. If non-interactive or terse, skips the printing and logs the start.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global PACKAGE The name of the package being installed.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None Waits for the user to press any key before proceeding if running interactively.
+##
+display_start() {
+    # Check if the script is non-interactive or in terse mode
+    if ! is_interactive || [ "$TERSE" = "true" ]; then
+        logI "$PACKAGE install beginning."
         return
     fi
 
-    # Compare the current Bash version against the required version
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
-          BASH_VERSINFO[1] < ${required_version##*.}))); then
-        die 1 "This script requires Bash version $required_version or newer."
-    fi
+    # Local variable declarations
+    local sp12 sp19 key
 
-    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+    # Add spaces for alignment
+    sp12="$(printf ' %.0s' {1..12})"
+    sp19="$(printf ' %.0s' {1..19})"
+
+    # Clear the screen
+    clear
+
+    # Display instructions
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp12 __          __                          _____ _ $sp19
+$DOT$BGBLK$FGYLW$sp12 \ \        / /                         |  __ (_)$sp19
+$DOT$BGBLK$FGYLW$sp12  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp19
+$DOT$BGBLK$FGYLW$sp12   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp19
+$DOT$BGBLK$FGYLW$sp12    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp19
+$DOT$BGBLK$FGYLW$sp12     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp19
+$DOT$BGBLK$FGYLW$sp12                | |               __/ |          $sp19
+$DOT$BGBLK$FGYLW$sp12                |_|              |___/           $sp19
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+You will be presented with some choices during the install. Most frequently
+you will see a 'yes or no' choice, with the default choice capitalized like
+so: [y/N]. Default means if you hit <enter> without typing anything, you will
+make the capitalized choice, i.e. hitting <enter> when you see [Y/n] will
+default to 'yes.'
+
+Yes/no choices are not case sensitive. However; passwords, system names and
+install paths are. Be aware of this. There is generally no difference between
+'y', 'yes', 'YES', 'Yes', etc.
+
+EOF
+
+    # Wait for user input
+    while true; do
+        read -n 1 -s -r -p "Press any key when you are ready to proceed or 'Q' to quit. " key < /dev/tty
+        echo # Move to the next line
+        case "$key" in
+            [Qq]) 
+                logI "Installation canceled by user."
+                exit 0
+                ;;
+            *) 
+                break
+                ;;
+        esac
+    done
+
+    # Clear the screen again
+    clear
 }
 
 ##
-# @brief Check if the script is running in a Bash shell.
-# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
-# Logs an error message and exits if not running in Bash.
+# @brief Sets the system timezone interactively or logs if already set.
+# @details If the current timezone is not GMT or BST, logs the current date and time,
+#          and exits. Otherwise, prompts the user to confirm or reconfigure the timezone.
 #
-# @global BASH_VERSION The version of the Bash shell being used.
-#
-# @return None (exits the script if not running in Bash).
+# @return None Logs the current timezone or adjusts it if necessary.
 ##
-check_bash() {
-    if [ -z "$BASH_VERSION" ]; then
-        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
-        exit 1
+set_time() {
+    # Declare local variables
+    local current_date tz yn
+
+    # Get the current date and time
+    current_date="$(date)"
+    tz="$(date +%Z)"
+
+    # Log and return if the timezone is not GMT or BST
+    if [ "$tz" != "GMT" ] && [ "$tz" != "BST" ]; then
+        logD "Current time and date: $current_date"
+        return
+    fi
+
+    # Log a warning and return if the script is not running interactively
+    if ! is_interactive; then
+        logW "Timezone detected as $tz, which may need to be updated."
+        return
+    fi
+
+    # Inform the user about the current date and time
+    logI "Timezone detected as $tz, which may need to be updated."
+
+    # Prompt for confirmation or reconfiguration
+    while true; do
+        read -rp "Is this correct? [y/N]: " yn < /dev/tty
+        case "$yn" in
+            [Yy]*) 
+                logI "Timezone confirmed on $current_date"
+                break  # User confirms timezone is correct
+                ;;
+            [Nn]* | *) 
+                dpkg-reconfigure tzdata  # Reconfigure timezone
+                logI "Timezone reconfigured on $current_date"
+                break
+                ;;
+        esac
+    done
+}
+
+##
+# @brief Check if the snd_bcm2835 module is available and blacklist it if necessary.
+# @details Checks if the snd_bcm2835 module is present on the system and if it is not
+#          already blacklisted, it adds it to the blacklist and sets the REBOOT flag.
+#
+# @global REBOOT The flag indicating if a reboot is required.
+#
+# @return 0 If the module is available and blacklisted (or already blacklisted).
+# @return 1 If the module is not available, and processing is skipped.
+##
+check_snd_bcm2835_status() {
+    # Declare local variables
+    local module="snd_bcm2835"
+    local blacklist_file="/etc/modprobe.d/alsa-blacklist.conf"
+
+    # Check if the module exists in the kernel
+    if ! modinfo "$module" &>/dev/null; then
+        return # Skip further processing if the module is not available
+    fi
+
+    # Check if the module is blacklisted
+    if grep -q "blacklist $module" "$blacklist_file" 2>/dev/null; then
+        logD "Module $module is already blacklisted in $blacklist_file."
+    else
+        # Blacklist the module if it is not already blacklisted
+        echo "blacklist $module" >> "$blacklist_file"
+        REBOOT="true"
+        readonly REBOOT  # Mark REBOOT as readonly
+        export REBOOT    # Export REBOOT to make it available to child processes
+        
+        # If TERSE mode is enabled, show a short warning
+        if [ "$TERSE" = "true" ]; then
+            logW "Module $module has been blacklisted. A reboot is required for changes to take effect."
+        else
+            # Display detailed message for non-terse mode
+            cat << EOF
+
+*Important Note:*
+
+Wsprry Pi uses the same hardware as your Raspberry Pi's sound
+system to generate radio frequencies. This soundcard has been
+disabled. You must reboot the Pi after this install completes
+for this to take effect:
+
+EOF
+            read -rp "Press any key to continue." < /dev/tty
+            echo
+        fi
+    fi
+
+    return 0
+}
+
+##
+# @brief Executes a command silently and logs results.
+#
+# @param[in] command Command to execute.
+#
+# @return Returns 0 for success, 1 for failure.
+##
+run_command() {
+    local command="$1"
+
+    if eval "$command" &>/dev/null; then
+        return 0
+    else
+        return 1
     fi
 }
+
+##
+# @brief Installs or upgrades all packages in the APTPACKAGES list.
+#
+# @details
+#   Updates the package list and resolves broken dependencies before proceeding.
+#
+# @return Logs the success or failure of each operation.
+##
+install_update_packages() {
+    local package
+
+    logI "Updating local apt cache."
+
+    # Update package list and fix broken installs
+    logI "Updating and managing required packages (this may take a few minutes)."
+    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
+        logE "Failed to update package list or fix broken installs."
+        return 1
+    fi
+
+    # Install or upgrade each package in the list
+    for package in "${APTPACKAGES[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
+                logW "Failed to upgrade package: $package. Continuing with the next package."
+            fi
+        else
+            if ! run_command "sudo apt-get install -y $package"; then
+                logW "Failed to install package: $package. Continuing with the next package."
+            fi
+        fi
+    done
+
+    logI "Package Installation Summary: All operations are complete."
+    return 0
+}
+
+##
+# @brief Finalize the script execution and display completion details.
+# @details Displays reboot instructions if required and provides details about the WSPR daemon.
+#          Skips the message if the script is running in non-interactive mode or terse mode.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global REBOOT Indicates whether a reboot is required.
+# @global VERSION The release version of the software.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None
+##
+finish_script() {
+    # Declare local variables
+    local sp7 sp11 sp18 sp28 sp49 rebootmessage
+
+    # Check for REBOOT first, and then handle TERSE condition
+    if [ "$REBOOT" = "false" ]; then
+        if ! is_interactive || [ "$TERSE" = "true" ]; then
+            logI "$PACKAGE install complete."
+            return
+        fi
+    elif [ "$REBOOT" = "true" ]; then
+        if ! is_interactive; then
+            logW "$PACKAGE install complete. A reboot is necessary to complete functionality."
+            return
+        elif [ "$TERSE" = "true" ]; then
+            logW "$PACKAGE install complete. A reboot is necessary to complete functionality."
+            
+            # Skip prompting for a reboot in terse mode and just return
+            return
+        else
+            # Prompt for reboot in non-terse mode
+            echo "A reboot is required to complete functionality."
+            read -rp "Reboot now? [Y/n]: " reboot_choice < /dev/tty
+            case "$reboot_choice" in
+                [Yy]* | "")  # Default to yes
+                    logI "Rebooting the system as requested."
+                    sudo reboot
+                    ;;
+                *)
+                    logI "Reboot deferred by the user."
+                    ;;
+            esac
+            return
+        fi
+    fi  # End of REBOOT check
+
+    # Final check for TERSE and return if true
+    if [ "$TERSE" = "true" ]; then
+        logI "$PACKAGE install complete."
+        return
+    fi
+
+    # Add spaces for formatting
+    sp7="$(printf ' %.0s' {1..7})"
+    sp11="$(printf ' %.0s' {1..11})"
+    sp18="$(printf ' %.0s' {1..18})"
+    sp28="$(printf ' %.0s' {1..28})"
+    sp49="$(printf ' %.0s' {1..49})"
+
+    # Display the completion message
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
+$DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
+$DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
+$DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
+$DOT$BGBLK$FGYLW$sp49|_|$sp28
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+The WSPR daemon has started.
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
+                  -or- : http://$(hostname).local/wspr
+ - Release version     : $VERSION
+$rebootmessage
+Happy DXing!
+EOF
+}
+
+############
+### Main Functions
+############
 
 # Main function
 main() {
     # Perform essential checks
     parse_args "$@"
     validate_dependencies
+    set_parameters
     setup_logging_environment
     check_bash
     check_bash_version
@@ -1170,19 +1566,20 @@ main() {
     print_system
     print_version
 
-    # Log script start and system information
-    logI "System: $(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')."
-    logI "Script '$THISSCRIPT' started."
+    # Script start
+    display_start
+    set_time
+    install_update_packages
 
-    # Example log entries for demonstration purposes
-    logD "This is a debug-level message."
-    logW "This is a warning-level message."
-    logE "This is an error-level message."
-    logC "This is a critical-level message."
-    logC "This is a critical-level message with extended details." "Additional information about the critical issue."
+    # do_service "wspr" "" "/usr/local/bin" # Install/upgrade wspr daemon
+    # do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
+    # do_www "/var/www/html/wspr" "$LOCAL_WWW_DIR" # Download website
+    # do_apache_setup
 
-    # Log script completion
-    logI "Script '$THISSCRIPT' complete."
+    check_snd_bcm2835_status
+
+    # Script complete
+    finish_script
 }
 
 # Run the main function and exit with its return status
