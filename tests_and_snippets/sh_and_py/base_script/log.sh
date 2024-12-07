@@ -21,26 +21,70 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ############
+### Script Description
+############
+##
+## @file
+## @brief Script to configure global logging settings for WsprryPi.
+##
+## This script initializes global logging variables and settings required for the WsprryPi application.
+## It also ensures that required dependencies are declared for runtime checks.
+##
+
+############
 ### Global Logging Declarations
 ############
 
-# Constants for the script
-declare THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use the provided THISSCRIPT or derive from basename
+##
+## @brief The name of the current script.
+##
+## Defaults to the script's basename unless overridden by an external variable.
+##
+declare THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"
 
-# Logging configuration
-declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank.
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set.
-declare NO_CONSOLE="${NO_CONSOLE:-false}" # Default to false if not set.  Turns off terminal logging.
+##
+## @brief Path to the log file.
+##
+## Specifies where logs will be stored. If unset, no logging to file is performed.
+##
+declare LOG_FILE="${LOG_FILE:-}"
 
-# Global variable to control file logging
-# LOG_TO_FILE options:
-# - "true": Always log to the file
-# - "false": Never log to the file
-# - unset: Follow logic defined in the is_interactive() function
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"    # Default to blank if not set
+##
+## @brief Specifies the logging verbosity level.
+##
+## Default value is "DEBUG" unless overridden by an external variable.
+##
+declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
 
-# List of required external dependencies
-declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami")
+##
+## @brief Flag to disable console logging.
+##
+## Possible values:
+## - "true": Disables logging to the terminal.
+## - "false": Enables logging to the terminal (default).
+##
+declare NO_CONSOLE="${NO_CONSOLE:-false}"
+
+##
+## @brief Controls whether logs are written to a file.
+##
+## Possible values:
+## - "true": Always log to the file.
+## - "false": Never log to the file.
+## - unset: Follow the logic defined in the `is_interactive()` function.
+##
+declare LOG_TO_FILE="${LOG_TO_FILE:-}"
+
+############
+### Dependencies
+############
+
+##
+## @brief List of external commands required by the script.
+##
+## These dependencies must be available for the script to execute successfully.
+##
+declare DEPENDENCIES=("getent" "date" "mktemp" "printf" "whoami")
 
 ############
 ### Logging Functions
@@ -95,7 +139,7 @@ prepare_log_context() {
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
     # Retrieve the line number of the caller
-    lineno="${BASH_LINENO[0]}"
+    lineno="${BASH_LINENO[2]}"
 
     # Return the pipe-separated timestamp and line number
     echo "$timestamp|$lineno"
