@@ -595,34 +595,31 @@ check_bash() {
 }
 
 ##
-# @brief Ensure the script is run with appropriate privileges based on REQUIRE_SUDO.
-# @details Validates whether the script is executed under the correct privilege conditions:
-#          - If REQUIRE_SUDO is true, the script must be run with `sudo` and not directly as root.
-#          - If REQUIRE_SUDO is false, the script must not be run as root or with `sudo`.
+# @brief Enforce that the script is run directly with `sudo`.
 #
-# @global REQUIRE_SUDO A boolean indicating whether the script requires `sudo` privileges.
-# @global EUID The effective user ID of the user running the script.
-# @global die Function to handle critical errors and terminate the script.
+# This function ensures the script is executed with `sudo` privileges and not:
+# - From a `sudo su` shell.
+# - As the root user directly (e.g., logged in as root).
 #
-# @return None Exits the script with an error if the privilege requirements are not met.
+# @returns None
+# @exit Exits with status 1 if the script is not executed correctly.
 ##
 enforce_sudo() {
-    # Check if the script requires sudo privileges
-    if [[ "$REQUIRE_SUDO" == true ]]; then
-        # Ensure the script is not being run directly as root
-        if [[ "$EUID" -eq 0 && -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges but should not be run as the root user directly."
-        fi
-
-        # Ensure the script is being run with sudo
-        if [[ -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges. Please re-run using 'sudo'."
-        fi
+    if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
+        # The script was invoked directly with `sudo`
+        return
+    elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
+        # The script is running as root, but within a `sudo su` shell
+        die 1 "This script requires 'sudo' privileges but should not be run from a 'sudo su' shell." \
+              "Please run it directly using 'sudo scriptname'."
+    elif [[ "$EUID" -eq 0 ]]; then
+        # The script is running as root directly (e.g., logged in as root)
+        die 1 "This script requires 'sudo' privileges but should not be run as the root user directly." \
+              "Please run it directly using 'sudo scriptname'."
     else
-        # Ensure the script is not being run as root
-        if [[ "$EUID" -eq 0 ]]; then
-            die 1 "This script should not be run as root. Avoid using 'sudo'."
-        fi
+        # The script is not running with sufficient privileges
+        die 1 "This script requires 'sudo' privileges." \
+              "Please re-run it using 'sudo scriptname'."
     fi
 }
 
