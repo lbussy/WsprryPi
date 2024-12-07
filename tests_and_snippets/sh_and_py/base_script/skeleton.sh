@@ -136,9 +136,22 @@ readonly SUPPORTED_MODELS
 
 ##
 # @brief Required dependencies.
-# @details Lists the external commands the script depends on.
+#
+# @details
+# This section lists the external commands required by the script for proper execution.
+# The listed dependencies must be available in the system's PATH for the script to function
+# as intended. Missing dependencies may cause runtime errors.
+#
+# @var DEPENDENCIES
+# @type array
+# @default ("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
+#
+# @note
+# Ensure all required commands are included in this list. Use a dependency-checking
+# function to verify their availability at runtime.
+#
+# @todo Check this list for completeness and update as needed.
 ##
-# TODO: Check these dependencies for completeness.
 declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
 
 ##
