@@ -20,11 +20,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# TODO:
-#   - Remove tags and metadata if printing as an installer
-#       - Add colorized "|||" to beginning of line
-#   - Remove line erasure on execution of command
-
 ############
 ### Script Description
 ############
@@ -89,7 +84,47 @@ declare LOG_TO_FILE="${LOG_TO_FILE:-}"
 ##
 ## These dependencies must be available for the script to execute successfully.
 ##
-declare DEPENDENCIES=("getent" "date" "mktemp" "printf" "whoami")
+declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "tput" "mkdir" "touch" "cat" "echo")
+
+##
+# @brief Array of critical system files to check for availability.
+# @details These files must exist and be readable for the script to function properly.
+##
+declare SYSTEM_READS+=(
+    "/etc/os-release"
+    "/proc/device-tree/compatible"
+)
+
+##
+# @brief Array of required environment variables.
+#
+# This array specifies the environment variables that the script requires
+# to function correctly. The `validate_env_vars` function checks for their
+# presence during initialization.
+#
+# Environment Variables:
+#   - SUDO_USER: Identifies the user who invoked the script using sudo.
+#   - HOME: Specifies the home directory of the current user.
+#   - COLUMNS: Defines the width of the terminal, used for formatting.
+##
+declare -a ENV_VARS+=(
+    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
+    "HOME"       # Home directory of the current user
+    "COLUMNS"    # Terminal width for formatting
+)
+
+##
+# @brief Set a default value for terminal width if COLUMNS is unset.
+#
+# The `COLUMNS` variable specifies the width of the terminal in columns.
+# If not already set, this line assigns a default value of 80 columns.
+# This ensures the script functions correctly in non-interactive environments
+# where `COLUMNS` might not be automatically defined.
+#
+# Environment Variable:
+#   COLUMNS - Represents the terminal width. Can be overridden externally.
+##
+COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 
 ############
 ### Logging Functions
@@ -116,24 +151,25 @@ print_log_entry() {
     # Write to log file if enabled
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+            # Use CRITICAL for the main message
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+
+            # Use EXTENDED for details
             IFS="|" read -r extended_label _ _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            printf "[%s]\t[%s]\t[%s/%s():%d]\t%s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
-            printf "[%s]\t[%s]\t[%s/%s():%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+            printf "[%s]\t[%s]\t[%s/%s:%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
         else
-            printf "[%s]\t[%s]\t[%s/%s():%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
-            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s/%s():%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+            # Standard log entry without extended details
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
         fi
     fi
 
     # Write to console if enabled
     if [[ "${NO_CONSOLE,,}" != "true" ]] && is_interactive; then
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname:$lineno]${RESET}\t$message"
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT/$funcname():$lineno]${RESET}\t$message"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT/$funcname():$lineno]${RESET}\tDetails: $details"
-        else
-            echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname():$lineno]${RESET}\t$message"
-            [[ -n "$details" ]] && echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname():$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$funcname/$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -148,20 +184,22 @@ print_log_entry() {
 prepare_log_context() {
     # Local variables for timestamp and line number
     local timestamp
+    local funcname
     local lineno
 
     # Generate the current timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
-    # Retrieve the function of the caller
-    lineno="${BASH_LINENO[2]}"
+    # Retrieve the calling function name
+    funcname=${FUNCNAME[3]}
 
     # Retrieve the line number of the caller
-    funcname="${FUNCNAME[0]}"
+    lineno="${BASH_LINENO[3]}"
 
     # Return the pipe-separated timestamp and line number
     echo "$timestamp|$funcname|$lineno"
 }
+
 ##
 # @brief Log a message with the specified log level.
 #
@@ -181,15 +219,15 @@ log_message() {
     local details="$3"
 
     # Context variables for logging
-    local context timestamp lineno custom_level color severity config_severity
+    local context timestamp funcname lineno custom_level color severity config_severity
 
-    # Generate context (timestamp, funcname, and line number)
+    # Generate context (timestamp and line number)
     context=$(prepare_log_context)
     IFS="|" read -r timestamp funcname lineno <<< "$context"
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
-        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[0]}." >&2 && exit 1
+        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[2]}() at line ${BASH_LINENO[1]}." >&2 && die
     fi
 
     # Extract log properties for the specified level
@@ -251,7 +289,7 @@ logW() {
 ##
 # @brief Log a message at the ERROR level.
 #
-# This function logs messages with the ERROR log level, used to report 
+# This function logs messages with the ERROR log level, used to report
 # significant issues that may impact functionality.
 #
 # @param $1 Main log message.
@@ -264,7 +302,7 @@ logE() {
 ##
 # @brief Log a message at the CRITICAL level.
 #
-# This function logs messages with the CRITICAL log level, used for 
+# This function logs messages with the CRITICAL log level, used for
 # severe issues that require immediate attention or could cause system failure.
 #
 # @param $1 Main log message.
@@ -351,12 +389,12 @@ default_color() {
 # @brief Determine if the script is running in an interactive shell.
 #
 # This function checks if the script is connected to a terminal by testing
-# whether standard output (file descriptor 1) is a terminal.
+# whether standard input and output (file descriptor 1 & 0) is a terminal.
 #
 # @return 0 (true) if the script is running interactively; non-zero otherwise.
 ##
 is_interactive() {
-    [[ -t 1 ]]  # Check if stdout is a terminal
+    [[ -t 1 ]] && [[ -t 0 ]]
 }
 
 ##
@@ -385,6 +423,8 @@ init_colors() {
         NO_BLINK=$(default_color sgr0)
         ITALIC=$(default_color sitm)
         NO_ITALIC=$(default_color ritm)
+        MOVE_UP=$(default_color cuu 1)
+        CLEAR_LINE=$(default_color el)
 
         # Foreground colors
         FGBLK=$(default_color setaf 0)
@@ -396,6 +436,7 @@ init_colors() {
         FGCYN=$(default_color setaf 6)
         FGWHT=$(default_color setaf 7)
         FGRST=$(default_color setaf 9)
+        FGGLD=$(default_color setaf 214)
 
         # Background colors
         BGBLK=$(default_color setab 0)
@@ -414,24 +455,26 @@ init_colors() {
         LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))"
     else
         # Fallback for unsupported or non-interactive terminals
-        RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""
-        NO_UNDERLINE=""; BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""
+        RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""; NO_UNDERLINE="";
+        BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""; MOVE_UP=""; CLEAR_LINE=""
         FGBLK=""; FGRED=""; FGGRN=""; FGYLW=""; FGBLU=""
-        FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""
+        FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""; FGGLD=""
         BGBLK=""; BGRED=""; BGGRN=""; BGYLW=""
         BGBLU=""; BGMAG=""; BGCYN=""; BGWHT=""; BGRST=""
         DOT=""; HHR=""; LHR=""
     fi
 
     # Set variables as readonly
-    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    readonly ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC
+    readonly NO_ITALIC MOVE_UP CLEAR_LINE
+    readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     readonly DOT HHR LHR
 
     # Export variables globally
-    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    export ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC
+    export NO_ITALIC MOVE_UP CLEAR_LINE
+    export FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     export BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     export DOT HHR LHR
 }
@@ -450,21 +493,74 @@ toggle_console_log() {
 
     case "$state" in
         on)
-            NO_CONSOLE="false"
             logD "Console logging enabled."
+            NO_CONSOLE="false"
             ;;
         off)
             NO_CONSOLE="true"
             logD "Console logging disabled."
             ;;
         *)
-            logW "Invalid argument for toggle_console_log." >&2
+            logW "ERROR: Invalid argument for toggle_console_log." >&2
             return 1
             ;;
     esac
 
-    export NO_CONSOLE
     return 0
+}
+
+##
+# @brief Validate the logging configuration, including LOG_LEVEL.
+#
+# This function checks whether the current LOG_LEVEL is valid. If LOG_LEVEL is not
+# defined in the `LOG_PROPERTIES` associative array, it defaults to "INFO" and
+# displays a warning message.
+#
+# @return void
+##
+validate_log_level() {
+    # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
+    if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]}" ]]; then
+        echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && die
+    fi
+}
+
+##
+# @brief Sets up the logging environment for the script.
+#
+# This function initializes terminal colors, configures the logging environment,
+# defines log properties, and validates both the log level and properties.
+# It must be called before any logging-related functions.
+#
+# @details
+# - Initializes terminal colors using `init_colors`.
+# - Sets up the log file and directory using `init_log`.
+# - Defines global log properties (`LOG_PROPERTIES`), including severity levels, colors, and labels.
+# - Validates the configured log level and ensures all required log properties are defined.
+#
+# @note This function should be called once during script initialization.
+#
+# @return void
+##
+setup_logging_environment() {
+    # Initialize terminal colors
+    init_colors
+
+    # Initialize logging environment
+    init_log
+
+    # Define log properties (severity, colors, and labels)
+    declare -gA LOG_PROPERTIES=(
+        ["DEBUG"]="DEBUG|${FGCYN}|0"
+        ["INFO"]="INFO|${FGGRN}|1"
+        ["WARNING"]="WARN|${FGYLW}|2"
+        ["ERROR"]="ERROR|${FGRED}|3"
+        ["CRITICAL"]="CRIT|${FGMAG}|4"
+        ["EXTENDED"]="EXTD|${FGCYN}|0"
+    )
+
+    # Validate the log level and log properties
+    validate_log_level
 }
 
 ##
@@ -641,9 +737,96 @@ die() {
 }
 
 ##
+# @brief Check for required dependencies and report any missing ones.
+# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
+# checking if each one is installed. Logs missing dependencies and exits the script
+# with an error code if any are missing.
+#
+# @global DEPENDENCIES Array of required dependencies.
+# @global log_message Function to log messages at various severity levels.
+# @global die Function to handle critical errors and exit.
+#
+# @return None (exits the script if dependencies are missing).
+##
+validate_dependencies() {
+    local missing=0  # Counter for missing dependencies
+    local dep        # Iterator for dependencies
+
+    for dep in "${DEPENDENCIES[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            printf "ERROR: Missing dependency: %s\n" "$dep" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing $missing dependencies. Install them and re-run the script."
+    fi
+}
+
+##
+# @brief Check the availability of critical system files.
+# @details Verifies that each file listed in the `SYSTEM_READS` array exists and is readable.
+# Logs an error for any missing or unreadable files and exits the script if any issues are found.
+#
+# @global SYSTEM_READS Array of critical system file paths to check.
+# @global logE Function to log error messages.
+# @global die Function to handle critical errors and exit.
+#
+# @return None Exits the script if any required files are missing or unreadable.
+##
+validate_system_reads() {
+    local missing=0  # Counter for missing or unreadable files
+    local file       # Iterator for files
+
+    for file in "${SYSTEM_READS[@]}"; do
+        if [[ ! -r "$file" ]]; then
+            printf "ERROR: Missing or unreadable file: %s\n" "$file" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
+    fi
+}
+
+##
+# @brief Validate the existence of required environment variables.
+#
+# This function checks if the environment variables specified in the ENV_VARS array
+# are set. Logs any missing variables and exits the script if any are missing.
+#
+# Global Variables:
+#   ENV_VARS - Array of required environment variables.
+#
+# @return void
+##
+validate_env_vars() {
+    local missing=0  # Counter for missing environment variables
+    local var        # Iterator for environment variables
+
+    for var in "${ENV_VARS[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            printf "ERROR: Missing environment variable: %s\n" "$var" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die "Missing $missing required environment variables. Ensure they are set and re-run the script." 1
+    fi
+}
+
+##
 # @brief Main function to initialize settings and execute script logic.
 ##
 main() {
+    # Check environment
+    validate_dependencies
+    validate_system_reads
+    validate_env_vars
+
     # Parse command-line arguments
     parse_args "$@"
 
