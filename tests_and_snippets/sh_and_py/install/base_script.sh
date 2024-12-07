@@ -164,6 +164,7 @@ readonly SUPPORTED_MODELS
 declare DEPENDENCIES=(
     "awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename"
     "getent" "date" "mktemp" "printf" "whoami" "mkdir" "touch" "echo"
+    "dpkg" "git" "dpkg-reconfigure" "curl" "realpath"
 )
 
 ##
@@ -234,6 +235,16 @@ readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to false if not
 # @details Set to `true` to enable stack trace logging for warnings.
 ##
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set
+
+##
+# @brief List of required APT packages for the script.
+# @details Defines the packages required for the script's proper functionality.
+#          Packages should be available in the system's default package manager.
+#
+# @type string
+# @global readonly APTPACKAGES
+##
+readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
 
 ############
 ### Logging Declarations
@@ -1586,12 +1597,14 @@ parse_args() {
                 usage
                 ;;
             --log-file|-lf)
-                if [[ -z "$2" || "$2" =~ ^- ]]; then
-                    echo "ERROR: Missing argument for $1. Please provide a valid file path." >&2
+                # Resolve full path and expand '~'
+                LOG_FILE=$(realpath -m "$2" 2>/dev/null)
+                if [[ -z "$LOG_FILE" ]]; then
+                    echo "ERROR: Invalid path '$2' for --log-file." >&2
                     exit 1
                 fi
-                LOG_FILE="$2"
-                shift
+                LOG_TO_FILE="true"  # Automatically enable logging to file
+                shift 2
                 ;;
             --log-level|-ll)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
