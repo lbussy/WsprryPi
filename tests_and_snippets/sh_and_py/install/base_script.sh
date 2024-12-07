@@ -1681,9 +1681,9 @@ main() {
 
     # Check how the script was executed
     if check_execution_mode; then
-        logI "The script is being piped through bash."
+        echo "The script is being piped through bash."
     else
-        logI "The script is either run directly or in an unusual way."
+        echo "The script is either run directly or in an unusual way."
     fi
 
     # Example log entries for demonstration purposes
