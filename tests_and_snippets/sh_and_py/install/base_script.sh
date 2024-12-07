@@ -804,73 +804,6 @@ print_version() {
 }
 
 ##
-# @brief Print the task status with start and end messages.
-# @details Displays a visual indicator of the task's execution status.
-#          Shows "[✔]" for success or "[✘]" for failure and logs the result.
-#          Temporarily disables console logging during execution.
-#
-# @param[in] command_text The description of the task to display.
-# @param[in] command The command to execute.
-##
-execute_task() {
-    # Local variable declarations
-    local start_indicator="${FGGLD}[-]${RESET}"
-    local end_indicator="${FGGRN}[✔]${RESET}"
-    local fail_indicator="${FGRED}[✘]${RESET}"
-    local status_message
-    local command_text="$1"  # Task description
-    local command="$2"       # Command to execute
-    local running_pre="Executing:"
-    local running_post="running."
-    local pass_pre="Executing:"
-    local pass_post="completed."
-    local fail_pre="Executing:"
-    local fail_post="failed."
-    local previous_value="$NO_CONSOLE"
-
-    # Ensure consistent single quotes around the command text
-    command_text="'$command_text'"
-
-    # Set the initial message with $running_pre $command_text $running_post
-    status_message="$running_pre $command_text $running_post"
-
-    # Temporarily disable console logging
-    toggle_console_log "off"
-
-    # Print the initial status
-    printf "%s %s\n" "$start_indicator" "$status_message"
-    logI "$status_message"
-
-    # Execute the command and capture both stdout and stderr
-    local output
-    output=$(eval "$command" 2>&1)  # Capture both stdout and stderr
-
-    # Capture the exit status of the command
-    local exit_status=$?
-
-    # Move the cursor up and clear the line before printing the final status
-    printf "%s%s" "${MOVE_UP}" "${CLEAR_LINE}"
-
-    # Determine the result of the command execution
-    if [[ $exit_status -eq 0 ]]; then
-        # Command succeeded
-        status_message="$pass_pre $command_text $pass_post"
-        printf "%s %s\n" "$end_indicator" "$status_message"
-        logI "$status_message"
-    else
-        # Command failed
-        status_message="$fail_pre $command_text $fail_post"
-        printf "%s %s\n" "$fail_indicator" "$status_message"
-        logE "$status_message"
-    fi
-
-    # Restore console logging if it was previously enabled
-    if [[ "${previous_value,,}" == "false" ]]; then
-        toggle_console_log "on"
-    fi
-}
-
-##
 # @brief Check for required dependencies and report any missing ones.
 # @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
 # checking if each one is installed. Logs missing dependencies and exits the script
@@ -1387,6 +1320,77 @@ setup_logging_environment() {
 
     # Validate the log level and log properties
     validate_log_level
+}
+
+############
+### Task Execution Functions
+############
+
+##
+# @brief Print the task status with start and end messages.
+# @details Displays a visual indicator of the task's execution status.
+#          Shows "[✔]" for success or "[✘]" for failure and logs the result.
+#          Temporarily disables console logging during execution.
+#
+# @param[in] command_text The description of the task to display.
+# @param[in] command The command to execute.
+##
+execute_task() {
+    # Local variable declarations
+    local start_indicator="${FGGLD}[-]${RESET}"
+    local end_indicator="${FGGRN}[✔]${RESET}"
+    local fail_indicator="${FGRED}[✘]${RESET}"
+    local status_message
+    local command_text="$1"  # Task description
+    local command="$2"       # Command to execute
+    local running_pre="Executing:"
+    local running_post="running."
+    local pass_pre="Executing:"
+    local pass_post="completed."
+    local fail_pre="Executing:"
+    local fail_post="failed."
+    local previous_value="$NO_CONSOLE"
+
+    # Ensure consistent single quotes around the command text
+    command_text="'$command_text'"
+
+    # Set the initial message with $running_pre $command_text $running_post
+    status_message="$running_pre $command_text $running_post"
+
+    # Temporarily disable console logging
+    toggle_console_log "off"
+
+    # Print the initial status
+    printf "%s %s\n" "$start_indicator" "$status_message"
+    logI "$status_message"
+
+    # Execute the command and capture both stdout and stderr
+    local output
+    output=$(eval "$command" 2>&1)  # Capture both stdout and stderr
+
+    # Capture the exit status of the command
+    local exit_status=$?
+
+    # Move the cursor up and clear the line before printing the final status
+    printf "%s%s" "${MOVE_UP}" "${CLEAR_LINE}"
+
+    # Determine the result of the command execution
+    if [[ $exit_status -eq 0 ]]; then
+        # Command succeeded
+        status_message="$pass_pre $command_text $pass_post"
+        printf "%s %s\n" "$end_indicator" "$status_message"
+        logI "$status_message"
+    else
+        # Command failed
+        status_message="$fail_pre $command_text $fail_post"
+        printf "%s %s\n" "$fail_indicator" "$status_message"
+        logE "$status_message"
+    fi
+
+    # Restore console logging if it was previously enabled
+    if [[ "${previous_value,,}" == "false" ]]; then
+        toggle_console_log "on"
+    fi
 }
 
 ############
