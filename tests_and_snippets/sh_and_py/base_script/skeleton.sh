@@ -56,7 +56,7 @@ trap_error() {
 # @brief Logging-related constants for the script.
 # @details Sets the script name (`THISSCRIPT`) based on the current environment.
 # If `THISSCRIPT` is already defined, its value is retained; otherwise, it is set
-# to the basename of the script or defaults to "script.sh".
+# to the basename of the script.
 #
 # @global THISSCRIPT The name of the script.
 ##
@@ -144,7 +144,7 @@ readonly SUPPORTED_MODELS
 #
 # @var DEPENDENCIES
 # @type array
-# @default ("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
+# @default
 #
 # @note
 # Ensure all required commands are included in this list. Use a dependency-checking
@@ -152,7 +152,45 @@ readonly SUPPORTED_MODELS
 #
 # @todo Check this list for completeness and update as needed.
 ##
-declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
+declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename")
+
+##
+# @brief Array of required environment variables.
+#
+# This array specifies the environment variables that the script requires
+# to function correctly. The `validate_env_vars` function checks for their
+# presence during initialization.
+#
+# Environment Variables:
+#   - SUDO_USER: Identifies the user who invoked the script using sudo.
+#   - HOME: Specifies the home directory of the current user.
+#   - COLUMNS: Defines the width of the terminal, used for formatting.
+##
+declare -a ENV_VARS=(
+    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
+    "HOME"       # Home directory of the current user
+    "COLUMNS"    # Terminal width for formatting
+)
+
+##
+# @brief Set a default value for terminal width if COLUMNS is unset.
+#
+# The `COLUMNS` variable specifies the width of the terminal in columns.
+# If not already set, this line assigns a default value of 80 columns.
+# This ensures the script functions correctly in non-interactive environments
+# where `COLUMNS` might not be automatically defined.
+#
+# Environment Variable:
+#   COLUMNS - Represents the terminal width. Can be overridden externally.
+##
+COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
+
+##
+# @brief Array of critical system files to check for availability.
+# @details These files must exist and be readable for the script to function properly.
+##
+declare SYSTEM_READS+=(
+)
 
 ##
 # @brief Controls whether stack traces are printed for warning messages.
@@ -552,6 +590,134 @@ check_bitness() {
 }
 
 ##
+# @brief Check if the system has an internet connection by making an HTTP request.
+# @details Uses curl to send a request to google.com and checks the response status to determine if the system is online.
+#          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
+#
+# @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
+#
+# @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
+##
+check_internet() {
+    # Skip check if REQUIRE_INTERNET is not true
+    if [ "$REQUIRE_INTERNET" != "true" ]; then
+        return
+    fi
+
+    # Check for internet connectivity using curl
+    if curl -s --head http://google.com | grep "HTTP/1\.[01] [23].." > /dev/null; then
+        logD "Internet is available."
+    else
+        die 1 "No Internet connection detected."
+    fi
+}
+
+##
+# @brief Print the script version and optionally log it.
+# @details This function displays the version of the script stored in the global
+#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise
+#          it uses `logI`.
+#
+# @global THISSCRIPT The name of the script.
+# @global VERSION The version of the script.
+#
+# @return None
+##
+print_version() {
+    # Check the name of the calling function
+    local caller="${FUNCNAME[1]}"
+
+    if [[ "$caller" == "parse_args" ]]; then
+        echo -e "$THISSCRIPT: version $VERSION" # Display the script name and version
+    else
+        logD "Running $THISSCRIPT version $VERSION"
+    fi
+}
+
+##
+# @brief Check for required dependencies and report any missing ones.
+# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
+# checking if each one is installed. Logs missing dependencies and exits the script
+# with an error code if any are missing.
+#
+# @global DEPENDENCIES Array of required dependencies.
+# @global log_message Function to log messages at various severity levels.
+# @global die Function to handle critical errors and exit.
+#
+# @return None (exits the script if dependencies are missing).
+##
+validate_dependencies() {
+    local missing=0  # Counter for missing dependencies
+    local dep        # Iterator for dependencies
+
+    for dep in "${DEPENDENCIES[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            printf "ERROR: Missing dependency: %s\n" "$dep" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing $missing dependencies. Install them and re-run the script."
+    fi
+}
+
+##
+# @brief Check the availability of critical system files.
+# @details Verifies that each file listed in the `SYSTEM_READS` array exists and is readable.
+# Logs an error for any missing or unreadable files and exits the script if any issues are found.
+#
+# @global SYSTEM_READS Array of critical system file paths to check.
+# @global logE Function to log error messages.
+# @global die Function to handle critical errors and exit.
+#
+# @return None Exits the script if any required files are missing or unreadable.
+##
+validate_system_reads() {
+    local missing=0  # Counter for missing or unreadable files
+    local file       # Iterator for files
+
+    for file in "${SYSTEM_READS[@]}"; do
+        if [[ ! -r "$file" ]]; then
+            printf "ERROR: Missing or unreadable file: %s\n" "$file" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
+    fi
+}
+
+##
+# @brief Validate the existence of required environment variables.
+#
+# Checks if the variables in the ENV_VARS array are set in the current shell or exported environment.
+# Logs any missing variables and exits if any are not set.
+#
+# Global Variables:
+#   ENV_VARS - Array of required environment variables.
+#
+# @return void
+##
+validate_env_vars() {
+    local missing=0  # Counter for missing environment variables
+    local var        # Iterator for environment variables
+
+    for var in "${ENV_VARS[@]}"; do
+        # Check if the variable is set in the current shell or as an exported environment variable
+        if ! declare -p "$var" &>/dev/null; then
+            printf "ERROR: Missing environment variable: %s\n" "$var" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die "Missing $missing required environment variables. Ensure they are set and re-run the script." 1
+    fi
+}
+
+##
 # @brief Display usage information and examples for the script.
 # @details Provides an overview of the script's available options, their purposes,
 #          and practical examples for running the script. This is the primary reference
@@ -588,28 +754,6 @@ EOF
 }
 
 ##
-# @brief Print the script version and optionally log it.
-# @details This function displays the version of the script stored in the global 
-#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise 
-#          it uses `logI`.
-#
-# @global THISSCRIPT The name of the script.
-# @global VERSION The version of the script.
-#
-# @return None
-##
-print_version() {
-    # Check the name of the calling function
-    local caller="${FUNCNAME[1]}"
-
-    if [[ "$caller" == "parse_args" ]]; then
-        echo -e "$THISSCRIPT: version $VERSION" # Display the script name and version
-    else
-        logD "Running $THISSCRIPT version $VERSION"
-    fi
-}
-
-##
 # @brief Parse command-line arguments.
 # @details Processes the command-line arguments passed to the script. Supports options for
 #          dry-run mode, displaying the script version, and showing the usage message.
@@ -634,6 +778,7 @@ parse_args() {
                 ;;
             --version|-v)
                 print_version
+                exit 0
                 ;;
             --help|-h)
                 usage
@@ -653,36 +798,6 @@ parse_args() {
         # Move to the next argument
         shift
     done
-}
-
-##
-# @brief Check for required dependencies and report any missing ones.
-# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
-# checking if each one is installed. Logs missing dependencies and exits the script
-# with an error code if any are missing.
-#
-# @global DEPENDENCIES Array of required dependencies.
-# @global log_message Function to log messages at various severity levels.
-# @global die Function to handle critical errors and exit.
-#
-# @return None (exits the script if dependencies are missing).
-##
-validate_dependencies() {
-    local missing=0  # Counter for missing dependencies
-    local dep        # Iterator for dependencies
-
-    for dep in "${DEPENDENCIES[@]}"; do
-        if ! command -v "$dep" &>/dev/null; then
-            logE "Missing dependency: $dep" # Log the missing dependency
-            ((missing++)) # Increment the missing counter
-        fi
-    done
-
-    if ((missing > 0)); then
-        die 1 "Missing $missing dependencies. Install them and re-run the script."
-    else
-        logD "All dependencies are satisfied."
-    fi
 }
 
 # TODO - These are simple functions for testing to be replaced by log.sh
@@ -861,6 +976,27 @@ check_bash() {
 }
 
 ##
+# @brief Print the system information to the log.
+# @details Extracts and logs the system's name and version using information
+#          from `/etc/os-release`.
+#
+# @global None
+# @return None
+##
+print_system() {
+    # Extract system name and version from /etc/os-release
+    local system_name
+    system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
+
+    # Check if system_name is empty
+    if [[ -z "$system_name" ]]; then
+        logI "System: Unknown (could not extract system information)."
+    else
+        logI "System: $system_name."
+    fi
+}
+
+##
 # @brief Main function of the script.
 # @details Executes the primary flow of the script, including pre-execution checks,
 #          system validation, and script-specific tasks. Logs key events and system
@@ -871,23 +1007,30 @@ check_bash() {
 # @return None Exits the script if a critical error occurs during execution.
 ##
 main() {
-    # Local variables
-    local os_info
+    # Perform essential checks:
+    validate_dependencies
+    validate_system_reads
+    validate_env_vars
+    # Check command line:
+    parse_args "$@"
 
-    # Perform essential checks
-    check_bash            # Verify that Bash is being used
-    check_bash_version    # Ensure the Bash version meets the minimum requirement
     # TODO: Logging init goes here
-    validate_dependencies # Check that all required dependencies are installed
-    parse_args "$@"       # Parse command-line arguments
-    check_bitness         # Verify system bitness compatibility
-    check_release         # Ensure OS version compatibility
-    check_architecture    # Validate Raspberry Pi model support
-    enforce_sudo          # Check and enforce privilege requirements
+
+    # Check the rest of the environment:
+    check_bash
+    check_bash_version
+    check_bitness
+    check_release
+    check_architecture
+    enforce_sudo
+    check_internet
+
+    # Informational/debug lines
+    print_system
+    print_version
 
     # Log script start and system information
-    os_info=$(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')
-    logI "Running on: $os_info."
+
     logI "Script '$THISSCRIPT' started."
 
     ########
