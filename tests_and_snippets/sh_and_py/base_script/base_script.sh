@@ -21,11 +21,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# TODO:
-#   - Remove tags and metadata if printing as an installer
-#       - Add colorized "|||" to beginning of line
-#   - Remove line erasure on pipe of execution of command to log
-
 ##
 # @brief Trap unexpected errors during script execution.
 # @details Captures any errors (via the ERR signal) that occur during script execution.
@@ -810,40 +805,45 @@ print_version() {
 
 ##
 # @brief Print the task status with start and end messages.
+# @details Displays a visual indicator of the task's execution status.
+#          Shows "[✔]" for success or "[✘]" for failure and logs the result.
+#          Temporarily disables console logging during execution.
 #
-# This function prints the "[ ]" start message, executes the provided command,
-# and then moves the cursor up and rewrites the line with either the "[✔]"
-# or "[✘]" end message depending on the command's success or failure.
-#
-# @param command_text The description of the task.
-# @param command The command to execute.
+# @param[in] command_text The description of the task to display.
+# @param[in] command The command to execute.
 ##
-execute_task_indicator() {
+execute_task() {
+    # Local variable declarations
     local start_indicator="${FGGLD}[-]${RESET}"
     local end_indicator="${FGGRN}[✔]${RESET}"
     local fail_indicator="${FGRED}[✘]${RESET}"
     local status_message
-    local command_text="$1"
-    local command="$2"
+    local command_text="$1"  # Task description
+    local command="$2"       # Command to execute
     local running_pre="Executing:"
     local running_post="running."
     local pass_pre="Executing:"
     local pass_post="completed."
     local fail_pre="Executing:"
     local fail_post="failed."
+    local previous_value="$NO_CONSOLE"
 
-    # Put consistent single quotes around the command text
+    # Ensure consistent single quotes around the command text
     command_text="'$command_text'"
 
     # Set the initial message with $running_pre $command_text $running_post
     status_message="$running_pre $command_text $running_post"
 
+    # Temporarily disable console logging
+    toggle_console_log "off"
+
     # Print the initial status
     printf "%s %s\n" "$start_indicator" "$status_message"
+    logI "$status_message"
 
     # Execute the command and capture both stdout and stderr
-    # TODO:  Maybe log this to file only?
-    output=$(eval "$command 2>&1")  # Capture both stdout and stderr
+    local output
+    output=$(eval "$command" 2>&1)  # Capture both stdout and stderr
 
     # Capture the exit status of the command
     local exit_status=$?
@@ -851,15 +851,22 @@ execute_task_indicator() {
     # Move the cursor up and clear the line before printing the final status
     printf "%s%s" "${MOVE_UP}" "${CLEAR_LINE}"
 
-    # Check the exit status of the command
-    if [ $exit_status -eq 0 ]; then
-        # If the command was successful, print $pass_pre $command_text $pass_post
+    # Determine the result of the command execution
+    if [[ $exit_status -eq 0 ]]; then
+        # Command succeeded
         status_message="$pass_pre $command_text $pass_post"
         printf "%s %s\n" "$end_indicator" "$status_message"
+        logI "$status_message"
     else
-        # If the command failed, print $fail_pre $command_text $fail_post
+        # Command failed
         status_message="$fail_pre $command_text $fail_post"
         printf "%s %s\n" "$fail_indicator" "$status_message"
+        logE "$status_message"
+    fi
+
+    # Restore console logging if it was previously enabled
+    if [[ "${previous_value,,}" == "false" ]]; then
+        toggle_console_log "on"
     fi
 }
 
@@ -1605,12 +1612,12 @@ main() {
     # Example command: Simulated failure
     local command="sleep 2 && foo"       # This will fail
     local command_text="data processing fail"
-    execute_task_indicator "$command_text" "$command"
+    execute_task "$command_text" "$command"
 
     # Example command: Simulated success
     command="sleep 2"                    # This will succeed
     command_text="data processing success"
-    execute_task_indicator "$command_text" "$command"
+    execute_task "$command_text" "$command"
 
     # Log script completion
     logI "Script '$THISSCRIPT' complete."
