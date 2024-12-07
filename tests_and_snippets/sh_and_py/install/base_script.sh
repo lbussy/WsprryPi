@@ -270,7 +270,7 @@ declare NO_CONSOLE="${NO_CONSOLE:-false}"
 ## - "false": Never log to the file.
 ## - unset: Follow the logic defined in the `is_interactive()` function.
 ##
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"
+declare LOG_TO_FILE="${LOG_TO_FILE:-true}"
 
 ############
 ### Skeleton Functions
@@ -1253,8 +1253,8 @@ init_colors() {
     # shellcheck disable=SC2034  # Intentional use for clarity
     tput_colors_available=$(tput colors 2>/dev/null || echo "0")
 
-    # Initialize colors and formatting if interactive and the terminal supports at least 8 colors
-    if is_interactive && [ "$tput_colors_available" -ge 8 ]; then
+    # Initialize colors and formatting if the terminal supports at least 8 colors
+    if [ "$tput_colors_available" -ge 8 ]; then
         # General text attributes
         RESET=$(default_color sgr0)
         BOLD=$(default_color bold)
