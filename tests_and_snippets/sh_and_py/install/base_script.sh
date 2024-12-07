@@ -49,7 +49,7 @@ trap_error() {
 # trap 'trap_error "$LINENO"' ERR
 
 ############
-### Global Skeleton Declarations
+### Global Declarations
 ############
 
 ##
@@ -60,18 +60,24 @@ trap_error() {
 #
 # @global THISSCRIPT The name of the script.
 ##
-declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, or default to script basename.
+# TODO:  Change THISSCRIPT if we are piped
+declare THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, or default to script basename.
 
 ##
 # @brief Project metadata constants used throughout the script.
 # @details These variables provide metadata about the script, including ownership,
 # versioning, and project details. All are marked as read-only.
 ##
+# TODO:  Make sure we use this:
 readonly COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"  # Copyright notice
+# TODO:  Make sure we use this:
 readonly PACKAGE="WsprryPi"                                          # Project package name (short)
+# TODO:  Make sure we use this:
 readonly PACKAGENAME="Wsprry Pi"                                     # Project package name (formatted)
+# TODO:  Make sure we use this:
 readonly OWNER="lbussy"                                              # Project owner or maintainer
 readonly VERSION="1.2.1-version-files+91.3bef855-dirty"              # Current script version
+# TODO:  Make sure we use this:
 readonly GIT_BRCH="version_files"                                    # Current Git branch
 
 ##
@@ -84,7 +90,7 @@ readonly GIT_BRCH="version_files"                                    # Current G
 # @brief Require root privileges to run the script.
 # @details Use `true` if the script requires root privileges.
 ##
-readonly REQUIRE_SUDO=false  # Set to true if the script requires root privileges
+readonly REQUIRE_SUDO=true  # Set to true if the script requires root privileges
 
 ##
 # @brief Minimum supported Bash version.
@@ -152,7 +158,10 @@ readonly SUPPORTED_MODELS
 #
 # @todo Check this list for completeness and update as needed.
 ##
-declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename")
+declare DEPENDENCIES=(
+    "awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename"
+    "getent" "date" "mktemp" "printf" "whoami" "mkdir" "touch" "echo"
+)
 
 ##
 # @brief Array of required environment variables.
@@ -166,11 +175,18 @@ declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "bas
 #   - HOME: Specifies the home directory of the current user.
 #   - COLUMNS: Defines the width of the terminal, used for formatting.
 ##
-declare -a ENV_VARS=(
-    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
+# Initialize the ENV_VARS array
+declare -a ENV_VARS_BASE=(
     "HOME"       # Home directory of the current user
     "COLUMNS"    # Terminal width for formatting
 )
+
+# Conditionally add SUDO_USER if REQUIRE_SUDO is true
+if [[ "$REQUIRE_SUDO" == true ]]; then
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
+else
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}")
+fi
 
 ##
 # @brief Set a default value for terminal width if COLUMNS is unset.
@@ -190,6 +206,8 @@ COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 # @details These files must exist and be readable for the script to function properly.
 ##
 declare SYSTEM_READS+=(
+    "/etc/os-release"
+    "/proc/device-tree/compatible"
 )
 
 ##
@@ -206,7 +224,7 @@ declare SYSTEM_READS+=(
 # Environment Variable:
 #   REQUIRE_INTERNET - Overrides this value if set before script execution.
 ##
-declare REQUIRE_INTERNET="${REQUIRE_INTERNET:-false}"  # Default to false if not set
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to false if not set
 
 ##
 # @brief Controls whether stack traces are printed for warning messages.
@@ -215,7 +233,7 @@ declare REQUIRE_INTERNET="${REQUIRE_INTERNET:-false}"  # Default to false if not
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set
 
 ############
-### Global Logging Declarations
+### Logging Declarations
 ############
 
 ##
@@ -251,53 +269,6 @@ declare NO_CONSOLE="${NO_CONSOLE:-false}"
 ##
 declare LOG_TO_FILE="${LOG_TO_FILE:-}"
 
-##
-## @brief List of external commands required by the script.
-##
-## These dependencies must be available for the script to execute successfully.
-##
-declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "tput" "mkdir" "touch" "cat" "echo")
-
-##
-# @brief Array of critical system files to check for availability.
-# @details These files must exist and be readable for the script to function properly.
-##
-declare SYSTEM_READS+=(
-    "/etc/os-release"
-    "/proc/device-tree/compatible"
-)
-
-##
-# @brief Array of required environment variables.
-#
-# This array specifies the environment variables that the script requires
-# to function correctly. The `validate_env_vars` function checks for their
-# presence during initialization.
-#
-# Environment Variables:
-#   - SUDO_USER: Identifies the user who invoked the script using sudo.
-#   - HOME: Specifies the home directory of the current user.
-#   - COLUMNS: Defines the width of the terminal, used for formatting.
-##
-declare -a ENV_VARS+=(
-    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
-    "HOME"       # Home directory of the current user
-    "COLUMNS"    # Terminal width for formatting
-)
-
-##
-# @brief Set a default value for terminal width if COLUMNS is unset.
-#
-# The `COLUMNS` variable specifies the width of the terminal in columns.
-# If not already set, this line assigns a default value of 80 columns.
-# This ensures the script functions correctly in non-interactive environments
-# where `COLUMNS` might not be automatically defined.
-#
-# Environment Variable:
-#   COLUMNS - Represents the terminal width. Can be overridden externally.
-##
-COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
-
 ############
 ### Skeleton Functions
 ############
@@ -323,6 +294,96 @@ check_internet() {
     else
         die 1 "No Internet connection detected."
     fi
+}
+
+##
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
+#
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
+#
+# @return None
+##
+stack_trace() {
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
 }
 
 ##
@@ -564,7 +625,7 @@ check_bash_version() {
 
     # Skip the check if the minimum version is set to "none"
     if [[ "$required_version" == "none" ]]; then
-        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+        logD "Bash version check is disabled (MIN_BASH_VERSION='none')."
         return
     fi
 
@@ -595,34 +656,31 @@ check_bash() {
 }
 
 ##
-# @brief Ensure the script is run with appropriate privileges based on REQUIRE_SUDO.
-# @details Validates whether the script is executed under the correct privilege conditions:
-#          - If REQUIRE_SUDO is true, the script must be run with `sudo` and not directly as root.
-#          - If REQUIRE_SUDO is false, the script must not be run as root or with `sudo`.
+# @brief Enforce that the script is run directly with `sudo`.
 #
-# @global REQUIRE_SUDO A boolean indicating whether the script requires `sudo` privileges.
-# @global EUID The effective user ID of the user running the script.
-# @global die Function to handle critical errors and terminate the script.
+# This function ensures the script is executed with `sudo` privileges and not:
+# - From a `sudo su` shell.
+# - As the root user directly (e.g., logged in as root).
 #
-# @return None Exits the script with an error if the privilege requirements are not met.
+# @returns None
+# @exit Exits with status 1 if the script is not executed correctly.
 ##
 enforce_sudo() {
-    # Check if the script requires sudo privileges
-    if [[ "$REQUIRE_SUDO" == true ]]; then
-        # Ensure the script is not being run directly as root
-        if [[ "$EUID" -eq 0 && -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges but should not be run as the root user directly."
-        fi
-
-        # Ensure the script is being run with sudo
-        if [[ -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges. Please re-run using 'sudo'."
-        fi
+    if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
+        # The script was invoked directly with `sudo`
+        return
+    elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
+        # The script is running as root, but within a `sudo su` shell
+        die 1 "This script requires 'sudo' privileges but should not be run from a 'sudo su' shell." \
+              "Please run it directly using 'sudo scriptname'."
+    elif [[ "$EUID" -eq 0 ]]; then
+        # The script is running as root directly (e.g., logged in as root)
+        die 1 "This script requires 'sudo' privileges but should not be run as the root user directly." \
+              "Please run it directly using 'sudo scriptname'."
     else
-        # Ensure the script is not being run as root
-        if [[ "$EUID" -eq 0 ]]; then
-            die 1 "This script should not be run as root. Avoid using 'sudo'."
-        fi
+        # The script is not running with sufficient privileges
+        die 1 "This script requires 'sudo' privileges." \
+              "Please re-run it using 'sudo scriptname'."
     fi
 }
 
@@ -881,7 +939,7 @@ validate_env_vars() {
     done
 
     if ((missing > 0)); then
-        die "Missing $missing required environment variables. Ensure they are set and re-run the script." 1
+        die 1 "Missing $missing required environment variables." "Ensure they are set and re-run the script."
     fi
 }
 
@@ -1596,6 +1654,7 @@ parse_args() {
 ##
 main() {
     # Perform essential checks
+    enforce_sudo                         # Ensure proper privileges for script execution
     validate_dependencies                # Ensure required dependencies are installed
     validate_system_reads                # Verify critical system files are accessible
     validate_env_vars                    # Check for required environment variables
@@ -1612,7 +1671,6 @@ main() {
     check_bitness                        # Validate system bitness compatibility
     check_release                        # Check Raspbian OS version compatibility
     check_architecture                   # Validate Raspberry Pi model compatibility
-    enforce_sudo                         # Ensure proper privileges for script execution
     check_internet                       # Verify internet connectivity if required
 
     # Log system and script version details
