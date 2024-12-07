@@ -81,6 +81,17 @@ readonly GIT_BRCH="${GIT_BRCH:-version_file}"                       # Git branch
 readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"               # Default fallback name if the script is piped
 
 ##
+# @brief Flag to control verbose or terse output in the script.
+# @details This variable determines whether the script produces terse (minimal) or verbose output.
+#          Defaults to "true" for terse output unless explicitly overridden.
+#
+# @global TERSE This variable controls the verbosity of the script's output.
+#
+# @default true
+##
+declare TERSE="${TERSE:-true}" # Use existing value, or default to "true".
+
+##
 # @brief Logging-related constants for the script.
 # @details Sets the script name (`SCRIPT_NAME`) based on the current environment.
 # If `SCRIPT_NAME` is already defined, its value is retained; otherwise, it is set
@@ -1529,14 +1540,19 @@ Options:
   -tf, --log-to-file <value>  Enable or disable logging to a file explicitly.
                               Options: true, false, unset (auto-detect based on interactivity).
                               Default: unset.
-  -nc, --no-console           Disable console logging. Default: Console logging is enabled.
+  -t,  --terse <value>        Enable or disable terse output mode.
+                              Options: true, false.
+                              Default: false.
+  -nc, --no-console <value>   Enable or disable console logging explicitly.
+                              Options: true, false.
+                              Default: false (console logging is enabled).
 
 Environment Variables:
   LOG_FILE                    Specify the log file path. Overrides the default location.
   LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
   LOG_TO_FILE                 Control file logging (true, false, unset).
+  TERSE                       Set to "true" to enable terse output mode.
   NO_CONSOLE                  Set to "true" to disable console logging.
-  REQUIRE_INTERNET            Set to "true" if the script requires internet connectivity.
 
 Defaults:
   - If no log file is specified, the log file is created in the user's home
@@ -1552,7 +1568,9 @@ Examples:
   3. Specify a custom log file and log level:
      $SCRIPT_NAME -lf /tmp/example.log -ll INFO
   4. Disable console logging while ensuring logs are written to a file:
-     $SCRIPT_NAME -nc -tf true
+     $SCRIPT_NAME -nc true -tf true
+  5. Enable terse output mode:
+     $SCRIPT_NAME --terse true
 
 EOF
 
@@ -1571,9 +1589,11 @@ EOF
 # - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
 # - `--version` or `-v`: Display the version information and exit.
 # - `--help` or `-h`: Show the usage information and exit.
-# - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
+# - `--log-file` or `-lf <path>`: Specify the log file location.
 # - `--log-level` or `-ll <level>`: Set the logging verbosity level.
 # - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
+# - `--terse` or `-t <value>`: Enable or disable terse output mode (true/false).
+# - `--no-console` or `-nc <value>`: Enable or disable console logging (true/false).
 #
 # @return
 # - Exits with code 0 on success.
@@ -1581,13 +1601,13 @@ EOF
 #
 # @note
 # - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
-# - Paths provided to `--log-file` are resolved to their absolute forms.
 #
 # @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
 # @global LOG_FILE           Path to the log file.
 # @global LOG_LEVEL          Logging verbosity level.
 # @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
-# @global NO_CONSOLE         Boolean flag to disable console logging.
+# @global TERSE              Boolean flag indicating terse output mode.
+# @global NO_CONSOLE         Boolean flag indicating console output status.
 ##
 parse_args() {
     local arg  # Iterator for arguments
@@ -1614,7 +1634,7 @@ parse_args() {
                     exit 1
                 fi
                 LOG_TO_FILE="true"  # Automatically enable logging to file
-                shift 2
+                shift
                 ;;
             --log-level|-ll)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
@@ -1646,8 +1666,35 @@ parse_args() {
                 esac
                 shift
                 ;;
+            --terse|-t)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
+                    exit 1
+                fi
+                TERSE="$2"
+                case "${TERSE,,}" in
+                    true|false) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $TERSE. Valid options are: true, false." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
+                ;;
             --no-console|-nc)
-                NO_CONSOLE=true
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
+                    exit 1
+                fi
+                NO_CONSOLE="$2"
+                case "${NO_CONSOLE,,}" in
+                    true|false) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $NO_CONSOLE. Valid options are: true, false." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
                 ;;
             -*)
                 echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
@@ -1665,11 +1712,12 @@ parse_args() {
     LOG_FILE="${LOG_FILE:-}"
     LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
     LOG_TO_FILE="${LOG_TO_FILE:-unset}"
+    TERSE="${TERSE:-false}"
     NO_CONSOLE="${NO_CONSOLE:-false}"
 
     # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE
-    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE NO_CONSOLE
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE
+    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE NO_CONSOLE
 }
 
 ##
