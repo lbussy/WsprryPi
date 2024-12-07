@@ -885,6 +885,25 @@ validate_env_vars() {
     fi
 }
 
+##
+# @brief Determine how the script was executed.
+# @details Checks if the script is being run directly, piped through bash,
+#          or executed in an unusual manner.
+#
+# @return 0 (true) if the script is being piped, 1 (false) otherwise.
+##
+check_execution_mode() {
+    if [[ "$0" == "bash" ]]; then
+        if [[ -p /dev/stdin ]]; then
+            return 0  # Script is being piped through bash
+        else
+            return 1  # Script was run in an unusual way with 'bash'
+        fi
+    else
+        return 1  # Script was run directly
+    fi
+}
+
 ############
 ### Logging Functions
 ############
@@ -1601,6 +1620,13 @@ main() {
     print_version                        # Log the script version
 
     logI "Script '$THISSCRIPT' started."
+
+    # Check how the script was executed
+    if check_execution_mode; then
+        logI "The script is being piped through bash."
+    else
+        logI "The script is either run directly or in an unusual way."
+    fi
 
     # Example log entries for demonstration purposes
     logD "This is a debug-level message."
