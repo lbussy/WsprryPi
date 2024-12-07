@@ -55,20 +55,30 @@ trap_error() {
 ##
 # @brief Project metadata constants used throughout the script.
 # @details These variables provide metadata about the script, including ownership,
-# versioning, and project details. All are marked as read-only.
+#          versioning, and project details. All constants are marked as read-only.
+#
+# @global readonly COPYRIGHT A copyright notice for the script.
+# @global readonly PACKAGE The short project package name.
+# @global readonly PACKAGENAME The formatted project package name.
+# @global readonly OWNER The project owner or maintainer.
+# @global readonly VERSION The current version of the script.
+# @global readonly GIT_BRCH The current Git branch.
+# @global readonly FALLBACK_NAME The default script name if the script is piped.
 ##
-# TODO:  Make sure we use this:
+
+# TODO: Make sure we use this constant:
 readonly COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)" # Copyright notice
-# TODO:  Make sure we use this:
-readonly PACKAGE="WsprryPi"                                         # Project package name (short)
-# TODO:  Make sure we use this:
+# TODO: Make sure we use this constant:
+readonly PACKAGE="${PACKAGE:-WsprryPi}"                             # Project package name (short, default: WsprryPi)
+# TODO: Make sure we use this constant:
 readonly PACKAGENAME="Wsprry Pi"                                    # Project package name (formatted)
-# TODO:  Make sure we use this:
-readonly OWNER="lbussy"                                             # Project owner or maintainer
-readonly VERSION="1.2.1-version-files+91.3bef855-dirty"             # Current script version
-# TODO:  Make sure we use this:
-readonly GIT_BRCH="version_files"                                   # Current Git branch
-readonly FALLBACK_NAME="install.sh"                                 # Default to this name if we are piped
+# TODO: Make sure we use this constant:
+readonly OWNER="${OWNER:-lbussy}"                                   # Project owner or maintainer (default: lbussy)
+# Current version of the script
+readonly VERSION="1.2.1-version-files+91.3bef855-dirty"
+# TODO: Make sure we use this constant:
+readonly GIT_BRCH="${GIT_BRCH:-version_file}"                       # Git branch (default: version_file)
+readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"               # Default fallback name if the script is piped
 
 ##
 # @brief Logging-related constants for the script.
