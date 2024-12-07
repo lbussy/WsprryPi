@@ -20,6 +20,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+# TODO:
+#   - Remove tags and metadata if printing as an installer
+#       - Add colorized "|||" to beginning of line
+#   - Remove line erasure on execution of command
+
 ############
 ### Script Description
 ############
@@ -103,22 +108,32 @@ print_log_entry() {
     local timestamp="$1"
     local level="$2"
     local color="$3"
-    local lineno="$4"
-    local message="$5"
-    local details="$6"
+    local funcname="$4"
+    local lineno="$5"
+    local message="$6"
+    local details="$7"
 
     # Write to log file if enabled
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
-        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$message" >&5
-        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$details" >&5
+        if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+            IFS="|" read -r extended_label _ _ <<< "${LOG_PROPERTIES[EXTENDED]}"
+            printf "[%s]\t[%s]\t[%s/%s():%d]\t%s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+            printf "[%s]\t[%s]\t[%s/%s():%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+        else
+            printf "[%s]\t[%s]\t[%s/%s():%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s/%s():%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+        fi
     fi
 
     # Write to console if enabled
     if [[ "${NO_CONSOLE,,}" != "true" ]] && is_interactive; then
-        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT/$funcname():$lineno]${RESET}\t$message"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT/$funcname():$lineno]${RESET}\tDetails: $details"
+        else
+            echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname():$lineno]${RESET}\t$message"
+            [[ -n "$details" ]] && echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname():$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -138,11 +153,14 @@ prepare_log_context() {
     # Generate the current timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
-    # Retrieve the line number of the caller
+    # Retrieve the function of the caller
     lineno="${BASH_LINENO[2]}"
 
+    # Retrieve the line number of the caller
+    funcname="${FUNCNAME[0]}"
+
     # Return the pipe-separated timestamp and line number
-    echo "$timestamp|$lineno"
+    echo "$timestamp|$funcname|$lineno"
 }
 ##
 # @brief Log a message with the specified log level.
@@ -165,9 +183,9 @@ log_message() {
     # Context variables for logging
     local context timestamp lineno custom_level color severity config_severity
 
-    # Generate context (timestamp and line number)
+    # Generate context (timestamp, funcname, and line number)
     context=$(prepare_log_context)
-    IFS="|" read -r timestamp lineno <<< "$context"
+    IFS="|" read -r timestamp funcname lineno <<< "$context"
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
@@ -188,7 +206,7 @@ log_message() {
     fi
 
     # Print the log entry
-    print_log_entry "$timestamp" "$custom_level" "$color" "$lineno" "$message" "$details"
+    print_log_entry "$timestamp" "$custom_level" "$color" "$funcname" "$lineno" "$message" "$details"
 }
 
 ##
@@ -440,7 +458,7 @@ toggle_console_log() {
             logD "Console logging disabled."
             ;;
         *)
-            logW "ERROR: Invalid argument for toggle_console_log." >&2
+            logW "Invalid argument for toggle_console_log." >&2
             return 1
             ;;
     esac
@@ -622,10 +640,6 @@ die() {
     exit "$exit_code"
 }
 
-# TODO:
-#
-# This resides in "skeleton.sh", so remove after testing
-#
 ##
 # @brief Main function to initialize settings and execute script logic.
 ##
@@ -653,10 +667,6 @@ main() {
     logI "Script execution complete."
 }
 
-# TODO:
-#
-# This resides in "skeleton.sh", so remove after testing
-#
 # Run the main function and exit with its return status
 main "$@"
 exit $?
