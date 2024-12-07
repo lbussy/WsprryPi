@@ -952,8 +952,8 @@ check_bash_version() {
     fi
 
     # Compare the current Bash version against the required version
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} ||
+         (BASH_VERSINFO[0] == ${required_version%%.*} &&
           BASH_VERSINFO[1] < ${required_version##*.}))); then
         die 1 "This script requires Bash version $required_version or newer."
     fi

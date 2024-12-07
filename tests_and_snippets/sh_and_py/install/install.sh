@@ -584,8 +584,8 @@ print_system() {
 
 ##
 # @brief Print the script version and optionally log it.
-# @details This function displays the version of the script stored in the global 
-#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise 
+# @details This function displays the version of the script stored in the global
+#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise
 #          it uses `logI`.
 #
 # @global THISSCRIPT The name of the script.

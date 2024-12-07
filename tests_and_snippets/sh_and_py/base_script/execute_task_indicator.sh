@@ -67,8 +67,8 @@ init_colors() {
 ##
 # @brief Print the task status with start and end messages.
 #
-# This function prints the "[ ]" start message, executes the provided command, 
-# and then moves the cursor up and rewrites the line with either the "[✔]" 
+# This function prints the "[ ]" start message, executes the provided command,
+# and then moves the cursor up and rewrites the line with either the "[✔]"
 # or "[✘]" end message depending on the command's success or failure.
 #
 # @param command_text The description of the task.

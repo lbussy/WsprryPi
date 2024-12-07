@@ -250,7 +250,7 @@ log_message() {
 ##
 # @brief Log a message at the DEBUG level.
 #
-# This function logs messages with the DEBUG log level, typically used for detailed 
+# This function logs messages with the DEBUG log level, typically used for detailed
 # debugging information useful during development or troubleshooting.
 #
 # @param $1 Main log message.
