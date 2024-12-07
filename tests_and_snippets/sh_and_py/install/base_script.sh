@@ -1460,11 +1460,11 @@ execute_task() {
     local command_text="$1"  # Task description
     local command="$2"       # Command to execute
     local running_pre="Executing:"
-    local running_post="running."
-    local pass_pre="Executing:"
-    local pass_post="completed."
-    local fail_pre="Executing:"
-    local fail_post="failed."
+    local running_post=""
+    local pass_pre="Completed:"
+    local pass_post=""
+    local fail_pre="Failed:"
+    local fail_post=""
     local previous_value="$NO_CONSOLE"
 
     # Ensure consistent single quotes around the command text
@@ -1472,6 +1472,9 @@ execute_task() {
 
     # Set the initial message with $running_pre $command_text $running_post
     status_message="$running_pre $command_text $running_post"
+
+    # Remove trailing spaces and add a period to $status_message
+    status_message=$(echo "$status_message" | sed 's/[[:space:]]*$//'). 
 
     # Temporarily disable console logging
     toggle_console_log "off"
@@ -1494,11 +1497,15 @@ execute_task() {
     if [[ $exit_status -eq 0 ]]; then
         # Command succeeded
         status_message="$pass_pre $command_text $pass_post"
+        # Remove trailing spaces and add a period to $status_message
+        status_message=$(echo "$status_message" | sed 's/[[:space:]]*$//'). 
         printf "%s %s\n" "$end_indicator" "$status_message"
-        logI "$status_message"
+        logI "$status_message."
     else
         # Command failed
         status_message="$fail_pre $command_text $fail_post"
+        # Remove trailing spaces and add a period to $status_message
+        status_message=$(echo "$status_message" | sed 's/[[:space:]]*$//'). 
         printf "%s %s\n" "$fail_indicator" "$status_message"
         logE "$status_message"
     fi

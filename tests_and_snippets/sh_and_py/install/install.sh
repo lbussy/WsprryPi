@@ -1319,7 +1319,7 @@ EOF
 ##
 set_time() {
     # Declare local variables
-    local current_date tz yn
+    local need_set current_date tz yn
 
     # Get the current date and time
     current_date="$(date)"
@@ -1327,14 +1327,17 @@ set_time() {
 
     # Log and return if the timezone is not GMT or BST
     if [ "$tz" != "GMT" ] && [ "$tz" != "BST" ]; then
-        logD "Current time and date: $current_date"
+        need_set=true
         return
     fi
 
-    # Log a warning and return if the script is not running interactively
-    if ! is_interactive; then
+    # Check if the script is in terse mode
+    if [[ "$TERSE" == "true" && "$need_set" == "true" ]]; then
         logW "Timezone detected as $tz, which may need to be updated."
+        # TODO: Add a terse mode logger
         return
+    else
+        logt "Timezone detected as $tz."
     fi
 
     # Inform the user about the current date and time
