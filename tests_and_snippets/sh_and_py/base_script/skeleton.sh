@@ -21,14 +21,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# TODO:
-#   - Bring in Logging
-#   - Check any "echo" commands
-#   - Use logging aliases (instead of log_message "WARNING" "$message" "$details")
-#   - Consider implementing DRY_RUN
-#   - Find a way to show pending / completed actions
-#   - Alias "do_die()" to "die" and default to 1 if not supplied
-
 ##
 # @brief Trap unexpected errors during script execution.
 # @details Captures any errors (via the ERR signal) that occur during script execution.
@@ -68,7 +60,7 @@ trap_error() {
 #
 # @global THISSCRIPT The name of the script.
 ##
-declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, script basename, or default to "script.sh"
+declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, or default to script basename.
 
 ##
 # @brief Project metadata constants used throughout the script.
@@ -88,112 +80,195 @@ readonly GIT_BRCH="version_files"                                    # Current G
 # supported Bash version, OS versions, and system bitness.
 ##
 
-# Require root privileges to run the script
+##
+# @brief Require root privileges to run the script.
+# @details Use `true` if the script requires root privileges.
+##
 readonly REQUIRE_SUDO=false  # Set to true if the script requires root privileges
 
-# Minimum supported Bash version (set to "none" to disable version checks)
+##
+# @brief Minimum supported Bash version.
+# @details Set to "none" to disable version checks.
+##
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified
 
-# Supported OS versions (minimum and maximum)
+##
+# @brief Supported OS versions (minimum and maximum).
+# @details Defines required OS levels (Debian-specific).
+##
 readonly MIN_OS=11       # Minimum supported OS version
 readonly MAX_OS=15       # Maximum supported OS version (use -1 for no upper limit)
 
-# Supported system bitness
+##
+# @brief Supported system bitness.
+# @details Defines appropriate bitness for script execution.
+##
 readonly SUPPORTED_BITNESS="32"  # Supported bitness ("32", "64", or "both")
 
-# Declare an associative array to hold Raspberry Pi models and their support statuses.
-# Key: Model identifier (name and revision codes)
-# Value: Support status ("Supported" or "Not Supported")
+##
+# @brief Raspberry Pi model compatibility map.
+# @details Associative array mapping Raspberry Pi models to their support statuses.
+##
 declare -A SUPPORTED_MODELS=(
     # Unsupported Models
-    ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"              # Raspberry Pi 5 Model B
-    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"                  # Raspberry Pi 400
-    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported" # Compute Module 4
-    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported" # Compute Module 3
-    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"     # Original Compute Module
+    ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"
+    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"
+    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported"
+    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported"
+    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"
 
     # Supported Models
-    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"          # Raspberry Pi 4 Model B
-    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model A+
-    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model B+
-    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"          # Raspberry Pi 3 Model B
-    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"          # Raspberry Pi 2 Model B
-    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"        # Raspberry Pi Model A+
-    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"        # Raspberry Pi Model B+
-    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported"   # Raspberry Pi Model B Rev 2
-    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"              # Raspberry Pi Model A
-    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"              # Raspberry Pi Model B
-    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"      # Raspberry Pi Zero 2 W
-    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"              # Raspberry Pi Zero
-    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"          # Raspberry Pi Zero W
+    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"
+    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"
+    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"
+    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"
+    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"
+    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"
+    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"
+    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported"
+    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"
+    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"
+    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"
+    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"
+    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"
 )
 readonly SUPPORTED_MODELS
 
-# List of required dependencies to be added to others when combined
-# TODO:  Check these
+##
+# @brief Required dependencies.
+# @details Lists the external commands the script depends on.
+##
+# TODO: Check these dependencies for completeness.
 declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
+
+##
+# @brief Controls whether stack traces are printed for warning messages.
+# @details Set to `true` to enable stack trace logging for warnings.
+##
+readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set
 
 ############
 ### Skeleton Functions
 ############
 
 ##
-# @brief Print a warning message with optional details.
-# @details Logs and prints a warning message along with any additional details provided.
+# @brief Logs a warning or error message with optional details and a stack trace.
+# @details This function logs messages at WARNING or ERROR levels, with an optional
+#          stack trace for warnings. The error level can also be specified and
+#          appended to the log message.
 #
-# @param $1 The main warning message.
-# @param $@ Additional details for the warning (optional).
+# @param $1 [Optional] The log level (WARNING or ERROR). Defaults to WARNING.
+# @param $2 [Optional] The error level (numeric). Defaults to 0 if not provided.
+# @param $3 [Optional] The main log message. Defaults to "An issue was raised on this line."
+# @param $4 [Optional] Additional details to log.
 #
-# @global BASH_LINENO Array containing line numbers where the warning occurred.
-# @global log_message Function to log messages at various severity levels.
+# @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THISSCRIPT The name of the script being executed.
 #
 # @return None
 ##
-# shellcheck disable=SC2329
 warn() {
-    local lineno="${BASH_LINENO[0]}"  # Line number where the warning occurred
-    local message="$1"               # Warning message
-    shift
-    local details="$*"               # Additional details (optional)
+    # Initialize default values
+    local error_level=0            # Default error level
+    local level="WARNING"          # Default log level
+    local message="An issue was raised on this line"  # Default log message
+    local details=""               # Default to no additional details
+    local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
+    local script="$THISSCRIPT"     # Script name
 
-    # Log and print the warning message
-    log_message "WARNING" "$message" "$details"
+    # Parse arguments in order
+    if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
+        level="$1"
+        shift
+    fi
+
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        error_level="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        message="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        details="$1"
+    fi
+
+    # Append error level to the log message
+    message="${message}: ($error_level)"
+
+    # Log the message with the appropriate level
+    if [[ "$level" == "WARNING" ]]; then
+        logW "$message" "$details"
+    elif [[ "$level" == "ERROR" ]]; then
+        logE "$message" "$details"
+    fi
+
+    # Optionally print a stack trace for warnings
+    if [[ "$level" == "WARNING" && "$WARN_STACK_TRACE" == "true" ]]; then
+        stack_trace "$level" "Stack trace for $level at line $lineno: $message"
+    fi
+
+    return
 }
 
 ##
-# @brief Print a fatal error message, log it, and exit the script.
-# @details Logs a critical error message with optional details, provides context,
-# prints a stack trace, and exits the script with the specified or default exit status.
+# @brief Log a critical error, print a stack trace, and exit the script.
 #
-# @param $1 Exit status code (default: last command's exit status).
-# @param $2 The main error message.
+# @param $1 Exit status code (optional, defaults to 1 if not numeric).
+# @param $2 Main error message (optional).
 # @param $@ Additional details for the error (optional).
 #
-# @global BASH_LINENO Array containing line numbers where the error occurred.
-# @global THISSCRIPT The name of the script (used in log messages).
-# @global log_message Function to log messages at various severity levels.
-# @global stack_trace Function to print the stack trace.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THISSCRIPT Script name.
 #
-# @return None (exits the script with the provided or default exit status).
+# @return Exits the script with the provided or default exit status.
 ##
 die() {
-    local lineno="${BASH_LINENO[0]}"     # Line number where the error occurred
-    local exit_status="${1:-$?}"        # Exit status code (default: last command's exit status)
-    shift
-    local message="$1"                  # Error message
-    shift
-    local details="$*"                  # Additional details (optional)
+    # Local variables
+    local exit_status="$1"              # First parameter as exit status
+    local message                       # Main error message
+    local details                       # Additional details
+    local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
+    local script="$THISSCRIPT"          # Script name
+    local level="CRITICAL"              # Error level
+    local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
-    # Log the fatal error message
-    log_message "CRITICAL" "$message" "$details"
+    # Determine exit status and message
+    if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
+        exit_status=1
+        message="$1"
+        shift
+    else
+        shift
+        message="$1"
+        shift
+    fi
+    details="$*" # Remaining parameters as details
 
-    # Provide context for the critical error
-    log_message "CRITICAL" "Script '$THISSCRIPT' did not complete due to a critical error."
+    # Log the error message only if a message is provided
+    if [[ -n "$message" ]]; then
+        printf "[%s]\t[%s:%d]\t%s\n" "$tag" "$script" "$lineno" "$message" >&2
+        if [[ -n "$details" ]]; then
+            printf "[%s]\t[%s:%d]\tDetails: %s\n" "$tag" "$script" "$lineno" "$details" >&2
+        fi
+    fi
 
-    # Print the stack trace
-    stack_trace
+    # Log the unrecoverable error
+    printf "[%s]\t[%s:%d]\tUnrecoverable error (exit status: %d).\n" \
+        "$tag" "$script" "$lineno" "$exit_status" >&2
 
-    # Exit with the provided or default exit status
+    # Call stack_trace with processed message and error level
+    if [[ -z "$message" ]]; then
+        stack_trace "$level" "Stack trace from line $lineno."
+    else
+        stack_trace "$level" "Stack trace from line $lineno: $message"
+    fi
+
+    # Exit with the determined status
     exit "$exit_status"
 }
 
@@ -210,7 +285,7 @@ add_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        echo "ERROR: Input to add_dot cannot be empty." >&2
+        warn "ERROR" "Input to add_dot cannot be empty."
         return 1
     fi
 
@@ -235,7 +310,7 @@ remove_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        echo "ERROR: Input to remove_dot cannot be empty." >&2
+        warn "ERROR" "Input to remove_dot cannot be empty."
         return 1
     fi
 
@@ -260,7 +335,7 @@ add_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        echo "ERROR: Input to add_slash cannot be empty." >&2
+        warn "ERROR" "Input to add_slash cannot be empty."
         return 1
     fi
 
@@ -285,7 +360,7 @@ remove_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        echo "ERROR: Input to remove_slash cannot be empty." >&2
+        warn "ERROR" "Input to remove_slash cannot be empty."
         return 1
     fi
 
@@ -312,12 +387,12 @@ remove_slash() {
 enforce_sudo() {
     # Check if the script requires sudo privileges
     if [[ "$REQUIRE_SUDO" == true ]]; then
-        # Ensure the user is not directly logged in as root
+        # Ensure the script is not being run directly as root
         if [[ "$EUID" -eq 0 && -z "$SUDO_USER" ]]; then
             die 1 "This script requires 'sudo' privileges but should not be run as the root user directly."
         fi
 
-        # Ensure the user is running the script with sudo
+        # Ensure the script is being run with sudo
         if [[ -z "$SUDO_USER" ]]; then
             die 1 "This script requires 'sudo' privileges. Please re-run using 'sudo'."
         fi
@@ -336,13 +411,13 @@ enforce_sudo() {
 #          model is unsupported or cannot be detected.
 #
 # @global SUPPORTED_MODELS Associative array of supported and unsupported Raspberry Pi models.
-# @global log_message Function for logging messages.
-# @global die Function to handle critical errors and terminate the script.
+# @global logD Function for detailed logging messages.
+# @global die Function for handling critical errors and terminating the script.
 #
 # @return None Exits the script with an error code if the architecture is unsupported.
 ##
 check_architecture() {
-    local detected_model is_supported key full_name model chip  # Local variables
+    local detected_model is_supported key full_name model chip  # Declare local variables
 
     # Attempt to read and process the compatible string
     if ! detected_model=$(cat /proc/device-tree/compatible 2>/dev/null | tr '\0' '\n' | grep "raspberrypi" | sed 's/raspberrypi,//'); then
@@ -365,7 +440,7 @@ check_architecture() {
         if [[ "$model" == "$detected_model" ]]; then
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 is_supported=true
-                log_message "DEBUG" "Model: '$full_name' ($chip) is supported."
+                logD "Model: '$full_name' ($chip) is supported."
             else
                 die 1 "Model: '$full_name' ($chip) is not supported."
             fi
@@ -379,16 +454,15 @@ check_architecture() {
     fi
 }
 
-
 ##
 # @brief Check Raspbian OS version compatibility.
-# @details This function ensures that the Raspbian version is within the supported range
-# and logs an error if the compatibility check fails.
+# @details Ensures that the Raspbian version is within the supported range defined by
+#          `MIN_OS` and `MAX_OS`. Logs an error if the compatibility check fails.
 #
 # @global MIN_OS Minimum supported OS version.
 # @global MAX_OS Maximum supported OS version (-1 indicates no upper limit).
-# @global log_message Function for logging messages.
-# @global die Function to handle critical errors and terminate the script.
+# @global logD Function for logging detailed messages.
+# @global die Function for handling critical errors and terminating the script.
 #
 # @return None Exits the script with an error code if the OS version is incompatible.
 ##
@@ -402,7 +476,7 @@ check_release() {
     fi
 
     # Extract the VERSION_ID from /etc/os-release.
-    if ! ver=$(grep "VERSION_ID" /etc/os-release 2>/dev/null | awk -F "=" '{print $2}' | tr -d '"'); then
+    if ! ver=$(grep "VERSION_ID" /etc/os-release | awk -F "=" '{print $2}' | tr -d '"'); then
         die 1 "Failed to extract version information from /etc/os-release."
     fi
 
@@ -422,7 +496,7 @@ check_release() {
     fi
 
     # Log success if the version is within the supported range.
-    log_message "DEBUG" "Raspbian version $ver is supported."
+    logD "Raspbian version $ver is within the supported range ($MIN_OS - $MAX_OS)."
 }
 
 ##
@@ -432,8 +506,8 @@ check_release() {
 #          - Logs an error and exits if the system's bitness is unsupported or misconfigured.
 #
 # @global SUPPORTED_BITNESS Specifies the bitness supported by the script ("32", "64", or "both").
+# @global logD Function to log informational or debug messages.
 # @global die Function to handle critical errors and terminate the script.
-# @global log_message Function to log informational messages.
 #
 # @return None Exits the script with an error if the system bitness is unsupported.
 ##
@@ -447,16 +521,16 @@ check_bitness() {
     case "$SUPPORTED_BITNESS" in
         "32")
             if [[ "$bitness" -ne 32 ]]; then
-                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
+            die 1 "Unsupported system: Only 32-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "64")
             if [[ "$bitness" -ne 64 ]]; then
-                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
+            die 1 "Unsupported system: Only 64-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "both")
-            log_message "DEBUG" "Detected $bitness-bit system, which is supported."
+            logD "System compatibility check passed: Detected $bitness-bit system, which is supported."
             ;;
         *)
             die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
@@ -467,7 +541,8 @@ check_bitness() {
 ##
 # @brief Display usage information and examples for the script.
 # @details Provides an overview of the script's available options, their purposes,
-#          and practical examples for running the script.
+#          and practical examples for running the script. This is the primary reference
+#          for users seeking guidance on how to interact with the script.
 #
 # @global THISSCRIPT The name of the script, typically derived from the script's filename.
 #
@@ -485,9 +560,14 @@ Options:
 
 Examples:
   1. Run the script in dry-run mode:
-     $THISSCRIPT --dry-run
+       $THISSCRIPT --dry-run
+
   2. Check the script version:
-     $THISSCRIPT --version
+       $THISSCRIPT --version
+
+  3. Display detailed help information:
+       $THISSCRIPT --help
+
 EOF
 
     # Exit with success
@@ -495,18 +575,25 @@ EOF
 }
 
 ##
-# @brief Print the script version and exit.
+# @brief Print the script version and optionally log it.
 # @details This function displays the version of the script stored in the global 
-# variable `VERSION` and exits successfully.
+#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise 
+#          it uses `logI`.
 #
 # @global THISSCRIPT The name of the script.
 # @global VERSION The version of the script.
 #
-# @return None (exits the script).
+# @return None
 ##
 print_version() {
-    echo "$THISSCRIPT: version $VERSION" # Display the script name and version
-    exit 0 # Exit with a success status
+    # Check the name of the calling function
+    local caller="${FUNCNAME[1]}"
+
+    if [[ "$caller" == "parse_args" ]]; then
+        echo -e "$THISSCRIPT: version $VERSION" # Display the script name and version
+    else
+        logD "Running $THISSCRIPT version $VERSION"
+    fi
 }
 
 ##
@@ -573,7 +660,7 @@ validate_dependencies() {
 
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            log_message "ERROR" "Missing dependency: $dep" # Log the missing dependency
+            logE "Missing dependency: $dep" # Log the missing dependency
             ((missing++)) # Increment the missing counter
         fi
     done
@@ -581,17 +668,138 @@ validate_dependencies() {
     if ((missing > 0)); then
         die 1 "Missing $missing dependencies. Install them and re-run the script."
     else
-        log_message "DEBUG" "All dependencies are satisfied."
+        logD "All dependencies are satisfied."
     fi
 }
 
-# TODO
+# TODO - These are simple functions for testing to be replaced ny log.sh
 log_message() {
-    local result="$*" # Concatenates all arguments with spaces
-    echo "$result"
+    local level="$1"
+    shift
+    local message="$1"
+    shift
+    local details="$*"
+
+    # Get the script name and line number dynamically
+    local script="$THISSCRIPT"
+    local lineno="${BASH_LINENO[1]}"
+
+    # Concatenate level, script name, and line number with a tab
+    local formatted_level="${level}\t[${script}:${lineno}]"
+
+    # Log the main message
+    printf "%b\t%s\n" "$formatted_level" "$message"
+
+    # Log the details separately with the level EXTD if provided
+    if [[ -n "$details" ]]; then
+        local details_level="[EXTD]\t[${script}:${lineno}]"
+        printf "%b\tDetails: %s\n" "$details_level" "$details"
+    fi
 }
+logD() {
+    log_message "[DEBUG]" "$1" "$2"
+}
+logI() {
+    log_message "[INFO]" "$1" "$2"
+}
+logW() {
+    log_message "[WARN]" "$1" "$2"
+}
+logE() {
+    log_message "[ERROR]" "$1" "$2"
+}
+logC() {
+    log_message "[CRIT]" "$1" "$2"
+}
+
+##
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
+#
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
+#
+# @return None
+##
 stack_trace() {
-    echo ""
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[1;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
 }
 
 ##
@@ -612,7 +820,6 @@ check_bash_version() {
 
     # Skip the check if the minimum version is set to "none"
     if [[ "$required_version" == "none" ]]; then
-        log_message "INFO" "Bash version check is disabled (MIN_BASH_VERSION='none')."
         return
     fi
 
@@ -622,8 +829,6 @@ check_bash_version() {
           BASH_VERSINFO[1] < ${required_version##*.}))); then
         die 1 "This script requires Bash version $required_version or newer."
     fi
-
-    log_message "DEBUG" "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
 }
 
 ##
@@ -637,42 +842,55 @@ check_bash_version() {
 ##
 check_bash() {
     if [ -z "$BASH_VERSION" ]; then
-        echo "ERROR: This script requires Bash. Please run it with Bash." >&2
+        printf "[ERROR]\tThis script requires Bash. Please run it with Bash.\n" >&2
         exit 1
     fi
 }
 
-# Main function
+##
+# @brief Main function of the script.
+# @details Executes the primary flow of the script, including pre-execution checks,
+#          system validation, and script-specific tasks. Logs key events and system
+#          information for tracking and debugging purposes.
+#
+# @param $@ Command-line arguments passed to the script.
+# @global THISSCRIPT The name of the current script (set globally).
+# @global logI Function to log informational messages.
+# @global logD Function to log debug messages.
+# @return None Exits the script if a critical error occurs during execution.
+##
 main() {
     # Perform essential checks
-    check_bash
-    check_bash_version
-    # Logging should go here
-    validate_dependencies
-    parse_args "$@"
-    check_bitness
-    check_release
-    check_architecture
-    enforce_sudo
-    # show_version
+    check_bash            # Verify that Bash is being used
+    check_bash_version    # Ensure the Bash version meets the minimum requirement
+    # TODO:  Logging init goes here
+    validate_dependencies # Check that all required dependencies are installed
+    parse_args "$@"       # Parse command-line arguments
+    check_bitness         # Verify system bitness compatibility
+    check_release         # Ensure OS version compatibility
+    check_architecture    # Validate Raspberry Pi model support
+    enforce_sudo          # Check and enforce privilege requirements
 
     # Log script start and system information
-    log_message "INFO" "Running on: $(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')."
-    log_message "INFO" "Script '$THISSCRIPT' started."
+    local os_info
+    os_info=$(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')
+    logI "Running on: $os_info."
+    logI "Script '$THISSCRIPT' started."
 
     ########
     # Begin script-specific tasks
     ########
 
-    # TODO:
+    # TODO: Add script-specific functionality here.
 
     ########
     # End script-specific tasks
     ########
 
     # Log script completion
-    log_message "INFO" "Script '$THISSCRIPT' complete."
+    logI "Script '$THISSCRIPT' complete."
 }
+
 
 # Run the main function and exit with its return status
 main "$@"
