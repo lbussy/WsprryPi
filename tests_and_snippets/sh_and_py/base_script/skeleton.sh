@@ -685,7 +685,7 @@ validate_dependencies() {
     fi
 }
 
-# TODO - These are simple functions for testing to be replaced ny log.sh
+# TODO - These are simple functions for testing to be replaced by log.sh
 log_message() {
     local level="$1"
     shift
@@ -867,16 +867,17 @@ check_bash() {
 #          information for tracking and debugging purposes.
 #
 # @param $@ Command-line arguments passed to the script.
-# @global THISSCRIPT The name of the current script (set globally).
-# @global logI Function to log informational messages.
-# @global logD Function to log debug messages.
+#
 # @return None Exits the script if a critical error occurs during execution.
 ##
 main() {
+    # Local variables
+    local os_info
+
     # Perform essential checks
     check_bash            # Verify that Bash is being used
     check_bash_version    # Ensure the Bash version meets the minimum requirement
-    # TODO:  Logging init goes here
+    # TODO: Logging init goes here
     validate_dependencies # Check that all required dependencies are installed
     parse_args "$@"       # Parse command-line arguments
     check_bitness         # Verify system bitness compatibility
@@ -885,7 +886,6 @@ main() {
     enforce_sudo          # Check and enforce privilege requirements
 
     # Log script start and system information
-    local os_info
     os_info=$(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')
     logI "Running on: $os_info."
     logI "Script '$THISSCRIPT' started."
@@ -903,7 +903,6 @@ main() {
     # Log script completion
     logI "Script '$THISSCRIPT' complete."
 }
-
 
 # Run the main function and exit with its return status
 main "$@"
