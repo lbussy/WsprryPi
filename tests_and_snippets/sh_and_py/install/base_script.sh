@@ -938,7 +938,8 @@ print_log_entry() {
         else
             # Standard log entry without extended details
             printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
-            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%s:%d]\tDetails: %s\n" \
+                "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
         fi
     fi
 
@@ -1519,7 +1520,6 @@ parse_args() {
                 ;;
             --help|-h)
                 usage
-                exit 0
                 ;;
             --log-file|-lf)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
