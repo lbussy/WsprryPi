@@ -21,13 +21,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# TODO:
-#   - Test string variables in arguments (move this back to log.sh)
-#   - Implement variable expansion on log path argument (move this back to log.sh)
-#   - Consider implementing DRY_RUN in future work
-#   - Find a way to show pending / completed actions (look at Fermentrack), e.g.:
-#       - "Start (this command)." message
-#       - "(this command) complete." message
+############
+### Trap section for development debugging
+############
 
 ##
 # @brief Trap unexpected errors during script execution.
@@ -48,7 +44,7 @@ trap_error() {
     local script="${THISSCRIPT:-$(basename "$0")}"  # Script name (fallback to current script)
 
     # Log the error message and exit
-    echo "ERROR: An unexpected error occurred in function '$func' at line $line of script '$script'. Exiting." >&2
+    echo "ERROR: An unexpected error occurred in function '$func()' at line $line of script '$script'. Exiting." >&2
     exit 1
 }
 
@@ -64,11 +60,11 @@ trap_error() {
 # @brief Logging-related constants for the script.
 # @details Sets the script name (`THISSCRIPT`) based on the current environment.
 # If `THISSCRIPT` is already defined, its value is retained; otherwise, it is set
-# to the basename of the script or defaults to "script.sh".
+# to the basename of the script.
 #
 # @global THISSCRIPT The name of the script.
 ##
-declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, script basename, or default to "script.sh"
+declare -r THISSCRIPT="${THISSCRIPT:-$(basename "$0")}"  # Use existing value, or default to script basename.
 
 ##
 # @brief Project metadata constants used throughout the script.
@@ -83,71 +79,154 @@ readonly VERSION="1.2.1-version-files+91.3bef855-dirty"              # Current s
 readonly GIT_BRCH="version_files"                                    # Current Git branch
 
 ##
-# @brief Configuration constants for script requirements and compatibility.
-# @details Defines requirements for running the script, including root privileges,
-# supported Bash version, OS versions, and system bitness.
+# @brief Require root privileges to run the script.
+# @details Use `true` if the script requires root privileges.
 ##
-
-# Require Internet to run the script
-readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Set to true if the script requires root privileges
-
-# Require root privileges to run the script
 readonly REQUIRE_SUDO=false  # Set to true if the script requires root privileges
 
-# Minimum supported Bash version (set to "none" to disable version checks)
+##
+# @brief Minimum supported Bash version.
+# @details Set to "none" to disable version checks.
+##
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified
 
-# Supported OS versions (minimum and maximum)
+##
+# @brief Supported OS versions (minimum and maximum).
+# @details Defines required OS levels (Debian-specific).
+##
 readonly MIN_OS=11       # Minimum supported OS version
 readonly MAX_OS=15       # Maximum supported OS version (use -1 for no upper limit)
 
-# Supported system bitness
+##
+# @brief Supported system bitness.
+# @details Defines appropriate bitness for script execution.
+##
 readonly SUPPORTED_BITNESS="32"  # Supported bitness ("32", "64", or "both")
 
-# Declare an associative array to hold Raspberry Pi models and their support statuses.
-# Key: Model identifier (name and revision codes)
-# Value: Support status ("Supported" or "Not Supported")
+##
+# @brief Specifies whether the script requires Internet connectivity.
+#
+# @details
+# If set to "true", the script checks for active Internet connectivity at runtime.
+# This requirement can be overridden by setting the environment variable
+# `REQUIRE_INTERNET` before executing the script.
+#
+# @var REQUIRE_INTERNET
+# @type readonly
+# @default true
+# @possible_values "true", "false"
+##
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Requires Internet to run
+
+##
+# @brief Raspberry Pi model compatibility map.
+# @details Associative array mapping Raspberry Pi models to their support statuses.
+##
 declare -A SUPPORTED_MODELS=(
     # Unsupported Models
-    ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"              # Raspberry Pi 5 Model B
-    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"                  # Raspberry Pi 400
-    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported" # Compute Module 4
-    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported" # Compute Module 3
-    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"     # Original Compute Module
+    ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"
+    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"
+    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported"
+    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported"
+    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"
 
     # Supported Models
-    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"          # Raspberry Pi 4 Model B
-    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model A+
-    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model B+
-    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"          # Raspberry Pi 3 Model B
-    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"          # Raspberry Pi 2 Model B
-    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"        # Raspberry Pi Model A+
-    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"        # Raspberry Pi Model B+
-    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported"   # Raspberry Pi Model B Rev 2
-    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"              # Raspberry Pi Model A
-    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"              # Raspberry Pi Model B
-    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"      # Raspberry Pi Zero 2 W
-    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"              # Raspberry Pi Zero
-    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"          # Raspberry Pi Zero W
+    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"
+    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"
+    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"
+    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"
+    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"
+    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"
+    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"
+    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported"
+    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"
+    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"
+    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"
+    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"
+    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"
 )
 readonly SUPPORTED_MODELS
 
-# Global variable to control file logging
-# LOG_TO_FILE options:
-# - "true": Always log to the file
-# - "false": Never log to the file
-# - unset: Follow logic defined in the is_interactive() function
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"    # Default to blank if not set
+##
+# @brief Required dependencies.
+#
+# @details
+# This section lists the external commands required by the script for proper execution.
+# The listed dependencies must be available in the system's PATH for the script to function
+# as intended. Missing dependencies may cause runtime errors.
+#
+# @var DEPENDENCIES
+# @type array
+# @default
+#
+# @note
+# Ensure all required commands are included in this list. Use a dependency-checking
+# function to verify their availability at runtime.
+#
+# @todo Check this list for completeness and update as needed.
+##
+declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "curl" "getent" "date" "mktemp" "printf" "whoami")
 
-# Logging configuration
-declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
-declare NO_CONSOLE="${NO_CONSOLE:-false}" # Default to false if not set.  Turns off terminal logging.
+##
+# @brief Controls whether stack traces are printed for warning messages.
+# @details Set to `true` to enable stack trace logging for warnings.
+##
+readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set
 
-# List of required external dependencies for skeleton
-declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "curl")
-# List of required external dependencies for logging
-declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami")
+############
+### Global Logging Declarations
+############
+
+# LOG_TO_FILE: Controls whether logs are written to a file.
+# - Default: Unset/empty, meaning the logging behavior depends on the script's logic.
+# - "true": Enables logging to a file, requiring `LOG_FILE` to be defined or default logic to apply.
+#
+# Global Behavior:
+# - If `LOG_FILE` is not explicitly specified:
+#   - The log file is created in the current user's home directory.
+#   - The default name of the log file is derived from the script's name (without extension),
+#     e.g., `<script_name>.log`.
+#   - If the home directory is unavailable or unwritable, a temporary file is created in `/tmp`.
+
+declare LOG_TO_FILE="${LOG_TO_FILE:-}"  # Default to empty if not set.
+
+# LOG_FILE: Specifies the file path for logging output.
+# - Default: Unset/empty, meaning the log file path is determined by the global behavior logic.
+#
+# Global Behavior (if LOG_FILE is not explicitly set):
+# - The log file is created in the current user's home directory.
+# - The default log file name is derived from the script's name (without extension),
+#   e.g., `<script_name>.log`.
+# - If the home directory is unavailable or unwritable, a temporary log file is created in `/tmp`.
+#
+# Usage:
+# - Set LOG_FILE to the desired log file path to override default behavior.
+# - Leave LOG_FILE unset or empty to use the default log file logic.
+
+declare LOG_FILE="${LOG_FILE:-}"  # Default to empty (default log file naming) if not set.
+
+# LOG_LEVEL: Specifies the logging verbosity level.
+# - Default: "DEBUG" (provides detailed logs for debugging purposes).
+# - Other possible values may include "INFO", "WARN", "ERROR", depending on the script's implementation.
+#
+# Usage:
+# - Set LOG_LEVEL to control the verbosity of logging output.
+# - Example: LOG_LEVEL="INFO" for general information without detailed debug logs.
+
+declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default to "DEBUG" if not set.
+
+# NO_CONSOLE: Controls whether logs are suppressed from being printed to the console.
+# - Default: "false" (console logs are enabled by default).
+# - "true": Suppresses console logs while still allowing logs to be written to a file (if enabled).
+#
+# Usage:
+# - Set NO_CONSOLE="true" to prevent log messages from appearing in the console.
+# - Leave NO_CONSOLE unset or set to "false" to allow console logging.
+#
+# Dependency:
+# - If LOG_TO_FILE is enabled, logs may still be written to the file regardless of NO_CONSOLE.
+
+declare NO_CONSOLE="${NO_CONSOLE:-false}"  # Default to "false" if not set.
 
 ############
 ### Skeleton Functions
@@ -177,62 +256,123 @@ check_internet() {
 }
 
 ##
-# @brief Print a warning message with optional details.
-# @details Logs and prints a warning message along with any additional details provided.
+# @brief Logs a warning or error message with optional details and a stack trace.
+# @details This function logs messages at WARNING or ERROR levels, with an optional
+#          stack trace for warnings. The error level can also be specified and
+#          appended to the log message.
 #
-# @param $1 The main warning message.
-# @param $@ Additional details for the warning (optional).
+# @param $1 [Optional] The log level (WARNING or ERROR). Defaults to WARNING.
+# @param $2 [Optional] The error level (numeric). Defaults to 0 if not provided.
+# @param $3 [Optional] The main log message. Defaults to "An issue was raised on this line."
+# @param $4 [Optional] Additional details to log.
 #
-# @global BASH_LINENO Array containing line numbers where the warning occurred.
-# @global log_message Function to log messages at various severity levels.
+# @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THISSCRIPT The name of the script being executed.
 #
 # @return None
 ##
-# shellcheck disable=SC2329
 warn() {
-    local lineno="${BASH_LINENO[0]}"  # Line number where the warning occurred
-    local message="$1"               # Warning message
-    shift
-    local details="$*"               # Additional details (optional)
+    # Initialize default values
+    local error_level=0            # Default error level
+    local level="WARNING"          # Default log level
+    local message="An issue was raised on this line"  # Default log message
+    local details=""               # Default to no additional details
+    local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
+    local script="$THISSCRIPT"     # Script name
 
-    # Log and print the warning message
-    logW "$message" "$details"
+    # Parse arguments in order
+    if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
+        level="$1"
+        shift
+    fi
+
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        error_level="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        message="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        details="$1"
+    fi
+
+    # Append error level to the log message
+    message="${message}: ($error_level)"
+
+    # Log the message with the appropriate level
+    if [[ "$level" == "WARNING" ]]; then
+        logW "$message" "$details"
+    elif [[ "$level" == "ERROR" ]]; then
+        logE "$message" "$details"
+    fi
+
+    # Optionally print a stack trace for warnings
+    if [[ "$level" == "WARNING" && "$WARN_STACK_TRACE" == "true" ]]; then
+        stack_trace "$level" "Stack trace for $level at line $lineno: $message"
+    fi
+
+    return
 }
 
 ##
-# @brief Print a fatal error message, log it, and exit the script.
-# @details Logs a critical error message with optional details, provides context,
-# prints a stack trace, and exits the script with the specified or default exit status.
+# @brief Log a critical error, print a stack trace, and exit the script.
 #
-# @param $1 Exit status code (default: last command's exit status).
-# @param $2 The main error message.
+# @param $1 Exit status code (optional, defaults to 1 if not numeric).
+# @param $2 Main error message (optional).
 # @param $@ Additional details for the error (optional).
 #
-# @global BASH_LINENO Array containing line numbers where the error occurred.
-# @global THISSCRIPT The name of the script (used in log messages).
-# @global log_message Function to log messages at various severity levels.
-# @global stack_trace Function to print the stack trace.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THISSCRIPT Script name.
 #
-# @return None (exits the script with the provided or default exit status).
+# @return Exits the script with the provided or default exit status.
 ##
 die() {
+    # Local variables
+    local exit_status="$1"              # First parameter as exit status
+    local message                       # Main error message
+    local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local exit_status="${1:-$?}"        # Exit status code (default: last command's exit status)
-    shift
-    local message="$1"                  # Error message
-    shift
-    local details="$*"                  # Additional details (optional)
+    local script="$THISSCRIPT"          # Script name
+    local level="CRITICAL"              # Error level
+    local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
-    # Log the fatal error message
-    logC "$message" "$details"
+    # Determine exit status and message
+    if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
+        exit_status=1
+        message="$1"
+        shift
+    else
+        shift
+        message="$1"
+        shift
+    fi
+    details="$*" # Remaining parameters as details
 
-    # Provide context for the critical error
-    logC "Script '$THISSCRIPT' did not complete due to a critical error."
+    # Log the error message only if a message is provided
+    if [[ -n "$message" ]]; then
+        printf "[%s]\t[%s:%d]\t%s\n" "$tag" "$script" "$lineno" "$message" >&2
+        if [[ -n "$details" ]]; then
+            printf "[%s]\t[%s:%d]\tDetails: %s\n" "$tag" "$script" "$lineno" "$details" >&2
+        fi
+    fi
 
-    # Print the stack trace
-    stack_trace
+    # Log the unrecoverable error
+    printf "[%s]\t[%s:%d]\tUnrecoverable error (exit status: %d).\n" \
+        "$tag" "$script" "$lineno" "$exit_status" >&2
 
-    # Exit with the provided or default exit status
+    # Call stack_trace with processed message and error level
+    if [[ -z "$message" ]]; then
+        stack_trace "$level" "Stack trace from line $lineno."
+    else
+        stack_trace "$level" "Stack trace from line $lineno: $message"
+    fi
+
+    # Exit with the determined status
     exit "$exit_status"
 }
 
@@ -249,7 +389,8 @@ add_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to add_dot cannot be empty."
+        return 1
     fi
 
     # Add a leading dot if it's missing
@@ -273,7 +414,8 @@ remove_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to remove_dot cannot be empty."
+        return 1
     fi
 
     # Remove the leading dot if present
@@ -297,7 +439,8 @@ add_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to add_slash cannot be empty."
+        return 1
     fi
 
     # Add a trailing slash if it's missing
@@ -321,7 +464,7 @@ remove_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to remove_slash cannot be empty."
         return 1
     fi
 
@@ -331,6 +474,54 @@ remove_slash() {
     fi
 
     echo "$input"
+}
+
+##
+# @brief Check if the current Bash version meets the minimum required version.
+# @details Compares the current Bash version against a required version specified
+# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
+# the check is skipped.
+#
+# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
+# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
+# @global die Function to handle fatal errors and exit the script.
+#
+# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
+##
+check_bash_version() {
+    # Ensure MIN_BASH_VERSION is defined; default to "none"
+    local required_version="${MIN_BASH_VERSION:-none}"
+
+    # Skip the check if the minimum version is set to "none"
+    if [[ "$required_version" == "none" ]]; then
+        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+        return
+    fi
+
+    # Compare the current Bash version against the required version
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
+         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+          BASH_VERSINFO[1] < ${required_version##*.}))); then
+        die 1 "This script requires Bash version $required_version or newer."
+    fi
+
+    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+}
+
+##
+# @brief Check if the script is running in a Bash shell.
+# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
+# Logs an error message and exits if not running in Bash.
+#
+# @global BASH_VERSION The version of the Bash shell being used.
+#
+# @return None (exits the script if not running in Bash).
+##
+check_bash() {
+    if [ -z "$BASH_VERSION" ]; then
+        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
+        exit 1
+    fi
 }
 
 ##
@@ -348,12 +539,12 @@ remove_slash() {
 enforce_sudo() {
     # Check if the script requires sudo privileges
     if [[ "$REQUIRE_SUDO" == true ]]; then
-        # Ensure the user is not directly logged in as root
+        # Ensure the script is not being run directly as root
         if [[ "$EUID" -eq 0 && -z "$SUDO_USER" ]]; then
             die 1 "This script requires 'sudo' privileges but should not be run as the root user directly."
         fi
 
-        # Ensure the user is running the script with sudo
+        # Ensure the script is being run with sudo
         if [[ -z "$SUDO_USER" ]]; then
             die 1 "This script requires 'sudo' privileges. Please re-run using 'sudo'."
         fi
@@ -372,13 +563,13 @@ enforce_sudo() {
 #          model is unsupported or cannot be detected.
 #
 # @global SUPPORTED_MODELS Associative array of supported and unsupported Raspberry Pi models.
-# @global log_message Function for logging messages.
-# @global die Function to handle critical errors and terminate the script.
+# @global logD Function for detailed logging messages.
+# @global die Function for handling critical errors and terminating the script.
 #
 # @return None Exits the script with an error code if the architecture is unsupported.
 ##
 check_architecture() {
-    local detected_model is_supported key full_name model chip  # Local variables
+    local detected_model is_supported key full_name model chip  # Declare local variables
 
     # Attempt to read and process the compatible string
     if ! detected_model=$(cat /proc/device-tree/compatible 2>/dev/null | tr '\0' '\n' | grep "raspberrypi" | sed 's/raspberrypi,//'); then
@@ -415,16 +606,15 @@ check_architecture() {
     fi
 }
 
-
 ##
 # @brief Check Raspbian OS version compatibility.
-# @details This function ensures that the Raspbian version is within the supported range
-# and logs an error if the compatibility check fails.
+# @details Ensures that the Raspbian version is within the supported range defined by
+#          `MIN_OS` and `MAX_OS`. Logs an error if the compatibility check fails.
 #
 # @global MIN_OS Minimum supported OS version.
 # @global MAX_OS Maximum supported OS version (-1 indicates no upper limit).
-# @global log_message Function for logging messages.
-# @global die Function to handle critical errors and terminate the script.
+# @global logD Function for logging detailed messages.
+# @global die Function for handling critical errors and terminating the script.
 #
 # @return None Exits the script with an error code if the OS version is incompatible.
 ##
@@ -438,7 +628,7 @@ check_release() {
     fi
 
     # Extract the VERSION_ID from /etc/os-release.
-    if ! ver=$(grep "VERSION_ID" /etc/os-release 2>/dev/null | awk -F "=" '{print $2}' | tr -d '"'); then
+    if ! ver=$(grep "VERSION_ID" /etc/os-release | awk -F "=" '{print $2}' | tr -d '"'); then
         die 1 "Failed to extract version information from /etc/os-release."
     fi
 
@@ -458,7 +648,7 @@ check_release() {
     fi
 
     # Log success if the version is within the supported range.
-    logD "Raspbian version $ver is supported."
+    logD "Raspbian version $ver is within the supported range ($MIN_OS - $MAX_OS)."
 }
 
 ##
@@ -468,8 +658,8 @@ check_release() {
 #          - Logs an error and exits if the system's bitness is unsupported or misconfigured.
 #
 # @global SUPPORTED_BITNESS Specifies the bitness supported by the script ("32", "64", or "both").
+# @global logD Function to log informational or debug messages.
 # @global die Function to handle critical errors and terminate the script.
-# @global log_message Function to log informational messages.
 #
 # @return None Exits the script with an error if the system bitness is unsupported.
 ##
@@ -483,80 +673,21 @@ check_bitness() {
     case "$SUPPORTED_BITNESS" in
         "32")
             if [[ "$bitness" -ne 32 ]]; then
-                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
+            die 1 "Unsupported system: Only 32-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "64")
             if [[ "$bitness" -ne 64 ]]; then
-                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
+            die 1 "Unsupported system: Only 64-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "both")
-            logD "Detected $bitness-bit system, which is supported."
+            logD "System compatibility check passed: Detected $bitness-bit system, which is supported."
             ;;
         *)
             die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
             ;;
     esac
-}
-
-##
-# @brief Display usage information and examples for the script.
-# @details Provides an overview of the script's available options, their purposes,
-#          and practical examples for running the script.
-#
-# @global THISSCRIPT The name of the script, typically derived from the script's filename.
-#
-# @return None Exits the script with a success code after displaying usage information.
-##
-usage() {
-    cat << EOF
-Usage: $THISSCRIPT [options]
-
-Options:
-  -dr, --dry-run              Simulate actions without making changes.
-                              Useful for testing the script without side effects.
-  -v, --version               Display the script version and exit.
-  -h, --help                  Display this help message and exit.
-  -lf, --log-file <path>      Specify the log file location.
-                              Default: User's home directory with the name <script_name>.log,
-                              or a temporary file in /tmp if unavailable.
-  -ll, --log-level <level>    Set the log level. Available levels:
-                              DEBUG, INFO, WARNING, ERROR, CRITICAL.
-                              Default: DEBUG.
-  -tf, --log-to-file <bool>   Set whether to log to a file.
-                              Options: true, false, unset (auto-detect based on interactivity).
-                              Default: unset.
-  -nc, --no-console           Disable console logging.
-                              Default: Console logging is enabled.
-  -h, --help                  Display this help message and exit.
-
-Environment Variables:
-  LOG_FILE                    Specify the log file path. Overrides the default
-                              location.
-  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING,
-                              ERROR, CRITICAL).
-  LOG_TO_FILE                 Control file logging (true, false, unset).
-  NO_CONSOLE                  Set to "true" to disable console logging.
-  REQUIRE_INTERNET            Whether Internet access is required.
-
-Defaults:
-  - If no log file is specified, the log file is created in the user's home
-    directory as <script_name>.log.
-  - If the home directory is unavailable or unwritable, a temporary log file
-    is created in /tmp.
-
-Examples:
-  1. Run the script in dry-run mode:
-     $THISSCRIPT --dry-run
-  2. Check the script version:
-     $THISSCRIPT --version
-  3. Log to /tmp/example.log at INFO level and log to file even if interactive
-     $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
-EOF
-
-    # Exit with success
-    exit 0
 }
 
 ##
@@ -658,123 +789,6 @@ execute_task_indicator() {
 }
 
 ##
-# @brief Parse command-line arguments and set configuration variables.
-##
-# @brief Parse command-line arguments and set configuration variables.
-# @details Processes command-line arguments passed to the script and assigns
-#          values to corresponding global variables.
-#
-# @param[in] "$@" The command-line arguments passed to the script.
-#
-# Supported options:
-# - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
-# - `--version` or `-v`: Display the version information and exit.
-# - `--help` or `-h`: Show the usage information and exit.
-# - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
-# - `--log-level` or `-ll <level>`: Set the logging verbosity level.
-# - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
-#
-# @return
-# - Exits with code 0 on success.
-# - Exits with code 1 if an invalid argument or option is provided.
-#
-# @note
-# - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
-# - Paths provided to `--log-file` are resolved to their absolute forms.
-#
-#
-# @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
-# @global LOG_FILE           Path to the log file.
-# @global LOG_LEVEL          Logging verbosity level.
-# @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
-#
-# @return None Exits with an error if invalid arguments or options are provided.
-##
-parse_args() {
-    # Local variable declarations
-    local arg  # Iterator for arguments
-
-    # Iterate through the provided arguments
-    while [[ "$#" -gt 0 ]]; do
-        arg="$1"
-        case "$arg" in
-            --dry-run|-dr)
-                DRY_RUN=true
-                ;;
-            --version|-v)
-                print_version
-                exit 0
-                ;;
-            --help|-h)
-                usage
-                exit 0
-                ;;
-            --log-file|-lf)
-                if [[ -z "$2" || "$2" =~ ^- ]]; then
-                    echo "ERROR: Missing argument for $1. Please provide a valid file path." >&2
-                    exit 1
-                fi
-                LOG_FILE="$2"
-                shift 2
-                ;;
-            --log-level|-ll)
-                if [[ -z "$2" || "$2" =~ ^- ]]; then
-                    echo "ERROR: Missing argument for $1. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
-                    exit 1
-                fi
-                LOG_LEVEL="$2"
-                case "$LOG_LEVEL" in
-                    DEBUG|INFO|WARNING|ERROR|CRITICAL) ;;  # Valid levels
-                    *)
-                        echo "ERROR: Invalid log level: $LOG_LEVEL. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
-                        exit 1
-                        ;;
-                esac
-                shift 2
-                ;;
-            --log-to-file|-tf)
-                if [[ -z "$2" || "$2" =~ ^- ]]; then
-                    echo "ERROR: Missing argument for $1. Valid options are: true, false, unset." >&2
-                    exit 1
-                fi
-                LOG_TO_FILE="$2"
-                case "${LOG_TO_FILE,,}" in
-                    true|false|unset) ;;  # Valid values
-                    *)
-                        echo "ERROR: Invalid value for $1: $LOG_TO_FILE. Valid options are: true, false, unset." >&2
-                        exit 1
-                        ;;
-                esac
-                shift 2
-                ;;
-            --no-console|-nc)
-                NO_CONSOLE="true"
-                shift
-                ;;
-            -*)
-                echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
-                exit 1
-                ;;
-            *)
-                echo "ERROR: Unexpected argument '$arg'." >&2
-                exit 1
-                ;;
-        esac
-        shift
-    done
-
-    # Set default values if not provided
-    LOG_FILE="${LOG_FILE:-}"
-    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
-    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
-    NO_CONSOLE="${NO_CONSOLE:-false}"
-
-    # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
-    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
-}
-
-##
 # @brief Check for required dependencies and report any missing ones.
 # @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
 # checking if each one is installed. Logs missing dependencies and exits the script
@@ -792,14 +806,13 @@ validate_dependencies() {
 
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            echo -e "ERROR" "Missing dependency: $dep" in ${FUNCNAME[0]} # Log the missing dependency
+            logE "Missing dependency: $dep" # Log the missing dependency
             ((missing++)) # Increment the missing counter
         fi
     done
 
     if ((missing > 0)); then
-        echo -e "ERROR: Missing $missing dependencies in ${FUNCNAME[0]}. Install them and re-run the script."
-        exit 1
+        die 1 "Missing $missing dependencies. Install them and re-run the script."
     fi
 }
 
@@ -889,7 +902,7 @@ log_message() {
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
-        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[0]}." >&2 && exit 1
+        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[2]}() at line ${BASH_LINENO[1]}." >&2 && exit 1
     fi
 
     # Extract log properties for the specified level
@@ -1226,55 +1239,183 @@ setup_logging_environment() {
 }
 
 ############
-### More Skeleton Functions
+### Command Line Functions
 ############
 
 ##
-# @brief Check if the current Bash version meets the minimum required version.
-# @details Compares the current Bash version against a required version specified
-# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
-# the check is skipped.
+# @brief Display usage information and examples for the script.
+# @details Provides an overview of the script's available options, their purposes,
+#          and practical examples for running the script.
 #
-# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
-# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
-# @global die Function to handle fatal errors and exit the script.
+# @global THISSCRIPT The name of the script, typically derived from the script's filename.
 #
-# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
+# @return None Exits the script with a success code after displaying usage information.
 ##
-check_bash_version() {
-    # Ensure MIN_BASH_VERSION is defined; default to "none"
-    local required_version="${MIN_BASH_VERSION:-none}"
+usage() {
+    cat << EOF
+Usage: $THISSCRIPT [options]
 
-    # Skip the check if the minimum version is set to "none"
-    if [[ "$required_version" == "none" ]]; then
-        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
-        return
-    fi
+Options:
+  -dr, --dry-run              Simulate actions without making changes.
+                              Useful for testing the script without side effects.
+  -v, --version               Display the script version and exit.
+  -h, --help                  Display this help message and exit.
+  -lf, --log-file <path>      Specify the log file location.
+                              Default: User's home directory with the name <script_name>.log,
+                              or a temporary file in /tmp if unavailable.
+  -ll, --log-level <level>    Set the log level. Available levels:
+                              DEBUG, INFO, WARNING, ERROR, CRITICAL.
+                              Default: DEBUG.
+  -tf, --log-to-file <bool>   Set whether to log to a file.
+                              Options: true, false, unset (auto-detect based on interactivity).
+                              Default: unset.
+  -nc, --no-console           Disable console logging.
+                              Default: Console logging is enabled.
+  -h, --help                  Display this help message and exit.
 
-    # Compare the current Bash version against the required version
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
-          BASH_VERSINFO[1] < ${required_version##*.}))); then
-        die 1 "This script requires Bash version $required_version or newer."
-    fi
+Environment Variables:
+  LOG_FILE                    Specify the log file path. Overrides the default
+                              location.
+  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING,
+                              ERROR, CRITICAL).
+  LOG_TO_FILE                 Control file logging (true, false, unset).
+  NO_CONSOLE                  Set to "true" to disable console logging.
+  REQUIRE_INTERNET            Whether Internet access is required.
 
-    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+Defaults:
+  - If no log file is specified, the log file is created in the user's home
+    directory as <script_name>.log.
+  - If the home directory is unavailable or unwritable, a temporary log file
+    is created in /tmp.
+
+Examples:
+  1. Run the script in dry-run mode:
+     $THISSCRIPT --dry-run
+  2. Check the script version:
+     $THISSCRIPT --version
+  3. Log to /tmp/example.log at INFO level and log to file even if interactive
+     $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
+EOF
+
+    # Exit with success
+    exit 0
 }
 
 ##
-# @brief Check if the script is running in a Bash shell.
-# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
-# Logs an error message and exits if not running in Bash.
-#
-# @global BASH_VERSION The version of the Bash shell being used.
-#
-# @return None (exits the script if not running in Bash).
+# @brief Parse command-line arguments and set configuration variables.
 ##
-check_bash() {
-    if [ -z "$BASH_VERSION" ]; then
-        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
-        exit 1
-    fi
+# @brief Parse command-line arguments and set configuration variables.
+# @details Processes command-line arguments passed to the script and assigns
+#          values to corresponding global variables.
+#
+# @param[in] "$@" The command-line arguments passed to the script.
+#
+# Supported options:
+# - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
+# - `--version` or `-v`: Display the version information and exit.
+# - `--help` or `-h`: Show the usage information and exit.
+# - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
+# - `--log-level` or `-ll <level>`: Set the logging verbosity level.
+# - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
+#
+# @return
+# - Exits with code 0 on success.
+# - Exits with code 1 if an invalid argument or option is provided.
+#
+# @note
+# - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
+# - Paths provided to `--log-file` are resolved to their absolute forms.
+#
+#
+# @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
+# @global LOG_FILE           Path to the log file.
+# @global LOG_LEVEL          Logging verbosity level.
+# @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
+#
+# @return None Exits with an error if invalid arguments or options are provided.
+##
+parse_args() {
+    # Local variable declarations
+    local arg  # Iterator for arguments
+
+    # Iterate through the provided arguments
+    while [[ "$#" -gt 0 ]]; do
+        arg="$1"
+        case "$arg" in
+            --dry-run|-dr)
+                DRY_RUN=true
+                ;;
+            --version|-v)
+                print_version
+                exit 0
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            --log-file|-lf)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Please provide a valid file path." >&2
+                    exit 1
+                fi
+                LOG_FILE="$2"
+                shift 2
+                ;;
+            --log-level|-ll)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                    exit 1
+                fi
+                LOG_LEVEL="$2"
+                case "$LOG_LEVEL" in
+                    DEBUG|INFO|WARNING|ERROR|CRITICAL) ;;  # Valid levels
+                    *)
+                        echo "ERROR: Invalid log level: $LOG_LEVEL. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                        exit 1
+                        ;;
+                esac
+                shift 2
+                ;;
+            --log-to-file|-tf)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false, unset." >&2
+                    exit 1
+                fi
+                LOG_TO_FILE="$2"
+                case "${LOG_TO_FILE,,}" in
+                    true|false|unset) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $LOG_TO_FILE. Valid options are: true, false, unset." >&2
+                        exit 1
+                        ;;
+                esac
+                shift 2
+                ;;
+            --no-console|-nc)
+                NO_CONSOLE="true"
+                shift
+                ;;
+            -*)
+                echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
+                exit 1
+                ;;
+            *)
+                echo "ERROR: Unexpected argument '$arg'." >&2
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    # Set default values if not provided
+    LOG_FILE="${LOG_FILE:-}"
+    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
+    NO_CONSOLE="${NO_CONSOLE:-false}"
+
+    # Export and make relevant global variables readonly
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
+    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
 }
 
 # Main function
