@@ -21,9 +21,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-############
-### Trap section for development debugging
-############
+# TODO:
+#   - Remove tags and metadata if printing as an installer
+#       - Add colorized "|||" to beginning of line
+#   - Remove line erasure on pipe of execution of command to log
 
 ##
 # @brief Trap unexpected errors during script execution.
@@ -44,7 +45,7 @@ trap_error() {
     local script="${THISSCRIPT:-$(basename "$0")}"  # Script name (fallback to current script)
 
     # Log the error message and exit
-    echo "ERROR: An unexpected error occurred in function '$func()' at line $line of script '$script'. Exiting." >&2
+    echo "ERROR: An unexpected error occurred in function '$func' at line $line of script '$script'. Exiting." >&2
     exit 1
 }
 
@@ -79,6 +80,12 @@ readonly VERSION="1.2.1-version-files+91.3bef855-dirty"              # Current s
 readonly GIT_BRCH="version_files"                                    # Current Git branch
 
 ##
+# @brief Configuration constants for script requirements and compatibility.
+# @details Defines requirements for running the script, including root privileges,
+# supported Bash version, OS versions, and system bitness.
+##
+
+##
 # @brief Require root privileges to run the script.
 # @details Use `true` if the script requires root privileges.
 ##
@@ -102,21 +109,6 @@ readonly MAX_OS=15       # Maximum supported OS version (use -1 for no upper lim
 # @details Defines appropriate bitness for script execution.
 ##
 readonly SUPPORTED_BITNESS="32"  # Supported bitness ("32", "64", or "both")
-
-##
-# @brief Specifies whether the script requires Internet connectivity.
-#
-# @details
-# If set to "true", the script checks for active Internet connectivity at runtime.
-# This requirement can be overridden by setting the environment variable
-# `REQUIRE_INTERNET` before executing the script.
-#
-# @var REQUIRE_INTERNET
-# @type readonly
-# @default true
-# @possible_values "true", "false"
-##
-readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Requires Internet to run
 
 ##
 # @brief Raspberry Pi model compatibility map.
@@ -165,7 +157,61 @@ readonly SUPPORTED_MODELS
 #
 # @todo Check this list for completeness and update as needed.
 ##
-declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "curl" "getent" "date" "mktemp" "printf" "whoami")
+declare DEPENDENCIES+=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename")
+
+##
+# @brief Array of required environment variables.
+#
+# This array specifies the environment variables that the script requires
+# to function correctly. The `validate_env_vars` function checks for their
+# presence during initialization.
+#
+# Environment Variables:
+#   - SUDO_USER: Identifies the user who invoked the script using sudo.
+#   - HOME: Specifies the home directory of the current user.
+#   - COLUMNS: Defines the width of the terminal, used for formatting.
+##
+declare -a ENV_VARS=(
+    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
+    "HOME"       # Home directory of the current user
+    "COLUMNS"    # Terminal width for formatting
+)
+
+##
+# @brief Set a default value for terminal width if COLUMNS is unset.
+#
+# The `COLUMNS` variable specifies the width of the terminal in columns.
+# If not already set, this line assigns a default value of 80 columns.
+# This ensures the script functions correctly in non-interactive environments
+# where `COLUMNS` might not be automatically defined.
+#
+# Environment Variable:
+#   COLUMNS - Represents the terminal width. Can be overridden externally.
+##
+COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
+
+##
+# @brief Array of critical system files to check for availability.
+# @details These files must exist and be readable for the script to function properly.
+##
+declare SYSTEM_READS+=(
+)
+
+##
+# @brief Flag to indicate if internet connectivity is required.
+#
+# This variable determines whether the script should verify internet connectivity
+# before proceeding. The default value is `false`, meaning the script does not
+# require internet unless explicitly set to `true`.
+#
+# Possible values:
+# - "true": Internet connectivity is required.
+# - "false": Internet connectivity is not required (default).
+#
+# Environment Variable:
+#   REQUIRE_INTERNET - Overrides this value if set before script execution.
+##
+declare REQUIRE_INTERNET="${REQUIRE_INTERNET:-false}"  # Default to false if not set
 
 ##
 # @brief Controls whether stack traces are printed for warning messages.
@@ -177,56 +223,85 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 ### Global Logging Declarations
 ############
 
-# LOG_TO_FILE: Controls whether logs are written to a file.
-# - Default: Unset/empty, meaning the logging behavior depends on the script's logic.
-# - "true": Enables logging to a file, requiring `LOG_FILE` to be defined or default logic to apply.
+##
+## @brief Path to the log file.
+##
+## Specifies where logs will be stored. If unset, no logging to file is performed.
+##
+declare LOG_FILE="${LOG_FILE:-}"
+
+##
+## @brief Specifies the logging verbosity level.
+##
+## Default value is "DEBUG" unless overridden by an external variable.
+##
+declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+
+##
+## @brief Flag to disable console logging.
+##
+## Possible values:
+## - "true": Disables logging to the terminal.
+## - "false": Enables logging to the terminal (default).
+##
+declare NO_CONSOLE="${NO_CONSOLE:-false}"
+
+##
+## @brief Controls whether logs are written to a file.
+##
+## Possible values:
+## - "true": Always log to the file.
+## - "false": Never log to the file.
+## - unset: Follow the logic defined in the `is_interactive()` function.
+##
+declare LOG_TO_FILE="${LOG_TO_FILE:-}"
+
+##
+## @brief List of external commands required by the script.
+##
+## These dependencies must be available for the script to execute successfully.
+##
+declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "tput" "mkdir" "touch" "cat" "echo")
+
+##
+# @brief Array of critical system files to check for availability.
+# @details These files must exist and be readable for the script to function properly.
+##
+declare SYSTEM_READS+=(
+    "/etc/os-release"
+    "/proc/device-tree/compatible"
+)
+
+##
+# @brief Array of required environment variables.
 #
-# Global Behavior:
-# - If `LOG_FILE` is not explicitly specified:
-#   - The log file is created in the current user's home directory.
-#   - The default name of the log file is derived from the script's name (without extension),
-#     e.g., `<script_name>.log`.
-#   - If the home directory is unavailable or unwritable, a temporary file is created in `/tmp`.
-
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"  # Default to empty if not set.
-
-# LOG_FILE: Specifies the file path for logging output.
-# - Default: Unset/empty, meaning the log file path is determined by the global behavior logic.
+# This array specifies the environment variables that the script requires
+# to function correctly. The `validate_env_vars` function checks for their
+# presence during initialization.
 #
-# Global Behavior (if LOG_FILE is not explicitly set):
-# - The log file is created in the current user's home directory.
-# - The default log file name is derived from the script's name (without extension),
-#   e.g., `<script_name>.log`.
-# - If the home directory is unavailable or unwritable, a temporary log file is created in `/tmp`.
+# Environment Variables:
+#   - SUDO_USER: Identifies the user who invoked the script using sudo.
+#   - HOME: Specifies the home directory of the current user.
+#   - COLUMNS: Defines the width of the terminal, used for formatting.
+##
+declare -a ENV_VARS+=(
+    # "SUDO_USER"  # User invoking the script, especially with elevated privileges
+    "HOME"       # Home directory of the current user
+    "COLUMNS"    # Terminal width for formatting
+)
+
+##
+# @brief Set a default value for terminal width if COLUMNS is unset.
 #
-# Usage:
-# - Set LOG_FILE to the desired log file path to override default behavior.
-# - Leave LOG_FILE unset or empty to use the default log file logic.
-
-declare LOG_FILE="${LOG_FILE:-}"  # Default to empty (default log file naming) if not set.
-
-# LOG_LEVEL: Specifies the logging verbosity level.
-# - Default: "DEBUG" (provides detailed logs for debugging purposes).
-# - Other possible values may include "INFO", "WARN", "ERROR", depending on the script's implementation.
+# The `COLUMNS` variable specifies the width of the terminal in columns.
+# If not already set, this line assigns a default value of 80 columns.
+# This ensures the script functions correctly in non-interactive environments
+# where `COLUMNS` might not be automatically defined.
 #
-# Usage:
-# - Set LOG_LEVEL to control the verbosity of logging output.
-# - Example: LOG_LEVEL="INFO" for general information without detailed debug logs.
-
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default to "DEBUG" if not set.
-
-# NO_CONSOLE: Controls whether logs are suppressed from being printed to the console.
-# - Default: "false" (console logs are enabled by default).
-# - "true": Suppresses console logs while still allowing logs to be written to a file (if enabled).
-#
-# Usage:
-# - Set NO_CONSOLE="true" to prevent log messages from appearing in the console.
-# - Leave NO_CONSOLE unset or set to "false" to allow console logging.
-#
-# Dependency:
-# - If LOG_TO_FILE is enabled, logs may still be written to the file regardless of NO_CONSOLE.
-
-declare NO_CONSOLE="${NO_CONSOLE:-false}"  # Default to "false" if not set.
+# Environment Variable:
+#   COLUMNS - Represents the terminal width. Can be overridden externally.
+##
+COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 
 ############
 ### Skeleton Functions
@@ -499,8 +574,8 @@ check_bash_version() {
     fi
 
     # Compare the current Bash version against the required version
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} ||
+         (BASH_VERSINFO[0] == ${required_version%%.*} &&
           BASH_VERSINFO[1] < ${required_version##*.}))); then
         die 1 "This script requires Bash version $required_version or newer."
     fi
@@ -713,8 +788,8 @@ print_system() {
 
 ##
 # @brief Print the script version and optionally log it.
-# @details This function displays the version of the script stored in the global 
-#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise 
+# @details This function displays the version of the script stored in the global
+#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise
 #          it uses `logI`.
 #
 # @global THISSCRIPT The name of the script.
@@ -736,8 +811,8 @@ print_version() {
 ##
 # @brief Print the task status with start and end messages.
 #
-# This function prints the "[ ]" start message, executes the provided command, 
-# and then moves the cursor up and rewrites the line with either the "[✔]" 
+# This function prints the "[ ]" start message, executes the provided command,
+# and then moves the cursor up and rewrites the line with either the "[✔]"
 # or "[✘]" end message depending on the command's success or failure.
 #
 # @param command_text The description of the task.
@@ -806,13 +881,67 @@ validate_dependencies() {
 
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
-            logE "Missing dependency: $dep" # Log the missing dependency
+            printf "ERROR: Missing dependency: %s\n" "$dep" >&2
             ((missing++)) # Increment the missing counter
         fi
     done
 
     if ((missing > 0)); then
         die 1 "Missing $missing dependencies. Install them and re-run the script."
+    fi
+}
+
+##
+# @brief Check the availability of critical system files.
+# @details Verifies that each file listed in the `SYSTEM_READS` array exists and is readable.
+# Logs an error for any missing or unreadable files and exits the script if any issues are found.
+#
+# @global SYSTEM_READS Array of critical system file paths to check.
+# @global logE Function to log error messages.
+# @global die Function to handle critical errors and exit.
+#
+# @return None Exits the script if any required files are missing or unreadable.
+##
+validate_system_reads() {
+    local missing=0  # Counter for missing or unreadable files
+    local file       # Iterator for files
+
+    for file in "${SYSTEM_READS[@]}"; do
+        if [[ ! -r "$file" ]]; then
+            printf "ERROR: Missing or unreadable file: %s\n" "$file" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
+    fi
+}
+
+##
+# @brief Validate the existence of required environment variables.
+#
+# This function checks if the environment variables specified in the ENV_VARS array
+# are set. Logs any missing variables and exits the script if any are missing.
+#
+# Global Variables:
+#   ENV_VARS - Array of required environment variables.
+#
+# @return void
+##
+validate_env_vars() {
+    local missing=0  # Counter for missing environment variables
+    local var        # Iterator for environment variables
+
+    for var in "${ENV_VARS[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            printf "ERROR: Missing environment variable: %s\n" "$var" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die "Missing $missing required environment variables. Ensure they are set and re-run the script." 1
     fi
 }
 
@@ -833,22 +962,33 @@ print_log_entry() {
     local timestamp="$1"
     local level="$2"
     local color="$3"
-    local lineno="$4"
-    local message="$5"
-    local details="$6"
+    local funcname="$4"
+    local lineno="$5"
+    local message="$6"
+    local details="$7"
 
     # Write to log file if enabled
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
-        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$message" >&5
-        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$details" >&5
+        if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+            # Use CRITICAL for the main message
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+
+            # Use EXTENDED for details
+            IFS="|" read -r extended_label _ _ <<< "${LOG_PROPERTIES[EXTENDED]}"
+            printf "[%s]\t[%s]\t[%s/%s:%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+        else
+            # Standard log entry without extended details
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$message" >&5
+            [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$funcname" "$lineno" "$details" >&5
+        fi
     fi
 
     # Write to console if enabled
     if [[ "${NO_CONSOLE,,}" != "true" ]] && is_interactive; then
-        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT/$funcname:$lineno]${RESET}\t$message"
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$funcname/$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -863,16 +1003,20 @@ print_log_entry() {
 prepare_log_context() {
     # Local variables for timestamp and line number
     local timestamp
+    local funcname
     local lineno
 
     # Generate the current timestamp
     timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
+    # Retrieve the calling function name
+    funcname=${FUNCNAME[3]}
+
     # Retrieve the line number of the caller
-    lineno="${BASH_LINENO[0]}"
+    lineno="${BASH_LINENO[3]}"
 
     # Return the pipe-separated timestamp and line number
-    echo "$timestamp|$lineno"
+    echo "$timestamp|$funcname|$lineno"
 }
 
 ##
@@ -894,15 +1038,15 @@ log_message() {
     local details="$3"
 
     # Context variables for logging
-    local context timestamp lineno custom_level color severity config_severity
+    local context timestamp funcname lineno custom_level color severity config_severity
 
     # Generate context (timestamp and line number)
     context=$(prepare_log_context)
-    IFS="|" read -r timestamp lineno <<< "$context"
+    IFS="|" read -r timestamp funcname lineno <<< "$context"
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
-        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[2]}() at line ${BASH_LINENO[1]}." >&2 && exit 1
+        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[2]}() at line ${BASH_LINENO[1]}." >&2 && die
     fi
 
     # Extract log properties for the specified level
@@ -919,13 +1063,13 @@ log_message() {
     fi
 
     # Print the log entry
-    print_log_entry "$timestamp" "$custom_level" "$color" "$lineno" "$message" "$details"
+    print_log_entry "$timestamp" "$custom_level" "$color" "$funcname" "$lineno" "$message" "$details"
 }
 
 ##
 # @brief Log a message at the DEBUG level.
 #
-# This function logs messages with the DEBUG log level, typically used for detailed 
+# This function logs messages with the DEBUG log level, typically used for detailed
 # debugging information useful during development or troubleshooting.
 #
 # @param $1 Main log message.
@@ -1168,8 +1312,8 @@ toggle_console_log() {
 
     case "$state" in
         on)
-            NO_CONSOLE="false"
             logD "Console logging enabled."
+            NO_CONSOLE="false"
             ;;
         off)
             NO_CONSOLE="true"
@@ -1196,7 +1340,7 @@ toggle_console_log() {
 validate_log_level() {
     # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
     if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]}" ]]; then
-        echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && exit 1
+        echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && die
     fi
 }
 
@@ -1256,31 +1400,27 @@ usage() {
 Usage: $THISSCRIPT [options]
 
 Options:
-  -dr, --dry-run              Simulate actions without making changes.
+  -dr, --dry-run              Enable dry-run mode, where no actions are performed.
                               Useful for testing the script without side effects.
   -v, --version               Display the script version and exit.
   -h, --help                  Display this help message and exit.
   -lf, --log-file <path>      Specify the log file location.
-                              Default: User's home directory with the name <script_name>.log,
+                              Default: <script_name>.log in the user's home directory,
                               or a temporary file in /tmp if unavailable.
-  -ll, --log-level <level>    Set the log level. Available levels:
-                              DEBUG, INFO, WARNING, ERROR, CRITICAL.
+  -ll, --log-level <level>    Set the logging verbosity level.
+                              Available levels: DEBUG, INFO, WARNING, ERROR, CRITICAL.
                               Default: DEBUG.
-  -tf, --log-to-file <bool>   Set whether to log to a file.
+  -tf, --log-to-file <value>  Enable or disable logging to a file explicitly.
                               Options: true, false, unset (auto-detect based on interactivity).
                               Default: unset.
-  -nc, --no-console           Disable console logging.
-                              Default: Console logging is enabled.
-  -h, --help                  Display this help message and exit.
+  -nc, --no-console           Disable console logging. Default: Console logging is enabled.
 
 Environment Variables:
-  LOG_FILE                    Specify the log file path. Overrides the default
-                              location.
-  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING,
-                              ERROR, CRITICAL).
+  LOG_FILE                    Specify the log file path. Overrides the default location.
+  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
   LOG_TO_FILE                 Control file logging (true, false, unset).
   NO_CONSOLE                  Set to "true" to disable console logging.
-  REQUIRE_INTERNET            Whether Internet access is required.
+  REQUIRE_INTERNET            Set to "true" if the script requires internet connectivity.
 
 Defaults:
   - If no log file is specified, the log file is created in the user's home
@@ -1293,16 +1433,17 @@ Examples:
      $THISSCRIPT --dry-run
   2. Check the script version:
      $THISSCRIPT --version
-  3. Log to /tmp/example.log at INFO level and log to file even if interactive
-     $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
+  3. Specify a custom log file and log level:
+     $THISSCRIPT -lf /tmp/example.log -ll INFO
+  4. Disable console logging while ensuring logs are written to a file:
+     $THISSCRIPT -nc -tf true
+
 EOF
 
     # Exit with success
     exit 0
 }
 
-##
-# @brief Parse command-line arguments and set configuration variables.
 ##
 # @brief Parse command-line arguments and set configuration variables.
 # @details Processes command-line arguments passed to the script and assigns
@@ -1326,16 +1467,13 @@ EOF
 # - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
 # - Paths provided to `--log-file` are resolved to their absolute forms.
 #
-#
 # @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
 # @global LOG_FILE           Path to the log file.
 # @global LOG_LEVEL          Logging verbosity level.
 # @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
-#
-# @return None Exits with an error if invalid arguments or options are provided.
+# @global NO_CONSOLE         Boolean flag to disable console logging.
 ##
 parse_args() {
-    # Local variable declarations
     local arg  # Iterator for arguments
 
     # Iterate through the provided arguments
@@ -1359,7 +1497,7 @@ parse_args() {
                     exit 1
                 fi
                 LOG_FILE="$2"
-                shift 2
+                shift
                 ;;
             --log-level|-ll)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
@@ -1374,7 +1512,7 @@ parse_args() {
                         exit 1
                         ;;
                 esac
-                shift 2
+                shift
                 ;;
             --log-to-file|-tf)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
@@ -1389,11 +1527,10 @@ parse_args() {
                         exit 1
                         ;;
                 esac
-                shift 2
+                shift
                 ;;
             --no-console|-nc)
-                NO_CONSOLE="true"
-                shift
+                NO_CONSOLE=true
                 ;;
             -*)
                 echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
@@ -1414,29 +1551,44 @@ parse_args() {
     NO_CONSOLE="${NO_CONSOLE:-false}"
 
     # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
-    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL NO_CONSOLE
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE
+    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE NO_CONSOLE
 }
 
-# Main function
+##
+# @brief Main function for script execution.
+# @details Performs initialization, validation, and core operations of the script.
+#          Executes tasks while logging actions and results.
+#
+# @param[in] "$@" Command-line arguments passed to the script.
+#
+# @return None Exits with the return status of the main function.
+##
 main() {
     # Perform essential checks
-    parse_args "$@"
-    validate_dependencies
-    setup_logging_environment
-    check_bash
-    check_bash_version
-    check_bitness
-    check_release
-    check_architecture
-    enforce_sudo
-    check_internet
-    # Informational/debug lines
-    print_system
-    #print_version
+    validate_dependencies                # Ensure required dependencies are installed
+    validate_system_reads                # Verify critical system files are accessible
+    validate_env_vars                    # Check for required environment variables
 
-    # Log script start and system information
-    logI "System: $(grep 'PRETTY_NAME' /etc/os-release | cut -d '=' -f2 | tr -d '"')."
+    # Parse command-line arguments
+    parse_args "$@"
+
+    # Setup logging environment
+    setup_logging_environment
+
+    # Check the script's runtime environment
+    check_bash                           # Ensure the script is executed in a Bash shell
+    check_bash_version                   # Verify the current Bash version meets minimum requirements
+    check_bitness                        # Validate system bitness compatibility
+    check_release                        # Check Raspbian OS version compatibility
+    check_architecture                   # Validate Raspberry Pi model compatibility
+    enforce_sudo                         # Ensure proper privileges for script execution
+    check_internet                       # Verify internet connectivity if required
+
+    # Log system and script version details
+    print_system                         # Log system information
+    print_version                        # Log the script version
+
     logI "Script '$THISSCRIPT' started."
 
     # Example log entries for demonstration purposes
@@ -1444,15 +1596,19 @@ main() {
     logW "This is a warning-level message."
     logE "This is an error-level message."
     logC "This is a critical-level message."
-    logC "This is a critical-level message with extended details." "Additional information about the critical issue."
+    logC "This is a critical-level message with extended details." \
+        "Additional information about the critical issue."
+    toggle_console_log off
+    logI "This is a message that will only be in the log file."
+    toggle_console_log on
 
-    # Example command: Replace with any command you'd like to run
-    command="sleep 2 && foo"  # This will fail
-    command_text="data processing fail"
+    # Example command: Simulated failure
+    local command="sleep 2 && foo"       # This will fail
+    local command_text="data processing fail"
     execute_task_indicator "$command_text" "$command"
 
-    # Example command: Replace with any command you'd like to run
-    command="sleep 2"  # This will succeed
+    # Example command: Simulated success
+    command="sleep 2"                    # This will succeed
     command_text="data processing success"
     execute_task_indicator "$command_text" "$command"
 
