@@ -154,6 +154,7 @@ declare LOG_TO_FILE="${LOG_TO_FILE:-}"    # Default to blank if not set
 # Logging configuration
 declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
+readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"               # Default fallback name if the script is piped
 
 # Required packages
 readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
@@ -672,54 +673,25 @@ check_bitness() {
 }
 
 ##
-# @brief Display usage information and examples for the script.
-# @details Provides an overview of the script's available options, their purposes,
-#          and practical examples for running the script.
+# @brief Determine how the script was executed.
+# @details Checks if the script is being run directly, piped through bash,
+#          or executed in an unusual manner.
 #
-# @global THIS_SCRIPT The name of the script, typically derived from the script's filename.
-#
-# @return None Exits the script with a success code after displaying usage information.
+# @return 0 (true) if the script is being piped, 1 (false) otherwise.
 ##
-usage() {
-    cat << EOF
-Usage: $THIS_SCRIPT [options]
-
-Options:
-  -dr, --dry-run              Simulate actions without making changes.
-                              Useful for testing the script without side effects.
-  -v, --version               Display the script version and exit.
-  -h, --help                  Display this help message and exit.
-  -lf, --log-file <path>      Specify the log file location.
-                              When set, implies --log-to-file true.
-  -ll, --log-level <level>    Set the log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  -tf, --log-to-file <value>  Enable or disable logging to a file explicitly (true/false).
-                              If --log-file is set, this option is ignored.
-  -l, --local                 Enable local mode for installation from a local git repository.
-  -t, --terse                 Enable terse mode. Reduces output verbosity for a quieter run.
-
-Environment Variables:
-  USE_LOCAL                   Enable local installation mode (equivalent to --local).
-  LOG_FILE                    Path to the log file. Overrides default logging behavior.
-  LOG_LEVEL                   Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-  LOG_TO_FILE                 Whether to log to a file (true, false, or unset).
-  TERSE                       Enable terse mode (equivalent to --terse).
-
-Examples:
-  1. Run the script in dry-run mode:
-     $THIS_SCRIPT --dry-run
-  2. Check the script version:
-     $THIS_SCRIPT --version
-  3. Log to /tmp/example.log at INFO level and explicitly log to file:
-     $THIS_SCRIPT -lf /tmp/example.log -ll INFO -tf true
-  4. Enable local installation mode:
-     $THIS_SCRIPT --local
-  5. Run the script in terse mode:
-     $THIS_SCRIPT --terse
-
-EOF
-
-    # Exit with success
-    exit 0
+check_pipe() {
+    if [[ "$0" == "bash" ]]; then
+        if [[ -p /dev/stdin ]]; then
+            # Script is being piped through bash
+            THIS_SCRIPT="$FALLBACK_NAME"
+        else
+            # Script was run in an unusual way with 'bash'
+            THIS_SCRIPT="$FALLBACK_NAME"
+        fi
+    else
+        # Script run directly
+        return
+    fi
 }
 
 ##
@@ -763,120 +735,6 @@ print_version() {
     else
         logD "Running $THIS_SCRIPT version $SEM_VER"
     fi
-}
-
-##
-# @brief Parse command-line arguments and set configuration variables.
-# @details Processes command-line arguments passed to the script and assigns
-#          values to corresponding global variables.
-#
-# @param[in] "$@" The command-line arguments passed to the script.
-#
-# Supported options:
-# - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
-# - `--version` or `-v`: Display the version information and exit.
-# - `--help` or `-h`: Show the usage information and exit.
-# - `--log-file` or `-lf <path>`: Specify the path to the log file. Automatically enables logging to a file.
-# - `--log-level` or `-ll <level>`: Set the logging verbosity level.
-# - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
-# - `--local` or `-l`: Enable local mode.
-# - `--terse` or `-t`: Enable terse mode, reducing output verbosity.
-#
-# @return
-# - Exits with code 0 on success.
-# - Exits with code 1 if an invalid argument or option is provided.
-#
-# @note
-# - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
-# - Paths provided to `--log-file` are resolved to their absolute forms.
-#
-# @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
-# @global LOG_FILE           Path to the log file.
-# @global LOG_LEVEL          Logging verbosity level.
-# @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
-# @global USE_LOCAL          Boolean flag indicating whether local mode is enabled.
-# @global TERSE              Boolean flag indicating whether terse mode is enabled.
-#
-# @return None Exits with an error if invalid arguments or options are provided.
-##
-parse_args() {
-    # Local variable declarations
-    local arg  # Iterator for arguments
-
-    # Iterate through the provided arguments
-    while [[ "$#" -gt 0 ]]; do
-        arg="$1"
-        case "$arg" in
-            --dry-run|-dr)
-                DRY_RUN=true
-                ;;
-            --version|-v)
-                print_version
-                exit 0
-                ;;
-            --help|-h)
-                usage
-                exit 0
-                ;;
-            --log-file|-lf)
-                if [[ -n "$2" ]]; then
-                    # Resolve full path and expand '~'
-                    LOG_FILE=$(realpath -m "$2" 2>/dev/null)
-                    if [[ -z "$LOG_FILE" ]]; then
-                        echo "ERROR: Invalid path '$2' for --log-file." >&2
-                        exit 1
-                    fi
-                    LOG_TO_FILE="true"  # Automatically enable logging to file
-                    shift 2
-                else
-                    echo "ERROR: --log-file requires a file path argument." >&2
-                    exit 1
-                fi
-                ;;
-            --log-level|-ll)
-                if [[ -n "$2" ]]; then
-                    LOG_LEVEL="$2"
-                    shift 2
-                else
-                    echo "ERROR: --log-level requires a level argument." >&2
-                    exit 1
-                fi
-                ;;
-            --log-to-file|-tf)
-                if [[ -n "$LOG_FILE" ]]; then
-                    # Skip processing --log-to-file if --log-file is set
-                    echo "INFO: Ignoring --log-to-file because --log-file is set." >&2
-                else
-                    if [[ -n "$2" ]]; then
-                        LOG_TO_FILE="$2"
-                        shift 2
-                    else
-                        echo "ERROR: --log-to-file requires a value (e.g., true/false)." >&2
-                        exit 1
-                    fi
-                fi
-                ;;
-            --local|-l)
-                USE_LOCAL="true"
-                ;;
-            --terse|-t)
-                TERSE="true"
-                ;;
-            -*)
-                echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
-                exit 1
-                ;;
-            *)
-                echo "ERROR: Unexpected argument '$arg'." >&2
-                exit 1
-                ;;
-        esac
-        shift
-    done
-
-    # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE # USE_LOCAL
-    export DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE USE_LOCAL
 }
 
 ##
@@ -1331,8 +1189,6 @@ validate_log_level() {
         echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && exit 1
     fi
 }
-
-
 
 ##
 # @brief Sets up the logging environment for the script.
@@ -1921,11 +1777,225 @@ EOF
 }
 
 ############
+### Command Line Functions
+############
+
+##
+# @brief Display usage information and examples for the script.
+# @details Provides an overview of the script's available options, their purposes,
+#          and practical examples for running the script.
+#
+# @global THIS_SCRIPT The name of the script, typically derived from the script's filename.
+#
+# @return None Exits the script with a success code after displaying usage information.
+##
+usage() {
+    cat << EOF
+Usage: $THIS_SCRIPT [options]
+
+Options:
+  -dr, --dry-run              Enable dry-run mode, where no actions are performed.
+                              Useful for testing the script without side effects.
+  -v, --version               Display the script version and exit.
+  -h, --help                  Display this help message and exit.
+  -lf, --log-file <path>      Specify the log file location.
+                              Default: <THIS_SCRIPT>.log in the user's home directory,
+                              or a temporary file in /tmp if unavailable.
+  -ll, --log-level <level>    Set the logging verbosity level.
+                              Available levels: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+                              Default: DEBUG.
+  -tf, --log-to-file <value>  Enable or disable logging to a file explicitly.
+                              Options: true, false, unset (auto-detect based on interactivity).
+                              Default: unset.
+  -t,  --terse <value>        Enable or disable terse output mode.
+                              Options: true, false.
+                              Default: false.
+  -nc, --no-console <value>   Enable or disable console logging explicitly.
+                              Options: true, false.
+                              Default: false (console logging is enabled).
+
+Environment Variables:
+  LOG_FILE                    Specify the log file path. Overrides the default location.
+  LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+  LOG_TO_FILE                 Control file logging (true, false, unset).
+  TERSE                       Set to "true" to enable terse output mode.
+  NO_CONSOLE                  Set to "true" to disable console logging.
+
+Defaults:
+  - If no log file is specified, the log file is created in the user's home
+    directory as <THIS_SCRIPT>.log.
+  - If the home directory is unavailable or unwritable, a temporary log file
+    is created in /tmp.
+
+Examples:
+  1. Run the script in dry-run mode:
+     $THIS_SCRIPT --dry-run
+  2. Check the script version:
+     $THIS_SCRIPT --version
+  3. Specify a custom log file and log level:
+     $THIS_SCRIPT -lf /tmp/example.log -ll INFO
+  4. Disable console logging while ensuring logs are written to a file:
+     $THIS_SCRIPT -nc true -tf true
+  5. Enable terse output mode:
+     $THIS_SCRIPT --terse true
+
+EOF
+
+    # Exit with success
+    exit 0
+}
+
+##
+# @brief Parse command-line arguments and set configuration variables.
+# @details Processes command-line arguments passed to the script and assigns
+#          values to corresponding global variables.
+#
+# @param[in] "$@" The command-line arguments passed to the script.
+#
+# Supported options:
+# - `--dry-run` or `-dr`: Enable dry-run mode, where no actions are performed.
+# - `--version` or `-v`: Display the version information and exit.
+# - `--help` or `-h`: Show the usage information and exit.
+# - `--log-file` or `-lf <path>`: Specify the log file location.
+# - `--log-level` or `-ll <level>`: Set the logging verbosity level.
+# - `--log-to-file` or `-tf <value>`: Enable or disable logging to a file explicitly (true/false).
+# - `--terse` or `-t <value>`: Enable or disable terse output mode (true/false).
+# - `--no-console` or `-nc <value>`: Enable or disable console logging (true/false).
+#
+# @return
+# - Exits with code 0 on success.
+# - Exits with code 1 if an invalid argument or option is provided.
+#
+# @note
+# - If both `--log-file` and `--log-to-file` are provided, `--log-file` takes precedence.
+#
+# @global DRY_RUN            Boolean flag indicating dry-run mode (no actions performed).
+# @global LOG_FILE           Path to the log file.
+# @global LOG_LEVEL          Logging verbosity level.
+# @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
+# @global TERSE              Boolean flag indicating terse output mode.
+# @global NO_CONSOLE         Boolean flag indicating console output status.
+##
+parse_args() {
+    local arg  # Iterator for arguments
+
+    # Iterate through the provided arguments
+    while [[ "$#" -gt 0 ]]; do
+        arg="$1"
+        case "$arg" in
+            --dry-run|-dr)
+                DRY_RUN=true
+                ;;
+            --version|-v)
+                print_version
+                exit 0
+                ;;
+            --help|-h)
+                usage
+                ;;
+            --log-file|-lf)
+                # Resolve full path and expand '~'
+                LOG_FILE=$(realpath -m "$2" 2>/dev/null)
+                if [[ -z "$LOG_FILE" ]]; then
+                    echo "ERROR: Invalid path '$2' for --log-file." >&2
+                    exit 1
+                fi
+                LOG_TO_FILE="true"  # Automatically enable logging to file
+                shift
+                ;;
+            --log-level|-ll)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                    exit 1
+                fi
+                LOG_LEVEL="$2"
+                case "$LOG_LEVEL" in
+                    DEBUG|INFO|WARNING|ERROR|CRITICAL) ;;  # Valid levels
+                    *)
+                        echo "ERROR: Invalid log level: $LOG_LEVEL. Valid options are: DEBUG, INFO, WARNING, ERROR, CRITICAL." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
+                ;;
+            --log-to-file|-tf)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false, unset." >&2
+                    exit 1
+                fi
+                LOG_TO_FILE="$2"
+                case "${LOG_TO_FILE,,}" in
+                    true|false|unset) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $LOG_TO_FILE. Valid options are: true, false, unset." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
+                ;;
+            --terse|-t)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
+                    exit 1
+                fi
+                TERSE="$2"
+                case "${TERSE,,}" in
+                    true|false) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $TERSE. Valid options are: true, false." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
+                ;;
+            --no-console|-nc)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
+                    exit 1
+                fi
+                NO_CONSOLE="$2"
+                case "${NO_CONSOLE,,}" in
+                    true|false) ;;  # Valid values
+                    *)
+                        echo "ERROR: Invalid value for $1: $NO_CONSOLE. Valid options are: true, false." >&2
+                        exit 1
+                        ;;
+                esac
+                shift
+                ;;
+            -*)
+                echo "ERROR: Unknown option '$arg'. Use -h or --help to see available options." >&2
+                exit 1
+                ;;
+            *)
+                echo "ERROR: Unexpected argument '$arg'." >&2
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    # Set default values if not provided
+    LOG_FILE="${LOG_FILE:-}"
+    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
+    TERSE="${TERSE:-false}"
+    NO_CONSOLE="${NO_CONSOLE:-false}"
+
+    # Export and make relevant global variables readonly
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE
+    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE NO_CONSOLE
+}
+
+############
 ### Main Functions
 ############
 
 # Main function
 main() {
+    # Get fallback name if piped through bash
+    check_pipe
+
     # Perform essential checks
     parse_args "$@"     # Parse any command line arguments
     validate_depends    # Check availability of req. non-Bash builtins
