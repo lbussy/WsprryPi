@@ -86,6 +86,15 @@ declare USE_LOCAL="${USE_LOCAL:-false}"
 declare GIT_DEF_BRCH=("main" "master")
 
 ##
+## @brief Flag to disable console logging.
+##
+## Possible values:
+## - "true": Disables logging to the terminal.
+## - "false": Enables logging to the terminal (default).
+##
+declare NO_CONSOLE="${NO_CONSOLE:-true}" # TODO: Disable console logging
+
+##
 # @brief Configuration constants for script requirements and compatibility.
 # @details Defines requirements for running the script, including root privileges,
 # supported Bash version, OS versions, and system bitness.
@@ -184,64 +193,214 @@ check_internet() {
     fi
 }
 
-
 ##
-# @brief Print a warning message with optional details.
-# @details Logs and prints a warning message along with any additional details provided.
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
 #
-# @param $1 The main warning message.
-# @param $@ Additional details for the warning (optional).
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
 #
-# @global BASH_LINENO Array containing line numbers where the warning occurred.
-# @global log_message Function to log messages at various severity levels.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
 #
 # @return None
 ##
-# shellcheck disable=SC2329
-warn() {
-    local lineno="${BASH_LINENO[0]}"  # Line number where the warning occurred
-    local message="$1"               # Warning message
-    shift
-    local details="$*"               # Additional details (optional)
+stack_trace() {
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
 
-    # Log and print the warning message
-    logW "$message" "$details"
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
 }
 
 ##
-# @brief Print a fatal error message, log it, and exit the script.
-# @details Logs a critical error message with optional details, provides context,
-# prints a stack trace, and exits the script with the specified or default exit status.
+# @brief Logs a warning or error message with optional details and a stack trace.
+# @details This function logs messages at WARNING or ERROR levels, with an optional
+#          stack trace for warnings. The error level can also be specified and
+#          appended to the log message.
 #
-# @param $1 Exit status code (default: last command's exit status).
-# @param $2 The main error message.
+# @param $1 [Optional] The log level (WARNING or ERROR). Defaults to WARNING.
+# @param $2 [Optional] The error level (numeric). Defaults to 0 if not provided.
+# @param $3 [Optional] The main log message. Defaults to "An issue was raised on this line."
+# @param $4 [Optional] Additional details to log.
+#
+# @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THIS_SCRIPT The name of the script being executed.
+#
+# @return None
+##
+warn() {
+    # Initialize default values
+    local error_level=0            # Default error level
+    local level="WARNING"          # Default log level
+    local message="An issue was raised on this line"  # Default log message
+    local details=""               # Default to no additional details
+    local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
+    local script="$THIS_SCRIPT"     # Script name
+
+    # Parse arguments in order
+    if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
+        level="$1"
+        shift
+    fi
+
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        error_level="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        message="$1"
+        shift
+    fi
+
+    if [[ -n "$1" ]]; then
+        details="$1"
+    fi
+
+    # Append error level to the log message
+    message="${message}: ($error_level)"
+
+    # Log the message with the appropriate level
+    if [[ "$level" == "WARNING" ]]; then
+        logW "$message" "$details"
+    elif [[ "$level" == "ERROR" ]]; then
+        logE "$message" "$details"
+    fi
+
+    # Optionally print a stack trace for warnings
+    if [[ "$level" == "WARNING" && "$WARN_STACK_TRACE" == "true" ]]; then
+        stack_trace "$level" "Stack trace for $level at line $lineno: $message"
+    fi
+
+    return
+}
+
+##
+# @brief Log a critical error, print a stack trace, and exit the script.
+#
+# @param $1 Exit status code (optional, defaults to 1 if not numeric).
+# @param $2 Main error message (optional).
 # @param $@ Additional details for the error (optional).
 #
-# @global BASH_LINENO Array containing line numbers where the error occurred.
-# @global THIS_SCRIPT The name of the script (used in log messages).
-# @global log_message Function to log messages at various severity levels.
-# @global stack_trace Function to print the stack trace.
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global THIS_SCRIPT Script name.
 #
-# @return None (exits the script with the provided or default exit status).
+# @return Exits the script with the provided or default exit status.
 ##
 die() {
+    # Local variables
+    local exit_status="$1"              # First parameter as exit status
+    local message                       # Main error message
+    local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local exit_status="${1:-$?}"        # Exit status code (default: last command's exit status)
-    shift
-    local message="$1"                  # Error message
-    shift
-    local details="$*"                  # Additional details (optional)
+    local script="$THIS_SCRIPT"         # Script name
+    local level="CRITICAL"              # Error level
+    local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
-    # Log the fatal error message
-    logC "$message" "$details"
+    # Determine exit status and message
+    if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
+        exit_status=1
+        message="$1"
+        shift
+    else
+        shift
+        message="$1"
+        shift
+    fi
+    details="$*" # Remaining parameters as details
 
-    # Provide context for the critical error
-    logC "Script '$THIS_SCRIPT' did not complete due to a critical error."
+    # Log the error message only if a message is provided
+    if [[ -n "$message" ]]; then
+        printf "[%s]\t[%s:%d]\t%s\n" "$tag" "$script" "$lineno" "$message" >&2
+        if [[ -n "$details" ]]; then
+            printf "[%s]\t[%s:%d]\tDetails: %s\n" "$tag" "$script" "$lineno" "$details" >&2
+        fi
+    fi
 
-    # Print the stack trace
-    stack_trace
+    # Log the unrecoverable error
+    printf "[%s]\t[%s:%d]\tUnrecoverable error (exit status: %d).\n" \
+        "$tag" "$script" "$lineno" "$exit_status" >&2
 
-    # Exit with the provided or default exit status
+    # Call stack_trace with processed message and error level
+    if [[ -z "$message" ]]; then
+        stack_trace "$level" "Stack trace from line $lineno."
+    else
+        stack_trace "$level" "Stack trace from line $lineno: $message"
+    fi
+
+    # Exit with the determined status
     exit "$exit_status"
 }
 
@@ -258,7 +417,8 @@ add_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to add_dot cannot be empty."
+        return 1
     fi
 
     # Add a leading dot if it's missing
@@ -282,7 +442,8 @@ remove_dot() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to remove_dot cannot be empty."
+        return 1
     fi
 
     # Remove the leading dot if present
@@ -306,7 +467,8 @@ add_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to add_slash cannot be empty."
+        return 1
     fi
 
     # Add a trailing slash if it's missing
@@ -330,7 +492,7 @@ remove_slash() {
 
     # Validate input
     if [[ -z "$input" ]]; then
-        die 1 "Input to ${FUNCNAME[0]} cannot be empty." >&2
+        warn "ERROR" "Input to remove_slash cannot be empty."
         return 1
     fi
 
@@ -1566,7 +1728,7 @@ blacklist_snd_bcm2835() {
         logD "Module $module is already blacklisted in $blacklist_file."
     else
         # Blacklist the module if it is not already blacklisted
-        echo "blacklist $module" >> "$blacklist_file"
+        echo "blacklist $module" | sudo tee -a "$blacklist_file" > /dev/null
         REBOOT="true"
         readonly REBOOT  # Mark REBOOT as readonly
         export REBOOT    # Export REBOOT to make it available to child processes
