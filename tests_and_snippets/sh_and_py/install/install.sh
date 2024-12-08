@@ -22,7 +22,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # TODO:
-#   - Change the line number in log_message to be the one calling the message
+#   - Change the line number in log_message to be the one calling the message + scriptname
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
@@ -91,6 +91,25 @@ declare GIT_DEF_BRCH=("main" "master")
 ##
 # TODO: Implement logic to disable console logging when USE_CONSOLE is set to "false".
 USE_CONSOLE="${USE_CONSOLE:-false}"
+
+##
+# @var TERSE
+# @brief Controls terse output mode.
+# @details
+# This variable determines whether the script operates in terse output mode.
+# When enabled (`true`), the script produces minimal output.
+# 
+# Default Behavior:
+# - If `TERSE` is unset or null, it defaults to `"true"`.
+# - If `TERSE` is already set, its value is preserved.
+#
+# Example:
+# - `TERSE="false"` disables terse output mode.
+# - If `TERSE` is not explicitly set, it will default to `"true"`.
+#
+# @default "true"
+##
+TERSE="${TERSE:-true}"
 
 ##
 # @var REQUIRE_SUDO
@@ -431,6 +450,7 @@ stack_trace() {
     done
 
     # Print stack trace footer (line of "-" matching $header)
+    # shellcheck disable=SC2183
     printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
 }
 
@@ -1292,7 +1312,8 @@ default_color() {
 ##
 generate_terminal_sequence() {
     local result
-    result=$(eval "$@" 2>/dev/null || echo "")  # Execute the command safely
+    # Execute the command and capture its output, suppressing errors.
+    result=$("$@" 2>/dev/null || echo "")
     echo "$result"
 }
 
@@ -1350,9 +1371,9 @@ init_colors() {
 
         # Additional formatting and separators
         DOT="$(tput sc)$(default_color setaf 0)$(default_color setab 0).$(default_color sgr0)$(tput rc)"
-        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
-        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
-
+        # Generate heavy and light horizontal rules based on terminal width.
+        HHR=$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}")) || true
+        LHR=$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}")) || true
     fi
 
     # Set variables as readonly
@@ -1706,7 +1727,7 @@ get_proj_params() {
 #
 # @return None Waits for the user to press any key before proceeding if running interactively.
 ##
-display_start() {
+start_script() {
     # Declare local variables
     local sp12 sp19 key
 
@@ -1840,7 +1861,7 @@ exec_command() {
 
     # Print the "[-] Running: $exec_name" message if USE_CONSOLE is false
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "${FGGLD}[-]${RESET}\t$running_pre $exec_name\n"
+        printf "%b[-]%b\t%s %s\n" "$FGGLD" "$RESET" "$running_pre" "$exec_name"
     fi
 
     # Execute the task command, suppress output, and capture result
@@ -1848,21 +1869,21 @@ exec_command() {
 
     # Move the cursor up and clear the entire line if USE_CONSOLE is false
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "${MOVE_UP}${CLEAR_LINE}"
+        printf "\033[A\033[2K"
     fi
 
     # Handle success or failure
     if [ "$result" -eq 0 ]; then
         # Success case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "${FGGRN}[✔]${RESET}\t$complete_pre $exec_name\n"
+            printf "\033[1;32m[✔]\033[0m\tCompleted: my_program.sh\n"
         fi
         logI "$complete_pre $exec_name"
         return 0 # Success (true)
     else
         # Failure case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "${FGRED}[✘]${RESET}\t$failed_pre $exec_name (Error: $result)\n"
+            printf "\033[1;31m[✘]\033[0m\tFailed to execute my_program.sh (%s)\n" "$result"
         fi
         logE "$failed_pre $exec_name"
         return 1 # Failure (false)
@@ -2272,11 +2293,10 @@ main() {
     print_version       # Log the script version
 
     # Install Functions
-    apt_packages        # Install/update required apt packages
+    start_script
+    # apt_packages        # Install/update required apt packages
 
-    # Testing exec_command()
-    exec_command "Processing data" "sleep 2" || die
-    exec_command "Installing software" "sleep 2 && foo" || die
+    finish_script       # Finish install
 }
 
 # Run the main function and exit with its return status

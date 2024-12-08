@@ -22,7 +22,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # TODO:
-#   - Change the line number in log_message to be the one calling the message
+#   - Change the line number in log_message to be the one calling the message + scriptname
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
@@ -91,6 +91,25 @@ declare GIT_DEF_BRCH=("main" "master")
 ##
 # TODO: Implement logic to disable console logging when USE_CONSOLE is set to "false".
 USE_CONSOLE="${USE_CONSOLE:-false}"
+
+##
+# @var TERSE
+# @brief Controls terse output mode.
+# @details
+# This variable determines whether the script operates in terse output mode.
+# When enabled (`true`), the script produces minimal output.
+# 
+# Default Behavior:
+# - If `TERSE` is unset or null, it defaults to `"true"`.
+# - If `TERSE` is already set, its value is preserved.
+#
+# Example:
+# - `TERSE="false"` disables terse output mode.
+# - If `TERSE` is not explicitly set, it will default to `"true"`.
+#
+# @default "true"
+##
+TERSE="${TERSE:-true}"
 
 ##
 # @var REQUIRE_SUDO
@@ -431,6 +450,7 @@ stack_trace() {
     done
 
     # Print stack trace footer (line of "-" matching $header)
+    # shellcheck disable=SC2183
     printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
 }
 
@@ -1292,7 +1312,8 @@ default_color() {
 ##
 generate_terminal_sequence() {
     local result
-    result=$(eval "$@" 2>/dev/null || echo "")  # Execute the command safely
+    # Execute the command and capture its output, suppressing errors.
+    result=$("$@" 2>/dev/null || echo "")
     echo "$result"
 }
 
@@ -1350,9 +1371,9 @@ init_colors() {
 
         # Additional formatting and separators
         DOT="$(tput sc)$(default_color setaf 0)$(default_color setab 0).$(default_color sgr0)$(tput rc)"
-        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
-        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
-
+        # Generate heavy and light horizontal rules based on terminal width.
+        HHR=$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}")) || true
+        LHR=$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}")) || true
     fi
 
     # Set variables as readonly
@@ -1696,6 +1717,127 @@ get_proj_params() {
 ############
 
 ##
+# @brief Display installation instructions or log the start of the installation in non-interactive or terse mode.
+# @details Provides an overview of the choices the user will encounter during installation
+#          if running interactively and not in terse mode. If non-interactive or terse, skips the printing and logs the start.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global REPO_NAME The name of the package being installed.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None Waits for the user to press any key before proceeding if running interactively.
+##
+start_script() {
+    # Declare local variables
+    local sp12 sp19 key
+
+    # Add spaces for alignment
+    sp12="$(printf ' %.0s' {1..12})"
+    sp19="$(printf ' %.0s' {1..19})"
+
+    # Check if the script is non-interactive or in terse mode
+    if [ "$TERSE" = "true" ]; then
+        logI "$REPO_NAME install beginning."
+        return
+    fi
+
+    # Clear the screen
+    clear
+
+    # Display instructions
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp12 __          __                          _____ _ $sp19
+$DOT$BGBLK$FGYLW$sp12 \ \        / /                         |  __ (_)$sp19
+$DOT$BGBLK$FGYLW$sp12  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp19
+$DOT$BGBLK$FGYLW$sp12   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp19
+$DOT$BGBLK$FGYLW$sp12    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp19
+$DOT$BGBLK$FGYLW$sp12     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp19
+$DOT$BGBLK$FGYLW$sp12                | |               __/ |          $sp19
+$DOT$BGBLK$FGYLW$sp12                |_|              |___/           $sp19
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+You will be presented with some choices during the install. Most frequently
+you will see a 'yes or no' choice, with the default choice capitalized like
+so: [y/N]. Default means if you hit <enter> without typing anything, you will
+make the capitalized choice, i.e. hitting <enter> when you see [Y/n] will
+default to 'yes.'
+
+Yes/no choices are not case sensitive. However, passwords, system names, and
+install paths are. Be aware of this. There is generally no difference between
+'y', 'yes', 'YES', 'Yes', etc.
+
+EOF
+
+    # Wait for user input
+    while true; do
+        read -n 1 -s -r -p "Press any key when you are ready to proceed or 'Q' to quit. " key < /dev/tty
+        echo
+        case "$key" in
+            [Qq]) 
+                logI "Installation canceled by user."
+                exit 0
+                ;;
+            *) 
+                break
+                ;;
+        esac
+    done
+
+    # Clear the screen again
+    clear
+}
+
+##
+# @brief Sets the system timezone interactively or logs if already set.
+# @details If the current timezone is not GMT or BST, logs the current date and time,
+#          and exits. Otherwise, prompts the user to confirm or reconfigure the timezone.
+#
+# @return None Logs the current timezone or adjusts it if necessary.
+##
+set_time() {
+    # Declare local variables
+    local need_set current_date tz yn
+
+    # Get the current date and time
+    current_date="$(date)"
+    tz="$(date +%Z)"
+
+    # Log and return if the timezone is not GMT or BST
+    if [ "$tz" != "GMT" ] && [ "$tz" != "BST" ]; then
+        need_set=true
+        return
+    fi
+
+    # Check if the script is in terse mode
+    if [[ "$TERSE" == "true" && "$need_set" == "true" ]]; then
+        logW "Timezone detected as $tz, which may need to be updated."
+        return
+    else
+        logt "Timezone detected as $tz."
+    fi
+
+    # Inform the user about the current date and time
+    logI "Timezone detected as $tz, which may need to be updated."
+
+    # Prompt for confirmation or reconfiguration
+    while true; do
+        read -rp "Is this correct? [y/N]: " yn < /dev/tty
+        case "$yn" in
+            [Yy]*) 
+                logI "Timezone confirmed on $current_date"
+                break
+                ;;
+            [Nn]* | *) 
+                dpkg-reconfigure tzdata
+                logI "Timezone reconfigured on $current_date"
+                break
+                ;;
+        esac
+    done
+}
+
+##
 # @brief Execute a command and return its success or failure.
 #
 # This function executes a given command, logs its status, and optionally
@@ -1719,7 +1861,7 @@ exec_command() {
 
     # Print the "[-] Running: $exec_name" message if USE_CONSOLE is false
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "${FGGLD}[-]${RESET}\t$running_pre $exec_name\n"
+        printf "%b[-]%b\t%s %s\n" "$FGGLD" "$RESET" "$running_pre" "$exec_name"
     fi
 
     # Execute the task command, suppress output, and capture result
@@ -1727,21 +1869,21 @@ exec_command() {
 
     # Move the cursor up and clear the entire line if USE_CONSOLE is false
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "${MOVE_UP}${CLEAR_LINE}"
+        printf "\033[A\033[2K"
     fi
 
     # Handle success or failure
     if [ "$result" -eq 0 ]; then
         # Success case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "${FGGRN}[✔]${RESET}\t$complete_pre $exec_name\n"
+            printf "\033[1;32m[✔]\033[0m\tCompleted: my_program.sh\n"
         fi
         logI "$complete_pre $exec_name"
         return 0 # Success (true)
     else
         # Failure case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "${FGRED}[✘]${RESET}\t$failed_pre $exec_name (Error: $result)\n"
+            printf "\033[1;31m[✘]\033[0m\tFailed to execute my_program.sh (%s)\n" "$result"
         fi
         logE "$failed_pre $exec_name"
         return 1 # Failure (false)
@@ -1791,6 +1933,124 @@ apt_packages() {
 
 ############
 ### TODO:  More Installer Functions HEre
+############
+
+##
+# @brief Check if the snd_bcm2835 module is available and blacklist it if necessary.
+# @details Checks if the snd_bcm2835 module is present on the system and if it is not
+#          already blacklisted, it adds it to the blacklist and sets the REBOOT flag.
+#
+# @global REBOOT The flag indicating if a reboot is required.
+#
+# @return 0 If the module is available and blacklisted (or already blacklisted).
+# @return 1 If the module is not available, and processing is skipped.
+##
+blacklist_snd_bcm2835() {
+    # Declare local variables
+    local module="snd_bcm2835"
+    local blacklist_file="/etc/modprobe.d/alsa-blacklist.conf"
+
+    # Check if the module exists in the kernel
+    if ! modinfo "$module" &>/dev/null; then
+        return
+    fi
+
+    # Check if the module is blacklisted
+    if grep -q "blacklist $module" "$blacklist_file" 2>/dev/null; then
+        logD "Module $module is already blacklisted in $blacklist_file."
+    else
+        echo "blacklist $module" | sudo tee -a "$blacklist_file" > /dev/null
+        REBOOT="true"
+        readonly REBOOT
+        export REBOOT
+
+        if [ "$TERSE" = "true" ]; then
+            logW "Module $module has been blacklisted. A reboot is required for changes to take effect."
+        else
+            cat << EOF
+
+*Important Note:*
+
+Wsprry Pi uses the same hardware as your Raspberry Pi's sound
+system to generate radio frequencies. This soundcard has been
+disabled. You must reboot the Pi after this install completes
+for this to take effect:
+
+EOF
+            read -rp "Press any key to continue." < /dev/tty
+            echo
+        fi
+    fi
+
+    return 0
+}
+
+##
+# @brief Finalize the script execution and display completion details.
+# @details Displays reboot instructions if required and provides details about the WSPR daemon.
+#          Skips the message if the script is running in non-interactive mode or terse mode.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global REBOOT Indicates whether a reboot is required.
+# @global SEM_VER The release version of the software.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None
+##
+finish_script() {
+    # Declare local variables
+    local sp7 sp11 sp18 sp28 sp49 rebootmessage
+
+    if [ "$REBOOT" = "true" ]; then
+        if [ "$TERSE" = "true" ]; then
+            logW "$REPO_NAME install complete. A reboot is necessary to complete functionality."
+        else
+            echo "A reboot is required to complete functionality."
+            read -rp "Reboot now? [Y/n]: " reboot_choice < /dev/tty
+            case "$reboot_choice" in
+                [Yy]* | "") 
+                    logI "Rebooting the system as requested."
+                    sudo reboot
+                    ;;
+                *)
+                    logI "Reboot deferred by the user."
+                    ;;
+            esac
+        fi
+        return
+    fi
+
+    if [ "$TERSE" = "true" ]; then
+        logI "$REPO_NAME install complete."
+        return
+    fi
+
+    sp7="$(printf ' %.0s' {1..7})"
+    sp11="$(printf ' %.0s' {1..11})"
+    sp18="$(printf ' %.0s' {1..18})"
+    sp28="$(printf ' %.0s' {1..28})"
+    sp49="$(printf ' %.0s' {1..49})"
+
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
+$DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
+$DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
+$DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
+$DOT$BGBLK$FGYLW$sp49|_|$sp28
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+The WSPR daemon has started.
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
+                  -or- : http://$(hostname).local/wspr
+ - Release version     : $SEM_VER
+$rebootmessage
+Happy DXing!
+EOF
+}
+
+############
+### TODO:  More Installer Functions Here
 ############
 
 ############
@@ -2033,7 +2293,6 @@ main() {
     print_version       # Log the script version
 
     # Install Functions
-    apt_packages        # Install/update required apt packages
 }
 
 # Run the main function and exit with its return status
