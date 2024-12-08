@@ -956,6 +956,36 @@ check_bash() {
     fi
 }
 
+##
+# @brief Toggle the NO_CONSOLE variable on or off.
+#
+# This function updates the global NO_CONSOLE variable to either "true" (off)
+# or "false" (on) based on the input argument.
+#
+# @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
+# @return 0 on success, 1 on invalid input.
+##
+toggle_console_log() {
+    local state="${1,,}"  # Convert input to lowercase for consistency
+
+    case "$state" in
+        on)
+            logD "Console logging enabled."
+            NO_CONSOLE="false"
+            ;;
+        off)
+            NO_CONSOLE="true"
+            logD "Console logging disabled."
+            ;;
+        *)
+            logW "ERROR: Invalid argument for toggle_console_log." >&2
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
 ############
 ### Logging Functions
 ############
