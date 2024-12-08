@@ -70,16 +70,20 @@ trap_error() {
 # @global THISSCRIPT The name of the script.
 ##
 declare THISSCRIPT="${THISSCRIPT:-install.sh}" # Use existing value, or default to "install.sh".
-#readonly THISSCRIPT="${THISSCRIPT:-$(basename "$0")}" # Use existing value, or default to script basename.
 
 ##
 # @brief Project metadata constants used throughout the script.
 # @details These variables provide metadata about the script, including ownership,
 # versioning, and project details. All are marked as read-only.
 ##
-readonly COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"  # Copyright notice
-readonly VERSION="1.2.1-version-files+91.3bef855-dirty"              # Current script version
-declare GIT_BRCH="version_files"                                     # Current Git branch
+readonly VERSION="1.2.1-version-files+91.3bef855-dirty"
+
+declare VERSION="${VERSION:-1.0.0}"     # Default to 1.0.0 if not set
+declare GIT_BRCH="${GIT_BRCH:-main}"    # Default to main branch if not set (non-constant)
+declare USE_LOCAL="${USE_LOCAL:-false}" # Default to false if not set (non-constant)
+declare PACKAGE="${PACKAGE:-WsprryPi}"  # Default to WsprryPi if not set (non-constant)
+declare OWNER="${OWNER:-lbussy}"        # Default to lbussy if not set
+
 
 ##
 # @brief Configuration constants for script requirements and compatibility.
@@ -142,12 +146,6 @@ declare LOG_TO_FILE="${LOG_TO_FILE:-}"    # Default to blank if not set
 declare LOG_FILE="${LOG_FILE:-}"          # Use the provided LOG_FILE or default to blank
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not set
 
-# Glogal variables to control installer
-declare USE_LOCAL="${USE_LOCAL:-false}"         # Default to false if not set
-declare PACKAGE="${PACKAGE:-WsprryPi}"          # Default to WsprryPi if not set
-declare OWNER="${OWNER:-lbussy}"                # Default to lbussy if not set
-declare GIT_BRCH="${OWNER:-version_file}"       # Default if not set
-
 # Required packages
 readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
 
@@ -157,6 +155,7 @@ declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
 declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "realpath")
 # List of required external dependencies for installer
 declare DEPENDENCIES+=("dpkg" "git" "dpkg-reconfigure" "curl")
+readonly DEPENDENCIES
 
 ############
 ### Skeleton Functions
@@ -387,7 +386,7 @@ enforce_sudo() {
 #
 # @return None Exits the script with an error code if the architecture is unsupported.
 ##
-check_architecture() {
+check_arch() {
     local detected_model is_supported key full_name model chip  # Local variables
 
     # Attempt to read and process the compatible string
@@ -730,7 +729,7 @@ parse_args() {
 #
 # @return None (exits the script if dependencies are missing).
 ##
-validate_dependencies() {
+validate_depends() {
     local missing=0  # Counter for missing dependencies
     local dep        # Iterator for dependencies
 
@@ -759,7 +758,7 @@ validate_dependencies() {
 #
 # @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
 ##
-check_bash_version() {
+check_sh_ver() {
     # Ensure MIN_BASH_VERSION is defined; default to "none"
     local required_version="${MIN_BASH_VERSION:-none}"
 
@@ -1141,6 +1140,8 @@ validate_log_level() {
     fi
 }
 
+
+
 ##
 # @brief Sets up the logging environment for the script.
 #
@@ -1158,7 +1159,7 @@ validate_log_level() {
 #
 # @return void
 ##
-setup_logging_environment() {
+setup_log() {
     # Initialize terminal colors
     init_colors
 
@@ -1183,6 +1184,99 @@ setup_logging_environment() {
 ### Install Functions
 ############
 
+# @brief Retrieve the Git owner or organization name from the remote URL.
+#
+# This function fetches the remote URL of the current Git repository using the
+# `git config --get remote.origin.url` command. It extracts the owner or
+# organization name, which is the first path segment after the domain in the URL.
+# If not inside a Git repository or no remote URL is configured, an error
+# message is displayed, and the script exits with a non-zero status.
+#
+# @return Prints the owner or organization name to standard output if successful.
+# @retval 0 Success: the owner or organization name is printed.
+# @retval 1 Failure: prints an error message to standard error.
+get_repo_org() {
+    local url organization
+
+    # Retrieve the remote URL from Git configuration.
+    url=$(git config --get remote.origin.url)
+
+    # Check if the URL is non-empty.
+    if [[ -n "$url" ]]; then
+        # Extract the owner or organization name.
+        # Supports HTTPS and SSH Git URLs.
+        organization=$(echo "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
+        echo "$organization"
+    else
+        # Print an error message if the remote URL is not set or not inside a Git repository.
+        die "Error: Not inside a Git repository or no remote URL configured."
+    fi
+}
+
+# @brief Retrieve the Git project name from the remote URL.
+#
+# This function fetches the remote URL of the current Git repository using the
+# `git config --get remote.origin.url` command. It extracts the repository name
+# from the URL, removing the `.git` suffix if present. If not inside a Git
+# repository or no remote URL is configured, an error message is displayed,
+# and the script exits with a non-zero status.
+#
+# @return Prints the project name to standard output if successful.
+# @retval 0 Success: the project name is printed.
+# @retval 1 Failure: prints an error message to standard error.
+get_repo_name() {
+    local url repo_name
+
+    # Retrieve the remote URL from Git configuration.
+    url=$(git config --get remote.origin.url)
+
+    # Check if the URL is non-empty.
+    if [[ -n "$url" ]]; then
+        # Extract the repository name from the URL and remove the ".git" suffix if present.
+        repo_name="${url##*/}"  # Remove everything up to the last `/`.
+        repo_name="${project_name%.git}"  # Remove the `.git` suffix.
+        echo "$project_name"
+    else
+        # Print an error message if the remote URL is not set or not inside a Git repository.
+        die "Error: Not inside a Git repository or no remote URL configured."
+    fi
+}
+
+# @brief Retrieve the current Git branch name or the branch this was detached from.
+#
+# This function fetches the name of the currently checked-out branch in a Git
+# repository. If the repository is in a detached HEAD state, it attempts to
+# determine the branch or tag the HEAD was detached from. If not inside a
+# Git repository, it displays an appropriate error message.
+#
+# @return Prints the current branch name or detached source to standard output.
+# @retval 0 Success: the branch or detached source name is printed.
+# @retval 1 Failure: prints an error message to standard error.
+get_current_branch() {
+    local branch detached_from
+
+    # Retrieve the current branch name using `git rev-parse`.
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+    if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
+        # Print the branch name if available and not in a detached HEAD state.
+        echo "$branch"
+    elif [[ "$branch" == "HEAD" ]]; then
+        # Handle the detached HEAD state: attempt to determine the source.
+        detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
+        if [[ -n "$detached_from" ]]; then
+            echo "Detached from branch: $detached_from"
+        else
+            echo "Detached HEAD state: Cannot determine the source branch." >&2
+            exit 1
+        fi
+    else
+        # Handle the case of not being inside a Git repository.
+        echo "Error: Not inside a Git repository." >&2
+        exit 1
+    fi
+}
+
 ##
 # @brief Configure local mode or remote mode based on the Git repository context.
 # @details Configures relevant variables for local mode if `USE_LOCAL` is true,
@@ -1202,12 +1296,27 @@ setup_logging_environment() {
 # @return None Exits with an error if `USE_LOCAL` is true and the script is not
 #               run from within a Git repository or if `git` is not available.
 ##
-set_parameters() {
+source_params() {
     local script_path package_name branch_name
 
     if [[ "$USE_LOCAL" == "true" ]]; then
         # Set the name of the current script
+        local this_script
+        local project_name
+        local owner
+
+        get_repo_org()
+        get_repo_name()
+        get_git_branch()
+
+        declare VERSION="${VERSION:-1.0.0}"     # Default to 1.0.0 if not set
+        declare GIT_BRCH="${GIT_BRCH:-main}"    # Default to main branch if not set (non-constant)
+        declare USE_LOCAL="${USE_LOCAL:-false}" # Default to false if not set (non-constant)
+        declare PACKAGE="${PACKAGE:-WsprryPi}"  # Default to WsprryPi if not set (non-constant)
+        declare OWNER="${OWNER:-lbussy}"        # Default to lbussy if not set
+        
         THISSCRIPT=$(basename "$0")
+        get_project_name
 
         # Determine the root directory of the current Git repository
         LOCAL_SOURCE_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -1226,6 +1335,8 @@ set_parameters() {
         # Set global variables
         PACKAGE="$package_name"
         GIT_BRCH="$branch_name"
+        OWNER
+        VERSION
 
     else
         # Default remote URLs for raw files and API access
@@ -1370,7 +1481,7 @@ set_time() {
 # @return 0 If the module is available and blacklisted (or already blacklisted).
 # @return 1 If the module is not available, and processing is skipped.
 ##
-check_snd_bcm2835_status() {
+blacklist_snd_bcm2835() {
     # Declare local variables
     local module="snd_bcm2835"
     local blacklist_file="/etc/modprobe.d/alsa-blacklist.conf"
@@ -1438,7 +1549,7 @@ run_command() {
 #
 # @return Logs the success or failure of each operation.
 ##
-install_update_packages() {
+apt_packages() {
     local package
 
     logI "Updating local apt cache."
@@ -1554,32 +1665,33 @@ EOF
 # Main function
 main() {
     # Perform essential checks
-    parse_args "$@"
-    validate_dependencies
-    set_parameters
-    setup_logging_environment
+    parse_args "$@"     # Parse any command line arguments
+    validate_depends    # Chech availability of req. non-Bash builtins
+    source_params       # 
+    setup_log
     check_bash
-    check_bash_version
+    check_sh_ver
     check_bitness
     check_release
-    check_architecture
+    check_arch
     enforce_sudo
     check_internet
+
     # Informational/debug lines
     print_system
     print_version
 
     # Script start
-    display_start
+    display_start   
     set_time
-    install_update_packages
+    apt_packages
 
     # do_service "wspr" "" "/usr/local/bin" # Install/upgrade wspr daemon
     # do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
     # do_www "/var/www/html/wspr" "$LOCAL_WWW_DIR" # Download website
     # do_apache_setup
 
-    check_snd_bcm2835_status
+    blacklist_snd_bcm2835
 
     # Script complete
     finish_script
