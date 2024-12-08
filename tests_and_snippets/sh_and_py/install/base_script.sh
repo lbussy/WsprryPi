@@ -59,7 +59,18 @@ trap_error() {
 
 ############
 ### Global Script Declarations
+### Global Script Declarations
 ############
+
+##
+# @brief Logging-related constants for the script.
+# @details Sets the script name (`THIS_SCRIPT`) based on the current environment.
+# If `THIS_SCRIPT` is already defined, its value is retained; otherwise, it is set
+# to the basename of the script or defaults to "script.sh".
+#
+# @global THIS_SCRIPT The name of the script.
+##
+declare THIS_SCRIPT="${THIS_SCRIPT:-install.sh}" # Use existing value, or default to "install.sh".
 
 ##
 # @brief Logging-related constants for the script.
@@ -113,9 +124,49 @@ readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to false if not specifi
 # Possible values:
 # - `"true"`: Internet connectivity is required.
 # - `"false"`: Internet connectivity is not required.
+# versioning, and project details. All are marked as read-only.
+##
+declare SEM_VER="1.2.1-version-files+91.3bef855-dirty"
+declare GIT_BRCH="install_update"
+declare REPO_ORG="${REPO_ORG:-lbussy}"
+declare REPO_NAME="${REPO_NAME:-WsprryPi}"
+declare GIT_BRCH="${GIT_BRCH:-main}"
+declare SEM_VER="${SEM_VER:-1.0.0}"
+declare GIT_DEF_BRCH=("main" "master")
+
+##
+# @brief Flag to disable console logging.
+#
+# Possible values:
+#  - "true": Disables logging to the terminal.
+#  - "false": Enables logging to the terminal (default).
+##
+declare NO_CONSOLE="${NO_CONSOLE:-true}" # TODO: Disable console logging
+
+##
+# @var REQUIRE_SUDO
+# @brief Indicates whether root privileges are required to run the script.
+# @details Defaults to 'false' if not specified. Can be overridden by setting the
+# `REQUIRE_SUDO` environment variable before running the script.
+# @default false
+##
+readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to false if not specified.
+
+##
+# @var REQUIRE_INTERNET
+# @type string
+# @brief Flag indicating if internet connectivity is required.
+# @details
+# Controls whether the script should verify internet connectivity during initialization. 
+# This can be overridden by setting the `REQUIRE_INTERNET` environment variable.
+#
+# Possible values:
+# - `"true"`: Internet connectivity is required.
+# - `"false"`: Internet connectivity is not required.
 #
 # @default `"true"`
 ##
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to true if not set
 readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to true if not set
 
 ##
@@ -129,6 +180,11 @@ readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to true if not 
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified.
 
 ##
+# @var MIN_OS
+# @brief Specifies the minimum supported OS version.
+# @details This variable defines the lowest OS version that the script can run on. 
+# It should be updated as compatibility requirements change.
+# @default 11
 # @var MIN_OS
 # @brief Specifies the minimum supported OS version.
 # @details This variable defines the lowest OS version that the script can run on. 
@@ -228,6 +284,43 @@ readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"  # Default fallback name i
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set.
 
 ##
+# @var LOG_TO_FILE
+# @brief Controls whether logging to a file is enabled.
+# @details Possible values are:
+# - "true": Always log to the file.
+# - "false": Never log to the file.
+# - unset: Follow the logic defined in the `is_interactive()` function.
+# Defaults to blank if not set.
+##
+declare LOG_TO_FILE="${LOG_TO_FILE:-}"  # Default to blank if not set.
+
+##
+# @var LOG_FILE
+# @brief Specifies the path to the log file.
+# @details Defaults to blank if not provided. This can be set externally to 
+# specify a custom log file path.
+##
+declare LOG_FILE="${LOG_FILE:-}"  # Use the provided LOG_FILE or default to blank.
+
+##
+# @var FALLBACK_NAME
+# @brief Specifies the fallback name for the script.
+# @details Used when the script is piped or the original name cannot be determined.
+# Defaults to "install.sh" if not provided.
+# @default "install.sh"
+##
+readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"  # Default fallback name if the script is piped.
+
+##
+# @var LOG_LEVEL
+# @brief Specifies the logging verbosity level.
+# @details Defaults to "DEBUG" if not set. Other possible levels can be defined 
+# depending on script requirements (e.g., INFO, WARN, ERROR).
+# @default "DEBUG"
+##
+declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set.
+
+##
 # @var DEPENDENCIES
 # @type array
 # @brief List of required external commands for the script.
@@ -246,6 +339,7 @@ declare -ar DEPENDENCIES=(
     "dpkg" "git" "dpkg-reconfigure" "curl" "realpath"
 )
 readonly DEPENDENCIES
+readonly DEPENDENCIES
 
 ##
 # @var ENV_VARS_BASE
@@ -255,7 +349,15 @@ readonly DEPENDENCIES
 # These variables are always required by the script, regardless of the runtime context.
 # - `HOME`: Specifies the home directory of the current user.
 # - `COLUMNS`: Defines the width of the terminal, used for formatting.
+# @var ENV_VARS_BASE
+# @type array
+# @brief Base list of required environment variables.
+# @details
+# These variables are always required by the script, regardless of the runtime context.
+# - `HOME`: Specifies the home directory of the current user.
+# - `COLUMNS`: Defines the width of the terminal, used for formatting.
 ##
+declare -ar ENV_VARS_BASE=(
 declare -ar ENV_VARS_BASE=(
     "HOME"       # Home directory of the current user
     "COLUMNS"    # Terminal width for formatting
@@ -271,9 +373,21 @@ declare -ar ENV_VARS_BASE=(
 # - `SUDO_USER`: Identifies the user who invoked the script using sudo.
 # - Dynamically constructed during runtime.
 ##
+##
+# @var ENV_VARS
+# @type array
+# @brief Final list of required environment variables.
+# @details
+# This array extends `ENV_VARS_BASE` by conditionally including `SUDO_USER` if the script 
+# requires root privileges (`REQUIRE_SUDO=true`).
+# - `SUDO_USER`: Identifies the user who invoked the script using sudo.
+# - Dynamically constructed during runtime.
+##
 if [[ "$REQUIRE_SUDO" == true ]]; then
     readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
+    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
 else
+    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}")
     readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}")
 fi
 
@@ -285,10 +399,25 @@ fi
 # If not already set by the environment, it defaults to 80 columns. 
 # This can be overridden externally by setting the `COLUMNS` environment variable.
 # @default 80
+# @var COLUMNS
+# @brief Terminal width in columns.
+# @details
+# The `COLUMNS` variable represents the width of the terminal in characters. 
+# If not already set by the environment, it defaults to 80 columns. 
+# This can be overridden externally by setting the `COLUMNS` environment variable.
+# @default 80
 ##
 COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 
 ##
+# @var SYSTEM_READS
+# @type array
+# @brief List of critical system files to check.
+# @details
+# Contains absolute paths to system files that the script depends on. 
+# These files must be both present and readable to ensure proper execution of the script.
+# - `/etc/os-release`: Contains operating system identification data.
+# - `/proc/device-tree/compatible`: Identifies the hardware compatibility (commonly used in embedded systems).
 # @var SYSTEM_READS
 # @type array
 # @brief List of critical system files to check.
@@ -345,6 +474,96 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 ############
 
 ##
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
+#
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
+#
+# @return None
+##
+stack_trace() {
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
+}
+
+##
 # @brief Logs a warning or error message with optional details and a stack trace.
 # @details This function logs messages at WARNING or ERROR levels, with an optional
 #          stack trace for warnings. The error level can also be specified and
@@ -357,14 +576,9 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 #
 # @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT The name of the script being executed.
+# @global SCRIPT_NAME The name of the script being executed.
 #
 # @return None
-#
-# Example Usage:
-#   warn "WARNING" "1" "Memory usage is high." "Additional details here."
-#   warn "ERROR" "An error occurred in the application."
-#   warn "This is a default warning message."
 ##
 warn() {
     # Initialize default values
@@ -373,7 +587,7 @@ warn() {
     local message="An issue was raised on this line"  # Default log message
     local details=""               # Default to no additional details
     local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
-    local script="$THIS_SCRIPT"     # Script name
+    local script="$SCRIPT_NAME"     # Script name
 
     # Parse arguments in order
     if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
@@ -421,7 +635,7 @@ warn() {
 # @param $@ Additional details for the error (optional).
 #
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT Script name.
+# @global SCRIPT_NAME Script name.
 #
 # @return Exits the script with the provided or default exit status.
 ##
@@ -431,7 +645,7 @@ die() {
     local message                       # Main error message
     local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local script="$THIS_SCRIPT"         # Script name
+    local script="$SCRIPT_NAME"          # Script name
     local level="CRITICAL"              # Error level
     local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
@@ -625,6 +839,23 @@ print_version() {
 ############
 ### Check Environment Functions
 ############
+print_version() {
+    # Declare local variables at the start of the function
+    local caller
+
+    # Check the name of the calling function
+    caller="${FUNCNAME[1]}"
+
+    if [[ "$caller" == "parse_args" ]]; then
+        echo -e "$THIS_SCRIPT: version $SEM_VER" # Display the script name and version
+    else
+        logD "Running $THIS_SCRIPT version $SEM_VER" # Log the script name and version
+    fi
+}
+
+############
+### Check Environment Functions
+############
 
 ##
 # @brief Determine how the script was executed.
@@ -633,7 +864,30 @@ print_version() {
 #
 # @global FALLBACK_NAME Name to use if script execution is piped or unusual.
 # @global USE_LOCAL Boolean indicating whether local resources are used.
+# @brief Determine how the script was executed.
+# @details Checks if the script is being run directly, piped through bash,
+#          or executed in an unusual manner.
 #
+# @global FALLBACK_NAME Name to use if script execution is piped or unusual.
+# @global USE_LOCAL Boolean indicating whether local resources are used.
+#
+# @return None
+##
+check_pipe() {
+    local this_script  # Local variable for script name
+
+    if [[ "$0" == "bash" ]]; then
+        if [[ -p /dev/stdin ]]; then
+            # Script is being piped through bash
+            this_script="$FALLBACK_NAME"
+        else
+            # Script was run in an unusual way with 'bash'
+            this_script="$FALLBACK_NAME"
+        fi
+        USE_LOCAL=false
+    else
+        # Script run directly
+        USE_LOCAL=true
 # @return None
 ##
 check_pipe() {
@@ -664,7 +918,17 @@ check_pipe() {
 # @global SUDO_USER User invoking `sudo`.
 # @global SUDO_COMMAND The command invoked with `sudo`.
 # @global THIS_SCRIPT Name of the current script.
+# @details Ensures the script is executed with `sudo` privileges and not:
+#          - From a `sudo su` shell.
+#          - As the root user directly.
 #
+# @global REQUIRE_SUDO Boolean indicating if `sudo` is required.
+# @global SUDO_USER User invoking `sudo`.
+# @global SUDO_COMMAND The command invoked with `sudo`.
+# @global THIS_SCRIPT Name of the current script.
+#
+# @return None
+# @exit 1 if the script is not executed correctly.
 # @return None
 # @exit 1 if the script is not executed correctly.
 ##
@@ -682,10 +946,27 @@ enforce_sudo() {
             die 1 "This script requires 'sudo' privileges." \
                   "Please re-run it using 'sudo $THIS_SCRIPT'."
         fi
+    if [[ "$REQUIRE_SUDO" == true ]]; then
+        if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
+            return  # Script is properly executed with `sudo`
+        elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
+            die 1 "This script should not be run from a root shell." \
+                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+        elif [[ "$EUID" -eq 0 ]]; then
+            die 1 "This script should not be run as the root user." \
+                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+        else
+            die 1 "This script requires 'sudo' privileges." \
+                  "Please re-run it using 'sudo $THIS_SCRIPT'."
+        fi
     fi
 }
 
 ##
+# @brief Check for required dependencies and report any missing ones.
+# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
+#          checking if each one is installed. Logs missing dependencies and exits
+#          the script with an error code if any are missing.
 # @brief Check for required dependencies and report any missing ones.
 # @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
 #          checking if each one is installed. Logs missing dependencies and exits
@@ -735,10 +1016,15 @@ validate_system_reads() {
 
     if ((missing > 0)); then
         die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
+    if ((missing > 0)); then
+        die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
     fi
 }
 
 ##
+# @brief Validate the existence of required environment variables.
+# @details Checks if the environment variables specified in the `ENV_VARS` array
+#          are set. Logs any missing variables and exits the script if any are missing.
 # @brief Validate the existence of required environment variables.
 # @details Checks if the environment variables specified in the `ENV_VARS` array
 #          are set. Logs any missing variables and exits the script if any are missing.
@@ -815,8 +1101,11 @@ check_sh_ver() {
 #
 # @return None
 # @exit 1 if the system bitness is unsupported.
+# @return None
+# @exit 1 if the system bitness is unsupported.
 ##
 check_bitness() {
+    local bitness  # Stores the detected bitness of the system.
     local bitness  # Stores the detected bitness of the system.
 
     bitness=$(getconf LONG_BIT)
@@ -825,10 +1114,12 @@ check_bitness() {
         "32")
             if [[ "$bitness" -ne 32 ]]; then
                 die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
+                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "64")
             if [[ "$bitness" -ne 64 ]]; then
+                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
                 die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
@@ -841,6 +1132,9 @@ check_bitness() {
 }
 
 ##
+# @brief Check Raspbian OS version compatibility.
+# @details This function ensures that the Raspbian version is within the supported range
+#          and logs an error if the compatibility check fails.
 # @brief Check Raspbian OS version compatibility.
 # @details This function ensures that the Raspbian version is within the supported range
 #          and logs an error if the compatibility check fails.
@@ -895,6 +1189,7 @@ check_release() {
 # @global die Function to handle critical errors and terminate the script.
 #
 # @return None Exits the script with an error code if the architecture is unsupported.
+# @return None Exits the script with an error code if the architecture is unsupported.
 ##
 check_arch() {
     local detected_model is_supported key full_name model chip  # Local variables.
@@ -929,6 +1224,9 @@ check_arch() {
     # Log an error if no supported model was found.
     if [[ "$is_supported" == false ]]; then
         die 1 "Detected Raspberry Pi model '$detected_model' is not recognized or supported."
+    # Log an error if no supported model was found.
+    if [[ "$is_supported" == false ]]; then
+        die 1 "Detected Raspberry Pi model '$detected_model' is not recognized or supported."
     fi
 }
 
@@ -938,13 +1236,26 @@ check_arch() {
 #          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
 #
 # @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
+# @brief Check if the system has an internet connection by making an HTTP request.
+# @details Uses curl to send a request to google.com and checks the response status to determine if the system is online.
+#          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
 #
+# @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
+#
+# @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
 # @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
 ##
 check_internet() {
     # Skip check if REQUIRE_INTERNET is not true.
     if [ "$REQUIRE_INTERNET" != "true" ]; then
         return
+    fi
+
+    # Check for internet connectivity using curl.
+    if curl -s --head http://google.com | grep "HTTP/1\.[01] [23].." > /dev/null; then
+        logD "Internet is available."
+    else
+        die 1 "No Internet connection detected."
     fi
 
     # Check for internet connectivity using curl.
@@ -975,7 +1286,12 @@ print_log_entry() {
     local lineno="$4"
     local message="$5"
     local details="$6"
+    local lineno="$4"
+    local message="$5"
+    local details="$6"
 
+    # Determine if logging to file is enabled
+    local should_log_to_file=false
     # Determine if logging to file is enabled
     local should_log_to_file=false
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
@@ -1005,6 +1321,7 @@ print_log_entry() {
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
             echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -1026,8 +1343,10 @@ prepare_log_context() {
 
     # Retrieve the line number of the caller
     lineno="${BASH_LINENO[0]}"
+    lineno="${BASH_LINENO[0]}"
 
     # Return the pipe-separated timestamp and line number
+    echo "$timestamp|$lineno"
     echo "$timestamp|$lineno"
 }
 
@@ -1051,13 +1370,16 @@ log_message() {
 
     # Context variables for logging
     local context timestamp lineno custom_level color severity config_severity
+    local context timestamp lineno custom_level color severity config_severity
 
     # Generate context (timestamp and line number)
     context=$(prepare_log_context)
     IFS="|" read -r timestamp lineno <<< "$context"
+    IFS="|" read -r timestamp lineno <<< "$context"
 
     # Validate log level and message
     if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
+        echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[0]}." >&2 && exit 1
         echo -e "ERROR: Invalid log level or empty message in ${FUNCNAME[0]}." >&2 && exit 1
     fi
 
@@ -1076,11 +1398,13 @@ log_message() {
 
     # Print the log entry
     print_log_entry "$timestamp" "$custom_level" "$color" "$lineno" "$message" "$details"
+    print_log_entry "$timestamp" "$custom_level" "$color" "$lineno" "$message" "$details"
 }
 
 ##
 # @brief Log a message at the DEBUG level.
 #
+# This function logs messages with the DEBUG log level, typically used for detailed 
 # This function logs messages with the DEBUG log level, typically used for detailed 
 # debugging information useful during development or troubleshooting.
 #
@@ -1160,21 +1484,35 @@ init_log() {
     homepath=$(getent passwd "${SUDO_USER:-$(whoami)}" | { IFS=':'; read -r _ _ _ _ _ homedir _; echo "$homedir"; })
 
     # Determine the log file location
+    # Determine the log file location
     LOG_FILE="${LOG_FILE:-$homepath/$scriptname.log}"
+
+    # Extract the log directory from the log file path
 
     # Extract the log directory from the log file path
     log_dir=$(dirname "$LOG_FILE")
 
+    # Ensure the log directory exists
     # Ensure the log directory exists
     if [[ ! -d "$log_dir" ]]; then
         echo -e "ERROR: Log directory does not exist: $log_dir in ${FUNCNAME[0]}" >&2 && exit 1
     fi
 
     # Check if the log directory is writable
+        echo -e "ERROR: Log directory does not exist: $log_dir in ${FUNCNAME[0]}" >&2 && exit 1
+    fi
+
+    # Check if the log directory is writable
     if [[ ! -w "$log_dir" ]]; then
+        echo -e "ERROR: Log directory is not writable: $log_dir in ${FUNCNAME[0]}" >&2 && exit 1
         echo -e "ERROR: Log directory is not writable: $log_dir in ${FUNCNAME[0]}" >&2 && exit 1
     fi
 
+    # Attempt to create the log file
+    touch "$LOG_FILE" >&2 || (echo -e "ERROR: Cannot create log file: $LOG_FILE in ${FUNCNAME[0]}" && exit 1)
+
+    readonly LOG_FILE
+    export LOG_FILE
     # Attempt to create the log file
     touch "$LOG_FILE" >&2 || (echo -e "ERROR: Cannot create log file: $LOG_FILE in ${FUNCNAME[0]}" && exit 1)
 
@@ -1222,6 +1560,7 @@ init_colors() {
     tput_colors_available=$(tput colors 2>/dev/null || echo "0")
 
     # Initialize colors and formatting if interactive and the terminal supports at least 8 colors
+    # Initialize colors and formatting if interactive and the terminal supports at least 8 colors
     if [ "$tput_colors_available" -ge 8 ]; then
         # General text attributes
         RESET=$(default_color sgr0)
@@ -1265,7 +1604,10 @@ init_colors() {
         # Fallback for unsupported or non-interactive terminals
         RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""
         NO_UNDERLINE=""; BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""
+        RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""
+        NO_UNDERLINE=""; BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""
         FGBLK=""; FGRED=""; FGGRN=""; FGYLW=""; FGBLU=""
+        FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""
         FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""
         BGBLK=""; BGRED=""; BGGRN=""; BGYLW=""
         BGBLU=""; BGMAG=""; BGCYN=""; BGWHT=""; BGRST=""
@@ -1275,10 +1617,14 @@ init_colors() {
     # Set variables as readonly
     readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
     readonly ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
+    readonly ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     readonly DOT HHR LHR
 
     # Export variables globally
+    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
+    export ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
     export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
     export ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
     export BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
@@ -1297,6 +1643,7 @@ init_colors() {
 validate_log_level() {
     # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
     if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]}" ]]; then
+        echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && exit 1
         echo -e "ERROR: Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'." >&2 && exit 1
     fi
 }
@@ -1318,6 +1665,7 @@ validate_log_level() {
 #
 # @return void
 ##
+setup_log() {
 setup_log() {
     # Initialize terminal colors
     init_colors
@@ -1606,6 +1954,9 @@ get_proj_params() {
 
     export THIS_SCRIPT REPO_ORG REPO_NAME GIT_BRCH SEM_VER LOCAL_SOURCE_DIR
     export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
+
+    export THIS_SCRIPT REPO_ORG REPO_NAME GIT_BRCH SEM_VER LOCAL_SOURCE_DIR
+    export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
 }
 
 ############
@@ -1868,7 +2219,22 @@ parse_args() {
 ############
 
 # Main function
+############
+### Main Functions
+############
+
+# Main function
 main() {
+    # Check Environment Functions
+    check_pipe        # Get fallback name if piped through bash
+
+    # Get Project Parameters Functions
+    get_proj_params     # Get project and git parameters
+
+    # Arguments Functions
+    parse_args "$@"  # Parse command-line arguments
+
+    # Check Environment Functions
     # Check Environment Functions
     check_pipe        # Get fallback name if piped through bash
 
@@ -1881,20 +2247,26 @@ main() {
     # Check Environment Functions
     enforce_sudo                         # Ensure proper privileges for script execution
     validate_depends                # Ensure required dependencies are installed
+    validate_depends                # Ensure required dependencies are installed
     validate_system_reads                # Verify critical system files are accessible
     validate_env_vars                    # Check for required environment variables
 
+    # Logging Functions
+    setup_log   # Setup logging environment
     # Logging Functions
     setup_log   # Setup logging environment
 
     # More: Check Environment Functions
     check_bash                           # Ensure the script is executed in a Bash shell
     check_sh_ver                   # Verify the current Bash version meets minimum requirements
+    check_sh_ver                   # Verify the current Bash version meets minimum requirements
     check_bitness                        # Validate system bitness compatibility
     check_release                        # Check Raspbian OS version compatibility
     check_arch                   # Validate Raspberry Pi model compatibility
+    check_arch                   # Validate Raspberry Pi model compatibility
     check_internet                       # Verify internet connectivity if required
 
+    # Print/Display Environment Functions
     # Print/Display Environment Functions
     print_system                         # Log system information
     print_version                        # Log the script version

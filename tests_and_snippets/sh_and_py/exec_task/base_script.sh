@@ -345,6 +345,96 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 ############
 
 ##
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
+#
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
+#
+# @return None
+##
+stack_trace() {
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
+}
+
+##
 # @brief Logs a warning or error message with optional details and a stack trace.
 # @details This function logs messages at WARNING or ERROR levels, with an optional
 #          stack trace for warnings. The error level can also be specified and
@@ -357,14 +447,9 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 #
 # @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT The name of the script being executed.
+# @global SCRIPT_NAME The name of the script being executed.
 #
 # @return None
-#
-# Example Usage:
-#   warn "WARNING" "1" "Memory usage is high." "Additional details here."
-#   warn "ERROR" "An error occurred in the application."
-#   warn "This is a default warning message."
 ##
 warn() {
     # Initialize default values
@@ -373,7 +458,7 @@ warn() {
     local message="An issue was raised on this line"  # Default log message
     local details=""               # Default to no additional details
     local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
-    local script="$THIS_SCRIPT"     # Script name
+    local script="$SCRIPT_NAME"     # Script name
 
     # Parse arguments in order
     if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
@@ -421,7 +506,7 @@ warn() {
 # @param $@ Additional details for the error (optional).
 #
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT Script name.
+# @global SCRIPT_NAME Script name.
 #
 # @return Exits the script with the provided or default exit status.
 ##
@@ -431,7 +516,7 @@ die() {
     local message                       # Main error message
     local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local script="$THIS_SCRIPT"         # Script name
+    local script="$SCRIPT_NAME"          # Script name
     local level="CRITICAL"              # Error level
     local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 

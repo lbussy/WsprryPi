@@ -272,9 +272,9 @@ declare -ar ENV_VARS_BASE=(
 # - Dynamically constructed during runtime.
 ##
 if [[ "$REQUIRE_SUDO" == true ]]; then
-    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
 else
-    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}")
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}")
 fi
 
 ##
@@ -345,6 +345,96 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 ############
 
 ##
+# @brief Print a detailed stack trace of the call hierarchy.
+# @details Outputs the sequence of function calls leading up to the point
+#          where this function was invoked. Supports optional error messages
+#          and colorized output based on terminal capabilities.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, WARN, ERROR, CRITICAL).
+# @param $2 Optional error message to display at the top of the stack trace.
+#
+# @global BASH_LINENO Array of line numbers in the call stack.
+# @global FUNCNAME Array of function names in the call stack.
+# @global BASH_SOURCE Array of source file names in the call stack.
+#
+# @return None
+##
+stack_trace() {
+    local level="$1"
+    local message="$2"
+    local color=""                   # Default: no color
+    local label=""                   # Log level label for display
+    local header="------------------ STACK TRACE ------------------"
+    local tput_colors_available      # Terminal color support
+    local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+
+    # Check terminal color support
+    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+
+    # Disable colors if terminal supports less than 8 colors
+    if [[ "$tput_colors_available" -lt 8 ]]; then
+        color="\033[0m"  # No color
+    fi
+
+    # Validate level or default to DEBUG
+    case "$level" in
+        "DEBUG"|"INFO"|"WARN"|"ERROR"|"CRITICAL")
+            ;;
+        *)
+            # If the first argument is not a valid level, treat it as a message
+            message="$level"
+            level="DEBUG"
+            ;;
+    esac
+
+    # Determine color and label based on the log level
+    case "$level" in
+        "DEBUG")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;36m"  # Cyan
+            label="Debug"
+            ;;
+        "INFO")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;32m"  # Green
+            label="Info"
+            ;;
+        "WARN")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;33m"  # Yellow
+            label="Warning"
+            ;;
+        "ERROR")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Red
+            label="Error"
+            ;;
+        "CRITICAL")
+            [[ "$tput_colors_available" -ge 8 ]] && color="\033[0;31m"  # Bright Red
+            label="Critical"
+            ;;
+    esac
+
+    # Print stack trace header
+    printf "%b%s%b\n" "$color" "$header" "\033[0m" >&2
+    if [[ -n "$message" ]]; then
+        # If a message is provided
+        printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
+    else
+        # Default message with the line number of the caller
+        local caller_lineno="${BASH_LINENO[1]}"
+        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+    fi
+
+    # Print each function in the stack trace
+    for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
+        local script="${BASH_SOURCE[i]##*/}"
+        local caller_lineno="${BASH_LINENO[i - 1]}"
+        printf "%b[%d] Function: %s called at %s:%d%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+    done
+
+    # Print stack trace footer (line of "-" matching $header)
+    printf "%b%s%b\n" "$color" "$(printf '%*s' "${#header}" | tr ' ' '-')" "\033[0m" >&2
+}
+
+##
 # @brief Logs a warning or error message with optional details and a stack trace.
 # @details This function logs messages at WARNING or ERROR levels, with an optional
 #          stack trace for warnings. The error level can also be specified and
@@ -357,14 +447,9 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 #
 # @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT The name of the script being executed.
+# @global SCRIPT_NAME The name of the script being executed.
 #
 # @return None
-#
-# Example Usage:
-#   warn "WARNING" "1" "Memory usage is high." "Additional details here."
-#   warn "ERROR" "An error occurred in the application."
-#   warn "This is a default warning message."
 ##
 warn() {
     # Initialize default values
@@ -373,7 +458,7 @@ warn() {
     local message="An issue was raised on this line"  # Default log message
     local details=""               # Default to no additional details
     local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
-    local script="$THIS_SCRIPT"     # Script name
+    local script="$SCRIPT_NAME"     # Script name
 
     # Parse arguments in order
     if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
@@ -421,7 +506,7 @@ warn() {
 # @param $@ Additional details for the error (optional).
 #
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global THIS_SCRIPT Script name.
+# @global SCRIPT_NAME Script name.
 #
 # @return Exits the script with the provided or default exit status.
 ##
@@ -431,7 +516,7 @@ die() {
     local message                       # Main error message
     local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local script="$THIS_SCRIPT"         # Script name
+    local script="$SCRIPT_NAME"          # Script name
     local level="CRITICAL"              # Error level
     local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
@@ -996,15 +1081,18 @@ print_log_entry() {
         [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$details" >> "$LOG_FILE"
     fi
 
-    # Always print to the terminal if in an interactive shell
-    if is_interactive; then
-        # Print the main log message
-        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
+    # Log to the terminal only if NO_CONSOLE is false
+    if [[ "${NO_CONSOLE}" == "false" ]]; then
+        # Always print to the terminal if in an interactive shell
+        if is_interactive; then
+            # Print the main log message
+            echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
 
-        # Print the details if provided, using the EXTENDED log level color and format
-        if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
-            IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
+            # Print the details if provided, using the EXTENDED log level color and format
+            if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+                IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
+                echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
+            fi
         fi
     fi
 }
@@ -1197,6 +1285,22 @@ default_color() {
 }
 
 ##
+# @brief Execute and combine complex terminal control sequences.
+#
+# This function executes `tput` commands and other shell commands
+# to create complex terminal control sequences. It supports commands
+# like moving the cursor, clearing lines, and resetting attributes.
+#
+# @param $@ Commands and arguments to evaluate (supports multiple commands).
+# @return The resulting terminal control sequence or an empty string if unsupported.
+##
+generate_terminal_sequence() {
+    local result
+    result=$(eval "$@" 2>/dev/null || echo "")  # Execute the command safely
+    echo "$result"
+}
+
+##
 # @brief Determine if the script is running in an interactive shell.
 #
 # This function checks if the script is connected to a terminal by testing
@@ -1234,6 +1338,8 @@ init_colors() {
         NO_BLINK=$(default_color sgr0)
         ITALIC=$(default_color sitm)
         NO_ITALIC=$(default_color ritm)
+        MOVE_UP=$(default_color cuu1)
+        CLEAR_LINE=$(tput el)
 
         # Foreground colors
         FGBLK=$(default_color setaf 0)
@@ -1245,6 +1351,7 @@ init_colors() {
         FGCYN=$(default_color setaf 6)
         FGWHT=$(default_color setaf 7)
         FGRST=$(default_color setaf 9)
+        FGGLD=$(default_color setaf 220)
 
         # Background colors
         BGBLK=$(default_color setab 0)
@@ -1259,28 +1366,20 @@ init_colors() {
 
         # Additional formatting and separators
         DOT="$(tput sc)$(default_color setaf 0)$(default_color setab 0).$(default_color sgr0)$(tput rc)"
-        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))"
-        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))"
-    else
-        # Fallback for unsupported or non-interactive terminals
-        RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""
-        NO_UNDERLINE=""; BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""
-        FGBLK=""; FGRED=""; FGGRN=""; FGYLW=""; FGBLU=""
-        FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""
-        BGBLK=""; BGRED=""; BGGRN=""; BGYLW=""
-        BGBLU=""; BGMAG=""; BGCYN=""; BGWHT=""; BGRST=""
-        DOT=""; HHR=""; LHR=""
+        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
+        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
+
     fi
 
     # Set variables as readonly
-    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    readonly ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     readonly DOT HHR LHR
 
     # Export variables globally
-    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    export ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    export FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     export BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     export DOT HHR LHR
 }
@@ -1438,7 +1537,7 @@ get_repo_name() {
 # determine the branch or tag the HEAD was detached from. If not inside a
 # Git repository, it displays an appropriate error message.
 #
-# @return Prints the current branch name or detached source to standard output.
+# @return Prints the current branch name or detached source to standard ou.
 # @retval 0 Success: the branch or detached source name is printed.
 # @retval 1 Failure: prints an error message to standard error.
 get_git_branch() {
@@ -1607,6 +1706,103 @@ get_proj_params() {
     export THIS_SCRIPT REPO_ORG REPO_NAME GIT_BRCH SEM_VER LOCAL_SOURCE_DIR
     export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
 }
+
+############
+### Install Functions
+############
+
+##
+# @brief Execute a command and return its success or failure.
+#
+# This function executes a given command, logs its status, and optionally
+# prints status messages to the console depending on the value of `NO_CONSOLE`.
+# It returns `true` for success or `false` for failure.
+#
+# @param $1 The name/message for the operation.
+# @param $2 The command/process to execute.
+# @return Returns 0 (true) if the command succeeds, or non-zero (false) if it fails.
+##
+exec_command() {
+    local exec_name="$1"         # The name/message for the operation
+    local exec_process="$2"      # The command/process to execute
+    local result                 # To store the exit status of the command
+    local running_pre="Running:" # Prefix for running message
+    local complete_pre="Complete:" # Prefix for success message
+    local failed_pre="Failed:"     # Prefix for failure message
+
+    # Log the "Running" message
+    logD "$running_pre $exec_name"
+
+    # Print the "[-] Running: $exec_name" message if NO_CONSOLE is not false
+    if [[ "${NO_CONSOLE}" != "false" ]]; then
+        printf "${FGGLD}[-]${RESET}\t$running_pre $exec_name\n"
+    fi
+
+    # Execute the task command, suppress output, and capture result
+    result=$({ eval "$exec_process" > /dev/null 2>&1; echo $?; })
+
+    # Move the cursor up and clear the entire line if NO_CONSOLE is not false
+    if [[ "${NO_CONSOLE}" != "false" ]]; then
+        printf "${MOVE_UP}${CLEAR_LINE}"
+    fi
+
+    # Handle success or failure
+    if [ "$result" -eq 0 ]; then
+        # Success case
+        if [[ "${NO_CONSOLE}" != "false" ]]; then
+            printf "${FGGRN}[✔]${RESET}\t$complete_pre $exec_name\n"
+        fi
+        logI "$complete_pre $exec_name"
+        return 0 # Success (true)
+    else
+        # Failure case
+        if [[ "${NO_CONSOLE}" != "false" ]]; then
+            printf "${FGRED}[✘]${RESET}\t$failed_pre $exec_name (Error: $result)\n"
+        fi
+        logE "$failed_pre $exec_name"
+        return 1 # Failure (false)
+    fi
+}
+
+##
+# @brief Installs or upgrades all packages in the APTPACKAGES list.
+# @details Updates the package list and resolves broken dependencies before proceeding.
+#
+# @return Logs the success or failure of each operation.
+##
+apt_packages() {
+    # Declare local variables
+    local package
+
+    logI "Updating local apt cache."
+
+    # Update package list and fix broken installs
+    logI "Updating and managing required packages (this may take a few minutes)."
+    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
+        logE "Failed to update package list or fix broken installs."
+        return 1
+    fi
+
+    # Install or upgrade each package in the list
+    for package in "${APTPACKAGES[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
+                logW "Failed to upgrade package: $package. Continuing with the next package."
+            fi
+        else
+            if ! run_command "sudo apt-get install -y $package"; then
+                logW "Failed to install package: $package. Continuing with the next package."
+            fi
+        fi
+    done
+
+    logI "Package Installation Summary: All operations are complete."
+    return 0
+}
+
+############
+### TODO:  More Installer Functions HEre
+############
 
 ############
 ### Arguments Functions
@@ -1825,35 +2021,40 @@ parse_args() {
 
 # Main function
 main() {
-    # Check Environment Functions
-    check_pipe        # Get fallback name if piped through bash
+    # # Check Environment Functions
+    # check_pipe        # Get fallback name if piped through bash
 
-    # Get Project Parameters Functions
-    get_proj_params     # Get project and git parameters
+    # # Get Project Parameters Functions
+    # get_proj_params     # Get project and git parameters
 
-    # Arguments Functions
-    parse_args "$@"  # Parse command-line arguments
+    # # Arguments Functions
+    # parse_args "$@"  # Parse command-line arguments
 
-    # Check Environment Functions
-    enforce_sudo                         # Ensure proper privileges for script execution
-    validate_depends                # Ensure required dependencies are installed
-    validate_system_reads                # Verify critical system files are accessible
-    validate_env_vars                    # Check for required environment variables
+    # # Check Environment Functions
+    # enforce_sudo                         # Ensure proper privileges for script execution
+    # validate_depends                # Ensure required dependencies are installed
+    # validate_system_reads                # Verify critical system files are accessible
+    # validate_env_vars                    # Check for required environment variables
 
     # Logging Functions
     setup_log   # Setup logging environment
 
-    # More: Check Environment Functions
-    check_bash                           # Ensure the script is executed in a Bash shell
-    check_sh_ver                   # Verify the current Bash version meets minimum requirements
-    check_bitness                        # Validate system bitness compatibility
-    check_release                        # Check Raspbian OS version compatibility
-    check_arch                   # Validate Raspberry Pi model compatibility
-    check_internet                       # Verify internet connectivity if required
+    # # More: Check Environment Functions
+    # check_bash                           # Ensure the script is executed in a Bash shell
+    # check_sh_ver                   # Verify the current Bash version meets minimum requirements
+    # check_bitness                        # Validate system bitness compatibility
+    # check_release                        # Check Raspbian OS version compatibility
+    # check_arch                   # Validate Raspberry Pi model compatibility
+    # check_internet                       # Verify internet connectivity if required
 
-    # Print/Display Environment Functions
-    print_system                         # Log system information
-    print_version                        # Log the script version
+    # # Print/Display Environment Functions
+    # print_system                         # Log system information
+    # print_version                        # Log the script version
+
+    # # Install Functions
+    # apt_packages
+    exec_command "Processing data" "sleep 2" || die
+    exec_command "Installing software" "sleep 2 && foo" || die
 }
 
 # Run the main function and exit with its return status
