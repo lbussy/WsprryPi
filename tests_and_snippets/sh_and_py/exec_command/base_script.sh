@@ -82,13 +82,15 @@ declare SEM_VER="${SEM_VER:-1.0.0}"
 declare GIT_DEF_BRCH=("main" "master")
 
 ##
-# @brief Flag to disable console logging.
-#
-# Possible values:
-#  - "true": Disables logging to the terminal.
-#  - "false": Enables logging to the terminal (default).
+# @var USE_CONSOLE
+# @brief Controls whether console logging is enabled.
+# @details Allows enabling or disabling console logging based on the environment variable.
+# If the environment variable `USE_CONSOLE` is not set, it defaults to `true`.
+# To disable console logging, set `USE_CONSOLE=false` in the environment or modify this variable.
+# @default "true"
 ##
-declare NO_CONSOLE="${NO_CONSOLE:-true}" # TODO: Disable console logging
+# TODO: Implement logic to disable console logging when USE_CONSOLE is set to "false".
+USE_CONSOLE="${USE_CONSOLE:-false}"
 
 ##
 # @var REQUIRE_SUDO
@@ -196,7 +198,8 @@ readonly SUPPORTED_MODELS
 # - unset: Follow the logic defined in the `is_interactive()` function.
 # Defaults to blank if not set.
 ##
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"  # Default to blank if not set.
+# TODO:  Fix this note
+declare LOG_TO_FILE="${LOG_TO_FILE:-true}"  # Default to blank if not set.
 
 ##
 # @var LOG_FILE
@@ -724,16 +727,17 @@ check_pipe() {
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             # Script is being piped through bash
-            this_script="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         else
             # Script was run in an unusual way with 'bash'
-            this_script="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         fi
         USE_LOCAL=false
     else
         # Script run directly
         USE_LOCAL=true
     fi
+    export THIS_SCRIPT USE_LOCAL
 }
 
 ##
@@ -804,7 +808,7 @@ validate_depends() {
 # @return None
 # @exit 1 if any required files are missing or unreadable.
 ##
-validate_system_reads() {
+validate_sys_accs() {
     local missing=0  # Counter for missing or unreadable files
     local file       # Iterator for files
 
@@ -1064,12 +1068,10 @@ print_log_entry() {
         should_log_to_file=true
     elif [[ "${LOG_TO_FILE,,}" == "false" ]]; then
         should_log_to_file=false
+    elif [[ "${USE_CONSOLE,,}" == "false" ]]; then
+        should_log_to_file=false
     else
-        if ! is_interactive; then
-            should_log_to_file=true
-        else
-            should_log_to_file=false
-        fi
+        should_log_to_file=true
     fi
 
     # Log to file if applicable
@@ -1078,18 +1080,15 @@ print_log_entry() {
         [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$details" >> "$LOG_FILE"
     fi
 
-    # Log to the terminal only if NO_CONSOLE is false
-    if [[ "${NO_CONSOLE}" == "false" ]]; then
-        # Always print to the terminal if in an interactive shell
-        if is_interactive; then
-            # Print the main log message
-            echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
+    # Log to the terminal only if USE_CONSOLE is faltruese
+    if [[ "${USE_CONSOLE}" == "true" ]]; then
+        # Print the main log message
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
 
-            # Print the details if provided, using the EXTENDED log level color and format
-            if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
-                IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-                echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
-            fi
+        # Print the details if provided, using the EXTENDED log level color and format
+        if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
+            IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -1298,18 +1297,6 @@ generate_terminal_sequence() {
 }
 
 ##
-# @brief Determine if the script is running in an interactive shell.
-#
-# This function checks if the script is connected to a terminal by testing
-# whether standard input and output (file descriptor 1 & 0) is a terminal.
-#
-# @return 0 (true) if the script is running interactively; non-zero otherwise.
-##
-is_interactive() {
-    [[ -t 1 ]] && [[ -t 0 ]]
-}
-
-##
 # @brief Initialize terminal colors and text formatting.
 #
 # This function sets up variables for foreground colors, background colors,
@@ -1436,9 +1423,9 @@ setup_log() {
 }
 
 ##
-# @brief Toggle the NO_CONSOLE variable on or off.
+# @brief Toggle the USE_CONSOLE variable on or off.
 #
-# This function updates the global NO_CONSOLE variable to either "true" (off)
+# This function updates the global USE_CONSOLE variable to either "true" (off)
 # or "false" (on) based on the input argument.
 #
 # @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
@@ -1450,10 +1437,10 @@ toggle_console_log() {
     case "$state" in
         on)
             logD "Console logging enabled."
-            NO_CONSOLE="false"
+            USE_CONSOLE="true"
             ;;
         off)
-            NO_CONSOLE="true"
+            USE_CONSOLE="false"
             logD "Console logging disabled."
             ;;
         *)
@@ -1712,7 +1699,7 @@ get_proj_params() {
 # @brief Execute a command and return its success or failure.
 #
 # This function executes a given command, logs its status, and optionally
-# prints status messages to the console depending on the value of `NO_CONSOLE`.
+# prints status messages to the console depending on the value of `USE_CONSOLE`.
 # It returns `true` for success or `false` for failure.
 #
 # @param $1 The name/message for the operation.
@@ -1730,30 +1717,30 @@ exec_command() {
     # Log the "Running" message
     logD "$running_pre $exec_name"
 
-    # Print the "[-] Running: $exec_name" message if NO_CONSOLE is not false
-    if [[ "${NO_CONSOLE}" != "false" ]]; then
+    # Print the "[-] Running: $exec_name" message if USE_CONSOLE is false
+    if [[ "${USE_CONSOLE}" == "false" ]]; then
         printf "${FGGLD}[-]${RESET}\t$running_pre $exec_name\n"
     fi
 
     # Execute the task command, suppress output, and capture result
     result=$({ eval "$exec_process" > /dev/null 2>&1; echo $?; })
 
-    # Move the cursor up and clear the entire line if NO_CONSOLE is not false
-    if [[ "${NO_CONSOLE}" != "false" ]]; then
+    # Move the cursor up and clear the entire line if USE_CONSOLE is false
+    if [[ "${USE_CONSOLE}" == "false" ]]; then
         printf "${MOVE_UP}${CLEAR_LINE}"
     fi
 
     # Handle success or failure
     if [ "$result" -eq 0 ]; then
         # Success case
-        if [[ "${NO_CONSOLE}" != "false" ]]; then
+        if [[ "${USE_CONSOLE}" == "false" ]]; then
             printf "${FGGRN}[✔]${RESET}\t$complete_pre $exec_name\n"
         fi
         logI "$complete_pre $exec_name"
         return 0 # Success (true)
     else
         # Failure case
-        if [[ "${NO_CONSOLE}" != "false" ]]; then
+        if [[ "${USE_CONSOLE}" == "false" ]]; then
             printf "${FGRED}[✘]${RESET}\t$failed_pre $exec_name (Error: $result)\n"
         fi
         logE "$failed_pre $exec_name"
@@ -1771,23 +1758,28 @@ apt_packages() {
     # Declare local variables
     local package
 
-    logI "Updating local apt cache."
+    logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    logI "Updating and managing required packages (this may take a few minutes)."
-    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
-        logE "Failed to update package list or fix broken installs."
+    if ! exec_command "Update local package index" "sudo apt-get update -y"; then
+        logE "Failed to update package list."
+        return 1
+    fi
+
+    # Update package list and fix broken installs
+    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y"; then
+        logE "Failed to fix broken installs."
         return 1
     fi
 
     # Install or upgrade each package in the list
     for package in "${APTPACKAGES[@]}"; do
         if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
+            if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package"; then
                 logW "Failed to upgrade package: $package. Continuing with the next package."
             fi
         else
-            if ! run_command "sudo apt-get install -y $package"; then
+            if ! exec_command "Install $package" "sudo apt-get install -y $package"; then
                 logW "Failed to install package: $package. Continuing with the next package."
             fi
         fi
@@ -1844,7 +1836,7 @@ Environment Variables:
   LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
   LOG_TO_FILE                 Control file logging (true, false, unset).
   TERSE                       Set to "true" to enable terse output mode.
-  NO_CONSOLE                  Set to "true" to disable console logging.
+  USE_CONSOLE                 Set to "true" to enable console logging.
 
 Defaults:
   - If no log file is specified, the log file is created in the user's home
@@ -1899,7 +1891,7 @@ EOF
 # @global LOG_LEVEL          Logging verbosity level.
 # @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
 # @global TERSE              Boolean flag indicating terse output mode.
-# @global NO_CONSOLE         Boolean flag indicating console output status.
+# @global USE_CONSOLE        Boolean flag indicating console output status.
 ##
 parse_args() {
     local arg  # Iterator for arguments
@@ -1973,16 +1965,16 @@ parse_args() {
                 esac
                 shift
                 ;;
-            --no-console|-nc)
+            --log-console|-lc)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
                     echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
                     exit 1
                 fi
-                NO_CONSOLE="$2"
-                case "${NO_CONSOLE,,}" in
+                USE_CONSOLE="$2"
+                case "${USE_CONSOLE,,}" in
                     true|false) ;;  # Valid values
                     *)
-                        echo "ERROR: Invalid value for $1: $NO_CONSOLE. Valid options are: true, false." >&2
+                        echo "ERROR: Invalid value for $1: $USE_CONSOLE. Valid options are: true, false." >&2
                         exit 1
                         ;;
                 esac
@@ -2000,16 +1992,8 @@ parse_args() {
         shift
     done
 
-    # Set default values if not provided
-    LOG_FILE="${LOG_FILE:-}"
-    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
-    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
-    TERSE="${TERSE:-false}"
-    NO_CONSOLE="${NO_CONSOLE:-false}"
-
-    # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE
-    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE NO_CONSOLE
+    # Export global variables
+    # TODO export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE USE_CONSOLE
 }
 
 ############
@@ -2018,40 +2002,38 @@ parse_args() {
 
 # Main function
 main() {
-    # # Check Environment Functions
-    # check_pipe        # Get fallback name if piped through bash
+    # Check Environment Functions
+    check_pipe          # Get fallback name if piped through bash
 
-    # # Get Project Parameters Functions
-    # get_proj_params     # Get project and git parameters
+    # Get Project Parameters Functions
+    get_proj_params     # Get project and git parameters
 
-    # # Arguments Functions
-    # parse_args "$@"  # Parse command-line arguments
+    # Arguments Functions
+    parse_args "$@"     # Parse command-line arguments
 
-    # # Check Environment Functions
-    # enforce_sudo                         # Ensure proper privileges for script execution
-    # validate_depends                # Ensure required dependencies are installed
-    # validate_system_reads                # Verify critical system files are accessible
-    # validate_env_vars                    # Check for required environment variables
+    # Check Environment Functions
+    enforce_sudo        # Ensure proper privileges for script execution
+    validate_depends    # Ensure required dependencies are installed
+    validate_sys_accs   # Verify critical system files are accessible
+    validate_env_vars   # Check for required environment variables
 
     # Logging Functions
-    setup_log   # Setup logging environment
+    setup_log           # Setup logging environment
 
-    # # More: Check Environment Functions
-    # check_bash                           # Ensure the script is executed in a Bash shell
-    # check_sh_ver                   # Verify the current Bash version meets minimum requirements
-    # check_bitness                        # Validate system bitness compatibility
-    # check_release                        # Check Raspbian OS version compatibility
-    # check_arch                   # Validate Raspberry Pi model compatibility
-    # check_internet                       # Verify internet connectivity if required
+    # More: Check Environment Functions
+    check_bash          # Ensure the script is executed in a Bash shell
+    check_sh_ver        # Verify the current Bash version meets minimum requirements
+    check_bitness       # Validate system bitness compatibility
+    check_release       # Check Raspbian OS version compatibility
+    check_arch          # Validate Raspberry Pi model compatibility
+    check_internet      # Verify internet connectivity if required
 
-    # # Print/Display Environment Functions
-    # print_system                         # Log system information
-    # print_version                        # Log the script version
+    # Print/Display Environment Functions
+    print_system        # Log system information
+    print_version       # Log the script version
 
-    # # Install Functions
-    # apt_packages
-    exec_command "Processing data" "sleep 2" || die
-    exec_command "Installing software" "sleep 2 && foo" || die
+    # Install Functions
+    apt_packages        # Install/update required apt packages
 }
 
 # Run the main function and exit with its return status

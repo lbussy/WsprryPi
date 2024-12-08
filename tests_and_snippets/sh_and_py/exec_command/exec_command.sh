@@ -26,9 +26,6 @@
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
-#   - Find a way to show pending / completed actions (look at Fermentrack), e.g.:
-#       - "Start (this command)." message
-#       - "(this command) complete." message
 
 ##
 # @brief Trap unexpected errors during script execution.
@@ -85,13 +82,15 @@ declare SEM_VER="${SEM_VER:-1.0.0}"
 declare GIT_DEF_BRCH=("main" "master")
 
 ##
-# @brief Flag to disable console logging.
-#
-# Possible values:
-#  - "true": Disables logging to the terminal.
-#  - "false": Enables logging to the terminal (default).
+# @var USE_CONSOLE
+# @brief Controls whether console logging is enabled.
+# @details Allows enabling or disabling console logging based on the environment variable.
+# If the environment variable `USE_CONSOLE` is not set, it defaults to `true`.
+# To disable console logging, set `USE_CONSOLE=false` in the environment or modify this variable.
+# @default "true"
 ##
-declare NO_CONSOLE="${NO_CONSOLE:-true}" # TODO: Disable console logging
+# TODO: Implement logic to disable console logging when USE_CONSOLE is set to "false".
+USE_CONSOLE="${USE_CONSOLE:-false}"
 
 ##
 # @var REQUIRE_SUDO
@@ -199,7 +198,8 @@ readonly SUPPORTED_MODELS
 # - unset: Follow the logic defined in the `is_interactive()` function.
 # Defaults to blank if not set.
 ##
-declare LOG_TO_FILE="${LOG_TO_FILE:-}"  # Default to blank if not set.
+# TODO:  Fix this note
+declare LOG_TO_FILE="${LOG_TO_FILE:-true}"  # Default to blank if not set.
 
 ##
 # @var LOG_FILE
@@ -272,9 +272,9 @@ declare -ar ENV_VARS_BASE=(
 # - Dynamically constructed during runtime.
 ##
 if [[ "$REQUIRE_SUDO" == true ]]; then
-    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
 else
-    readonly -ar ENV_VARS=("${ENV_VARS_BASE[@]}")
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}")
 fi
 
 ##
@@ -727,16 +727,17 @@ check_pipe() {
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             # Script is being piped through bash
-            this_script="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         else
             # Script was run in an unusual way with 'bash'
-            this_script="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         fi
         USE_LOCAL=false
     else
         # Script run directly
         USE_LOCAL=true
     fi
+    export THIS_SCRIPT USE_LOCAL
 }
 
 ##
@@ -807,7 +808,7 @@ validate_depends() {
 # @return None
 # @exit 1 if any required files are missing or unreadable.
 ##
-validate_system_reads() {
+validate_sys_accs() {
     local missing=0  # Counter for missing or unreadable files
     local file       # Iterator for files
 
@@ -1067,12 +1068,10 @@ print_log_entry() {
         should_log_to_file=true
     elif [[ "${LOG_TO_FILE,,}" == "false" ]]; then
         should_log_to_file=false
+    elif [[ "${USE_CONSOLE,,}" == "false" ]]; then
+        should_log_to_file=false
     else
-        if ! is_interactive; then
-            should_log_to_file=true
-        else
-            should_log_to_file=false
-        fi
+        should_log_to_file=true
     fi
 
     # Log to file if applicable
@@ -1081,8 +1080,8 @@ print_log_entry() {
         [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$details" >> "$LOG_FILE"
     fi
 
-    # Always print to the terminal if in an interactive shell
-    if is_interactive; then
+    # Log to the terminal only if USE_CONSOLE is faltruese
+    if [[ "${USE_CONSOLE}" == "true" ]]; then
         # Print the main log message
         echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
 
@@ -1282,15 +1281,19 @@ default_color() {
 }
 
 ##
-# @brief Determine if the script is running in an interactive shell.
+# @brief Execute and combine complex terminal control sequences.
 #
-# This function checks if the script is connected to a terminal by testing
-# whether standard input and output (file descriptor 1 & 0) is a terminal.
+# This function executes `tput` commands and other shell commands
+# to create complex terminal control sequences. It supports commands
+# like moving the cursor, clearing lines, and resetting attributes.
 #
-# @return 0 (true) if the script is running interactively; non-zero otherwise.
+# @param $@ Commands and arguments to evaluate (supports multiple commands).
+# @return The resulting terminal control sequence or an empty string if unsupported.
 ##
-is_interactive() {
-    [[ -t 1 ]] && [[ -t 0 ]]
+generate_terminal_sequence() {
+    local result
+    result=$(eval "$@" 2>/dev/null || echo "")  # Execute the command safely
+    echo "$result"
 }
 
 ##
@@ -1319,6 +1322,8 @@ init_colors() {
         NO_BLINK=$(default_color sgr0)
         ITALIC=$(default_color sitm)
         NO_ITALIC=$(default_color ritm)
+        MOVE_UP=$(default_color cuu1)
+        CLEAR_LINE=$(tput el)
 
         # Foreground colors
         FGBLK=$(default_color setaf 0)
@@ -1330,6 +1335,7 @@ init_colors() {
         FGCYN=$(default_color setaf 6)
         FGWHT=$(default_color setaf 7)
         FGRST=$(default_color setaf 9)
+        FGGLD=$(default_color setaf 220)
 
         # Background colors
         BGBLK=$(default_color setab 0)
@@ -1344,28 +1350,20 @@ init_colors() {
 
         # Additional formatting and separators
         DOT="$(tput sc)$(default_color setaf 0)$(default_color setab 0).$(default_color sgr0)$(tput rc)"
-        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))"
-        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))"
-    else
-        # Fallback for unsupported or non-interactive terminals
-        RESET=""; BOLD=""; SMSO=""; RMSO=""; UNDERLINE=""
-        NO_UNDERLINE=""; BLINK=""; NO_BLINK=""; ITALIC=""; NO_ITALIC=""
-        FGBLK=""; FGRED=""; FGGRN=""; FGYLW=""; FGBLU=""
-        FGMAG=""; FGCYN=""; FGWHT=""; FGRST=""
-        BGBLK=""; BGRED=""; BGGRN=""; BGYLW=""
-        BGBLU=""; BGMAG=""; BGCYN=""; BGWHT=""; BGRST=""
-        DOT=""; HHR=""; LHR=""
+        HHR="$(printf '═%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
+        LHR="$(printf '─%.0s' $(seq 1 "${COLUMNS:-$(tput cols)}"))" 2>/dev/null || ""
+
     fi
 
     # Set variables as readonly
-    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    readonly ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     readonly DOT HHR LHR
 
     # Export variables globally
-    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK
-    export ITALIC NO_ITALIC FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
+    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    export FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     export BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     export DOT HHR LHR
 }
@@ -1425,9 +1423,9 @@ setup_log() {
 }
 
 ##
-# @brief Toggle the NO_CONSOLE variable on or off.
+# @brief Toggle the USE_CONSOLE variable on or off.
 #
-# This function updates the global NO_CONSOLE variable to either "true" (off)
+# This function updates the global USE_CONSOLE variable to either "true" (off)
 # or "false" (on) based on the input argument.
 #
 # @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
@@ -1439,10 +1437,10 @@ toggle_console_log() {
     case "$state" in
         on)
             logD "Console logging enabled."
-            NO_CONSOLE="false"
+            USE_CONSOLE="true"
             ;;
         off)
-            NO_CONSOLE="true"
+            USE_CONSOLE="false"
             logD "Console logging disabled."
             ;;
         *)
@@ -1523,7 +1521,7 @@ get_repo_name() {
 # determine the branch or tag the HEAD was detached from. If not inside a
 # Git repository, it displays an appropriate error message.
 #
-# @return Prints the current branch name or detached source to standard output.
+# @return Prints the current branch name or detached source to standard ou.
 # @retval 0 Success: the branch or detached source name is printed.
 # @retval 1 Failure: prints an error message to standard error.
 get_git_branch() {
@@ -1698,6 +1696,180 @@ get_proj_params() {
 ############
 
 ##
+# @brief Display installation instructions or log the start of the installation in non-interactive or terse mode.
+# @details Provides an overview of the choices the user will encounter during installation
+#          if running interactively and not in terse mode. If non-interactive or terse, skips the printing and logs the start.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global REPO_NAME The name of the package being installed.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None Waits for the user to press any key before proceeding if running interactively.
+##
+display_start() {
+    # Declare local variables
+    local sp12 sp19 key
+
+    # Add spaces for alignment
+    sp12="$(printf ' %.0s' {1..12})"
+    sp19="$(printf ' %.0s' {1..19})"
+
+    # Check if the script is non-interactive or in terse mode
+    if [ "$TERSE" = "true" ]; then
+        logI "$REPO_NAME install beginning."
+        return
+    fi
+
+    # Clear the screen
+    clear
+
+    # Display instructions
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp12 __          __                          _____ _ $sp19
+$DOT$BGBLK$FGYLW$sp12 \ \        / /                         |  __ (_)$sp19
+$DOT$BGBLK$FGYLW$sp12  \ \  /\  / /__ _ __  _ __ _ __ _   _  | |__) | $sp19
+$DOT$BGBLK$FGYLW$sp12   \ \/  \/ / __| '_ \| '__| '__| | | | |  ___/ |$sp19
+$DOT$BGBLK$FGYLW$sp12    \  /\  /\__ \ |_) | |  | |  | |_| | | |   | |$sp19
+$DOT$BGBLK$FGYLW$sp12     \/  \/ |___/ .__/|_|  |_|   \__, | |_|   |_|$sp19
+$DOT$BGBLK$FGYLW$sp12                | |               __/ |          $sp19
+$DOT$BGBLK$FGYLW$sp12                |_|              |___/           $sp19
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+You will be presented with some choices during the install. Most frequently
+you will see a 'yes or no' choice, with the default choice capitalized like
+so: [y/N]. Default means if you hit <enter> without typing anything, you will
+make the capitalized choice, i.e. hitting <enter> when you see [Y/n] will
+default to 'yes.'
+
+Yes/no choices are not case sensitive. However, passwords, system names, and
+install paths are. Be aware of this. There is generally no difference between
+'y', 'yes', 'YES', 'Yes', etc.
+
+EOF
+
+    # Wait for user input
+    while true; do
+        read -n 1 -s -r -p "Press any key when you are ready to proceed or 'Q' to quit. " key < /dev/tty
+        echo
+        case "$key" in
+            [Qq]) 
+                logI "Installation canceled by user."
+                exit 0
+                ;;
+            *) 
+                break
+                ;;
+        esac
+    done
+
+    # Clear the screen again
+    clear
+}
+
+##
+# @brief Sets the system timezone interactively or logs if already set.
+# @details If the current timezone is not GMT or BST, logs the current date and time,
+#          and exits. Otherwise, prompts the user to confirm or reconfigure the timezone.
+#
+# @return None Logs the current timezone or adjusts it if necessary.
+##
+set_time() {
+    # Declare local variables
+    local need_set current_date tz yn
+
+    # Get the current date and time
+    current_date="$(date)"
+    tz="$(date +%Z)"
+
+    # Log and return if the timezone is not GMT or BST
+    if [ "$tz" != "GMT" ] && [ "$tz" != "BST" ]; then
+        need_set=true
+        return
+    fi
+
+    # Check if the script is in terse mode
+    if [[ "$TERSE" == "true" && "$need_set" == "true" ]]; then
+        logW "Timezone detected as $tz, which may need to be updated."
+        return
+    else
+        logt "Timezone detected as $tz."
+    fi
+
+    # Inform the user about the current date and time
+    logI "Timezone detected as $tz, which may need to be updated."
+
+    # Prompt for confirmation or reconfiguration
+    while true; do
+        read -rp "Is this correct? [y/N]: " yn < /dev/tty
+        case "$yn" in
+            [Yy]*) 
+                logI "Timezone confirmed on $current_date"
+                break
+                ;;
+            [Nn]* | *) 
+                dpkg-reconfigure tzdata
+                logI "Timezone reconfigured on $current_date"
+                break
+                ;;
+        esac
+    done
+}
+
+##
+# @brief Execute a command and return its success or failure.
+#
+# This function executes a given command, logs its status, and optionally
+# prints status messages to the console depending on the value of `USE_CONSOLE`.
+# It returns `true` for success or `false` for failure.
+#
+# @param $1 The name/message for the operation.
+# @param $2 The command/process to execute.
+# @return Returns 0 (true) if the command succeeds, or non-zero (false) if it fails.
+##
+exec_command() {
+    local exec_name="$1"         # The name/message for the operation
+    local exec_process="$2"      # The command/process to execute
+    local result                 # To store the exit status of the command
+    local running_pre="Running:" # Prefix for running message
+    local complete_pre="Complete:" # Prefix for success message
+    local failed_pre="Failed:"     # Prefix for failure message
+
+    # Log the "Running" message
+    logD "$running_pre $exec_name"
+
+    # Print the "[-] Running: $exec_name" message if USE_CONSOLE is false
+    if [[ "${USE_CONSOLE}" == "false" ]]; then
+        printf "${FGGLD}[-]${RESET}\t$running_pre $exec_name\n"
+    fi
+
+    # Execute the task command, suppress output, and capture result
+    result=$({ eval "$exec_process" > /dev/null 2>&1; echo $?; })
+
+    # Move the cursor up and clear the entire line if USE_CONSOLE is false
+    if [[ "${USE_CONSOLE}" == "false" ]]; then
+        printf "${MOVE_UP}${CLEAR_LINE}"
+    fi
+
+    # Handle success or failure
+    if [ "$result" -eq 0 ]; then
+        # Success case
+        if [[ "${USE_CONSOLE}" == "false" ]]; then
+            printf "${FGGRN}[✔]${RESET}\t$complete_pre $exec_name\n"
+        fi
+        logI "$complete_pre $exec_name"
+        return 0 # Success (true)
+    else
+        # Failure case
+        if [[ "${USE_CONSOLE}" == "false" ]]; then
+            printf "${FGRED}[✘]${RESET}\t$failed_pre $exec_name (Error: $result)\n"
+        fi
+        logE "$failed_pre $exec_name"
+        return 1 # Failure (false)
+    fi
+}
+
+##
 # @brief Installs or upgrades all packages in the APTPACKAGES list.
 # @details Updates the package list and resolves broken dependencies before proceeding.
 #
@@ -1707,23 +1879,28 @@ apt_packages() {
     # Declare local variables
     local package
 
-    logI "Updating local apt cache."
+    logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    logI "Updating and managing required packages (this may take a few minutes)."
-    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
-        logE "Failed to update package list or fix broken installs."
+    if ! exec_command "Update local package index" "sudo apt-get update -y"; then
+        logE "Failed to update package list."
+        return 1
+    fi
+
+    # Update package list and fix broken installs
+    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y"; then
+        logE "Failed to fix broken installs."
         return 1
     fi
 
     # Install or upgrade each package in the list
     for package in "${APTPACKAGES[@]}"; do
         if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
+            if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package"; then
                 logW "Failed to upgrade package: $package. Continuing with the next package."
             fi
         else
-            if ! run_command "sudo apt-get install -y $package"; then
+            if ! exec_command "Install $package" "sudo apt-get install -y $package"; then
                 logW "Failed to install package: $package. Continuing with the next package."
             fi
         fi
@@ -1735,6 +1912,124 @@ apt_packages() {
 
 ############
 ### TODO:  More Installer Functions HEre
+############
+
+##
+# @brief Check if the snd_bcm2835 module is available and blacklist it if necessary.
+# @details Checks if the snd_bcm2835 module is present on the system and if it is not
+#          already blacklisted, it adds it to the blacklist and sets the REBOOT flag.
+#
+# @global REBOOT The flag indicating if a reboot is required.
+#
+# @return 0 If the module is available and blacklisted (or already blacklisted).
+# @return 1 If the module is not available, and processing is skipped.
+##
+blacklist_snd_bcm2835() {
+    # Declare local variables
+    local module="snd_bcm2835"
+    local blacklist_file="/etc/modprobe.d/alsa-blacklist.conf"
+
+    # Check if the module exists in the kernel
+    if ! modinfo "$module" &>/dev/null; then
+        return
+    fi
+
+    # Check if the module is blacklisted
+    if grep -q "blacklist $module" "$blacklist_file" 2>/dev/null; then
+        logD "Module $module is already blacklisted in $blacklist_file."
+    else
+        echo "blacklist $module" | sudo tee -a "$blacklist_file" > /dev/null
+        REBOOT="true"
+        readonly REBOOT
+        export REBOOT
+
+        if [ "$TERSE" = "true" ]; then
+            logW "Module $module has been blacklisted. A reboot is required for changes to take effect."
+        else
+            cat << EOF
+
+*Important Note:*
+
+Wsprry Pi uses the same hardware as your Raspberry Pi's sound
+system to generate radio frequencies. This soundcard has been
+disabled. You must reboot the Pi after this install completes
+for this to take effect:
+
+EOF
+            read -rp "Press any key to continue." < /dev/tty
+            echo
+        fi
+    fi
+
+    return 0
+}
+
+##
+# @brief Finalize the script execution and display completion details.
+# @details Displays reboot instructions if required and provides details about the WSPR daemon.
+#          Skips the message if the script is running in non-interactive mode or terse mode.
+#
+# @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
+# @global REBOOT Indicates whether a reboot is required.
+# @global SEM_VER The release version of the software.
+# @global TERSE Indicates whether the script is running in terse mode.
+#
+# @return None
+##
+finish_script() {
+    # Declare local variables
+    local sp7 sp11 sp18 sp28 sp49 rebootmessage
+
+    if [ "$REBOOT" = "true" ]; then
+        if [ "$TERSE" = "true" ]; then
+            logW "$REPO_NAME install complete. A reboot is necessary to complete functionality."
+        else
+            echo "A reboot is required to complete functionality."
+            read -rp "Reboot now? [Y/n]: " reboot_choice < /dev/tty
+            case "$reboot_choice" in
+                [Yy]* | "") 
+                    logI "Rebooting the system as requested."
+                    sudo reboot
+                    ;;
+                *)
+                    logI "Reboot deferred by the user."
+                    ;;
+            esac
+        fi
+        return
+    fi
+
+    if [ "$TERSE" = "true" ]; then
+        logI "$REPO_NAME install complete."
+        return
+    fi
+
+    sp7="$(printf ' %.0s' {1..7})"
+    sp11="$(printf ' %.0s' {1..11})"
+    sp18="$(printf ' %.0s' {1..18})"
+    sp28="$(printf ' %.0s' {1..28})"
+    sp49="$(printf ' %.0s' {1..49})"
+
+    cat << EOF
+
+$DOT$BGBLK$FGYLW$sp7 ___         _        _ _    ___                _     _$sp18
+$DOT$BGBLK$FGYLW$sp7|_ _|_ _  __| |_ __ _| | |  / __|___ _ __  _ __| |___| |_ ___ $sp11
+$DOT$BGBLK$FGYLW$sp7 | || ' \(_-<  _/ _\` | | | | (__/ _ \ '  \| '_ \ / -_)  _/ -_)$sp11
+$DOT$BGBLK$FGYLW$sp7|___|_|\_/__/\__\__,_|_|_|  \___\___/_|_|_| .__/_\___|\__\___|$sp11
+$DOT$BGBLK$FGYLW$sp49|_|$sp28
+$DOT$BGBLK$FGGRN$HHR$RESET
+
+The WSPR daemon has started.
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
+                  -or- : http://$(hostname).local/wspr
+ - Release version     : $SEM_VER
+$rebootmessage
+Happy DXing!
+EOF
+}
+
+############
+### TODO:  More Installer Functions Here
 ############
 
 ############
@@ -1780,7 +2075,7 @@ Environment Variables:
   LOG_LEVEL                   Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
   LOG_TO_FILE                 Control file logging (true, false, unset).
   TERSE                       Set to "true" to enable terse output mode.
-  NO_CONSOLE                  Set to "true" to disable console logging.
+  USE_CONSOLE                 Set to "true" to enable console logging.
 
 Defaults:
   - If no log file is specified, the log file is created in the user's home
@@ -1835,7 +2130,7 @@ EOF
 # @global LOG_LEVEL          Logging verbosity level.
 # @global LOG_TO_FILE        Boolean or value indicating whether to log to a file.
 # @global TERSE              Boolean flag indicating terse output mode.
-# @global NO_CONSOLE         Boolean flag indicating console output status.
+# @global USE_CONSOLE        Boolean flag indicating console output status.
 ##
 parse_args() {
     local arg  # Iterator for arguments
@@ -1909,16 +2204,16 @@ parse_args() {
                 esac
                 shift
                 ;;
-            --no-console|-nc)
+            --log-console|-lc)
                 if [[ -z "$2" || "$2" =~ ^- ]]; then
                     echo "ERROR: Missing argument for $1. Valid options are: true, false." >&2
                     exit 1
                 fi
-                NO_CONSOLE="$2"
-                case "${NO_CONSOLE,,}" in
+                USE_CONSOLE="$2"
+                case "${USE_CONSOLE,,}" in
                     true|false) ;;  # Valid values
                     *)
-                        echo "ERROR: Invalid value for $1: $NO_CONSOLE. Valid options are: true, false." >&2
+                        echo "ERROR: Invalid value for $1: $USE_CONSOLE. Valid options are: true, false." >&2
                         exit 1
                         ;;
                 esac
@@ -1936,16 +2231,8 @@ parse_args() {
         shift
     done
 
-    # Set default values if not provided
-    LOG_FILE="${LOG_FILE:-}"
-    LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
-    LOG_TO_FILE="${LOG_TO_FILE:-unset}"
-    TERSE="${TERSE:-false}"
-    NO_CONSOLE="${NO_CONSOLE:-false}"
-
-    # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE
-    export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE NO_CONSOLE
+    # Export global variables
+    # TODO export DRY_RUN LOG_FILE LOG_LEVEL LOG_TO_FILE TERSE USE_CONSOLE
 }
 
 ############
@@ -1955,37 +2242,41 @@ parse_args() {
 # Main function
 main() {
     # Check Environment Functions
-    check_pipe        # Get fallback name if piped through bash
+    check_pipe          # Get fallback name if piped through bash
 
     # Get Project Parameters Functions
     get_proj_params     # Get project and git parameters
 
     # Arguments Functions
-    parse_args "$@"  # Parse command-line arguments
+    parse_args "$@"     # Parse command-line arguments
 
     # Check Environment Functions
-    enforce_sudo                         # Ensure proper privileges for script execution
-    validate_depends                # Ensure required dependencies are installed
-    validate_system_reads                # Verify critical system files are accessible
-    validate_env_vars                    # Check for required environment variables
+    enforce_sudo        # Ensure proper privileges for script execution
+    validate_depends    # Ensure required dependencies are installed
+    validate_sys_accs   # Verify critical system files are accessible
+    validate_env_vars   # Check for required environment variables
 
     # Logging Functions
-    setup_log   # Setup logging environment
+    setup_log           # Setup logging environment
 
     # More: Check Environment Functions
-    check_bash                           # Ensure the script is executed in a Bash shell
-    check_sh_ver                   # Verify the current Bash version meets minimum requirements
-    check_bitness                        # Validate system bitness compatibility
-    check_release                        # Check Raspbian OS version compatibility
-    check_arch                   # Validate Raspberry Pi model compatibility
-    check_internet                       # Verify internet connectivity if required
+    check_bash          # Ensure the script is executed in a Bash shell
+    check_sh_ver        # Verify the current Bash version meets minimum requirements
+    check_bitness       # Validate system bitness compatibility
+    check_release       # Check Raspbian OS version compatibility
+    check_arch          # Validate Raspberry Pi model compatibility
+    check_internet      # Verify internet connectivity if required
 
     # Print/Display Environment Functions
-    print_system                         # Log system information
-    print_version                        # Log the script version
+    print_system        # Log system information
+    print_version       # Log the script version
 
     # Install Functions
-    apt_packages
+    apt_packages        # Install/update required apt packages
+
+    # Testing exec_command()
+    exec_command "Processing data" "sleep 2" || die
+    exec_command "Installing software" "sleep 2 && foo" || die
 }
 
 # Run the main function and exit with its return status
