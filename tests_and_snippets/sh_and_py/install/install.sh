@@ -38,7 +38,7 @@
 #
 # @global FUNCNAME Array containing function names in the call stack.
 # @global LINENO Line number where the error occurred.
-# @global THISSCRIPT Name of the script.
+# @global THIS_SCRIPT Name of the script.
 #
 # @return None (exits the script with an error code).
 ##
@@ -46,7 +46,7 @@
 trap_error() {
     local func="${FUNCNAME[1]:-main}"  # Get the calling function name (default: "main")
     local line="$1"                   # Line number where the error occurred
-    local script="${THISSCRIPT:-$(basename "$0")}"  # Script name (fallback to current script)
+    local script="${THIS_SCRIPT:-$(basename "$0")}"  # Script name (fallback to current script)
 
     # Log the error message and exit
     echo "ERROR: An unexpected error occurred in function '$func' at line $line of script '$script'. Exiting." >&2
@@ -63,27 +63,27 @@ trap_error() {
 
 ##
 # @brief Logging-related constants for the script.
-# @details Sets the script name (`THISSCRIPT`) based on the current environment.
-# If `THISSCRIPT` is already defined, its value is retained; otherwise, it is set
+# @details Sets the script name (`THIS_SCRIPT`) based on the current environment.
+# If `THIS_SCRIPT` is already defined, its value is retained; otherwise, it is set
 # to the basename of the script or defaults to "script.sh".
 #
-# @global THISSCRIPT The name of the script.
+# @global THIS_SCRIPT The name of the script.
 ##
-declare THISSCRIPT="${THISSCRIPT:-install.sh}" # Use existing value, or default to "install.sh".
+declare THIS_SCRIPT="${THIS_SCRIPT:-install.sh}" # Use existing value, or default to "install.sh".
 
 ##
 # @brief Project metadata constants used throughout the script.
 # @details These variables provide metadata about the script, including ownership,
 # versioning, and project details. All are marked as read-only.
 ##
-readonly VERSION="1.2.1-version-files+91.3bef855-dirty"
-
-declare VERSION="${VERSION:-1.0.0}"     # Default to 1.0.0 if not set
-declare GIT_BRCH="${GIT_BRCH:-main}"    # Default to main branch if not set (non-constant)
-declare USE_LOCAL="${USE_LOCAL:-false}" # Default to false if not set (non-constant)
-declare PACKAGE="${PACKAGE:-WsprryPi}"  # Default to WsprryPi if not set (non-constant)
-declare OWNER="${OWNER:-lbussy}"        # Default to lbussy if not set
-
+declare SEM_VER="1.2.1-version-files+91.3bef855-dirty"
+declare GIT_BRCH="install_update"
+declare REPO_ORG="${REPO_ORG:-lbussy}"
+declare REPO_NAME="${REPO_NAME:-WsprryPi}"
+declare GIT_BRCH="${GIT_BRCH:-main}"
+declare SEM_VER="${SEM_VER:-1.0.0}"
+declare USE_LOCAL="${USE_LOCAL:-false}"
+declare GIT_DEF_BRCH=("main" "master")
 
 ##
 # @brief Configuration constants for script requirements and compatibility.
@@ -96,7 +96,7 @@ readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Set to true if the scri
 
 # Require root privileges to run the script
 # Set to true if the script requires root privileges
-declare REQUIRE_SUDO="${REQUIRE_SUDO:-false}"   # Default to false if not specified
+readonly REQUIRE_SUDO="${REQUIRE_SUDO:-false}"   # Default to false if not specified
 
 # Minimum supported Bash version (set to "none" to disable version checks)
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified
@@ -218,7 +218,7 @@ warn() {
 # @param $@ Additional details for the error (optional).
 #
 # @global BASH_LINENO Array containing line numbers where the error occurred.
-# @global THISSCRIPT The name of the script (used in log messages).
+# @global THIS_SCRIPT The name of the script (used in log messages).
 # @global log_message Function to log messages at various severity levels.
 # @global stack_trace Function to print the stack trace.
 #
@@ -236,7 +236,7 @@ die() {
     logC "$message" "$details"
 
     # Provide context for the critical error
-    logC "Script '$THISSCRIPT' did not complete due to a critical error."
+    logC "Script '$THIS_SCRIPT' did not complete due to a critical error."
 
     # Print the stack trace
     stack_trace
@@ -514,13 +514,13 @@ check_bitness() {
 # @details Provides an overview of the script's available options, their purposes,
 #          and practical examples for running the script.
 #
-# @global THISSCRIPT The name of the script, typically derived from the script's filename.
+# @global THIS_SCRIPT The name of the script, typically derived from the script's filename.
 #
 # @return None Exits the script with a success code after displaying usage information.
 ##
 usage() {
     cat << EOF
-Usage: $THISSCRIPT [options]
+Usage: $THIS_SCRIPT [options]
 
 Options:
   -dr, --dry-run              Simulate actions without making changes.
@@ -544,15 +544,15 @@ Environment Variables:
 
 Examples:
   1. Run the script in dry-run mode:
-     $THISSCRIPT --dry-run
+     $THIS_SCRIPT --dry-run
   2. Check the script version:
-     $THISSCRIPT --version
+     $THIS_SCRIPT --version
   3. Log to /tmp/example.log at INFO level and explicitly log to file:
-     $THISSCRIPT -lf /tmp/example.log -ll INFO -tf true
+     $THIS_SCRIPT -lf /tmp/example.log -ll INFO -tf true
   4. Enable local installation mode:
-     $THISSCRIPT --local
+     $THIS_SCRIPT --local
   5. Run the script in terse mode:
-     $THISSCRIPT --terse
+     $THIS_SCRIPT --terse
 
 EOF
 
@@ -584,11 +584,11 @@ print_system() {
 ##
 # @brief Print the script version and optionally log it.
 # @details This function displays the version of the script stored in the global
-#          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise
+#          variable `SEM_VER`. It uses `echo` if called by `parse_args`, otherwise
 #          it uses `logI`.
 #
-# @global THISSCRIPT The name of the script.
-# @global VERSION The version of the script.
+# @global THIS_SCRIPT The name of the script.
+# @global SEM_VER The version of the script.
 #
 # @return None
 ##
@@ -597,9 +597,9 @@ print_version() {
     local caller="${FUNCNAME[1]}"
 
     if [[ "$caller" == "parse_args" ]]; then
-        echo -e "$THISSCRIPT: version $VERSION" # Display the script name and version
+        echo -e "$THIS_SCRIPT: version $SEM_VER" # Display the script name and version
     else
-        logD "Running $THISSCRIPT version $VERSION"
+        logD "Running $THIS_SCRIPT version $SEM_VER"
     fi
 }
 
@@ -713,8 +713,8 @@ parse_args() {
     done
 
     # Export and make relevant global variables readonly
-    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL TERSE
-    export DRY_RUN LOG_LEVEL LOG_TO_FILE USE_LOCAL TERSE
+    readonly DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE # USE_LOCAL
+    export DRY_RUN LOG_LEVEL LOG_TO_FILE TERSE USE_LOCAL
 }
 
 ##
@@ -831,19 +831,19 @@ print_log_entry() {
 
     # Log to file if applicable
     if "$should_log_to_file"; then
-        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$message" >> "$LOG_FILE"
-        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THISSCRIPT" "$lineno" "$details" >> "$LOG_FILE"
+        printf "[%s]\t[%s]\t[%s:%d]\t%s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$message" >> "$LOG_FILE"
+        [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%d]\tDetails: %s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$details" >> "$LOG_FILE"
     fi
 
     # Always print to the terminal if in an interactive shell
     if is_interactive; then
         # Print the main log message
-        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THISSCRIPT:$lineno]${RESET}\t$message"
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT:$lineno]${RESET}\t$message"
 
         # Print the details if provided, using the EXTENDED log level color and format
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THISSCRIPT:$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -991,7 +991,7 @@ logC() {
 ##
 init_log() {
     # Local variables
-    local scriptname="${THISSCRIPT%%.*}"  # Extract script name without extension
+    local scriptname="${THIS_SCRIPT%%.*}"  # Extract script name without extension
     local homepath                        # Home directory of the current user
     local log_dir                         # Directory of the log file
 
@@ -1208,8 +1208,8 @@ get_repo_org() {
         organization=$(echo "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
         echo "$organization"
     else
-        # Print an error message if the remote URL is not set or not inside a Git repository.
-        die "Error: Not inside a Git repository or no remote URL configured."
+        echo "Error: Not inside a Git repository or no remote URL configured." >&2
+        exit 1
     fi
 }
 
@@ -1233,12 +1233,12 @@ get_repo_name() {
     # Check if the URL is non-empty.
     if [[ -n "$url" ]]; then
         # Extract the repository name from the URL and remove the ".git" suffix if present.
-        repo_name="${url##*/}"  # Remove everything up to the last `/`.
-        repo_name="${project_name%.git}"  # Remove the `.git` suffix.
-        echo "$project_name"
+        repo_name="${url##*/}"       # Remove everything up to the last `/`.
+        repo_name="${repo_name%.git}" # Remove the `.git` suffix.
+        echo "$repo_name"
     else
-        # Print an error message if the remote URL is not set or not inside a Git repository.
-        die "Error: Not inside a Git repository or no remote URL configured."
+        echo "Error: Not inside a Git repository or no remote URL configured." >&2
+        exit 1
     fi
 }
 
@@ -1252,7 +1252,7 @@ get_repo_name() {
 # @return Prints the current branch name or detached source to standard output.
 # @retval 0 Success: the branch or detached source name is printed.
 # @retval 1 Failure: prints an error message to standard error.
-get_current_branch() {
+get_git_branch() {
     local branch detached_from
 
     # Retrieve the current branch name using `git rev-parse`.
@@ -1271,82 +1271,152 @@ get_current_branch() {
             exit 1
         fi
     else
-        # Handle the case of not being inside a Git repository.
         echo "Error: Not inside a Git repository." >&2
         exit 1
     fi
 }
 
-##
-# @brief Configure local mode or remote mode based on the Git repository context.
-# @details Configures relevant variables for local mode if `USE_LOCAL` is true,
-#          including fetching the package name and branch name from Git.
-#          Sets default remote URLs if `USE_LOCAL` is not set.
-#
-# @global USE_LOCAL           Boolean flag indicating whether local mode is enabled.
-# @global LOCAL_SOURCE_DIR    The root directory of the current Git repository.
-# @global LOCAL_WWW_DIR       Path to the data directory under the Git repo root.
-# @global LOCAL_SCRIPTS_DIR   Path to the scripts directory under the Git repo root.
-# @global GIT_RAW             Base URL for accessing raw files in the repository.
-# @global GIT_API             Base URL for accessing the repository API.
-# @global PACKAGE             The name of the current package (repository name).
-# @global GIT_BRCH            The current branch name in the Git repository.
-# @global THISSCRIPT          The name of the current script.
-#
-# @return None Exits with an error if `USE_LOCAL` is true and the script is not
-#               run from within a Git repository or if `git` is not available.
-##
-source_params() {
-    local script_path package_name branch_name
+# @brief Get the most recent Git tag.
+# @return The most recent Git tag, or nothing if no tags exist.
+get_last_tag() {
+    local tag
 
-    if [[ "$USE_LOCAL" == "true" ]]; then
-        # Set the name of the current script
-        local this_script
-        local project_name
-        local owner
+    # Retrieve the most recent Git tag
+    tag=$(git describe --tags --abbrev=0 2>/dev/null)
 
-        get_repo_org()
-        get_repo_name()
-        get_git_branch()
+    echo "$tag"
+}
 
-        declare VERSION="${VERSION:-1.0.0}"     # Default to 1.0.0 if not set
-        declare GIT_BRCH="${GIT_BRCH:-main}"    # Default to main branch if not set (non-constant)
-        declare USE_LOCAL="${USE_LOCAL:-false}" # Default to false if not set (non-constant)
-        declare PACKAGE="${PACKAGE:-WsprryPi}"  # Default to WsprryPi if not set (non-constant)
-        declare OWNER="${OWNER:-lbussy}"        # Default to lbussy if not set
-        
-        THISSCRIPT=$(basename "$0")
-        get_project_name
+# @brief Check if a tag follows semantic versioning.
+# @param tag The Git tag to validate.
+# @return "true" if the tag follows semantic versioning, otherwise "false".
+is_sem_ver() {
+    local tag="$1"
 
-        # Determine the root directory of the current Git repository
-        LOCAL_SOURCE_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
-        if [[ -z "$LOCAL_SOURCE_DIR" ]]; then
-            die 1 "This script must be run from within a Git repository." >&2
-        fi
-
-        # Set directories under the Git repository root
-        LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data"        # Data directory under the Git repo root
-        LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts" # Scripts directory under the Git repo root
-
-        # Get the repository name (package) and current branch name
-        package_name=$(git rev-parse --show-toplevel | xargs basename)
-        branch_name=$(git rev-parse --abbrev-ref HEAD)
-
-        # Set global variables
-        PACKAGE="$package_name"
-        GIT_BRCH="$branch_name"
-        OWNER
-        VERSION
-
+    # Validate if the tag follows the semantic versioning format (major.minor.patch)
+    if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "true"
     else
-        # Default remote URLs for raw files and API access
-        GIT_RAW="https://raw.githubusercontent.com/$OWNER/$PACKAGE"
-        GIT_API="https://api.github.com/repos/$OWNER/$PACKAGE"
+        echo "false"
+    fi
+}
+
+# @brief Get the number of commits since the last tag.
+# @param tag The Git tag to count commits from.
+# @return The number of commits since the tag, or 0 if the tag does not exist.
+get_num_commits() {
+    local tag="$1" commit_count
+
+    # Count the number of commits since the given tag
+    commit_count=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || echo 0)
+
+    echo "$commit_count"
+}
+
+# @brief Get the short hash of the current Git commit.
+# @return The short hash of the current Git commit.
+get_short_hash() {
+    local short_hash
+
+    # Retrieve the short hash of the current Git commit
+    short_hash=$(git rev-parse --short HEAD 2>/dev/null)
+
+    echo "$short_hash"
+}
+
+# @brief Check if there are uncommitted changes in the working directory.
+# @return "true" if there are uncommitted changes, otherwise "false".
+get_dirty() {
+    local changes
+
+    # Check for uncommitted changes in the repository
+    changes=$(git status --porcelain 2>/dev/null)
+
+    if [[ -n "$changes" ]]; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+# @brief Generate a version string based on the state of the Git repository.
+# @return The generated semantic version string.
+get_sem_ver() {
+    local branch_name git_tag num_commits short_hash dirty version_string
+
+    # Determine if the latest tag is a semantic version
+    tag=$(get_last_tag)
+    if [[ "$(is_sem_ver "$tag")" == "true" ]]; then
+        version_string="$tag"
+    else
+        version_string="1.0.0" # Use default version if no valid tag exists
     fi
 
-    # Export and make variables readonly
-    readonly THISSCRIPT GIT_RAW GIT_API LOCAL_SOURCE_DIR LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR PACKAGE GIT_BRCH
-    export THISSCRIPT GIT_RAW GIT_API LOCAL_SOURCE_DIR LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR PACKAGE GIT_BRCH
+    # Retrieve the current branch name
+    branch_name=$(get_git_branch)
+    version_string="$version_string-$branch_name"
+
+    # Get the number of commits since the last tag and append it to the tag
+    num_commits=$(get_num_commits "$tag")
+    if [[ "$num_commits" -gt 0 ]]; then
+        version_string="$version_string+$num_commits"
+    fi
+
+    # Get the short hash and append it to the tag
+    short_hash=$(get_short_hash)
+    if [[ -n "$short_hash" ]]; then
+        version_string="$version_string.$short_hash"
+    fi
+
+    # Check for a dirty working directory
+    dirty=$(get_dirty)
+    if [[ "$dirty" == "true" ]]; then
+        version_string="$version_string-dirty"
+    fi
+
+    echo "$version_string"
+}
+
+# @brief Configure local or remote mode based on the Git repository context.
+#
+# This function sets relevant variables for local mode if `USE_LOCAL` is true.
+# Defaults to remote configuration if not in local mode.
+#
+# @global USE_LOCAL           Indicates whether local mode is enabled.
+# @global THIS_SCRIPT          Name of the current script.
+# @global REPO_ORG            Git organization or owner name.
+# @global REPO_NAME           Git repository name.
+# @global GIT_BRCH            Current Git branch name.
+# @global SEM_VER             Generated semantic version string.
+# @global LOCAL_SOURCE_DIR    Path to the root of the local repository.
+# @global LOCAL_WWW_DIR       Path to the `data` directory in the repository.
+# @global LOCAL_SCRIPTS_DIR   Path to the `scripts` directory in the repository.
+# @global GIT_RAW             URL for accessing raw files remotely.
+# @global GIT_API             URL for accessing the repository API.
+get_proj_params() {
+    if [[ "$USE_LOCAL" == "true" ]]; then
+        THIS_SCRIPT=$(basename "$0")
+        REPO_ORG=$(get_repo_org)
+        REPO_NAME=$(get_repo_name)
+        GIT_BRCH=$(get_git_branch)
+        SEM_VER=$(get_sem_ver)
+
+        # Get the root directory of the repository
+        LOCAL_SOURCE_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
+        if [[ -z "$LOCAL_SOURCE_DIR" ]]; then
+            echo "Error: Not inside a Git repository." >&2
+            exit 1
+        fi
+
+        LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data"
+        LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts"
+    else
+        GIT_RAW="https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"
+        GIT_API="https://api.github.com/repos/$REPO_ORG/$REPO_NAME"
+    fi
+
+    export THIS_SCRIPT REPO_ORG REPO_NAME GIT_BRCH SEM_VER LOCAL_SOURCE_DIR
+    export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
 }
 
 ##
@@ -1355,7 +1425,7 @@ source_params() {
 #          if running interactively and not in terse mode. If non-interactive or terse, skips the printing and logs the start.
 #
 # @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
-# @global PACKAGE The name of the package being installed.
+# @global REPO_NAME The name of the package being installed.
 # @global TERSE Indicates whether the script is running in terse mode.
 #
 # @return None Waits for the user to press any key before proceeding if running interactively.
@@ -1363,7 +1433,7 @@ source_params() {
 display_start() {
     # Check if the script is non-interactive or in terse mode
     if ! is_interactive || [ "$TERSE" = "true" ]; then
-        logI "$PACKAGE install beginning."
+        logI "$REPO_NAME install beginning."
         return
     fi
 
@@ -1585,7 +1655,7 @@ apt_packages() {
 #
 # @global DOT, BGBLK, FGYLW, FGGRN, HHR, RESET Variables for terminal formatting.
 # @global REBOOT Indicates whether a reboot is required.
-# @global VERSION The release version of the software.
+# @global SEM_VER The release version of the software.
 # @global TERSE Indicates whether the script is running in terse mode.
 #
 # @return None
@@ -1597,15 +1667,15 @@ finish_script() {
     # Check for REBOOT first, and then handle TERSE condition
     if [ "$REBOOT" = "false" ]; then
         if ! is_interactive || [ "$TERSE" = "true" ]; then
-            logI "$PACKAGE install complete."
+            logI "$REPO_NAME install complete."
             return
         fi
     elif [ "$REBOOT" = "true" ]; then
         if ! is_interactive; then
-            logW "$PACKAGE install complete. A reboot is necessary to complete functionality."
+            logW "$REPO_NAME install complete. A reboot is necessary to complete functionality."
             return
         elif [ "$TERSE" = "true" ]; then
-            logW "$PACKAGE install complete. A reboot is necessary to complete functionality."
+            logW "$REPO_NAME install complete. A reboot is necessary to complete functionality."
             
             # Skip prompting for a reboot in terse mode and just return
             return
@@ -1628,7 +1698,7 @@ finish_script() {
 
     # Final check for TERSE and return if true
     if [ "$TERSE" = "true" ]; then
-        logI "$PACKAGE install complete."
+        logI "$REPO_NAME install complete."
         return
     fi
 
@@ -1652,7 +1722,7 @@ $DOT$BGBLK$FGGRN$HHR$RESET
 The WSPR daemon has started.
  - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
                   -or- : http://$(hostname).local/wspr
- - Release version     : $VERSION
+ - Release version     : $SEM_VER
 $rebootmessage
 Happy DXing!
 EOF
@@ -1666,20 +1736,20 @@ EOF
 main() {
     # Perform essential checks
     parse_args "$@"     # Parse any command line arguments
-    validate_depends    # Chech availability of req. non-Bash builtins
-    source_params       # 
-    setup_log
-    check_bash
-    check_sh_ver
-    check_bitness
-    check_release
-    check_arch
-    enforce_sudo
-    check_internet
+    validate_depends    # Check availability of req. non-Bash builtins
+    get_proj_params     # Get project and git parameters
+    setup_log           # Set up logging
+    check_bash          # Validate we are using Bash
+    check_sh_ver        # Validate bash version
+    check_bitness       # Validate bitness requirements
+    check_release       # Validate release requirements
+    check_arch          # Validate architecture requirements
+    enforce_sudo        # Validate we have permissions to run
+    check_internet      # Validate Internet access
 
     # Informational/debug lines
-    print_system
-    print_version
+    print_system        # Log system info
+    print_version       # Log script version
 
     # Script start
     display_start   
