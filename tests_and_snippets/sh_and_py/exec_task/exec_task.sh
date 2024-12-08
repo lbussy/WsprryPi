@@ -26,9 +26,6 @@
 #   - Test string variables in arguments (move this back to log.sh)
 #   - Implement variable expansion on log path argument (move this back to log.sh)
 #   - Consider implementing DRY_RUN in future work
-#   - Find a way to show pending / completed actions (look at Fermentrack), e.g.:
-#       - "Start (this command)." message
-#       - "(this command) complete." message
 
 ##
 # @brief Trap unexpected errors during script execution.
