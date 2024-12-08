@@ -157,42 +157,119 @@ declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"   # Default log level is DEBUG if not se
 readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"               # Default fallback name if the script is piped
 
 # Required packages
-readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
+readonly APTPACKAGES=(
+    "apache2" "php" "jq" "libraspberrypi-dev" "raspberrypi-kernel-headers"
+)
 
-# List of required external dependencies for skeleton
-declare DEPENDENCIES=("awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed")
-# List of required external dependencies for logging
-declare DEPENDENCIES+=("getent" "date" "mktemp" "printf" "whoami" "realpath")
-# List of required external dependencies for installer
-declare DEPENDENCIES+=("dpkg" "git" "dpkg-reconfigure" "curl")
+##
+# @brief Required dependencies.
+#
+# @details
+# This section lists the external commands required by the script for proper execution.
+# The listed dependencies must be available in the system's PATH for the script to function
+# as intended. Missing dependencies may cause runtime errors.
+#
+# @var DEPENDENCIES
+# @type array
+# @default
+#
+# @note
+# Ensure all required commands are included in this list. Use a dependency-checking
+# function to verify their availability at runtime.
+#
+# @todo Check this list for completeness and update as needed.
+##
+declare DEPENDENCIES=(
+    "awk" "grep" "tput" "cut" "tr" "getconf" "cat" "sed" "basename"
+    "getent" "date" "mktemp" "printf" "whoami" "mkdir" "touch" "echo"
+    "dpkg" "git" "dpkg-reconfigure" "curl" "realpath"
+)
 readonly DEPENDENCIES
+
+##
+# @brief Array of required environment variables.
+#
+# This array specifies the environment variables that the script requires
+# to function correctly. The `validate_env_vars` function checks for their
+# presence during initialization.
+#
+# Environment Variables:
+#   - SUDO_USER: Identifies the user who invoked the script using sudo.
+#   - HOME: Specifies the home directory of the current user.
+#   - COLUMNS: Defines the width of the terminal, used for formatting.
+##
+# Initialize the ENV_VARS array
+declare -a ENV_VARS_BASE=(
+    "HOME"       # Home directory of the current user
+    "COLUMNS"    # Terminal width for formatting
+)
+
+# Conditionally add SUDO_USER if REQUIRE_SUDO is true
+if [[ "$REQUIRE_SUDO" == true ]]; then
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}" "SUDO_USER")
+else
+    readonly -a ENV_VARS=("${ENV_VARS_BASE[@]}")
+fi
+
+##
+# @brief Set a default value for terminal width if COLUMNS is unset.
+#
+# The `COLUMNS` variable specifies the width of the terminal in columns.
+# If not already set, this line assigns a default value of 80 columns.
+# This ensures the script functions correctly in non-interactive environments
+# where `COLUMNS` might not be automatically defined.
+#
+# Environment Variable:
+#   COLUMNS - Represents the terminal width. Can be overridden externally.
+##
+COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
+
+##
+# @brief Array of critical system files to check for availability.
+# @details These files must exist and be readable for the script to function properly.
+##
+declare SYSTEM_READS+=(
+    "/etc/os-release"
+    "/proc/device-tree/compatible"
+)
+
+##
+# @brief Flag to indicate if internet connectivity is required.
+#
+# This variable determines whether the script should verify internet connectivity
+# before proceeding. The default value is `false`, meaning the script does not
+# require internet unless explicitly set to `true`.
+#
+# Possible values:
+# - "true": Internet connectivity is required.
+# - "false": Internet connectivity is not required (default).
+#
+# Environment Variable:
+#   REQUIRE_INTERNET - Overrides this value if set before script execution.
+##
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to false if not set
+
+##
+# @brief Controls whether stack traces are printed for warning messages.
+# @details Set to `true` to enable stack trace logging for warnings.
+##
+readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set
+
+##
+# @brief List of required APT packages for the script.
+# @details Defines the packages required for the script's proper functionality.
+#          Packages should be available in the system's default package manager.
+#
+# @type string
+# @global readonly APTPACKAGES
+##
+readonly APTPACKAGES="apache2 php jq libraspberrypi-dev raspberrypi-kernel-headers"
 
 ############
 ### Skeleton Functions
 ############
 
-##
-# @brief Check if the system has an internet connection by making an HTTP request.
-# @details Uses curl to send a request to google.com and checks the response status to determine if the system is online.
-#          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
-#
-# @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
-#
-# @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
-##
-check_internet() {
-    # Skip check if REQUIRE_INTERNET is not true
-    if [ "$REQUIRE_INTERNET" != "true" ]; then
-        return
-    fi
 
-    # Check for internet connectivity using curl
-    if curl -s --head http://google.com | grep "HTTP/1\.[01] [23].." > /dev/null; then
-        logD "Internet is available."
-    else
-        die 1 "No Internet connection detected."
-    fi
-}
 
 ##
 # @brief Print a detailed stack trace of the call hierarchy.
@@ -505,36 +582,321 @@ remove_slash() {
     echo "$input"
 }
 
-##
-# @brief Ensure the script is run with appropriate privileges based on REQUIRE_SUDO.
-# @details Validates whether the script is executed under the correct privilege conditions:
-#          - If REQUIRE_SUDO is true, the script must be run with `sudo` and not directly as root.
-#          - If REQUIRE_SUDO is false, the script must not be run as root or with `sudo`.
-#
-# @global REQUIRE_SUDO A boolean indicating whether the script requires `sudo` privileges.
-# @global EUID The effective user ID of the user running the script.
-# @global die Function to handle critical errors and terminate the script.
-#
-# @return None Exits the script with an error if the privilege requirements are not met.
-##
-enforce_sudo() {
-    # Check if the script requires sudo privileges
-    if [[ "$REQUIRE_SUDO" == true ]]; then
-        # Ensure the user is not directly logged in as root
-        if [[ "$EUID" -eq 0 && -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges but should not be run as the root user directly."
-        fi
+############
+### Print/Display Environment Functions
+############
 
-        # Ensure the user is running the script with sudo
-        if [[ -z "$SUDO_USER" ]]; then
-            die 1 "This script requires 'sudo' privileges. Please re-run using 'sudo'."
+##
+# @brief Print the system information to the log.
+# @details Extracts and logs the system's name and version using information
+#          from `/etc/os-release`.
+#
+# @global None
+# @return None
+##
+print_system() {
+    # Extract system name and version from /etc/os-release
+    local system_name
+    system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
+
+    # Check if system_name is empty
+    if [[ -z "$system_name" ]]; then
+        logW "System: Unknown (could not extract system information)."
+    else
+        logD "System: $system_name."
+    fi
+}
+
+##
+# @brief Print the script version and optionally log it.
+# @details This function displays the version of the script stored in the global
+#          variable `SEM_VER`. It uses `echo` if called by `parse_args`, otherwise
+#          it uses `logI`.
+#
+# @global THIS_SCRIPT The name of the script.
+# @global SEM_VER The version of the script.
+#
+# @return None
+##
+print_version() {
+    # Check the name of the calling function
+    local caller="${FUNCNAME[1]}"
+
+    if [[ "$caller" == "parse_args" ]]; then
+        echo -e "$THIS_SCRIPT: version $SEM_VER" # Display the script name and version
+    else
+        logD "Running $THIS_SCRIPT version $SEM_VER"
+    fi
+}
+
+############
+### Check Environment Functions
+############
+
+##
+# @brief Determine how the script was executed.
+# @details Checks if the script is being run directly, piped through bash,
+#          or executed in an unusual manner.
+#
+# @return 0 (true) if the script is being piped, 1 (false) otherwise.
+##
+check_pipe() {
+    if [[ "$0" == "bash" ]]; then
+        if [[ -p /dev/stdin ]]; then
+            # Script is being piped through bash
+            THIS_SCRIPT="$FALLBACK_NAME"
+        else
+            # Script was run in an unusual way with 'bash'
+            THIS_SCRIPT="$FALLBACK_NAME"
         fi
     else
-        # Ensure the script is not being run as root
-        if [[ "$EUID" -eq 0 ]]; then
-            die 1 "This script should not be run as root. Avoid using 'sudo'."
-        fi
+        # Script run directly
+        return
     fi
+}
+
+##
+# @brief Enforce that the script is run directly with `sudo`.
+#
+# This function ensures the script is executed with `sudo` privileges and not:
+# - From a `sudo su` shell.
+# - As the root user directly (e.g., logged in as root).
+#
+# @returns None
+# @exit Exits with status 1 if the script is not executed correctly.
+##
+enforce_sudo() {
+    if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
+        # The script was invoked directly with `sudo`
+        return
+    elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
+        # The script is running as root, but within a `sudo su` shell
+        die 1 "This script requires 'sudo' privileges but should not be run from a 'sudo su' shell." \
+              "Please run it directly using 'sudo scriptname'."
+    elif [[ "$EUID" -eq 0 ]]; then
+        # The script is running as root directly (e.g., logged in as root)
+        die 1 "This script requires 'sudo' privileges but should not be run as the root user directly." \
+              "Please run it directly using 'sudo scriptname'."
+    else
+        # The script is not running with sufficient privileges
+        die 1 "This script requires 'sudo' privileges." \
+              "Please re-run it using 'sudo scriptname'."
+    fi
+}
+
+##
+# @brief Check for required dependencies and report any missing ones.
+# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
+# checking if each one is installed. Logs missing dependencies and exits the script
+# with an error code if any are missing.
+#
+# @global DEPENDENCIES Array of required dependencies.
+# @global log_message Function to log messages at various severity levels.
+# @global die Function to handle critical errors and exit.
+#
+# @return None (exits the script if dependencies are missing).
+##
+validate_depends() {
+    local missing=0  # Counter for missing dependencies
+    local dep        # Iterator for dependencies
+
+    for dep in "${DEPENDENCIES[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            echo -e "ERROR" "Missing dependency: $dep" in ${FUNCNAME[0]} # Log the missing dependency
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        echo -e "ERROR: Missing $missing dependencies in ${FUNCNAME[0]}. Install them and re-run the script."
+        exit 1
+    fi
+}
+
+##
+# @brief Check the availability of critical system files.
+# @details Verifies that each file listed in the `SYSTEM_READS` array exists and is readable.
+# Logs an error for any missing or unreadable files and exits the script if any issues are found.
+#
+# @global SYSTEM_READS Array of critical system file paths to check.
+# @global logE Function to log error messages.
+# @global die Function to handle critical errors and exit.
+#
+# @return None Exits the script if any required files are missing or unreadable.
+##
+validate_system_reads() {
+    local missing=0  # Counter for missing or unreadable files
+    local file       # Iterator for files
+
+    for file in "${SYSTEM_READS[@]}"; do
+        if [[ ! -r "$file" ]]; then
+            printf "ERROR: Missing or unreadable file: %s\n" "$file" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing or unreadable $missing critical system files. Ensure they are accessible and re-run the script."
+    fi
+}
+
+##
+# @brief Validate the existence of required environment variables.
+#
+# This function checks if the environment variables specified in the ENV_VARS array
+# are set. Logs any missing variables and exits the script if any are missing.
+#
+# Global Variables:
+#   ENV_VARS - Array of required environment variables.
+#
+# @return void
+##
+validate_env_vars() {
+    local missing=0  # Counter for missing environment variables
+    local var        # Iterator for environment variables
+
+    for var in "${ENV_VARS[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            printf "ERROR: Missing environment variable: %s\n" "$var" >&2
+            ((missing++)) # Increment the missing counter
+        fi
+    done
+
+    if ((missing > 0)); then
+        die 1 "Missing $missing required environment variables." "Ensure they are set and re-run the script."
+    fi
+}
+
+##
+# @brief Check if the script is running in a Bash shell.
+# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
+# Logs an error message and exits if not running in Bash.
+#
+# @global BASH_VERSION The version of the Bash shell being used.
+#
+# @return None (exits the script if not running in Bash).
+##
+check_bash() {
+    if [ -z "$BASH_VERSION" ]; then
+        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
+        exit 1
+    fi
+}
+
+##
+# @brief Check if the current Bash version meets the minimum required version.
+# @details Compares the current Bash version against a required version specified
+# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
+# the check is skipped.
+#
+# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
+# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
+# @global die Function to handle fatal errors and exit the script.
+#
+# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
+##
+check_sh_ver() {
+    # Ensure MIN_BASH_VERSION is defined; default to "none"
+    local required_version="${MIN_BASH_VERSION:-none}"
+
+    # Skip the check if the minimum version is set to "none"
+    if [[ "$required_version" == "none" ]]; then
+        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+        return
+    fi
+
+    # Compare the current Bash version against the required version
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
+         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+          BASH_VERSINFO[1] < ${required_version##*.}))); then
+        die 1 "This script requires Bash version $required_version or newer."
+    fi
+
+    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+}
+
+##
+# @brief Check system bitness compatibility.
+# @details Validates whether the current system's bitness matches the supported configuration.
+#          - Supported values for SUPPORTED_BITNESS are "32", "64", or "both".
+#          - Logs an error and exits if the system's bitness is unsupported or misconfigured.
+#
+# @global SUPPORTED_BITNESS Specifies the bitness supported by the script ("32", "64", or "both").
+# @global die Function to handle critical errors and terminate the script.
+# @global log_message Function to log informational messages.
+#
+# @return None Exits the script with an error if the system bitness is unsupported.
+##
+check_bitness() {
+    local bitness  # Variable to store the detected system bitness
+
+    # Retrieve the system's bitness
+    bitness=$(getconf LONG_BIT)
+
+    # Validate the system's bitness against the supported configuration
+    case "$SUPPORTED_BITNESS" in
+        "32")
+            if [[ "$bitness" -ne 32 ]]; then
+                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
+            fi
+            ;;
+        "64")
+            if [[ "$bitness" -ne 64 ]]; then
+                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
+            fi
+            ;;
+        "both")
+            logD "Detected $bitness-bit system, which is supported."
+            ;;
+        *)
+            die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
+            ;;
+    esac
+}
+
+##
+# @brief Check Raspbian OS version compatibility.
+# @details This function ensures that the Raspbian version is within the supported range
+# and logs an error if the compatibility check fails.
+#
+# @global MIN_OS Minimum supported OS version.
+# @global MAX_OS Maximum supported OS version (-1 indicates no upper limit).
+# @global log_message Function for logging messages.
+# @global die Function to handle critical errors and terminate the script.
+#
+# @return None Exits the script with an error code if the OS version is incompatible.
+##
+check_release() {
+    local ver  # Holds the extracted version ID from /etc/os-release.
+
+    # Ensure the file exists and is readable.
+    if [[ ! -f /etc/os-release || ! -r /etc/os-release ]]; then
+        die 1 "Unable to read /etc/os-release." \
+            "Ensure this script is run on a compatible system with a readable /etc/os-release file."
+    fi
+
+    # Extract the VERSION_ID from /etc/os-release.
+    if ! ver=$(grep "VERSION_ID" /etc/os-release 2>/dev/null | awk -F "=" '{print $2}' | tr -d '"'); then
+        die 1 "Failed to extract version information from /etc/os-release."
+    fi
+
+    # Ensure the extracted version is not empty.
+    if [[ -z "$ver" ]]; then
+        die 1 "VERSION_ID is missing or empty in /etc/os-release."
+    fi
+
+    # Check if the version is older than the minimum supported version.
+    if [[ "$ver" -lt "$MIN_OS" ]]; then
+        die 1 "Raspbian version $ver is older than the minimum supported version ($MIN_OS)."
+    fi
+
+    # Check if the version is newer than the maximum supported version, if applicable.
+    if [[ "$MAX_OS" -ne -1 && "$ver" -gt "$MAX_OS" ]]; then
+        die 1 "Raspbian version $ver is newer than the maximum supported version ($MAX_OS)."
+    fi
+
+    # Log success if the version is within the supported range.
+    logD "Raspbian version $ver is supported."
 }
 
 ##
@@ -587,261 +949,27 @@ check_arch() {
     fi
 }
 
-
 ##
-# @brief Check Raspbian OS version compatibility.
-# @details This function ensures that the Raspbian version is within the supported range
-# and logs an error if the compatibility check fails.
+# @brief Check if the system has an internet connection by making an HTTP request.
+# @details Uses curl to send a request to google.com and checks the response status to determine if the system is online.
+#          Skips the check if the global variable REQUIRE_INTERNET is not set to true.
 #
-# @global MIN_OS Minimum supported OS version.
-# @global MAX_OS Maximum supported OS version (-1 indicates no upper limit).
-# @global log_message Function for logging messages.
-# @global die Function to handle critical errors and terminate the script.
+# @global REQUIRE_INTERNET A flag indicating whether internet connectivity should be checked.
 #
-# @return None Exits the script with an error code if the OS version is incompatible.
+# @return 0 if the system is online or the internet check is skipped, 1 if the system is offline and REQUIRE_INTERNET is true.
 ##
-check_release() {
-    local ver  # Holds the extracted version ID from /etc/os-release.
-
-    # Ensure the file exists and is readable.
-    if [[ ! -f /etc/os-release || ! -r /etc/os-release ]]; then
-        die 1 "Unable to read /etc/os-release." \
-            "Ensure this script is run on a compatible system with a readable /etc/os-release file."
-    fi
-
-    # Extract the VERSION_ID from /etc/os-release.
-    if ! ver=$(grep "VERSION_ID" /etc/os-release 2>/dev/null | awk -F "=" '{print $2}' | tr -d '"'); then
-        die 1 "Failed to extract version information from /etc/os-release."
-    fi
-
-    # Ensure the extracted version is not empty.
-    if [[ -z "$ver" ]]; then
-        die 1 "VERSION_ID is missing or empty in /etc/os-release."
-    fi
-
-    # Check if the version is older than the minimum supported version.
-    if [[ "$ver" -lt "$MIN_OS" ]]; then
-        die 1 "Raspbian version $ver is older than the minimum supported version ($MIN_OS)."
-    fi
-
-    # Check if the version is newer than the maximum supported version, if applicable.
-    if [[ "$MAX_OS" -ne -1 && "$ver" -gt "$MAX_OS" ]]; then
-        die 1 "Raspbian version $ver is newer than the maximum supported version ($MAX_OS)."
-    fi
-
-    # Log success if the version is within the supported range.
-    logD "Raspbian version $ver is supported."
-}
-
-##
-# @brief Check system bitness compatibility.
-# @details Validates whether the current system's bitness matches the supported configuration.
-#          - Supported values for SUPPORTED_BITNESS are "32", "64", or "both".
-#          - Logs an error and exits if the system's bitness is unsupported or misconfigured.
-#
-# @global SUPPORTED_BITNESS Specifies the bitness supported by the script ("32", "64", or "both").
-# @global die Function to handle critical errors and terminate the script.
-# @global log_message Function to log informational messages.
-#
-# @return None Exits the script with an error if the system bitness is unsupported.
-##
-check_bitness() {
-    local bitness  # Variable to store the detected system bitness
-
-    # Retrieve the system's bitness
-    bitness=$(getconf LONG_BIT)
-
-    # Validate the system's bitness against the supported configuration
-    case "$SUPPORTED_BITNESS" in
-        "32")
-            if [[ "$bitness" -ne 32 ]]; then
-                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
-            fi
-            ;;
-        "64")
-            if [[ "$bitness" -ne 64 ]]; then
-                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
-            fi
-            ;;
-        "both")
-            logD "Detected $bitness-bit system, which is supported."
-            ;;
-        *)
-            die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
-            ;;
-    esac
-}
-
-##
-# @brief Determine how the script was executed.
-# @details Checks if the script is being run directly, piped through bash,
-#          or executed in an unusual manner.
-#
-# @return 0 (true) if the script is being piped, 1 (false) otherwise.
-##
-check_pipe() {
-    if [[ "$0" == "bash" ]]; then
-        if [[ -p /dev/stdin ]]; then
-            # Script is being piped through bash
-            THIS_SCRIPT="$FALLBACK_NAME"
-        else
-            # Script was run in an unusual way with 'bash'
-            THIS_SCRIPT="$FALLBACK_NAME"
-        fi
-    else
-        # Script run directly
-        return
-    fi
-}
-
-##
-# @brief Print the system information to the log.
-# @details Extracts and logs the system's name and version using information
-#          from `/etc/os-release`.
-#
-# @global None
-# @return None
-##
-print_system() {
-    # Extract system name and version from /etc/os-release
-    local system_name
-    system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
-
-    # Check if system_name is empty
-    if [[ -z "$system_name" ]]; then
-        logW "System: Unknown (could not extract system information)."
-    else
-        logD "System: $system_name."
-    fi
-}
-
-##
-# @brief Print the script version and optionally log it.
-# @details This function displays the version of the script stored in the global
-#          variable `SEM_VER`. It uses `echo` if called by `parse_args`, otherwise
-#          it uses `logI`.
-#
-# @global THIS_SCRIPT The name of the script.
-# @global SEM_VER The version of the script.
-#
-# @return None
-##
-print_version() {
-    # Check the name of the calling function
-    local caller="${FUNCNAME[1]}"
-
-    if [[ "$caller" == "parse_args" ]]; then
-        echo -e "$THIS_SCRIPT: version $SEM_VER" # Display the script name and version
-    else
-        logD "Running $THIS_SCRIPT version $SEM_VER"
-    fi
-}
-
-##
-# @brief Check for required dependencies and report any missing ones.
-# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
-# checking if each one is installed. Logs missing dependencies and exits the script
-# with an error code if any are missing.
-#
-# @global DEPENDENCIES Array of required dependencies.
-# @global log_message Function to log messages at various severity levels.
-# @global die Function to handle critical errors and exit.
-#
-# @return None (exits the script if dependencies are missing).
-##
-validate_depends() {
-    local missing=0  # Counter for missing dependencies
-    local dep        # Iterator for dependencies
-
-    for dep in "${DEPENDENCIES[@]}"; do
-        if ! command -v "$dep" &>/dev/null; then
-            echo -e "ERROR" "Missing dependency: $dep" in ${FUNCNAME[0]} # Log the missing dependency
-            ((missing++)) # Increment the missing counter
-        fi
-    done
-
-    if ((missing > 0)); then
-        echo -e "ERROR: Missing $missing dependencies in ${FUNCNAME[0]}. Install them and re-run the script."
-        exit 1
-    fi
-}
-
-##
-# @brief Check if the current Bash version meets the minimum required version.
-# @details Compares the current Bash version against a required version specified
-# in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is set to "none",
-# the check is skipped.
-#
-# @global MIN_BASH_VERSION Specifies the minimum required Bash version (e.g., "4.0") or "none".
-# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
-# @global die Function to handle fatal errors and exit the script.
-#
-# @return None (exits the script if the Bash version is insufficient, unless the check is disabled).
-##
-check_sh_ver() {
-    # Ensure MIN_BASH_VERSION is defined; default to "none"
-    local required_version="${MIN_BASH_VERSION:-none}"
-
-    # Skip the check if the minimum version is set to "none"
-    if [[ "$required_version" == "none" ]]; then
-        logI "Bash version check is disabled (MIN_BASH_VERSION='none')."
+check_internet() {
+    # Skip check if REQUIRE_INTERNET is not true
+    if [ "$REQUIRE_INTERNET" != "true" ]; then
         return
     fi
 
-    # Compare the current Bash version against the required version
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
-          BASH_VERSINFO[1] < ${required_version##*.}))); then
-        die 1 "This script requires Bash version $required_version or newer."
+    # Check for internet connectivity using curl
+    if curl -s --head http://google.com | grep "HTTP/1\.[01] [23].." > /dev/null; then
+        logD "Internet is available."
+    else
+        die 1 "No Internet connection detected."
     fi
-
-    logD "Bash version check passed. Running Bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
-}
-
-##
-# @brief Check if the script is running in a Bash shell.
-# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
-# Logs an error message and exits if not running in Bash.
-#
-# @global BASH_VERSION The version of the Bash shell being used.
-#
-# @return None (exits the script if not running in Bash).
-##
-check_bash() {
-    if [ -z "$BASH_VERSION" ]; then
-        echo -e "ERROR: This script requires Bash. Please run it with Bash." >&2
-        exit 1
-    fi
-}
-
-##
-# @brief Toggle the NO_CONSOLE variable on or off.
-#
-# This function updates the global NO_CONSOLE variable to either "true" (off)
-# or "false" (on) based on the input argument.
-#
-# @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
-# @return 0 on success, 1 on invalid input.
-##
-toggle_console_log() {
-    local state="${1,,}"  # Convert input to lowercase for consistency
-
-    case "$state" in
-        on)
-            logD "Console logging enabled."
-            NO_CONSOLE="false"
-            ;;
-        off)
-            NO_CONSOLE="true"
-            logD "Console logging disabled."
-            ;;
-        *)
-            logW "ERROR: Invalid argument for toggle_console_log." >&2
-            return 1
-            ;;
-    esac
-
-    return 0
 }
 
 ############
@@ -1111,7 +1239,7 @@ init_colors() {
     tput_colors_available=$(tput colors 2>/dev/null || echo "0")
 
     # Initialize colors and formatting if interactive and the terminal supports at least 8 colors
-    if is_interactive && [ "$tput_colors_available" -ge 8 ]; then
+    if [ "$tput_colors_available" -ge 8 ]; then
         # General text attributes
         RESET=$(default_color sgr0)
         BOLD=$(default_color bold)
@@ -1228,8 +1356,38 @@ setup_log() {
     validate_log_level
 }
 
+##
+# @brief Toggle the NO_CONSOLE variable on or off.
+#
+# This function updates the global NO_CONSOLE variable to either "true" (off)
+# or "false" (on) based on the input argument.
+#
+# @param $1 The desired state: "on" (to enable console logging) or "off" (to disable console logging).
+# @return 0 on success, 1 on invalid input.
+##
+toggle_console_log() {
+    local state="${1,,}"  # Convert input to lowercase for consistency
+
+    case "$state" in
+        on)
+            logD "Console logging enabled."
+            NO_CONSOLE="false"
+            ;;
+        off)
+            NO_CONSOLE="true"
+            logD "Console logging disabled."
+            ;;
+        *)
+            logW "ERROR: Invalid argument for toggle_console_log." >&2
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
 ############
-### Install Functions
+### Get Project Parameters Functions
 ############
 
 # @brief Retrieve the Git owner or organization name from the remote URL.
@@ -1467,6 +1625,10 @@ get_proj_params() {
     export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
 }
 
+############
+### Install Functions
+############
+
 ##
 # @brief Display installation instructions or log the start of the installation in non-interactive or terse mode.
 # @details Provides an overview of the choices the user will encounter during installation
@@ -1590,6 +1752,43 @@ set_time() {
 }
 
 ##
+# @brief Installs or upgrades all packages in the APTPACKAGES list.
+#
+# @details
+#   Updates the package list and resolves broken dependencies before proceeding.
+#
+# @return Logs the success or failure of each operation.
+##
+apt_packages() {
+    local package
+
+    logI "Updating local apt cache."
+
+    # Update package list and fix broken installs
+    logI "Updating and managing required packages (this may take a few minutes)."
+    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
+        logE "Failed to update package list or fix broken installs."
+        return 1
+    fi
+
+    # Install or upgrade each package in the list
+    for package in "${APTPACKAGES[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
+                logW "Failed to upgrade package: $package. Continuing with the next package."
+            fi
+        else
+            if ! run_command "sudo apt-get install -y $package"; then
+                logW "Failed to install package: $package. Continuing with the next package."
+            fi
+        fi
+    done
+
+    logI "Package Installation Summary: All operations are complete."
+    return 0
+}
+
+##
 # @brief Check if the snd_bcm2835 module is available and blacklist it if necessary.
 # @details Checks if the snd_bcm2835 module is present on the system and if it is not
 #          already blacklisted, it adds it to the blacklist and sets the REBOOT flag.
@@ -1649,6 +1848,7 @@ EOF
 #
 # @return Returns 0 for success, 1 for failure.
 ##
+# TODO:  Replace with exec_task()
 run_command() {
     local command="$1"
 
@@ -1657,43 +1857,6 @@ run_command() {
     else
         return 1
     fi
-}
-
-##
-# @brief Installs or upgrades all packages in the APTPACKAGES list.
-#
-# @details
-#   Updates the package list and resolves broken dependencies before proceeding.
-#
-# @return Logs the success or failure of each operation.
-##
-apt_packages() {
-    local package
-
-    logI "Updating local apt cache."
-
-    # Update package list and fix broken installs
-    logI "Updating and managing required packages (this may take a few minutes)."
-    if ! run_command "sudo apt-get update -y && sudo apt-get install -f -y"; then
-        logE "Failed to update package list or fix broken installs."
-        return 1
-    fi
-
-    # Install or upgrade each package in the list
-    for package in "${APTPACKAGES[@]}"; do
-        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! run_command "sudo apt-get install --only-upgrade -y $package"; then
-                logW "Failed to upgrade package: $package. Continuing with the next package."
-            fi
-        else
-            if ! run_command "sudo apt-get install -y $package"; then
-                logW "Failed to install package: $package. Continuing with the next package."
-            fi
-        fi
-    done
-
-    logI "Package Installation Summary: All operations are complete."
-    return 0
 }
 
 ##
@@ -1777,7 +1940,7 @@ EOF
 }
 
 ############
-### Command Line Functions
+### Arguments Functions
 ############
 
 ##
@@ -1993,27 +2156,37 @@ parse_args() {
 
 # Main function
 main() {
-    # Get fallback name if piped through bash
-    check_pipe
+    # Check Environment Functions
+    check_pipe        # Get fallback name if piped through bash
 
-    # Perform essential checks
-    parse_args "$@"     # Parse any command line arguments
-    validate_depends    # Check availability of req. non-Bash builtins
+    # Get Project Parameters Functions
     get_proj_params     # Get project and git parameters
-    setup_log           # Set up logging
-    check_bash          # Validate we are using Bash
-    check_sh_ver        # Validate bash version
-    check_bitness       # Validate bitness requirements
-    check_release       # Validate release requirements
-    check_arch          # Validate architecture requirements
-    enforce_sudo        # Validate we have permissions to run
-    check_internet      # Validate Internet access
 
-    # Informational/debug lines
-    print_system        # Log system info
-    print_version       # Log script version
+    # Arguments Functions
+    parse_args "$@"  # Parse command-line arguments
 
-    # Script start
+    # Check Environment Functions
+    enforce_sudo                         # Ensure proper privileges for script execution
+    validate_depends                # Ensure required dependencies are installed
+    validate_system_reads                # Verify critical system files are accessible
+    validate_env_vars                    # Check for required environment variables
+
+    # Logging Functions
+    setup_log   # Setup logging environment
+
+    # More: Check Environment Functions
+    check_bash                           # Ensure the script is executed in a Bash shell
+    check_sh_ver                   # Verify the current Bash version meets minimum requirements
+    check_bitness                        # Validate system bitness compatibility
+    check_release                        # Check Raspbian OS version compatibility
+    check_arch                   # Validate Raspberry Pi model compatibility
+    check_internet                       # Verify internet connectivity if required
+
+    # Print/Display Environment Functions
+    print_system                         # Log system information
+    print_version                        # Log the script version
+
+    # Install Functions
     display_start   
     set_time
     apt_packages

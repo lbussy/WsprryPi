@@ -29,7 +29,7 @@
 #
 # @global FUNCNAME Array containing function names in the call stack.
 # @global LINENO Line number where the error occurred.
-# @global SCRIPT_NAME Name of the script.
+# @global THIS_SCRIPT Name of the script.
 #
 # @return None (exits the script with an error code).
 ##
@@ -37,7 +37,7 @@
 trap_error() {
     local func="${FUNCNAME[1]:-main}"               # Get the calling function name (default: "main")
     local line="$1"                                 # Line number where the error occurred
-    local script="${SCRIPT_NAME:-$(basename "$0")}" # Script name (fallback to current script)
+    local script="${THIS_SCRIPT:-$(basename "$0")}" # Script name (fallback to current script)
 
     # Log the error message and exit
     echo "ERROR: An unexpected error occurred in function '$func' at line $line of script '$script'. Exiting." >&2
@@ -93,16 +93,16 @@ declare TERSE="${TERSE:-true}" # Use existing value, or default to "true".
 
 ##
 # @brief Logging-related constants for the script.
-# @details Sets the script name (`SCRIPT_NAME`) based on the current environment.
-# If `SCRIPT_NAME` is already defined, its value is retained; otherwise, it is set
+# @details Sets the script name (`THIS_SCRIPT`) based on the current environment.
+# If `THIS_SCRIPT` is already defined, its value is retained; otherwise, it is set
 # to the basename of the script.
 #
 # If the script is piped through bash (as in when it is curled) it will change
 # to FALLBACK_NAME via check_pipe().
 #
-# @global SCRIPT_NAME The name of the script.
+# @global THIS_SCRIPT The name of the script.
 ##
-declare SCRIPT_NAME="${SCRIPT_NAME:-$(basename "$0")}"  # Use existing value, or default to script basename.
+declare THIS_SCRIPT="${THIS_SCRIPT:-$(basename "$0")}"  # Use existing value, or default to script basename.
 
 ##
 # @brief Configuration constants for script requirements and compatibility.
@@ -434,7 +434,7 @@ stack_trace() {
 #
 # @global WARN_STACK_TRACE Enables stack trace logging for warnings when set to true.
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global SCRIPT_NAME The name of the script being executed.
+# @global THIS_SCRIPT The name of the script being executed.
 #
 # @return None
 ##
@@ -445,7 +445,7 @@ warn() {
     local message="An issue was raised on this line"  # Default log message
     local details=""               # Default to no additional details
     local lineno="${BASH_LINENO[1]}"  # Line number where the function was called
-    local script="$SCRIPT_NAME"     # Script name
+    local script="$THIS_SCRIPT"     # Script name
 
     # Parse arguments in order
     if [[ "$1" == "WARNING" || "$1" == "ERROR" ]]; then
@@ -493,7 +493,7 @@ warn() {
 # @param $@ Additional details for the error (optional).
 #
 # @global BASH_LINENO Array of line numbers in the call stack.
-# @global SCRIPT_NAME Script name.
+# @global THIS_SCRIPT Script name.
 #
 # @return Exits the script with the provided or default exit status.
 ##
@@ -503,7 +503,7 @@ die() {
     local message                       # Main error message
     local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local script="$SCRIPT_NAME"          # Script name
+    local script="$THIS_SCRIPT"          # Script name
     local level="CRITICAL"              # Error level
     local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
 
@@ -880,7 +880,7 @@ print_system() {
 #          variable `VERSION`. It uses `echo` if called by `parse_args`, otherwise
 #          it uses `logI`.
 #
-# @global SCRIPT_NAME The name of the script.
+# @global THIS_SCRIPT The name of the script.
 # @global VERSION The version of the script.
 #
 # @return None
@@ -890,9 +890,9 @@ print_version() {
     local caller="${FUNCNAME[1]}"
 
     if [[ "$caller" == "parse_args" ]]; then
-        echo -e "$SCRIPT_NAME: version $VERSION" # Display the script name and version
+        echo -e "$THIS_SCRIPT: version $VERSION" # Display the script name and version
     else
-        logD "Running $SCRIPT_NAME version $VERSION"
+        logD "Running $THIS_SCRIPT version $VERSION"
     fi
 }
 
@@ -989,10 +989,10 @@ check_pipe() {
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             # Script is being piped through bash
-            SCRIPT_NAME="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         else
             # Script was run in an unusual way with 'bash'
-            SCRIPT_NAME="$FALLBACK_NAME"
+            THIS_SCRIPT="$FALLBACK_NAME"
         fi
     else
         # Script run directly
@@ -1026,25 +1026,25 @@ print_log_entry() {
     if [[ "${LOG_TO_FILE,,}" == "true" ]]; then
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             # Use CRITICAL for the main message
-            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$SCRIPT_NAME" "$funcname" "$lineno" "$message" >&5
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$funcname" "$lineno" "$message" >&5
 
             # Use EXTENDED for details
             IFS="|" read -r extended_label _ _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            printf "[%s]\t[%s]\t[%s/%s:%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$SCRIPT_NAME" "$funcname" "$lineno" "$details" >&5
+            printf "[%s]\t[%s]\t[%s/%s:%d]\tDetails: %s\n" "$timestamp" "$extended_label" "$THIS_SCRIPT" "$funcname" "$lineno" "$details" >&5
         else
             # Standard log entry without extended details
-            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$SCRIPT_NAME" "$funcname" "$lineno" "$message" >&5
+            printf "[%s]\t[%s]\t[%s/%s:%d]\t%s\n" "$timestamp" "$level" "$THIS_SCRIPT" "$funcname" "$lineno" "$message" >&5
             [[ -n "$details" ]] && printf "[%s]\t[%s]\t[%s:%s:%d]\tDetails: %s\n" \
-                "$timestamp" "$level" "$SCRIPT_NAME" "$funcname" "$lineno" "$details" >&5
+                "$timestamp" "$level" "$THIS_SCRIPT" "$funcname" "$lineno" "$details" >&5
         fi
     fi
 
     # Write to console if enabled
     if [[ "${NO_CONSOLE,,}" != "true" ]] && is_interactive; then
-        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$SCRIPT_NAME/$funcname:$lineno]${RESET}\t$message"
+        echo -e "${BOLD}${color}[${level}]${RESET}\t${color}[$THIS_SCRIPT/$funcname:$lineno]${RESET}\t$message"
         if [[ -n "$details" && -n "${LOG_PROPERTIES[EXTENDED]}" ]]; then
             IFS="|" read -r extended_label extended_color _ <<< "${LOG_PROPERTIES[EXTENDED]}"
-            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$SCRIPT_NAME:$funcname/$lineno]${RESET}\tDetails: $details"
+            echo -e "${BOLD}${extended_color}[${extended_label}]${RESET}\t${extended_color}[$THIS_SCRIPT:$funcname/$lineno]${RESET}\tDetails: $details"
         fi
     fi
 }
@@ -1198,12 +1198,12 @@ logC() {
 # - If `LOG_FILE` is not explicitly specified:
 #   - The log file is created in the current user's home directory.
 #   - The default name of the log file is derived from the script's name (without extension),
-#     e.g., `<script_name>.log`.
+#     e.g., `<THIS_SCRIPT>.log`.
 #   - If the home directory is unavailable or unwritable, a temporary file is created in `/tmp`.
 #
 # Global Variables:
 #   LOG_FILE (out) - Path to the log file used by the script.
-#   SCRIPT_NAME (in) - Name of the current script, used to derive default log file name.
+#   THIS_SCRIPT (in) - Name of the current script, used to derive default log file name.
 #
 # Environment Variables:
 #   SUDO_USER - Used to determine the home directory of the invoking user.
@@ -1211,7 +1211,7 @@ logC() {
 # @return void
 ##
 init_log() {
-    local scriptname="${SCRIPT_NAME%%.*}"   # Extract script name without extension
+    local scriptname="${THIS_SCRIPT%%.*}"   # Extract script name without extension
     local homepath                          # Home directory of the current user
     local log_dir                           # Directory of the log file
 
@@ -1525,13 +1525,13 @@ execute_task() {
 # @details Provides an overview of the script's available options, their purposes,
 #          and practical examples for running the script.
 #
-# @global SCRIPT_NAME The name of the script, typically derived from the script's filename.
+# @global THIS_SCRIPT The name of the script, typically derived from the script's filename.
 #
 # @return None Exits the script with a success code after displaying usage information.
 ##
 usage() {
     cat << EOF
-Usage: $SCRIPT_NAME [options]
+Usage: $THIS_SCRIPT [options]
 
 Options:
   -dr, --dry-run              Enable dry-run mode, where no actions are performed.
@@ -1539,7 +1539,7 @@ Options:
   -v, --version               Display the script version and exit.
   -h, --help                  Display this help message and exit.
   -lf, --log-file <path>      Specify the log file location.
-                              Default: <script_name>.log in the user's home directory,
+                              Default: <THIS_SCRIPT>.log in the user's home directory,
                               or a temporary file in /tmp if unavailable.
   -ll, --log-level <level>    Set the logging verbosity level.
                               Available levels: DEBUG, INFO, WARNING, ERROR, CRITICAL.
@@ -1563,21 +1563,21 @@ Environment Variables:
 
 Defaults:
   - If no log file is specified, the log file is created in the user's home
-    directory as <script_name>.log.
+    directory as <THIS_SCRIPT>.log.
   - If the home directory is unavailable or unwritable, a temporary log file
     is created in /tmp.
 
 Examples:
   1. Run the script in dry-run mode:
-     $SCRIPT_NAME --dry-run
+     $THIS_SCRIPT --dry-run
   2. Check the script version:
-     $SCRIPT_NAME --version
+     $THIS_SCRIPT --version
   3. Specify a custom log file and log level:
-     $SCRIPT_NAME -lf /tmp/example.log -ll INFO
+     $THIS_SCRIPT -lf /tmp/example.log -ll INFO
   4. Disable console logging while ensuring logs are written to a file:
-     $SCRIPT_NAME -nc true -tf true
+     $THIS_SCRIPT -nc true -tf true
   5. Enable terse output mode:
-     $SCRIPT_NAME --terse true
+     $THIS_SCRIPT --terse true
 
 EOF
 
@@ -1764,7 +1764,7 @@ main() {
     print_system                         # Log system information
     print_version                        # Log the script version
 
-    logI "Script '$SCRIPT_NAME' started."
+    logI "Script '$THIS_SCRIPT' started."
 
     # Example log entries for demonstration purposes
     logD "This is a debug-level message."
@@ -1788,7 +1788,7 @@ main() {
     execute_task "$command_text" "$command"
 
     # Log script completion
-    logI "Script '$SCRIPT_NAME' complete."
+    logI "Script '$THIS_SCRIPT' complete."
 }
 
 # Run the main function and exit with its return status
