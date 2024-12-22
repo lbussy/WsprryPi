@@ -1,71 +1,118 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -uo pipefail
+IFS=$'\n\t'
+
+##
+# @file copyexe.sh
+# @brief Updates and manages WsprryPi scripts and services.
 #
-# This file is part of WsprryPi.
+# @details
+# This script updates WsprryPi-related files, manages the shutdown button service, 
+# and ensures proper setup and functionality of the `wspr` service.
 #
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# @author Lee Bussy
+# @date December 21, 2024
+# @version 1.0.0
 #
-# WsprryPi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# @par Usage:
+# ```bash
+# ./copyexe.sh
+# ```
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
+# @requirements
+# - `systemctl` for managing services.
+# - `sudo` privileges for file and service updates.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# @warning
+# Ensure the script is executed in the context of a Git repository.
+##
 
-# Begin
-#
-# Get repo root
-repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$repo_root" ]; then
-    echo "Not in a Git repository."
-    exit
-fi
+# -----------------------------------------------------------------------------
+# @brief Get the root directory of the current Git repository.
+# @return Sets the global variable `repo_root` with the root directory path.
+# @retval 0 on success.
+# @retval 1 if not inside a Git repository.
+# -----------------------------------------------------------------------------
+get_repo_root() {
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [ -z "$repo_root" ]; then
+        echo "Not in a Git repository."
+        exit 1
+    fi
+}
 
-# Check if wspr is already installed
-if ! systemctl list-unit-files | grep -q "^wspr"; then
-    echo "WsprryPi is not installed."
-    echo "Please use install.sh to set up environment for the first time."
-    exit
-fi
+# -----------------------------------------------------------------------------
+# @brief Check if WsprryPi is installed.
+# @retval 0 if installed.
+# @retval 1 if not installed.
+# -----------------------------------------------------------------------------
+check_wspri_installed() {
+    if ! systemctl list-unit-files | grep -q "^wspr"; then
+        echo "WsprryPi is not installed."
+        echo "Please use install.sh to set up the environment for the first time."
+        exit 1
+    fi
+}
 
-# Stop wspr daemons if they exist
-sudo systemctl stop wspr 2>/dev/null || true
-sudo systemctl stop shutdown-button 2>/dev/null || true
-sudo systemctl stop shutdown_button 2>/dev/null || true
+# -----------------------------------------------------------------------------
+# @brief Stop WsprryPi and shutdown-related services.
+# -----------------------------------------------------------------------------
+stop_services() {
+    sudo systemctl stop wspr 2>/dev/null || true
+    sudo systemctl stop shutdown-button 2>/dev/null || true
+    sudo systemctl stop shutdown_button 2>/dev/null || true
+}
 
-# Copy new files
-sudo cp -f "$repo_root"/scripts/wspr /usr/local/bin
-sudo cp -f "$repo_root"/scripts/wspr.ini /usr/local/etc
-sudo cp -f "$repo_root"/scripts/logrotate.d /etc/logrotate.d/wspr
+# -----------------------------------------------------------------------------
+# @brief Copy new WsprryPi-related files to their appropriate locations.
+# -----------------------------------------------------------------------------
+copy_files() {
+    sudo cp -f "$repo_root"/scripts/wspr /usr/local/bin
+    sudo cp -f "$repo_root"/scripts/wspr.ini /usr/local/etc
+    sudo cp -f "$repo_root"/scripts/logrotate.d /etc/logrotate.d/wspr
 
-# Refresh shutdown button if it was installed
-sudo rm -f "/usr/local/bin/shutdown-watch.py"
-if systemctl list-unit-files | grep -q "^shutdown-button"; then
-    sudo cp -f "$repo_root"/scripts/shutdown_button.py /usr/local/bin
-fi
+    # Refresh shutdown button if it was installed
+    sudo rm -f "/usr/local/bin/shutdown-watch.py"
+    if systemctl list-unit-files | grep -q "^shutdown-button"; then
+        sudo cp -f "$repo_root"/scripts/shutdown_button.py /usr/local/bin
+    fi
 
-# Make sure log location exists
-[[ -d "/var/log/wspr" ]] || mkdir "/var/log/wspr"
+    # Ensure log directory exists
+    [[ -d "/var/log/wspr" ]] || sudo mkdir "/var/log/wspr"
+}
 
-# Reload systemctl daemon to pick up changes and start wspr
-sudo systemctl daemon-reload
-sudo systemctl start wspr
+# -----------------------------------------------------------------------------
+# @brief Reload the systemd daemon and restart WsprryPi services.
+# -----------------------------------------------------------------------------
+restart_services() {
+    sudo systemctl daemon-reload
+    sudo systemctl start wspr
 
-# If shutdown button is installed, start it
-if systemctl list-unit-files | grep -q "^shutdown-button"; then
-    sudo rm -fr /etc/systemd/system/shutdown-button.service
-fi
-if systemctl list-unit-files | grep -q "^shutdown-watch"; then
-    sudo rm -fr /etc/systemd/system/shutdown-watch.service
-fi
-if systemctl list-unit-files | grep -q "^shutdown_watch"; then
-    systemctl start shutdown_watch
-else
-    echo "shutdown_watch.service is not installed, re-run installer."
-fi
-echo "Executables copied."
+    # Handle shutdown button service
+    if systemctl list-unit-files | grep -q "^shutdown-button"; then
+        sudo rm -fr /etc/systemd/system/shutdown-button.service
+    fi
+    if systemctl list-unit-files | grep -q "^shutdown-watch"; then
+        sudo rm -fr /etc/systemd/system/shutdown-watch.service
+    fi
+    if systemctl list-unit-files | grep -q "^shutdown_watch"; then
+        sudo systemctl start shutdown_watch
+    else
+        echo "shutdown_watch.service is not installed, re-run installer."
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Main function orchestrating the script execution.
+# -----------------------------------------------------------------------------
+main() {
+    get_repo_root
+    check_wspri_installed
+    stop_services
+    copy_files
+    restart_services
+    echo "Executables copied."
+}
+
+# Invoke the main function
+main "$@"

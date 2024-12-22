@@ -1,35 +1,89 @@
-#!/bin/bash
-#
-# This file is part of WsprryPi.
-#
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-#
-# WsprryPi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#!/usr/bin/env bash
+set -uo pipefail
+IFS=$'\n\t'
 
-# Begin
+##
+# @file copydocs.sh
+# @brief Updates and deploys documentation for a Git repository.
 #
-# Get repo root
-repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$repo_root" ]; then
-    echo "Not in a Git repository."
-    exit
-fi
+# @details
+# This script automates the process of cleaning, building, and deploying documentation
+# generated from a Git repository. It performs the following steps:
+# - Verifies the script is executed inside a Git repository.
+# - Cleans and rebuilds the documentation using `make` commands.
+# - Deploys the generated documentation to a specified directory.
+#
+# @author Lee Bussy
+# @date December 21, 2024
+# @version 1.0.0
+#
+# @par Usage:
+# ```bash
+# ./copydocs.sh
+# ```
+#
+# @warning
+# This script requires `sudo` privileges for deploying the documentation.
+#
+# @requirements
+# - Git must be installed and available in the PATH.
+# - `make` must be installed and configured to build the documentation.
+##
 
-(cd "$repo_root"/docs || exit; make clean)
-(cd "$repo_root"/docs || exit; make html)
-sudo rm -fr /var/www/html/wspr/docs
-sudo mkdir -p /var/www/html/wspr/docs
-sudo cp -R "$repo_root"/docs/_build/html/* /var/www/html/wspr/docs/
-sudo chown -R www-data:www-data /var/www/html/wspr/docs
-echo "Docs copied."
+# -----------------------------------------------------------------------------
+# @brief Get the root directory of the current Git repository.
+# @return Sets the global variable `repo_root` with the root directory path.
+# @retval 0 on success.
+# @retval 1 if not inside a Git repository.
+# -----------------------------------------------------------------------------
+get_repo_root() {
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [ -z "$repo_root" ]; then
+        echo "Not in a Git repository."
+        exit 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Clean and build documentation.
+# @details Executes `make clean` and `make html` in the `docs` directory.
+# @retval 0 on success.
+# @retval 1 if the `docs` directory is not found.
+# -----------------------------------------------------------------------------
+build_docs() {
+    local docs_dir="$repo_root/docs"
+    if [ ! -d "$docs_dir" ]; then
+        echo "Docs directory not found at $docs_dir"
+        exit 1
+    fi
+
+    (cd "$docs_dir" || exit; make clean)
+    (cd "$docs_dir" || exit; make html)
+}
+
+# -----------------------------------------------------------------------------
+# @brief Deploy the built documentation to the web server directory.
+# @details Copies the generated documentation to `/var/www/html/wspr/docs/`.
+# -----------------------------------------------------------------------------
+deploy_docs() {
+    local dest_dir="/var/www/html/wspr/docs"
+    local src_dir="$repo_root/docs/_build/html"
+
+    sudo rm -fr "$dest_dir"
+    sudo mkdir -p "$dest_dir"
+    sudo cp -R "$src_dir"/* "$dest_dir"
+    sudo chown -R www-data:www-data "$dest_dir"
+    echo "Docs copied to $dest_dir."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Main function orchestrating the script execution.
+# -----------------------------------------------------------------------------
+main() {
+    get_repo_root
+    build_docs
+    deploy_docs
+}
+
+# Invoke the main function
+main "$@"

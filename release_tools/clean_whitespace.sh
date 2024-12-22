@@ -1,29 +1,38 @@
-#!/bin/bash
-#
-# This file is part of WsprryPi.
-#
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-#
-# WsprryPi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#!/usr/bin/env bash
+set -uo pipefail # Setting -e is far too much work here
+IFS=$'\n\t'
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+##
+# @file clean_whitespace.sh
+# @brief Cleans whitespace from files.
+#
+# @details
+# This script processes files by cleaning trailing whitespace from them. It includes:
+# - Robust logging for INFO and ERROR levels.
+# - Recursive or non-recursive file processing options.
+# - Customizable file extensions for processing.
+# - Dry-run mode for previewing changes.
+# - Exclusion of specific directories from processing.
+#
+# @author Lee Bussy
+# @date December 21, 2024
+# @version 1.0.0
+#
+# @par Usage:
+# ```bash
+# ./script_name.sh [-r] [-n] [-x exclude_dir] [-e extensions] [directory]
+# ```
+##
 
-# Array of default file extensions to process
+# -----------------------------------------------------------------------------
+# @var extensions
+# @brief Array of default file extensions to process.
+# -----------------------------------------------------------------------------
 extensions=(c cpp py h hpp md txt ini sh)
 
-# Logging function (no timestamp)
+# -----------------------------------------------------------------------------
+# @brief Log messages with specified severity levels.
+# -----------------------------------------------------------------------------
 log() {
     local level="$1"
     local message="$2"
@@ -34,7 +43,9 @@ log() {
     esac
 }
 
-# Build regex from extensions array
+# -----------------------------------------------------------------------------
+# @brief Build a regex pattern from the extensions array.
+# -----------------------------------------------------------------------------
 build_regex() {
     local regex=".*\\.("
     for ext in "${extensions[@]}"; do
@@ -44,7 +55,9 @@ build_regex() {
     echo "$regex"
 }
 
-# Validate custom extensions input
+# -----------------------------------------------------------------------------
+# @brief Validate custom extensions input.
+# -----------------------------------------------------------------------------
 validate_extensions() {
     local valid_regex='^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$'
     if [[ ! $custom_extensions =~ $valid_regex ]]; then
@@ -53,7 +66,9 @@ validate_extensions() {
     fi
 }
 
-# Process a single file
+# -----------------------------------------------------------------------------
+# @brief Process a single file to remove trailing whitespace.
+# -----------------------------------------------------------------------------
 process_file() {
     local file="$1"
     if $dry_run; then
@@ -69,13 +84,15 @@ process_file() {
     fi
 }
 
-# Process files in a directory
+# -----------------------------------------------------------------------------
+# @brief Process files in a directory.
+# -----------------------------------------------------------------------------
 process_files() {
     local dir="$1"
     local recursive="$2"
     local regex
 
-    regex=$(build_regex)  # Build the regex
+    regex=$(build_regex)
 
     if $recursive; then
         log "INFO" "Processing files recursively from directory: $dir"
@@ -88,7 +105,9 @@ process_files() {
     fi
 }
 
-# Display usage instructions
+# -----------------------------------------------------------------------------
+# @brief Display usage instructions.
+# -----------------------------------------------------------------------------
 usage() {
     echo "Usage: $0 [-r] [-n] [-x exclude_dir] [-e extensions] [directory]"
     echo "  -r          Process files recursively"
@@ -99,52 +118,60 @@ usage() {
     exit 1
 }
 
-# Default values
-recursive=false
-dry_run=false
-directory="."
-excludes=()
-custom_extensions=""
+# -----------------------------------------------------------------------------
+# @brief Main function orchestrating the script execution.
+# -----------------------------------------------------------------------------
+main() {
+    # Default values
+    recursive=false
+    dry_run=false
+    directory="."
+    excludes=()
+    custom_extensions=""
 
-# Parse options
-while getopts ":rnx:e:" opt; do
-    case $opt in
-        r) recursive=true ;;
-        n) dry_run=true ;;
-        x) excludes+=("$OPTARG") ;;
-        e) custom_extensions="$OPTARG" ;;
-        *) usage ;;
-    esac
-done
-shift $((OPTIND - 1))
+    # Parse options
+    while getopts ":rnx:e:" opt; do
+        case $opt in
+            r) recursive=true ;;
+            n) dry_run=true ;;
+            x) excludes+=("$OPTARG") ;;
+            e) custom_extensions="$OPTARG" ;;
+            *) usage ;;
+        esac
+    done
+    shift $((OPTIND - 1))
 
-# Validate custom extensions if provided
-if [[ -n $custom_extensions ]]; then
-    validate_extensions
-    IFS=',' read -r -a extensions <<< "$custom_extensions"  # Split extensions by comma
-fi
-
-# Set directory argument if provided
-if [[ $# -ge 1 ]]; then
-    directory="$1"
-    if [[ ! -d "$directory" ]]; then
-        log "ERROR" "$directory is not a valid directory."
-        exit 1
+    # Validate custom extensions if provided
+    if [[ -n $custom_extensions ]]; then
+        validate_extensions
+        IFS=',' read -r -a extensions <<< "$custom_extensions"
     fi
-fi
 
-# Build exclusion arguments for find
-exclude_args=()
-for exclude in "${excludes[@]}"; do
-    exclude_args+=(-not -path "$exclude/*")
-done
+    # Set directory argument if provided
+    if [[ $# -ge 1 ]]; then
+        directory="$1"
+        if [[ ! -d "$directory" ]]; then
+            log "ERROR" "$directory is not a valid directory."
+            exit 1
+        fi
+    fi
 
-# Initialize counters
-success_count=0
-failure_count=0
+    # Build exclusion arguments for find
+    exclude_args=()
+    for exclude in "${excludes[@]}"; do
+        exclude_args+=(-not -path "$exclude/*")
+    done
 
-# Run the processing function
-process_files "$directory" "$recursive"
+    # Initialize counters
+    success_count=0
+    failure_count=0
 
-# Summary of results
-log "INFO" "Summary: $success_count files processed successfully, $failure_count failures."
+    # Run the processing function
+    process_files "$directory" "$recursive"
+
+    # Summary of results
+    log "INFO" "Summary: $success_count files processed successfully, $failure_count failures."
+}
+
+# Invoke the main function
+main "$@"

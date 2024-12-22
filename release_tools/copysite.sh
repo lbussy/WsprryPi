@@ -1,33 +1,79 @@
-#!/bin/bash
-#
-# This file is part of WsprryPi.
-#
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-#
-# WsprryPi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#!/usr/bin/env bash
+set -uo pipefail
+IFS=$'\n\t'
 
-# Begin
+##
+# @file copysite.sh
+# @brief Updates and deploys the WsprryPi website files.
 #
-repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$repo_root" ]; then
-    echo "Not in a Git repository."
-    exit
-fi
+# @details
+# This script automates the deployment of website files for WsprryPi. It ensures:
+# - Proper cleanup and recreation of the target directory.
+# - Copying of data files to the web directory.
+# - Creation of symbolic links for configuration files.
+# - Setting appropriate ownership for the web server.
+#
+# @author Lee Bussy
+# @date December 21, 2024
+# @version 1.0.0
+#
+# @par Usage:
+# ```bash
+# ./copysite.sh
+# ```
+#
+# @requirements
+# - Git must be installed and accessible.
+# - `sudo` privileges for managing web server directories.
+#
+# @warning
+# Ensure the script is executed in the context of a Git repository.
+##
 
-sudo rm -fr /var/www/html/wspr
-sudo mkdir /var/www/html/wspr
-sudo cp -R "$repo_root"/data/* /var/www/html/wspr/
-sudo ln -sf /usr/local/etc/wspr.ini /var/www/html/wspr/wspr.ini
-sudo chown -R www-data:www-data /var/www/html/wspr/
-echo "Website copied."
+# -----------------------------------------------------------------------------
+# @brief Get the root directory of the current Git repository.
+# @return Sets the global variable `repo_root` with the root directory path.
+# @retval 0 on success.
+# @retval 1 if not inside a Git repository.
+# -----------------------------------------------------------------------------
+get_repo_root() {
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [ -z "$repo_root" ]; then
+        echo "Not in a Git repository."
+        exit 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Deploy website files to the web server directory.
+# @details Cleans up the target directory, copies files, and sets up ownership.
+# -----------------------------------------------------------------------------
+deploy_website() {
+    local web_dir="/var/www/html/wspr"
+    
+    # Remove existing directory and recreate it
+    sudo rm -fr "$web_dir"
+    sudo mkdir -p "$web_dir"
+
+    # Copy data files to the web directory
+    sudo cp -R "$repo_root"/data/* "$web_dir/"
+
+    # Create a symbolic link to the configuration file
+    sudo ln -sf /usr/local/etc/wspr.ini "$web_dir/wspr.ini"
+
+    # Set appropriate ownership
+    sudo chown -R www-data:www-data "$web_dir"
+
+    echo "Website copied."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Main function orchestrating the script execution.
+# -----------------------------------------------------------------------------
+main() {
+    get_repo_root
+    deploy_website
+}
+
+# Invoke the main function
+main "$@"
