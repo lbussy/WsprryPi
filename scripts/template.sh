@@ -244,10 +244,10 @@ declare IS_REPO="${IS_REPO:-false}"
 # echo "API URL: $GIT_API"
 # -----------------------------------------------------------------------------
 declare REPO_ORG="${REPO_ORG:-lbussy}"
-declare REPO_NAME="${REPO_NAME:-bash-template}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
-declare GIT_TAG="${GIT_TAG:-1.2.1}"
-declare SEM_VER="${GIT_TAG:-1.2.1-main.31256b0}"
+declare REPO_NAME="${REPO_NAME:-wsprrypi}"
+declare REPO_BRANCH="${REPO_BRANCH:-install_update}"
+declare GIT_TAG="${GIT_TAG:-1.3.0}"
+declare SEM_VER="${GIT_TAG:-1.3.0}"
 declare LOCAL_REPO_DIR="${LOCAL_REPO_DIR:-}"
 declare LOCAL_WWW_DIR="${LOCAL_WWW_DIR:-}"
 declare LOCAL_SCRIPTS_DIR="${LOCAL_SCRIPTS_DIR:-}"
@@ -279,7 +279,7 @@ declare OPTIONS_LIST=()     # List of -f--fl arguemtns for command line parsing
 #          in the script to determine which content to fetch from the
 #          repository.
 # -----------------------------------------------------------------------------
-readonly GIT_DIRS="${GIT_DIRS:-("man" "scripts" "conf")}"
+readonly GIT_DIRS="${GIT_DIRS:-()}"
 
 # -----------------------------------------------------------------------------
 # @var USER_HOME
@@ -436,7 +436,7 @@ readonly MAX_OS="${MAX_OS:-15}"  # (use -1 for no upper limit)
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-both}" # ("32", "64", or "both")
+readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_MODELS
