@@ -1,4 +1,4 @@
-# Systemd - WsspryPi
+# Systemd - WsprryPi
 
 ## Overview
 
