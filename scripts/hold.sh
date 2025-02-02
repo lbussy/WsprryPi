@@ -113,24 +113,24 @@ copy_file() {
 
 extract_semantic_version() {
     # Function to extract semantic version from a string
-  local line="$1"
-  echo "$line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?' || echo "unknown"
+    local line="$1"
+    echo "$line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?' || echo "unknown"
 }
 
 strip_pre_release() {
     # Function to strip unknown pre-release info
-  local input_version="$1"
+    local input_version="$1"
 
-  # Match the base version and allowed pre-release types
-  if [[ "$input_version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-(alpha|beta|rc[0-9]*|final))?$ ]]; then
-    # If it matches, return the base version with allowed pre-release types
-    echo "${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
-    return 0
-  else
-    # Otherwise, strip pre-release metadata and append "-development"
-    echo "${input_version%%-*}-development"
-    return 0
-  fi
+    # Match the base version and allowed pre-release types
+    if [[ "$input_version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-(alpha|beta|rc[0-9]*|final))?$ ]]; then
+        # If it matches, return the base version with allowed pre-release types
+        echo "${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
+        return 0
+    else
+        # Otherwise, strip pre-release metadata and append "-development"
+        echo "${input_version%%-*}-development"
+        return 0
+    fi
 }
 
 check_file() {
@@ -212,13 +212,5 @@ check_file() {
 ############
 
 main() {
-    arguments "$@" # Check command line arguments
-
-    do_service "wspr" "" "/usr/local/bin" # Install/upgrade wspr daemon
     do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
-    do_www "/var/www/html/wspr" "$LOCAL_WWW_DIR" # Download website
-    disable_sound
-
-    echo -e "\n***Script $THISSCRIPT complete.***\n"
-    complete
 }

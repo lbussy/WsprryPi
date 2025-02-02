@@ -124,6 +124,22 @@ if [[ -z "${THIS_SCRIPT:-}" ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+# @var ACTION
+# @brief Determines whether the script runs in "install" or "uninstall" mode.
+# @details This variable controls whether the script installs or uninstalls 
+#          the systemd service. If not explicitly set, it defaults to
+#          "install". The script checks this variable to execute the
+#          appropriate actions.
+#
+# @default "install"
+#
+# @example
+# ACTION="install"  # Set to install mode
+# ACTION="uninstall"  # Set to uninstall mode
+# -----------------------------------------------------------------------------
+declare ACTION="${ACTION:-install}"
+
+# -----------------------------------------------------------------------------
 # @var DRY_RUN
 # @brief Enables simulated execution of certain commands.
 # @details When set to `true`, commands are not actually executed but are
@@ -136,91 +152,45 @@ fi
 declare DRY_RUN="${DRY_RUN:-false}"
 
 # -----------------------------------------------------------------------------
-# @var IS_PATH
-# @brief Indicates whether the script was executed from a `PATH` location.
-# @details This variable is initialized to `false` by default. During
-#          execution, it is dynamically set to `true` if the script is
-#          determined to have been executed from a directory listed in the
-#          `PATH` environment variable.
+# @brief Defines global repository-related variables.
+# @details These variables are used to determine the repository context, 
+#          including whether the script is running inside a local Git 
+#          repository or fetching data remotely. Default values are set 
+#          to ensure fallback behavior when values are unset.
 #
-# @example
-# if [[ "$IS_PATH" == "true" ]]; then
-#     echo "Script was executed from a PATH directory."
-# else
-#     echo "Script was executed from a non-PATH directory."
-# fi
-# -----------------------------------------------------------------------------
-declare IS_PATH="${IS_PATH:-false}"
-
-# -----------------------------------------------------------------------------
-# @var IS_REPO
-# @brief Indicates whether the script resides in a GitHub repository or
-#        subdirectory.
-# @details This variable is initialized to `false` by default. During
-#          execution, it
-#          is dynamically set to `true` if the script is detected to be within
-#          a GitHub repository (i.e., if a `.git` directory exists in the
-#          directory hierarchy of the script's location).
-#
-# @example
-# if [[ "$IS_REPO" == "true" ]]; then
-#     echo "This script resides within a GitHub repository."
-# else
-#     echo "This script is not located within a GitHub repository."
-# fi
+# @global IS_REPO Boolean flag indicating if the script is running inside 
+#                 a local Git repository (default: false).
+# @global REPO_ORG The GitHub organization or user associated with the repository.
+# @global REPO_NAME The name of the GitHub repository.
+# @global REPO_TITLE A human-readable title for the repository.
+# @global REPO_BRANCH The default branch of the repository.
+# @global GIT_TAG The default Git tag/version to use.
+# @global GIT_RAW_BASE The base URL for raw file retrieval from GitHub.
+# @global GIT_API_BASE The base URL for accessing GitHub's API.
+# @global GIT_CLONE_BASE The base URL for cloning repositories from GitHub.
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"
-
-# -----------------------------------------------------------------------------
-# @brief Project metadata constants used throughout the script.
-# @details These variables provide metadata about the script, including
-#          ownership, versioning, project details, and GitHub URLs. They are
-#          initialized with default values here and may be dynamically set
-#          during execution to reflect the project's context.
-#
-# @vars
-# - @var REPO_ORG The organization or owner of the repository (default:
-#                 "lbussy").
-# - @var REPO_NAME The name of the repository (default: "bash-template").
-# - @var REPO_BRANCH The current Git branch name (default: "main").
-# - @var GIT_TAG The current Git tag (default: "0.0.1").
-# - @var SEM_VER The semantic version of the project (default: "0.0.1").
-# - @var LOCAL_REPO_DIR The local source directory path (default: unset).
-# - @var LOCAL_WWW_DIR The local web directory path (default: unset).
-# - @var LOCAL_SCRIPTS_DIR The local scripts directory path (default: unset).
-# - @var GIT_RAW The base URL for accessing raw GitHub content (default:
-#                "https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME").
-# - @var GIT_API The base URL for the GitHub API for this repository (default:
-#                "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
-# - @var GIT_CLONE The clone URL for the GitHub repository (default:
-#                "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
-#
-# @example
-# echo "Repository: $REPO_ORG/$REPO_NAME"
-# echo "Branch: $REPO_BRANCH, Tag: $GIT_TAG, Version: $SEM_VER"
-# echo "Source Directory: ${LOCAL_REPO_DIR:-Not Set}"
-# echo "WWW Directory: ${LOCAL_WWW_DIR:-Not Set}"
-# echo "Scripts Directory: ${LOCAL_SCRIPTS_DIR:-Not Set}"
-# echo "Raw URL: $GIT_RAW"
-# echo "API URL: $GIT_API"
-# -----------------------------------------------------------------------------
 declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="${REPO_NAME:-wsprrypi}"
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-install_update}"
 declare GIT_TAG="${GIT_TAG:-1.3.0}"
-declare SEM_VER="${GIT_TAG:-1.3.0}"
-declare LOCAL_REPO_DIR="${LOCAL_REPO_DIR:-}"
-declare GIT_RAW="${GIT_RAW:-"https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"}"
-declare GIT_API="${GIT_API:-"https://api.github.com/repos/$REPO_ORG/$REPO_NAME"}"
+declare GIT_RAW_BASE="https://raw.githubusercontent.com"
+declare GIT_API_BASE="https://api.github.com/repos"
+declare GIT_CLONE_BASE="https://github.com"
 
 # -----------------------------------------------------------------------------
-# Declare Menu Variables
+# @var USE_TAPR
+# @brief Indicates whether the TAPR shutdown button functionality is enabled.
+# @details This global variable is set to "true" if the user opts to enable 
+#          the TAPR shutdown button feature, otherwise it defaults to "false".
+#          The value is determined via user input during installation.
+#
+# @note This variable is typically set by the function `set_use_tapr()`.
+#
+# @default false
 # -----------------------------------------------------------------------------
-declare -A MENU_ITEMS       # Associative array of menu items
-declare -a MAIN_MENU        # Array defining the main menu screen
-declare -a SUB_MENU         # Array defining the sub-menu screen
-declare MENU_HEADER="${MENU_HEADER:-Menu}"  # Global menu header
+declare USE_TAPR="${USE_TAPR:-false}"
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -239,19 +209,31 @@ declare OPTIONS_LIST=()     # List of -f--fl arguemtns for command line parsing
 # -----------------------------------------------------------------------------
 readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 
+# -----------------------------------------------------------------------------
+# @var WSPR_EXE
+# @brief The executable name for WsprryPi.
+# @details This variable holds the name of the main WsprryPi executable that 
+#          will be installed in `/usr/local/bin/` and used for signal processing.
+#
+# @var WSPR_INI
+# @brief The configuration file for WsprryPi.
+# @details This variable specifies the name of the WsprryPi configuration file, 
+#          typically stored in `/usr/local/etc/`, containing user settings.
+#
+# @var LOG_ROTATE
+# @brief The log rotation configuration file.
+# @details This variable defines the logrotate configuration file, used to manage 
+#          WsprryPi logs under `/var/log/wspr/` by limiting file size and retention.
+#
+# @var SHUTDOWN_WATCH_EXE
+# @brief The shutdown monitoring script.
+# @details This variable holds the name of the shutdown watch script, which 
+#          monitors the TAPR shutdown button functionality to enable safe shutdown.
+# -----------------------------------------------------------------------------
 readonly WSPR_EXE="wspr"
-readonly WSPR_PATH="/usr/local/bin/$WSPR_EXE"
 readonly WSPR_INI="wspr.ini"
-readonly WSPR_INI_PATH="/usr/local/etc/$WSPR_INI"
-readonly WSPR_SERVICE_FILE="wspr.service"
-readonly WSPR_SERVICE_FILE_PATH="/etc/systemd/system/$WSPR_SERVICE_FILE"
-readonly WSPR_LOG_PATH="/var/log/$WSPR_EXE/"
-
+readonly LOG_ROTATE="logrotate.conf"
 readonly SHUTDOWN_WATCH_EXE="shutdown_watch.py"
-readonly SHUTDOWN_WATCH_PATH="/usr/local/bin/$SHUTDOWN_WATCH_EXE"
-readonly SHUTDOWN_WATCH_SERVICE_FILE="shutdown_watch.service"
-readonly SHUTDOWN_WATCH_SERVICE_FILE_PATH="/etc/systemd/system/$SHUTDOWN_WATCH_SERVICE_FILE"
-readonly SHUTDOWN_WATCH_LOG_PATH="/var/log/$WSPR_EXE/"
 
 # -----------------------------------------------------------------------------
 # @var USER_HOME
@@ -738,7 +720,6 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 #       the current session and `date` to capture the session end time.
 # -----------------------------------------------------------------------------
 egress() {
-    # TODO: Add any cleanup items here
     # shellcheck disable=SC2317
     true
 }
@@ -1593,6 +1574,127 @@ remove_slash() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Modify lines in a file based on a given suffix and action.
+# @details This function searches for lines in a file that end with a given 
+#          suffix and either comments or uncomments them based on the specified 
+#          action. Commenting adds a "# " prefix if it is not already present, 
+#          while uncommenting removes the "#" and any following whitespace but 
+#          retains leading spaces.
+#
+# @param $1 Filename to process.
+# @param $2 Search string (suffix to match at the end of lines).
+# @param $3 Action to perform: "comment" to add "# ", "uncomment" to remove it.
+#
+# @global None.
+#
+# @throws Exits with an error if the file does not exist, an invalid action is 
+#         provided, or a temporary file cannot be created.
+#
+# @return 0 on success, non-zero on failure.
+#
+# @example
+# modify_comment_lines "example.txt" ".log" "comment"
+# modify_comment_lines "example.txt" ".log" "uncomment"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+modify_comment_lines() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure all three arguments are provided
+    if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: modify_comment_lines 'example.txt' '.log' 'comment'"
+        debug_end "$debug"
+        return 1
+    fi
+
+    local filename="$1"
+    local search_string="$2"
+    local action="$3"
+
+    if [[ ! -f "$filename" ]]; then
+        debug_print "Error: File '$filename' not found." "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    if [[ "$action" != "comment" && "$action" != "uncomment" ]]; then
+        debug_print "Error: Invalid action '$action'. Use 'comment' or 'uncomment'." "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    local temp_file
+    temp_file=$(mktemp) || { debug_print "Error: Failed to create temp file." "$debug"; debug_end "$debug"; return 1; }
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ${search_string}$ ]]; then
+            if [[ "$action" == "comment" ]]; then
+                if [[ ! "$line" =~ ^# ]]; then
+                    echo "# $line" >> "$temp_file"
+                    debug_print "Commenting: $line" "$debug"
+                else
+                    echo "$line" >> "$temp_file"
+                fi
+            elif [[ "$action" == "uncomment" ]]; then
+                echo "${line#"${line%%[!# ]*}"}" >> "$temp_file"
+                debug_print "Uncommenting: $line" "$debug"
+            fi
+        else
+            echo "$line" >> "$temp_file"
+        fi
+    done < "$filename"
+
+    mv "$temp_file" "$filename" || { debug_print "Error: Failed to update file." "$debug"; debug_end "$debug"; return 1; }
+
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Replace a placeholder string in a file.
+# @details This function searches for a given string within a file, where the 
+#          string is bordered by "%" characters (e.g., "%SEARCH_STRING%"). If 
+#          found, it replaces the entire placeholder (including "%" signs) with 
+#          the specified replacement string.
+#
+# @param $1 Path to the file to modify.
+# @param $2 Search string (without % signs).
+# @param $3 Replacement string.
+#
+# @global None.
+#
+# @throws Exits with an error if the file does not exist or cannot be modified.
+#
+# @return 0 on success, non-zero on failure.
+#
+# @example
+# replace_string_in_script "script.sh" "PLACEHOLDER" "new_value"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+replace_string_in_script() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local file_path="$1"
+    local search_string="$2"
+    local replace_string="$3"
+
+    if [[ ! -f "$file_path" ]]; then
+        debug_print "Error: File '$file_path' not found." "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    local pattern="%${search_string}%"
+    
+    # Use sed to replace all occurrences of %SEARCH_STRING% with REPLACE_STRING
+    sed -i "s|${pattern}|${replace_string}|g" "$file_path"
+
+    debug_print "Replaced occurrences of '${pattern}' with '${replace_string}' in '$file_path'." "$debug"
+
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Pauses execution and waits for user input to continue.
 # @details This function displays a message prompting the user to press any key
 #          to continue. It waits for a key press, then resumes execution.
@@ -1671,7 +1773,6 @@ print_system() {
 #
 # @global THIS_SCRIPT The name of the script.
 # @global SEM_VER The version of the script.
-# @global REPO_NAME The name of the repository.
 #
 # @return None
 #
@@ -1685,7 +1786,7 @@ print_version() {
     local caller="${FUNCNAME[1]}"
 
     if [[ "$caller" == "process_args" ]]; then
-        printf "%s: version %s\n" "$THIS_SCRIPT" "$SEM_VER" # Display the script name and version
+        printf "%s: version %s\n" "$REPO_TITLE" "$SEM_VER" # Display the script name and version
     else
         logI "Running ${REPO_TITLE}'s '${THIS_SCRIPT}', version $SEM_VER"
     fi
@@ -1824,41 +1925,31 @@ handle_execution_context() {
     case $context in
         0)
             THIS_SCRIPT="piped_script"
-            USE_LOCAL=false
             IS_REPO=false
-            IS_PATH=false
             debug_print "Execution context: Script was piped (e.g., 'curl url | sudo bash')." "$debug"
             ;;
         1)
             THIS_SCRIPT="piped_script"
-            USE_LOCAL=false
             IS_REPO=false
-            IS_PATH=false
             warn "Execution context: Script run with 'bash' in an unusual way."
             ;;
         2)
             THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
             IS_REPO=false
-            IS_PATH=false
             debug_print "Execution context: Script executed directly from $THIS_SCRIPT." "$debug"
             ;;
         3)
             THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
             IS_REPO=true
-            IS_PATH=false
             debug_print "Execution context: Script is within a GitHub repository." "$debug"
             ;;
         4)
             THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
             IS_REPO=false
-            IS_PATH=true
             debug_print "Execution context: Script executed from a PATH location ($(command -v "$THIS_SCRIPT"))" "$debug"
             ;;
         *)
-                    debug_end "$debug"
+            debug_end "$debug"
             die 99 "Unknown execution context."
             ;;
     esac
@@ -3490,6 +3581,7 @@ get_repo_name() {
 #
 # @throws Exits with an error if the repository name is empty.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 repo_to_title_case() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3820,82 +3912,65 @@ get_sem_ver() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Configure local or remote mode based on the Git repository context.
-# @details Sets relevant variables for local mode if `USE_LOCAL` is `true` and
-#          the script is being executed from within a GitHub repository
-#          (`IS_REPO` is `true`). Defaults to remote configuration if not in
-#          local mode or when the combined check fails.
+# @brief Retrieves and sets repository-related project parameters.
+# @details This function initializes and exports key repository variables
+#          based on the execution context. If the script is running inside 
+#          a GitHub repository, it gathers metadata such as organization, 
+#          repository name, branch, and tags. Otherwise, it configures remote 
+#          URLs for accessing the repository.
 #
-# @param $1 [Optional] Pass "debug" to enable verbose debugging output.
+# @global REPO_ORG The GitHub organization or user associated with the repository.
+# @global REPO_NAME The name of the GitHub repository.
+# @global REPO_BRANCH The active branch of the repository.
+# @global GIT_TAG The latest Git tag (release) for the repository.
+# @global SEM_VER The semantic version retrieved from the latest Git tag.
+# @global LOCAL_REPO_DIR The local root directory of the repository.
+# @global LOCAL_EXECUTABLES_DIR The path to the local executables directory.
+# @global LOCAL_SYSTEMD_DIR The path to the local systemd configuration directory.
+# @global LOCAL_CONFIG_DIR The path to the local configuration directory.
+# @global LOCAL_WWW_DIR The path to the local web assets directory.
+# @global GIT_RAW The raw GitHub content URL for downloading repository files.
+# @global GIT_API The GitHub API URL for accessing repository information.
+# @global GIT_CLONE The GitHub clone URL for checking out the repository.
 #
-# @global USE_LOCAL           Indicates whether local mode is enabled.
-# @global IS_REPO             Indicates whether the script resides in a GitHub
-#                              repository.
-# @global THIS_SCRIPT         Name of the current script.
-# @global REPO_ORG            Git organization or owner name.
-# @global REPO_NAME           Git repository name.
-# @global REPO_BRANCH         Current Git branch name.
-# @global GIT_TAG             Generated semantic version string.
-# @global LOCAL_REPO_DIR      Path to the root of the local repository.
-# @global LOCAL_WWW_DIR       Path to the `data` directory in the repository.
-# @global LOCAL_SCRIPTS_DIR   Path to the `scripts` dir in the repository.
-# @global GIT_RAW             URL for accessing raw files remotely.
-# @global GIT_API             URL for accessing the repository API.
+# @param $1 Debug mode flag (optional).
 #
-# @throws Exits with a critical error if the combined check fails in local mode.
+# @throws Terminates the script if repository metadata cannot be retrieved.
+# @throws Terminates the script if required directories do not exist.
 #
-# @return None
+# @return 0 on success, 1 on failure.
+#
+# @example
+# get_proj_params "$debug"
 # -----------------------------------------------------------------------------
 get_proj_params() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    if [[ "$USE_LOCAL" == "true" && "$IS_REPO" == "true" ]]; then
+    if [[ "$IS_REPO" == "true" ]]; then
         debug_print "Configuring local mode with GitHub repository context." "$debug"
 
-        # Making sure THIS_SCRIPT is right
-        THIS_SCRIPT=$(basename "$0")
-        debug_print "THIS_SCRIPT set to: $THIS_SCRIPT" "$debug"
-
         # Retrieve repository details
+        local retval=0  # Initialize return value
+
         REPO_ORG=$(get_repo_org "${debug}")
-        local retval=$?
-        if [[ $retval -ne 0 ]]; then
-                    debug_end "$debug"
-            die 1 "Failed to retrieve repository organization."
-        fi
-        debug_print "REPO_ORG set to: $REPO_ORG" "$debug"
+        retval=$(( retval | $? ))
 
         REPO_NAME=$(get_repo_name "${debug}")
-        local retval=$?
-        if [[ $retval -ne 0 ]]; then
-                    debug_end "$debug"
-            die 1 "Failed to retrieve repository name."
-        fi
-        debug_print "REPO_NAME set to: $REPO_NAME" "$debug"
+        retval=$(( retval | $? ))
 
         REPO_BRANCH=$(get_repo_branch "${debug}")
-        local retval=$?
-        if [[ $retval -ne 0 ]]; then
-                    debug_end "$debug"
-            die 1 "Failed to retrieve respository branch."
-        fi
-        debug_print "REPO_BRANCH set to: $REPO_BRANCH" "$debug"
+        retval=$(( retval | $? ))
 
         GIT_TAG=$(get_last_tag "${debug}")
-        local retval=$?
-        if [[ $retval -ne 0 ]]; then
-                    debug_end "$debug"
-            die 1 "Failed to retrieve last tag."
-        fi
-        debug_print "GIT_TAG set to: $GIT_TAG" "$debug"
+        retval=$(( retval | $? ))
 
         SEM_VER=$(get_sem_ver "${debug}")
-        local retval=$?
+        retval=$(( retval | $? ))
+
         if [[ $retval -ne 0 ]]; then
-                    debug_end "$debug"
-            die 1 "Failed to retrieve semantic version."
+            debug_end "$debug"
+            die 1 "Failed to retrieve repository parameters."
         fi
-        debug_print "SEM_VER set to: $SEM_VER" "$debug"
 
         # Get the root directory of the repository
         LOCAL_REPO_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -3903,43 +3978,84 @@ get_proj_params() {
             debug_end "$debug"
             die 1 "Not inside a valid Git repository. Ensure the repository is properly initialized."
         fi
-        debug_print "LOCAL_REPO_DIR set to: $LOCAL_REPO_DIR" "$debug"
 
-        # Set local script path based on repository structure
+        # Set local script paths based on repository structure
         LOCAL_WWW_DIR="$LOCAL_REPO_DIR/data"
-        if [[ -d "${LOCAL_WWW_DIR:-}" ]]; then
+        if [[ ! -d "${LOCAL_WWW_DIR:-}" ]]; then
             debug_end "$debug"
             die 1 "HTML source directory does not exist."
         fi
-        debug_print "LOCAL_WWW_DIR set to: $LOCAL_WWW_DIR" "$debug"
 
-        # Set local script path based on repository structure
-        LOCAL_SCRIPTS_DIR="$LOCAL_REPO_DIR/scripts"
-        if [[ -d "${LOCAL_WWW_DIR:-}" ]]; then
-                    debug_end "$debug"
-            die 1 "Scripts source directory does not exist."
+        LOCAL_CONFIG_DIR="$LOCAL_REPO_DIR/config"
+        if [[ ! -d "${LOCAL_CONFIG_DIR:-}" ]]; then
+            debug_end "$debug"
+            die 1 "Configuration source directory does not exist."
         fi
-        debug_print "LOCAL_SCRIPTS_DIR set to: $LOCAL_SCRIPTS_DIR" "$debug"
+
+        LOCAL_SYSTEMD_DIR="$LOCAL_REPO_DIR/systemd"
+        if [[ ! -d "${LOCAL_SYSTEMD_DIR:-}" ]]; then
+            debug_end "$debug"
+            die 1 "systemd source directory does not exist."
+        fi
+
+        LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+        if [[ ! -d "${LOCAL_EXECUTABLES_DIR:-}" ]]; then
+            debug_end "$debug"
+            die 1 "Executables source directory does not exist."
+        fi
+
+        GIT_RAW="$GIT_RAW_BASE/$REPO_ORG/$REPO_NAME"
+        GIT_API="$GIT_API_BASE/$REPO_ORG/$REPO_NAME"
+        GIT_CLONE="$GIT_CLONE_BASE/$REPO_ORG/$REPO_NAME"
+
     else
         # Configure remote access URLs
         debug_print "Configuring remote mode." "$debug"
-        if [[ -z "${REPO_ORG:-}" || -z "${REPO_NAME:-}" ]]; then
-                    debug_end "$debug"
-            die 1 "Remote mode requires REPO_ORG and REPO_NAME to be set."
+        if [[ -z "${REPO_ORG:-}" || -z "${REPO_NAME:-}" || -z "${REPO_BRANCH:-}" || -z "${GIT_TAG:-}" ]]; then
+            debug_end "$debug"
+            die 1 "Remote mode requires Git data to be set."
         fi
 
-        # Get GitHub URLs
-        GIT_RAW="https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"
-        GIT_API="https://api.github.com/repos/$REPO_ORG/$REPO_NAME"
-        GIT_CLONE="https://github.com/$REPO_ORG/$REPO_NAME.git"
-        debug_print "GIT_RAW set to: $GIT_RAW" "$debug"
-        debug_print "GIT_API set to: $GIT_API" "$debug"
-        debug_print "GIT_CLONE set to: $GIT_CLONE" "$debug"
+        SEM_VER="${SEM_VER:-0.0.1}"
+        LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
+        LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+        LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
+        LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
+        LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/data"
+        GIT_RAW="$GIT_RAW_BASE/$REPO_ORG/$REPO_NAME"
+        GIT_API="$GIT_API_BASE/$REPO_ORG/$REPO_NAME"
+        GIT_CLONE="$GIT_CLONE_BASE/$REPO_ORG/$REPO_NAME"
     fi
 
     # Export global variables for further use
-    export THIS_SCRIPT REPO_ORG REPO_NAME REPO_BRANCH GIT_TAG LOCAL_REPO_DIR
-    export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
+    export REPO_ORG
+    export REPO_NAME
+    export REPO_BRANCH
+    export GIT_TAG
+    export SEM_VER
+    export LOCAL_REPO_DIR
+    export LOCAL_EXECUTABLES_DIR
+    export LOCAL_SYSTEMD_DIR
+    export LOCAL_CONFIG_DIR
+    export LOCAL_WWW_DIR
+    export GIT_RAW
+    export GIT_API
+    export GIT_CLONE
+
+    # Debug output for exported variables
+    debug_print "Exported REPO_ORG: $REPO_ORG" "$debug"
+    debug_print "Exported REPO_NAME: $REPO_NAME" "$debug"
+    debug_print "Exported REPO_BRANCH: $REPO_BRANCH" "$debug"
+    debug_print "Exported GIT_TAG: $GIT_TAG" "$debug"
+    debug_print "Exported SEM_VER: $SEM_VER" "$debug"
+    debug_print "Exported LOCAL_REPO_DIR: $LOCAL_REPO_DIR" "$debug"
+    debug_print "Exported LOCAL_EXECUTABLES_DIR: $LOCAL_EXECUTABLES_DIR" "$debug"
+    debug_print "Exported LOCAL_SYSTEMD_DIR: $LOCAL_SYSTEMD_DIR" "$debug"
+    debug_print "Exported LOCAL_CONFIG_DIR: $LOCAL_CONFIG_DIR" "$debug"
+    debug_print "Exported LOCAL_WWW_DIR: $LOCAL_WWW_DIR" "$debug"
+    debug_print "Exported GIT_RAW: $GIT_RAW" "$debug"
+    debug_print "Exported GIT_API: $GIT_API" "$debug"
+    debug_print "Exported GIT_CLONE: $GIT_CLONE" "$debug"
 
     debug_end "$debug"
     return 0
@@ -4013,7 +4129,7 @@ download_file() {
 # shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local dest_root="$USER_HOME/$REPO_NAME"
+    local dest_root="$LOCAL_REPO_DIR"
     mkdir -p "$dest_root"
 
     logI "Cloning repository from $GIT_CLONE to $dest_root"
@@ -4084,7 +4200,7 @@ fetch_tree() {
 download_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local dest_root="$USER_HOME/$REPO_NAME"
+    local dest_root="$LOCAL_REPO_DIR"
 
     if [[ "$IS_REPO" == "true" || "$(realpath -m "$dest_root")" == "$(realpath -m "$LOCAL_REPO_DIR")" ]]; then
         logI "Running from repo, skipping download."
@@ -4464,250 +4580,6 @@ exit_script() {
 }
 
 ############
-### Menu Functions
-############
-
-# -----------------------------------------------------------------------------
-# @var MENU_ITEMS
-# @brief Stores menu item details.
-# @details Keys are unique identifiers for menu items, and values are formatted
-#          strings containing display names and the corresponding function to
-#          call.
-# -----------------------------------------------------------------------------
-MENU_ITEMS["option_one"]="Option One"
-MENU_ITEMS["option_two"]="Option Two"
-MENU_ITEMS["option_three"]="Option Three"
-MENU_ITEMS["display_sub_menu"]="Display Sub Menu"
-MENU_ITEMS["display_main_menu"]="Display Main Menu"
-
-# -----------------------------------------------------------------------------
-# @var MAIN_MENU
-# @brief Array defining the main menu options.
-# @details Contains keys that correspond to the `MENU_ITEMS` associative array.
-#          These keys define the options available in the main menu.
-#
-# @example
-# MAIN_MENU=(
-#     "option_one"
-#     "option_two"
-#     "display_sub_menu"
-# )
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2034
-MAIN_MENU=(
-    "option_one"
-    "option_two"
-    "display_sub_menu"
-)
-
-# -----------------------------------------------------------------------------
-# @var SUB_MENU
-# @brief Array defining the sub-menu options.
-# @details Contains keys that correspond to the `MENU_ITEMS` associative array.
-#          These keys define the options available in the sub-menu.
-#
-# @example
-# SUB_MENU=(
-#     "option_three"
-#     "display_main_menu"
-# )
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2034
-SUB_MENU=(
-    "option_three"
-    "display_main_menu"
-)
-
-# -----------------------------------------------------------------------------
-# @brief Test function one
-# @details Executes a sample action for the "Option One" menu item.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-option_one() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Execute menu action
-    printf "\n"
-    printf "Running %s().\n" "${FUNCNAME[0]}"
-    pause "$debug"
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Test function two
-# @details Executes a sample action for the "Option Two" menu item.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-option_two() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Execute menu action
-    printf "\n"
-    printf "Running %s().\n" "${FUNCNAME[0]}"
-    pause
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Test function three
-# @details Executes a sample action for the "Option Three" menu item.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-option_three() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Execute menu action
-    printf "\n"
-    printf "Running %s().\n" "${FUNCNAME[0]}"
-    pause
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Displays a menu based on the given menu array.
-# @details The menu items are numbered sequentially, and the user is prompted
-#          for input to select an option.
-#
-# @param $1 Array of menu keys to display.
-# @param $2 Debug flag for optional debug output.
-#
-# @global MENU_ITEMS Uses this global array to retrieve menu details.
-# @global MENU_HEADER Prints the global menu header.
-#
-# @throws Prints an error message if an invalid choice is made.
-#
-# @return Executes the corresponding function for the selected menu item.
-# -----------------------------------------------------------------------------
-display_menu() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    local choice
-    local i=1
-    local menu_array=("${!1}")  # Array of menu keys to display
-
-    # Display the menu header
-    printf "%s\n\n" "$MENU_HEADER"
-    printf "Please select an option:\n\n"
-
-    # Display the menu items
-    for func in "${menu_array[@]}"; do
-        # Fixed-width format for consistent alignment
-        printf "%-4d%-30s\n" "$i" "${MENU_ITEMS[$func]}"
-        ((i++))
-    done
-    printf "%-4d%-30s\n" 0 "Exit"
-
-    # Read user choice
-    printf "\n"
-    printf "Enter your choice: "
-    read -n 1 -sr choice < /dev/tty || true
-    printf "%s\n" "$choice"
-
-    # Validate input
-    if [[ -z "$choice" ]]; then
-        printf "No input provided. Please enter a valid choice.\n"
-        return
-    elif [[ "$choice" =~ ^[0-9]$ ]]; then
-        if [[ "$choice" -eq 0 ]]; then
-            printf "\n"
-            printf "Exiting.\n"
-            debug_end "$debug"
-            exit 0
-        elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
-            local func="${menu_array[choice-1]}"
-            "$func" "$debug"
-        else
-            printf "Invalid choice. Please try again.\n"
-        fi
-    else
-        printf "Invalid input. Please enter a number.\n"
-    fi
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Displays the main menu.
-# @details Calls the `display_menu` function with the main menu array.
-#
-# @param $1 Debug flag for optional debug output.
-#
-# @return Calls `display_menu` with the main menu array.
-# -----------------------------------------------------------------------------
-display_main_menu() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Clear screen
-    clear
-    # Display the menu
-    display_menu MAIN_MENU[@] "$debug"
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Displays the sub-menu.
-# @details Calls the `display_menu` function with the sub-menu array. Loops
-#          within the sub-menu until the user chooses to exit.
-#
-# @param $1 Debug flag for optional debug output.
-#
-# @return Calls `display_menu` with the sub-menu array in a loop.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-display_sub_menu() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    while true; do
-        # Clear screen
-        clear
-        # Display the menu
-        display_menu SUB_MENU[@] "$debug"
-    done
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Entry point for the menu.
-# @details Initializes debugging if the "debug" flag is passed, starts the
-#          main menu loop, and ensures proper debug logging upon exit.
-#
-# @param $@ Arguments passed to the script. Pass "debug" for debug mode.
-#
-# @example
-# Execute the menu
-#   do_menu "$debug"
-# -----------------------------------------------------------------------------
-do_menu() {
-    # Debug declarations
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Main script execution starts here
-    while true; do
-        display_main_menu "$debug"
-    done
-
-    # Debug log: function exit
-    debug_end "$debug"
-}
-
-############
 ### Arguments Functions
 ############
 
@@ -4725,8 +4597,7 @@ do_menu() {
 #          specific function when encountered on the command line.
 # -----------------------------------------------------------------------------
 ARGUMENTS_LIST=(
-    "word1 word_arg_one Handles word argument one 0"
-    "word2 word_arg_two Handles word argument two 1"
+    "debug true Executes with verbose debug information 0"
 )
 
 # -----------------------------------------------------------------------------
@@ -4744,218 +4615,9 @@ ARGUMENTS_LIST=(
 #          processing.
 # -----------------------------------------------------------------------------
 OPTIONS_LIST=(
-    "-1|--flag_1 0 flag_arg_one Handles flag_arg_one 0"
-    "-2|--flag_2 0 flag_arg_two Handles flag_arg_two 1"
-    "-3|--flag_3 1 flag_arg_tre Handles flag_arg_tre 0"
-    "-4|--flag_4 1 flag_arg_fwr Handles flag_arg_fwr 1"
     "-h|--help 0 usage Show these instructions 1"
+    "-v|--version 0 version Display $WSPR_EXE version 1"
 )
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first word argument.
-# @details This function processes a plain word argument, constructs a message
-#          based on its value, and prints the message. If the argument is not
-#          provided, a default message is used. This function is designed as a
-#          demo for handling word arguments, showing how to pass and process
-#          arguments.
-#
-# @param $1 [optional] Turns on debug printing
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-word_arg_one() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first word argument.
-# @details This function processes a plain word argument, constructs a message
-#          based on its value, and prints the message. If the argument is not
-#          provided, a default message is used. This function is designed as a
-#          demo for handling word arguments, showing how to pass and process
-#          arguments.
-#
-# @param $1 [optional] Turns on debug printing if == "debug"
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-word_arg_two() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first flag argument.
-# @details This function processes the a flagged argument, constructs a
-#          message based on whether the argument is provided. If an argument
-#          is supplied, it constructs a message with the argument value.
-#          Otherwise, a default message is used. The message is then printed
-#          with the debug_print function, and the status is returned.
-#
-# @param $1 [optional] The first flag argument passed to the function. If not
-#           provided, the function defaults to an empty string.
-# @param $2 [optional] Turns on debug printing if == "debug"
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-flag_arg_one() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first flag argument.
-# @details This function processes the a flagged argument, constructs a
-#          message based on whether the argument is provided. If an argument
-#          is supplied, it constructs a message with the argument value.
-#          Otherwise, a default message is used. The message is then printed
-#          with the debug_print function, and the status is returned.
-#
-# @param $1 [optional] The first flag argument passed to the function. If not
-#           provided, the function defaults to an empty string.
-# @param $2 [optional] Turns on debug printing if == "debug"
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-flag_arg_two() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first flag argument.
-# @details This function processes the a flagged argument, constructs a
-#          message based on whether the argument is provided. If an argument
-#          is supplied, it constructs a message with the argument value.
-#          Otherwise, a default message is used. The message is then printed
-#          with the debug_print function, and the status is returned.
-#
-# @param $1 [optional] The first flag argument passed to the function. If not
-#           provided, the function defaults to an empty string.
-# @param $2 [optional] Turns on debug printing if == "debug"
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-flag_arg_tre() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Handles the first flag argument.
-# @details This function processes the a flagged argument, constructs a
-#          message based on whether the argument is provided. If an argument
-#          is supplied, it constructs a message with the argument value.
-#          Otherwise, a default message is used. The message is then printed
-#          with the debug_print function, and the status is returned.
-#
-# @param $1 [optional] The first flag argument passed to the function. If not
-#           provided, the function defaults to an empty string.
-# @param $2 [optional] Turns on debug printing if == "debug"
-#
-# @return 0 on success, or the status of the last executed command.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-flag_arg_fwr() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local retval=0
-    local argument
-    argument="${1:-}"  # Use the first argument or default to an empty string
-
-    local message
-    if [[ -n "$argument" ]]; then
-        message="Argument: ${argument}."
-    else
-        message="No arguments."
-    fi
-
-    debug_print "$message" "$debug"
-    retval="$?"
-
-    debug_end "$debug"
-    return "$retval"
-}
 
 # -----------------------------------------------------------------------------
 # @brief Processes command-line arguments.
@@ -5191,6 +4853,27 @@ usage() {
 ### Wsprry Pi Installer Functions
 ############
 
+# -----------------------------------------------------------------------------
+# @brief Initiates the script execution and handles user interaction.
+# @details This function validates the action (`install` or `uninstall`), 
+#          displays an introductory message, and prompts the user for 
+#          confirmation before proceeding. If the script is running in 
+#          terse mode, the prompt is skipped.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global REPO_DISPLAY_NAME The display name of the repository.
+# @global TERSE If set to "true", suppresses user prompts.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if an invalid action is specified or the user cancels.
+#
+# @return Returns 0 if the script proceeds, 1 if the user quits or an invalid 
+#         action is specified.
+#
+# @example
+#   start_script "debug"
+# -----------------------------------------------------------------------------
 start_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -5224,6 +4907,7 @@ start_script() {
     printf "Press any key to continue or 'Q' to quit (continuing install in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
+    local key
     if ! read -n 1 -sr -t 10 key < /dev/tty; then
         key=""  # Assign a default value on timeout
     fi
@@ -5234,7 +4918,8 @@ start_script() {
         [Qq])  # Quit
             debug_print "Quit key pressed. Ending $action_message." "$debug"
             logI "$action_message canceled by user."
-            exit_script "Script canceled" "$debug"
+            debug_end "$debug"
+            return 1
             ;;
         "")  # Timeout or Enter
             debug_print "No key pressed, proceeding with $action_message." "$debug"
@@ -5248,27 +4933,119 @@ start_script() {
     return 0
 }
 
-stop_all_services() {
-    # TODO
-    true
-}
-
-install_wspr_exe() {
+# -----------------------------------------------------------------------------
+# @brief Prompts the user to enable or disable TAPR shutdown button functionality.
+# @details This function asks the user if they have a TAPR button and whether
+#          they would like to enable its shutdown functionality. The choice is
+#          stored in the global variable `USE_TAPR` for later use.
+#
+# @global USE_TAPR Indicates whether TAPR shutdown functionality is enabled.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws None.
+#
+# @return Returns 0 after setting the global variable.
+#
+# @example
+#   set_use_tapr "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+set_use_tapr() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local source_root
-    source_root="$USER_HOME/$REPO_NAME"
-    source_path="$source_root/executables/$WSPR_EXE"
+    local user_input
+
+    printf "\nTAPR Shutdown Button Configuration\n"
+    printf "-----------------------------------\n"
+    printf "The TAPR board includes a shutdown button feature.\n"
+    printf "Would you like to enable the TAPR shutdown button functionality? (y/n): "
+
+    # Read user input and validate response
+    while true; do
+        read -r user_input < /dev/tty
+        case "$user_input" in
+            [Yy]*) 
+                USE_TAPR="true"
+                debug_print "User enabled TAPR shutdown functionality." "$debug"
+                break
+                ;;
+            [Nn]*) 
+                USE_TAPR="false"
+                debug_print "User disabled TAPR shutdown functionality." "$debug"
+                break
+                ;;
+            *) 
+                printf "Invalid input. Please enter 'y' or 'n': "
+                ;;
+        esac
+    done
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Manages the installation or removal of an executable.
+# @details This function installs or removes an executable binary in 
+#          `/usr/local/bin/`. During installation, it verifies the existence 
+#          of the source file, copies it, sets ownership, and adjusts 
+#          permissions. During uninstallation, it removes the executable.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global USER_HOME The user's home directory path.
+# @global REPO_NAME The name of the repository.
+# @global DRY_RUN If set to "true", performs a dry-run without making changes.
+#
+# @param $1 The name of the executable file.
+# @param $2 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if required arguments are missing, the source file 
+#         is not found, or an operation fails.
+#
+# @return Returns 0 on success, or 1 if any operation fails.
+#
+# @example
+#   manage_exe "wsprrypi" "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+manage_exe() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure the executable argument is provided
+    if [[ -z "$1" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: manage_exe <exe_name>"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Declare local variables
+    local executable exe_name source_path exe_path
+
+    # Get from args or associative array
+    executable="$1"
+    exe_name="${executable##*/}"      # Remove path
+    exe_name="${exe_name%.*}"         # Remove extension (if present)
+    source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
+    exe_path="/usr/local/bin/${executable}"
 
     if [[ "$ACTION" == "install" ]]; then
-        logI "Installing '$WSPR_EXE'."
+        logI "Installing $exe_name."
+
+        # Validate source file exists
+        if [[ ! -f "$source_path" ]]; then
+            logE "Error: Source file '$source_path' not found."
+            debug_end "$debug"
+            return 1
+        fi
 
         # Install the application
         debug_print "Copying application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $source_path $WSPR_PATH"
+            logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "sudo cp -f $source_path $WSPR_PATH" "$debug" || {
+            exec_command "Install application" "sudo cp -f $source_path $exe_path" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5278,9 +5055,9 @@ install_wspr_exe() {
         # Change ownership on the application
         debug_print "Changing ownership on application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: sudo chown root:root $WSPR_PATH"
+            logD "Exec: sudo chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "sudo chown root:root $WSPR_PATH" "$debug" || {
+            exec_command "Change ownership on application" "sudo chown root:root $exe_path" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5288,11 +5065,11 @@ install_wspr_exe() {
         fi
 
         # Change permissions on the application to make it executable
-        debug_print  "Changing permissions on application."
+        debug_print "Changing permissions on application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: chmod +x $WSPR_PATH"
+            logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "sudo chmod +x $WSPR_PATH" "$debug" "$debug" || {
+            exec_command "Make app executable" "sudo chmod 755 $exe_path" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5300,14 +5077,14 @@ install_wspr_exe() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$WSPR_EXE'."
+        logI "Removing '$exe_name'."
 
         # Remove the application
-        debug_print "Removing application."
+        debug_print "Removing application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: rm -f $WSPR_PATH"
+            logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "sudo rm -f $WSPR_PATH" "$debug" || {
+            exec_command "Remove application" "sudo rm -f $exe_path" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
@@ -5320,275 +5097,495 @@ install_wspr_exe() {
     debug_end "$debug"
 }
 
-install_wspr_ini() {
+# -----------------------------------------------------------------------------
+# @brief Manages the installation or removal of configuration files.
+# @details This function installs or removes a configuration file. During
+#          installation, it validates the source file, updates the semantic
+#          version placeholder, and sets appropriate permissions. During 
+#          uninstallation, it removes the configuration file.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global USER_HOME The user's home directory path.
+# @global REPO_NAME The name of the repository.
+# @global DRY_RUN If set to "true", performs a dry-run without making changes.
+#
+# @param $1 The name of the configuration file.
+# @param $2 The destination directory for the configuration file.
+# @param $3 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if required arguments are missing, the source file 
+#         is not found, or the target directory does not exist.
+#
+# @return Returns 0 on success, or 1 if any operation fails.
+#
+# @example
+#   manage_config "wsprrypi.ini" "/usr/local/etc" "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+manage_config() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local source_root source_path
-    source_root="$USER_HOME/$REPO_NAME"
-    source_path="$source_root/config/$WSPR_INI"
+    # Ensure the configuration arguments are provided
+    if [[ -z "$1" || -z "$2" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: manage_config <config_file> <config_path>"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Declare local variables
+    local config_file config_name config_path
+    local retval=0  # Initialize return value
+
+    # Get from args or associative array
+    config_file="$1"
+    config_path="$2"
+    config_name="${config_file##*/}"            # Remove path
+    config_name="${config_name%.*}"             # Remove extension (if present)
+    config_path="${LOCAL_CONFIG_DIR}"           # Config files source
+    config_path="${config_path}/${config_file}" # Keeping original file reference
 
     if [[ "$ACTION" == "install" ]]; then
-        logI "Installing '$REPO_TITLE' configuration."
+        logI "Installing '$config_name' configuration."
 
-        # Install the configuration file
-        debug_print "Installing configuration." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $source_path $WSPR_INI_PATH"
-        else
-            exec_command "Copy config file" "sudo cp -f $source_path $WSPR_INI_PATH" "$debug" || {
-                logE "Failed to install config file."
-                debug_end "$debug"
-                return 1
-            }
+        # Validate source file exists
+        if [[ ! -f "$source_path" ]]; then
+            logE "Error: Source file '$source_path' not found."
+            debug_end "$debug"
+            return 1
         fi
 
-        # Change ownership on the config file
-        debug_print  "Changing ownership on configuration file." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: chown root:root $WSPR_INI_PATH"
-        else
-            exec_command "Change ownership on config file" "sudo chown root:root $WSPR_INI_PATH" "$debug" || {
-                logE "Failed to change ownership on config file."
-                debug_end "$debug"
-                return 1
-            }
+        # Validate target directory exists
+        if [[ ! -d "$(dirname "$config_path")" ]]; then
+            logE "Error: Target directory '$(dirname "$config_path")' does not exist."
+            debug_end "$debug"
+            return 1
         fi
 
-        # Change permissions on the configuration file
-        debug_print  "Changing permissions on configuration file" "$debug"
+        # Install the configuration
+        debug_print "Copying configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: chmod 644 $WSPR_INI_PATH"
+            logD "Exec: cp -f $source_path $config_path"
         else
-            exec_command "Change permissions on config file" "sudo chmod 644 $WSPR_INI_PATH" "$debug" || {
-                logE "Failed to change permissions on config file."
-                debug_end "$debug"
-                return 1
-            }
+            exec_command "Install configuration" "sudo cp -f $source_path $config_path" "$debug" || retval=1
+        fi
+
+        # Update version
+        replace_string_in_script "$config_path" "SEMANTIC_VERSION" "$(get_sem_ver "$debug")" "$debug"
+
+        # Change ownership on the configuration
+        debug_print "Changing ownership on configuration." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo chown root:root $config_path"
+        else
+            exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
+        fi
+
+        # Change permissions on the configuration
+        debug_print "Changing permissions on configuration." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: chmod 644 $config_path"
+        else
+            exec_command "Set config permissions" "sudo chmod 644 $config_path" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$REPO_TITLE' configuration."
+        logI "Removing '$config_name' configuration."
 
-        # Remove the configuration file
-        debug_print "Removing configuration file." "$debug"
+        # Remove the configuration
+        debug_print "Removing configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: rm -f $WSPR_INI_PATH"
+            logD "Exec: rm -f $config_path"
         else
-            exec_command "Remove config file" "sudo rm -f $WSPR_INI_PATH" "$debug" || {
-                logE "Failed to remove configuration."
-                debug_end "$debug"
-                return 1
-            }
+            exec_command "Remove configuration" "sudo rm -f $config_path" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
     debug_end "$debug"
+    return "$retval"
 }
 
-create_wspr_service() {
+# -----------------------------------------------------------------------------
+# @brief Manages the installation or removal of a systemd service.
+# @details This function installs or removes a systemd service, including
+#          handling service enablement, starting, stopping, and proper
+#          logging setup. It also ensures the appropriate configuration
+#          for system logs based on the use of syslog.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global USER_HOME The user's home directory path.
+# @global REPO_NAME The name of the repository.
+# @global DRY_RUN If set to "true", performs a dry-run without making changes.
+#
+# @param $1 The path to the daemon executable.
+# @param $2 The ExecStart command for systemd.
+# @param $3 Boolean flag ("true" or "false") to indicate if syslog should be used.
+# @param $4 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if an invalid action is specified or an operation fails.
+#
+# @return Returns 0 on success, or 1 if any operation fails.
+#
+# @example
+#   manage_service "/usr/bin/mydaemon" "/usr/local/bin/mydaemon -D" "false" "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+manage_service() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    # readonly WSPR_EXE="wspr"
-    # readonly WSPR_PATH="/usr/local/bin/$WSPR_EXE"
-    # readonly WSPR_INI="wspr.ini"
-    # readonly WSPR_INI_PATH="/usr/local/etc/$WSPR_INI"
-    # readonly WSPR_SERVICE_FILE="wspr.service"
-    # readonly WSPR_SERVICE_FILE_PATH="/etc/systemd/system/$WSPR_SERVICE_FILE"
-    # readonly WSPR_LOG_PATH="/var/log/$WSPR_EXE/"
+    # Ensure all three arguments are provided
+    if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: manage_service <daemon_exe> <exec_start> <use_syslog>"
+        debug_end "$debug"
+        return 1
+    fi
 
-    # readonly SHUTDOWN_WATCH_EXE="shutdown_watch.py"
-    # readonly SHUTDOWN_WATCH_PATH="/usr/local/bin/$SHUTDOWN_WATCH_EXE"
-    # readonly SHUTDOWN_WATCH_SERVICE_FILE="shutdown_watch.service"
-    # readonly SHUTDOWN_WATCH_SERVICE_FILE_PATH="/etc/systemd/system/$SHUTDOWN_WATCH_SERVICE_FILE"
-    # readonly SHUTDOWN_WATCH_LOG_PATH="/var/log/$WSPR_EXE/"
+    # Get from args
+    local daemon_exe="$1"
+    local exec_start="$2"
+    local use_syslog="$3"
 
-    local source_root source_file service_name
-    source_root="$USER_HOME/$REPO_NAME"
-    service_name="$WSPR_SERVICE_FILE"
-    source_path="$source_root/systemd/$service_name"
+    # Declare local variables
+    local daemon_name
+    local source_path
+    local daemon_systemd_name
+    local service_path
+    local syslog_identifier
+    local log_path
+    local log_std_out
+    local log_std_err
+    local retval=0  # Initialize return value
+
+    daemon_name="${daemon_exe##*/}"     # Remove path
+    daemon_name="${daemon_name%.*}"     # Remove extension (only if there is one)
+    source_path="$LOCAL_SYSTEMD_DIR/generic.service"
+    daemon_systemd_name="${daemon_name}.service"
+    service_path="/lib/systemd/system/${daemon_systemd_name}"
+    syslog_identifier="$daemon_name"    # Use stripped daemon_exe
+    log_path="/var/log/$REPO_NAME"      # Use repo name
+    log_std_out="$log_path/${syslog_identifier}_log"
+    log_std_err="$log_path/${syslog_identifier}_error"
 
     if [[ "$ACTION" == "install" ]]; then
-        # Check if the systemd service already exists
-        if ! systemctl list-unit-files --type=service | grep -q "$service_name"; then
-            logI "Creating systemd service: $service_name."
+        if ! systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
+            logI "Creating systemd service: $daemon_systemd_name."
         else
-            logI "Updating systemd service: $service_name." "$debug"
-            # Stop and disable service
-            if [[ "$DRY_RUN" == "true" ]]; then
-                logD "Stop and disable $service_name (dry-run)."
-            else
-                exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" "$debug" || {
-                    logE "Failed to disable systemd service."
-                    debug_end "$debug"
-                    return 1
-                }
+            logI "Updating systemd service: $daemon_systemd_name." "$debug"
+            if [[ "$DRY_RUN" != "true" ]]; then
+                exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
 
-                exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" "$debug" || {
-                    logE "Failed to install controller."
-                    debug_end "$debug"
-                    return 1
-                }
-                # Check if the service is masked and unmask if necessary
-                if systemctl is-enabled "$service_name" 2>/dev/null | grep -q "^masked$"; then
-                    exec_command "Unmask systemd service" "sudo systemctl unmask $service_name" "$debug" "$debug" || {
-                        logE "Failed to unmask systemd service."
-                        debug_end "$debug"
-                        return 1
-                    }
+                if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
+                    exec_command "Unmask systemd service" "sudo systemctl unmask $daemon_systemd_name" "$debug" || retval=1
                 fi
             fi
         fi
 
         if [[ ! -f "$source_path" ]]; then
             warn "$source_path not found."
-            return 1
+            retval=1
+        elif [[ "$DRY_RUN" != "true" ]]; then
+            exec_command "Copy systemd file" "sudo cp -f $source_path $service_path" "$debug" || retval=1
+            debug_print "Updating $service_path." "$debug"
+
+            if [[ "$use_syslog" == "true" ]]; then
+                modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
+                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "uncomment" "$debug"
+                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "uncomment" "$debug"
+            else
+                modify_comment_lines "$service_path" "StandardOutput=null" "uncomment" "$debug"
+                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "comment" "$debug"
+                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "comment" "$debug"
+            fi
+
+            replace_string_in_script "$service_path" "SEMANTIC_VERSION" "$(get_sem_ver "$debug")" "$debug"
+            replace_string_in_script "$service_path" "DAEMON_NAME" "$daemon_name" "$debug"
+            replace_string_in_script "$service_path" "EXEC_START" "$exec_start" "$debug"
+            replace_string_in_script "$service_path" "SYSLOG_IDENTIFIER" "$syslog_identifier" "$debug"
+            replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
+            replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_err" "$debug"
+
+            exec_command "Change ownership on systemd file" "sudo chown root:root $service_path" "$debug" || retval=1
+            exec_command "Change permissions on systemd file" "sudo chmod 644 $service_path" "$debug" || retval=1
+            exec_command "Create log path" "sudo mkdir -p $log_path" "$debug" || retval=1
+            exec_command "Change ownership on log path" "sudo chown root:root $log_path" "$debug" || retval=1
+            exec_command "Change permissions on log path" "sudo chmod 755 $log_path" "$debug" || retval=1
+            exec_command "Enable systemd service" "sudo systemctl enable $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || retval=1
+            exec_command "Start systemd service" "sudo systemctl restart $daemon_systemd_name" "$debug" || retval=1
         fi
 
-        # Update template
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Installing $service_name (dry-run)."
-        else
-            debug_print "Updating $source_path." "$debug"
-            replace_string_in_script "$source_path" "APP_NAME" "$APP_NAME" "$debug"
-            replace_string_in_script "$source_path" "APP_PATH" "$APP_PATH" "$debug"
-            replace_string_in_script "$source_path" "APP_LOG_PATH" "$APP_LOG_PATH" "$debug"
-            # Install the systemd service file
-            exec_command "Copy systemd file" "sudo cp -f $source_path $SERVICE_FILE" "$debug" || {
-                logE "Failed to copy systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            # Change ownership on the systemd service|| {
-            exec_command "Change ownership on systemd file" "sudo chown root:root $SERVICE_FILE" "$debug" || {
-                logE "Failed to change permissions on systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            # Change permissions on the systemd service file
-            exec_command "Change permissions on systemd file" "sudo chmod 644 $SERVICE_FILE" "$debug" || {
-                logE "Failed to change permissions on systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            # Create log directory if not exist and ensure correct permissions
-            debug_print "Exec: (log path) sudo mkdir -p $APP_LOG_PATH" "$debug"
-            exec_command "Create log path" "sudo mkdir -p $APP_LOG_PATH" "$debug" || {
-                logE "Failed to create log path."
-                debug_end "$debug"
-                return 1
-            }
-            # Change ownership on the log directory
-            exec_command "Change ownership on log path" "sudo chown root:root $APP_LOG_PATH" "$debug" || {
-                logE "Failed to change ownership on log path."
-                debug_end "$debug"
-                return 1
-            }
-            # Change permissions on the log directory
-            exec_command "Change permissions on log path" "sudo chmod 755 $APP_LOG_PATH" "$debug" || {
-                logE "Failed to change permissions on log path."
-                debug_end "$debug"
-                return 1
-            }
-            # Enable the systemd service
-            exec_command "Enable systemd service" "sudo systemctl enable $service_name" "$debug" || {
-                logE "Failed to enable systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            # Reload systemd
-            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || {
-                logE "Failed to reload systemd."
-                debug_end "$debug"
-                return 1
-            }
-        fi
-
-        logI "Systemd service $service_name created."
+        logI "Systemd service $daemon_name created."
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing systemd service: $service_name."
+        logI "Removing systemd service: $daemon_systemd_name."
 
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Remove $service_name (dry-run)."
+        if [[ -f "$service_path" ]]; then
+            if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
+                if systemctl is-active --quiet "$daemon_systemd_name"; then
+                    exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                fi
+
+                if systemctl is-enabled --quiet "$daemon_systemd_name"; then
+                    exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                fi
+            fi
+
+            exec_command "Remove service file" "sudo rm -f $service_path" "$debug" || retval=1
         else
-            # Check if the service unit file exists before proceeding
-            if systemctl list-unit-files | grep -q "^$service_name"; then
-                # Check if the service is active before attempting to stop it
-                if systemctl is-active --quiet "$service_name"; then
-                    exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" || {
-                        logE "Failed to stop systemd service $service_name."
-                        debug_end "$debug"
-                        return 1
-                    }
-                else
-                    debug_print "Service $service_name is not active. Skipping stop." "$debug"
-                fi
-
-                # Check if the service is enabled before attempting to disable it
-                if systemctl is-enabled --quiet "$service_name"; then
-                    exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" || {
-                        logE "Failed to disable systemd service $service_name."
-                        debug_end "$debug"
-                        return 1
-                    }
-                else
-                    debug_print "Service $service_name is not enabled. Skipping disable." "$debug"
-                fi
-            else
-                debug_print "Service unit file for $service_name does not exist. Skipping stop and disable." "$debug"
-            fi
-
-            # Check if the service file exists before attempting to delete it
-            if [[ -f "$SERVICE_FILE" ]]; then
-                exec_command "Remove service file" "sudo rm -f $SERVICE_FILE" "$debug" || {
-                    logE "Failed to remove service file $SERVICE_FILE."
-                    debug_end "$debug"
-                    return 1
-                }
-            else
-                debug_print "Service file $SERVICE_FILE does not exist. Skipping removal." "$debug"
-            fi
-
-            # Check if the log directory exists before attempting to delete it
-            if [[ -d "$APP_LOG_PATH" ]]; then
-                exec_command "Remove logs" "sudo rm -rf $APP_LOG_PATH" "$debug" || {
-                    logE "Failed to remove logs in $APP_LOG_PATH."
-                    debug_end "$debug"
-                    return 1
-                }
-            else
-                debug_print "Log directory $APP_LOG_PATH does not exist. Skipping removal." "$debug"
-            fi
+            debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
 
-        logI "Systemd service $service_name removed."
+        logI "Systemd service $daemon_systemd_name removed."
+
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
     debug_end "$debug"
+    return "$retval"
 }
 
+# -----------------------------------------------------------------------------
+# @brief Manages the installation or removal of web files.
+# @details This function installs or removes web-related files from the 
+#          `$LOCAL_WWW_DIR` source directory to `/var/www/html/$REPO_NAME`. 
+#          During installation, it ensures the target directory exists, copies 
+#          the files, and sets appropriate ownership and permissions. During 
+#          uninstallation, it removes the web directory.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global LOCAL_WWW_DIR The source directory containing web files.
+# @global REPO_NAME The name of the repository, used for the web directory.
+# @global DRY_RUN If set to "true", performs a dry-run without making changes.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if required directories are missing or an operation fails.
+#
+# @return Returns 0 on success, or 1 if any operation fails.
+#
+# @example
+#   manage_web "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+manage_web() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local source_path="$LOCAL_WWW_DIR"
+    local target_path="/var/www/html/$REPO_NAME"
+    local retval=0  # Initialize return value
+
+    if [[ "$ACTION" == "install" ]]; then
+        logI "Installing web files to '$target_path'."
+
+        # Validate source directory exists
+        if [[ ! -d "$source_path" ]]; then
+            logE "Error: Source directory '$source_path' not found."
+            debug_end "$debug"
+            return 1
+        fi
+
+        # Ensure target directory exists
+        debug_print "Creating target web directory if missing." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: mkdir -p $target_path"
+        else
+            exec_command "Create target web directory" "sudo mkdir -p $target_path" "$debug" || retval=1
+        fi
+
+        # Copy web files
+        debug_print "Copying web files from '$source_path' to '$target_path'." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: cp -r $source_path* $target_path/"
+        else
+            exec_command "Copy web files" "sudo cp -r $source_path/* $target_path/" "$debug" || retval=1
+        fi
+
+        # Change ownership and permissions
+        debug_print "Setting permissions for '$target_path'." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo chown -R www-data:www-data $target_path"
+            logD "Exec: sudo chmod -R 755 $target_path"
+        else
+            # Set ownership for the entire directory
+            exec_command "Set ownership" "sudo chown -R www-data:www-data $target_path" "$debug" || retval=1
+
+            # Set correct permissions:
+            # - Directories: `rwxr-xr-x` (755)
+            # - Files: `rw-r--r--` (644)
+            exec_command "Set directory permissions" "sudo find $target_path -type d -exec chmod 755 {} +" "$debug" || retval=1
+            exec_command "Set file permissions" "sudo find $target_path -type f -exec chmod 644 {} +" "$debug" || retval=1
+        fi
+
+    elif [[ "$ACTION" == "uninstall" ]]; then
+        logI "Removing web files from '$target_path'."
+
+        # Remove the web directory
+        debug_print "Removing web directory '$target_path'." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: rm -rf $target_path"
+        else
+            exec_command "Remove web directory" "sudo rm -rf $target_path" "$debug" || retval=1
+        fi
+    else
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
+    fi
+
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Manages the sound module for WsprryPi.
+# @details This function enables or disables the Raspberry Pi sound module
+#          (`snd_bcm2835`) by modifying the ALSA blacklist file. During 
+#          installation, the module is blacklisted to allow WsprryPi to 
+#          generate radio frequencies. During uninstallation, the blacklist 
+#          entry is removed to restore sound functionality.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global REBOOT Indicates whether a system reboot is required.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if an invalid action is specified.
+#
+# @return Returns 0 on success.
+#
+# @example
+#   manage_sound "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+manage_sound() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local blacklist
+    local file
+    local line_count
+
+    blacklist="blacklist snd_bcm2835"
+    file="/etc/modprobe.d/alsa-blacklist.conf"
+
+    if [[ "$ACTION" == "install" ]]; then
+        if [[ ! -f "$file" ]]; then
+            # Create file and add the blacklist line
+            echo "$blacklist" > "$file"
+            REBOOT="true"
+            debug_print "Created $file and disabled sound." "$debug"
+        elif ! grep -Fxq "$blacklist" "$file"; then
+            # Append blacklist line if it doesn't exist
+            echo "$blacklist" >> "$file"
+            REBOOT="true"
+            debug_print "Added blacklist entry to $file." "$debug"
+        else
+            REBOOT="false"
+            debug_print "Sound is already disabled." "$debug"
+        fi
+
+    elif [[ "$ACTION" == "uninstall" ]]; then
+        if [[ -f "$file" ]] && grep -Fxq "$blacklist" "$file"; then
+            line_count=$(wc -l < "$file")
+
+            if [[ "$line_count" -eq 1 ]]; then
+                # If it's the only line, delete the file
+                rm -f "$file"
+                debug_print "Removed $file and re-enabled sound." "$debug"
+            else
+                # Otherwise, remove just the blacklist line
+                sed -i "\|$blacklist|d" "$file"
+                debug_print "Removed blacklist entry from $file." "$debug"
+            fi
+            REBOOT="true"
+        else
+            REBOOT="false"
+            debug_print "Sound is already enabled or no blacklist file exists." "$debug"
+        fi
+    else
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
+    fi
+
+    # Print reboot message only if REBOOT is true
+    if [[ "$REBOOT" == "true" ]]; then
+        printf "\n*Important Note:*\n\n"
+        if [[ "$ACTION" == "install" ]]; then
+            printf "Wsprry Pi uses the same hardware as the sound system to generate\n"
+            printf "radio frequencies. This soundcard has been disabled. You must\n"
+            printf "reboot the Pi with the following command after install for this\n"
+            printf "to take effect:\n\n"
+        else
+            printf "The sound system has been re-enabled. If you wish to use\n"
+            printf "audio on the Raspberry Pi, you must reboot for changes\n"
+            printf "to take effect:\n\n"
+        fi
+        printf "'sudo reboot'\n\n"
+
+        read -rp "Press any key to continue." < /dev/tty
+        echo
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Cleans up the local repository files after installation or uninstallation.
+# @details This function removes the local repository directory unless the script
+#          is being executed from within the repository itself, in which case it
+#          skips cleanup. It respects dry-run mode to simulate deletion without
+#          actually removing files.
+#
+# @global USER_HOME The user's home directory path.
+# @global REPO_NAME The name of the repository.
+# @global IS_REPO Indicates if the script is running inside a repository.
+# @global LOCAL_REPO_DIR The expected repository directory path.
+# @global DRY_RUN If set to "true", performs a dry-run without deleting files.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if the target directory is empty or deletion fails.
+#
+# @return Returns 0 if cleanup succeeds or is skipped, 1 if cleanup fails.
+#
+# @example
+#   cleanup_files_in_directories "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 cleanup_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local dest_root="$USER_HOME/$REPO_NAME"
+    # Declare local variables
+    local dest_root
+    dest_root="$LOCAL_REPO_DIR"
 
-    if [[ "$IS_REPO" == "true" || "$(realpath -m "$dest_root")" == "$(realpath -m "$LOCAL_REPO_DIR")" ]]; then
+    # Ensure target directory is not empty
+    if [[ -z "$dest_root" ]]; then
+        logE "Error: Target directory for cleanup is empty. Aborting."
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Prevent deletion if running inside the repository
+    if [[ -d "$dest_root" && ("$IS_REPO" == "true" || "$(realpath "$dest_root")" == "$(realpath "$LOCAL_REPO_DIR")") ]]; then
         logI "Running from repo, skipping cleanup."
         debug_end "$debug"
-        return
+        return 0
     fi
 
     logI "Deleting local repository tree."
 
     if [[ "$DRY_RUN" == "true" ]]; then
         logD "Delete local repo files (dry-run)."
+        debug_end "$debug"
+        return 0
     else
         # Delete the repository directory
-        exec_command "Delete local repository" " sudo rm -fr $dest_root" "$debug" || {
+        exec_command "Delete local repository" "sudo rm -fr $dest_root" "$debug" || {
             logE "Failed to delete local install files."
             debug_end "$debug"
             return 1
@@ -5599,8 +5596,32 @@ cleanup_files_in_directories() {
     return 0
 }
 
+# -----------------------------------------------------------------------------
+# @brief Finalizes the installation or uninstallation process.
+# @details Logs and displays a completion message based on whether the install
+#          or uninstall was successful or failed. It also provides follow-up
+#          instructions if applicable.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global REPO_DISPLAY_NAME The display name of the repository.
+# @global WSPR_EXE The executable name for WsprryPi.
+#
+# @param $1 The overall success or failure status (0 for success, 1 for failure).
+# @param $2 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if an invalid action is specified.
+#
+# @return Returns 0 on success, or 1 if the process failed.
+#
+# @example
+#   finish_script 0 "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 finish_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Capture overall status
+    local overall_status="$1"
 
     # Validate action
     if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
@@ -5618,176 +5639,133 @@ finish_script() {
         action_message="Uninstallation"
     fi
 
-    # Log completion message
-    logI "$action_message complete: $REPO_DISPLAY_NAME."
-    debug_print "$action_message complete message logged." "$debug"
-
-    # Optionally clear the screen or display a message
-    printf "%s complete: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
-
-    if [[ "$ACTION" == "install" ]]; then
-        # Display follow-up instructions after install
-        printf "\nUse:\n"
-        printf "    \$ sudo %s\n\n" "$WSPR_EXE"
-        printf "... to configure %s.\n\n" "$REPO_DISPLAY_NAME"
+    # Handle success or failure messages
+    if [[ "$overall_status" -eq 0 ]]; then
+        logI "$action_message successful: $REPO_DISPLAY_NAME."
+        debug_print "$action_message completed successfully." "$debug"
+        printf "%s successful: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
     else
-        # Display follow-up instructions after uninstall
+        logE "$action_message failed: $REPO_DISPLAY_NAME."
+        debug_print "$action_message encountered errors." "$debug"
+        printf "%s failed: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Generate hostname and IP address
+    local ip_address
+    ip_address=$(hostname -I | awk '{print $1}')
+
+    # Display follow-up instructions only if install was successful
+    if [[ "$ACTION" == "install" && "$overall_status" -eq 0 ]]; then
+        printf "\n"
+        printf "To configure %s, open the following URL in your browser:\n\n" "$REPO_DISPLAY_NAME"
+
+        printf "  %bhttp://%s.local/wspr%b\n" "${FGBLU}" "$HOSTNAME" "${RESET}"
+        printf "  %bhttp://%s/wspr%b\n\n" "${FGBLU}" "$ip_address" "${RESET}"
+
+        printf "If the hostname URL does not work, try using the IP address.\n"
+        printf "Ensure your device is on the same network and that mDNS is\n"
+        printf "supported by your system.\n\n"
+    elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
         printf "\n%s has been uninstalled. No apt packages have\n" "$REPO_DISPLAY_NAME"
         printf "been removed to prevent impact to other functionality.\n\n"
     fi
 
     debug_end "$debug"
-    return 0
+    return "$overall_status"
 }
 
-install_wsprry_pi() {
+# -----------------------------------------------------------------------------
+# @brief Manages the installation or uninstallation of WsprryPi.
+# @details This function dynamically executes a set of predefined functions to
+#          either install or uninstall WsprryPi and its dependencies. The 
+#          functions are executed in order for installation and in reverse order
+#          for uninstallation. Certain functions are skipped during uninstall.
+#
+# @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
+# @global WSPR_EXE The executable name for WsprryPi.
+# @global WSPR_INI The configuration file name for WsprryPi.
+# @global SHUTDOWN_WATCH_EXE The shutdown watch executable.
+# @global REPO_NAME The repository name for log file management.
+#
+# @param $1 Debug flag for enabling or disabling debug output.
+#
+# @throws Exits with status 1 if an invalid action is specified or any function
+#         in the process fails.
+#
+# @return Returns 0 on success, or 1 if any operation fails.
+#
+# @example
+#   manage_wsprry_pi "debug"
+# -----------------------------------------------------------------------------
+manage_wsprry_pi() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Context Codes:
-    # 0: Script executed via pipe.
-            # THIS_SCRIPT="piped_script"
-            # USE_LOCAL=false
-            # IS_REPO=false
-            # IS_PATH=false
-    # 1: Script executed with `bash` in an unusual way.
-            # THIS_SCRIPT="piped_script"
-            # USE_LOCAL=false
-            # IS_REPO=false
-            # IS_PATH=false
-    # 2: Script executed directly (local or from PATH).
-            # THIS_SCRIPT=$(basename "$0")
-            # USE_LOCAL=true
-            # IS_REPO=false
-            # IS_PATH=false
-    # 3: Script executed from within a GitHub repository.            
-            # THIS_SCRIPT=$(basename "$0")
-            # USE_LOCAL=true
-            # IS_REPO=true
-            # IS_PATH=false
-    # 4: Script executed from a PATH location.
-            # THIS_SCRIPT=$(basename "$0")
-            # USE_LOCAL=true
-            # IS_REPO=false
-            # IS_PATH=true
-
 
     # Define the group of functions to install/uninstall
     local install_group=(
-        # Start script
-        #download_files_in_directories
-        # Stop all services
-        #install_wspr_exe
-        #install_wspr_ini
-        # Create log directories
-        # Install wspr service
-        # Install shutdown watch executable
-        # Install shutdown watch service
-        # Install logrotate config
-        # Disable sound
-        # Start all services
-        #cleanup_files_in_directories
-        # Finish script
+        "download_files_in_directories"
+        "manage_exe \"$WSPR_EXE\""
+        "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
+        "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
+        "manage_exe \"$SHUTDOWN_WATCH_EXE\""
+        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE\" \"true\""
+        "manage_config \"$LOG_ROTATE\" \"/var/log/$REPO_NAME\""
+        "manage_web"
+        "manage_sound"
+        "cleanup_files_in_directories"
     )
 
-    local skip_on_uninstall=(
-        # Stop all services
-        # Start all services
-        # download_files_in_directories
-        # cleanup_files_in_directories
-    )
+    # Define functions to skip on uninstall using an associative array (hashmap)
+    declare -A skip_on_uninstall
+    skip_on_uninstall["download_files_in_directories"]=1
+    skip_on_uninstall["cleanup_files_in_directories"]=1
 
     # Start the script
-    start_script "$ACTION" "$debug"
+    start_script "$debug"
+
+    # Track overall success/failure
+    local overall_status=0
 
     # Iterate over the group of functions and call them with the action and debug flag
+    local group_to_execute=()
     if [[ "$ACTION" == "install" ]]; then
-        local group_to_execute=()
         group_to_execute=("${install_group[@]}")
-
-        for func in "${group_to_execute[@]}"; do
-            debug_print "Running $func() with action: '$ACTION'" "$debug"
-            # Call the function with action and debug flag
-            "$func" "$ACTION" "$debug"
-            local status=$?
-
-            # Check if the function failed
-            if [[ $status -ne 0 ]]; then
-                logE "$func failed with status $status"
-                debug_end "$debug"
-                return 1
-            else
-                debug_print "$func succeeded." "$debug"
-            fi
-        done
     elif [[ "$ACTION" == "uninstall" ]]; then
-        # Reverse the array for uninstall
-        local group_to_execute=()
         mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
-
-        for func in "${group_to_execute[@]}"; do
-            # Skip functions listed in skip_on_uninstall
-            local skip=false
-            for skip_func in "${skip_on_uninstall[@]}"; do
-                if [[ "$func" == "$skip_func" ]]; then
-                    skip=true
-                    break
-                fi
-            done
-
-            if [[ "$skip" == true ]]; then
-                debug_print "Skipping $func during uninstall." "$debug"
-                continue
-            fi
-
-            # Call the function with action and debug flag
-            "$func" "$ACTION" "$debug"
-            local status=$?
-
-            # Check if the function failed
-            if [[ $status -ne 0 ]]; then
-                logE "$func failed with status $status"
-                debug_end "$debug"
-                return 1
-            else
-                debug_print "$func succeeded." "$debug"
-            fi
-        done
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
-    # File cleanup
-    cleanup_files_in_directories "$debug"
+    for func in "${group_to_execute[@]}"; do
+        # Skip functions listed in skip_on_uninstall
+        if [[ -n "${skip_on_uninstall[$func]}" ]]; then
+            debug_print "Skipping $func during uninstall." "$debug"
+            continue
+        fi
 
-    # Finish the script
-    finish_script "$ACTION" "$debug"
+        debug_print "Running $func() with action: '$ACTION'" "$debug"
+
+        # Call the function with action and debug flag
+        eval "$func \"$debug\""
+        local status=$?
+
+        # Check if the function failed
+        if [[ $status -ne 0 ]]; then
+            logE "$func failed with status $status"
+            overall_status=1
+            debug_end "$debug"
+            return 1
+        else
+            debug_print "$func succeeded." "$debug"
+        fi
+    done
+
+    # Finish the script, passing success or failure
+    finish_script "$overall_status" "$debug"
 
     debug_end "$debug"
-    return 0
-}
-
-disable_sound() {
-    local blacklist file retval
-    blacklist="blacklist snd_bcm2835"
-    file="/etc/modprobe.d/alsa-blacklist.conf"
-
-    if grep -Fxq "$blacklist" "$file" 2>/dev/null; then
-        REBOOT="false"
-        return
-    fi
-
-    REBOOT="true"
-    echo "$blacklist" > "$file"
-
-    printf "\n*Important Note:*\n\n"
-    printf "Wsprry Pi uses the same hardware as the sound system to generate\n"
-    printf "radio frequencies. This soundcard has been disabled. You must\n"
-    printf "reboot the Pi with the following command after install for this\n"
-    printf "to take effect:\n\n"
-    printf "'sudo reboot'\n\n"
-
-    read -rp "Press any key to continue." < /dev/tty
-    echo
+    return "$overall_status"
 }
 
 ############
@@ -5798,36 +5776,36 @@ _main() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Check and set up the environment
-    # handle_execution_context "$debug"  # Get execution context and set environment variables
-    # get_proj_params "$debug"           # Get project and git parameters
-    # process_args "$@"                  # Parse command-line arguments
-    # enforce_sudo "$debug"              # Ensure proper privileges for script execution
-    # validate_depends "$debug"          # Ensure required dependencies are installed
-    # validate_sys_accs "$debug"         # Verify critical system files are accessible
-    # validate_env_vars "$debug"         # Check for required environment variables
-    # setup_log "$debug"                 # Setup logging environment
-    # check_bash "$debug"                # Ensure the script is executed in a Bash shell
-    # check_sh_ver "$debug"              # Verify the Bash version meets minimum requirements
-    # check_bitness "$debug"             # Validate system bitness compatibility
-    # check_release "$debug"             # Check Raspbian OS version compatibility
-    # check_arch "$debug"                # Validate Raspberry Pi model compatibility
-    # check_internet "$debug"            # Verify internet connectivity if required
+    handle_execution_context "$debug"  # Get execution context and set environment variables
+    get_proj_params "$debug"           # Get project and git parameters
+    process_args "$@"                  # Parse command-line arguments
+    enforce_sudo "$debug"              # Ensure proper privileges for script execution
+    validate_depends "$debug"          # Ensure required dependencies are installed
+    validate_sys_accs "$debug"         # Verify critical system files are accessible
+    validate_env_vars "$debug"         # Check for required environment variables
+    setup_log "$debug"                 # Setup logging environment
+    check_bash "$debug"                # Ensure the script is executed in a Bash shell
+    check_sh_ver "$debug"              # Verify the Bash version meets minimum requirements
+    check_bitness "$debug"             # Validate system bitness compatibility
+    check_release "$debug"             # Check Raspbian OS version compatibility
+    check_arch "$debug"                # Validate Raspberry Pi model compatibility
+    check_internet "$debug"            # Verify internet connectivity if required
 
     # Print/display the environment
-    # print_system "$debug"              # Log system information
-    # print_version "$debug"             # Log the script version
+    print_system "$debug"           # Log system information
+    print_version "$debug"          # Log the script version
 
-    # Run template steps
-    # start_script "$debug"              # Start the script with instructions
-    # set_time "$debug"                  # Offer to change timezone if default
+    # Install dependencies
+    handle_apt_packages "$debug"
 
-    # process_args "$@" "$debug"         # Process command line argments
-    # handle_apt_packages "$debug"       # Perform APT maintenance and install/update packages
+    # Handle command line arguments
+    process_args "$@" "$debug"
+    
+    # Handle correcting timezone
+    set_time "$debug"
 
-    install_wsprry_pi()                 # Install Wsprry Pi Services
-
-    #do_menu "$debug"                   # Execute menu
-    #finish_script "$debug"             # Finish the script with final instructions
+    # Install or uninstall Wsprry Pi services
+    #manage_wsprry_pi "$debug"      
 
     debug_end "$debug"
     return 0
@@ -5857,3 +5835,6 @@ debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 main "$@" "$debug"
 debug_end "$debug"
 exit $?
+
+# TODO:  Make sure all git and especially SEM_VER return valid if not in a repo
+# TODO: Check to make all local variables are declared
