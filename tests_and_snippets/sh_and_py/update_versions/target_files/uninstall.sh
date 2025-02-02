@@ -2,7 +2,7 @@
 #
 # This file is part of WsprryPi.
 #
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 #
 # WsprryPi is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ VERSION="1.2.1-update-copyright+84.d160d4b-dirty"
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"

@@ -6,7 +6,7 @@
  * active).
  * 
  * Copyright (C) @threeme3 (unknown dates)
- * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  * 
  * WsprryPi is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
