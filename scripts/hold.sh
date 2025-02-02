@@ -206,11 +206,3 @@ check_file() {
         return 0  # File does not exist, proceed with installation
     fi
 }
-
-############
-### Main function
-############
-
-main() {
-    do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
-}

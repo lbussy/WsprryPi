@@ -5621,7 +5621,7 @@ finish_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Capture overall status
-    local overall_status="$1"
+    local overall_status="${1:-1}"  # Default to 1 (failure) if empty
 
     # Validate action
     if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
@@ -5655,6 +5655,9 @@ finish_script() {
     # Generate hostname and IP address
     local ip_address
     ip_address=$(hostname -I | awk '{print $1}')
+    if [[ -z "$ip_address" ]]; then
+        ip_address="unknown_ip"
+    fi
 
     # Display follow-up instructions only if install was successful
     if [[ "$ACTION" == "install" && "$overall_status" -eq 0 ]]; then
@@ -5667,9 +5670,16 @@ finish_script() {
         printf "If the hostname URL does not work, try using the IP address.\n"
         printf "Ensure your device is on the same network and that mDNS is\n"
         printf "supported by your system.\n\n"
+
+        if [[ "${REBOOT:-false}" == "true" ]]; then
+            printf "Remember to reboot to disable your soundcard before transmission.\n\n"
+        fi
     elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
         printf "\n%s has been uninstalled. No apt packages have\n" "$REPO_DISPLAY_NAME"
         printf "been removed to prevent impact to other functionality.\n\n"
+        if [[ "${REBOOT:-false}" == "true" ]]; then
+            printf "Remember to reboot to re-enable your soundcard.\n\n"
+        fi
     fi
 
     debug_end "$debug"
