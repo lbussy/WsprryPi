@@ -7,7 +7,7 @@ IFS=$'\n\t'
 # @brief Updates and manages WsprryPi scripts and services.
 #
 # @details
-# This script updates WsprryPi-related files, manages the shutdown button service, 
+# This script updates WsprryPi-related files, manages the shutdown button service,
 # and ensures proper setup and functionality of the `wspr` service.
 #
 # @author Lee Bussy

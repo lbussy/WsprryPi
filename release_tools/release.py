@@ -6,8 +6,8 @@
 # @brief Project Header Update Script for WsprryPi project.
 #
 # @details
-# This script automates the process of updating header information in project files, 
-# including copyright and versioning. It processes supported files, handles version 
+# This script automates the process of updating header information in project files,
+# including copyright and versioning. It processes supported files, handles version
 # and copyright updates, and ensures that certain sections (such as open-source license blocks)
 # are excluded from the updates. The script also handles logging, file backups,
 # and compilation if enabled in the configuration.

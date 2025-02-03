@@ -1,13 +1,13 @@
 /**
  * @file ini.c
  * @brief A simple INI file parser implementation.
- * 
+ *
  * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
  * active).
- * 
+ *
  * However, the inih library itself is distributed under the New BSD license:
  * Copyright (c) 2009-2020, Ben Hoyt, All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -18,7 +18,7 @@
  *     * Neither the name of Ben Hoyt nor the names of its contributors
  *       may be used to endorse or promote products derived from this software
  *       without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY BEN HOYT ''AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,9 +29,9 @@
  * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  * For more information about inih, see: https://github.com/benhoyt/inih
- * 
+ *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 

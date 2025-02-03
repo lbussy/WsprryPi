@@ -1,23 +1,23 @@
 /**
  * @file lcblog.cpp
  * @brief Provides unit tests for the LCBLog class.
- * 
+ *
  * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
  * active).
- * 
+ *
  * Copyright (C) @threeme3 (unknown dates)
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
- * 
+ *
  * WsprryPi is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
@@ -36,7 +36,7 @@
 
 /**
  * @brief Unit test for checking multiple logS calls in Daemon mode.
- * 
+ *
  * This function logs multiple messages to test whether each log message
  * appears on a separate line in Daemon mode.
  */
@@ -91,7 +91,7 @@ void testDaemonLoggingMultipleCalls()
 
 /**
  * @brief Unit test for Daemon mode logging behavior.
- * 
+ *
  * This function logs multiple messages in Daemon mode and validates whether
  * the log messages appear on separate lines.
  */
@@ -146,8 +146,8 @@ void testDaemonLogging()
 
 /**
  * @brief Unit tests for the LCBLog class.
- * 
- * This function tests the `crush` function, which processes a string to 
+ *
+ * This function tests the `crush` function, which processes a string to
  * remove extraneous spaces and fix formatting issues.
  */
 void testCrush()
@@ -193,8 +193,8 @@ void testCrush()
 
 /**
  * @brief Unit tests for empty string logging behavior.
- * 
- * This function simulates the behavior of logging an empty string and 
+ *
+ * This function simulates the behavior of logging an empty string and
  * validates the output.
  */
 void testEmptyLogging()
@@ -208,7 +208,7 @@ void testEmptyLogging()
 
 /**
  * @brief Unit tests for logging functionality.
- * 
+ *
  * This function tests standard and error output logging in both Daemon mode
  * and non-Daemon mode.
  */
@@ -236,7 +236,7 @@ void testLogging()
 
 /**
  * @brief Main function to run unit tests for LCBLog.
- * 
+ *
  * This function runs all unit tests to ensure the logging system works
  * as expected.
  */

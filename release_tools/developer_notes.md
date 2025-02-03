@@ -15,7 +15,7 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 Any references to `{hostname}` should be replaced with the hostname of your target Pi.
 
 1. If you are on Windows, have [Open SSH](https://windowsloop.com/install-openssh-server-windows-11/) installed.
-   
+
 2. Check that you have an SSH key generated on your system:
 
    * Linux or Mac (one line):
@@ -62,7 +62,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
    * Exit back out
 
 4. Copy keys to host with (enter target host password when asked):
-   
+
    ``` bash
    ssh-copy-id pi@{hostname}.local
    ```
@@ -125,7 +125,7 @@ If you are going to use VS Code from your workstation:
    git clone https://github.com/lbussy/WsprryPi.git
    cd ~/WsprryPi/
    ```
-  
+
    (This lets the installer install everything, but then you clone the repo after.)
 
 6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:

@@ -22,8 +22,8 @@
 @file make_version.py
 @brief Generate a version string based on Git repository state.
 
-This script produces a version string based on the current Git branch, tag, commit count, 
-short hash, and whether there are uncommitted changes. It adheres to semantic versioning 
+This script produces a version string based on the current Git branch, tag, commit count,
+short hash, and whether there are uncommitted changes. It adheres to semantic versioning
 principles when applicable.
 """
 

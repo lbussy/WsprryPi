@@ -49,7 +49,7 @@ using namespace std;
 #define F_XTAL     (19200000.0)
 #ifdef RPI4
 #define F_PLLD_CLK (750000000.0)
-#else 
+#else
 #ifdef RPI23
 #define F_PLLD_CLK (500000000.0)
 #endif

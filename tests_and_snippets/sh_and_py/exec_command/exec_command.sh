@@ -106,7 +106,7 @@ readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to false if not specifi
 # @type string
 # @brief Flag indicating if internet connectivity is required.
 # @details
-# Controls whether the script should verify internet connectivity during initialization. 
+# Controls whether the script should verify internet connectivity during initialization.
 # This can be overridden by setting the `REQUIRE_INTERNET` environment variable.
 #
 # Possible values:
@@ -130,7 +130,7 @@ readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not 
 ##
 # @var MIN_OS
 # @brief Specifies the minimum supported OS version.
-# @details This variable defines the lowest OS version that the script can run on. 
+# @details This variable defines the lowest OS version that the script can run on.
 # It should be updated as compatibility requirements change.
 # @default 11
 ##
@@ -204,7 +204,7 @@ declare LOG_TO_FILE="${LOG_TO_FILE:-true}"  # Default to blank if not set.
 ##
 # @var LOG_FILE
 # @brief Specifies the path to the log file.
-# @details Defaults to blank if not provided. This can be set externally to 
+# @details Defaults to blank if not provided. This can be set externally to
 # specify a custom log file path.
 ##
 declare LOG_FILE="${LOG_FILE:-}"  # Use the provided LOG_FILE or default to blank.
@@ -221,7 +221,7 @@ readonly FALLBACK_NAME="${FALLBACK_NAME:-install.sh}"  # Default fallback name i
 ##
 # @var LOG_LEVEL
 # @brief Specifies the logging verbosity level.
-# @details Defaults to "DEBUG" if not set. Other possible levels can be defined 
+# @details Defaults to "DEBUG" if not set. Other possible levels can be defined
 # depending on script requirements (e.g., INFO, WARN, ERROR).
 # @default "DEBUG"
 ##
@@ -232,7 +232,7 @@ declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set
 # @type array
 # @brief List of required external commands for the script.
 # @details
-# This array contains the names of commands that the script relies on. Each command is checked 
+# This array contains the names of commands that the script relies on. Each command is checked
 # for availability at runtime. The script may fail if these dependencies are not installed or accessible.
 # - Ensure all required commands are included.
 # - Use a dependency-checking function to verify their presence.
@@ -266,7 +266,7 @@ declare -ar ENV_VARS_BASE=(
 # @type array
 # @brief Final list of required environment variables.
 # @details
-# This array extends `ENV_VARS_BASE` by conditionally including `SUDO_USER` if the script 
+# This array extends `ENV_VARS_BASE` by conditionally including `SUDO_USER` if the script
 # requires root privileges (`REQUIRE_SUDO=true`).
 # - `SUDO_USER`: Identifies the user who invoked the script using sudo.
 # - Dynamically constructed during runtime.
@@ -281,8 +281,8 @@ fi
 # @var COLUMNS
 # @brief Terminal width in columns.
 # @details
-# The `COLUMNS` variable represents the width of the terminal in characters. 
-# If not already set by the environment, it defaults to 80 columns. 
+# The `COLUMNS` variable represents the width of the terminal in characters.
+# If not already set by the environment, it defaults to 80 columns.
 # This can be overridden externally by setting the `COLUMNS` environment variable.
 # @default 80
 ##
@@ -293,7 +293,7 @@ COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 # @type array
 # @brief List of critical system files to check.
 # @details
-# Contains absolute paths to system files that the script depends on. 
+# Contains absolute paths to system files that the script depends on.
 # These files must be both present and readable to ensure proper execution of the script.
 # - `/etc/os-release`: Contains operating system identification data.
 # - `/proc/device-tree/compatible`: Identifies the hardware compatibility (commonly used in embedded systems).
@@ -309,8 +309,8 @@ readonly SYSTEM_READS
 # @type array
 # @brief List of required APT packages.
 # @details
-# Specifies the names of APT packages that the script depends on. These packages 
-# should be available in the system's default package repository and will be 
+# Specifies the names of APT packages that the script depends on. These packages
+# should be available in the system's default package repository and will be
 # checked or installed if missing.
 #
 # Packages included:
@@ -329,7 +329,7 @@ readonly APTPACKAGES=(
 # @type string
 # @brief Flag to enable stack trace logging for warnings.
 # @details
-# Controls whether stack traces are printed alongside warning messages. 
+# Controls whether stack traces are printed alongside warning messages.
 # This is useful for debugging and tracking the script's execution path.
 #
 # Possible values:
@@ -886,8 +886,8 @@ check_sh_ver() {
         return  # Skip version check
     fi
 
-    if ((BASH_VERSINFO[0] < ${required_version%%.*} || 
-         (BASH_VERSINFO[0] == ${required_version%%.*} && 
+    if ((BASH_VERSINFO[0] < ${required_version%%.*} ||
+         (BASH_VERSINFO[0] == ${required_version%%.*} &&
           BASH_VERSINFO[1] < ${required_version##*.}))); then
         die 1 "This script requires Bash version $required_version or newer."
     fi
@@ -1165,7 +1165,7 @@ log_message() {
 ##
 # @brief Log a message at the DEBUG level.
 #
-# This function logs messages with the DEBUG log level, typically used for detailed 
+# This function logs messages with the DEBUG log level, typically used for detailed
 # debugging information useful during development or troubleshooting.
 #
 # @param $1 Main log message.
@@ -1753,11 +1753,11 @@ EOF
         read -n 1 -s -r -p "Press any key when you are ready to proceed or 'Q' to quit. " key < /dev/tty
         echo
         case "$key" in
-            [Qq]) 
+            [Qq])
                 logI "Installation canceled by user."
                 exit 0
                 ;;
-            *) 
+            *)
                 break
                 ;;
         esac
@@ -1803,11 +1803,11 @@ set_time() {
     while true; do
         read -rp "Is this correct? [y/N]: " yn < /dev/tty
         case "$yn" in
-            [Yy]*) 
+            [Yy]*)
                 logI "Timezone confirmed on $current_date"
                 break
                 ;;
-            [Nn]* | *) 
+            [Nn]* | *)
                 dpkg-reconfigure tzdata
                 logI "Timezone reconfigured on $current_date"
                 break
@@ -1987,7 +1987,7 @@ finish_script() {
             echo "A reboot is required to complete functionality."
             read -rp "Reboot now? [Y/n]: " reboot_choice < /dev/tty
             case "$reboot_choice" in
-                [Yy]* | "") 
+                [Yy]* | "")
                     logI "Rebooting the system as requested."
                     sudo reboot
                     ;;

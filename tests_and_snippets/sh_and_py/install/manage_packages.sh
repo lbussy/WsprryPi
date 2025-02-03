@@ -4,8 +4,8 @@
 # @brief Script to manage package installation, upgrading, and uninstallation.
 #
 # @description
-#   This script provides options to install/upgrade or uninstall the packages 
-#   defined in the APTPACKAGES list. It suppresses command output and displays 
+#   This script provides options to install/upgrade or uninstall the packages
+#   defined in the APTPACKAGES list. It suppresses command output and displays
 #   custom success or failure messages for each operation.
 #
 # @todo Extend support for dynamic package lists passed as arguments.

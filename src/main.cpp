@@ -1,23 +1,23 @@
 /**
  * @file main.cpp
- * @brief 
- * 
+ * @brief
+ *
  * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
  * active).
- * 
+ *
  * Copyright (C) @threeme3 (unknown dates)
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
- * 
+ *
  * WsprryPi is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
@@ -1201,8 +1201,8 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     else
     {
-        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed 
-                                 << "A test tone will be generated at frequency " 
+        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed
+                                 << "A test tone will be generated at frequency "
                                  << config.test_tone / 1e6 << " MHz.").str());
         if (config.self_cal)
         {

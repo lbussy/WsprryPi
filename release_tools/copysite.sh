@@ -50,7 +50,7 @@ get_repo_root() {
 # -----------------------------------------------------------------------------
 deploy_website() {
     local web_dir="/var/www/html/wspr"
-    
+
     # Remove existing directory and recreate it
     sudo rm -fr "$web_dir"
     sudo mkdir -p "$web_dir"

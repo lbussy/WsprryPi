@@ -6,8 +6,8 @@
 # @brief Configuration script for updating headers in the WsprryPi project.
 #
 # @details
-# This script manages configurations for updating headers in project files, 
-# including support for dry-run functionality, logging, license exclusions, 
+# This script manages configurations for updating headers in project files,
+# including support for dry-run functionality, logging, license exclusions,
 # and more.
 #
 # @par License:

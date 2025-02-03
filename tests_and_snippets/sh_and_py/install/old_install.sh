@@ -449,7 +449,7 @@ copy_file() {
 
     git_raw=$(remove_slash "$GIT_RAW")
     git_repo=$(remove_slash "$GIT_BRCH")
-    
+
     file_path="$script_path/$file_name.$extension"
     remote_url="$git_raw/$git_repo/scripts"
 
@@ -673,7 +673,7 @@ do_www() {
     if [ ! -d "$www_dir" ]; then
         mkdir "$www_dir"
     fi
-    
+
     # Get the list of files
     api_url=$(remove_slash "$GIT_API")
     api_url="$api_url/contents/$directory?ref=$BRANCH"

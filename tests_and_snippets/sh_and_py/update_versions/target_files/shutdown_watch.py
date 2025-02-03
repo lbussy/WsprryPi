@@ -27,7 +27,7 @@ If a shutdown signal is detected via a button press or the presence of the
 STOP_FILE, it initiates a system shutdown. It also supports a debug mode
 to test behavior without actually shutting down the system.
 
-@note This script must be run with root privileges to access GPIO and 
+@note This script must be run with root privileges to access GPIO and
 shutdown functionalities.
 """
 
@@ -284,7 +284,7 @@ def process_arguments():
         help="Enable debug mode. Logs actions but takes no shutdown actions."
     )
     parser.add_argument(
-        "-D", "--daemon", 
+        "-D", "--daemon",
         action="store_true",
         help="Enable daemon mode. Output/logs will have date/time stamp."
     )

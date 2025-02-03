@@ -31,7 +31,7 @@
     ? How would you like to authenticate GitHub CLI? Login with a web browser
 
     ! First copy your one-time code: XXXX-XXXX
-    Press Enter to open github.com in your browser... 
+    Press Enter to open github.com in your browser...
     ✓ Authentication complete.
     - gh config set -h github.com git_protocol https
     ✓ Configured git protocol
@@ -42,7 +42,7 @@
 - MOTD?
     ``` bash
     Linux wpsd 6.1.0-rpi7-rpi-v7 #1 SMP Raspbian 1:6.1.63-1+rpt1 (2023-11-24) armv7l
-    _      _____  _______ 
+    _      _____  _______
     | | /| / / _ \/ __/ _ \
     | |/ |/ / ___/\ \/ // /
     |__/|__/_/  /___/____/
@@ -64,7 +64,7 @@
     [i] WPSD command-line tools are all prefixed with "wpsd-".
         Simply type wpsd- and then the TAB key twice to see a list.
 
-    pi-star@wpsd:~ 
+    pi-star@wpsd:~
     ```
 
 ### Fis in this iteration

@@ -87,30 +87,6 @@ copy_file_generic() {
     fi
 }
 
-copy_file() {
-    local file_name extension script_path file_path remote_url local_scripts_dir
-    file_name="$1"
-    extension=$(remove_dot "$2")
-    script_path=$(remove_slash "$3")
-    local_scripts_dir=$(remove_slash "$LOCAL_SCRIPTS_DIR")
-
-    git_raw=$(remove_slash "$GIT_RAW")
-    git_repo=$(remove_slash "$GIT_BRCH")
-    
-    file_path="$script_path/$file_name.$extension"
-    remote_url="$git_raw/$git_repo/scripts"
-
-    copy_file_generic "$file_name" "$extension" "$local_scripts_dir" "$file_path" "$remote_url"
-
-    # Set permissions
-    chown root:root "$file_path"
-    if file "$file_path" | grep -q executable; then
-        chmod 0755 "$file_path"
-    else
-        chmod 0644 "$file_path"
-    fi
-}
-
 extract_semantic_version() {
     # Function to extract semantic version from a string
     local line="$1"
@@ -134,7 +110,7 @@ strip_pre_release() {
 }
 
 check_file() {
-    local file_name script_path verchk yn file_path
+    local file_name script_path yn file_path
     local installed_version stripped_installed_version
     local available_version stripped_available_version
     file_name="$1"
