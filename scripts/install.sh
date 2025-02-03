@@ -126,7 +126,7 @@ fi
 # -----------------------------------------------------------------------------
 # @var ACTION
 # @brief Determines whether the script runs in "install" or "uninstall" mode.
-# @details This variable controls whether the script installs or uninstalls 
+# @details This variable controls whether the script installs or uninstalls
 #          the systemd service. If not explicitly set, it defaults to
 #          "install". The script checks this variable to execute the
 #          appropriate actions.
@@ -153,12 +153,12 @@ declare DRY_RUN="${DRY_RUN:-false}"
 
 # -----------------------------------------------------------------------------
 # @brief Defines global repository-related variables.
-# @details These variables are used to determine the repository context, 
-#          including whether the script is running inside a local Git 
-#          repository or fetching data remotely. Default values are set 
+# @details These variables are used to determine the repository context,
+#          including whether the script is running inside a local Git
+#          repository or fetching data remotely. Default values are set
 #          to ensure fallback behavior when values are unset.
 #
-# @global IS_REPO Boolean flag indicating if the script is running inside 
+# @global IS_REPO Boolean flag indicating if the script is running inside
 #                 a local Git repository (default: false).
 # @global REPO_ORG The GitHub organization or user associated with the repository.
 # @global REPO_NAME The name of the GitHub repository.
@@ -182,7 +182,7 @@ declare GIT_CLONE_BASE="https://github.com"
 # -----------------------------------------------------------------------------
 # @var USE_TAPR
 # @brief Indicates whether the TAPR shutdown button functionality is enabled.
-# @details This global variable is set to "true" if the user opts to enable 
+# @details This global variable is set to "true" if the user opts to enable
 #          the TAPR shutdown button feature, otherwise it defaults to "false".
 #          The value is determined via user input during installation.
 #
@@ -212,22 +212,22 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 # -----------------------------------------------------------------------------
 # @var WSPR_EXE
 # @brief The executable name for WsprryPi.
-# @details This variable holds the name of the main WsprryPi executable that 
+# @details This variable holds the name of the main WsprryPi executable that
 #          will be installed in `/usr/local/bin/` and used for signal processing.
 #
 # @var WSPR_INI
 # @brief The configuration file for WsprryPi.
-# @details This variable specifies the name of the WsprryPi configuration file, 
+# @details This variable specifies the name of the WsprryPi configuration file,
 #          typically stored in `/usr/local/etc/`, containing user settings.
 #
 # @var LOG_ROTATE
 # @brief The log rotation configuration file.
-# @details This variable defines the logrotate configuration file, used to manage 
+# @details This variable defines the logrotate configuration file, used to manage
 #          WsprryPi logs under `/var/log/wspr/` by limiting file size and retention.
 #
 # @var SHUTDOWN_WATCH_EXE
 # @brief The shutdown monitoring script.
-# @details This variable holds the name of the shutdown watch script, which 
+# @details This variable holds the name of the shutdown watch script, which
 #          monitors the TAPR shutdown button functionality to enable safe shutdown.
 # -----------------------------------------------------------------------------
 readonly WSPR_EXE="wspr"
@@ -295,7 +295,7 @@ declare CONSOLE_STATE="${CONSOLE_STATE:-$USE_CONSOLE}"
 # TERSE=false # Enables verbose logging mode.
 # ./install.sh
 # -----------------------------------------------------------------------------
-declare TERSE="${TERSE:-false}"
+declare TERSE="${TERSE:-true}"
 
 # -----------------------------------------------------------------------------
 # @var REQUIRE_INTERNET
@@ -1575,10 +1575,10 @@ remove_slash() {
 
 # -----------------------------------------------------------------------------
 # @brief Modify lines in a file based on a given suffix and action.
-# @details This function searches for lines in a file that end with a given 
-#          suffix and either comments or uncomments them based on the specified 
-#          action. Commenting adds a "# " prefix if it is not already present, 
-#          while uncommenting removes the "#" and any following whitespace but 
+# @details This function searches for lines in a file that end with a given
+#          suffix and either comments or uncomments them based on the specified
+#          action. Commenting adds a "# " prefix if it is not already present,
+#          while uncommenting removes the "#" and any following whitespace but
 #          retains leading spaces.
 #
 # @param $1 Filename to process.
@@ -1587,7 +1587,7 @@ remove_slash() {
 #
 # @global None.
 #
-# @throws Exits with an error if the file does not exist, an invalid action is 
+# @throws Exits with an error if the file does not exist, an invalid action is
 #         provided, or a temporary file cannot be created.
 #
 # @return 0 on success, non-zero on failure.
@@ -1652,9 +1652,9 @@ modify_comment_lines() {
 
 # -----------------------------------------------------------------------------
 # @brief Replace a placeholder string in a file.
-# @details This function searches for a given string within a file, where the 
-#          string is bordered by "%" characters (e.g., "%SEARCH_STRING%"). If 
-#          found, it replaces the entire placeholder (including "%" signs) with 
+# @details This function searches for a given string within a file, where the
+#          string is bordered by "%" characters (e.g., "%SEARCH_STRING%"). If
+#          found, it replaces the entire placeholder (including "%" signs) with
 #          the specified replacement string.
 #
 # @param $1 Path to the file to modify.
@@ -1685,7 +1685,7 @@ replace_string_in_script() {
     fi
 
     local pattern="%${search_string}%"
-    
+
     # Use sed to replace all occurrences of %SEARCH_STRING% with REPLACE_STRING
     sed -i "s|${pattern}|${replace_string}|g" "$file_path"
 
@@ -3914,9 +3914,9 @@ get_sem_ver() {
 # -----------------------------------------------------------------------------
 # @brief Retrieves and sets repository-related project parameters.
 # @details This function initializes and exports key repository variables
-#          based on the execution context. If the script is running inside 
-#          a GitHub repository, it gathers metadata such as organization, 
-#          repository name, branch, and tags. Otherwise, it configures remote 
+#          based on the execution context. If the script is running inside
+#          a GitHub repository, it gathers metadata such as organization,
+#          repository name, branch, and tags. Otherwise, it configures remote
 #          URLs for accessing the repository.
 #
 # @global REPO_ORG The GitHub organization or user associated with the repository.
@@ -4855,20 +4855,20 @@ usage() {
 
 # -----------------------------------------------------------------------------
 # @brief Initiates the script execution and handles user interaction.
-# @details This function validates the action (`install` or `uninstall`), 
-#          displays an introductory message, and prompts the user for 
-#          confirmation before proceeding. If the script is running in 
+# @details This function validates the action (`install` or `uninstall`),
+#          displays an introductory message, and prompts the user for
+#          confirmation before proceeding. If the script is running in
 #          terse mode, the prompt is skipped.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
-# @global REPO_DISPLAY_NAME The display name of the repository.
+# @global REPO_TITLE The display name of the repository.
 # @global TERSE If set to "true", suppresses user prompts.
 #
 # @param $1 Debug flag for enabling or disabling debug output.
 #
 # @throws Exits with status 1 if an invalid action is specified or the user cancels.
 #
-# @return Returns 0 if the script proceeds, 1 if the user quits or an invalid 
+# @return Returns 0 if the script proceeds, 1 if the user quits or an invalid
 #         action is specified.
 #
 # @example
@@ -4895,7 +4895,7 @@ start_script() {
 
     # Check terse mode
     if [[ "${TERSE:-false}" == "true" ]]; then
-        logI "$REPO_DISPLAY_NAME $action_message beginning."
+        logI "$REPO_TITLE $action_message beginning."
         debug_print "Skipping interactive message due to terse mode." "$debug"
         debug_end "$debug"
         return 0
@@ -4903,7 +4903,7 @@ start_script() {
 
     # Prompt user for input
     printf "\n"
-    printf "Starting %s for: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+    printf "Starting %s for: %s.\n" "$action_message" "$REPO_TITLE"
     printf "Press any key to continue or 'Q' to quit (continuing install in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
@@ -4956,30 +4956,40 @@ set_use_tapr() {
 
     local user_input
 
-    printf "\nTAPR Shutdown Button Configuration\n"
-    printf "-----------------------------------\n"
-    printf "The TAPR board includes a shutdown button feature.\n"
-    printf "Would you like to enable the TAPR shutdown button functionality? (y/n): "
+    # Assume "Y" if TERSE is enabled
+    if [[ "${TERSE:-false}" == "true" ]]; then
+        USE_TAPR="true"
+        logI "Automatically enabling TAPR shutdown functionality." "$debug"
+        debug_end "$debug"
+        return 0
+    else
+        printf "\nTAPR Shutdown Button Configuration\n"
+        printf "%s\n" "-----------------------------------"
+        printf "The TAPR board includes a shutdown button feature.\n"
+        printf "Would you like to enable the TAPR shutdown button functionality? (y/n): "
 
-    # Read user input and validate response
-    while true; do
-        read -r user_input < /dev/tty
-        case "$user_input" in
-            [Yy]*) 
-                USE_TAPR="true"
-                debug_print "User enabled TAPR shutdown functionality." "$debug"
-                break
-                ;;
-            [Nn]*) 
-                USE_TAPR="false"
-                debug_print "User disabled TAPR shutdown functionality." "$debug"
-                break
-                ;;
-            *) 
-                printf "Invalid input. Please enter 'y' or 'n': "
-                ;;
-        esac
-    done
+        # Read user input and validate response
+        while true; do
+            read -r user_input < /dev/tty
+            case "$user_input" in
+                [Yy]* | "")  # Default to Yes if Enter is pressed
+                    USE_TAPR="true"
+                    printf "\n"
+                    logI "Enabling TAPR button functionality." "$debug"
+                    break
+                    ;;
+                [Nn]*)
+                    USE_TAPR="false"
+                    printf "\n"
+                    logI "Not enabling TAPR button functionality." "$debug"
+                    break
+                    ;;
+                *)
+                    printf "Invalid input. Please enter 'y' or 'n': "
+                    ;;
+            esac
+        done
+    fi
 
     debug_end "$debug"
     return 0
@@ -4987,9 +4997,9 @@ set_use_tapr() {
 
 # -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of an executable.
-# @details This function installs or removes an executable binary in 
-#          `/usr/local/bin/`. During installation, it verifies the existence 
-#          of the source file, copies it, sets ownership, and adjusts 
+# @details This function installs or removes an executable binary in
+#          `/usr/local/bin/`. During installation, it verifies the existence
+#          of the source file, copies it, sets ownership, and adjusts
 #          permissions. During uninstallation, it removes the executable.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
@@ -5000,7 +5010,7 @@ set_use_tapr() {
 # @param $1 The name of the executable file.
 # @param $2 Debug flag for enabling or disabling debug output.
 #
-# @throws Exits with status 1 if required arguments are missing, the source file 
+# @throws Exits with status 1 if required arguments are missing, the source file
 #         is not found, or an operation fails.
 #
 # @return Returns 0 on success, or 1 if any operation fails.
@@ -5101,7 +5111,7 @@ manage_exe() {
 # @brief Manages the installation or removal of configuration files.
 # @details This function installs or removes a configuration file. During
 #          installation, it validates the source file, updates the semantic
-#          version placeholder, and sets appropriate permissions. During 
+#          version placeholder, and sets appropriate permissions. During
 #          uninstallation, it removes the configuration file.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
@@ -5113,7 +5123,7 @@ manage_exe() {
 # @param $2 The destination directory for the configuration file.
 # @param $3 Debug flag for enabling or disabling debug output.
 #
-# @throws Exits with status 1 if required arguments are missing, the source file 
+# @throws Exits with status 1 if required arguments are missing, the source file
 #         is not found, or the target directory does not exist.
 #
 # @return Returns 0 on success, or 1 if any operation fails.
@@ -5134,16 +5144,16 @@ manage_config() {
     fi
 
     # Declare local variables
-    local config_file config_name config_path
+    local config_file config_name config_path source_path
     local retval=0  # Initialize return value
 
     # Get from args or associative array
     config_file="$1"
     config_path="$2"
-    config_name="${config_file##*/}"            # Remove path
-    config_name="${config_name%.*}"             # Remove extension (if present)
-    config_path="${LOCAL_CONFIG_DIR}"           # Config files source
-    config_path="${config_path}/${config_file}" # Keeping original file reference
+    config_name="${config_file##*/}"                    # Remove path
+    config_name="${config_name%.*}"                     # Remove extension (if present)
+    source_path="${LOCAL_CONFIG_DIR}/${config_file}"    # Config files source
+    config_path="${config_path}/${config_file}"         # Keeping original file reference
 
     if [[ "$ACTION" == "install" ]]; then
         logI "Installing '$config_name' configuration."
@@ -5176,9 +5186,17 @@ manage_config() {
         # Change ownership on the configuration
         debug_print "Changing ownership on configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: sudo chown root:root $config_path"
+            if [[ "$config_file" == "wspr.ini" ]]; then
+                logD "Exec: sudo chown www-data:www-data $config_path"
+            else
+                logD "Exec: sudo chown root:root $config_path"
+            fi
         else
-            exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
+            if [[ "$config_file" == "wspr.ini" ]]; then
+                exec_command "Change ownership on wspr.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
+            else
+                exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
+            fi
         fi
 
         # Change permissions on the configuration
@@ -5351,10 +5369,10 @@ manage_service() {
 
 # -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of web files.
-# @details This function installs or removes web-related files from the 
-#          `$LOCAL_WWW_DIR` source directory to `/var/www/html/$REPO_NAME`. 
-#          During installation, it ensures the target directory exists, copies 
-#          the files, and sets appropriate ownership and permissions. During 
+# @details This function installs or removes web-related files from the
+#          `$LOCAL_WWW_DIR` source directory to `/var/www/html/$REPO_NAME`.
+#          During installation, it ensures the target directory exists, copies
+#          the files, and sets appropriate ownership and permissions. During
 #          uninstallation, it removes the web directory.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
@@ -5406,6 +5424,12 @@ manage_web() {
             exec_command "Copy web files" "sudo cp -r $source_path/* $target_path/" "$debug" || retval=1
         fi
 
+        # Link INI File
+        logI "Fixing file permissions for data file."
+        inisource="/usr/local/etc/${WSPR_INI}"
+        inilink="$target_path/${WSPR_INI}"
+        ln -sf "$inisource" "$inilink"
+
         # Change ownership and permissions
         debug_print "Setting permissions for '$target_path'." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -5443,9 +5467,9 @@ manage_web() {
 # -----------------------------------------------------------------------------
 # @brief Manages the sound module for WsprryPi.
 # @details This function enables or disables the Raspberry Pi sound module
-#          (`snd_bcm2835`) by modifying the ALSA blacklist file. During 
-#          installation, the module is blacklisted to allow WsprryPi to 
-#          generate radio frequencies. During uninstallation, the blacklist 
+#          (`snd_bcm2835`) by modifying the ALSA blacklist file. During
+#          installation, the module is blacklisted to allow WsprryPi to
+#          generate radio frequencies. During uninstallation, the blacklist
 #          entry is removed to restore sound functionality.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
@@ -5603,7 +5627,7 @@ cleanup_files_in_directories() {
 #          instructions if applicable.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
-# @global REPO_DISPLAY_NAME The display name of the repository.
+# @global REPO_TITLE The display name of the repository.
 # @global WSPR_EXE The executable name for WsprryPi.
 #
 # @param $1 The overall success or failure status (0 for success, 1 for failure).
@@ -5641,13 +5665,11 @@ finish_script() {
 
     # Handle success or failure messages
     if [[ "$overall_status" -eq 0 ]]; then
-        logI "$action_message successful: $REPO_DISPLAY_NAME."
         debug_print "$action_message completed successfully." "$debug"
-        printf "%s successful: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+        printf "\n%s successful: %s.\n" "$action_message" "$REPO_TITLE"
     else
-        logE "$action_message failed: $REPO_DISPLAY_NAME."
+        logE "$action_message failed: $REPO_TITLE."
         debug_print "$action_message encountered errors." "$debug"
-        printf "%s failed: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
         debug_end "$debug"
         return 1
     fi
@@ -5662,10 +5684,10 @@ finish_script() {
     # Display follow-up instructions only if install was successful
     if [[ "$ACTION" == "install" && "$overall_status" -eq 0 ]]; then
         printf "\n"
-        printf "To configure %s, open the following URL in your browser:\n\n" "$REPO_DISPLAY_NAME"
+        printf "To configure %s, open the following URL in your browser:\n\n" "$REPO_TITLE"
 
-        printf "  %bhttp://%s.local/wspr%b\n" "${FGBLU}" "$HOSTNAME" "${RESET}"
-        printf "  %bhttp://%s/wspr%b\n\n" "${FGBLU}" "$ip_address" "${RESET}"
+        printf "  %bhttp://%s.local/$REPO_NAME%b\n" "${FGBLU}" "$HOSTNAME" "${RESET}"
+        printf "  %bhttp://%s/$REPO_NAME%b\n\n" "${FGBLU}" "$ip_address" "${RESET}"
 
         printf "If the hostname URL does not work, try using the IP address.\n"
         printf "Ensure your device is on the same network and that mDNS is\n"
@@ -5675,7 +5697,7 @@ finish_script() {
             printf "Remember to reboot to disable your soundcard before transmission.\n\n"
         fi
     elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
-        printf "\n%s has been uninstalled. No apt packages have\n" "$REPO_DISPLAY_NAME"
+        printf "\n%s has been uninstalled. No apt packages have\n" "$REPO_TITLE"
         printf "been removed to prevent impact to other functionality.\n\n"
         if [[ "${REBOOT:-false}" == "true" ]]; then
             printf "Remember to reboot to re-enable your soundcard.\n\n"
@@ -5689,7 +5711,7 @@ finish_script() {
 # -----------------------------------------------------------------------------
 # @brief Manages the installation or uninstallation of WsprryPi.
 # @details This function dynamically executes a set of predefined functions to
-#          either install or uninstall WsprryPi and its dependencies. The 
+#          either install or uninstall WsprryPi and its dependencies. The
 #          functions are executed in order for installation and in reverse order
 #          for uninstallation. Certain functions are skipped during uninstall.
 #
@@ -5727,12 +5749,15 @@ manage_wsprry_pi() {
     )
 
     # Define functions to skip on uninstall using an associative array (hashmap)
-    declare -A skip_on_uninstall
+    declare -A skip_on_uninstall=()  # Ensure associative array is initialized
     skip_on_uninstall["download_files_in_directories"]=1
     skip_on_uninstall["cleanup_files_in_directories"]=1
 
     # Start the script
     start_script "$debug"
+
+    # Check if TAPR button should be used
+    set_use_tapr "$debug"
 
     # Track overall success/failure
     local overall_status=0
@@ -5748,9 +5773,11 @@ manage_wsprry_pi() {
     fi
 
     for func in "${group_to_execute[@]}"; do
+        local function_name="${func%% *}"  # Extract only function name
+
         # Skip functions listed in skip_on_uninstall
-        if [[ -n "${skip_on_uninstall[$func]}" ]]; then
-            debug_print "Skipping $func during uninstall." "$debug"
+        if [[ -n "${skip_on_uninstall[$function_name]:-}" ]]; then
+            debug_print "Skipping $function_name during uninstall." "$debug"
             continue
         fi
 
@@ -5782,13 +5809,34 @@ manage_wsprry_pi() {
 ### Main Functions
 ############
 
+# -----------------------------------------------------------------------------
+# @brief Main execution function for the script.
+# @details This function initializes the execution environment, processes
+#          command-line arguments, verifies system compatibility, ensures
+#          dependencies are installed, and executes either the install or
+#          uninstall process for Wsprry Pi.
+#
+# @global ACTION Determines whether the script performs installation or
+#                uninstallation.
+#
+# @param $@ Command-line arguments passed to the script.
+#
+# @throws Exits with an error code if any critical dependency is missing,
+#         an unsupported environment is detected, or a step fails.
+#
+# @return 0 on successful execution, non-zero on failure.
+#
+# @note Debug mode (`"$debug"`) is propagated throughout all function calls.
+# -----------------------------------------------------------------------------
 _main() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    printf "\n"
 
     # Check and set up the environment
     handle_execution_context "$debug"  # Get execution context and set environment variables
     get_proj_params "$debug"           # Get project and git parameters
-    process_args "$@"                  # Parse command-line arguments
+    process_args "$@" "$debug"         # Parse command-line arguments
     enforce_sudo "$debug"              # Ensure proper privileges for script execution
     validate_depends "$debug"          # Ensure required dependencies are installed
     validate_sys_accs "$debug"         # Verify critical system files are accessible
@@ -5801,21 +5849,18 @@ _main() {
     check_arch "$debug"                # Validate Raspberry Pi model compatibility
     check_internet "$debug"            # Verify internet connectivity if required
 
-    # Print/display the environment
-    print_system "$debug"           # Log system information
-    print_version "$debug"          # Log the script version
-
-    # Install dependencies
+    # Install dependencies after system checks
     handle_apt_packages "$debug"
 
-    # Handle command line arguments
-    process_args "$@" "$debug"
-    
+    # Print/display the environment
+    print_system "$debug"              # Log system information
+    print_version "$debug"              # Log the script version
+
     # Handle correcting timezone
     set_time "$debug"
 
     # Install or uninstall Wsprry Pi services
-    #manage_wsprry_pi "$debug"      
+    manage_wsprry_pi "$debug"
 
     debug_end "$debug"
     return 0
@@ -5845,6 +5890,3 @@ debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 main "$@" "$debug"
 debug_end "$debug"
 exit $?
-
-# TODO:  Make sure all git and especially SEM_VER return valid if not in a repo
-# TODO: Check to make all local variables are declared
