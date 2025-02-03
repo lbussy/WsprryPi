@@ -5314,7 +5314,7 @@ manage_service() {
             exec_command "Copy systemd file" "sudo cp -f $source_path $service_path" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
 
-            if [[ "$use_syslog" == "true" ]]; then
+            if [[ "$use_syslog" == "false" ]]; then
                 modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
                 modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "uncomment" "$debug"
                 modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "uncomment" "$debug"
@@ -5855,14 +5855,14 @@ _main() {
     check_internet "$debug"            # Verify internet connectivity if required
 
     # Install dependencies after system checks
-    handle_apt_packages "$debug"
+    [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
 
     # Print/display the environment
     print_system "$debug"              # Log system information
     print_version "$debug"              # Log the script version
 
     # Handle correcting timezone
-    set_time "$debug"
+    [[ "$ACTION" != "uninstall" ]] && set_time "$debug"
 
     # Install or uninstall Wsprry Pi services
     manage_wsprry_pi "$debug"
