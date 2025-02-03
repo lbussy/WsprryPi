@@ -7,7 +7,7 @@ IFS=$'\n\t'
 # -----------------------------------------------------------------------------
 # @file clean_whitespace.sh
 # @brief Brief description of what the script does.
-# @details A more detailed explanation of the script’s purpose, including its 
+# @details A more detailed explanation of the script’s purpose, including its
 #          functionality, expected input/output, and any relevant dependencies.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
@@ -17,25 +17,25 @@ IFS=$'\n\t'
 #
 # @license
 # MIT License
-# 
+#
 # Copyright (c) 2023-2025 Lee C. Bussy
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy 
-# of this software and associated documentation files (the "Software"), to deal 
-# in the Software without restriction, including without limitation the rights 
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
-# copies of the Software, and to permit persons to whom the Software is 
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all 
+#
+# The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
 # @usage
@@ -247,14 +247,14 @@ usage() {
     printf "  %-14s %s\n" "-n" "Dry-run mode (no changes made)"
     printf "  %-14s %s\n" "-x <dir>" "Exclude specified directory"
     printf "  %-14s %s\n" "-e <ext>" "Comma-separated list of file extensions to process"
-    
+
     printf "\nArguments:\n"
     printf "  %-14s %s\n" "directory" "Directory to process (default: current directory)"
-    
+
     printf "\nExamples:\n"
     printf "  %s %s\n" "$0" "-r                    # Process files recursively"
     printf "  %s %s\n" "$0" "-n -x logs -e txt,md  # Dry-run, exclude 'logs', only process txt/md files"
-    
+
     printf "\n"
     return 1  # Use 'return' instead of 'exit' inside functions
 }
@@ -354,6 +354,12 @@ main() {
     return 0
 }
 
-# Invoke the main function
-main "$@" || return 1
-return 0
+main "$@"
+retval="$?"
+if [[ $retval -ne 0 ]]; then
+    printf "Failed to clean whitespace.\n" >&2
+    exit "$retval"
+fi
+
+# If the main function succeeds, exit normally
+exit 0

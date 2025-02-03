@@ -20,25 +20,25 @@ IFS=$'\n\t'
 #
 # @license
 # MIT License
-# 
+#
 # Copyright (c) 2023-2025 Lee C. Bussy
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy 
-# of this software and associated documentation files (the "Software"), to deal 
-# in the Software without restriction, including without limitation the rights 
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
-# copies of the Software, and to permit persons to whom the Software is 
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all 
+#
+# The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
 # @par Usage:
@@ -62,12 +62,12 @@ IFS=$'\n\t'
 get_repo_root() {
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-    
+
     if [ -z "$repo_root" ]; then
         printf "Error: Not inside a Git repository.\n" >&2
         return 1
     fi
-    
+
     printf "%s\n" "$repo_root"
     return 0
 }
@@ -101,23 +101,23 @@ build_docs() {
 # -----------------------------------------------------------------------------
 # @brief Deploy the built documentation to the web server directory.
 # @details
-# This function copies the generated documentation from the specified 
-# source directory to the destination directory on the web server. It 
+# This function copies the generated documentation from the specified
+# source directory to the destination directory on the web server. It
 # performs the following tasks:
-# - Verifies that the source directory containing the built documentation 
+# - Verifies that the source directory containing the built documentation
 #   exists.
 # - Removes any existing documentation at the destination directory.
 # - Creates the destination directory if it doesn't already exist.
 # - Copies the newly built documentation to the destination directory.
-# - Sets appropriate ownership and permissions for the copied files and 
+# - Sets appropriate ownership and permissions for the copied files and
 #   directories.
 #
 # @param repo_root The root directory of the Git repository.
-#                  This is used to locate the `docs/_build/html` source 
+#                  This is used to locate the `docs/_build/html` source
 #                  directory.
 #
 # @retval 0 on success.
-# @retval 1 if the source directory is not found, or if any error occurs 
+# @retval 1 if the source directory is not found, or if any error occurs
 #         during the deployment process.
 #
 # @example
@@ -198,5 +198,12 @@ main() {
 }
 
 # Invoke the main function and handle errors properly
-main "$@" || { printf "Failed to copy docs.\n" >&2; return 1; }
-return 0
+main "$@"
+retval="$?"
+if [[ $retval -ne 0 ]]; then
+    printf "Failed to copy docs.\n" >&2
+    exit "$retval"
+fi
+
+# If the main function succeeds, exit normally
+exit 0

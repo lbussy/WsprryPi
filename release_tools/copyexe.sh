@@ -17,25 +17,25 @@ IFS=$'\n\t'
 #
 # @license
 # MIT License
-# 
+#
 # Copyright (c) 2023-2025 Lee C. Bussy
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy 
-# of this software and associated documentation files (the "Software"), to deal 
-# in the Software without restriction, including without limitation the rights 
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
-# copies of the Software, and to permit persons to whom the Software is 
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all 
+#
+# The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
 # @usage
@@ -59,12 +59,12 @@ IFS=$'\n\t'
 get_repo_root() {
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-    
+
     if [ -z "$repo_root" ]; then
         printf "Error: Not inside a Git repository.\n" >&2
         return 1
     fi
-    
+
     printf "%s\n" "$repo_root"
     return 0
 }
@@ -72,10 +72,10 @@ get_repo_root() {
 # -----------------------------------------------------------------------------
 # @brief Check if WsprryPi is installed.
 # @details
-# This function checks if the WsprryPi service is installed by looking for 
-# an active unit file. If not installed, it suggests using `install.sh` to 
+# This function checks if the WsprryPi service is installed by looking for
+# an active unit file. If not installed, it suggests using `install.sh` to
 # set up the environment.
-# 
+#
 # @retval 0 if installed.
 # @retval 1 if not installed.
 # -----------------------------------------------------------------------------
@@ -110,7 +110,7 @@ stop_services() {
         printf "Error: Failed to stop the WsprryPi service.\n" >&2
         return 1
     fi
-    
+
     # Stop the shutdown-button service
     if ! sudo systemctl stop shutdown-button 2>/dev/null; then
         printf "Error: Failed to stop the shutdown-button service.\n" >&2
@@ -245,7 +245,7 @@ restart_services() {
 # -----------------------------------------------------------------------------
 # @brief Main function orchestrating the script execution.
 # @details
-# This function coordinates the overall flow of the script by performing the 
+# This function coordinates the overall flow of the script by performing the
 # following tasks:
 # - Retrieves the root directory of the Git repository using `get_repo_root`.
 # - Checks if WsprryPi is installed using `check_wspri_installed`.
@@ -260,14 +260,14 @@ restart_services() {
 # -----------------------------------------------------------------------------
 main() {
     local repo_root
-    
+
     # Get the root directory of the Git repository
     repo_root=$(get_repo_root)
     if [ $? -ne 0 ]; then
         printf "Error: Failed to get the Git repository root.\n" >&2
         return 1
     fi
-    
+
     # Check if WsprryPi is installed
     check_wspri_installed
     if [ $? -ne 0 ]; then
@@ -301,5 +301,12 @@ main() {
 }
 
 # Invoke the main function and handle errors properly
-main "$@" || { printf "Failed to copy executables.\n" >&2; return 1; }
-return 0
+main "$@"
+retval="$?"
+if [[ $retval -ne 0 ]]; then
+    printf "Failed to copy executables.\n" >&2
+    exit "$retval"
+fi
+
+# If the main function succeeds, exit normally
+exit 0

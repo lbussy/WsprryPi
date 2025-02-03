@@ -20,25 +20,25 @@ IFS=$'\n\t'
 #
 # @license
 # MIT License
-# 
+#
 # Copyright (c) 2023-2025 Lee C. Bussy
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy 
-# of this software and associated documentation files (the "Software"), to deal 
-# in the Software without restriction, including without limitation the rights 
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
-# copies of the Software, and to permit persons to whom the Software is 
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all 
+#
+# The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
 # @par Usage:
@@ -62,12 +62,12 @@ IFS=$'\n\t'
 get_repo_root() {
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-    
+
     if [ -z "$repo_root" ]; then
         printf "Error: Not inside a Git repository.\n" >&2
         return 1
     fi
-    
+
     printf "%s\n" "$repo_root"
     return 0
 }
@@ -81,10 +81,10 @@ get_repo_root() {
 # - Creates a symbolic link to the `wspr.ini` configuration file.
 # - Sets the appropriate ownership for the files.
 #
-# If any step fails, an error message is printed and the function returns with a 
+# If any step fails, an error message is printed and the function returns with a
 # non-zero status.
 #
-# @param repo_root The root directory of the Git repository, used to locate 
+# @param repo_root The root directory of the Git repository, used to locate
 #                  the data files.
 #
 # @retval 0 on successful execution.
@@ -142,7 +142,7 @@ deploy_website() {
 # -----------------------------------------------------------------------------
 main() {
     local repo_root
-    
+
     # Get the root directory of the Git repository
     repo_root=$(get_repo_root)
     if [ $? -ne 0 ]; then
@@ -162,5 +162,12 @@ main() {
 }
 
 # Invoke the main function and handle errors properly
-main "$@" || { printf "Failed to copy website.\n" >&2; return 1; }
-return 0
+main "$@"
+retval="$?"
+if [[ $retval -ne 0 ]]; then
+    printf "Failed to copy website.\n" >&2
+    exit "$retval"
+fi
+
+# If the main function succeeds, exit normally
+exit 0
