@@ -4421,7 +4421,7 @@ exec_command() {
     failed_pre+=":"
 
     # 1) Print ephemeral “Running” line
-    printf "%b[-]%b %s %s\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    printf "%b[-]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
     # Optionally ensure it shows up (especially if the command is super fast):
     sleep 0.02
 
@@ -5153,7 +5153,12 @@ manage_config() {
     config_name="${config_file##*/}"                    # Remove path
     config_name="${config_name%.*}"                     # Remove extension (if present)
     source_path="${LOCAL_CONFIG_DIR}/${config_file}"    # Config files source
-    config_path="${config_path}/${config_file}"         # Keeping original file reference
+    # If config file is logrotate then rename it to repo_name
+    if [[ "${config_file}" != "logrotate.conf" ]]; then
+        config_path="${config_path}/${config_file}"
+    else
+        config_path="${config_path}/${REPO_NAME}"
+    fi
 
     if [[ "$ACTION" == "install" ]]; then
         logI "Installing '$config_name' configuration."
@@ -5213,7 +5218,7 @@ manage_config() {
         # Remove the configuration
         debug_print "Removing configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: rm -f $config_path"
+            logD "Exec: rm -rf $config_path"
         else
             exec_command "Remove configuration" "sudo rm -f $config_path" "$debug" || retval=1
         fi
@@ -5742,7 +5747,7 @@ manage_wsprry_pi() {
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_exe \"$SHUTDOWN_WATCH_EXE\""
         "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE\" \"true\""
-        "manage_config \"$LOG_ROTATE\" \"/var/log/$REPO_NAME\""
+        "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
         "cleanup_files_in_directories"
