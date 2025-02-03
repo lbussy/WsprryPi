@@ -1,34 +1,111 @@
 <!-- omit in toc -->
-# WsprryPi Release Script Overview
+# WsprryPi Release Scripts Overview
 
 - [Components](#components)
-  - [`release.py`](#releasepy)
+  - [`copyexe.sh`](#copyexesh)
     - [Purpose](#purpose)
     - [Key Features](#key-features)
     - [Usage](#usage)
-    - [Configurable Parameters (via `release_config.py`)](#configurable-parameters-via-release_configpy)
-  - [`release_config.py`](#release_configpy)
+    - [Test Cases](#test-cases)
+  - [`clean_whitespace.sh`](#clean_whitespacesh)
     - [Purpose](#purpose-1)
-    - [Key Configuration Settings](#key-configuration-settings)
-    - [Example Configuration](#example-configuration)
-  - [`release_test.py`](#release_testpy)
-    - [Purpose](#purpose-2)
     - [Key Features](#key-features-1)
     - [Usage](#usage-1)
-    - [Test Cases](#test-cases)
+    - [Test Cases](#test-cases-1)
+  - [`release.py`](#releasepy)
+    - [Key Features](#key-features-2)
+    - [Usage](#usage-2)
+    - [Configurable Parameters (via `release_config.py`)](#configurable-parameters-via-release_configpy)
+  - [`get_semantic_version.sh`](#get_semantic_versionsh)
+  - [`release_config.py`](#release_configpy)
+    - [Purpose](#purpose-2)
+    - [Key Configuration Settings](#key-configuration-settings)
+    - [Example Configuration](#example-configuration)
+  - [`rename_branch.sh`](#rename_branchsh)
+    - [Purpose](#purpose-3)
+    - [Key Features](#key-features-3)
+    - [Usage](#usage-3)
+    - [Test Cases](#test-cases-2)
+  - [`get_semantic_version.py`](#get_semantic_versionpy)
+    - [Purpose](#purpose-4)
+    - [Key Features](#key-features-4)
+    - [Usage](#usage-4)
+    - [Test Cases](#test-cases-3)
+  - [`copysite.sh`](#copysitesh)
+    - [Purpose](#purpose-5)
+    - [Key Features](#key-features-5)
+    - [Usage](#usage-5)
+    - [Test Cases](#test-cases-4)
+  - [`update_versions.py`](#update_versionspy)
+    - [Purpose](#purpose-6)
+    - [Key Features](#key-features-6)
+    - [Usage](#usage-6)
+    - [Test Cases](#test-cases-5)
+  - [`copydocs.sh`](#copydocssh)
+    - [Purpose](#purpose-7)
+    - [Key Features](#key-features-7)
+    - [Usage](#usage-7)
+    - [Test Cases](#test-cases-6)
 - [Conclusion](#conclusion)
+
 
 ## Components
 
-- `release.py`: The main script responsible for automating the update of project headers, including version and copyright information, across various project files.
-- `release_config.py`: This is the configuration file that holds all the customizable settings used by `release.py` to control the behavior of the release process.
-- `release_test.py`: A test script designed to validate the functionality and correctness of `release.py`.
+- `TODO.md`: 
+- `README.md`: 
+- `developer_notes.md`: 
+- `copyexe.sh`: 
+- `clean_whitespace.sh`: 
+- `release.py`: 
+- `get_semantic_version.sh`: 
+- `release_config.py`: 
+- `make_version.py`: 
+- `rename_branch.sh`: 
+- `get_semantic_version.py`: 
+- `copysite.sh`: 
+- `update_versions.py`: 
+- `copydocs.sh`: 
 
 My intent is to update copyright and release (Project, Tag, Branch) information and inject some of these into the compiled executable.
 
-### `release.py`
+### `copyexe.sh`
 
 #### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
+
+---
+
+### `clean_whitespace.sh`
+
+#### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
+
+---
+
+### `release.py`
+
 The `release.py` script updates project files with version and copyright information. It integrates with Git to retrieve the current repository's version details and updates the relevant headers in the project's source files.
 
 #### Key Features
@@ -56,6 +133,10 @@ python3 release.py
 - **Supported File Extensions**: Specify the file types that the script should process.
 
 ---
+
+### `get_semantic_version.sh`
+
+
 
 ### `release_config.py`
 
@@ -90,34 +171,91 @@ class Config:
 
 ---
 
-### `release_test.py`
-
+### `rename_branch.sh`
 #### Purpose
-
-`release_test.py` is a test script designed to validate the behavior of `release.py`. It ensures that the script functions correctly by performing various checks on the files and configurations.
 
 #### Key Features
 
-- **Unit Testing**: Tests key functionality in `release.py`, including file processing, backup creation, and version updating.
-- **Dry Run Validation**: Performs a dry run to ensure the script correctly simulates updates before making changes.
-- **Mocking**: This method uses mock data to simulate file changes and verify that the expected updates are made to the project files.
-
 #### Usage
 
-Run `release_test.py` to execute tests and verify that the `release.py` script behaves as expected. The developer should run this test after making changes to `release.py` to ensure no regressions.
+
 
 ```bash
-python3 release_test.py
+python3 foo.py
 ```
 
 #### Test Cases
 
-- **Test Backup Creation**: Verifies that the script creates a backup folder and files it backs files up before being modified.
-- **Test Header Updates**: This check ensures that the version and copyright information in project files are updated correctly.
-- **Test Logging**: Verifies that the logging mechanism works as intended (e.g., logging updates and errors).
-- **Test Dry Run**: Ensures that when `DRY_RUN` is enabled, the script makes no changes but displays diffs.
+---
+
+### `get_semantic_version.py`
+#### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
 
 ---
+
+### `copysite.sh`
+#### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
+
+---
+
+### `update_versions.py`
+#### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
+
+---
+
+### `copydocs.sh`
+#### Purpose
+
+#### Key Features
+
+#### Usage
+
+
+
+```bash
+python3 foo.py
+```
+
+#### Test Cases
+
+---
+
 
 ## Conclusion
 
