@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# ----------------------------------------------------------------------------
-# @file release_config.py
-# @brief Configuration script for updating headers in the WsprryPi project.
+# -----------------------------------------------------------------------------
+# @file release_config.sh
+# @brief Configuration for release management
 #
-# @details
-# This script manages configurations for updating headers in project files,
-# including support for dry-run functionality, logging, license exclusions,
-# and more.
+# @author Lee C. Bussy <Lee@Bussy.org>
+# @version 1.0.0
+# @date 2025-02-03
+# @copyright MIT License
 #
-# @par License:
+# @license
 # MIT License
-# Copyright (c) 2024
+#
+# Copyright (c) 2023-2025 Lee C. Bussy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +32,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-# ----------------------------------------------------------------------------
+#
+# -----------------------------------------------------------------------------
 
 from pathlib import Path
 

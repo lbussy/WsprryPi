@@ -1,22 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+# -----------------------------------------------------------------------------
+# @file shutdown_watch.py
+# @brief Poll a GPIO pin and initiate shutdown when puled low.
 #
-# This file is part of WsprryPi.
+# @author Lee C. Bussy <Lee@Bussy.org>
+# @version 1.0.0
+# @date 2025-02-03
+# @copyright MIT License
 #
-# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
+# @license
+# MIT License
 #
-# WsprryPi is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# Copyright (c) 2023-2025 Lee C. Bussy
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# @usage
+# ./get_semantic_version.sh
+#
+# @returns
+# Returns a correctly formatted sematic version string.  Defaults to
+# declarations in header.
+#
+# -----------------------------------------------------------------------------
 
 """
 @file shutdown_watch.py
@@ -46,7 +70,7 @@ except ImportError:
     sys.exit("Failed to import gpiozero. Ensure it is installed and available.")
 
 # Version
-__version__ = "0.0.1"
+__version__ = "1.2.3"
 
 # Global Constants
 STOP_PIN = 19           # GPIO pin for the shutdown button
