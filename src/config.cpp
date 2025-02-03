@@ -1,6 +1,7 @@
 /**
  * @file config.hpp
- * @brief Defines the WSPRConfig class for reading and managing configuration data from an INI file.
+ * @brief Defines the WSPRConfig class for reading and managing
+ * configuration data from an INI file.
  *
  * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
  * active).
