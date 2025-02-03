@@ -1,10 +1,10 @@
 /**
  * @file mailbox.c
  * @brief Implementation of mailbox-based communication for the Raspberry Pi.
- * 
+ *
  * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
  * active).  However the mailbox implementation is property of Broadcom.
- * 
+ *
  * Copyright (c) 2012, Broadcom Europe Ltd.
  * All rights reserved.
  *

@@ -1,4 +1,4 @@
-# Systemd - WsspryPi
+# Systemd - WsprryPi
 
 ## Overview
 
@@ -79,7 +79,7 @@ If the `wspr` process uses Direct Memory Access (DMA), it likely requires elevat
      sudo setcap cap_sys_rawio,cap_dac_override+ep /usr/local/bin/wspr
      ```
    - Update the `wspr.service` file to:
-  
+
       ```ini
       User=wspr
       Group=wspr
@@ -174,7 +174,7 @@ WantedBy=multi-user.target
 ### Summary
 - Running as `root` is justifiable due to DMA requirements but consider creating a dedicated user if possible.
 - Add memory, device, and real-time scheduling configurations to optimize performance and security.
-- Validate `/dev/dma_device` or other required hardware permissions. 
+- Validate `/dev/dma_device` or other required hardware permissions.
 
 Let me know if you'd like detailed help implementing these suggestions!
 

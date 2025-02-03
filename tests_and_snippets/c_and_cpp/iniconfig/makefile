@@ -1,7 +1,7 @@
 # Testing: make clean && make && ./config
 
 NAME	= iniconfig
-OBJS 	= $(NAME).o 
+OBJS 	= $(NAME).o
 SOURCE	= $(NAME).cpp
 OUT	    = $(NAME)
 CC	    = g++

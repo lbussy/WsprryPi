@@ -1,0 +1,22 @@
+# Created for WsprryPi version %SEMANTIC_VERSION%
+# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
+
+[Unit]
+Description=Wsprry Pi daemon for: %DAEMON_NAME%
+Documentation=https://github.com/lbussy/WsprryPi/discussions
+After=multi-user.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+ExecStart=%EXEC_START%
+SyslogIdentifier=%SYSLOG_IDENTIFIER%
+# StandardOutput=null
+# StandardOutput=append:%LOG_STD_OUT%
+# StandardError=append:%LOG_STD_ERR%
+
+[Install]
+WantedBy=multi-user.target

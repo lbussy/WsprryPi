@@ -3,7 +3,7 @@
 #
 # This file is part of WsprryPi.
 #
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 #
 # WsprryPi is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,8 +22,8 @@
 @file make_version.py
 @brief Generate a version string based on Git repository state.
 
-This script produces a version string based on the current Git branch, tag, commit count, 
-short hash, and whether there are uncommitted changes. It adheres to semantic versioning 
+This script produces a version string based on the current Git branch, tag, commit count,
+short hash, and whether there are uncommitted changes. It adheres to semantic versioning
 principles when applicable.
 """
 

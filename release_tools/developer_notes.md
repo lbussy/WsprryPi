@@ -15,7 +15,7 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 Any references to `{hostname}` should be replaced with the hostname of your target Pi.
 
 1. If you are on Windows, have [Open SSH](https://windowsloop.com/install-openssh-server-windows-11/) installed.
-   
+
 2. Check that you have an SSH key generated on your system:
 
    * Linux or Mac (one line):
@@ -62,7 +62,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
    * Exit back out
 
 4. Copy keys to host with (enter target host password when asked):
-   
+
    ``` bash
    ssh-copy-id pi@{hostname}.local
    ```
@@ -86,7 +86,7 @@ I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d
 To handle all of these aliases and package installs, paste in this command:
 
 ``` bash
-curl -fsSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/57ba6f5052768a4124fdeee03d3bc900e4d96b3a/install_aliases.sh | bash
+curl -fsSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/install_aliases.sh | bash
 ```
 
 See the [Gist](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) for more info if you have never used these.
@@ -125,7 +125,7 @@ If you are going to use VS Code from your workstation:
    git clone https://github.com/lbussy/WsprryPi.git
    cd ~/WsprryPi/
    ```
-  
+
    (This lets the installer install everything, but then you clone the repo after.)
 
 6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
@@ -181,6 +181,7 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 
 * git
 * gh
+* jq
 * apache2
 * php
 * colordiff
@@ -190,7 +191,7 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 Install these with:
 
 ``` bash
-sudo apt-get install git gh apache2 php colordiff libraspberrypi-dev raspberrypi-kernel-headers -y
+sudo apt-get install git gh jq apache2 php colordiff libraspberrypi-dev raspberrypi-kernel-headers -y
 ```
 
 ## Reboot
@@ -199,4 +200,4 @@ The installer blacklists the onboard snd_bcm2835 device, as Wsprry Pi uses this 
 
 ## Working with the Project
 
-See [RELEASE.md](./scripts/RELEASE.md) for information about the project development tools.
+See [release.md](./scripts/release.md) for information about the project development tools.

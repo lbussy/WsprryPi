@@ -119,7 +119,7 @@ process_file() {
 # Function: Process files or directories
 process_files() {
   local TARGET="$1"
-  
+
   # Print the header for the pattern or directory
   echo -e "${BOLD}Processing file(s):${RESET}"
 
@@ -129,7 +129,7 @@ process_files() {
     for FILE in "$TARGET"/*; do
       [ -f "$FILE" ] && process_file "$FILE"
     done
-  
+
   # If the target is a file or matches a pattern
   else
     shopt -s nullglob

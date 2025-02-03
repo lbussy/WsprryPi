@@ -22,8 +22,8 @@ def get_git_root():
     """
     Get the root directory of the current Git repository.
 
-    This function runs `git rev-parse --show-toplevel` to determine the 
-    root directory of the current Git repository. If the current directory 
+    This function runs `git rev-parse --show-toplevel` to determine the
+    root directory of the current Git repository. If the current directory
     is not inside a Git repository, it returns None.
 
     @return: The root directory of the Git repository or None if not inside a Git repo.
@@ -45,8 +45,8 @@ def get_git_branch():
     """
     Get the current Git branch name.
 
-    This function runs `git rev-parse --abbrev-ref HEAD` to retrieve the name 
-    of the current branch of the repository. If the directory is not a Git 
+    This function runs `git rev-parse --abbrev-ref HEAD` to retrieve the name
+    of the current branch of the repository. If the directory is not a Git
     repository, it returns None.
 
     @return: The current Git branch name or None if not inside a Git repo.
@@ -72,7 +72,7 @@ def update_version_in_file(file_path, new_version, branch):
     """
     Update the VERSION and BRANCH in a given file.
 
-    This function reads the file, searches for lines starting with `BRANCH=`, 
+    This function reads the file, searches for lines starting with `BRANCH=`,
     `VERSION=`, and `__version__`, and updates their values with the new version
     and the current Git branch.
 
@@ -94,7 +94,7 @@ def update_version_in_file(file_path, new_version, branch):
             updated_line = f'BRANCH="{branch}"\n'
             updated_lines.append(updated_line)  # Add the updated line
             continue  # Skip the remaining part of the loop and move to the next line
-        
+
         # Update VERSION= line to the new version string
         if line.startswith("VERSION="):
             line = f'VERSION="{new_version}"\n'
@@ -118,7 +118,7 @@ def update_file(file_path, new_version):
     """
     Update a single file by setting its version and branch.
 
-    This function fetches the current Git branch and calls `update_version_in_file` 
+    This function fetches the current Git branch and calls `update_version_in_file`
     to update the contents of the file with the new version and branch.
 
     @param file_path: The path to the file to update.
@@ -137,8 +137,8 @@ def update_files(files_to_update, new_version):
     """
     Update multiple files by setting their version and branch.
 
-    This function checks if the current directory is a Git repository, then 
-    loops through a list of files and updates each of them using 
+    This function checks if the current directory is a Git repository, then
+    loops through a list of files and updates each of them using
     `update_file`.
 
     @param files_to_update: List of file paths to update.
@@ -150,7 +150,7 @@ def update_files(files_to_update, new_version):
     if not git_root:
         print("Error: This is not a Git repository.", file=sys.stderr)
         sys.exit(1)  # Exit with a non-zero status code for failure
-    
+
     # Update each file in the provided list
     for file_path in files_to_update:
         full_path = os.path.join(git_root, target_file_directory, file_path)
@@ -161,8 +161,8 @@ def main(files_to_update):
     """
     Main function to generate a new version string and update the files.
 
-    This function calls `generate_version_string` to get a new version string, 
-    then updates the files in `files_to_update` with the new version and the 
+    This function calls `generate_version_string` to get a new version string,
+    then updates the files in `files_to_update` with the new version and the
     current Git branch.
 
     @param files_to_update: List of files to update.
