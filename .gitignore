@@ -20,6 +20,7 @@ src/*.d
 
 ## Allow specific files in /src
 !/src/Makefile
+!/src/refactoring
 
 ## C/C++ Ignores
 *.d            # Dependency files
