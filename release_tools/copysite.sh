@@ -14,7 +14,7 @@ IFS=$'\n\t'
 # - Setting appropriate ownership for the web server.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.0.0
+# @version 1.2.1-update_release_scripts+95.8843fc0-dirty
 # @date 2025-02-03
 # @copyright MIT License
 #

@@ -34,7 +34,7 @@
 # SOFTWARE.
 #
 # @usage
-# ./get_semantic_version.sh
+# ./get_semantic_version.sh [--dry-run]
 #
 # @returns
 # Returns a correctly formatted semantic version string. Defaults to
@@ -44,7 +44,9 @@
 
 import os
 import subprocess
+import sys
 from datetime import datetime
+import argparse
 
 from get_semantic_version import SemanticVersion
 
@@ -123,7 +125,7 @@ def replace_line_in_file(file_path, line_num, new_line):
         file.writelines(lines)
 
 
-def parse_file_for_version_and_date(file_path, new_version):
+def parse_file_for_version_and_date(file_path, new_version, dry_run):
     changed_lines = 0
     changed = False
 
@@ -140,8 +142,11 @@ def parse_file_for_version_and_date(file_path, new_version):
 
                     # Compare the original line with the new line
                     if line.strip() != new_line.strip():  # Check if there's a difference
-                        # Replace the line in the file
-                        replace_line_in_file(file_path, line_num, new_line)
+                        # Print the change if it's a dry run
+                        if dry_run:
+                            print(f"[Dry Run] {file_path}: Line {line_num} will be changed to: {new_line}")
+                        else:
+                            replace_line_in_file(file_path, line_num, new_line)
                         changed_lines += 1
                         changed = True
 
@@ -153,8 +158,11 @@ def parse_file_for_version_and_date(file_path, new_version):
 
                     # Compare the original line with the new line
                     if line.strip() != new_line.strip():  # Check if there's a difference
-                        # Replace the line in the file
-                        replace_line_in_file(file_path, line_num, new_line)
+                        # Print the change if it's a dry run
+                        if dry_run:
+                            print(f"[Dry Run] {file_path}: Line {line_num} will be changed to: {new_line}")
+                        else:
+                            replace_line_in_file(file_path, line_num, new_line)
                         changed_lines += 1
                         changed = True
 
@@ -162,6 +170,11 @@ def parse_file_for_version_and_date(file_path, new_version):
 
 
 def main():
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="Update version and date in scripts and source files.")
+    parser.add_argument('--dry-run', action='store_true', help="Simulate the changes without modifying any files.")
+    args = parser.parse_args()
+
     # Get the root directory of the Git repository
     git_root = get_git_root()
     if not git_root:
@@ -183,16 +196,16 @@ def main():
 
     # Parse files for matching lines and replace them
     for file_path in files_to_update:
-        changed, changed_lines = parse_file_for_version_and_date(file_path, new_version)
+        changed, changed_lines = parse_file_for_version_and_date(file_path, new_version, args.dry_run)
 
         if changed:
             files_changed.append(file_path)
             total_lines_changed += changed_lines
-            print(f"{file_path}: Change was made, {changed_lines} lines updated.")
+            if not args.dry_run:
+                print(f"{file_path}: Change was made, {changed_lines} lines updated.")
 
     # Print the results only if there were changes
     if files_changed:
-
         print(f"\nTotal lines changed: {total_lines_changed}")
     else:
         print("No files needed to be updated.")
