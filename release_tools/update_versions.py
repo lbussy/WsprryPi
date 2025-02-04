@@ -6,7 +6,7 @@
 # @brief Update versions in scripts and source files.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+95.8843fc0-dirty
+# @version 1.2.1-update_release_scripts+96.5f30a8e
 # @date 2025-02-03
 # @copyright MIT License
 #
@@ -50,7 +50,7 @@ import argparse
 
 from get_semantic_version import SemanticVersion
 
-__version__ = "1.2.1-update_release_scripts+95.8843fc0-dirty"
+__version__ = "1.2.1-update_release_scripts+96.5f30a8e"
 
 
 # List of files to update
