@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # -----------------------------------------------------------------------------
-# @file get_semantic_version.sh
+# @file get_semantic_version.py
 # @brief Creates a semantic version from local repo.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
@@ -34,16 +34,18 @@
 # SOFTWARE.
 #
 # @usage
-# ./get_semantic_version.sh
+# ./get_semantic_version.py [--debug]
 #
 # @returns
-# Returns a correctly formatted sematic version string.  Defaults to
+# Returns a correctly formatted semantic version string. Defaults to
 # declarations in header.
 #
 # -----------------------------------------------------------------------------
 
 import subprocess
 import os
+import inspect
+import argparse
 
 class SemanticVersion:
     def __init__(self, repo_org="lbussy", repo_name="wsprrypi", repo_title="Wsprry Pi", repo_branch="install_update", git_tag="1.3.0", debug=False):
@@ -55,17 +57,19 @@ class SemanticVersion:
         self.debug = debug
 
     def debug_print(self, message):
-        """Print debug message if debug is enabled."""
+        """Print debug message if debug is enabled, along with the function name and line number."""
         if self.debug:
-            caller_name = self.get_caller_name()
-            print(f"[DEBUG] {caller_name}: {message}")
+            caller_function, caller_line = self.get_caller_info()
+            print(f"[DEBUG] {caller_function} (Line {caller_line}): {message}")
 
-    def get_caller_name(self):
-        """Get the name of the calling function."""
-        import inspect
+    def get_caller_info(self):
+        """Get the function name and line number from the caller."""
         stack = inspect.stack()
-        caller = stack[2]
-        return caller.function
+        # Skip over debug_print and debug_start/debug_end calls, looking 3 frames up
+        caller = stack[3]  # Skip 2 frames and get the actual caller
+        caller_function = caller.function
+        caller_line = caller.lineno
+        return caller_function, caller_line
 
     def debug_start(self):
         """Start debug process."""
@@ -182,6 +186,11 @@ class SemanticVersion:
 
 
 if __name__ == "__main__":
-    # Example usage:
-    version_generator = SemanticVersion(debug=False)
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Generate semantic version from Git repository.")
+    parser.add_argument('-d', '--debug', action='store_true', help="Enable debug output.")
+    args = parser.parse_args()
+
+    # Initialize the SemanticVersion object with debug mode set by the argument
+    version_generator = SemanticVersion(debug=args.debug)
     version_generator.main()

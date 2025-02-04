@@ -6,7 +6,7 @@
 # @brief Configuration for release management
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+96.5f30a8e
+# @version 1.2.1-update_release_scripts+97.ce4f887-dirty
 # @date 2025-02-03
 # @copyright MIT License
 #
@@ -38,34 +38,10 @@
 from pathlib import Path
 
 class Config:
-    """
-    Configuration class for the WsprryPi project header update script.
-    """
-
     DRY_RUN = True
     ENABLE_COMPILATION = True
     ENABLE_COPY = True
-    ENABLE_BACKUP = False
-    ENABLE_LOGGING = False
     DEBUG = True
-
-    SUPPORTED_EXTENSIONS = [".sh", ".py", ".d", ".h", ".c", ".hpp", ".cpp"]
-    DIRECTORIES_TO_PROCESS = ["scripts", "src"]
-    PROJECT_EXES = ["wspr", "wspr.ini"]
-    NAME_TAG = "@LBussy"
-
-    LOG_DIR = Path(__file__).parent / "logs"
-    LOG_FILE_PREFIX = "release_log_"
-
-    LICENSE_PATTERNS = [
-        r"MIT License",
-        r"GNU General Public License",
-        r"Apache License",
-        r"BSD License",
-        r"Mozilla Public License",
-        r"Creative Commons Attribution",
-        r"Public Domain",
-    ]
 
     @staticmethod
     def get_license_exclusion_patterns():
