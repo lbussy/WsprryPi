@@ -6,7 +6,7 @@
 # @brief Creates a semantic version from local repo.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+96.5f30a8e
+# @version 1.2.1-update_release_scripts+98.5953e00-dirty
 # @date 2025-02-03
 # @copyright MIT License
 #
@@ -46,6 +46,9 @@ import subprocess
 import os
 import inspect
 import argparse
+
+__version__ = "1.2.1-update_release_scripts+98.5953e00-dirty"
+
 
 class SemanticVersion:
     def __init__(self, repo_org="lbussy", repo_name="wsprrypi", repo_title="Wsprry Pi", repo_branch="install_update", git_tag="1.3.0", debug=False):
