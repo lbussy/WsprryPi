@@ -1,3 +1,27 @@
+# -----------------------------------------------------------------------------
+# MIT License
+# 
+# Copyright (c) 2025 Lee C. Bussy (@lbussy)
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# provided to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# -----------------------------------------------------------------------------
+
 # Makefile for building the WSPR project
 
 # Allow threading by default using all available processors
@@ -5,11 +29,9 @@ MAKEFLAGS += -j$(nproc)
 
 # TODO:
 #   - Implement and test the 'test' target.
-#   - Implement and test the 'lint' target using cppcheck.
-#   - Implement and test the install/uninstall targets.
 
 # Output binary name
-OUT = wspr
+OUT = wsprrypi
 
 # Executable name derived from the output binary name
 EXE = $(OUT)
@@ -119,31 +141,31 @@ help:
 	@echo "  clean      Remove build artifacts."
 	@echo "  files      Show detected source and object files."
 	@echo "  defines    Show all defined macros"
-#	@echo "  install    Install the binary to $(prefix)/bin."
-#	@echo "  uninstall  Remove the installed binary."
-#	@echo "  test       Run tests (if available)."
-#	@echo "  lint       Run static analysis on the source files."
+	@echo "  install    Install the binary to $(prefix)/bin."
+	@echo "  uninstall  Remove the installed binary."
+	@echo "  test       Run unit tests (if available)."
+	@echo "  lint       Run static analysis on the source files."
 
-# Install the binary to the specified directory
-# .PHONY: install
-# install: $(OUT)
-# 	@echo "Installing $(OUT) to $(prefix)/bin."
-# 	$(Q)install -m 0755 $(OUT) $(prefix)/bin
+# Install the binary and restart the service
+.PHONY: install
+install: $(OUT)
+	@echo "Stopping wsprrypi service."
+	$(Q)sudo systemctl stop wsprrypi.service
+	@echo "Copying executable to /usr/local/bin/wsprrypi."
+	$(Q)sudo cp $(OUT) /usr/local/bin/wsprrypi
+	@echo "Changing ownership to root and setting permissions."
+	$(Q)sudo chown root:root /usr/local/bin/wsprrypi
+	$(Q)sudo chmod 755 /usr/local/bin/wsprrypi
+	@echo "Restarting wsprrypi service."
+	$(Q)sudo systemctl start wsprrypi.service
+	@echo "Installation completed."
 
-# Uninstall the binary
-# .PHONY: uninstall
-# uninstall:
-# 	@echo "Uninstalling $(OUT) from $(prefix)/bin."
-# 	$(Q)$(RM) $(prefix)/bin/$(OUT)
-
-# Test target to run unit tests (implementation pending)
-#. PHONY: test
-# test:
-#	@echo "Running tests..."
-#	$(Q)./test_suite
-
-# Lint target for static analysis (implementation pending)
-# .PHONY: lint
-# lint:
-#	@echo "Linting source files..."
-#	$(Q)cppcheck --enable=all --inconclusive $(C_SOURCES) $(CPP_SOURCES)
+# Uninstall the binary and disable the service
+.PHONY: uninstall
+uninstall:
+	@echo "Stopping and disabling wsprrypi service."
+	$(Q)sudo systemctl stop wsprrypi.service
+	$(Q)sudo systemctl disable wsprrypi.service
+	@echo "Removing executable from /usr/local/bin/wsprrypi."
+	$(Q)sudo rm -f /usr/local/bin/wsprrypi
+	@echo "Uninstallation completed."
