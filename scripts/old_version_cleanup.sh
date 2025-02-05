@@ -101,7 +101,7 @@ remove_files_and_dirs() {
                 retval=1
             fi
         else
-            printf "Item %s does not exist or is not found.\n" "$item"
+            printf "Item '%s' does not exist or is not found.\n" "$item"
         fi
     done
 
@@ -138,17 +138,21 @@ remove_services() {
 
     # Loop through each service name in the array
     for service_name in "${services[@]}"; do
-        # Check if the service exists using systemctl show for detailed info
-        if systemctl show "$service_name.service" > /dev/null 2>&1; then
-            printf "Removing service: %s\n" "$service_name"
+        # Check if the service exists in systemd
+        if systemctl list-units --all | grep -q "$service_name.service"; then
+            printf "Removing service: '%s'\n" "$service_name"
 
             # Check for dependencies using systemctl list-dependencies
-            dependencies=$(systemctl list-dependencies "$service_name.service" --quiet)
+            dependencies=$(systemctl list-dependencies "$service_name.service" 2>/dev/null)
+
+            # Filter out self-references from the dependencies list
+            dependencies=$(echo "$dependencies" | grep -v "^  $service_name.service")
+
             if [ -n "$dependencies" ]; then
-                printf "Warning: %s.service has dependencies. Please review before removing.\n" "$service_name"
+                printf "Warning: '%s.service' has dependencies. Please review before removing.\n" "$service_name"
                 read -p "Do you want to continue and remove this service? (y/n): " confirm
                 if [[ "$confirm" != "y" ]]; then
-                    printf "Skipping removal of %s.service due to dependencies.\n" "$service_name"
+                    printf "Skipping removal of '%s.service' due to dependencies.\n" "$service_name"
                     continue
                 fi
             fi
@@ -156,7 +160,7 @@ remove_services() {
             # Stop the service only if it is running
             if systemctl is-active --quiet "$service_name.service"; then
                 if ! systemctl stop "$service_name.service"; then
-                    printf "Error: Failed to stop %s.service: %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
+                    printf "Error: Failed to stop '%s.service': %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
                     retval=1
                 fi
             fi
@@ -164,22 +168,25 @@ remove_services() {
             # Disable the service only if it is enabled
             if systemctl is-enabled --quiet "$service_name.service"; then
                 if ! systemctl disable "$service_name.service"; then
-                    printf "Error: Failed to disable %s.service: %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
+                    printf "Error: Failed to disable '%s.service': %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
                     retval=1
                 fi
             fi
         else
-            printf "Service %s.service does not exist or is not loaded.\n" "$service_name"
+            # If the service does not exist or is not loaded, skip it entirely
+            printf "Service '%s.service. does not exist or is not loaded. Skipping.\n" "$service_name"
+            continue  # Skip this service if it doesn't exist
         fi
     done
 
     # Move service file deletion outside the loop to handle if the service was never installed
     for service_name in "${services[@]}"; do
         for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+            # Check if the service file exists
             if [ -f "$dir/$service_name.service" ]; then
                 printf "Removing service file: %s\n" "$dir/$service_name.service"
                 if ! rm -f "$dir/$service_name.service"; then
-                    printf "Warning: Failed to remove %s.service. It may not exist.\n" "$service_name"
+                    printf "Warning: Failed to remove '%s.service'. It may not exist.\n" "$service_name"
                     retval=1
                 fi
             fi
@@ -216,16 +223,24 @@ remove_services() {
 _main() {
     local retval=0  # Initialize the return value to 0 for successful execution.
 
+    printf "Beginning cleanup of older versions of Wsprry Pi.\n"
+
     # Call remove_files_and_dirs and capture its return value
     remove_files_and_dirs "$@"
-    retval=$((retval + $?))  # Add the return value of remove_files_and_dirs to retval
+    local retval_files_and_dirs=$?  # Capture the return value of remove_files_and_dirs
+    retval=$((retval + retval_files_and_dirs))  # Accumulate the result
 
     # Call remove_services and capture its return value
     remove_services "$@"
-    retval=$((retval + $?))  # Add the return value of remove_services to retval
+    local retval_services=$?  # Capture the return value of remove_services
+    retval=$((retval + retval_services))  # Accumulate the result
 
     # Return the final status: 0 if all steps succeeded, non-zero if any failed
-    return "$retval"
+    if [ "$retval" -gt 0 ]; then
+        return 1  # If any failure occurred, return non-zero status
+    else
+        return 0  # All succeeded
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -238,7 +253,11 @@ _main() {
 # @param "$@" Arguments to be passed to `_main`.
 # @return Returns the status code from `_main`.
 # -----------------------------------------------------------------------------
-main() { remove_services "$@"; return "$?"; }
+main() {
+    _main "$@"
+    return "$?"  # Ensure the return value from _main is passed along correctly
+}
 
-retval=$(main "$@")
-exit "$retval"
+main "$@"
+retval="$?"
+exit "$retval" # Exit with the status returned by main
