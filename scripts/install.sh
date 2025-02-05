@@ -257,15 +257,15 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 # @var LOG_ROTATE
 # @brief The log rotation configuration file.
 # @details This variable defines the logrotate configuration file, used to manage
-#          WsprryPi logs under `/var/log/wspr/` by limiting file size and retention.
+#          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
 #
 # @var SHUTDOWN_WATCH_EXE
 # @brief The shutdown monitoring script.
 # @details This variable holds the name of the shutdown watch script, which
 #          monitors the TAPR shutdown button functionality to enable safe shutdown.
 # -----------------------------------------------------------------------------
-readonly WSPR_EXE="wspr"
-readonly WSPR_INI="wspr.ini"
+readonly WSPR_EXE="wsprrypi"
+readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
 readonly SHUTDOWN_WATCH_EXE="shutdown_watch.py"
 
@@ -5225,14 +5225,14 @@ manage_config() {
         # Change ownership on the configuration
         debug_print "Changing ownership on configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            if [[ "$config_file" == "wspr.ini" ]]; then
+            if [[ "$config_file" == "wsprrypi.ini" ]]; then
                 logD "Exec: sudo chown www-data:www-data $config_path"
             else
                 logD "Exec: sudo chown root:root $config_path"
             fi
         else
-            if [[ "$config_file" == "wspr.ini" ]]; then
-                exec_command "Change ownership on wspr.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
+            if [[ "$config_file" == "wsprrypi.ini" ]]; then
+                exec_command "Change ownership on wsprrypi.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
             else
                 exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
             fi

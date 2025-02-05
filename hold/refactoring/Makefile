@@ -13,7 +13,7 @@ CXXFLAGS += -Wno-psabi -lstdc++fs -std=c++17
 LDLIBS += -lm -lbcm_host
 
 # Output binary name
-OUT = wspr
+OUT = wsprrypi
 
 # Get version and branch directly using shell commands
 VER := $(shell git describe --tags --always --dirty="-dirty" | sed -E 's/-([0-9]+)-g([a-f0-9]+)/-\2/')

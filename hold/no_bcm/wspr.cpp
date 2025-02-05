@@ -1,4 +1,4 @@
-#include "wspr.hpp"
+#include "wsprrypi.hpp"
 
 // #define WSPR_DEBUG
 
@@ -734,7 +734,7 @@ void to_upper(char *str)
     }
 }
 
-void wspr(
+void wsprrypi(
     const char *call,
     const char *l_pre,
     const char *dbm,
@@ -872,9 +872,9 @@ void wspr(
 void print_usage()
 {
     llog.logS("Usage:");
-    llog.logS("  wspr [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
+    llog.logS("  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
     llog.logS("    OR");
-    llog.logS("  wspr [options] --test-tone f");
+    llog.logS("  wsprrypi [options] --test-tone f");
     llog.logS("");
     llog.logS("Options:");
     llog.logS("  -h --help");
@@ -1102,7 +1102,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            llog.logS("Wsprry Pi (wspr) version ", exeversion(), " (", branch(), ").");
+            llog.logS("Wsprry Pi (wsprrypi) version ", exeversion(), " (", branch(), ").");
             return false;
             break;
         case 'p':
@@ -1286,7 +1286,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
             llog.logE("Error: must specify callsign, gridsquare, dBm, and at least one frequency.");
-            llog.logE("Try: wspr --help");
+            llog.logE("Try: wsprrypi --help");
             exit(-1);
         }
     }
@@ -1655,7 +1655,7 @@ int main(const int argc, char *const argv[])
         { // Reload Loop >
             // Create WSPR symbols
             unsigned char symbols[162];
-            wspr(config.callsign.c_str(), config.grid_square.c_str(), config.tx_power.c_str(), symbols);
+            wsprrypi(config.callsign.c_str(), config.grid_square.c_str(), config.tx_power.c_str(), symbols);
 
             // // Print encodeed packet
             // printf("WSPR codeblock: ");

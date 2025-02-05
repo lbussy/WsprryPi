@@ -390,8 +390,8 @@ do_service() {
         systemctl disable "$file_name" &> /dev/null
         copy_file "$file_name" "$extension" "$script_path"
         copy_file "$file_name" ".service" "/etc/systemd/system"
-        if [[ "$file_name" == "wspr" ]]; then
-            do_ini "wspr" "ini" "/usr/local/etc"
+        if [[ "$file_name" == "wsprrypi" ]]; then
+            do_ini "wsprrypi" "ini" "/usr/local/etc"
             copy_file "logrotate" "conf" "/etc/logrotate.d/"
         fi
         eval "sudo systemctl daemon-reload" &> /dev/null
@@ -569,7 +569,7 @@ check_file() {
 }
 
 ############
-### Create wspr ini file
+### Create wsprrypi ini file
 ### Required:
 ###   none
 ############
@@ -802,8 +802,8 @@ $DOT$BGBLK$FGYLW$sp49|_|$sp28
 $DOT$BGBLK$FGGRN$HHR$RESET
 
 The WSPR daemon has started.
- - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
-                  -or- : http://$(hostname).local/wspr
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wsprrypi
+                  -or- : http://$(hostname).local/wsprrypi
  - Release version     : $VERSION
 $rebootmessage
 Happy DXing!
@@ -843,9 +843,9 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     apt_packages # Install any apt packages needed
-    do_service "wspr" "" "/usr/local/bin" # Install/upgrade wspr daemon
+    do_service "wsprrypi" "" "/usr/local/bin" # Install/upgrade wsprrypi daemon
     do_shutdown_button "shutdown_watch" "py" "/usr/local/bin" # Handle TAPR shutdown button
-    do_www "/var/www/html/wspr" "$LOCAL_WWW_DIR" # Download website
+    do_www "/var/www/html/wsprrypi" "$LOCAL_WWW_DIR" # Download website
     disable_sound
     echo -e "\n***Script $THISSCRIPT complete.***\n"
     complete

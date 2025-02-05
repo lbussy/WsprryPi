@@ -433,7 +433,7 @@ do_unit() {
     checkdaemon "$unit"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wspr" "$(which "$executable")"
+        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wsprrypi" "$(which "$executable")"
     else
         eval "systemctl restart $unit"
     fi
@@ -498,7 +498,7 @@ copy_file() {
 
 copy_logd() {
     local fullName remoteURL
-    fullName="/etc/logrotate.d/wspr"
+    fullName="/etc/logrotate.d/wsprrypi"
     remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/scripts"
 
     copy_file_generic "logrotate.conf" "$LOCAL_SCRIPTS_DIR" "$fullName" "$remoteURL"
@@ -530,9 +530,9 @@ checkscript() {
                 # Fallback: Try to extract the version by running the script with a flag if no comment is found
                 src=$(python3 "$scriptFile" -v 2>&1 | grep -oP 'version \K[^\s]+')
             fi
-        elif [[ "$scriptName" == "wspr" ]]; then
-            # Extract version for wspr using the -v command output
-            src=$(wspr -v | grep -oP 'version \K[^\s]+')
+        elif [[ "$scriptName" == "wsprrypi" ]]; then
+            # Extract version for wsprrypi using the -v command output
+            src=$(wsprrypi -v | grep -oP 'version \K[^\s]+')
         else
             # General case for other scripts with version info in a comment line
             src=$(grep -Eo "^# Created for the WsprryPi project, version [^ ]+" "$scriptFile" | \
@@ -709,14 +709,14 @@ WantedBy=multi-user.target"
 }
 
 ############
-### Create wspr ini file
+### Create wsprrypi ini file
 ### Required:
 ###   none
 ############
 
 createini() {
     local fullName
-    fullName="/usr/local/etc/wspr.ini"
+    fullName="/usr/local/etc/wsprrypi.ini"
 
     if [ -f "$fullName" ]; then
         echo
@@ -793,7 +793,7 @@ aptPackages() {
 
 doWWW() {
     local file dir fullName remoteURL
-    dir="/var/www/html/wspr"
+    dir="/var/www/html/wsprrypi"
     remoteURL="$GITRAW/$GITPROJ/$GITBRNCH/data"
 
     # Delete old files
@@ -932,8 +932,8 @@ $DOT$BGBLK$FGYLW$sp49|_|$sp28
 $DOT$BGBLK$FGGRN$HHR$RESET
 
 The WSPR daemon has started.
- - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
-                  -or- : http://$(hostname).local/wspr
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wsprrypi
+                  -or- : http://$(hostname).local/wsprrypi
  - Release version     : $VERSION
 $rebootmessage
 Happy DXing!
@@ -961,7 +961,7 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     # DEBUG TODO aptPackages # Install any apt packages needed
-    do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
+    do_unit "wsprrypi" "exe" "-D -i /usr/local/etc/wsprrypi.ini" # Install/upgrade wsprrypi daemon
     createini # Create ini file
     support_shutdown_button # Handle TAPR shutdown button
     copy_logd "$@" # Enable log rotation

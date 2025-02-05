@@ -8,7 +8,7 @@ IFS=$'\n\t'
 #
 # @details
 # This script updates WsprryPi-related files, manages the shutdown button service,
-# and ensures proper setup and functionality of the `wspr` service.
+# and ensures proper setup and functionality of the `wsprrypi` service.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
 # @version 1.2.1-update_release_scripts+98.5953e00-dirty
@@ -80,9 +80,9 @@ get_repo_root() {
 # @retval 1 if not installed.
 # -----------------------------------------------------------------------------
 check_wspri_installed() {
-    # Check for wspr service; if it fails, don't exit immediately due to `set -e`
-    if ! systemctl list-units --type=service | grep -q "^wspr"; then
-        # Print error and return 1 if wspr is not found
+    # Check for wsprrypi service; if it fails, don't exit immediately due to `set -e`
+    if ! systemctl list-units --type=service | grep -q "^wsprrypi"; then
+        # Print error and return 1 if wsprrypi is not found
         printf "Error: WsprryPi is not installed.\n" >&2
         printf "Please use install.sh to set up the environment.\n" >&2
         return 1
@@ -94,7 +94,7 @@ check_wspri_installed() {
 # @brief Stop WsprryPi and shutdown-related services.
 # @details
 # This function stops the following services:
-# - `wspr` service.
+# - `wsprrypi` service.
 # - `shutdown-button` service.
 # - `shutdown_button` service.
 #
@@ -106,7 +106,7 @@ check_wspri_installed() {
 # -----------------------------------------------------------------------------
 stop_services() {
     # Stop the Wspr service
-    if ! sudo systemctl stop wspr 2>/dev/null; then
+    if ! sudo systemctl stop wsprrypi 2>/dev/null; then
         printf "Error: Failed to stop the WsprryPi service.\n" >&2
         return 1
     fi
@@ -131,9 +131,9 @@ stop_services() {
 # @details
 # This function copies necessary files from the repository to their proper
 # locations on the system. It handles:
-# - Copying the `wspr` script to `/usr/local/bin`.
-# - Copying the `wspr.ini` configuration file to `/usr/local/etc`.
-# - Copying the logrotate configuration to `/etc/logrotate.d/wspr`.
+# - Copying the `wsprrypi` script to `/usr/local/bin`.
+# - Copying the `wsprrypi.ini` configuration file to `/usr/local/etc`.
+# - Copying the logrotate configuration to `/etc/logrotate.d/wsprrypi`.
 # - Refreshing the shutdown button file if the service is installed.
 # - Ensuring that the log directory exists.
 #
@@ -151,20 +151,20 @@ copy_files() {
     repo_root="${1:-}"
 
     # Copy Wspr script to /usr/local/bin
-    if ! sudo cp -f "$repo_root/scripts/wspr" /usr/local/bin; then
-        printf "Error: Failed to copy wspr script to /usr/local/bin.\n" >&2
+    if ! sudo cp -f "$repo_root/scripts/wsprrypi" /usr/local/bin; then
+        printf "Error: Failed to copy wsprrypi script to /usr/local/bin.\n" >&2
         return 1
     fi
 
     # Copy Wspr configuration file to /usr/local/etc
-    if ! sudo cp -f "$repo_root/scripts/wspr.ini" /usr/local/etc; then
-        printf "Error: Failed to copy wspr.ini to /usr/local/etc.\n" >&2
+    if ! sudo cp -f "$repo_root/scripts/wsprrypi.ini" /usr/local/etc; then
+        printf "Error: Failed to copy wsprrypi.ini to /usr/local/etc.\n" >&2
         return 1
     fi
 
-    # Copy logrotate configuration to /etc/logrotate.d/wspr
-    if ! sudo cp -f "$repo_root/scripts/logrotate.d" /etc/logrotate.d/wspr; then
-        printf "Error: Failed to copy logrotate configuration to /etc/logrotate.d/wspr.\n" >&2
+    # Copy logrotate configuration to /etc/logrotate.d/wsprrypi
+    if ! sudo cp -f "$repo_root/scripts/logrotate.d" /etc/logrotate.d/wsprrypi; then
+        printf "Error: Failed to copy logrotate configuration to /etc/logrotate.d/wsprrypi.\n" >&2
         return 1
     fi
 
@@ -178,9 +178,9 @@ copy_files() {
     fi
 
     # Ensure log directory exists
-    if [ ! -d "/var/log/wspr" ]; then
-        if ! sudo mkdir -p "/var/log/wspr"; then
-            printf "Error: Failed to create log directory /var/log/wspr.\n" >&2
+    if [ ! -d "/var/log/wsprrypi" ]; then
+        if ! sudo mkdir -p "/var/log/wsprrypi"; then
+            printf "Error: Failed to create log directory /var/log/wsprrypi.\n" >&2
             return 1
         fi
     fi
@@ -193,7 +193,7 @@ copy_files() {
 # @details
 # This function performs the following actions:
 # - Reloads the systemd daemon to apply any changes.
-# - Starts the `wspr` service.
+# - Starts the `wsprrypi` service.
 # - If the shutdown button service is installed, it removes its service file.
 # - Checks and restarts the `shutdown_watch` service if it's installed.
 #
@@ -208,7 +208,7 @@ restart_services() {
     fi
 
     # Start the WsprryPi service
-    if ! sudo systemctl start wspr; then
+    if ! sudo systemctl start wsprrypi; then
         printf "Error: Failed to start the WsprryPi service.\n" >&2
         return 1
     fi

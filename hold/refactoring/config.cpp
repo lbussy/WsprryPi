@@ -28,7 +28,7 @@
 // Unit tests:
 // g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_CONFIG config.cpp ini_reader.cpp ini.c -o config
 // Test command:
-// ./config wspr.ini
+// ./config wsprrypi.ini
 
 #ifdef DEBUG_MAIN_CONFIG
 

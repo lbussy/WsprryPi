@@ -126,7 +126,7 @@ build_docs() {
 deploy_docs() {
     local repo_root src_dir dest_dir
     repo_root="${1:-}"
-    dest_dir="/var/www/html/wspr/docs"
+    dest_dir="/var/www/html/wsprrypi/docs"
     src_dir="$repo_root/docs/_build/html"
 
     # Check if the source directory exists

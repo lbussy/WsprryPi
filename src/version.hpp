@@ -24,7 +24,7 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-//sudo apt install libraspberrypi-dev raspberrypi-kernel-headers -y
+// sudo apt install libraspberrypi-dev raspberrypi-kernel-headers -y
 #include <bcm_host.h>
 #include <string>
 

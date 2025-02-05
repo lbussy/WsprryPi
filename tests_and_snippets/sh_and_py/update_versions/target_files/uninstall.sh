@@ -228,26 +228,26 @@ die() {
 ############
 
 uninstall() {
-    systemctl stop wspr.service 2>/dev/null
-    systemctl disable wspr.service 2>/dev/null
+    systemctl stop wsprrypi.service 2>/dev/null
+    systemctl disable wsprrypi.service 2>/dev/null
     systemctl stop shutdown-button.service 2>/dev/null
     systemctl stop shutdown-watch.service 2>/dev/null
     systemctl disable shutdown-button.service 2>/dev/null
     systemctl disable shutdown-watch.service 2>/dev/null
-    rm -f /etc/systemd/system/wspr.service 2>/dev/null
-    rm -f /usr/local/bin/wspr 2>/dev/null
-    rm -f /usr/local/etc/wspr.ini 2>/dev/null
+    rm -f /etc/systemd/system/wsprrypi.service 2>/dev/null
+    rm -f /usr/local/bin/wsprrypi 2>/dev/null
+    rm -f /usr/local/etc/wsprrypi.ini 2>/dev/null
     rm -f /etc/systemd/system/shutdown-button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown_button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown-watch.service 2>/dev/null
     rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
     rm -f /usr/local/bin/shutdown-watch.py 2>/dev/null
-    rm -fr /var/www/html/wspr/ 2>/dev/null
+    rm -fr /var/www/html/wsprrypi/ 2>/dev/null
     sed -i '/blacklist snd_bcm2835/d' /etc/modprobe.d/alsa-blacklist.conf
     rm -fr /var/log/wsprrypi 2>/dev/null
     rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
-    rm -fr /var/log/wspr 2>/dev/null
-    rm -f /etc/logrotate.d/wspr 2>/dev/null
+    rm -fr /var/log/wsprrypi 2>/dev/null
+    rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
 }
 
 ############

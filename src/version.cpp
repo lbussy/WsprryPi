@@ -28,7 +28,7 @@
         -DDEBUG_MAIN_VERSION \
         -DMAKE_TAG="1.2.1-abc123" \
         -DMAKE_BRH="main" \
-        -DMAKE_EXE="wspr" \
+        -DMAKE_EXE="wsprrypi" \
         -DMAKE_PRJ="WsprryPi" \
         version.cpp -o version -lbcm_host
 */

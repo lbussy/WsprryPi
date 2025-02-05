@@ -736,9 +736,9 @@ void setupDMA(
 void print_usage()
 {
     llog.logS("Usage:");
-    llog.logS("  wspr [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
+    llog.logS("  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
     llog.logS("    OR");
-    llog.logS("  wspr [options] --test-tone {frequency}");
+    llog.logS("  wsprrypi [options] --test-tone {frequency}");
     llog.logS("");
     llog.logS("Options:");
     llog.logS("  -h --help");
@@ -1151,7 +1151,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
             llog.logE("Error: must specify callsign, gridsquare, dBm, and at least one frequency.");
-            llog.logE("Try: wspr --help");
+            llog.logE("Try: wsprrypi --help");
             exit(-1);
         }
     }
@@ -1347,7 +1347,7 @@ void cleanupAndExit(int sig)
     // 53) SIGRTMAX-11 54) SIGRTMAX-10 55) SIGRTMAX-9  56) SIGRTMAX-8  57) SIGRTMAX-7
     // 58) SIGRTMAX-6  59) SIGRTMAX-5  60) SIGRTMAX-4  61) SIGRTMAX-3  62) SIGRTMAX-2
     // 63) SIGRTMAX-1  64) SIGRTMAX
-    // e.g.: 'kill -SIGCONT $(pgrep wspr)'
+    // e.g.: 'kill -SIGCONT $(pgrep wsprrypi)'
 
     // Suppress the default action (printing the signal message to the terminal)
     // Log the signal information
@@ -1596,8 +1596,8 @@ int main(const int argc, char *const argv[])
 
     if ( ! parseConfigData(argc, argv) ) return 1;
 
-    // Make sure we're the only wspr process
-    wspr::SingletonProcess singleton(SINGLETON_PORT);
+    // Make sure we're the only wsprrypi process
+    wsprrypi::SingletonProcess singleton(SINGLETON_PORT);
     try
     {
         if (!singleton())

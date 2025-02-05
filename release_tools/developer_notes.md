@@ -138,7 +138,7 @@ If you are going to use VS Code from your workstation:
 7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
 
    ``` bash
-   # Extensions installed on SSH: wspr.local:
+   # Extensions installed on SSH: wsprrypi.local:
    code --install-extension ms-python.debugpy
    code --install-extension ms-python.python
    code --install-extension ms-python.vscode-pylance
@@ -166,11 +166,11 @@ If you are going to use VS Code from your workstation:
 
 11. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
-Remember that the **Wsprry Pi** and optional **Shutdown Watch** systemd daemons are running. If you are executing from your dev environment, you may receive an error that says `wspr` is already running. You can stop and deactivate these with:
+Remember that the **Wsprry Pi** and optional **Shutdown Watch** systemd daemons are running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 
 ``` bash
-sudo systemctl stop wspr
-sudo systemctl disable wspr
+sudo systemctl stop wsprrypi
+sudo systemctl disable wsprrypi
 sudo systemctl stop shutdown_watch
 sudo systemctl disable shutdown_watch
 ```

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The provided `wspr.service` file is a systemd unit configuration that appears well-structured for its intended purpose. Here's an evaluation of its components:
+The provided `wsprrypi.service` file is a systemd unit configuration that appears well-structured for its intended purpose. Here's an evaluation of its components:
 
 ### Strengths
 1. **Clear Description and Documentation**:
@@ -18,13 +18,13 @@ The provided `wspr.service` file is a systemd unit configuration that appears we
    - `RestartSec=5` provides a sensible delay between restart attempts.
 
 4. **User and Group**:
-   - `User=root` and `Group=root` indicate the service runs with root privileges. This is fine if the `wspr` application requires elevated permissions (e.g., accessing hardware or restricted files).
+   - `User=root` and `Group=root` indicate the service runs with root privileges. This is fine if the `wsprrypi` application requires elevated permissions (e.g., accessing hardware or restricted files).
 
 5. **Logging**:
-   - `SyslogIdentifier=wspr` and custom logs (`StandardOutput` and `StandardError`) ensure log messages are accessible for debugging and monitoring.
+   - `SyslogIdentifier=wsprrypi` and custom logs (`StandardOutput` and `StandardError`) ensure log messages are accessible for debugging and monitoring.
 
 6. **ExecStart**:
-   - The command `/usr/local/bin/wspr -D -i /usr/local/etc/wspr.ini` specifies the executable and configuration file, which matches typical conventions.
+   - The command `/usr/local/bin/wsprrypi -D -i /usr/local/etc/wsprrypi.ini` specifies the executable and configuration file, which matches typical conventions.
 
 7. **Install Section**:
    - `WantedBy=multi-user.target` ensures the service starts at the appropriate time during system boot.
@@ -33,13 +33,13 @@ The provided `wspr.service` file is a systemd unit configuration that appears we
 
 ### Potential Improvements
 1. **User and Group**:
-   - Running as `root` might pose security risks if not necessary. If `wspr` does not need elevated privileges, consider creating a dedicated user (e.g., `wspr`) and updating `User` and `Group` accordingly.
+   - Running as `root` might pose security risks if not necessary. If `wsprrypi` does not need elevated privileges, consider creating a dedicated user (e.g., `wsprrypi`) and updating `User` and `Group` accordingly.
 
 2. **Log Management**:
-   - The logs are being appended to specific files in `/var/log/wspr/`. Ensure these logs are rotated using `logrotate` to prevent disk space issues.
+   - The logs are being appended to specific files in `/var/log/wsprrypi/`. Ensure these logs are rotated using `logrotate` to prevent disk space issues.
 
 3. **Missing Directories**:
-   - Verify that `/var/log/wspr/` exists and is writable by the `User` and `Group` specified. If not, the service may fail to start.
+   - Verify that `/var/log/wsprrypi/` exists and is writable by the `User` and `Group` specified. If not, the service may fail to start.
 
 4. **Service Hardening** (Optional but Recommended):
    Add some security directives for better isolation:
@@ -49,8 +49,8 @@ The provided `wspr.service` file is a systemd unit configuration that appears we
    ProtectHome=true
    NoNewPrivileges=true
    PrivateTmp=true
-   ReadOnlyPaths=/usr/local/bin/wspr /usr/local/etc/wspr.ini
-   ReadWritePaths=/var/log/wspr
+   ReadOnlyPaths=/usr/local/bin/wsprrypi /usr/local/etc/wsprrypi.ini
+   ReadWritePaths=/var/log/wsprrypi
    ```
 
 1. **Comment Update**:
@@ -63,26 +63,26 @@ The file is appropriate for the WsprryPi project and can work as is. The suggest
 
 ## DMA Notes
 
-If the `wspr` process uses Direct Memory Access (DMA), it likely requires elevated privileges or direct access to specific hardware resources. This makes the `root` user configuration in your `wspr.service` file more justifiable. However, there are still security and operational best practices you can apply:
+If the `wsprrypi` process uses Direct Memory Access (DMA), it likely requires elevated privileges or direct access to specific hardware resources. This makes the `root` user configuration in your `wsprrypi.service` file more justifiable. However, there are still security and operational best practices you can apply:
 
 ---
 
 ### Security Enhancements for DMA Usage
 1. **Dedicated System User**:
    Even with DMA, you could run the service as a non-root user if that user has sufficient permissions to access the required hardware. For example:
-   - Create a dedicated `wspr` user:
+   - Create a dedicated `wsprrypi` user:
      ```bash
-     sudo useradd -r -s /bin/false wspr
+     sudo useradd -r -s /bin/false wsprrypi
      ```
    - Assign necessary permissions to this user, such as access to specific devices or files, using `udev` rules or `setcap`:
      ```bash
-     sudo setcap cap_sys_rawio,cap_dac_override+ep /usr/local/bin/wspr
+     sudo setcap cap_sys_rawio,cap_dac_override+ep /usr/local/bin/wsprrypi
      ```
-   - Update the `wspr.service` file to:
+   - Update the `wsprrypi.service` file to:
 
       ```ini
-      User=wspr
-      Group=wspr
+      User=wsprrypi
+      Group=wsprrypi
       ```
 
 2. **Restrict Resource Access**:
@@ -99,8 +99,8 @@ If the `wspr` process uses Direct Memory Access (DMA), it likely requires elevat
 
 ### Logging Improvements for DMA
 DMA-related issues might require detailed debug logging. Ensure your service logs capture enough information:
-- Add a debug flag if `wspr` supports one.
-- Check if `/var/log/wspr/wspr.error.log` captures DMA errors. If not, consider enhancing the application's logging or using `dmesg` for kernel-related issues.
+- Add a debug flag if `wsprrypi` supports one.
+- Check if `/var/log/wsprrypi/wsprrypi.error.log` captures DMA errors. If not, consider enhancing the application's logging or using `dmesg` for kernel-related issues.
 
 ---
 
@@ -122,7 +122,7 @@ Include options to safeguard against DMA-related misbehavior:
    ```
 
 - **Real-Time Priority**:
-   If `wspr` requires high-priority scheduling for DMA, add:
+   If `wsprrypi` requires high-priority scheduling for DMA, add:
 
    ```ini
    IOSchedulingClass=real-time
@@ -131,12 +131,12 @@ Include options to safeguard against DMA-related misbehavior:
 
 ---
 
-### Final `wspr.service` Example for DMA
+### Final `wsprrypi.service` Example for DMA
 Here’s an updated service file incorporating the suggestions:
 
 ```ini
 [Unit]
-Description=wspr daemon for: wspr
+Description=wsprrypi daemon for: wsprrypi
 Documentation=https://github.com/lbussy/WsprryPi/discussions
 After=multi-user.target
 
@@ -146,18 +146,18 @@ Restart=on-failure
 RestartSec=5
 User=root
 Group=root
-ExecStart=/usr/local/bin/wspr -D -i /usr/local/etc/wspr.ini
-SyslogIdentifier=wspr
-StandardOutput=append:/var/log/wspr/wspr.transmit.log
-StandardError=append:/var/log/wspr/wspr.error.log
+ExecStart=/usr/local/bin/wsprrypi -D -i /usr/local/etc/wsprrypi.ini
+SyslogIdentifier=wsprrypi
+StandardOutput=append:/var/log/wsprrypi/wsprrypi.transmit.log
+StandardError=append:/var/log/wsprrypi/wsprrypi.error.log
 
 # Security and performance enhancements
 ProtectSystem=full
 ProtectHome=true
 NoNewPrivileges=true
 PrivateTmp=true
-ReadOnlyPaths=/usr/local/bin/wspr /usr/local/etc/wspr.ini
-ReadWritePaths=/var/log/wspr
+ReadOnlyPaths=/usr/local/bin/wsprrypi /usr/local/etc/wsprrypi.ini
+ReadWritePaths=/var/log/wsprrypi
 DeviceAllow=/dev/dma_device rw
 LimitMEMLOCK=infinity
 LimitNPROC=512

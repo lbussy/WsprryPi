@@ -54,8 +54,8 @@ $DOT$BGBLK$FGYLW$sp49|_|$sp28
 $DOT$BGBLK$FGGRN$HHR$RESET
 
 The WSPR daemon has started.
- - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
-                  -or- : http://$(hostname).local/wspr
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wsprrypi
+                  -or- : http://$(hostname).local/wsprrypi
  - Release version     : $VERSION
 $rebootmessage
 Happy DXing!

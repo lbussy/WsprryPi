@@ -1,6 +1,6 @@
 # Advanced Operations
 
-Everyone wants to know hat is under the covers. These topics cover some of the underlying controls and topics related to WSPR and `wspr` operations.
+Everyone wants to know hat is under the covers. These topics cover some of the underlying controls and topics related to WSPR and `wsprrypi` operations.
 
 ## Transmission Timing
 
@@ -24,14 +24,14 @@ Suppose your local AM radio station is at 780kHz. Use the `--test-tone` option t
 
 ## INI File
 
-System daemon operations will read the `wspr.ini` file to supply execution parameters. During everyday use, there should be no reason to edit the file directly. The Wsprry Pi installer stores the file in the user data directory:
+System daemon operations will read the `wsprrypi.ini` file to supply execution parameters. During everyday use, there should be no reason to edit the file directly. The Wsprry Pi installer stores the file in the user data directory:
 
 ``` bash
 $ ls -al /usr/local/etc
 total 12
 drwxr-xr-x  2 root root 4096 Feb 18 14:51 .
 drwxr-xr-x 10 root root 4096 Sep 21 19:02 ..
--rw-rw-rw-  1 root root  171 Mar  6 19:47 wspr.ini
+-rw-rw-rw-  1 root root  171 Mar  6 19:47 wsprrypi.ini
 ```
 
 The INI file is a standard INI file with which you may already be familiar. It has three sections, Control, Common, and Extended. The application will ignore blank lines and other whitespaces. The settings are in a key/value pair separated by an equals sign. Comments are allowed and delineated by a semicolon.
@@ -59,15 +59,15 @@ Power Level = 7 ; 0-7, 7 is max
 ```
 
 - **Control**
-   - *Transmit**: A true or false Boolean, indicating whether wspr will transmit. Even when not transmitting, wspr will continue to run and react to changes in the INI.
+   - *Transmit**: A true or false Boolean, indicating whether wsprrypi will transmit. Even when not transmitting, wsprrypi will continue to run and react to changes in the INI.
 - **Common**
   - **Call Sign**: Your registered call sign.  Your callsign will be alphanumeric, contain no spaces, and be that which is assigned to you by your authorizing entity.
   - **Grid Square**: Your four-digit Maidenhead grid square. It will be two letters followed by two numbers.
   - **TX Power**:
-  - **Frequency**: A string representing the frequency or a list of frequencies through which wspr will rotate. The notation can be an integer with "m" as a suffix indicating a standard band plan, an integer as in '450000000' representing the frequency in Hz, or an exponential format like '780e3'. The '-15' indicates it should use a 15-minute window in LF, MF, or 160m.
+  - **Frequency**: A string representing the frequency or a list of frequencies through which wsprrypi will rotate. The notation can be an integer with "m" as a suffix indicating a standard band plan, an integer as in '450000000' representing the frequency in Hz, or an exponential format like '780e3'. The '-15' indicates it should use a 15-minute window in LF, MF, or 160m.
 - **Extended**
   - **PPM*: A double for the PPM offset to use as a specific calibration. The compensation is not honored when in self-calibration mode.
-  - **Self Cal**: A true/false Boolean indicating whether wspr should self-calibrate with the NTP clock.
+  - **Self Cal**: A true/false Boolean indicating whether wsprrypi should self-calibrate with the NTP clock.
   - **Offset**: = A true/false Boolean indicating whether to add a slight offset to each transmission.
   - **Use LED**: A true/false Boolean to use the LED attached to the TAPR board as a transmission indicator.
   - **Power Level**: A power level indicator, 0-7, the default is 7:
@@ -88,7 +88,7 @@ The code uses the RPi PWM peripheral to time the frequency transitions of the ou
 
 The output of the Pi's PWM is a square wave, so a low-pass filter is REQUIRED. Knowing why this is required is part of learning to be a Ham. Connect a low-pass filter (via a decoupling capacitor) to GPIO4 (GPCLK0) and the Ground pin of your Raspberry Pi and connect an antenna to the LPF. The GPIO4 and GND pins are found on the main header on pins 7 and 9, respectively; the pin closest to the P1 label is pin 1, and its 3rd and 4th neighbor is pin 7 and 9, respectively. See [this link](http://elinux.org/RPi\_Low-level\_peripherals) for pin layout.
 
-Examples of low-pass filters can be [found here](http://www.gqrp.com/harmonic\_filters.pdf) (PDF link). TAPR makes a [very nice shield for the Raspberry Pi](https://www.tapr.org/kits\_20M-wspr-pi.html) that is pre-assembled, performs the appropriate filtering for the selected band, and also amplifies the power output to 20dBm. Just connect your antenna, and you're good to go.
+Examples of low-pass filters can be [found here](http://www.gqrp.com/harmonic\_filters.pdf) (PDF link). TAPR makes a [very nice shield for the Raspberry Pi](https://www.tapr.org/kits\_20M-wsprrypi-pi.html) that is pre-assembled, performs the appropriate filtering for the selected band, and also amplifies the power output to 20dBm. Just connect your antenna, and you're good to go.
 
 The expected power output is 10mW (+10dBm) in a 50 Ohm load without the TAPR hat. This power looks negligible, but when connected to a simple dipole antenna, this may result in reception reports ranging up to several thousand kilometers.
 

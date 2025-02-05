@@ -25,7 +25,7 @@
 // Unit testing:
 // g++ -Wall -Werror -fmax-errors=5 -std=c++17 -DDEBUG_MAIN_READER ini_reader.cpp ini.c -o ini_reader
 // Test command:
-// ./ini_reader wspr.ini
+// ./ini_reader wsprrypi.ini
 
 #include "ini_reader.hpp"
 #include "ini.h"

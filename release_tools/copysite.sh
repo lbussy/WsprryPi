@@ -78,7 +78,7 @@ get_repo_root() {
 # This function performs the following tasks:
 # - Cleans up the target directory by removing and recreating it.
 # - Copies the data files from the repository to the web server directory.
-# - Creates a symbolic link to the `wspr.ini` configuration file.
+# - Creates a symbolic link to the `wsprrypi.ini` configuration file.
 # - Sets the appropriate ownership for the files.
 #
 # If any step fails, an error message is printed and the function returns with a
@@ -93,7 +93,7 @@ get_repo_root() {
 deploy_website() {
     local repo_root
     repo_root="${1:-}"
-    local web_dir="/var/www/html/wspr"
+    local web_dir="/var/www/html/wsprrypi"
 
     # Remove existing web directory and recreate it
     if ! sudo rm -fr "$web_dir"; then
@@ -113,8 +113,8 @@ deploy_website() {
     fi
 
     # Create a symbolic link to the configuration file
-    if ! sudo ln -sf /usr/local/etc/wspr.ini "$web_dir/wspr.ini"; then
-        printf "Error: Failed to create symbolic link for wspr.ini.\n" >&2
+    if ! sudo ln -sf /usr/local/etc/wsprrypi.ini "$web_dir/wsprrypi.ini"; then
+        printf "Error: Failed to create symbolic link for wsprrypi.ini.\n" >&2
         return 1
     fi
 
