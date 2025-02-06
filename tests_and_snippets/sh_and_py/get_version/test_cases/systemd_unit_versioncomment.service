@@ -1,0 +1,10 @@
+[Unit]
+Description=WsprryPi Service
+
+[Service]
+ExecStart=/usr/bin/wsprrypi
+
+[Install]
+WantedBy=multi-user.target
+
+# Created for the WsprryPi project, version 1.2.1-8c2314a-dirty [version_exe]

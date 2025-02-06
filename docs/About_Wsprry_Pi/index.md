@@ -18,7 +18,7 @@ The original WsprryPi was written by [Dan Ankers](https://github.com/DanAnkers/)
 
 If I need to correct any of this history, please let me know by [opening an issue](https://github.com/lbussy/WsprryPi/issues).
 
-[threeme3](https://github.com/threeme3/) adapted Dan's repo, and then I forked threeme3's work here. Bruce Raymond from [TAPR](https://tapr.org/) (who sell the [WPSR Without Tears](https://tapr.org/product/wspr/) hat for the Raspberry Pi) incorporated a few things in some complete Pi images that TAPR makes available, and I wanted to incorporate those here as well. Of course, the Internet being what it is, the libraries Bruce used are no longer available, so I had to go in a different direction.
+[threeme3](https://github.com/threeme3/) adapted Dan's repo, and then I forked threeme3's work here. Bruce Raymond from [TAPR](https://tapr.org/) (who sell the [WPSR Without Tears](https://tapr.org/product/wsprrypi/) hat for the Raspberry Pi) incorporated a few things in some complete Pi images that TAPR makes available, and I wanted to incorporate those here as well. Of course, the Internet being what it is, the libraries Bruce used are no longer available, so I had to go in a different direction.
 
 Where do I come in? Well, Bruce was friendly enough to answer my email. I'm a new ham in 2022 (KF0LDK originally, now AA0NT), still trying to find my way, but I have some minor success in the Raspberry Pi ecosystem, so I decided to take on the gap which might exist between a ham and a new Pi owner. I want to be VERY clear. I am not your Elmer; I cannot help with ham radio. This project stops where WSPR executes on the Pi, and you are responsible for your actions, your hardware, and your level of understanding.
 

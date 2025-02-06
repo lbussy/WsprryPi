@@ -10,7 +10,7 @@ esbonio==0.16.5
 gpiozero==2.0.1
 idna==3.10
 imagesize==1.4.1
-Jinja2==3.1.4
+Jinja2==3.1.5
 lsprotocol==2023.0.1
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
@@ -26,7 +26,7 @@ PyYAML==6.0.2
 requests==2.32.3
 snowballstemmer==2.2.0
 Sphinx==8.1.3
-sphinx_rtd_theme==3.0.1
+sphinx_rtd_theme==3.0.2
 sphinxcontrib-applehelp==2.0.0
 sphinxcontrib-devhelp==2.0.0
 sphinxcontrib-htmlhelp==2.1.0

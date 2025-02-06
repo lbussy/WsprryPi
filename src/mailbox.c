@@ -1,81 +1,100 @@
+/**
+ * @file mailbox.c
+ * @brief Implementation of mailbox-based communication for the Raspberry Pi.
+ *
+ * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
+ * active).  However the mailbox implementation is property of Broadcom.
+ *
+ * Copyright (c) 2012, Broadcom Europe Ltd.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *  - Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  - Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  - Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from
+ *    this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*
-Copyright (c) 2012, Broadcom Europe Ltd.
-All rights reserved.
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-     * Redistributions of source code must retain the above copyright
-        notice, this list of conditions and the following disclaimer.
-     * Redistributions in binary form must reproduce the above copyright
-        notice, this list of conditions and the following disclaimer in the
-        documentation and/or other materials provided with the distribution.
-     * Neither the name of the copyright holder nor the
-        names of its contributors may be used to endorse or promote products
-        derived from this software without specific prior written permission.
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ * References:
+ * - https://github.com/raspberrypi/firmware/wiki/Mailboxes
+ * - https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface
+ * - https://bitbanged.com/posts/understanding-rpi/the-mailbox/
+ * - http://www.freenos.org/doxygen/classBroadcomMailbox.html
+ */
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
 #include <stdint.h>
-#include <sys/sysmacros.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
-
 #include "mailbox.h"
 
 #define PAGE_SIZE (4 * 1024)
 
+/**
+ * @brief Maps physical memory into the process's address space.
+ *
+ * @param base Physical base address to map.
+ * @param size Size of the memory region to map.
+ * @return Pointer to the mapped memory, or exits on failure.
+ */
 void *mapmem(uint32_t base, uint32_t size)
 {
     int mem_fd;
     unsigned offset = base % PAGE_SIZE;
-    base = base - offset;
-    /* open /dev/mem */
+    base -= offset;
+
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        printf("can't open /dev/mem\nThis program should be run as root. Try prefixing command with: sudo\n");
-        exit(-1);
+        fprintf(stderr, "Error: Cannot open /dev/mem. Run as root or use sudo.\n");
+        exit(EXIT_FAILURE);
     }
-    void *mem = mmap(
-        0,
-        size,
-        PROT_READ | PROT_WRITE,
-        MAP_SHARED /*|MAP_FIXED*/,
-        mem_fd,
-        base);
-#ifdef DEBUG
-    printf("base=0x%x, mem=%p\n", base, mem);
-#endif
+
+    void *mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, base);
+    close(mem_fd);
+
     if (mem == MAP_FAILED)
     {
-        printf("mmap error %d\n", (int)mem);
-        exit(-1);
+        perror("Error: mmap failed");
+        exit(EXIT_FAILURE);
     }
-    close(mem_fd);
-    return (uint8_t* )mem + offset; // TODO:  Make sure we are still sending a good packet
+
+    return (uint8_t *)mem + offset;
 }
 
+/**
+ * @brief Unmaps previously mapped memory.
+ *
+ * @param addr Pointer to the mapped memory.
+ * @param size Size of the memory region to unmap.
+ */
 void unmapmem(void *addr, uint32_t size)
 {
-    int s = munmap(addr, size);
-    if (s != 0)
+    if (munmap(addr, size) != 0)
     {
-        printf("munmap error %d\n", s);
-        exit(-1);
+        perror("Error: munmap failed");
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -151,62 +170,84 @@ unsigned mem_free(int file_desc, unsigned handle)
     return p[5];
 }
 
+/**
+ * @brief Locks memory using the mailbox interface.
+ *
+ * @param file_desc File descriptor for the mailbox.
+ * @param handle Handle to the memory to lock.
+ * @return Memory lock handle, or exits on error.
+ */
 unsigned mem_lock(int file_desc, unsigned handle)
 {
-    int i = 0;
     unsigned p[32];
-    p[i++] = 0;          // size
-    p[i++] = 0x00000000; // process request
+    unsigned i = 0;
 
-    p[i++] = 0x3000d; // (the tag id)
-    p[i++] = 4;       // (size of the buffer)
-    p[i++] = 4;       // (size of the data)
+    p[i++] = 0;          // Size
+    p[i++] = 0x00000000; // Process request
+    p[i++] = 0x3000d;    // Tag ID
+    p[i++] = 4;          // Size of the buffer
+    p[i++] = 4;          // Size of the data
     p[i++] = handle;
-
-    p[i++] = 0x00000000;  // end tag
-    p[0] = i * sizeof *p; // actual size
+    p[i++] = 0x00000000; // End tag
+    p[0] = i * sizeof(*p);
 
     if (mbox_property(file_desc, p) < 0)
     {
-        printf("mem_lock: mbox_property() error, abort!\n");
-        exit(-1);
+        fprintf(stderr, "Error: mem_lock failed, aborting.\n");
+        exit(EXIT_FAILURE);
     }
+
     return p[5];
 }
 
+/**
+ * @brief Unlocks memory using the mailbox interface.
+ *
+ * @param file_desc File descriptor for the mailbox.
+ * @param handle Handle to the memory to unlock.
+ * @return 0 on success, or exits on error.
+ */
 unsigned mem_unlock(int file_desc, unsigned handle)
 {
-    int i = 0;
     unsigned p[32];
-    p[i++] = 0;          // size
-    p[i++] = 0x00000000; // process request
+    unsigned i = 0;
 
-    p[i++] = 0x3000e; // (the tag id)
-    p[i++] = 4;       // (size of the buffer)
-    p[i++] = 4;       // (size of the data)
+    p[i++] = 0;          // Size
+    p[i++] = 0x00000000; // Process request
+    p[i++] = 0x3000e;    // Tag ID
+    p[i++] = 4;          // Size of the buffer
+    p[i++] = 4;          // Size of the data
     p[i++] = handle;
-
-    p[i++] = 0x00000000;  // end tag
-    p[0] = i * sizeof *p; // actual size
+    p[i++] = 0x00000000; // End tag
+    p[0] = i * sizeof(*p);
 
     if (mbox_property(file_desc, p) < 0)
     {
-        printf("mem_unlock: mbox_property() error, ignoring\n");
+        fprintf(stderr, "Error: mem_unlock failed.\n");
         return 0;
     }
+
     return p[5];
 }
 
+/**
+ * @brief Executes code in the GPU using the mailbox interface.
+ *
+ * @param file_desc File descriptor for the mailbox.
+ * @param code Address of the code to execute.
+ * @param r0-r5 Parameters to pass to the code.
+ * @return Result of the code execution, or 0 on error.
+ */
 unsigned execute_code(int file_desc, unsigned code, unsigned r0, unsigned r1, unsigned r2, unsigned r3, unsigned r4, unsigned r5)
 {
-    int i = 0;
     unsigned p[32];
-    p[i++] = 0;          // size
-    p[i++] = 0x00000000; // process request
+    unsigned i = 0;
 
-    p[i++] = 0x30010; // (the tag id)
-    p[i++] = 28;      // (size of the buffer)
-    p[i++] = 28;      // (size of the data)
+    p[i++] = 0;          // Size
+    p[i++] = 0x00000000; // Process request
+    p[i++] = 0x30010;    // Tag ID
+    p[i++] = 28;         // Size of the buffer
+    p[i++] = 28;         // Size of the data
     p[i++] = code;
     p[i++] = r0;
     p[i++] = r1;
@@ -214,103 +255,39 @@ unsigned execute_code(int file_desc, unsigned code, unsigned r0, unsigned r1, un
     p[i++] = r3;
     p[i++] = r4;
     p[i++] = r5;
-
-    p[i++] = 0x00000000;  // end tag
-    p[0] = i * sizeof *p; // actual size
-
-    if (mbox_property(file_desc, p) < 0)
-    {
-        printf("execute_code: mbox_property() error, ignoring\n");
-        return 0;
-    }
-    return p[5];
-}
-
-unsigned qpu_enable(int file_desc, unsigned enable)
-{
-    int i = 0;
-    unsigned p[32];
-
-    p[i++] = 0;          // size
-    p[i++] = 0x00000000; // process request
-
-    p[i++] = 0x30012; // (the tag id)
-    p[i++] = 4;       // (size of the buffer)
-    p[i++] = 4;       // (size of the data)
-    p[i++] = enable;
-
-    p[i++] = 0x00000000;  // end tag
-    p[0] = i * sizeof *p; // actual size
+    p[i++] = 0x00000000; // End tag
+    p[0] = i * sizeof(*p);
 
     if (mbox_property(file_desc, p) < 0)
     {
-        printf("qpu_enable: mbox_property() error, ignoring\n");
+        fprintf(stderr, "Error: execute_code failed.\n");
         return 0;
     }
+
     return p[5];
 }
 
-unsigned execute_qpu(int file_desc, unsigned num_qpus, unsigned control, unsigned noflush, unsigned timeout)
-{
-    int i = 0;
-    unsigned p[32];
-
-    p[i++] = 0;          // size
-    p[i++] = 0x00000000; // process request
-    p[i++] = 0x30011;    // (the tag id)
-    p[i++] = 16;         // (size of the buffer)
-    p[i++] = 16;         // (size of the data)
-    p[i++] = num_qpus;
-    p[i++] = control;
-    p[i++] = noflush;
-    p[i++] = timeout; // ms
-
-    p[i++] = 0x00000000;  // end tag
-    p[0] = i * sizeof *p; // actual size
-
-    if (mbox_property(file_desc, p) < 0)
-    {
-        printf("execute_qpu: mbox_property() error, ignoring\n");
-        return 0;
-    }
-    return p[5];
-}
-
+/**
+ * @brief Opens the mailbox device for communication.
+ *
+ * @return File descriptor for the opened mailbox device, or exits on failure.
+ */
 int mbox_open()
 {
-    int file_desc;
-
-    // Open a char device file used for communicating with kernel mbox driver.
-
-    // try to use the device node in /dev first (created by kernels 4.1+)
-    file_desc = open(DEVICE_FILE_NAME, 0);
-    if (file_desc >= 0)
+    int file_desc = open(DEVICE_FILE_NAME, O_RDWR);
+    if (file_desc < 0)
     {
-        // printf("Using mbox device " DEVICE_FILE_NAME ".\n");
-        return file_desc;
+        perror("Error: Unable to open mailbox device");
+        exit(EXIT_FAILURE);
     }
-
-    // Try to create one
-    unlink(LOCAL_DEVICE_FILE_NAME);
-    if (mknod(LOCAL_DEVICE_FILE_NAME, S_IFCHR | 0600, makedev(MAJOR_NUM_A, 0)) >= 0 &&
-        (file_desc = open(LOCAL_DEVICE_FILE_NAME, 0)) >= 0)
-    {
-        printf("Using local mbox device file with major %d.\n", MAJOR_NUM_A);
-        return file_desc;
-    }
-
-    unlink(LOCAL_DEVICE_FILE_NAME);
-    if (mknod(LOCAL_DEVICE_FILE_NAME, S_IFCHR | 0600, makedev(MAJOR_NUM_B, 0)) >= 0 &&
-        (file_desc = open(LOCAL_DEVICE_FILE_NAME, 0)) >= 0)
-    {
-        printf("Using local mbox device file with major %d.\n", MAJOR_NUM_B);
-        return file_desc;
-    }
-
-    printf("Unable to open / create kernel mbox device file, abort!\n");
-    exit(-1);
+    return file_desc;
 }
 
+/**
+ * @brief Closes the mailbox device.
+ *
+ * @param file_desc File descriptor for the mailbox to close.
+ */
 void mbox_close(int file_desc)
 {
     close(file_desc);
