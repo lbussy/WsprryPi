@@ -27,8 +27,7 @@
 # Allow threading by default using all available processors
 MAKEFLAGS += -j$(nproc)
 
-# TODO:
-#   - Implement and test the 'test' target.
+# TODO: Implement and test the 'test' target.
 
 # Output binary name
 OUT = wsprrypi
@@ -37,6 +36,7 @@ OUT = wsprrypi
 EXE = $(OUT)
 
 # Macro for LED pin number, used as a compile-time constant
+# Pin 12, GPIO18, BCM18
 LED_PIN = 18
 
 # Installation directory for the binary
