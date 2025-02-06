@@ -1,5 +1,8 @@
 # To Do
 
+- Fix shutdown-watch
+- Create reloease script orchestration
+
 ## Stuff to Remember
 
 ### Branches:
