@@ -8,8 +8,8 @@ IFS=$'\n\t'
 # @details Cleans all files and folders used by versions before 1.3.0.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+98.5953e00-dirty
-# @date 2025-02-03
+# @version 1.2.1-remove_bcm+109.59592e9
+# @date 2025-02-05
 # @copyright MIT License
 #
 # @license
@@ -62,6 +62,7 @@ remove_files_and_dirs() {
     local files_and_dirs=("$@")
     if [ ${#files_and_dirs[@]} -eq 0 ]; then
         files_and_dirs=(
+            "/usr/local/bin/wspr"
             "/usr/local/etc/wspr.ini"
             "/usr/local/bin/shutdown-button.py"
             "/usr/local/bin/shutdown-watch.py"

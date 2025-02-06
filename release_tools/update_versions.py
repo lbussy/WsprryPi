@@ -6,8 +6,8 @@
 # @brief Update versions in scripts and source files.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+98.5953e00-dirty
-# @date 2025-02-03
+# @version 1.2.1-remove_bcm+109.59592e9
+# @date 2025-02-05
 # @copyright MIT License
 #
 # @license
@@ -50,7 +50,7 @@ import inspect
 
 from get_semantic_version import SemanticVersion
 
-__version__ = "1.2.1-update_release_scripts+98.5953e00-dirty"
+__version__ = "1.2.1-remove_bcm+109.59592e9"
 
 
 # List of files to update
