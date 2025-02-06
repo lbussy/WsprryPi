@@ -3,15 +3,13 @@
  * @brief Implements an INI handler for reading and managing configuration
  * data from an INI file.
  *
+ * This file is part of WsprryPi, a project originally forked from
+ * threeme3/WsprryPi (no longer active on GitHub).
+ *
+ * However, this new code added to the project is distributed under under
+ * the MIT License. See LICENSE.MIT.md for more information.
+ *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
- *
- * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
- * active).
- *
- * However, this portion of new code added to the project is distributed under
- * under the MIT License. See LICENSE for more information.
- *
- * Copyright (c) 2009-2020, Ben Hoyt, All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
