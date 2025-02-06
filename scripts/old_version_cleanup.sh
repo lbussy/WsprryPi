@@ -3,12 +3,9 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # -----------------------------------------------------------------------------
-# @file cleanup_old_wspr.sh
-# @brief Trap unexpected errors during script execution.
-# @details Captures any errors (via the ERR signal) that occur during script
-#          execution. Logs the function name and line number where the error
-#          occurred and exits the script. The trap calls an error-handling
-#          function for better flexibility.
+# @file old_version_cleanup.sh
+# @brief Cleanup Wsprry Pi versions < 1.3.0.
+# @details Cleans all files and folders used by versions before 1.3.0.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
 # @version 1.2.1-update_release_scripts+98.5953e00-dirty
@@ -39,8 +36,7 @@ IFS=$'\n\t'
 # SOFTWARE.
 #
 # @usage
-# sudo ./cleanup_old_wspr.sh
-# sudo ./cleanup_old_wspr.sh debug
+# sudo ./old_version_cleanup.sh
 #
 # -----------------------------------------------------------------------------
 
@@ -53,13 +49,13 @@ IFS=$'\n\t'
 #          removing items if unexpected dependencies or locations are detected.
 #          All errors are suppressed and warnings are printed to the terminal.
 #
-# @param files_and_dirs Array of files and directories to remove. If no arguments
-#                       are provided, default files and directories will be used.
+# @param files_and_dirs Array of files and directories to remove. If no
+#                       arguments are provided, default files and directories
+#                       will be used.
 #
-# @return 0 if all files and directories were successfully removed, 1 if any failure occurred.
+# @return 0 if all files and directories were successfully removed, 1 if any
+# failure occurred.
 #
-# @example
-# remove_files_and_dirs "/usr/local/bin/abc" "/var/www/html/xyz"
 # -----------------------------------------------------------------------------
 remove_files_and_dirs() {
     # Accept files and directories as arguments or use a default list if none provided
@@ -122,10 +118,9 @@ remove_files_and_dirs() {
 # @param services List of service names to remove. If no arguments are provided,
 #                 default services will be used.
 #
-# @return 0 if all services were successfully processed, 1 if any failure occurred.
+# @return 0 if all services were successfully processed, 1 if any failure
+# occurred.
 #
-# @example
-# remove_services "wspr" "shutdown-button" "shutdown-watch"
 # -----------------------------------------------------------------------------
 remove_services() {
     # Accept services as arguments or use a default list if none provided
