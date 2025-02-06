@@ -35,7 +35,7 @@
 #include <stdexcept>
 #include <system_error>
 
-namespace wspr {
+namespace wsprrypi {
 
 /**
  * @class SingletonException
@@ -119,6 +119,6 @@ private:
     uint16_t port_;  ///< Port number used for binding.
 };
 
-} // namespace wspr
+} // namespace wsprrypi
 
 #endif // SINGLETON_H

@@ -6,7 +6,7 @@
 : <<'EOF'
 This script manages Apache2 configurations and settings for the Wsprry Pi project.
 It will:
-  - Enable a rewrite from '/' to '/wspr' if the default Apache2 page is present
+  - Enable a rewrite from '/' to '/wsprrypi' if the default Apache2 page is present
     in the root directory.
   - Add a 'ServerName' directive to localhost to suppress the warning:
     "Could not reliably determine the server's fully qualified domain name."

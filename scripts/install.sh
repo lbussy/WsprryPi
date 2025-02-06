@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+98.5953e00-dirty
-# @date 2025-02-03
+# @version 1.2.1-remove_bcm+109.59592e9
+# @date 2025-02-05
 # @copyright MIT License
 #
 # @license
@@ -257,15 +257,15 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 # @var LOG_ROTATE
 # @brief The log rotation configuration file.
 # @details This variable defines the logrotate configuration file, used to manage
-#          WsprryPi logs under `/var/log/wspr/` by limiting file size and retention.
+#          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
 #
 # @var SHUTDOWN_WATCH_EXE
 # @brief The shutdown monitoring script.
 # @details This variable holds the name of the shutdown watch script, which
 #          monitors the TAPR shutdown button functionality to enable safe shutdown.
 # -----------------------------------------------------------------------------
-readonly WSPR_EXE="wspr"
-readonly WSPR_INI="wspr.ini"
+readonly WSPR_EXE="wsprrypi"
+readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
 readonly SHUTDOWN_WATCH_EXE="shutdown_watch.py"
 
@@ -1868,19 +1868,19 @@ determine_execution_context() {
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             debug_print "Execution context: Script executed via pipe." "$debug"
-                    debug_end "$debug"
-            return 0  # Execution via pipe
+            debug_end "$debug"
+            printf "0\n" && return 0  # Execution via pipe
         else
             warn "Unusual bash execution detected."
-                    debug_end "$debug"
-            return 1  # Unusual bash execution
+            debug_end "$debug"
+            printf "1\n" && return 0  # Unusual bash execution
         fi
     fi
 
     # Get the script path
     script_path=$(realpath "$0" 2>/dev/null) || script_path=$(pwd)/$(basename "$0")
     if [[ ! -f "$script_path" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Unable to resolve script path: $script_path"
     fi
     debug_print "Resolved script path: $script_path" "$debug"
@@ -1891,25 +1891,14 @@ determine_execution_context() {
 
     # Safeguard against invalid current_dir during initialization
     if [[ ! -d "$current_dir" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Invalid starting directory: $current_dir"
     fi
 
-    # Traverse upwards to detect a GitHub repository
-    while [[ "$current_dir" != "/" && $depth -lt $max_depth ]]; do
-        if [[ -d "$current_dir/.git" ]]; then
-            debug_print "GitHub repository detected at depth $depth: $current_dir" "$debug"
-                    debug_end "$debug"
-            return 3  # Execution within a GitHub repository
-        fi
-        current_dir=$(dirname "$current_dir") # Move up one directory
-        ((depth++))
-    done
-
-    # Handle loop termination conditions
-    if [[ $depth -ge $max_depth ]]; then
-            debug_end "$debug"
-        die 1 "Directory traversal exceeded maximum depth ($max_depth)"
+    # Check if the current directory is inside a Git repository
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        debug_end "$debug"
+        printf "3\n" && return 0  # Execution from a PATH location
     fi
 
     # Check if the script is executed from a PATH location
@@ -1917,15 +1906,15 @@ determine_execution_context() {
     resolved_path=$(command -v "$(basename "$0")" 2>/dev/null)
     if [[ "$resolved_path" == "$script_path" ]]; then
         debug_print "Script executed from a PATH location: $resolved_path." "$debug"
-            debug_end "$debug"
-        return 4  # Execution from a PATH location
+        debug_end "$debug"
+        printf "4\n" && return 0  # Execution from a PATH location
     fi
 
     # Default: Direct execution from the local filesystem
     debug_print "Default context: Script executed directly." "$debug"
 
     debug_end "$debug"
-    return 2
+    printf "2\n" && return 0  
 }
 
 # -----------------------------------------------------------------------------
@@ -1946,8 +1935,8 @@ handle_execution_context() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Call determine_execution_context and capture its output
-    determine_execution_context "$debug"
-    local context=$?  # Capture the return code to determine context
+    local context
+    context=$(determine_execution_context "$debug")
 
     # Validate the context
     if ! [[ "$context" =~ ^[0-4]$ ]]; then
@@ -5225,14 +5214,14 @@ manage_config() {
         # Change ownership on the configuration
         debug_print "Changing ownership on configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            if [[ "$config_file" == "wspr.ini" ]]; then
+            if [[ "$config_file" == "wsprrypi.ini" ]]; then
                 logD "Exec: sudo chown www-data:www-data $config_path"
             else
                 logD "Exec: sudo chown root:root $config_path"
             fi
         else
-            if [[ "$config_file" == "wspr.ini" ]]; then
-                exec_command "Change ownership on wspr.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
+            if [[ "$config_file" == "wsprrypi.ini" ]]; then
+                exec_command "Change ownership on wsprrypi.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
             else
                 exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
             fi
@@ -5926,6 +5915,7 @@ main() { _main "$@"; return "$?"; }
 trap egress EXIT
 
 debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-retval=$(main "$@" "$debug")
+main "$@" "$debug"
+retval="$?"
 debug_end "$debug"
 exit "$retval"

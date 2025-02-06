@@ -49,7 +49,7 @@ void test_singleton(uint16_t port)
     try {
         std::cout << "\nTesting SingletonProcess with port " << port << "...\n";
 
-        wspr::SingletonProcess singleton(port);
+        wsprrypi::SingletonProcess singleton(port);
 
         if (singleton()) {
             std::cout << "Singleton instance created successfully on " << singleton.GetLockFileName() << ".\n";
@@ -59,7 +59,7 @@ void test_singleton(uint16_t port)
 
         std::cout << "Testing binding to the same port (should fail)...\n";
         try {
-            wspr::SingletonProcess singleton_fail(port);
+            wsprrypi::SingletonProcess singleton_fail(port);
             if (singleton_fail()) {
                 std::cerr << "Error: Should not be able to bind to the same port!\n";
             }
@@ -84,7 +84,7 @@ void simulate_permission_error()
 
         std::cout << "\nTesting SingletonProcess on a restricted port (" << restricted_port << ")...\n";
 
-        wspr::SingletonProcess singleton(restricted_port);
+        wsprrypi::SingletonProcess singleton(restricted_port);
 
         if (singleton()) {
             std::cerr << "Error: Should not be able to bind to a restricted port without root privileges!\n";

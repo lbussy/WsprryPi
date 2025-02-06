@@ -12,7 +12,7 @@ WSPR is the software that implements MEPT-JT, which started life in 2008 as a su
 
 The idea was to take a minimal message, code them as tightly as possible, add forward error correction, and then combine this with a known pseudo-random sequence to generate a two-minute-long message to be sent using 4-FSK modulation and a low baud rate. Joe estimated that the theoretical sensitivity of the system would be -30dB S/N.
 
-Transmissions carry a station's callsign, [Maidenhead grid locator](https://en.wikipedia.org/wiki/Maidenhead\_Locator\_System), and transmitter power indicated in dBm. Receiving stations can decode signals with a signal-to-noise ratio [as low as −28 dB in a 2500 Hz bandwidth](https://physics.princeton.edu//pulsar/K1JT/wspr.html). Stations with internet access can automatically upload their reception reports to a central database called [WSPRnet](https://wsprnet.org), which includes a mapping facility.
+Transmissions carry a station's callsign, [Maidenhead grid locator](https://en.wikipedia.org/wiki/Maidenhead\_Locator\_System), and transmitter power indicated in dBm. Receiving stations can decode signals with a signal-to-noise ratio [as low as −28 dB in a 2500 Hz bandwidth](https://physics.princeton.edu//pulsar/K1JT/wsprrypi.html). Stations with internet access can automatically upload their reception reports to a central database called [WSPRnet](https://wsprnet.org), which includes a mapping facility.
 
 The basic specifications of the MEPT\_JT mode are as follows:
 

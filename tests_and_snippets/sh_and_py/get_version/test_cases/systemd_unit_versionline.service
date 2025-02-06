@@ -3,7 +3,7 @@ Description=WsprryPi Service
 Version=1.2.1-8c2314a-dirty [version_exe]
 
 [Service]
-ExecStart=/usr/bin/wspr
+ExecStart=/usr/bin/wsprrypi
 
 [Install]
 WantedBy=multi-user.target

@@ -1,23 +1,23 @@
 # Command Line Operations
 
-The Wsprry Pi executable, wspr, is controlled by the Linux `systemd` controller. It will run in the background as soon as your Pi starts up. It is a singleton application by design, meaning only one `wspr` process may be running. You must stop the daemon if you desire to have some manual control for testing or other reasons. Here are some commands you may use:
+The Wsprry Pi executable, wsprrypi, is controlled by the Linux `systemd` controller. It will run in the background as soon as your Pi starts up. It is a singleton application by design, meaning only one `wsprrypi` process may be running. You must stop the daemon if you desire to have some manual control for testing or other reasons. Here are some commands you may use:
 
-- `sudo systemctl status wspr`: Show a status page for the running daemon.
-- `sudo systemctl restart wspr`: Restart the daemon and wspr with it.
-- `sudo systemctl stop wspr`: Stop the daemon. The daemon will restart again upon reboot.
-- `sudo systemctl start wspr`: Start the daemon if it is not running.
-- `sudo systemctl disable wspr`: Disable the daemon from restarting on reboot.
-- `sudo systemctl enable wspr`: Enable the daemon to start on reboot if it is disabled.
+- `sudo systemctl status wsprrypi`: Show a status page for the running daemon.
+- `sudo systemctl restart wsprrypi`: Restart the daemon and wsprrypi with it.
+- `sudo systemctl stop wsprrypi`: Stop the daemon. The daemon will restart again upon reboot.
+- `sudo systemctl start wsprrypi`: Start the daemon if it is not running.
+- `sudo systemctl disable wsprrypi`: Disable the daemon from restarting on reboot.
+- `sudo systemctl enable wsprrypi`: Enable the daemon to start on reboot if it is disabled.
 
-You will control the shutdown button monitor daemon like `wspr`, substituting `shutdown-button` for `wspr` above.
+You will control the shutdown button monitor daemon like `wsprrypi`, substituting `shutdown-button` for `wsprrypi` above.
 
-To run wspr from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wspr -h`:
+To run wsprrypi from the command line, a complete listing of command line options is available by executing `(sudo) /usr/local/bin/wsprrypi -h`:
 
 ```text
 Usage:
-  wspr [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
+  wsprrypi [options] callsign locator tx_pwr_dBm f1 <f2> <f3> ...
     OR
-  wspr [options] --test-tone {frequency}
+  wsprrypi [options] --test-tone {frequency}
 
 Options:
   -h --help
@@ -71,39 +71,39 @@ You may create transmission gaps by specifying a TX frequency of 0.
 
 ## Command Line Entries for Testing
 
-You may transmit a constant tone at a specific frequency for testing. In this example, wspr will send a tone at 780 kHz (780000 Hz):
+You may transmit a constant tone at a specific frequency for testing. In this example, wsprrypi will send a tone at 780 kHz (780000 Hz):
 
-`wspr --test-tone 780e3`
+`wsprrypi --test-tone 780e3`
 
 ## Example Usage
 
 Remember that anything that creates a transmission will require you to use `sudo`.
 
-`wspr --help`
+`wsprrypi --help`
 
 Display a brief help screen.
 
-`wspr --test-tone 780e3`
+`wsprrypi --test-tone 780e3`
 
 Transmit a constant test tone at 780 kHz.
 
-`wspr N9NNN EM10 33 20m`
+`wsprrypi N9NNN EM10 33 20m`
 
 Using callsign N9NNN, locator EM10, and TX power 33 dBm, transmit a single WSPR transmission on the 20m band using NTP-based frequency offset calibration.
 
-`wspr --led N9NNN EM10 33 20m`
+`wsprrypi --led N9NNN EM10 33 20m`
 
 The same as above but using the red LED on transmit (TAPR Hat) to indicate an active transmission. The LED is connected to Pin 12 (GPIO18, BCM18).
 
-`wspr --free-running N9NNN EM10 33 20m`
+`wsprrypi --free-running N9NNN EM10 33 20m`
 
 The same as above, but without NTP calibration.
 
-`wspr --repeat --terminate 7 --ppm 43.17 N9NNN EM10 33 10140210 0 0 0 0`
+`wsprrypi --repeat --terminate 7 --ppm 43.17 N9NNN EM10 33 10140210 0 0 0 0`
 
 Transmit a WSPR transmission slightly off-center on 30m every 10 minutes for seven transmissions, using a fixed PPM correction value.
 
-`wspr --repeat --offset --self-calibration N9NNN EM10 33 40m`
+`wsprrypi --repeat --offset --self-calibration N9NNN EM10 33 40m`
 
 Transmit repeatedly on 40m, use NTP-based frequency offset calibration, and add a random frequency offset to each transmission to minimize collisions with other transmitters.
 

@@ -14,8 +14,8 @@ IFS=$'\n\t'
 # - Deploys the generated documentation to a specified directory.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+98.5953e00-dirty
-# @date 2025-02-03
+# @version 1.2.1-remove_bcm+109.59592e9
+# @date 2025-02-05
 # @copyright MIT License
 #
 # @license
@@ -126,7 +126,7 @@ build_docs() {
 deploy_docs() {
     local repo_root src_dir dest_dir
     repo_root="${1:-}"
-    dest_dir="/var/www/html/wspr/docs"
+    dest_dir="/var/www/html/wsprrypi/docs"
     src_dir="$repo_root/docs/_build/html"
 
     # Check if the source directory exists

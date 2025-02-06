@@ -22,21 +22,48 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <termios.h>
+#include <assert.h>     // 'assert' support
+#include <fcntl.h>      // O_RDWR support
+#include <getopt.h>     // getopt_long support
+#include <iterator>     // istream_iterator support
+#include <math.h>       // NAN support
+#include <signal.h>     // Sig interrupt support
+#include <stdexcept>    // no_argument, required_argument support
+#include <sys/mman.h>   // PROT_READ, PROT_WRITE, MAP_FAILED support
+#include <sys/time.h>   // gettimeofday support
+#include <sys/timex.h>  // ntp_adjtime, TIME_OK support
+#include <termios.h>    // ECHOCTL, term, TCSANOW, tcgetattr
+
+// #include <algorithm>
+// #include <cmath>
+// #include <cstdint>
+// #include <ctype.h>
+// #include <dirent.h>
+// #include <iomanip>
+// #include <iostream>
+// #include <malloc.h>
+// #include <pthread.h>
+// #include <signal.h>
+// #include <sstream>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <string.h>
+// #include <sys/stat.h>
+// #include <sys/types.h>
+// #include <time.h>
+// #include <unistd.h>
+// #include <vector>
 
 #include "version.hpp"
-#include "singleton.hpp"
-#include "monitorfile.hpp"
 #include "config.hpp"
 #include "lcblog.hpp"
-#include "utils.hpp"
+#include "monitorfile.hpp"
+#include "singleton.hpp"
 #include "wspr_message.hpp"
 
 #include "main.hpp"
 
 // #define WSPR_DEBUG
-
-
 
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
@@ -262,7 +289,7 @@ void setupGPIO(int pin = 0)
     // Set up gpio pointer for direct register access
     int mem_fd;
     // Set up a memory regions to access GPIO
-    unsigned gpio_base = gpioBase() + 0x200000;
+    unsigned gpio_base = get_peripheral_address() + 0x200000;
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -321,7 +348,8 @@ void getPLLD()
     // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
     // This 2.5 PPM offset is compensated for here, but only for the RPi1.
 
-    switch (ver())
+    int procType = getProcessorTypeAsInt();
+    switch (procType)
     {
     case 0: // RPi1
         config.mem_flag = 0x0c;
@@ -337,7 +365,7 @@ void getPLLD()
         config.f_plld_clk = (750000000.0);
         break;
     default:
-        fprintf(stderr, "Error: Unknown chipset (%d).", ver());
+        fprintf(stderr, "Error: Unknown chipset (%d).", procType);
         exit(-1);
     }
 }
@@ -736,9 +764,9 @@ void setupDMA(
 void print_usage()
 {
     llog.logS("Usage:");
-    llog.logS("  wspr [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
+    llog.logS("  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
     llog.logS("    OR");
-    llog.logS("  wspr [options] --test-tone {frequency}");
+    llog.logS("  wsprrypi [options] --test-tone {frequency}");
     llog.logS("");
     llog.logS("Options:");
     llog.logS("  -h --help");
@@ -1151,7 +1179,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
             llog.logE("Error: must specify callsign, gridsquare, dBm, and at least one frequency.");
-            llog.logE("Try: wspr --help");
+            llog.logE("Try: wsprrypi --help");
             exit(-1);
         }
     }
@@ -1333,22 +1361,6 @@ void cleanup()
 // Handle cleanup and exiting based on signal
 void cleanupAndExit(int sig)
 {
-    // Raspberry Pi SIG list (kill -l):
-    //  1) SIGHUP       2) SIGINT       3) SIGQUIT      4) SIGILL       5) SIGTRAP
-    //  6) SIGABRT      7) SIGBUS       8) SIGFPE       9) SIGKILL     10) SIGUSR1
-    // 11) SIGSEGV     12) SIGUSR2     13) SIGPIPE     14) SIGALRM     15) SIGTERM
-    // 16) SIGSTKFLT   17) SIGCHLD     18) SIGCONT     19) SIGSTOP     20) SIGTSTP
-    // 21) SIGTTIN     22) SIGTTOU     23) SIGURG      24) SIGXCPU     25) SIGXFSZ
-    // 26) SIGVTALRM   27) SIGPROF     28) SIGWINCH    29) SIGIO       30) SIGPWR
-    // 31) SIGSYS      34) SIGRTMIN    35) SIGRTMIN+1  36) SIGRTMIN+2  37) SIGRTMIN+3
-    // 38) SIGRTMIN+4  39) SIGRTMIN+5  40) SIGRTMIN+6  41) SIGRTMIN+7  42) SIGRTMIN+8
-    // 43) SIGRTMIN+9  44) SIGRTMIN+10 45) SIGRTMIN+11 46) SIGRTMIN+12 47) SIGRTMIN+13
-    // 48) SIGRTMIN+14 49) SIGRTMIN+15 50) SIGRTMAX-14 51) SIGRTMAX-13 52) SIGRTMAX-12
-    // 53) SIGRTMAX-11 54) SIGRTMAX-10 55) SIGRTMAX-9  56) SIGRTMAX-8  57) SIGRTMAX-7
-    // 58) SIGRTMAX-6  59) SIGRTMAX-5  60) SIGRTMAX-4  61) SIGRTMAX-3  62) SIGRTMAX-2
-    // 63) SIGRTMAX-1  64) SIGRTMAX
-    // e.g.: 'kill -SIGCONT $(pgrep wspr)'
-
     // Suppress the default action (printing the signal message to the terminal)
     // Log the signal information
     const char* sig_description = strsignal(sig); // Get the signal name/description
@@ -1510,7 +1522,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // of physical memory.
 
     int mem_fd;
-    unsigned gpio_base = gpioBase();
+    unsigned gpio_base = get_peripheral_address();
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -1586,7 +1598,7 @@ int main(const int argc, char *const argv[])
     if ( ! parse_commandline(argc, argv) ) return 1;
 
     llog.logS(version_string());
-    llog.logS("Running on: ", RPiVersion(), ".");
+    llog.logS("Running on: ", getRaspberryPiModel(), ".");
 
     getPLLD(); // Get PLLD Frequency
 
@@ -1596,8 +1608,8 @@ int main(const int argc, char *const argv[])
 
     if ( ! parseConfigData(argc, argv) ) return 1;
 
-    // Make sure we're the only wspr process
-    wspr::SingletonProcess singleton(SINGLETON_PORT);
+    // Make sure we're the only wsprrypi process
+    wsprrypi::SingletonProcess singleton(SINGLETON_PORT);
     try
     {
         if (!singleton())

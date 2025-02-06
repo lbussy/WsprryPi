@@ -28,7 +28,7 @@ This section may be the most challenging part of the whole installation.  *You m
 
 **You MUST use a 32-bit version**, and I am only testing with the current version: Bookworm.
 
-You can use a full-featured desktop version with all the bells and whistles, or wspr will run just fine on the Lite version on an SD card as small as 2 GB (although a minimum of 8 GB seems more comfortable these days.)  You can even run it headless without a keyboard, mouse, or monitor. If you enable SSH, you can use your command line from Windows 10/11, MacOS, or another Pi.
+You can use a full-featured desktop version with all the bells and whistles, or wsprrypi will run just fine on the Lite version on an SD card as small as 2 GB (although a minimum of 8 GB seems more comfortable these days.)  You can even run it headless without a keyboard, mouse, or monitor. If you enable SSH, you can use your command line from Windows 10/11, MacOS, or another Pi.
 
 Whatever you do, you will need command line access to your Pi to proceed. Once you are up and running and connected to the Internet, you may proceed with Wsprry Pi installation. Here is a recommended process:
 
@@ -44,7 +44,7 @@ Whatever you do, you will need command line access to your Pi to proceed. Once y
 * Next
 * At "Use OS Customizations," select "Edit Settings"
   * On the General Tab
-    * Set the hostname to something unique on your network (like `wspr`)
+    * Set the hostname to something unique on your network (like `wsprrypi`)
     * Set username and password (you must do this, or SSH will not work)
       * Only the username `pi` has been tested
       * Choose a password you can remember
@@ -65,7 +65,7 @@ Whatever you do, you will need command line access to your Pi to proceed. Once y
 
 Aside from the obvious, installing Wsprry Pi, the install script will do the following:
 
-- **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers. The [Apache Software Foundation](https://www.apache.org/) maintains Apache. Apache is used to control wspr from an easy-to-use web page.
+- **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers. The [Apache Software Foundation](https://www.apache.org/) maintains Apache. Apache is used to control wsprrypi from an easy-to-use web page.
 - **Install PHP**, a popular general-purpose scripting language especially suited to web development. The [PHO Group](https://www.php.net/) maintains PHP. I wrote the web pages in PHP.
 - **Install Raspberry Pi development libraries**, `libraspberrypi-dev` `raspberrypi-kernel-headers`.
 - Optionally install support for TAPR's shutdown button.
@@ -121,8 +121,8 @@ When complete, the script displays the final screen:
 
 ```text
 The WSPR daemon has started.
- - WSPR frontend URL   : http://192.168.1.24/wspr
- -or- : http://wspr.local/wspr
+ - WSPR frontend URL   : http://192.168.1.24/wsprrypi
+ -or- : http://wsprrypi.local/wsprrypi
  - Release version     : 0.0.1
 
 Happy DXing!

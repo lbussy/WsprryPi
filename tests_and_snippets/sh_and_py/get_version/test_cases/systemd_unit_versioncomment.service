@@ -2,7 +2,7 @@
 Description=WsprryPi Service
 
 [Service]
-ExecStart=/usr/bin/wspr
+ExecStart=/usr/bin/wsprrypi
 
 [Install]
 WantedBy=multi-user.target

@@ -7,7 +7,7 @@ ini_set('display_errors', 0);
 // Set custom exception handler
 set_exception_handler('myException');
 
-$file = "wspr.ini";
+$file = "wsprrypi.ini";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'PUT') {
     // Convert input to a PHP object

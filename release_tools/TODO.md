@@ -9,7 +9,7 @@
 
 ### Stuff to do:
 
-- Review the wspr.service file
+- Review the wsprrypi.service file
 - See if we can include libs in compile
 - If in daemon mode, do not suppress SIGINT
 - Inline the apache_tool into install.
@@ -38,7 +38,7 @@
     ✓ Logged in as foo
     ```
 - See if we can implement something like daemonize instead of Singleton
-- Add a .wspr-alias file and source it from the .bash_aliases
+- Add a .wsprrypi-alias file and source it from the .bash_aliases
 - MOTD?
     ``` bash
     Linux wpsd 6.1.0-rpi7-rpi-v7 #1 SMP Raspbian 1:6.1.63-1+rpt1 (2023-11-24) armv7l
@@ -69,8 +69,8 @@
 
 ### Fis in this iteration
 
-- Move copying ini file before the wspr daemon restarts (called "configuration file")
-- logrotate.d must be called 'wspr' and put it in /etc/logrotate.d/
+- Move copying ini file before the wsprrypi daemon restarts (called "configuration file")
+- logrotate.d must be called 'wsprrypi' and put it in /etc/logrotate.d/
 - Fix this:  2024-11-27 22:16:15 GMT Do not use NTP sync: false
 
 ### Nice to Do
