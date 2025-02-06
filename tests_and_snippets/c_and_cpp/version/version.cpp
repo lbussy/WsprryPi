@@ -29,8 +29,6 @@
  * SOFTWARE.
  */
 
-#ifdef DEBUG_MAIN_VERSION
-
 #include "version.hpp"
 
 #include <iostream>
@@ -179,13 +177,13 @@ const char* getRaspberryPiModel() {
     return model.c_str();  // Return a const char* pointing to the static string
 }
 
-inline const char* version_string() {
+const char* version_string() {
     static std::string version = std::string(project_name()) + " version " + exe_version() + " (" + branch() + ").";
     return version.c_str();
 }
 
 // Function to get the address from device tree
-static unsigned get_dt_ranges(const char *filename, unsigned offset)
+unsigned get_dt_ranges(const char *filename, unsigned offset)
 {
    unsigned address = ~0;
    FILE *fp = fopen(filename, "rb");
@@ -201,7 +199,7 @@ static unsigned get_dt_ranges(const char *filename, unsigned offset)
 }
 
 // Function to get the BCM host peripheral address
-unsigned bcm_host_get_peripheral_address(void)
+unsigned get_peripheral_address(void)
 {
    unsigned address = get_dt_ranges("/proc/device-tree/soc/ranges", 4);
    if (address == 0)
@@ -209,12 +207,7 @@ unsigned bcm_host_get_peripheral_address(void)
    return address == static_cast<unsigned>(~0) ? 0x20000000 : address; // Cast to unsigned
 }
 
-// Function to return the peripheral address as an unsigned integer
-unsigned get_peripheral_address(void)
-{
-   unsigned address = bcm_host_get_peripheral_address();
-   return address;  // Return the address as an unsigned integer
-}
+#ifdef DEBUG_MAIN_VERSION
 
 /**
  * @brief Main function to test versioning and Raspberry Pi hardware information.

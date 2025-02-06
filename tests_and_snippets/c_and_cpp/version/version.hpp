@@ -35,17 +35,17 @@
 #include <string>
 
 // Function prototype for getRaspberryPiModel
-inline const char* getRaspberryPiModel();
-inline const char* getProcessorType();
-inline const char* getAppVersion();
-inline const char* exe_version();
-inline const char* branch();
-inline const char* exe_name();
-inline const char* project_name();
-inline int getProcessorTypeAsInt();
+const char* getRaspberryPiModel();
+const char* getProcessorType();
+const char* getAppVersion();
+const char* exe_version();
+const char* branch();
+const char* exe_name();
+const char* project_name();
+const char* version_string();
+int getProcessorTypeAsInt();
 
-static unsigned get_dt_ranges(const char *filename, unsigned offset);
-unsigned bcm_host_get_peripheral_address(void);
+unsigned get_dt_ranges(const char *filename, unsigned offset);
 unsigned get_peripheral_address(void);
 
 #endif // VERSION_H

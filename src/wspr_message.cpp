@@ -30,7 +30,7 @@
  */
 
 // Unit testing:
-// g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_MESSAGE wspr_message.cpp utils.cpp -o wspr_message -lm -lbcm_host
+// g++ -Wall -Werror -fmax-errors=5 -static-libgcc -Wno-psabi -lstdc++fs -std=c++17 -DDEBUG_MAIN_MESSAGE wspr_message.cpp utils.cpp -o wspr_message -lm
 // Test command:
 // ./wspr_message
 

@@ -57,7 +57,7 @@ CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 CFLAGS += $(COMMON_FLAGS)
 
 # Linker flags for required libraries
-LDLIBS += -lm -lbcm_host
+# LDLIBS += -lm -lbcm_host
 
 # Enable verbose output if VERBOSE=1 is specified during the build
 VERBOSE ?= 0
