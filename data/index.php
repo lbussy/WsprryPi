@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 
+<!-- TODO:
+    - Get -24 hours from:
+        https://www.wsprnet.org/olddb?mode=html&band=all&limit=50&findcall=AA0NT&findreporter=&sort=date
+-->
+
 <head>
     <meta charset="utf-8">
     <title>Wsprry Pi</title>
