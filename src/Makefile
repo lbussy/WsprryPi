@@ -47,7 +47,7 @@ CXX = g++            # C++ compiler
 CC = gcc             # C compiler
 
 # Common compiler flags for warnings and error handling
-COMMON_FLAGS = -Wall -Werror -fmax-errors=5
+COMMON_FLAGS = -Wall -Werror -fmax-errors=10
 
 # Additional C++ compiler flags
 COMM_CXX_FLAGS = -static-libgcc -Wno-psabi -lstdc++fs -std=c++17
@@ -169,3 +169,9 @@ uninstall:
 	@echo "Removing executable from /usr/local/bin/wsprrypi."
 	$(Q)sudo rm -f /usr/local/bin/wsprrypi
 	@echo "Uninstallation completed."
+
+# Lint the source files using cppcheck
+.PHONY: lint
+lint:
+	@echo "Running static analysis with cppcheck..."
+	$(Q)cppcheck --enable=all --inconclusive --std=c++17 --force --quiet $(CPP_SOURCES) $(C_SOURCES)
