@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_release_scripts+98.5953e00-dirty
-# @date 2025-02-03
+# @version 1.2.1-remove_bcm+109.59592e9
+# @date 2025-02-05
 # @copyright MIT License
 #
 # @license
@@ -1868,19 +1868,19 @@ determine_execution_context() {
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             debug_print "Execution context: Script executed via pipe." "$debug"
-                    debug_end "$debug"
-            return 0  # Execution via pipe
+            debug_end "$debug"
+            printf "0\n" && return 0  # Execution via pipe
         else
             warn "Unusual bash execution detected."
-                    debug_end "$debug"
-            return 1  # Unusual bash execution
+            debug_end "$debug"
+            printf "1\n" && return 0  # Unusual bash execution
         fi
     fi
 
     # Get the script path
     script_path=$(realpath "$0" 2>/dev/null) || script_path=$(pwd)/$(basename "$0")
     if [[ ! -f "$script_path" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Unable to resolve script path: $script_path"
     fi
     debug_print "Resolved script path: $script_path" "$debug"
@@ -1891,25 +1891,14 @@ determine_execution_context() {
 
     # Safeguard against invalid current_dir during initialization
     if [[ ! -d "$current_dir" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Invalid starting directory: $current_dir"
     fi
 
-    # Traverse upwards to detect a GitHub repository
-    while [[ "$current_dir" != "/" && $depth -lt $max_depth ]]; do
-        if [[ -d "$current_dir/.git" ]]; then
-            debug_print "GitHub repository detected at depth $depth: $current_dir" "$debug"
-                    debug_end "$debug"
-            return 3  # Execution within a GitHub repository
-        fi
-        current_dir=$(dirname "$current_dir") # Move up one directory
-        ((depth++))
-    done
-
-    # Handle loop termination conditions
-    if [[ $depth -ge $max_depth ]]; then
-            debug_end "$debug"
-        die 1 "Directory traversal exceeded maximum depth ($max_depth)"
+    # Check if the current directory is inside a Git repository
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        debug_end "$debug"
+        printf "3\n" && return 0  # Execution from a PATH location
     fi
 
     # Check if the script is executed from a PATH location
@@ -1917,15 +1906,15 @@ determine_execution_context() {
     resolved_path=$(command -v "$(basename "$0")" 2>/dev/null)
     if [[ "$resolved_path" == "$script_path" ]]; then
         debug_print "Script executed from a PATH location: $resolved_path." "$debug"
-            debug_end "$debug"
-        return 4  # Execution from a PATH location
+        debug_end "$debug"
+        printf "4\n" && return 0  # Execution from a PATH location
     fi
 
     # Default: Direct execution from the local filesystem
     debug_print "Default context: Script executed directly." "$debug"
 
     debug_end "$debug"
-    return 2
+    printf "2\n" && return 0  
 }
 
 # -----------------------------------------------------------------------------
@@ -1946,8 +1935,8 @@ handle_execution_context() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Call determine_execution_context and capture its output
-    determine_execution_context "$debug"
-    local context=$?  # Capture the return code to determine context
+    local context
+    context=$(determine_execution_context "$debug")
 
     # Validate the context
     if ! [[ "$context" =~ ^[0-4]$ ]]; then
@@ -5926,6 +5915,7 @@ main() { _main "$@"; return "$?"; }
 trap egress EXIT
 
 debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-retval=$(main "$@" "$debug")
+main "$@" "$debug"
+retval="$?"
 debug_end "$debug"
 exit "$retval"
