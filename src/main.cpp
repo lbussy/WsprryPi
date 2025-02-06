@@ -22,21 +22,47 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <termios.h>
+#include <assert.h>     // 'assert' support
+#include <fcntl.h>      // O_RDWR support
+#include <getopt.h>     // getopt_long support
+#include <iterator>     // istream_iterator support
+#include <math.h>       // NAN support
+#include <stdexcept>    // no_argument, required_argument support
+#include <sys/mman.h>   // PROT_READ, PROT_WRITE, MAP_FAILED support
+#include <sys/time.h>   // gettimeofday support
+#include <sys/timex.h>  // ntp_adjtime, TIME_OK support
+#include <termios.h>    // ECHOCTL, term, TCSANOW, tcgetattr
 
-#include "version.hpp"
-#include "singleton.hpp"
-#include "monitorfile.hpp"
+// #include <algorithm>
+// #include <cmath>
+// #include <cstdint>
+// #include <ctype.h>
+// #include <dirent.h>
+// #include <iomanip>
+// #include <iostream>
+// #include <malloc.h>
+// #include <pthread.h>
+// #include <signal.h>
+// #include <sstream>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <string.h>
+// #include <sys/stat.h>
+// #include <sys/types.h>
+// #include <time.h>
+// #include <unistd.h>
+// #include <vector>
+
 #include "config.hpp"
 #include "lcblog.hpp"
-#include "utils.hpp"
+#include "monitorfile.hpp"
+#include "singleton.hpp"
+#include "version.hpp"
 #include "wspr_message.hpp"
 
 #include "main.hpp"
 
 // #define WSPR_DEBUG
-
-
 
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
