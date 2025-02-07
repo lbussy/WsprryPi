@@ -52,6 +52,7 @@ private:
     std::string handleLED(const std::string& arg);
     std::string handlePort();
     std::string handleXMIT();
+    std::string handleVersion();
 
     /**
      * @brief Main server loop.

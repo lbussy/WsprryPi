@@ -18,7 +18,7 @@ std::atomic<int> WsprryPi_Server::active_connections = 0;
 
 const std::unordered_set<std::string> WsprryPi_Server::valid_commands = {
     "transmit", "call", "grid", "power", "freq", "ppm", "selfcal", "offset",
-    "led", "port", "xmit"
+    "led", "port", "xmit", "version"
 };
 
 /**
@@ -332,4 +332,9 @@ std::string WsprryPi_Server::handlePort() {
 std::string WsprryPi_Server::handleXMIT() {
     log.logS(INFO, "Reading XMIT value");
     return "XMIT value: <dummy>\n";
+}
+
+std::string WsprryPi_Server::handleVersion() {
+    log.logS(INFO, "Reading Version value");
+    return "Version value: <dummy>\n";
 }
