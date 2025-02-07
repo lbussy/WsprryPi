@@ -1,12 +1,16 @@
 /**
  * @file lcblog.hpp
- * @brief A logging class for handling log levels, formatting, and timestamping.
+ * @brief A logging class for handling log levels, formatting, and
+ * timestamping within a C++ project.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This logging class provides a flexible and thread-safe logging mechanism 
+ * with support for multiple log levels, timestamped logs, and customizable 
+ * output streams. include the header (`lcblog.hpp`), implementation
+ * (`lcblog.cpp`), and template definitions (`lcblog.tpp`)when using in
+ * a project.
  *
- * However, this new code added to the project is distributed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This software is distributed under the MIT License. See LICENSE.MIT.md for
+ * details.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
@@ -29,217 +33,154 @@
  * SOFTWARE.
  */
 
-#ifndef _LOGGING_HPP
-#define _LOGGING_HPP
+#ifndef LCBLOG_HPP
+#define LCBLOG_HPP
 
-#include <iostream>
+#include <iostream> 
+#include <sstream>
+#include <mutex>
 #include <string>
-#include <regex>
 #include <ctime>
+#include <iomanip> 
 
 /**
- * @brief A logging class to handle standard output and error output with optional timestamping.
+ * @enum LogLevel
+ * @brief Defines the severity levels for logging.
+ *
+ * This enumeration represents different log levels, which determine 
+ * the severity and importance of logged messages.
  */
-class LCBLog
-{
-public:
-    /**
-     * @brief Enable or disable daemon mode for logging.
-     * @param daemonmode True to enable daemon mode; false otherwise.
-     */
-    void setDaemon(bool daemonmode)
-    {
-        isDaemon = daemonmode;
-    }
-
-    /**
-     * @brief Log a single message to standard output.
-     * @tparam T The type of the message to log.
-     * @param t The message to log.
-     */
-    template <typename T>
-    void logS(T t) {
-        if (!printline.empty()) { // If there's an incomplete log message, flush it first
-            finalizeOutput(std::cout);
-        }
-
-        if (isDaemon) {
-            std::cout << getStamp() << "\t"; // Add timestamp and tab for Daemon mode
-        }
-        prtStd(t);
-        finalizeOutput(std::cout);
-    }
-
-    /**
-     * @brief Log multiple concatenated messages to standard output.
-     * @tparam T The type of the first message to log.
-     * @tparam Args The types of additional messages to log.
-     * @param t The first message to log.
-     * @param args Additional messages to log.
-     */
-    template <typename T, typename... Args>
-    void logS(T t, Args... args) {
-        if (!printline.empty()) { // Flush any pending messages before starting new one
-            finalizeOutput(std::cout);
-        }
-
-        if (isDaemon) {
-            std::cout << getStamp() << "\t"; // Add timestamp and tab for Daemon mode
-        }
-        prtStd(t, args...);
-        finalizeOutput(std::cout);
-    }
-
-    /**
-     * @brief Log a single message to standard error.
-     * @tparam T The type of the message to log.
-     * @param t The message to log.
-     */
-    template <typename T>
-    void logE(T t)
-    {
-        if (isDaemon)
-            std::cerr << getStamp() << "\t";
-        prtStd(t);
-        finalizeOutput(std::cerr);
-    }
-
-    /**
-     * @brief Log multiple concatenated messages to standard error.
-     * @tparam T The type of the first message to log.
-     * @tparam Args The types of additional messages to log.
-     * @param t The first message to log.
-     * @param args Additional messages to log.
-     */
-    template <typename T, typename... Args>
-    void logE(T t, Args... args)
-    {
-        if (isDaemon)
-            std::cerr << getStamp() << "\t";
-        prtStd(t, args...);
-        finalizeOutput(std::cerr);
-    }
-
-    /**
-     * @brief Test the `crush` function directly with a given string.
-     * @param s The string to process using `crush`.
-     */
-    static void testCrush(std::string &s)
-    {
-        crush(s);
-    }
-
-private:
-    bool isDaemon = false; /**< Indicates whether daemon mode is enabled. */
-    std::string printline = ""; /**< Accumulated log message. */
-
-    /**
-     * @brief Append a message to the log buffer.
-     * @param t The message to append.
-     */
-    void prtStd(const std::string &t)
-    {
-        if (!printline.empty())
-            printline += " ";
-        printline += t;
-    }
-
-    /**
-     * @brief Append a message to the log buffer.
-     * @param t The message to append.
-     */
-    void prtStd(const char *t)
-    {
-        if (!printline.empty())
-            printline += " ";
-        printline += t;
-    }
-
-    /**
-     * @brief Append a numeric message to the log buffer.
-     * @tparam T The numeric type of the message.
-     * @param t The numeric message to append.
-     */
-    template <typename T>
-    void prtStd(T t)
-    {
-        if (!printline.empty())
-            printline += " ";
-        printline += std::to_string(t);
-    }
-
-    /**
-     * @brief Append multiple concatenated messages to the log buffer.
-     * @tparam T The type of the first message.
-     * @tparam Args The types of additional messages.
-     * @param t The first message.
-     * @param args Additional messages.
-     */
-    template <typename T, typename... Args>
-    void prtStd(T t, Args... args)
-    {
-        prtStd(t);
-        prtStd(args...);
-    }
-
-    /**
-     * @brief Finalize and print the accumulated log message to the output stream.
-     * @param os The output stream (e.g., std::cout or std::cerr).
-     */
-    void finalizeOutput(std::ostream &os) {
-        if (printline.empty())
-            return;
-
-        crush(printline); // Clean up the accumulated log message
-        os << printline << std::endl << std::flush; // Ensure newline
-        printline.clear(); // Clear the buffer after output
-    }
-
-    /**
-     * @brief Clean up a string by removing extraneous spaces and fixing formatting issues.
-     * @param s The string to clean.
-     */
-    static void crush(std::string &s)
-    {
-        // Trim leading and trailing spaces
-        s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
-
-        // Replace multiple spaces with a single space
-        s = std::regex_replace(s, std::regex("\\s+"), " ");
-
-        // Remove spaces directly inside parentheses/brackets
-        s = std::regex_replace(s, std::regex("\\(\\s+"), "(");
-        s = std::regex_replace(s, std::regex("\\s+\\)"), ")");
-        s = std::regex_replace(s, std::regex("\\[\\s+"), "[");
-        s = std::regex_replace(s, std::regex("\\s+\\]"), "]");
-
-        // Remove spaces before punctuation
-        s = std::regex_replace(s, std::regex("\\s+([.,!?])"), "$1");
-
-        // Add space before opening parentheses/brackets if missing
-        s = std::regex_replace(s, std::regex("([a-zA-Z0-9])\\("), "$1 (");
-        s = std::regex_replace(s, std::regex("([a-zA-Z0-9])\\["), "$1 [");
-
-        // Remove spaces before closing parentheses/brackets
-        s = std::regex_replace(s, std::regex("\\s+([)}\\]])"), "$1");
-
-        // Final cleanup
-        s = std::regex_replace(s, std::regex("\\s+"), " ");
-        s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
-    }
-
-    /**
-     * @brief Get the current timestamp formatted as a string.
-     * @return A string representing the current timestamp in the format "YYYY-MM-DD HH:MM:SS TZ".
-     */
-    std::string getStamp()
-    {
-        char dts[24];
-        time_t t = time(0);
-        struct tm *tm = gmtime(&t);
-        strftime(dts, sizeof(dts), "%F %T %Z", tm);
-        return std::string(dts);
-    }
+enum LogLevel {
+    DEBUG = 0, ///< Debug-level messages for detailed troubleshooting.
+    INFO,      ///< Informational messages for general system state.
+    WARN,      ///< Warnings indicating potential issues.
+    ERROR,     ///< Errors that require attention but allow continued execution.
+    FATAL      ///< Critical errors that result in program termination.
 };
 
-#endif // _LOGGING_HPP
+std::string logLevelToString(LogLevel level);/**
+ * @brief Converts a log level to its string representation.
+ * 
+ * @param level The log level to convert.
+ * @return A string representing the log level.
+ */
+std::string logLevelToString(LogLevel level);
+
+/**
+ * @class LCBLog
+ * @brief A thread-safe logging class supporting multiple log levels.
+ *
+ * Provides a mechanism for logging messages with different severity levels, 
+ * timestamping, and customizable output streams.
+ */
+class LCBLog {
+public:
+    /**
+     * @brief Constructs the logging class with specified output streams.
+     * 
+     * @param outStream The output stream for standard logs (default: std::cout).
+     * @param errStream The output stream for error logs (default: std::cerr).
+     */
+    explicit LCBLog(std::ostream& outStream = std::cout, std::ostream& errStream = std::cerr);
+
+    /**
+     * @brief Sets the minimum log level for message output.
+     * 
+     * @param level The log level to set.
+     */
+    void setLogLevel(LogLevel level);
+
+    /**
+     * @brief Checks if a message should be logged based on the current log level.
+     * 
+     * @param level The log level to check.
+     * @return True if the message should be logged, otherwise false.
+     */
+    bool shouldLog(LogLevel level) const;
+
+    /**
+     * @brief Logs a message to a specified stream.
+     * 
+     * @tparam T First message argument type.
+     * @tparam Args Variadic additional message arguments.
+     * @param level The log level of the message.
+     * @param stream The output stream to write to.
+     * @param t First message content.
+     * @param args Additional message content.
+     */
+    template <typename T, typename... Args>
+    void log(LogLevel level, std::ostream& stream, T t, Args... args);
+
+    /**
+     * @brief Logs a message to the standard output stream.
+     * 
+     * @tparam T First message argument type.
+     * @tparam Args Variadic additional message arguments.
+     * @param level The log level of the message.
+     * @param t First message content.
+     * @param args Additional message content.
+     */
+    template <typename T, typename... Args>
+    void logS(LogLevel level, T t, Args... args) {
+        log(level, out, t, args...);
+    }
+
+    /**
+     * @brief Logs a message to the error output stream.
+     * 
+     * @tparam T First message argument type.
+     * @tparam Args Variadic additional message arguments.
+     * @param level The log level of the message.
+     * @param t First message content.
+     * @param args Additional message content.
+     */
+    template <typename T, typename... Args>
+    void logE(LogLevel level, T t, Args... args) {
+        log(level, err, t, args...);
+    }
+
+    /**
+     * @brief Enables or disables timestamping for log messages.
+     * 
+     * @param enable If true, timestamps will be included in logs.
+     */
+    void enableTimestamps(bool enable);
+
+private:
+    LogLevel logLevel;              ///< The current log level threshold.
+    std::ostream& out;              ///< Stream for standard log output.
+    std::ostream& err;              ///< Stream for error log output.
+    std::mutex logMutex;            ///< Mutex for thread-safe logging.
+    bool printTimestamps = false;   ///< LOgger should print timestamp.
+
+    /**
+     * @brief Logs a formatted message to a specified stream.
+     * 
+     * @tparam T First message argument type.
+     * @tparam Args Variadic additional message arguments.
+     * @param stream The output stream to write to.
+     * @param level The log level of the message.
+     * @param t First message content.
+     * @param args Additional message content.
+     */
+    template <typename T, typename... Args>
+    void logToStream(std::ostream& stream, LogLevel level, T t, Args... args);
+
+    /**
+     * @brief Sanitizes a string by removing unwanted characters.
+     * 
+     * @param s The string to sanitize.
+     */
+    static void crush(std::string& s);
+
+    /**
+     * @brief Generates a timestamp string for log entries.
+     * 
+     * @return A formatted timestamp string.
+     */
+    std::string getStamp();
+};
+
+#include "lcblog.tpp"
+
+#endif // LCBLOG_HPP
