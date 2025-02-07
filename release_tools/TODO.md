@@ -2,6 +2,10 @@
 
 - Fix shutdown-watch
 - Create reloease script orchestration
+- Fix LED
+- Fix freq change ()
+- Run lint
+- Put version on web page (version.php)
 
 ## Stuff to Remember
 

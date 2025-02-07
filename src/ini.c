@@ -222,7 +222,10 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler, void*
                 ini_rstrip(value);
 
 #if INI_ALLOW_MULTILINE
-                strncpy(prev_name, name, sizeof(prev_name));
+                // Copy up to sizeof(prev_name)-1 to leave space for null terminator
+                strncpy(prev_name, name, sizeof(prev_name) - 1);
+                // Ensure null termination
+                prev_name[sizeof(prev_name) - 1] = '\0';
 #endif
 
                 if (!HANDLER(user, section, name, value) && !error) {
@@ -285,18 +288,17 @@ int ini_parse(const char* filename, ini_handler handler, void* user) {
  * @param stream Pointer to the input stream.
  * @return Pointer to the buffer or NULL on error.
  */
-static char* ini_reader_string(char* str, int num, void* stream) {
+char* ini_reader_string(char* str, int num, void* stream) {
     ini_parse_string_ctx* ctx = (ini_parse_string_ctx*)stream;
     const char* ctx_ptr = ctx->ptr;
     size_t ctx_num_left = ctx->num_left;
     char* strp = str;
-    char c;
 
     if (ctx_num_left == 0 || num < 2)
         return NULL;
 
     while (num > 1 && ctx_num_left != 0) {
-        c = *ctx_ptr++;
+        char c = *ctx_ptr++;  // Declare c inside the loop
         ctx_num_left--;
         *strp++ = c;
         if (c == '\n')
@@ -318,10 +320,11 @@ static char* ini_reader_string(char* str, int num, void* stream) {
  * @param user User-provided data passed to the handler.
  * @return Error code or 0 on success.
  */
-int ini_parse_string(const char* string, ini_handler handler, void* user) {
-    ini_parse_string_ctx ctx = {string, strlen(string)};
-    return ini_parse_stream((ini_reader)ini_reader_string, &ctx, handler, user);
-}
+ // TODO: Remove?
+// int ini_parse_string(const char* string, ini_handler handler, void* user) {
+//     ini_parse_string_ctx ctx = {string, strlen(string)};
+//     return ini_parse_stream((ini_reader)ini_reader_string, &ctx, handler, user);
+// }
 
 #ifdef DEBUG_MAIN_INI
 /**
@@ -333,7 +336,7 @@ int ini_parse_string(const char* string, ini_handler handler, void* user) {
  * @param value Value associated with the key.
  * @return Always returns 1 to continue parsing.
  */
-static int example_handler(void* user, const char* section, const char* name, const char* value) {
+int example_handler(void* user, const char* section, const char* name, const char* value) {
     printf("Parsed -> Section: [%s], Name: '%s', Value: '%s'\n", section, name, value ? value : "(null)");
     return 1;
 }

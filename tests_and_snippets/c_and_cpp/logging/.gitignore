@@ -1,2 +1,6 @@
 *.o
-logging
+*.err
+*.log
+*.d
+*.a
+lcblog_test

@@ -117,7 +117,7 @@ static int mbox_property(int file_desc, void *buf)
     int i;
     unsigned size = *(unsigned *)buf;
     for (i = 0; i < size / 4; i++)
-        printf("%04x: 0x%08x\n", i * sizeof *p, p[i]);
+        printf("%04zx: 0x%08x\n", i * sizeof *p, p[i]);  // Use %zx for size_t
 #endif
     return ret_val;
 }
