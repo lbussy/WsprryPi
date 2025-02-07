@@ -51,20 +51,20 @@
 
 ## Components
 
-- `TODO.md`: 
-- `README.md`: 
-- `developer_notes.md`: 
-- `copyexe.sh`: 
-- `clean_whitespace.sh`: 
-- `release.py`: 
-- `get_semantic_version.sh`: 
-- `release_config.py`: 
-- `make_version.py`: 
-- `rename_branch.sh`: 
-- `get_semantic_version.py`: 
-- `copysite.sh`: 
-- `update_versions.py`: 
-- `copydocs.sh`: 
+- `TODO.md`:
+- `README.md`:
+- `developer_notes.md`:
+- `copyexe.sh`:
+- `clean_whitespace.sh`:
+- `release.py`:
+- `get_semantic_version.sh`:
+- `release_config.py`:
+- `make_version.py`:
+- `rename_branch.sh`:
+- `get_semantic_version.py`:
+- `copysite.sh`:
+- `update_versions.py`:
+- `copydocs.sh`:
 
 My intent is to update copyright and release (Project, Tag, Branch) information and inject some of these into the compiled executable.
 

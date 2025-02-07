@@ -238,6 +238,10 @@ void INIReader::CreateDefaultINI(const std::string& filename) {
         ini_file << "; Power Level: Output power level (integer from 0 to 7).\n";
         ini_file << "Power Level = 7\n";
 
+        ini_file << "[Server]\n";
+        ini_file << "; Port used for process communication.\n";
+        ini_file << "Port = 31415\n";
+
         ini_file.close();
         std::cout << "INI file created with default values and comments: " << filename << std::endl;
     } else {

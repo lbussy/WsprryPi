@@ -1914,7 +1914,7 @@ determine_execution_context() {
     debug_print "Default context: Script executed directly." "$debug"
 
     debug_end "$debug"
-    printf "2\n" && return 0  
+    printf "2\n" && return 0
 }
 
 # -----------------------------------------------------------------------------

@@ -277,6 +277,7 @@ struct wConfig
     bool use_led = false;
     bool daemon_mode = false;
     int power_level = 7;
+    int port = 31415;
     // PLLD clock frequency.
     double f_plld_clk;
     // MEM_FLAG_L1_NONALLOCATING?
@@ -805,6 +806,8 @@ void print_usage()
     llog.logS(INFO, "    Run with terse messaging.");
     llog.logS(INFO, "  -d --power_level");
     llog.logS(INFO, "    Set actual TX power, 0-7.");
+    llog.logS(INFO, "  -e --port");
+    llog.logS(INFO, "    Set server port, 49152–65535.");
     llog.logS(INFO, "");
     llog.logS(INFO, "Frequencies can be specified either as an absolute TX carrier frequency,");
     llog.logS(INFO, "or using one of the following bands:");
@@ -837,6 +840,7 @@ bool getINIValues(bool reload = false)
         config.random_offset = iniConfig.getOffset();
         config.use_led = iniConfig.getUseLED();
         config.power_level = iniConfig.getPowerLevel();
+        config.port = iniConfig.getServerPort();
 
         if (! config.daemon_mode )
             llog.logS(INFO, "\n============================================");
@@ -853,6 +857,7 @@ bool getINIValues(bool reload = false)
         llog.logS(INFO, "Check NTP Each Run (default):\t", ((config.self_cal) ? "true" : "false"));
         llog.logS(INFO, "Use Frequency Randomization:\t", ((config.random_offset) ? "true" : "false"));
         llog.logS(INFO, "Power Level:\t\t\t", config.power_level);
+        llog.logS(INFO, "Server Port:\t\t\t", config.port);
         llog.logS(INFO, "Use LED:\t\t\t", ((config.use_led) ? "true" : "false"));
         if (! config.daemon_mode )
             llog.logS(INFO, "============================================\n");
@@ -969,13 +974,14 @@ bool parse_commandline(const int &argc, char *const argv[])
         {"ini-file", required_argument, 0, 'i'},
         {"daemon-mode", no_argument, 0, 'D'},
         {"power_level", required_argument, 0, 'd'},
+        {"port", required_argument, 0, 'e'},
         {0, 0, 0, 0}};
 
     while (true)
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "?vhp:sfrxd:ot:nli:D",
+        int c = getopt_long(argc, argv, "?vhp:sfrxde:ot:nli:D",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -1080,7 +1086,20 @@ bool parse_commandline(const int &argc, char *const argv[])
                 {
                     config.power_level = _pwr;
                 }
-                config.power_level = strtol(optarg, NULL, 10);
+                break;
+            }
+        case 'e':
+            {
+                // Set power output 0-7
+                int _port = strtol(optarg, NULL, 10);
+                if (_port < 49152 || _port > 65535)
+                {
+                    config.port = 31415;
+                }
+                else
+                {
+                    config.port = _port;
+                }
                 break;
             }
         default:

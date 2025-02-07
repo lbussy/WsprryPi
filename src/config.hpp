@@ -49,7 +49,8 @@ public:
      * @brief Default constructor for WSPRConfig.
      */
     WSPRConfig() : isinitialized(false), transmit(false), repeat(false), ppm(0.0),
-                   selfcal(false), offset(false), use_led(false), power_level(7) {}
+                   selfcal(false), offset(false), use_led(false), power_level(7),
+                   port(31415) {}
 
     /**
      * @brief Initializes the configuration by loading values from the given INI file.
@@ -62,71 +63,37 @@ public:
         return isinitialized;
     }
 
-    /**
-     * @brief Checks whether transmissions are enabled.
-     * @return True if transmission is enabled, false otherwise.
-     */
-    bool getTransmit() const { return transmit; }
+    /** @name Getters */
+    ///@{
+    bool getTransmit() const;          ///< Gets transmission status.
+    bool getRepeat() const;            ///< Gets repeat transmission status.
+    std::string getCallsign() const;   ///< Gets the configured callsign.
+    std::string getGridsquare() const; ///< Gets the configured grid square.
+    std::string getTxpower() const;    ///< Gets the configured transmission power.
+    std::string getFrequency() const;  ///< Gets the configured transmission frequency.
+    double getPpm() const;             ///< Gets the PPM correction value.
+    bool getSelfcal() const;           ///< Gets self-calibration status.
+    bool getOffset() const;            ///< Gets offset setting status.
+    bool getUseLED() const;            ///< Gets LED usage status.
+    int getPowerLevel() const;         ///< Gets the power level setting.
+    int getServerPort() const;         ///< Gets the server port configuration.
+    ///@}
 
-    /**
-     * @brief Checks whether repeat transmissions are enabled.
-     * @return True if repeat transmissions are enabled, false otherwise.
-     */
-    bool getRepeat() const { return repeat; }
-
-    /**
-     * @brief Gets the configured callsign.
-     * @return The callsign as a string.
-     */
-    std::string getCallsign() const { return callsign; }
-
-    /**
-     * @brief Gets the configured grid square.
-     * @return The grid square as a string.
-     */
-    std::string getGridsquare() const { return gridsquare; }
-
-    /**
-     * @brief Gets the configured transmission power.
-     * @return The transmission power as a string.
-     */
-    std::string getTxpower() const { return txpower; }
-
-    /**
-     * @brief Gets the configured transmission frequency.
-     * @return The frequency as a string.
-     */
-    std::string getFrequency() const { return frequency; }
-
-    /**
-     * @brief Gets the PPM correction value.
-     * @return The PPM correction value as a double.
-     */
-    double getPpm() const { return ppm; }
-
-    /**
-     * @brief Checks whether self-calibration is enabled.
-     * @return True if self-calibration is enabled, false otherwise.
-     */
-    bool getSelfcal() const { return selfcal; }
-
-    /**
-     * @brief Checks whether the offset setting is enabled.
-     * @return True if the offset setting is enabled, false otherwise.
-     */
-    bool getOffset() const { return offset; }
-
-    /**
-     * @brief Checks whether the LED is enabled.
-     * @return True if the LED is enabled, false otherwise.
-     */
-    bool getUseLED() const { return use_led; }
-
-    /**
-     * @brief Gets the power level setting.
-     * @return The power level as an integer.
-     */
-    int getPowerLevel() const { return power_level; }
+    /** @name Setters */
+    ///@{
+    void setTransmit(bool value);          ///< Sets transmission status.
+    void setRepeat(bool value);            ///< Sets repeat transmission status.
+    void setCallsign(const std::string& value); ///< Sets the callsign.
+    void setGridsquare(const std::string& value); ///< Sets the grid square.
+    void setTxpower(const std::string& value);    ///< Sets the transmission power.
+    void setFrequency(const std::string& value);  ///< Sets the transmission frequency.
+    void setPpm(double value);              ///< Sets the PPM correction value.
+    void setSelfcal(bool value);            ///< Sets self-calibration status.
+    void setOffset(bool value);             ///< Sets offset setting status.
+    void setUseLED(bool value);             ///< Sets LED usage status.
+    void setPowerLevel(int value);          ///< Sets the power level setting.
+    void setServerPort(int value);          ///< Sets the server port configuration.
+    ///@}
 
 private:
     /**
@@ -161,6 +128,7 @@ private:
             offset = reader.GetBoolean("Extended", "Offset", false);
             use_led = reader.GetBoolean("Extended", "Use LED", false);
             power_level = reader.GetInteger("Extended", "Power Level", 7);
+            port = reader.GetInteger("Server", "Port", 31415);
         }
     }
 
@@ -176,6 +144,7 @@ private:
     bool offset;              ///< Indicates whether the offset setting is enabled.
     bool use_led;             ///< Indicates whether the LED is enabled.
     int power_level;          ///< The configured power level.
+    int port;                 ///< The configured server port.
 };
 
 #endif // CONFIG_H

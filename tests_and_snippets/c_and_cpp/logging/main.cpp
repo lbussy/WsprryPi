@@ -3,8 +3,8 @@
  * @brief Test framnework for LCBLog, a logging class for handling log levels,
  * formatting, and timestamping within a C++ project.
  *
- * This logging class provides a flexible and thread-safe logging mechanism 
- * with support for multiple log levels, timestamped logs, and customizable 
+ * This logging class provides a flexible and thread-safe logging mechanism
+ * with support for multiple log levels, timestamped logs, and customizable
  * output streams. include the header (`lcblog.hpp`), implementation
  * (`lcblog.cpp`), and template definitions (`lcblog.tpp`)when using in
  * a project.
@@ -32,7 +32,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
- 
+
  #ifdef DEBUG_MAIN_LCBLOG
 #include "lcblog.hpp"
 #include <fstream>
@@ -51,7 +51,7 @@ LCBLog llog(logFile, errFile);
 
 void threadSafetyTest() {
     std::cout << "Testing thread safety..." << std::endl;
-    
+
     // Lambda function to log in multiple threads
     auto logTask = [](int threadId) {
         for (int i = 0; i < 5; ++i) {
@@ -78,10 +78,10 @@ void logToDifferentStreamsTest() {
 
     // Log to stdout
     llog.logS(INFO, "This is an INFO message to stdout.");
-    
+
     // Log to stderr
     llog.logE(ERROR, "This is an ERROR message to stderr.");
-    
+
     std::cout << "Log output test completed." << std::endl;
 }
 

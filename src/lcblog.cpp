@@ -2,11 +2,11 @@
  * @file lcblog.cpp
  * @brief Implementation of the LCBLog logging class.
  *
- * This logging class provides a flexible and thread-safe logging mechanism 
- * with support for multiple log levels, timestamped logs, and customizable 
+ * This logging class provides a flexible and thread-safe logging mechanism
+ * with support for multiple log levels, timestamped logs, and customizable
  * output streams.
  *
- * This software is distributed under the MIT License. See LICENSE.MIT.md 
+ * This software is distributed under the MIT License. See LICENSE.MIT.md
  * for details.
  *
  * @author Lee C. Bussy
@@ -21,7 +21,7 @@
 
 /**
  * @brief Converts a log level to its string representation.
- * 
+ *
  * @param level The log level to convert.
  * @return A string representing the log level.
  */
@@ -38,7 +38,7 @@ std::string logLevelToString(LogLevel level) {
 
 /**
  * @brief Constructs the logging class with specified output streams.
- * 
+ *
  * @param outStream The output stream for standard logs (default: std::cout).
  * @param errStream The output stream for error logs (default: std::cerr).
  */
@@ -47,7 +47,7 @@ LCBLog::LCBLog(std::ostream& outStream, std::ostream& errStream)
 
 /**
  * @brief Sets the minimum log level for message output.
- * 
+ *
  * @param level The log level to set.
  */
 void LCBLog::setLogLevel(LogLevel level) {
@@ -61,7 +61,7 @@ void LCBLog::setLogLevel(LogLevel level) {
 
 /**
  * @brief Enables or disables timestamping for log messages.
- * 
+ *
  * @param enable If true, timestamps will be included in logs.
  */
 void LCBLog::enableTimestamps(bool enable) {
@@ -70,7 +70,7 @@ void LCBLog::enableTimestamps(bool enable) {
 
 /**
  * @brief Checks if a message should be logged based on the current log level.
- * 
+ *
  * @param level The log level to check.
  * @return True if the message should be logged, otherwise false.
  */
@@ -80,7 +80,7 @@ bool LCBLog::shouldLog(LogLevel level) const {
 
 /**
  * @brief Generates a timestamp string for log entries.
- * 
+ *
  * @return A formatted timestamp string.
  */
 std::string LCBLog::getStamp() {
@@ -94,7 +94,7 @@ std::string LCBLog::getStamp() {
 
 /**
  * @brief Cleans up a string by trimming whitespace and reducing consecutive spaces.
- * 
+ *
  * @param s The string to sanitize.
  */
 void LCBLog::crush(std::string& s) {

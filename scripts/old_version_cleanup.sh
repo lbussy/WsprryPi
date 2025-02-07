@@ -42,10 +42,10 @@ IFS=$'\n\t'
 
 # -----------------------------------------------------------------------------
 # @brief Removes specified files and directories from the system.
-# 
-# @details This function attempts to remove files and directories listed in 
-#          the predefined array or passed in as arguments. It checks whether 
-#          each file or directory exists, and confirms with the user before 
+#
+# @details This function attempts to remove files and directories listed in
+#          the predefined array or passed in as arguments. It checks whether
+#          each file or directory exists, and confirms with the user before
 #          removing items if unexpected dependencies or locations are detected.
 #          All errors are suppressed and warnings are printed to the terminal.
 #
@@ -108,7 +108,7 @@ remove_files_and_dirs() {
 
 # -----------------------------------------------------------------------------
 # @brief Removes specified services from systemd if they exist and are enabled.
-# 
+#
 # @details This function attempts to stop the service only if it is running,
 #          disable it if it is enabled, remove the service unit file (even if
 #          the service was never installed), and always resets the failed state
@@ -205,7 +205,7 @@ remove_services() {
 
 # -----------------------------------------------------------------------------
 # @brief Main execution function for the script.
-# @details This function orchestrates the uninstall process for legacy 
+# @details This function orchestrates the uninstall process for legacy
 #          Wsprry Pi serbices, files, and folders.
 #
 # @param $@ Command-line arguments passed to the script.

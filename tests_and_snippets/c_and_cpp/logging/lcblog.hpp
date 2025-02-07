@@ -3,8 +3,8 @@
  * @brief A logging class for handling log levels, formatting, and
  * timestamping within a C++ project.
  *
- * This logging class provides a flexible and thread-safe logging mechanism 
- * with support for multiple log levels, timestamped logs, and customizable 
+ * This logging class provides a flexible and thread-safe logging mechanism
+ * with support for multiple log levels, timestamped logs, and customizable
  * output streams. include the header (`lcblog.hpp`), implementation
  * (`lcblog.cpp`), and template definitions (`lcblog.tpp`)when using in
  * a project.
@@ -36,18 +36,18 @@
 #ifndef LCBLOG_HPP
 #define LCBLOG_HPP
 
-#include <iostream> 
+#include <iostream>
 #include <sstream>
 #include <mutex>
 #include <string>
 #include <ctime>
-#include <iomanip> 
+#include <iomanip>
 
 /**
  * @enum LogLevel
  * @brief Defines the severity levels for logging.
  *
- * This enumeration represents different log levels, which determine 
+ * This enumeration represents different log levels, which determine
  * the severity and importance of logged messages.
  */
 enum LogLevel {
@@ -60,7 +60,7 @@ enum LogLevel {
 
 std::string logLevelToString(LogLevel level);/**
  * @brief Converts a log level to its string representation.
- * 
+ *
  * @param level The log level to convert.
  * @return A string representing the log level.
  */
@@ -70,14 +70,14 @@ std::string logLevelToString(LogLevel level);
  * @class LCBLog
  * @brief A thread-safe logging class supporting multiple log levels.
  *
- * Provides a mechanism for logging messages with different severity levels, 
+ * Provides a mechanism for logging messages with different severity levels,
  * timestamping, and customizable output streams.
  */
 class LCBLog {
 public:
     /**
      * @brief Constructs the logging class with specified output streams.
-     * 
+     *
      * @param outStream The output stream for standard logs (default: std::cout).
      * @param errStream The output stream for error logs (default: std::cerr).
      */
@@ -85,14 +85,14 @@ public:
 
     /**
      * @brief Sets the minimum log level for message output.
-     * 
+     *
      * @param level The log level to set.
      */
     void setLogLevel(LogLevel level);
 
     /**
      * @brief Checks if a message should be logged based on the current log level.
-     * 
+     *
      * @param level The log level to check.
      * @return True if the message should be logged, otherwise false.
      */
@@ -100,7 +100,7 @@ public:
 
     /**
      * @brief Logs a message to a specified stream.
-     * 
+     *
      * @tparam T First message argument type.
      * @tparam Args Variadic additional message arguments.
      * @param level The log level of the message.
@@ -113,7 +113,7 @@ public:
 
     /**
      * @brief Logs a message to the standard output stream.
-     * 
+     *
      * @tparam T First message argument type.
      * @tparam Args Variadic additional message arguments.
      * @param level The log level of the message.
@@ -127,7 +127,7 @@ public:
 
     /**
      * @brief Logs a message to the error output stream.
-     * 
+     *
      * @tparam T First message argument type.
      * @tparam Args Variadic additional message arguments.
      * @param level The log level of the message.
@@ -141,7 +141,7 @@ public:
 
     /**
      * @brief Enables or disables timestamping for log messages.
-     * 
+     *
      * @param enable If true, timestamps will be included in logs.
      */
     void enableTimestamps(bool enable);
@@ -155,7 +155,7 @@ private:
 
     /**
      * @brief Logs a formatted message to a specified stream.
-     * 
+     *
      * @tparam T First message argument type.
      * @tparam Args Variadic additional message arguments.
      * @param stream The output stream to write to.
@@ -168,14 +168,14 @@ private:
 
     /**
      * @brief Sanitizes a string by removing unwanted characters.
-     * 
+     *
      * @param s The string to sanitize.
      */
     static void crush(std::string& s);
 
     /**
      * @brief Generates a timestamp string for log entries.
-     * 
+     *
      * @return A formatted timestamp string.
      */
     std::string getStamp();
