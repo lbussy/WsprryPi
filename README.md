@@ -15,8 +15,8 @@
 
 This project is distributed under multiple licenses:
 
-- **Compiled Code:** The compiled code and codebase (C and C++) within the `/src` directory are licensed under the GNU General Public License (GPL) v3. See the [LICENSE.GPL](./LICENSE.GPL.md) file for details.
-- **ALl Other Works:** All other works in this repository, including those within the `/data`, `/docs`, `/images`, `/release_tools`, and `/scripts` Licensed under the MIT License. See the [LICENSE.MIT](LICENSE.MIT.md) file for details.
+- **Compiled Code:** The original code and codebase (C and C++) within the `/src` directory are licensed under the GNU General Public License (GPL) v3. See the [LICENSE.GPL](./LICENSE.GPL.md) file for details.
+- **ALl Other Works:** All new works in this repository, including those within the `/src` directory are licensed under the MIT License. See the [LICENSE.MIT](LICENSE.MIT.md) file for details.
 
 ## Origins
 
