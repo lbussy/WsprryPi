@@ -208,34 +208,34 @@ int INIReader::ValueHandler(void* user, const char* section, const char* name, c
 void INIReader::CreateDefaultINI(const std::string& filename) {
     std::ofstream ini_file(filename);
     if (ini_file.is_open()) {
-        ini_file << "# Configuration file for WSPR program\n";
-        ini_file << "# This file was automatically created because it was missing.\n";
-        ini_file << "# Edit the values below as needed. Do not remove sections or keys.\n\n";
+        ini_file << "; Configuration file for WSPR program\n";
+        ini_file << "; This file was automatically created because it was missing.\n";
+        ini_file << "; Edit the values below as needed. Do not remove sections or keys.\n\n";
 
         ini_file << "[Control]\n";
-        ini_file << "# Transmit: Set to True to enable transmitting, False to disable.\n";
+        ini_file << "; Transmit: Set to True to enable transmitting, False to disable.\n";
         ini_file << "Transmit = False\n\n";
 
         ini_file << "[Common]\n";
-        ini_file << "# Call Sign: Your ham radio call sign (maximum 7 characters).\n";
+        ini_file << "; Call Sign: Your ham radio call sign (maximum 7 characters).\n";
         ini_file << "Call Sign = NXXX\n";
-        ini_file << "# Grid Square: Your location's Maidenhead grid square (4 characters).\n";
+        ini_file << "; Grid Square: Your location's Maidenhead grid square (4 characters).\n";
         ini_file << "Grid Square = ZZ99\n";
-        ini_file << "# TX Power: Transmitter power in dBm (integer, e.g., 20).\n";
+        ini_file << "; TX Power: Transmitter power in dBm (integer, e.g., 20).\n";
         ini_file << "TX Power = 20\n";
-        ini_file << "# Frequency: Transmission frequency in meters (e.g., '20m') or Hz.\n";
+        ini_file << "; Frequency: Transmission frequency in meters (e.g., '20m') or Hz.\n";
         ini_file << "Frequency = 20m\n\n";
 
         ini_file << "[Extended]\n";
-        ini_file << "# PPM: Frequency offset in parts per million.\n";
+        ini_file << "; PPM: Frequency offset in parts per million.\n";
         ini_file << "PPM = 0.0\n";
-        ini_file << "# Self Cal: Set to True to enable self-calibration.\n";
+        ini_file << "; Self Cal: Set to True to enable self-calibration.\n";
         ini_file << "Self Cal = True\n";
-        ini_file << "# Offset: Set to True to enable frequency offset correction.\n";
+        ini_file << "; Offset: Set to True to enable frequency offset correction.\n";
         ini_file << "Offset = False\n";
-        ini_file << "# Use LED: Set to True to enable LED usage.\n";
+        ini_file << "; Use LED: Set to True to enable LED usage.\n";
         ini_file << "Use LED = False\n";
-        ini_file << "# Power Level: Output power level (integer from 0 to 7).\n";
+        ini_file << "; Power Level: Output power level (integer from 0 to 7).\n";
         ini_file << "Power Level = 7\n";
 
         ini_file.close();

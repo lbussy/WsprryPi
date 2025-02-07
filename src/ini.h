@@ -141,7 +141,8 @@ INI_API int ini_parse_stream(ini_reader reader, void* stream, ini_handler handle
  * @param user User-provided data passed to the handler.
  * @return 0 on success, line number of first error, or -2 on memory allocation error.
  */
-INI_API int ini_parse_string(const char* string, ini_handler handler, void* user);
+ // TODO: Remove?
+// INI_API int ini_parse_string(const char* string, ini_handler handler, void* user);
 
 /* Configurable behavior options. */
 

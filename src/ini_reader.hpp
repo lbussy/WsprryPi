@@ -148,7 +148,7 @@ private:
      *
      * @param filename Path to the INI file to create.
      */
-    void CreateDefaultINI(const std::string& filename);
+    static void CreateDefaultINI(const std::string& filename);
 
     /**
      * @brief Create a case-insensitive key from a section and name.

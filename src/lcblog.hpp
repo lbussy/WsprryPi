@@ -1,12 +1,12 @@
 /**
- * @file lcblog.cpp
- * @brief A header-only logging class.
+ * @file lcblog.hpp
+ * @brief A logging class for handling log levels, formatting, and timestamping.
  *
  * This file is part of WsprryPi, a project originally forked from
  * threeme3/WsprryPi (no longer active on GitHub).
  *
- * However, this new code added to the project is distributed under under
- * the MIT License. See LICENSE.MIT.md for more information.
+ * However, this new code added to the project is distributed under the
+ * MIT License. See LICENSE.MIT.md for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
@@ -124,7 +124,7 @@ public:
      * @brief Test the `crush` function directly with a given string.
      * @param s The string to process using `crush`.
      */
-    void testCrush(std::string &s)
+    static void testCrush(std::string &s)
     {
         crush(s);
     }
@@ -199,7 +199,7 @@ private:
      * @brief Clean up a string by removing extraneous spaces and fixing formatting issues.
      * @param s The string to clean.
      */
-    void crush(std::string &s)
+    static void crush(std::string &s)
     {
         // Trim leading and trailing spaces
         s = std::regex_replace(s, std::regex("^\\s+|\\s+$"), "");
