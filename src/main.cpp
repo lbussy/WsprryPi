@@ -22,6 +22,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>    // transform support
+#include <vector>       // vector support
 #include <assert.h>     // 'assert' support
 #include <fcntl.h>      // O_RDWR support
 #include <getopt.h>     // getopt_long support
@@ -293,7 +295,7 @@ void setupGPIO(int pin = 0)
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        llog.logE("Fail: Unable to open /dev/mem (running as root?)");
+        llog.logE(FATAL,"Unable to open /dev/mem (running as root?)");
         exit(-1);
     }
 
@@ -396,7 +398,7 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     // page in the pool.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
-        llog.logE("Error: unable to allocated more pages.");
+        llog.logE(FATAL, "Unable to allocated more pages.");
         exit(-1);
     }
     unsigned offset = mbox.pool_cnt * 4096;
@@ -636,8 +638,8 @@ void setupDMATab(
     {
         center_freq_actual = plld_actual_freq / floor(div_lo) - 1.6 * tone_spacing;
         std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
-        llog.logE(temp.str(), " because of hardware limitations.");
+        temp << std::setprecision(6) << std::fixed << "Center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
+        llog.logS(WARN, temp.str(), " because of hardware limitations.");
     }
 
     // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
@@ -763,60 +765,60 @@ void setupDMA(
 
 void print_usage()
 {
-    llog.logS("Usage:");
-    llog.logS("  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
-    llog.logS("    OR");
-    llog.logS("  wsprrypi [options] --test-tone {frequency}");
-    llog.logS("");
-    llog.logS("Options:");
-    llog.logS("  -h --help");
-    llog.logS("    Print out this help screen.");
-    llog.logS("  -v --version");
-    llog.logS("    Show the Wsprry Pi version.");
-    llog.logS("  -p --ppm ppm");
-    llog.logS("    Known PPM correction to 19.2MHz RPi nominal crystal frequency.");
-    llog.logS("  -s --self-calibration");
-    llog.logS("    Check NTP before every transmission to obtain the PPM error of the");
-    llog.logS("    crystal (default setting.)");
-    llog.logS("  -f --free-running");
-    llog.logS("    Do not use NTP to correct the frequency error of RPi crystal.");
-    llog.logS("  -r --repeat");
-    llog.logS("    Repeatedly and in order, transmit on all the specified command line");
-    llog.logS("    freqs.");
-    llog.logS("  -x --terminate <n>");
-    llog.logS("    Terminate after completing <n> transmissions.");
-    llog.logS("  -o --offset");
-    llog.logS("    Add a random frequency offset to each transmission:");
-    llog.logS("      +/- ", WSPR_RAND_OFFSET, "Hz for WSPR");
-    llog.logS("      +/- ", WSPR15_RAND_OFFSET, "Hz for WSPR-15");
-    llog.logS("  -t --test-tone freq");
-    llog.logS("    Output a test tone at the specified frequency. Only used for");
-    llog.logS("    debugging and verifying calibration.");
-    llog.logS("  -l --led");
-    llog.logS("    Use LED as a transmit indicator (TAPR board).");
-    llog.logS("  -n --no-delay;");
-    llog.logS("    Transmit immediately without waiting for a WSPR TX window. Used for");
-    llog.logS("    testing only.");
-    llog.logS("  -i --ini-file");
-    llog.logS("    Load parameters from an ini file. Supply path and file name.");
-    llog.logS("  -D --daemon-mode");
-    llog.logS("    Run with terse messaging.");
-    llog.logS("  -d --power_level");
-    llog.logS("    Set actual TX power, 0-7.");
-    llog.logS("");
-    llog.logS("Frequencies can be specified either as an absolute TX carrier frequency,");
-    llog.logS("or using one of the following bands:");
-    llog.logS("");
-    llog.logS("  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,");
-    llog.logS("  17m, 15m, 12m, 10m, 6m, 4m, and 2m");
-    llog.logS("");
-    llog.logS("If you specify a band, the transmission will happen in the middle of the");
-    llog.logS("WSPR region of the selected band.");
-    llog.logS("");
-    llog.logS("The \"-15\" suffix indicates the WSPR-15 region of the band.");
-    llog.logS("");
-    llog.logS("You may create transmission gaps by specifying a TX frequency of 0.");
-    llog.logS("");
+    llog.logS(INFO, "Usage:");
+    llog.logS(INFO, "  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
+    llog.logS(INFO, "    OR");
+    llog.logS(INFO, "  wsprrypi [options] --test-tone {frequency}");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "Options:");
+    llog.logS(INFO, "  -h --help");
+    llog.logS(INFO, "    Print out this help screen.");
+    llog.logS(INFO, "  -v --version");
+    llog.logS(INFO, "    Show the Wsprry Pi version.");
+    llog.logS(INFO, "  -p --ppm ppm");
+    llog.logS(INFO, "    Known PPM correction to 19.2MHz RPi nominal crystal frequency.");
+    llog.logS(INFO, "  -s --self-calibration");
+    llog.logS(INFO, "    Check NTP before every transmission to obtain the PPM error of the");
+    llog.logS(INFO, "    crystal (default setting.)");
+    llog.logS(INFO, "  -f --free-running");
+    llog.logS(INFO, "    Do not use NTP to correct the frequency error of RPi crystal.");
+    llog.logS(INFO, "  -r --repeat");
+    llog.logS(INFO, "    Repeatedly and in order, transmit on all the specified command line");
+    llog.logS(INFO, "    freqs.");
+    llog.logS(INFO, "  -x --terminate <n>");
+    llog.logS(INFO, "    Terminate after completing <n> transmissions.");
+    llog.logS(INFO, "  -o --offset");
+    llog.logS(INFO, "    Add a random frequency offset to each transmission:");
+    llog.logS(INFO, "      +/- ", WSPR_RAND_OFFSET, "Hz for WSPR");
+    llog.logS(INFO, "      +/- ", WSPR15_RAND_OFFSET, "Hz for WSPR-15");
+    llog.logS(INFO, "  -t --test-tone freq");
+    llog.logS(INFO, "    Output a test tone at the specified frequency. Only used for");
+    llog.logS(INFO, "    debugging and verifying calibration.");
+    llog.logS(INFO, "  -l --led");
+    llog.logS(INFO, "    Use LED as a transmit indicator (TAPR board).");
+    llog.logS(INFO, "  -n --no-delay;");
+    llog.logS(INFO, "    Transmit immediately without waiting for a WSPR TX window. Used for");
+    llog.logS(INFO, "    testing only.");
+    llog.logS(INFO, "  -i --ini-file");
+    llog.logS(INFO, "    Load parameters from an ini file. Supply path and file name.");
+    llog.logS(INFO, "  -D --daemon-mode");
+    llog.logS(INFO, "    Run with terse messaging.");
+    llog.logS(INFO, "  -d --power_level");
+    llog.logS(INFO, "    Set actual TX power, 0-7.");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "Frequencies can be specified either as an absolute TX carrier frequency,");
+    llog.logS(INFO, "or using one of the following bands:");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,");
+    llog.logS(INFO, "  17m, 15m, 12m, 10m, 6m, 4m, and 2m");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "If you specify a band, the transmission will happen in the middle of the");
+    llog.logS(INFO, "WSPR region of the selected band.");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "The \"-15\" suffix indicates the WSPR-15 region of the band.");
+    llog.logS(INFO, "");
+    llog.logS(INFO, "You may create transmission gaps by specifying a TX frequency of 0.");
+    llog.logS(INFO, "");
 }
 
 bool getINIValues(bool reload = false)
@@ -837,23 +839,23 @@ bool getINIValues(bool reload = false)
         config.power_level = iniConfig.getPowerLevel();
 
         if (! config.daemon_mode )
-            llog.logS("\n============================================");
-        llog.logS("Config ", ((reload) ? "re-loaded" : "loaded"), "from: ", config.inifile);
+            llog.logS(INFO, "\n============================================");
+        llog.logS(INFO, "Config ", ((reload) ? "re-loaded" : "loaded"), "from: ", config.inifile);
         if (! config.daemon_mode )
-            llog.logS("============================================");
-        llog.logS("Transmit Enabled:\t\t", ((config.xmit_enabled) ? "true" : "false"));
-        llog.logS("Call Sign:\t\t\t", config.callsign);
-        llog.logS("Grid Square:\t\t\t", config.grid_square);
-        llog.logS("Transmit Power:\t\t\t", config.tx_power);
-        llog.logS("Frequencies:\t\t\t", config.frequency_string);
-        llog.logS("PPM Offset:\t\t\t", config.ppm);
-        llog.logS("Do not use NTP sync:\t\t", ((!config.self_cal) ? "true" : "false"));
-        llog.logS("Check NTP Each Run (default):\t", ((config.self_cal) ? "true" : "false"));
-        llog.logS("Use Frequency Randomization:\t", ((config.random_offset) ? "true" : "false"));
-        llog.logS("Power Level:\t\t\t", config.power_level);
-        llog.logS("Use LED:\t\t\t", ((config.use_led) ? "true" : "false"));
+            llog.logS(INFO, "============================================");
+        llog.logS(INFO, "Transmit Enabled:\t\t", ((config.xmit_enabled) ? "true" : "false"));
+        llog.logS(INFO, "Call Sign:\t\t\t", config.callsign);
+        llog.logS(INFO, "Grid Square:\t\t\t", config.grid_square);
+        llog.logS(INFO, "Transmit Power:\t\t\t", config.tx_power);
+        llog.logS(INFO, "Frequencies:\t\t\t", config.frequency_string);
+        llog.logS(INFO, "PPM Offset:\t\t\t", config.ppm);
+        llog.logS(INFO, "Do not use NTP sync:\t\t", ((!config.self_cal) ? "true" : "false"));
+        llog.logS(INFO, "Check NTP Each Run (default):\t", ((config.self_cal) ? "true" : "false"));
+        llog.logS(INFO, "Use Frequency Randomization:\t", ((config.random_offset) ? "true" : "false"));
+        llog.logS(INFO, "Power Level:\t\t\t", config.power_level);
+        llog.logS(INFO, "Use LED:\t\t\t", ((config.use_led) ? "true" : "false"));
         if (! config.daemon_mode )
-            llog.logS("============================================\n");
+            llog.logS(INFO, "============================================\n");
         return true;
     }
     else
@@ -944,7 +946,7 @@ void convertToFreq(const char* &option, double &parsed_freq)
         parsed_freq = strtod(option, &endp);
         if ((optarg == endp) || (*endp != '\0'))
         {
-            llog.logE("Error: Could not parse transmit frequency: ", option);
+            llog.logE(FATAL, "Could not parse transmit frequency: ", option);
             exit(-1);
         }
     }
@@ -984,7 +986,7 @@ bool parse_commandline(const int &argc, char *const argv[])
         case 0:
             // Code should only get here if a long option was given a non-null
             // flag value.
-            llog.logE("Check code.");
+            llog.logE(FATAL, "Check code.");
             return false;
             break;
         case 'h':
@@ -995,7 +997,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            llog.logS(version_string());
+            llog.logS(INFO, version_string());
             return false;
             break;
         case 'p':
@@ -1003,7 +1005,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             config.ppm = strtod(optarg, &endp);
             if ((optarg == endp) || (*endp != '\0'))
             {
-                llog.logE("Error: Could not parse ppm value.");
+                llog.logE(FATAL, "Could not parse ppm value.");
                 return false;
             }
             break;
@@ -1024,12 +1026,12 @@ bool parse_commandline(const int &argc, char *const argv[])
             config.terminate = strtol(optarg, &endp, 10);
             if ((optarg == endp) || (*endp != '\0'))
             {
-                llog.logE("Error: Could not parse termination argument.");
+                llog.logE(FATAL, "Could not parse termination argument.");
                 return false;
             }
             if (config.terminate < 1)
             {
-                llog.logE("Error: Termination parameter must be >= 1.");
+                llog.logE(FATAL, "Termination parameter must be >= 1.");
                 return false;
             }
             break;
@@ -1043,7 +1045,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             config.mode = TONE;
             if ((optarg == endp) || (*endp != '\0'))
             {
-                llog.logE("Error: could not parse test tone frequency.");
+                llog.logE(FATAL, "Could not parse test tone frequency.");
                 return false;
             }
             break;
@@ -1064,7 +1066,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             // Daemon mode, repeats indefinitely
             config.daemon_mode = true;
             config.repeat = true; // Repeat must be true in a daemon setup
-            llog.setDaemon(config.daemon_mode);
+            llog.enableTimestamps(config.daemon_mode);
             break;
         case 'd':
             {
@@ -1096,7 +1098,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         if (! reparse) iniMonitor.filemon(config.inifile.c_str());
         if ( !getINIValues(reparse) )
         {
-            llog.logE("Error: Failed to reload the INI.");
+            llog.logE(FATAL, "Failed to reload the INI.");
             exit(-1);
         }
         config.center_freq_set.clear();
@@ -1158,19 +1160,19 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     // Check consistency among command line options.
     if (config.ppm && config.self_cal)
     {
-        llog.logE("Warning: ppm value is being ignored.");
+        llog.logE(INFO, "PPM value is being ignored.");
         config.ppm = 0.0;
     }
     if (config.mode == TONE)
     {
         if ((config.callsign != "") || (config.grid_square != "") || (config.tx_power != "") || (config.center_freq_set.size() != 0) || config.random_offset)
         {
-            llog.logE("Warning: Callsign, gridsquare, etc. are ignored when generating test tone.");
+            llog.logE(INFO, "Callsign, gridsquare, etc. are ignored when generating test tone.");
         }
         config.random_offset = 0;
         if (config.test_tone <= 0)
         {
-            llog.logE("Error: Test tone frequency must be positive.");
+            llog.logE(FATAL, "Test tone frequency must be positive.");
             exit(-1);
         }
     }
@@ -1178,8 +1180,8 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     {
         if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
         {
-            llog.logE("Error: must specify callsign, gridsquare, dBm, and at least one frequency.");
-            llog.logE("Try: wsprrypi --help");
+            llog.logE(FATAL, "must specify callsign, gridsquare, dBm, and at least one frequency.");
+            llog.logE(FATAL, "Try: wsprrypi --help");
             exit(-1);
         }
     }
@@ -1187,11 +1189,11 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     // Print a summary of the parsed options
     if (config.mode == WSPR)
     {
-        llog.logS("WSPR packet payload:");
-        llog.logS("- Callsign: ", config.callsign);
-        llog.logS("- Locator:  ", config.grid_square);
-        llog.logS("- Power:    ", config.tx_power, " dBm");
-        llog.logS("Requested TX frequencies:");
+        llog.logS(INFO, "WSPR packet payload:");
+        llog.logS(INFO, "- Callsign: ", config.callsign);
+        llog.logS(INFO, "- Locator:  ", config.grid_square);
+        llog.logS(INFO, "- Power:    ", config.tx_power, " dBm");
+        llog.logS(INFO, "Requested TX frequencies:");
 
         // Concatenate a message
         std::ostringstream log_message;
@@ -1201,44 +1203,44 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         }
 
         // Log the concatenated message
-        llog.logS(log_message.str());
+        llog.logS(INFO, log_message.str());
 
 
         if (config.self_cal)
         {
-            llog.logS("- Using NTP to calibrate transmission frequency.");
+            llog.logS(INFO, "- Using NTP to calibrate transmission frequency.");
         }
         else if (config.ppm)
         {
-            llog.logS("- PPM value to be used for all transmissions: ", config.ppm);
+            llog.logS(INFO, "- PPM value to be used for all transmissions: ", config.ppm);
         }
 
         if (config.terminate > 0)
         {
-            llog.logS("- TX will stop after ", config.terminate);
+            llog.logS(INFO, "- TX will stop after ", config.terminate);
         }
         else if (config.repeat && !config.daemon_mode)
         {
-            llog.logS("- Transmissions will continue forever until stopped with CTRL-C.");
+            llog.logS(INFO, "- Transmissions will continue forever until stopped with CTRL-C.");
         }
 
         if (config.random_offset)
         {
-            llog.logS("- A small random frequency offset will be added to all transmissions.");
+            llog.logS(INFO, "- A small random frequency offset will be added to all transmissions.");
         }
     }
     else
     {
-        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed
+        llog.logS(INFO, (std::ostringstream() << std::setprecision(6) << std::fixed
                                  << "A test tone will be generated at frequency "
                                  << config.test_tone / 1e6 << " MHz.").str());
         if (config.self_cal)
         {
-            llog.logS("NTP will be used to calibrate the tone frequency.");
+            llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
         }
         else if (config.ppm)
         {
-            llog.logS("PPM value to be used to generate the tone: ", config.ppm);
+            llog.logS(INFO, "PPM value to be used to generate the tone: ", config.ppm);
         }
     }
     return true;
@@ -1262,7 +1264,7 @@ bool wait_every(int minute)
             usleep(500000);
             while (iniMonitor.changed()) {;;}
 
-            llog.logS("Notice: INI file changed, reloading parameters.");
+            llog.logS(INFO, "INI file changed, reloading parameters.");
             parseConfigData(true);
             return false; // Need to reload
         }
@@ -1289,21 +1291,21 @@ bool update_ppm()
 
     if (status != TIME_OK)
     {
-        llog.logE("Error: Clock not synchronized.");
+        llog.logE(FATAL, "Clock not synchronized.");
         return false;
     }
 
     ppm_new = (double)ntx.freq / (double)(1 << 16); /* frequency scale */
     if (abs(ppm_new) > 200)
     {
-        llog.logE("Warning: Absolute ppm value is greater than 200 and is being ignored.");
+        llog.logE(FATAL, "Absolute ppm value is greater than 200 and is being ignored.");
         return false;
     }
     else
     {
         if (config.ppm != ppm_new)
         {
-            llog.logS("Obtained new ppm value: ", ppm_new);
+            llog.logS(INFO, "Obtained new ppm value: ", ppm_new);
         }
         config.ppm = ppm_new;
         return true;
@@ -1341,7 +1343,7 @@ void open_mbox()
     mbox.handle = mbox_open();
     if (mbox.handle < 0)
     {
-        llog.logE("Failed to open mailbox.");
+        llog.logE(FATAL, "Failed to open mailbox.");
         exit(-1);
     }
 }
@@ -1372,44 +1374,44 @@ void cleanupAndExit(int sig)
     switch (sig) {
         case SIGINT: // 2
             log_message = "Exiting due to interrupt (Ctrl+C).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
         case SIGTERM: // 15
             log_message = "Exiting due to termination request (SIGTERM).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
         case SIGUSR1: // 10
             log_message = "Exiting due to user-defined signal 1 (SIGUSR1).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
         case SIGUSR2: // 12
             log_message = "Exiting due to user-defined signal 2 (SIGUSR2).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
         case SIGQUIT: // 3
             log_message = "Exiting due to quit signal (SIGQUIT).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
         case SIGPWR: // 30
             log_message = "Exiting due to power failure signal (SIGPWR).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(0); // User-initiated action, normal exit
             break;
 
@@ -1417,84 +1419,84 @@ void cleanupAndExit(int sig)
         case SIGCONT:
             log_message = "Exiting due to stop signal (SIGCONT).";
             if (should_log_normal) {
-                llog.logS(log_message);
+                llog.logS(INFO, log_message);
             }
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for SIGCONT
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for SIGCONT
+            llog.logE(INFO, "Signal: ", sig);
+            llog.logE(INFO, "Description: ", sig_description);
             exit(-1); // Daemon shutdown
             break;
         case SIGKILL:
             log_message = "Exiting due to kill signal (SIGKILL).";
             if (should_log_normal) {
-                llog.logS(log_message);
+                llog.logS(INFO, log_message);
             }
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for SIGKILL
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for SIGKILL
+            llog.logE(INFO, "Signal: ", sig);
+            llog.logE(INFO, "Description: ", sig_description);
             exit(-1); // System error condition, abnormal exit
             break;
         case SIGSEGV:
             log_message = "Exiting due to segmentation fault (SIGSEGV).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for segmentation fault
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for segmentation fault
+            llog.logE(FATAL, "Signal: ", sig);
+            llog.logE(FATAL, "Description: ", sig_description);
             exit(-1); // Critical system error, abnormal exit
             break;
         case SIGBUS:
             log_message = "Exiting due to bus error (SIGBUS).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for bus error
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for bus error
+            llog.logE(FATAL, "Signal: ", sig);
+            llog.logE(FATAL, "Description: ", sig_description);
             exit(-1); // Critical system error, abnormal exit
             break;
         case SIGFPE:
             log_message = "Exiting due to floating point exception (SIGFPE).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for floating point exception
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for floating point exception
+            llog.logE(FATAL, "Signal: ", sig);
+            llog.logE(FATAL, "Description: ", sig_description);
             exit(-1); // Critical system error, abnormal exit
             break;
         case SIGILL:
             log_message = "Exiting due to illegal instruction (SIGILL).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message); // Log error for illegal instruction
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message); // Log error for illegal instruction
+            llog.logE(FATAL, "Signal: ", sig);
+            llog.logE(FATAL, "Description: ", sig_description);
             exit(-1); // Critical system error, abnormal exit
             break;
         case SIGHUP:
             log_message = "Exiting due to hangup signal (SIGHUP).";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
             exit(-1); // System error condition, abnormal exit
             break;
 
         // Catch-all for unhandled signals
         default:
             log_message = "Exiting due to unknown signal.";
-            llog.logS(log_message);
-            llog.logS("Signal: ", sig);
-            llog.logS("Description: ", sig_description);
-            llog.logE(log_message);
-            llog.logE("Signal: ", sig);
-            llog.logE("Description: ", sig_description);
+            llog.logS(INFO, log_message);
+            llog.logS(INFO, "Signal: ", sig);
+            llog.logS(INFO, "Description: ", sig_description);
+            llog.logE(FATAL, log_message);
+            llog.logE(FATAL, "Signal: ", sig);
+            llog.logE(FATAL, "Description: ", sig_description);
             exit(-1); // Abnormal exit for unknown signals
             break;
     }
@@ -1512,7 +1514,7 @@ void setSchedPriority(int priority)
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (ret)
     {
-        llog.logE("Warning: pthread_setschedparam (increase thread priority) returned non-zero: ", ret);
+        llog.logE(INFO, "pthread_setschedparam (increase thread priority) returned non-zero: ", ret);
     }
 }
 
@@ -1526,7 +1528,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        llog.logE("Error: Can't open /dev/mem");
+        llog.logE(FATAL, "Can't open /dev/mem");
         exit(-1);
     }
     peri_base_virt = (unsigned *)mmap(
@@ -1539,7 +1541,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     );
     if ((long int)peri_base_virt == -1)
     {
-        llog.logE("Error: peri_base_virt mmap error.");
+        llog.logE(FATAL, "peri_base_virt mmap error.");
         exit(-1);
     }
     close(mem_fd);
@@ -1597,8 +1599,8 @@ int main(const int argc, char *const argv[])
 
     if ( ! parse_commandline(argc, argv) ) return 1;
 
-    llog.logS(version_string());
-    llog.logS("Running on: ", getRaspberryPiModel(), ".");
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on: ", getRaspberryPiModel(), ".");
 
     getPLLD(); // Get PLLD Frequency
 
@@ -1614,13 +1616,13 @@ int main(const int argc, char *const argv[])
     {
         if (!singleton())
         {
-            llog.logE("Process already running; see ", singleton.GetLockFileName());
+            llog.logE(FATAL, "Process already running; see ", singleton.GetLockFileName());
             return 1;
         }
     }
     catch (const std::exception& e)
     {
-        llog.logE("Failed to enforce singleton: ", e.what());
+        llog.logE(FATAL, "Failed to enforce singleton: ", e.what());
         return 1;
     }
 
@@ -1648,7 +1650,7 @@ int main(const int argc, char *const argv[])
     txoff();
 
     // Display the PID:
-    llog.logS("Process PID: ", getpid());
+    llog.logS(INFO, "Process PID: ", getpid());
 
     if (config.mode == TONE)
     {
@@ -1658,8 +1660,8 @@ int main(const int argc, char *const argv[])
 
         std::stringstream temp;
         temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
-        llog.logS(temp.str());
-        llog.logS("Press CTRL-C to exit.");
+        llog.logS(INFO, temp.str());
+        llog.logS(INFO, "Press CTRL-C to exit.");
 
         txon(config.use_led, config.power_level);
         int bufPtr = 0;
@@ -1683,8 +1685,8 @@ int main(const int argc, char *const argv[])
                 if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
                 {
                     std::stringstream temp;
-                    temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations." << std::endl;
-                    llog.logE(temp.str());
+                    temp << std::setprecision(6) << std::fixed << "Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations." << std::endl;
+                    llog.logE(INFO, temp.str());
                 }
                 ppm_prev = config.ppm;
             }
@@ -1717,7 +1719,7 @@ int main(const int argc, char *const argv[])
             std::cout << std::endl;
 #endif
 
-            llog.logS("Ready to transmit (setup complete).");
+            llog.logS(INFO, "Ready to transmit (setup complete).");
             int band = 0;
             int n_tx = 0;
             for (;;)
@@ -1742,16 +1744,16 @@ int main(const int argc, char *const argv[])
                 std::stringstream temp;
                 temp << std::setprecision(6) << std::fixed;
                 temp << "Center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " trans: " << center_freq_desired / 1e6 << " MHz.";
-                llog.logS(temp.str());
+                llog.logS(INFO, temp.str());
 
                 // Wait for WSPR transmission window to arrive.
                 if (config.no_delay)
                 {
-                    llog.logS("Transmitting immediately (not waiting for WSPR window.)");
+                    llog.logS(INFO, "Transmitting immediately (not waiting for WSPR window.)");
                 }
                 else
                 {
-                    llog.logS("Waiting for next WSPR transmission window.");
+                    llog.logS(INFO, "Waiting for next WSPR transmission window.");
                     if ( ! wait_every((wspr15) ? 15 : 2) )
                     {
                         // Break and reload if ini changes
@@ -1781,7 +1783,7 @@ int main(const int argc, char *const argv[])
                 if (center_freq_actual && config.xmit_enabled)
                 {
                     // Print a status message right before transmission begins.
-                    llog.logS("Transmission started.");
+                    llog.logS(INFO, "Transmission started.");
 
                     struct timeval tvBegin, sym_start, diff;
                     gettimeofday(&tvBegin, NULL);
@@ -1812,11 +1814,11 @@ int main(const int argc, char *const argv[])
                     // Calculate duration in <double> seconds
                     std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
                     double num_seconds = elapsed.count();
-                    llog.logS("Transmission completed, (", num_seconds, " sec.)");
+                    llog.logS(INFO, "Transmission completed, (", num_seconds, " sec.)");
                 }
                 else
                 {
-                    llog.logS("Skipping transmission.");
+                    llog.logS(INFO, "Skipping transmission.");
                     usleep(1000000);
                 }
 
