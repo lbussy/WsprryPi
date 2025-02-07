@@ -108,9 +108,14 @@ void LCBLog::crush(std::string& s) {
         return !std::isspace(ch);
     }).base(), s.end());
 
-    // Replace multiple spaces with a single space
     try {
+        // Replace multiple spaces with a single space
         s = std::regex_replace(s, std::regex("\\s{2,}"), " ");
+
+        // Remove spaces immediately after '(' and before ')'
+        s = std::regex_replace(s, std::regex("\\(\\s+"), "("); // Remove space after '('
+        s = std::regex_replace(s, std::regex("\\s+\\)"), ")"); // Remove space before ')'
+
     } catch (const std::regex_error& e) {
         std::cerr << "[ERROR] Regex processing failed in crush(): " << e.what() << std::endl;
     }
