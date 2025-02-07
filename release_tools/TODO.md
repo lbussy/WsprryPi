@@ -1,6 +1,7 @@
 # To Do
 
 - Save INI on setter in config.cpp
+- Merge Singleton port with server port
 - Fix shutdown-watch
 - Create release script orchestration
 - Fix LED
