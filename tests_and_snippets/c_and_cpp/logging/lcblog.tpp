@@ -1,5 +1,5 @@
 /**
- * @file lcblog.cpp
+ * @file lcblog.tpp
  * @brief A logging class for handling log levels, formatting, and
  * timestamping within a C++ project.
  *
@@ -33,62 +33,33 @@
  * SOFTWARE.
  */
 
-#include "lcblog.hpp"
-#include <algorithm>
-#include <regex>
-#include <iostream>
+template <typename T, typename... Args>
+void LCBLog::log(LogLevel level, std::ostream& stream, T t, Args... args) {
+    if (!shouldLog(level)) return;
 
-std::string logLevelToString(LogLevel level) {
-    switch (level) {
-        case DEBUG: return "DEBUG";
-        case INFO: return "INFO ";
-        case WARN: return "WARN ";
-        case ERROR: return "ERROR";
-        case FATAL: return "FATAL";
-        default: return "UNKNOWN";
+    std::lock_guard<std::mutex> lock(logMutex);
+    logToStream(stream, level, t, args...);
+}
+
+template <typename T, typename... Args>
+void LCBLog::logToStream(std::ostream& stream, LogLevel level, T t, Args... args) {
+    std::ostringstream oss;
+    oss << t;
+    ((oss << " " << args), ...);
+
+    std::string logMessage = oss.str();
+    std::istringstream messageStream(logMessage);
+    std::string line;
+    bool firstLine = true;
+
+    while (std::getline(messageStream, line)) {
+        if (!firstLine) stream << std::endl;
+
+        crush(line);
+        if (isDaemon) stream << getStamp() << "\t";
+
+        stream << "[" << logLevelToString(level) << "] " << line;
+        firstLine = false;
     }
-}
-
-LCBLog::LCBLog(std::ostream& outStream, std::ostream& errStream)
-    : logLevel(INFO), out(outStream), err(errStream) {}
-
-void LCBLog::setLogLevel(LogLevel level) {
-    {
-        std::lock_guard<std::mutex> lock(logMutex);
-        logLevel = level;
-    }
-
-    logS(INFO, "Log level changed to:", logLevelToString(level));
-}
-
-void LCBLog::enableTimestamps(bool enable) {
-    isDaemon = enable;
-}
-
-bool LCBLog::shouldLog(LogLevel level) const {
-    return static_cast<int>(level) >= static_cast<int>(logLevel);
-}
-
-std::string LCBLog::getStamp() {
-    char dts[24];
-    time_t t = time(nullptr);
-    struct tm tm;
-    gmtime_r(&t, &tm);
-    strftime(dts, sizeof(dts), "%F %T UTC", &tm);
-    return std::string(dts);
-}
-
-void LCBLog::crush(std::string& s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }));
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }).base(), s.end());
-
-    try {
-        s = std::regex_replace(s, std::regex("\\s{2,}"), " ");
-    } catch (const std::regex_error& e) {
-        std::cerr << "[ERROR] Regex processing failed in crush(): " << e.what() << std::endl;
-    }
+    stream << std::endl;
 }
