@@ -144,9 +144,15 @@ process_file() {
         return 1
     fi
 
-    # Detect non-UTF-8 files
-    if ! file -i "$file" | grep -q 'charset=utf-8'; then
-        log "WARNING" "Skipping non-UTF-8 file: $file"
+    # Check if the file is empty
+    if [[ ! -s "$file" ]]; then
+        log "WARNING" "Skipping empty file: $file"
+        return 0
+    fi
+
+    # Detect and skip binary files, but allow ASCII text
+    if file -i "$file" | grep -q 'charset=binary'; then
+        log "WARNING" "Skipping binary file: $file"
         return 0
     fi
 
