@@ -1,13 +1,21 @@
 # To Do
 
-- Save INI on setter in config.cpp
+- Clean up config - it's rredundant now in main
+- Save config INI on setter in cconfig - allow saving when we change via the server.  MAke sure it is threadsafe.
+- See if we can thread the transmit, or if it's threaded.  Check threadsave things.
 - Merge Singleton port with server port
 - Fix shutdown-watch
 - Create release script orchestration
 - Fix LED
-- Fix freq change ()
+- Fix freq change (#57)
+- Show current time on web page (#63)
+- Show logs on web page (#27)
+- Allow reboots (#62)
+- Show transission indicator (#64)
 - Run lint
-- Put version on web page (version.php)
+- Put version on web page (#97)
+- Unable to instal when lib versions differ (#92)
+- Put spots on web page: https://www.wsprnet.org/olddb?mode=html&band=all&limit=50&findcall=AA0NT&sort=date
 
 ## Stuff to Remember
 
