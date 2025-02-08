@@ -33,6 +33,11 @@
  * SOFTWARE.
  */
 
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <type_traits>
+
 /**
  * @brief Logs a message at a given log level.
  *
@@ -67,8 +72,22 @@ void LCBLog::log(LogLevel level, std::ostream& stream, T t, Args... args) {
 template <typename T, typename... Args>
 void LCBLog::logToStream(std::ostream& stream, LogLevel level, T t, Args... args) {
     std::ostringstream oss;
-    oss << t;
-    ((oss << " " << args), ...);  // Fold expression for variadic arguments
+    oss << t;  // First argument is directly added
+
+    if constexpr (sizeof...(args) > 0) {
+        auto shouldSkipSpace = [](const auto& arg) -> bool {
+            if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, std::string>) {
+                return arg.size() == 1 && (arg == "." || arg == "," || arg == ";" || arg == ":");
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, const char*>) {
+                std::string strArg = arg;
+                return strArg.size() == 1 && (strArg == "." || strArg == "," || strArg == ";" || strArg == ":");
+            }
+            return false;
+        };
+
+        // Fold expression to append arguments correctly
+        ((shouldSkipSpace(args) ? oss << args : oss << " " << args), ...);
+    }
 
     std::string logMessage = oss.str();
     std::istringstream messageStream(logMessage);
