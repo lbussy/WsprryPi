@@ -2,7 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# declare DEBUG_MODE=true
+declare DEBUG_MODE="${DEBUG_MODE:=false}"  # Set default if not set
 
 # -----------------------------------------------------------------------------
 # @file clean_whitespace.sh
@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          functionality, expected input/output, and any relevant dependencies.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-remove_bcm+109.59592e9
-# @date 2025-02-05
+# @version 1.2.1-config+20.dd2b495
+# @date 2025-02-08
 # @copyright MIT License
 #
 # @license
@@ -57,7 +57,7 @@ IFS=$'\n\t'
 # @var extensions
 # @brief Array of default file extensions to process.
 # -----------------------------------------------------------------------------
-declare -g -a extensions=(c cpp py h hpp md txt ini sh)
+declare -g -a extensions=(c cpp py h hpp t tpp md txt ini sh py)
 
 # -----------------------------------------------------------------------------
 # @var exclude_args
@@ -78,12 +78,20 @@ declare -g success_count=0
 declare -g failure_count=0
 
 # -----------------------------------------------------------------------------
-# @brief Log messages with specified severity levels.
+# @brief Logs messages with color-coded severity levels.
+# @details Prints messages to stdout/stderr based on log severity.
+#          DEBUG messages appear only if DEBUG_MODE is enabled.
 #
 # @param $1 Log level (INFO, WARNING, ERROR, DEBUG)
-# @param $2 Log message
+# @param $2 Log message text.
+#
+# @global DEBUG_MODE Used to control debug message output.
 #
 # @return None
+#
+# @example
+# log "INFO" "Process started."
+# log "ERROR" "File not found."
 # -----------------------------------------------------------------------------
 log() {
     local level="$1"
@@ -92,33 +100,26 @@ log() {
     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
 
     local green yellow red cyan reset
-    green=$(tput setaf 2 2>/dev/null || printf "")
-    yellow=$(tput setaf 3 2>/dev/null || printf "")
-    red=$(tput setaf 1 2>/dev/null || printf "")
-    cyan=$(tput setaf 6 2>/dev/null || printf "")
-    reset=$(tput sgr0 2>/dev/null || printf "")
+    if [[ -t 1 ]]; then
+        green=$(tput setaf 2 2>/dev/null || printf "")
+        yellow=$(tput setaf 3 2>/dev/null || printf "")
+        red=$(tput setaf 1 2>/dev/null || printf "")
+        cyan=$(tput setaf 6 2>/dev/null || printf "")
+        reset=$(tput sgr0 2>/dev/null || printf "")
+    else
+        green="" yellow="" red="" cyan="" reset=""
+    fi
 
     case "${level^^}" in
-        INFO)
-            level="INFO "
-            printf "%s%s [%s]%s %s\n" "$green" "$timestamp" "$level" "$reset" "$message"
-            ;;
-        WARNING)
-            level="WARN "
-            printf "%s%s [%s]%s %s\n" "$yellow" "$timestamp" "$level" "$reset" "$message" >&2
-            ;;
-        ERROR)
-            printf "%s%s [%s]%s %s\n" "$red" "$timestamp" "$level" "$reset" "$message" >&2
-            ;;
+        INFO) printf "%s%s [%s]%s %s\n" "$green" "$timestamp" "INFO " "$reset" "$message" ;;
+        WARNING) printf "%s%s [%s]%s %s\n" "$yellow" "$timestamp" "WARN " "$reset" "$message" >&2 ;;
+        ERROR) printf "%s%s [%s]%s %s\n" "$red" "$timestamp" "ERROR" "$reset" "$message" >&2 ;;
         DEBUG)
             if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
-                printf "%s%s [%s]%s %s\n" "$cyan" "$timestamp" "$level" "$reset" "$message"
+                printf "%s%s [%s]%s %s\n" "$cyan" "$timestamp" "DEBUG" "$reset" "$message"
             fi
             ;;
-        *)
-            level="UNKNW"
-            printf "%s [%s] %s\n" "$timestamp" "$level" "$message"
-            ;;
+        *) printf "%s [%s] %s\n" "$timestamp" "UNKNW" "$message" ;;
     esac
 }
 
@@ -143,11 +144,20 @@ process_file() {
         return 1
     fi
 
-    if [[ "$dry_run_mode" == true ]]; then
-        log "INFO" "Dry-run mode: Would process $file"
-        ((success_count++))  # ✅ Ensure count updates in dry-run mode
+    # Detect non-UTF-8 files
+    if ! file -i "$file" | grep -q 'charset=utf-8'; then
+        log "WARNING" "Skipping non-UTF-8 file: $file"
         return 0
     fi
+
+    if [[ "$dry_run_mode" == true ]]; then
+        log "INFO" "Dry-run mode: Would process $file"
+        ((success_count++))
+        return 0
+    fi
+
+    # Create a backup
+    cp "$file" "$file.bak" || log "WARNING" "Failed to create backup for $file"
 
     if ! sed -i -E 's/[[:space:]]*$//' "$file" 2>/dev/null; then
         log "ERROR" "Failed to process file: $file"
@@ -155,7 +165,7 @@ process_file() {
         return 1
     fi
 
-    ((success_count++))  # ✅ Increment success count
+    ((success_count++))
     log "INFO" "SUCCESS: Processed $file"
 }
 
@@ -178,7 +188,7 @@ process_files() {
 
     if [[ ! -d "$dir" ]]; then
         log "ERROR" "Directory not found: $dir"
-        return 1  # Avoid script exit, allow logging and continuation
+        return 1
     fi
 
     # ✅ Build find filters for file extensions
@@ -188,9 +198,13 @@ process_files() {
     done
     unset 'find_filters[-1]'  # ✅ Remove trailing `-o`
 
-    # ✅ Handle exclusions
-    local exclude_filters=()
+    # ✅ Handle exclusions, including default hidden directories
+    local exclude_filters=(-not -path "*/.*/*")  # Default: exclude hidden directories
     for exclude in "${exclude_args[@]}"; do
+        # If the user explicitly included a hidden dir, remove the default exclusion
+        if [[ "$exclude" == .* ]]; then
+            exclude_filters=()
+        fi
         exclude_filters+=(-not -path "$exclude/*")
     done
 
@@ -210,7 +224,7 @@ process_files() {
     # ✅ Ensure find didn't fail silently
     if [[ ${#files_found[@]} -eq 0 ]]; then
         log "WARNING" "No matching files found in $dir."
-        return 0  # Prevents breaking the script when no files are found
+        return 0
     fi
 
     # ✅ Process each found file
@@ -222,6 +236,18 @@ process_files() {
     # ✅ Print summary results
     printf "\n%sSUCCESS:%s\t%d files processed correctly.\n" "$(tput setaf 2 2>/dev/null || printf '')" "$(tput sgr0 2>/dev/null || printf '')" "$success_count"
     printf "%sFAILURES:%s\t%d files could not be processed.\n\n" "$(tput setaf 1 2>/dev/null || printf '')" "$(tput sgr0 2>/dev/null || printf '')" "$failure_count"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate custom extensions format.
+#
+# @param $1 String containing comma-separated extensions.
+#
+# @return 0 if valid, 1 otherwise.
+# -----------------------------------------------------------------------------
+validate_extensions() {
+    local input="$1"
+    [[ "$input" =~ ^[a-zA-Z0-9,]+$ ]]
 }
 
 # -----------------------------------------------------------------------------
@@ -259,6 +285,8 @@ usage() {
     return 1  # Use 'return' instead of 'exit' inside functions
 }
 
+
+
 # -----------------------------------------------------------------------------
 # @brief Main function orchestrating the script execution.
 #
@@ -271,33 +299,23 @@ main() {
     local custom_extensions=""
     local -a excludes=()
 
-    # ✅ Ensure arguments are provided
     if [[ $# -eq 0 ]]; then
         log "ERROR" "No arguments provided. Use -h for help."
         return 1
     fi
 
-    # ✅ Parse options safely
     while getopts ":rnx:e:h" opt; do
         case "$opt" in
             r) recursive=true ;;
             n) dry_run=true ;;
             x) excludes+=("$OPTARG") ;;
             e) custom_extensions="$OPTARG" ;;
-            h)
-                usage
-                return 0
-                ;;
-            *)
-                log "ERROR" "Invalid option: -$OPTARG"
-                usage
-                return 1
-                ;;
+            h) usage; return 0 ;;
+            *) log "ERROR" "Invalid option: -$OPTARG"; usage; return 1 ;;
         esac
     done
     shift $((OPTIND - 1))
 
-    # ✅ Ensure a valid directory is provided or defaults to "."
     if [[ $# -ge 1 ]]; then
         directory="$1"
         if [[ ! -d "$directory" ]]; then
@@ -306,7 +324,6 @@ main() {
         fi
     fi
 
-    # ✅ Validate custom extensions before processing
     if [[ -n "$custom_extensions" ]]; then
         if ! validate_extensions "$custom_extensions"; then
             log "ERROR" "Invalid extensions format."
@@ -315,7 +332,6 @@ main() {
         IFS=',' read -r -a extensions <<< "$custom_extensions"
     fi
 
-    # ✅ Initialize exclusion arguments safely
     exclude_args=()
     declare -A seen_excludes
 
@@ -339,17 +355,14 @@ main() {
         fi
     done
 
-    # ✅ Reset counters before processing
     success_count=0
     failure_count=0
 
-    # ✅ Call process_files with safety checks
     if ! process_files "$directory" "$recursive" "$dry_run"; then
         log "ERROR" "File processing encountered errors."
         return 1
     fi
 
-    # ✅ Final summary log
     log "INFO" "Summary: $success_count files processed successfully, $failure_count failures."
     return 0
 }
@@ -361,5 +374,4 @@ if [[ $retval -ne 0 ]]; then
     exit "$retval"
 fi
 
-# If the main function succeeds, exit normally
 exit 0
