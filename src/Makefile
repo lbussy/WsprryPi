@@ -50,14 +50,15 @@ CC = gcc             # C compiler
 COMMON_FLAGS = -Wall -Werror -fmax-errors=10
 
 # Additional C++ compiler flags
-COMM_CXX_FLAGS = -static-libgcc -Wno-psabi -lstdc++fs -std=c++17
+COMM_CXX_FLAGS = -Wno-psabi -lstdc++fs -std=c++17
+CXXFLAGS += -static-libgcc -static-libstdc++
 CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 
 # Additional C compiler flags
 CFLAGS += $(COMMON_FLAGS)
 
 # Linker flags for required libraries
-# LDLIBS += -lm -lbcm_host
+LDLIBS += -static
 
 # Enable verbose output if VERBOSE=1 is specified during the build
 VERBOSE ?= 0
@@ -97,8 +98,8 @@ all: $(OUT)
 
 # Link the binary from object files
 $(OUT): $(OBJECTS)
-	@echo "Linking executable: $(OUT)"
-	$(Q)$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS)
+	@echo "Linking statically: $(OUT)"
+	$(Q)$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS) -static
 
 # Compile C++ source files
 %.o: %.cpp
