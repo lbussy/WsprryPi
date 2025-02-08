@@ -265,18 +265,18 @@ usage() {
     local green=""
     local reset=""
 
-    # Use colors only if output is a terminal
     if [[ -t 1 ]]; then
-        green=$(tput setaf 2)  # Green for headers
-        reset=$(tput sgr0)     # Reset color
+        green=$(tput setaf 2)
+        reset=$(tput sgr0)
     fi
 
-    printf "%sUsage:%s %s [-r] [-n] [-x exclude_dir] [-e extensions] [directory]\n\n" \
+    printf "%sUsage:%s %s [-r] [-d] [-v] [-x exclude_dir] [-e extensions] [directory]\n\n" \
         "$green" "$reset" "$0"
 
     printf "Options:\n"
     printf "  %-14s %s\n" "-r" "Process files recursively"
-    printf "  %-14s %s\n" "-n" "Dry-run mode (no changes made)"
+    printf "  %-14s %s\n" "-d" "Dry-run mode (no changes made)"
+    printf "  %-14s %s\n" "-v" "Verbose mode (enable DEBUG_MODE)"
     printf "  %-14s %s\n" "-x <dir>" "Exclude specified directory"
     printf "  %-14s %s\n" "-e <ext>" "Comma-separated list of file extensions to process"
 
@@ -285,13 +285,12 @@ usage() {
 
     printf "\nExamples:\n"
     printf "  %s %s\n" "$0" "-r                    # Process files recursively"
-    printf "  %s %s\n" "$0" "-n -x logs -e txt,md  # Dry-run, exclude 'logs', only process txt/md files"
+    printf "  %s %s\n" "$0" "-d -x logs -e txt,md  # Dry-run, exclude 'logs', only process txt/md files"
+    printf "  %s %s\n" "$0" "-v                    # Enable verbose debug mode"
 
     printf "\n"
-    return 1  # Use 'return' instead of 'exit' inside functions
+    return 1
 }
-
-
 
 # -----------------------------------------------------------------------------
 # @brief Main function orchestrating the script execution.
@@ -304,16 +303,18 @@ main() {
     local directory="."
     local custom_extensions=""
     local -a excludes=()
+    DEBUG_MODE=false
 
     if [[ $# -eq 0 ]]; then
         log "ERROR" "No arguments provided. Use -h for help."
         return 1
     fi
 
-    while getopts ":rnx:e:h" opt; do
+    while getopts ":rdvx:e:h" opt; do
         case "$opt" in
             r) recursive=true ;;
-            n) dry_run=true ;;
+            d) dry_run=true ;;
+            v) DEBUG_MODE=true ;;
             x) excludes+=("$OPTARG") ;;
             e) custom_extensions="$OPTARG" ;;
             h) usage; return 0 ;;
