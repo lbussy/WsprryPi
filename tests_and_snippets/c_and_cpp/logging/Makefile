@@ -29,9 +29,6 @@ CXXFLAGS    += -Wno-psabi -std=c++17 -MMD -MP
 # Debug flags for testing (Automatically enabled for 'make test')
 ifeq ($(MAKECMDGOALS), test)
     CXXFLAGS += -DDEBUG_MAIN_LCBLOG
-    TEST_SRC = main.cpp
-    TEST_OBJ = $(TEST_SRC:.cpp=.o)
-    TEST_DEP = $(TEST_SRC:.cpp=.d)
 endif
 
 # Linker flags (if needed)
@@ -42,7 +39,7 @@ SRC         = $(NAME).cpp
 OBJ         = $(SRC:.cpp=.o)
 DEP         = $(OBJ:.o=.d)
 
-# Test-specific files (always set, even outside "ifeq" to avoid issues)
+# Test-specific files
 TEST_SRC    = main.cpp
 TEST_OBJ    = $(TEST_SRC:.cpp=.o)
 TEST_DEP    = $(TEST_SRC:.cpp=.d)
@@ -61,32 +58,40 @@ $(LIB_NAME): $(OBJ)
 clean_logs:
 	$(RM) $(TEST_LOGS)
 
-# Build the test executable with debug enabled
-test: clean_logs $(TEST_NAME)
+# Build the test executable
+test: $(TEST_NAME)
 
-# Compile and link main.cpp properly when testing
-$(TEST_NAME): $(OBJ) $(TEST_OBJ)
+$(TEST_NAME): clean_logs $(OBJ) $(TEST_OBJ)
 	$(CXX) $(CXXFLAGS) $(OBJ) $(TEST_OBJ) -o $(TEST_NAME) $(LDLIBS)
 
 # Compile source files into object files
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean up build artifacts (including test object files and dependencies)
+# Clean up build artifacts
 clean:
-	$(RM) $(OBJ) $(TEST_OBJ) $(DEP) $(TEST_DEP) $(LIB_NAME) $(TEST_NAME) $(TEST_LOGS)
+	-$(RM) $(OBJ) $(TEST_OBJ) $(DEP) $(TEST_DEP) $(LIB_NAME) $(TEST_NAME) $(TEST_LOGS)
 
 # Include dependency files
 -include $(DEP)
 -include $(TEST_DEP)
 
 # Debug build: compiles the library with debug flags enabled
+debug: clean
 debug: CXXFLAGS += -g
 debug: $(LIB_NAME)
 
 # Lint target: performs static code analysis with cppcheck
 lint:
-	cppcheck --enable=all --inconclusive --max-configs=100 --std=c++17 --language=c++ $(SRC) $(TEST_SRC)
+	@command -v cppcheck >/dev/null 2>&1 || { \
+	    echo "Error: cppcheck not found. Please install it using:"; \
+	    echo "  sudo apt install cppcheck   # Debian/Ubuntu"; \
+	    echo "  sudo dnf install cppcheck   # Fedora"; \
+	    echo "  brew install cppcheck       # macOS (Homebrew)"; \
+	    echo "  choco install cppcheck      # Windows (Chocolatey)"; \
+	    exit 1; \
+	}
+	cppcheck --enable=all --inconclusive --max-configs=100 --std=c++17 --language=c++ $(SRC) $(TEST_SRC) --suppress=missingIncludeSystem
 
 # Help target: displays available make targets and their descriptions
 help:
@@ -97,3 +102,5 @@ help:
 	@echo "  lint       - Run cppcheck for static code analysis."
 	@echo "  clean      - Clean up build artifacts (object files, library, etc.)."
 	@echo "  help       - Display this help message."
+
+.PHONY: all test debug lint clean help clean_logs

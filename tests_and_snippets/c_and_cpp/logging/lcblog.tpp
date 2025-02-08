@@ -94,13 +94,17 @@ void LCBLog::logToStream(std::ostream& stream, LogLevel level, T t, Args... args
     std::string line;
     bool firstLine = true;
 
+    constexpr int LOG_LEVEL_WIDTH = 5; // Maximum length of log level names (DEBUG, ERROR, FATAL = 5)
+    std::string levelStr = logLevelToString(level);
+    levelStr.append(LOG_LEVEL_WIDTH - levelStr.size(), ' '); // Pad to align all levels
+
     while (std::getline(messageStream, line)) {
         if (!firstLine) stream << std::endl;
 
         crush(line);  // Remove excessive whitespace
         if (printTimestamps) stream << getStamp() << "\t";
 
-        stream << "[" << logLevelToString(level) << "] " << line;
+        stream << "[" << levelStr << "] " << line;
         firstLine = false;
     }
     stream << std::endl;

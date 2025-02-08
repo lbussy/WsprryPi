@@ -259,8 +259,8 @@ int main() {
     // crushTestViaLog();
     // multiLineLogTest();
     // messageFormattingTest();
-    // runLogLevelFilteringTests();
-    longTest();
+    runLogLevelFilteringTests();
+    //longTest();
     return 0;
 }
 #endif
