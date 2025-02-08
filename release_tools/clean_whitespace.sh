@@ -270,13 +270,14 @@ usage() {
         reset=$(tput sgr0)
     fi
 
-    printf "%sUsage:%s %s [-r] [-d] [-v] [-x exclude_dir] [-e extensions] [directory]\n\n" \
+    printf "%sUsage:%s %s [-r] [-d] [-v] [-b] [-x exclude_dir] [-e extensions] [directory]\n\n" \
         "$green" "$reset" "$0"
 
     printf "Options:\n"
     printf "  %-14s %s\n" "-r" "Process files recursively"
     printf "  %-14s %s\n" "-d" "Dry-run mode (no changes made)"
     printf "  %-14s %s\n" "-v" "Verbose mode (enable DEBUG_MODE)"
+    printf "  %-14s %s\n" "-b" "Keep backup files (.bak), otherwise remove"
     printf "  %-14s %s\n" "-x <dir>" "Exclude specified directory"
     printf "  %-14s %s\n" "-e <ext>" "Comma-separated list of file extensions to process"
 
@@ -287,6 +288,7 @@ usage() {
     printf "  %s %s\n" "$0" "-r                    # Process files recursively"
     printf "  %s %s\n" "$0" "-d -x logs -e txt,md  # Dry-run, exclude 'logs', only process txt/md files"
     printf "  %s %s\n" "$0" "-v                    # Enable verbose debug mode"
+    printf "  %s %s\n" "$0" "-b                    # Keep backup files (.bak)"
 
     printf "\n"
     return 1
@@ -300,6 +302,7 @@ usage() {
 main() {
     local recursive=false
     local dry_run=false
+    local keep_backup=false
     local directory="."
     local custom_extensions=""
     local -a excludes=()
@@ -310,11 +313,12 @@ main() {
         return 1
     fi
 
-    while getopts ":rdvx:e:h" opt; do
+    while getopts ":rdvbx:e:h" opt; do
         case "$opt" in
             r) recursive=true ;;
             d) dry_run=true ;;
             v) DEBUG_MODE=true ;;
+            b) keep_backup=true ;;
             x) excludes+=("$OPTARG") ;;
             e) custom_extensions="$OPTARG" ;;
             h) usage; return 0 ;;
@@ -365,7 +369,7 @@ main() {
     success_count=0
     failure_count=0
 
-    if ! process_files "$directory" "$recursive" "$dry_run"; then
+    if ! process_files "$directory" "$recursive" "$dry_run" "$keep_backup"; then
         log "ERROR" "File processing encountered errors."
         return 1
     fi
