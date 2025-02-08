@@ -1201,8 +1201,8 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     else
     {
-        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed 
-                                 << "A test tone will be generated at frequency " 
+        llog.logS((std::ostringstream() << std::setprecision(6) << std::fixed
+                                 << "A test tone will be generated at frequency "
                                  << config.test_tone / 1e6 << " MHz.").str());
         if (config.self_cal)
         {

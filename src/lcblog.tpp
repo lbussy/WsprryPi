@@ -3,8 +3,8 @@
  * @brief A logging class for handling log levels, formatting, and
  * timestamping within a C++ project.
  *
- * This logging class provides a flexible and thread-safe logging mechanism 
- * with support for multiple log levels, timestamped logs, and customizable 
+ * This logging class provides a flexible and thread-safe logging mechanism
+ * with support for multiple log levels, timestamped logs, and customizable
  * output streams. include the header (`lcblog.hpp`), implementation
  * (`lcblog.cpp`), and template definitions (`lcblog.tpp`)when using in
  * a project.
@@ -35,7 +35,7 @@
 
 /**
  * @brief Logs a message at a given log level.
- * 
+ *
  * @tparam T The first type of the message content.
  * @tparam Args Variadic template arguments for additional message content.
  * @param level The log level of the message.
@@ -53,10 +53,10 @@ void LCBLog::log(LogLevel level, std::ostream& stream, T t, Args... args) {
 
 /**
  * @brief Logs a formatted message to a specified stream.
- * 
- * Processes multi-line messages, applies optional timestamping, and formats 
+ *
+ * Processes multi-line messages, applies optional timestamping, and formats
  * the output with log level tags.
- * 
+ *
  * @tparam T The first type of the message content.
  * @tparam Args Variadic template arguments for additional message content.
  * @param stream The output stream to write the log message to.

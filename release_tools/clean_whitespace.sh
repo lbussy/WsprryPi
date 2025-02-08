@@ -11,7 +11,7 @@ declare DEBUG_MODE="${DEBUG_MODE:=false}"  # Set default if not set
 #          functionality, expected input/output, and any relevant dependencies.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config+20.dd2b495
+# @version 1.2.1-config+25.5f5f0f8-dirty
 # @date 2025-02-08
 # @copyright MIT License
 #
@@ -257,6 +257,54 @@ validate_extensions() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Recursively find and delete *.bak files, with user confirmation.
+#
+# @param $1 Directory to search.
+# @param $2 Boolean: true for recursive search, false for current directory only.
+# @return None
+# -----------------------------------------------------------------------------
+delete_backup_files() {
+    local dir="$1"
+    local recursive="$2"
+
+    # Define the find command based on recursive flag
+    local find_cmd
+    if [[ "$recursive" == true ]]; then
+        find_cmd=(find "$dir" -type f -name "*.bak")
+    else
+        find_cmd=(find "$dir" -maxdepth 1 -type f -name "*.bak")
+    fi
+
+    # Capture found files
+    mapfile -t bak_files < <("${find_cmd[@]}" 2>/dev/null || true)
+
+    # No .bak files found
+    if [[ ${#bak_files[@]} -eq 0 ]]; then
+        log "INFO" "No .bak files found to delete."
+        return 0
+    fi
+
+    # List files to be deleted
+    log "INFO" "The following .bak files were found:"
+    for file in "${bak_files[@]}"; do
+        log "INFO" "  $file"
+    done
+
+    # Prompt user for deletion confirmation
+    printf "\nDo you want to delete these files? (y/N): "
+    read -r confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        for file in "${bak_files[@]}"; do
+            rm -f "$file"
+            log "INFO" "Deleted: $file"
+        done
+        log "INFO" "All .bak files have been deleted."
+    else
+        log "INFO" "Deletion cancelled. No files were removed."
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # @brief Display usage instructions.
 #
 # @return None (Exits with status 1)
@@ -369,9 +417,15 @@ main() {
     success_count=0
     failure_count=0
 
+    # Process whitespace cleanup
     if ! process_files "$directory" "$recursive" "$dry_run" "$keep_backup"; then
         log "ERROR" "File processing encountered errors."
         return 1
+    fi
+
+    # If -b is NOT set, prompt to delete .bak files
+    if [[ "$keep_backup" == false ]]; then
+        delete_backup_files "$directory" "$recursive"
     fi
 
     log "INFO" "Summary: $success_count files processed successfully, $failure_count failures."
