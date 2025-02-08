@@ -36,7 +36,8 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
-#include <sstream>  // For std::stringstream
+#include <sstream>
+#include <algorithm>
 
 /**
  * @brief Converts a value or macro to a string.
@@ -117,62 +118,45 @@ int getProcessorTypeAsInt() {
 
 // Function that returns the processor type as const char*
 const char* getProcessorType() {
-    std::ifstream cpuinfo("/proc/cpuinfo");
+    static std::string cpuModel;
+    std::ifstream dtCompatible("/sys/firmware/devicetree/base/compatible");
 
-    if (!cpuinfo.is_open()) {
-        std::cerr << "Failed to open /proc/cpuinfo file." << std::endl;
-        return nullptr;
+    if (!dtCompatible.is_open()) {
+        std::cerr << "Failed to open /sys/firmware/devicetree/base/compatible file." << std::endl;
+        return "Unknown CPU";
     }
 
-    std::string line;
-    static std::string processorType;  // Static variable to hold the processor type
+    std::getline(dtCompatible, cpuModel);
+    dtCompatible.close();
 
-    // Loop through each line in the file
-    while (std::getline(cpuinfo, line)) {
-        // Look for the line starting with "Hardware"
-        if (line.find("Hardware") == 0) {  // Checks if line starts with "Hardware"
-            // Extract the processor type after "Hardware        : "
-            size_t pos = line.find(":");
-            if (pos != std::string::npos) {
-                processorType = line.substr(pos + 2);  // Skip ": " after "Hardware"
-                break;  // Exit the loop after finding the processor type
-            }
+    // Extract CPU model (e.g., "brcm,bcm2835" → "BCM2835")
+    size_t start = cpuModel.find("bcm");
+    if (start != std::string::npos) {
+        cpuModel = cpuModel.substr(start);
+        for (char& c : cpuModel) {
+            if (c == ',') c = ' ';  // Replace comma with space for readability
         }
+
+        // Convert to uppercase
+        std::transform(cpuModel.begin(), cpuModel.end(), cpuModel.begin(), ::toupper);
+
+        return cpuModel.c_str();
     }
-
-    // Close the file
-    cpuinfo.close();
-
-    return processorType.c_str();  // Return a const char* pointing to the static string
+    return "Unknown CPU Model";
 }
 
 // Function that returns the Raspberry Pi model as const char*
 const char* getRaspberryPiModel() {
-    std::ifstream cpuinfo("/proc/cpuinfo");
+    static std::string model;  // Static variable to hold the model string
+    std::ifstream modelFile("/proc/device-tree/model");
 
-    if (!cpuinfo.is_open()) {
-        std::cerr << "Failed to open /proc/cpuinfo file." << std::endl;
+    if (!modelFile.is_open()) {
+        std::cerr << "Failed to open /proc/device-tree/model file." << std::endl;
         return nullptr;
     }
 
-    std::string line;
-    static std::string model;  // Static variable to hold the model string
-
-    // Loop through each line in the file
-    while (std::getline(cpuinfo, line)) {
-        // Look for the line starting with "Model"
-        if (line.find("Model") == 0) {  // Checks if line starts with "Model"
-            // Extract the model information after "Model           : "
-            size_t pos = line.find(":");
-            if (pos != std::string::npos) {
-                model = line.substr(pos + 2);  // Skip ": " after "Model"
-                break;  // Exit the loop after finding the model
-            }
-        }
-    }
-
-    // Close the file
-    cpuinfo.close();
+    std::getline(modelFile, model);  // Read the entire model name
+    modelFile.close();
 
     return model.c_str();  // Return a const char* pointing to the static string
 }

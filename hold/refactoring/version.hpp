@@ -76,30 +76,6 @@ inline const char* branch() { return SANITIZED_BRH; }
 inline int ver() { return bcm_host_get_processor_id(); }
 
 /**
- * @brief Provides a description of the Raspberry Pi model based on its processor ID.
- *
- * This function maps processor IDs to descriptive text for different Raspberry Pi models.
- *
- * @return A C-string describing the Raspberry Pi version or "Unknown Raspberry Pi Version" if the ID is invalid.
- */
-inline const char* RPiVersion()
-{
-    static const char* vertext[] = {
-        "Raspberry Pi 1 or Zero Model (BCM2835)",
-        "Raspberry Pi 2B (BCM2836)",
-        "Raspberry Pi 2B or 3B (BCM2837)",
-        "Raspberry Pi 4 (BCM2711)"
-    };
-
-    int id = ver();
-    if (id < 0 || id >= static_cast<int>(sizeof(vertext) / sizeof(vertext[0]))) {
-        return "Unknown Raspberry Pi Version";
-    }
-
-    return vertext[id];
-}
-
-/**
  * @brief Retrieves the GPIO base address for the Raspberry Pi.
  * @return An unsigned integer representing the GPIO base address.
  */

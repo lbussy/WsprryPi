@@ -14,17 +14,6 @@ int ver()
     return bcm_host_get_processor_id();
 }
 
-const char* RPiVersion()
-{
-    const char* vertext[4] = {
-                "Raspberry Pi 1 or Zero Model (BCM2835)",
-                "Raspberry Pi 2B (BCM2836)",
-                "Raspberry Pi 2B or 3B (BCM2837)",
-                "Raspberry Pi 4 (BCM2711)"
-            };
-    return vertext[ver()];
-}
-
 unsigned gpioBase()
 {
     return bcm_host_get_peripheral_address();
