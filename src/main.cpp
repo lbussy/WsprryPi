@@ -1003,7 +1003,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            llog.logS(INFO, version_string());
+            std::cout << version_string() << std::endl;
             return false;
             break;
         case 'p':
