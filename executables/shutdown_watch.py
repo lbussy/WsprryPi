@@ -183,13 +183,8 @@ def watch(debug, daemon):
 
 def setup_logger(debug, daemon):
     """
-    Configure the logger for the script.
-
-    The logger can operate in debug or normal mode based on the debug parameter.
-    If daemon mode is enabled, logs will include a date/time stamp.
-
-    @param debug (bool): Flag indicating whether to run in debug mode.
-    @param daemon (bool): Flag indicating whether to include date/time stamps in logs.
+    Configure the logger for the script to log INFO and DEBUG to stdout,
+    and ERROR and higher to stderr.
     """
     global logger
     log_level = logging.DEBUG if debug else logging.INFO
@@ -197,8 +192,29 @@ def setup_logger(debug, daemon):
         "%(asctime)s - %(levelname)s - %(message)s" if daemon
         else "%(levelname)s - %(message)s"
     )
-    logging.basicConfig(level=log_level, format=log_format)
+
     logger = logging.getLogger()
+    logger.setLevel(log_level)
+
+    # Create separate handlers for stdout (INFO & DEBUG) and stderr (ERROR & higher)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG if debug else logging.INFO)
+
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.WARNING)  # Logs WARNING, ERROR, and CRITICAL
+
+    # Set the format for both handlers
+    formatter = logging.Formatter(log_format)
+    stdout_handler.setFormatter(formatter)
+    stderr_handler.setFormatter(formatter)
+
+    # Remove old handlers to prevent duplication
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # Add new handlers
+    logger.addHandler(stdout_handler)
+    logger.addHandler(stderr_handler)
 
 
 def register_signals():
@@ -219,12 +235,14 @@ def register_signals():
 def disable_ctrlc_echo():
     """
     Disable the terminal's default echo of `^C` when SIGINT is received.
+    Only applies if running in an interactive terminal.
     """
     global original_termios
-    original_termios = termios.tcgetattr(sys.stdin)
-    new_termios = termios.tcgetattr(sys.stdin)
-    new_termios[3] = new_termios[3] & ~termios.ECHO  # Disable ECHO
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_termios)
+    if sys.stdin.isatty():  # ✅ Ensure stdin is a TTY before modifying
+        original_termios = termios.tcgetattr(sys.stdin)
+        new_termios = termios.tcgetattr(sys.stdin)
+        new_termios[3] = new_termios[3] & ~termios.ECHO  # Disable ECHO
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_termios)
 
 
 def restore_terminal():
