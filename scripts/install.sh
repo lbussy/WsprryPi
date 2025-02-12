@@ -1914,7 +1914,7 @@ determine_execution_context() {
     debug_print "Default context: Script executed directly." "$debug"
 
     debug_end "$debug"
-    printf "2\n" && return 0
+    printf "2\n" && return 0  
 }
 
 # -----------------------------------------------------------------------------
@@ -5769,7 +5769,7 @@ manage_wsprry_pi() {
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_exe \"$SHUTDOWN_WATCH_EXE\""
-        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE\" \"true\""
+        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE -D -w\" \"true\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
