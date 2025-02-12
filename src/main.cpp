@@ -828,7 +828,7 @@ bool getINIValues(bool reload = false)
         if (! config.daemon_mode )
             llog.logS(INFO, "============================================");
         // TODO:  Align these values?
-        llog.logS(INFO, "Transmit Enabled:\t", ((config.xmit_enabled) ? "true" : "false"));
+        llog.logS(INFO, "Transmit Enabled: ", ((config.xmit_enabled) ? "true" : "false"));
         llog.logS(INFO, "Call Sign: ", config.callsign);
         llog.logS(INFO, "Grid Square: ", config.grid_square);
         llog.logS(INFO, "Transmit Power: ", config.tx_power);
