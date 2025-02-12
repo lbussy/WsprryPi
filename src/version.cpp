@@ -76,14 +76,14 @@
 #define SANITIZED_EXE macro_to_string(MAKE_EXE)
 #define SANITIZED_PRJ macro_to_string(MAKE_PRJ)
 
-const char* exe_version() { return SANITIZED_TAG; }
-const char* branch() { return SANITIZED_BRH; }
-const char* exe_name() { return SANITIZED_EXE; }
-const char* project_name() { return SANITIZED_PRJ; }
+std::string exe_version() { return SANITIZED_TAG; }
+std::string branch() { return SANITIZED_BRH; }
+std::string exe_name() { return SANITIZED_EXE; }
+std::string project_name() { return SANITIZED_PRJ; }
 
 // Struct to store the processor type and its corresponding integer value
 struct ProcessorMapping {
-    const char* type;
+    std::string type;
     int value;
 };
 
@@ -98,16 +98,16 @@ const ProcessorMapping processorMappings[] = {
 
 // Function that returns an integer based on the processor type using an array for easy modification
 int getProcessorTypeAsInt() {
-    const char* processorType = getProcessorType();
+    std::string processorType = getProcessorType();
 
-    if (processorType == nullptr) {
+    if (processorType.empty()) {
         std::cerr << "Failed to get processor type." << std::endl;
         return -1;  // Return -1 to indicate an error
     }
 
     // Loop through the array to find the processor type and return the corresponding integer
     for (const auto& mapping : processorMappings) {
-        if (strcmp(processorType, mapping.type) == 0) {
+        if (processorType == mapping.type) {
             return mapping.value;  // Return the associated integer value
         }
     }
@@ -116,8 +116,8 @@ int getProcessorTypeAsInt() {
     return -1;  // Return -1 for unknown processor types
 }
 
-// Function that returns the processor type as const char*
-const char* getProcessorType() {
+// Function that returns the processor type as std::string
+std::string getProcessorType() {
     static std::string cpuModel;
     std::ifstream dtCompatible("/sys/firmware/devicetree/base/compatible");
 
@@ -145,8 +145,8 @@ const char* getProcessorType() {
     return "Unknown CPU Model";
 }
 
-// Function that returns the Raspberry Pi model as const char*
-const char* getRaspberryPiModel() {
+// Function that returns the Raspberry Pi model as std::string
+std::string getRaspberryPiModel() {
     static std::string model;  // Static variable to hold the model string
     std::ifstream modelFile("/proc/device-tree/model");
 
@@ -158,12 +158,15 @@ const char* getRaspberryPiModel() {
     std::getline(modelFile, model);  // Read the entire model name
     modelFile.close();
 
-    return model.c_str();  // Return a const char* pointing to the static string
+    return model.c_str();  // Return a std::string pointing to the static string
 }
 
-const char* version_string() {
-    static std::string version = std::string(project_name()) + " version " + exe_version() + " (" + branch() + ").";
-    return version.c_str();
+std::string version_string() {
+    std::string version;
+    std::string proj = project_name();
+    std::string ver = exe_version();
+    std::string br = branch();
+    return proj + " version " + ver + " (" + br + ").";
 }
 
 // Function to get the address from device tree
@@ -223,10 +226,10 @@ int main()
     std::cout << "\nHardware Information:\n";
     std::cout << "Processor ID: " << processorId << "\n";
 
-    const char* procType = getProcessorType();
+    std::string procType = getProcessorType();
     std::cout << "Processor type: " << procType << "\n";
 
-    const char* piVersion = getRaspberryPiModel();
+    std::string piVersion = getRaspberryPiModel();
     std::cout << "Raspberry Pi Version: " << piVersion << "\n";
 
     unsigned gpioBaseAddr = get_peripheral_address();
