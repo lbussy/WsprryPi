@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-remove_bcm+109.59592e9
-# @date 2025-02-05
+# @version 1.2.1-config+36.d4eff93-dirty
+# @date 2025-02-12
 # @copyright MIT License
 #
 # @license
@@ -1861,8 +1861,6 @@ determine_execution_context() {
 
     local script_path   # Full path of the script
     local current_dir   # Temporary variable to traverse directories
-    local max_depth=10  # Limit for directory traversal depth
-    local depth=0       # Counter for directory traversal
 
     # Check if the script is executed via pipe
     if [[ "$0" == "bash" ]]; then

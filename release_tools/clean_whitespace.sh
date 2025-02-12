@@ -11,8 +11,8 @@ declare DEBUG_MODE="${DEBUG_MODE:=false}"  # Set default if not set
 #          functionality, expected input/output, and any relevant dependencies.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config+25.5f5f0f8-dirty
-# @date 2025-02-08
+# @version 1.2.1-config+36.d4eff93-dirty
+# @date 2025-02-12
 # @copyright MIT License
 #
 # @license

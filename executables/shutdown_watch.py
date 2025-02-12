@@ -6,8 +6,8 @@
 # @brief Poll a GPIO pin and initiate shutdown when puled low.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-remove_bcm+109.59592e9
-# @date 2025-02-05
+# @version 1.2.1-config+36.d4eff93-dirty
+# @date 2025-02-12
 # @copyright MIT License
 #
 # @license
@@ -70,7 +70,7 @@ except ImportError:
     sys.exit("Failed to import gpiozero. Ensure it is installed and available.")
 
 # Version
-__version__ = "1.2.1-remove_bcm+109.59592e9"
+__version__ = "1.2.1-config+36.d4eff93-dirty"
 
 # Global Constants
 STOP_PIN = 19           # GPIO pin for the shutdown button
