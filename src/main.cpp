@@ -36,29 +36,9 @@
 #include <sys/timex.h>  // ntp_adjtime, TIME_OK support
 #include <termios.h>    // ECHOCTL, term, TCSANOW, tcgetattr
 
-// #include <algorithm>
-// #include <cmath>
-// #include <cstdint>
-// #include <ctype.h>
-// #include <dirent.h>
-// #include <iomanip>
-// #include <iostream>
-// #include <malloc.h>
-// #include <pthread.h>
-// #include <signal.h>
-// #include <sstream>
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <string.h>
-// #include <sys/stat.h>
-// #include <sys/types.h>
-// #include <time.h>
-// #include <unistd.h>
-// #include <vector>
-
 #include "version.hpp"
 #include "config.hpp"
-#include "../src/LCBLog/lcblog.hpp"
+#include "lcblog.hpp"       // Submodule included in Makefile
 #include "monitorfile.hpp"
 #include "singleton.hpp"
 #include "wspr_message.hpp"
@@ -1613,6 +1593,7 @@ void restoreTerminalAttributes()
 
 int main(const int argc, char *const argv[])
 {
+    llog.setLogLevel(DEBUG);
     disableSignalEcho(); // Disable echo for signals like Ctrl+C
     atexit(restoreTerminalAttributes); // Ensure terminal settings are restored on exit
 
