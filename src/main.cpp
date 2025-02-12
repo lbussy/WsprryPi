@@ -58,7 +58,7 @@
 
 #include "version.hpp"
 #include "config.hpp"
-#include "lcblog.hpp"
+#include "../src/LCBLog/lcblog.hpp"
 #include "monitorfile.hpp"
 #include "singleton.hpp"
 #include "wspr_message.hpp"
