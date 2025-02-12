@@ -1,0 +1,3 @@
+[submodule "src/LCBLog"]
+	path = src/LCBLog
+	url = https://github.com/lbussy/LCBLog.git
