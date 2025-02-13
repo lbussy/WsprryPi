@@ -54,6 +54,7 @@ COMM_CXX_FLAGS = -Wno-psabi -lstdc++fs -std=c++17
 CXXFLAGS += -static-libgcc -static-libstdc++
 CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 CXXFLAGS += -ILCBLog/src
+CXXFLAGS += -IINI-Handler/src
 
 # Additional C compiler flags
 CFLAGS += $(COMMON_FLAGS)
@@ -84,7 +85,7 @@ CXXFLAGS += -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(P
 
 # Define source and object files
 C_SOURCES := $(shell find . -name "*.c")
-CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp")
+CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp")
 C_OBJECTS := $(patsubst %.c,%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,%.o,$(CPP_SOURCES))
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)

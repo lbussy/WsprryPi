@@ -10,9 +10,20 @@ Thumbs.db
 # Ignore all files without extensions in src/
 src/[^/]*[^.][^/]*$
 
-# Ignore executable files without extensions (common in C/C++ projects)
-src/*
-!src/*.*
+# Allow the src/ directory itself
+!src/
+
+# Allow all directories inside src/ (this is crucial)
+!src/**/
+
+# Explicitly allow submodules
+!src/LCBLog/
+!src/LCBLog/**/*
+!src/INI-Handler/
+!src/INI-Handler/**/*
+
+# Ignore all other files inside src/, but not directories
+src/*/*
 
 # Ensure .o and .d files remain ignored even with the rule above
 src/*.o

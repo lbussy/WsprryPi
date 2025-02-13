@@ -36,9 +36,9 @@
 #include <sys/timex.h>  // ntp_adjtime, TIME_OK support
 #include <termios.h>    // ECHOCTL, term, TCSANOW, tcgetattr
 
+#include "lcblog.hpp"       // Submodule path included in Makefile
+#include "ini_file.hpp"     // Submodule path included in Makefile
 #include "version.hpp"
-#include "config.hpp"
-#include "lcblog.hpp"       // Submodule included in Makefile
 #include "monitorfile.hpp"
 #include "singleton.hpp"
 #include "wspr_message.hpp"
@@ -52,6 +52,9 @@
 
 // Logging library
 LCBLog llog;
+
+// INI File Library
+IniFile ini(llog);
 
 // Note on accessing memory in RPi:
 //
@@ -806,21 +809,22 @@ void print_usage()
 
 bool getINIValues(bool reload = false)
 {
-    WSPRConfig iniConfig;
-    if (iniConfig.initialize(config.inifile))
+    if (ini.load())
     {
-        config.xmit_enabled = iniConfig.getTransmit();
-        config.callsign = iniConfig.getCallsign();
-        config.grid_square = iniConfig.getGridsquare();
-        config.tx_power = iniConfig.getTxpower();
+        config.xmit_enabled = ini.get_bool_value("Control", "Transmit");
+        config.callsign = ini.get_value("Common", "Call Sign");
+        config.grid_square = ini.get_value("Common", "Grid Square");
+        config.tx_power = ini.get_int_value("Common", "TX Power");
         config.frequency_string.clear(); // Ensure previous data is cleared
-        config.frequency_string = iniConfig.getFrequency(); // Assign the new value
-        config.ppm = iniConfig.getPpm();
-        config.self_cal = iniConfig.getSelfcal();
-        config.random_offset = iniConfig.getOffset();
-        config.use_led = iniConfig.getUseLED();
-        config.power_level = iniConfig.getPowerLevel();
-        config.port = iniConfig.getServerPort();
+        config.frequency_string = ini.get_int_value("Common", "Frequency");
+        config.ppm = ini.get_double_value("Extended", "PPM");
+        config.self_cal = ini.get_bool_value("Extended", "Self Cal");
+        config.random_offset = ini.get_bool_value("Extended", "Offset");
+        config.use_led = ini.get_bool_value("Extended", "Use LED");
+        config.power_level = ini.get_int_value("Extended", "Power Level");
+        // TODO DEBUG
+        config.port = 31415;
+        // config.port = ini.get_int_value("Server", "Port");
 
         if (! config.daemon_mode )
             llog.logS(INFO, "\n============================================");
@@ -1040,6 +1044,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             // Use INI file
             config.inifile = optarg;
             config.useini = true;
+            ini.set_filename(config.inifile);
             break;
         case 'n':
             // No delay, transmit immediately
@@ -1107,6 +1112,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         std::istringstream s ( config.frequency_string );
         freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
+        // TODO:  Fix frequency processing
         for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f)
         {
             std::string fString{ *f };
@@ -1146,6 +1152,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
                 // First see if it is a string.
                 double parsed_freq;
                 const char * argument = argv[optind];
+                // TODO:  Fix frequency processing
                 convertToFreq(argument, parsed_freq);
                 optind++;
                 config.center_freq_set.push_back(parsed_freq);
