@@ -788,8 +788,8 @@ void print_usage()
     llog.logS(INFO, "    Terminate after completing <n> transmissions.");
     llog.logS(INFO, "  -o --offset");
     llog.logS(INFO, "    Add a random frequency offset to each transmission:");
-    llog.logS(INFO, "      +/- ", WSPR_RAND_OFFSET, "Hz for WSPR");
-    llog.logS(INFO, "      +/- ", WSPR15_RAND_OFFSET, "Hz for WSPR-15");
+    llog.logS(INFO, "      +/-:", WSPR_RAND_OFFSET, "Hz for WSPR");
+    llog.logS(INFO, "      +/-:", WSPR15_RAND_OFFSET, "Hz for WSPR-15");
     llog.logS(INFO, "  -t --test-tone freq");
     llog.logS(INFO, "    Output a test tone at the specified frequency. Only used for");
     llog.logS(INFO, "    debugging and verifying calibration.");
@@ -826,64 +826,24 @@ bool getINIValues(bool reload = false)
 {
     if (ini.load())
     {
-        // [Control]
-        config.xmit_enabled = ini.get_bool_value("Control", "Transmit");
-        llog.logS(DEBUG, "✅ Transmit Enabled: ", config.xmit_enabled);
-        //
-        //
-        // [Common]
-        config.callsign = ini.get_value("Common", "Call Sign");
-        llog.logS(DEBUG, "✅ Call Sign: ", ini.get_value("Common", "Call Sign"));
-        //
-        config.grid_square = ini.get_value("Common", "Grid Square");
-        llog.logS(DEBUG, "✅ Grid Square: ", config.grid_square);
-        //
-        config.tx_power = ini.get_int_value("Common", "TX Power");
-        llog.logS(DEBUG, "✅ TX Power: ", ini.get_int_value("Common", "TX Power"));
-        //
-        config.frequency_string = ini.get_string_value("Common", "Frequency");
-        llog.logS(DEBUG, "✅ Frequency: ", ini.get_string_value("Common", "Frequency"));
-        //
-        //
-        // [Extended]
-        config.ppm = ini.get_double_value("Extended", "PPM");
-        llog.logS(DEBUG, "✅ PPM: ", config.ppm);
-        //
-        config.self_cal = ini.get_bool_value("Extended", "Self Cal");
-        llog.logS(DEBUG, "✅ FREQ: ", config.self_cal);
-        //
-        config.random_offset = ini.get_bool_value("Extended", "Offset");
-        llog.logS(DEBUG, "✅ Offset: ", config.random_offset);
-        //
-        config.use_led = ini.get_bool_value("Extended", "Use LED");
-        llog.logS(DEBUG, "✅ Use LED: ", config.use_led);
-        //
-        config.power_level = ini.get_int_value("Extended", "Power Level");
-        llog.logS(DEBUG, "✅ Power Level: ", config.power_level);
-        //
-        //
-        // [Server]
-        config.port = ini.get_int_value("Server", "Port");
-        llog.logS(DEBUG, "✅ Port: ", config.port);
-
         if (! config.daemon_mode )
             llog.logS(INFO, "\n============================================");
-        llog.logS(INFO, "Config ", ((reload) ? "re-loaded" : "loaded"), "from: ", config.inifile);
+        llog.logS(INFO, "Config:", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
         if (! config.daemon_mode )
             llog.logS(INFO, "============================================");
         // TODO:  Align these values?
-        llog.logS(INFO, "Transmit Enabled: ", ((config.xmit_enabled) ? "true" : "false"));
-        llog.logS(INFO, "Call Sign: ", config.callsign);
-        llog.logS(INFO, "Grid Square: ", config.grid_square);
-        llog.logS(INFO, "Transmit Power: ", config.tx_power);
-        llog.logS(INFO, "Frequencies: ", config.frequency_string);
-        llog.logS(INFO, "PPM Offset: ", config.ppm);
-        llog.logS(INFO, "Do not use NTP sync: ", ((!config.self_cal) ? "true" : "false"));
-        llog.logS(INFO, "Check NTP Each Run (default): ", ((config.self_cal) ? "true" : "false"));
-        llog.logS(INFO, "Use Frequency Randomization: ", ((config.random_offset) ? "true" : "false"));
-        llog.logS(INFO, "Power Level: ", config.power_level);
-        llog.logS(INFO, "Server Port: ", config.port);
-        llog.logS(INFO, "Use LED: ", ((config.use_led) ? "true" : "false"));
+        llog.logS(INFO, "Transmit Enabled:", ((config.xmit_enabled) ? "true" : "false"));
+        llog.logS(INFO, "Call Sign:", config.callsign);
+        llog.logS(INFO, "Grid Square:", config.grid_square);
+        llog.logS(INFO, "Transmit Power:", config.tx_power);
+        llog.logS(INFO, "Frequencies:", config.frequency_string);
+        llog.logS(INFO, "PPM Offset:", config.ppm);
+        llog.logS(INFO, "Do not use NTP sync:", ((!config.self_cal) ? "true" : "false"));
+        llog.logS(INFO, "Check NTP Each Run (default):", ((config.self_cal) ? "true" : "false"));
+        llog.logS(INFO, "Use Frequency Randomization:", ((config.random_offset) ? "true" : "false"));
+        llog.logS(INFO, "Power Level:", config.power_level);
+        llog.logS(INFO, "Server Port:", config.port);
+        llog.logS(INFO, "Use LED:", ((config.use_led) ? "true" : "false"));
         if (! config.daemon_mode )
             llog.logS(INFO, "============================================\n");
         return true;
@@ -944,7 +904,7 @@ double string_to_frequency(const std::string &option) {
     double parsed_freq = std::strtod(option.c_str(), &endp);
 
     if (endp == option.c_str() || *endp != '\0') {
-        llog.logE(FATAL, "Could not parse transmit frequency: ", option);
+        llog.logE(FATAL, "Could not parse transmit frequency:", option);
         return 0.0;
     }
 
@@ -1217,9 +1177,9 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     if (config.mode == WSPR)
     {
         llog.logS(INFO, "WSPR packet payload:");
-        llog.logS(INFO, "- Callsign: ", config.callsign);
-        llog.logS(INFO, "- Locator:  ", config.grid_square);
-        llog.logS(INFO, "- Power:    ", config.tx_power, " dBm");
+        llog.logS(INFO, "- Callsign:", config.callsign);
+        llog.logS(INFO, "- Locator:", config.grid_square);
+        llog.logS(INFO, "- Power:", config.tx_power, " dBm");
         llog.logS(INFO, "Requested TX frequencies:");
 
         // Concatenate a message
@@ -1239,12 +1199,12 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         }
         else if (config.ppm)
         {
-            llog.logS(INFO, "- PPM value to be used for all transmissions: ", config.ppm);
+            llog.logS(INFO, "- PPM value to be used for all transmissions:", config.ppm);
         }
 
         if (config.terminate > 0)
         {
-            llog.logS(INFO, "- TX will stop after ", config.terminate);
+            llog.logS(INFO, "- TX will stop after:", config.terminate);
         }
         else if (config.repeat && !config.daemon_mode)
         {
@@ -1267,7 +1227,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         }
         else if (config.ppm)
         {
-            llog.logS(INFO, "PPM value to be used to generate the tone: ", config.ppm);
+            llog.logS(INFO, "PPM value to be used to generate the tone:", config.ppm);
         }
     }
     return true;
@@ -1332,7 +1292,7 @@ bool update_ppm()
     {
         if (config.ppm != ppm_new)
         {
-            llog.logS(INFO, "Obtained new ppm value: ", ppm_new);
+            llog.logS(INFO, "Obtained new ppm value:", ppm_new);
         }
         config.ppm = ppm_new;
         return true;
@@ -1375,11 +1335,6 @@ void open_mbox()
     }
 }
 
-void cleanup()
-{
-
-}
-
 void setSchedPriority(int priority)
 {
     // In order to get the best timing at a decent queue size, we want the kernel
@@ -1390,7 +1345,7 @@ void setSchedPriority(int priority)
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (ret)
     {
-        llog.logE(INFO, "pthread_setschedparam (increase thread priority) returned non-zero: ", ret);
+        llog.logE(INFO, "pthread_setschedparam (increase thread priority) returned non-zero:", ret);
     }
 }
 
@@ -1499,13 +1454,13 @@ void handleExitSignal(int sig, int severity)
 
     // Log signal details
     llog.logS(INFO, log_message);
-    llog.logS(INFO, "Signal: ", sig);
+    llog.logS(INFO, "Signal:", sig);
 
     // Log error if it's a critical signal
     if (severity == FATAL)
     {
         llog.logE(FATAL, log_message);
-        llog.logE(FATAL, "Signal: ", sig);
+        llog.logE(FATAL, "Signal:", sig);
     }
 
     // Restore terminal settings before exiting
@@ -1557,7 +1512,7 @@ int main(const int argc, char *const argv[])
     if ( ! parse_commandline(argc, argv) ) return 1;
 
     llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on: ", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
 
     getPLLD(); // Get PLLD Frequency
 
@@ -1573,13 +1528,13 @@ int main(const int argc, char *const argv[])
     {
         if (!singleton())
         {
-            llog.logE(FATAL, "Process already running; see ", singleton.GetLockFileName());
+            llog.logE(FATAL, "Process already running; see:", singleton.GetLockFileName());
             return 1;
         }
     }
     catch (const std::exception& e)
     {
-        llog.logE(FATAL, "Failed to enforce singleton: ", e.what());
+        llog.logE(FATAL, "Failed to enforce singleton:", e.what());
         return 1;
     }
 
@@ -1604,7 +1559,7 @@ int main(const int argc, char *const argv[])
     txoff();
 
     // Display the PID:
-    llog.logS(INFO, "Process PID: ", getpid());
+    llog.logS(INFO, "Process PID:", getpid());
 
     if (config.mode == TONE)
     {
@@ -1672,7 +1627,7 @@ int main(const int argc, char *const argv[])
             }
 
             // Print the concatenated string in one call
-            llog.logS(DEBUG, "Generated WSPR symbols: ", symbols_stream.str());
+            llog.logS(DEBUG, "Generated WSPR symbols:", symbols_stream.str());
             // std::cout << symbols_stream.str() << std::endl;
             #endif
 
@@ -1797,7 +1752,6 @@ int main(const int argc, char *const argv[])
     return 0;
 }
 
-// TODO:  Make it so logger will add a sspace if ":" is at the end of a string
-// TODO:  Transmission completed, (74.4248 sec.) - Working now?  NFC.
-// TODO:  Add in server
+// TODO:  Add in tcp server
 // TODO:  Move singleton to server maybe
+// TODO:  Consider an external file for band to frequency lookups

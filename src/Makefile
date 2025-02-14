@@ -140,9 +140,9 @@ targets:
 # Test target: Build with WSPR_DEBUG and run the executable
 .PHONY: test
 test: clean
-	@echo "Building WSPR test mode with WSPR_DEBUG enabled..."
+	@echo "Building WSPR test mode with WSPR_DEBUG enabled"
 	$(Q)$(MAKE) CXXFLAGS="$(CXXFLAGS) -DWSPR_DEBUG" CFLAGS="$(CFLAGS) -DWSPR_DEBUG" all
-	@echo "Running WSPR test mode.
+	@echo "Running WSPR test mode."
 	$(Q)sudo ./$(OUT) -D -i $(INI_FILE)
 
 # Show only user-defined macros from the Makefile
