@@ -34,17 +34,32 @@
 #include <sys/mman.h>   // PROT_READ, PROT_WRITE, MAP_FAILED support
 #include <sys/time.h>   // gettimeofday support
 #include <sys/timex.h>  // ntp_adjtime, TIME_OK support
-#include <termios.h>    // ECHOCTL, term, TCSANOW, tcgetattr
+#include <cctype>       // isdigit() support
+#include <cstdlib>      // strtod() support
+#include <string>       // string support
+#include <unordered_map>    // unordered_map support
+#include <iostream>
+#include <termios.h>
+#include <unistd.h>
 
 #include "lcblog.hpp"       // Submodule path included in Makefile
 #include "ini_file.hpp"     // Submodule path included in Makefile
+#include "wspr_message.hpp" // Submodule path included in Makefile
 #include "version.hpp"
 #include "monitorfile.hpp"
 #include "singleton.hpp"
-#include "wspr_message.hpp"
 
 #include "main.hpp"
 
+/** 
+ * @var original_term
+ * @brief Stores the original terminal settings.
+ * @details This structure is used to restore the terminal settings 
+ *          before the program exits.
+ */
+static struct termios original_term;
+
+// Set with "make debug"
 // #define WSPR_DEBUG
 
 // TCP port to bind to check for Singleton
@@ -54,7 +69,7 @@
 LCBLog llog;
 
 // INI File Library
-IniFile ini(llog);
+IniFile ini;
 
 // Note on accessing memory in RPi:
 //
@@ -247,7 +262,7 @@ struct wConfig
     bool repeat = false;
     std::string callsign;
     std::string grid_square;
-    std::string tx_power;
+    int tx_power;
     std::string frequency_string;
     std::vector<double> center_freq_set;
     double ppm = 0;
@@ -811,20 +826,45 @@ bool getINIValues(bool reload = false)
 {
     if (ini.load())
     {
+        // [Control]
         config.xmit_enabled = ini.get_bool_value("Control", "Transmit");
+        llog.logS(DEBUG, "✅ Transmit Enabled: ", config.xmit_enabled);
+        //
+        //
+        // [Common]
         config.callsign = ini.get_value("Common", "Call Sign");
+        llog.logS(DEBUG, "✅ Call Sign: ", ini.get_value("Common", "Call Sign"));
+        //
         config.grid_square = ini.get_value("Common", "Grid Square");
+        llog.logS(DEBUG, "✅ Grid Square: ", config.grid_square);
+        //
         config.tx_power = ini.get_int_value("Common", "TX Power");
-        config.frequency_string.clear(); // Ensure previous data is cleared
-        config.frequency_string = ini.get_int_value("Common", "Frequency");
+        llog.logS(DEBUG, "✅ TX Power: ", ini.get_int_value("Common", "TX Power"));
+        //
+        config.frequency_string = ini.get_string_value("Common", "Frequency");
+        llog.logS(DEBUG, "✅ Frequency: ", ini.get_string_value("Common", "Frequency"));
+        //
+        //
+        // [Extended]
         config.ppm = ini.get_double_value("Extended", "PPM");
+        llog.logS(DEBUG, "✅ PPM: ", config.ppm);
+        //
         config.self_cal = ini.get_bool_value("Extended", "Self Cal");
+        llog.logS(DEBUG, "✅ FREQ: ", config.self_cal);
+        //
         config.random_offset = ini.get_bool_value("Extended", "Offset");
+        llog.logS(DEBUG, "✅ Offset: ", config.random_offset);
+        //
         config.use_led = ini.get_bool_value("Extended", "Use LED");
+        llog.logS(DEBUG, "✅ Use LED: ", config.use_led);
+        //
         config.power_level = ini.get_int_value("Extended", "Power Level");
-        // TODO DEBUG
-        config.port = 31415;
-        // config.port = ini.get_int_value("Server", "Port");
+        llog.logS(DEBUG, "✅ Power Level: ", config.power_level);
+        //
+        //
+        // [Server]
+        config.port = ini.get_int_value("Server", "Port");
+        llog.logS(DEBUG, "✅ Port: ", config.port);
 
         if (! config.daemon_mode )
             llog.logS(INFO, "\n============================================");
@@ -855,91 +895,60 @@ bool getINIValues(bool reload = false)
 
 }
 
-void convertToFreq(const char* &option, double &parsed_freq)
-{
-    if (!strcasecmp(option, "LF"))
-    {
-        parsed_freq = 137500.0;
+/**
+ * @brief Converts a string to uppercase.
+ *
+ * @param str The input string.
+ * @return The uppercase version of the string.
+ */
+std::string to_uppercase(const std::string &str) {
+    std::string upper_str = str;
+    std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
+                   [](unsigned char c) { return std::toupper(c); });
+    return upper_str;
+}
+
+/**
+ * @brief Converts a frequency label or numeric string to its corresponding frequency.
+ *
+ * @param option The string representing the frequency band or a numeric value.
+ * @return The corresponding frequency in Hz.
+ * @throws Exits with a fatal log error if the input is invalid.
+ */
+double string_to_frequency(const std::string &option) {
+    /**
+     * @brief Mapping of frequency labels to their corresponding values in Hz.
+     *
+     * The keys are stored in uppercase to enable case-insensitive lookup.
+     */
+    static const std::unordered_map<std::string, double> frequency_map = {
+        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0},
+        {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5},
+        {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0},
+        {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0},
+        {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0},
+        {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}
+    };
+
+    // Convert the input to uppercase for case-insensitive comparison
+    std::string key = to_uppercase(option);
+
+    // Check if the given option exists in the predefined frequency map
+    auto it = frequency_map.find(key);
+    if (it != frequency_map.end()) {
+        return it->second;
     }
-    else if (!strcasecmp(option, "LF-15"))
-    {
-        parsed_freq = 137612.5;
+
+    // Attempt to parse as a numeric frequency
+    char *endp;
+    double parsed_freq = std::strtod(option.c_str(), &endp);
+
+    if (endp == option.c_str() || *endp != '\0') {
+        llog.logE(FATAL, "Could not parse transmit frequency: ", option);
+        return 0.0;
     }
-    else if (!strcasecmp(option, "MF"))
-    {
-        parsed_freq = 475700.0;
-    }
-    else if (!strcasecmp(option, "MF-15"))
-    {
-        parsed_freq = 475812.5;
-    }
-    else if (!strcasecmp(option, "160m"))
-    {
-        parsed_freq = 1838100.0;
-    }
-    else if (!strcasecmp(option, "160m-15"))
-    {
-        parsed_freq = 1838212.5;
-    }
-    else if (!strcasecmp(option, "80m"))
-    {
-        parsed_freq = 3570100.0;
-    }
-    else if (!strcasecmp(option, "60m"))
-    {
-        parsed_freq = 5288700.0;
-    }
-    else if (!strcasecmp(option, "40m"))
-    {
-        parsed_freq = 7040100.0;
-    }
-    else if (!strcasecmp(option, "30m"))
-    {
-        parsed_freq = 10140200.0;
-    }
-    else if (!strcasecmp(option, "20m"))
-    {
-        parsed_freq = 14097100.0;
-    }
-    else if (!strcasecmp(option, "17m"))
-    {
-        parsed_freq = 18106100.0;
-    }
-    else if (!strcasecmp(option, "15m"))
-    {
-        parsed_freq = 21096100.0;
-    }
-    else if (!strcasecmp(option, "12m"))
-    {
-        parsed_freq = 24926100.0;
-    }
-    else if (!strcasecmp(option, "10m"))
-    {
-        parsed_freq = 28126100.0;
-    }
-    else if (!strcasecmp(option, "6m"))
-    {
-        parsed_freq = 50294500.0;
-    }
-    else if (!strcasecmp(option, "4m"))
-    {
-        parsed_freq = 70092500.0;
-    }
-    else if (!strcasecmp(option, "2m"))
-    {
-        parsed_freq = 144490500.0;
-    }
-    else
-    {
-        // Not a string. See if it can be parsed as a double.
-        char *endp;
-        parsed_freq = strtod(option, &endp);
-        if ((optarg == endp) || (*endp != '\0'))
-        {
-            llog.logE(FATAL, "Could not parse transmit frequency: ", option);
-            exit(-1);
-        }
-    }
+
+    return parsed_freq;
 }
 
 bool parse_commandline(const int &argc, char *const argv[])
@@ -1108,17 +1117,24 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         }
         config.center_freq_set.clear();
 
+        // Declare a vector to store the extracted frequency values as strings
         std::vector<std::string> freq_list;
-        std::istringstream s ( config.frequency_string );
-        freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
-        // TODO:  Fix frequency processing
-        for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f)
+        // Create an input string stream from the frequency string to process it word by word
+        std::istringstream s(config.frequency_string);
+
+        // Temporary variable to hold each extracted token
+        std::string token;
+
+        // Read words from the input stream and store them in freq_list
+        while (s >> token) {
+            freq_list.push_back(token); // Add each extracted token to the vector
+        }
+        
+        // Parse the list as a list of strings, and convert them to doubles
+        for (const auto& f : freq_list)
         {
-            std::string fString{ *f };
-            const char * fs = fString.c_str();
-            double parsed_freq;
-            convertToFreq(fs, parsed_freq);
+            double parsed_freq = string_to_frequency(f);
             config.center_freq_set.push_back(parsed_freq);
         }
     }
@@ -1144,18 +1160,21 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
                 }
                 if (n_free_args == 2)
                 {
-                    config.tx_power = argv[optind++];
+                    // Convert to an integer
+                    try {
+                        config.tx_power = std::stoi(argv[optind++]);
+                    } catch (const std::exception &e) {
+                        std::cerr << "Error: Invalid power value: " << argv[optind - 1] << std::endl;
+                        return 1;  // Exit with error code
+                    }
                     n_free_args++;
                     continue;
                 }
-                // Must be a frequency
-                // First see if it is a string.
-                double parsed_freq;
-                const char * argument = argv[optind];
-                // TODO:  Fix frequency processing
-                convertToFreq(argument, parsed_freq);
+                // Treat the freq as a string, and convert it to a double
+                std::string argument = argv[optind];  // Convert to std::string
+                double parsed_freq = string_to_frequency(argument);  // Call the new function
+                config.center_freq_set.push_back(parsed_freq);  // Store the result
                 optind++;
-                config.center_freq_set.push_back(parsed_freq);
             }
         }
     }
@@ -1172,7 +1191,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     if (config.mode == TONE)
     {
-        if ((config.callsign != "") || (config.grid_square != "") || (config.tx_power != "") || (config.center_freq_set.size() != 0) || config.random_offset)
+        if ((config.callsign.empty()) || (config.grid_square.empty()) || (config.tx_power > 0) || (config.center_freq_set.empty()) || config.random_offset)
         {
             llog.logE(INFO, "Callsign, gridsquare, etc. are ignored when generating test tone.");
         }
@@ -1185,7 +1204,8 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     else
     {
-        if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power == "") || (config.center_freq_set.size() == 0))
+
+        if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power <= 0) || (config.center_freq_set.size() == 0))
         {
             llog.logE(FATAL, "must specify callsign, gridsquare, dBm, and at least one frequency.");
             llog.logE(FATAL, "Try: wsprrypi --help");
@@ -1357,158 +1377,7 @@ void open_mbox()
 
 void cleanup()
 {
-    // Called when exiting or when a signal is received.
-#ifdef LED_PIN
-    pinLow(LED_PIN);
-#endif
-    disable_clock();
-    unSetupDMA();
-    deallocMemPool();
-    unlink(LOCAL_DEVICE_FILE_NAME);
-}
 
-// Handle cleanup and exiting based on signal
-void cleanupAndExit(int sig)
-{
-    // Suppress the default action (printing the signal message to the terminal)
-    // Log the signal information
-    const char* sig_description = strsignal(sig); // Get the signal name/description
-    std::string log_message;
-
-    // Check if we are in daemon mode to log with logS
-    bool should_log_normal = config.daemon_mode;
-
-    switch (sig) {
-        case SIGINT: // 2
-            log_message = "Exiting due to interrupt (Ctrl+C).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-        case SIGTERM: // 15
-            log_message = "Exiting due to termination request (SIGTERM).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-        case SIGUSR1: // 10
-            log_message = "Exiting due to user-defined signal 1 (SIGUSR1).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-        case SIGUSR2: // 12
-            log_message = "Exiting due to user-defined signal 2 (SIGUSR2).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-        case SIGQUIT: // 3
-            log_message = "Exiting due to quit signal (SIGQUIT).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-        case SIGPWR: // 30
-            log_message = "Exiting due to power failure signal (SIGPWR).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(0); // User-initiated action, normal exit
-            break;
-
-        // System or error signals
-        case SIGCONT:
-            log_message = "Exiting due to stop signal (SIGCONT).";
-            if (should_log_normal) {
-                llog.logS(INFO, log_message);
-            }
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for SIGCONT
-            llog.logE(INFO, "Signal: ", sig);
-            llog.logE(INFO, "Description: ", sig_description);
-            exit(-1); // Daemon shutdown
-            break;
-        case SIGKILL:
-            log_message = "Exiting due to kill signal (SIGKILL).";
-            if (should_log_normal) {
-                llog.logS(INFO, log_message);
-            }
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for SIGKILL
-            llog.logE(INFO, "Signal: ", sig);
-            llog.logE(INFO, "Description: ", sig_description);
-            exit(-1); // System error condition, abnormal exit
-            break;
-        case SIGSEGV:
-            log_message = "Exiting due to segmentation fault (SIGSEGV).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for segmentation fault
-            llog.logE(FATAL, "Signal: ", sig);
-            llog.logE(FATAL, "Description: ", sig_description);
-            exit(-1); // Critical system error, abnormal exit
-            break;
-        case SIGBUS:
-            log_message = "Exiting due to bus error (SIGBUS).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for bus error
-            llog.logE(FATAL, "Signal: ", sig);
-            llog.logE(FATAL, "Description: ", sig_description);
-            exit(-1); // Critical system error, abnormal exit
-            break;
-        case SIGFPE:
-            log_message = "Exiting due to floating point exception (SIGFPE).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for floating point exception
-            llog.logE(FATAL, "Signal: ", sig);
-            llog.logE(FATAL, "Description: ", sig_description);
-            exit(-1); // Critical system error, abnormal exit
-            break;
-        case SIGILL:
-            log_message = "Exiting due to illegal instruction (SIGILL).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message); // Log error for illegal instruction
-            llog.logE(FATAL, "Signal: ", sig);
-            llog.logE(FATAL, "Description: ", sig_description);
-            exit(-1); // Critical system error, abnormal exit
-            break;
-        case SIGHUP:
-            log_message = "Exiting due to hangup signal (SIGHUP).";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            exit(-1); // System error condition, abnormal exit
-            break;
-
-        // Catch-all for unhandled signals
-        default:
-            log_message = "Exiting due to unknown signal.";
-            llog.logS(INFO, log_message);
-            llog.logS(INFO, "Signal: ", sig);
-            llog.logS(INFO, "Description: ", sig_description);
-            llog.logE(FATAL, log_message);
-            llog.logE(FATAL, "Signal: ", sig);
-            llog.logE(FATAL, "Description: ", sig_description);
-            exit(-1); // Abnormal exit for unknown signals
-            break;
-    }
-    // Call cleanup function
-    cleanup();
 }
 
 void setSchedPriority(int priority)
@@ -1554,56 +1423,136 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     close(mem_fd);
 }
 
-// Set up the signal handler
-void setup_signal_handlers()
+/**
+ * @brief Restores the terminal settings to their original state.
+ * @details This function restores terminal attributes that were saved 
+ *          before modifications. It is registered with `atexit()` and
+ *          is also called in the signal handler.
+ */
+void restoreTerminalSettings()
 {
-    struct sigaction sa;
-    sa.sa_handler = cleanupAndExit;
-    sa.sa_flags = SA_RESTART;  // Keep this if you want to restart syscalls interrupted by signals
-    sigemptyset(&sa.sa_mask);
-
-    // Set up the signal handler to intercept all relevant signals
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGUSR1, &sa, NULL);
-    sigaction(SIGUSR2, &sa, NULL);
-    sigaction(SIGQUIT, &sa, NULL);
-    sigaction(SIGPWR, &sa, NULL);
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGBUS, &sa, NULL);
-    sigaction(SIGFPE, &sa, NULL);
-    sigaction(SIGILL, &sa, NULL);
-    sigaction(SIGHUP, &sa, NULL);
-    sigaction(SIGKILL, &sa, NULL);  // Note: SIGKILL cannot be caught by the program but is included for completeness
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &original_term) != 0)
+    {
+        std::cerr << "Error: Failed to restore terminal attributes.\n";
+    }
 }
 
-// Function to set terminal attributes to suppress `^C`
+/**
+ * @brief Disables the echoing of control characters in the terminal.
+ * @details This function modifies terminal attributes to prevent control 
+ *          characters (like ^C) from being displayed. It ensures settings 
+ *          are restored on exit.
+ */
 void disableSignalEcho()
 {
     struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0)
+
+    // Get and save current terminal attributes
+    if (tcgetattr(STDIN_FILENO, &term) != 0)
     {
-        term.c_lflag &= ~ECHOCTL; // Disable echoing control characters like ^C
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+        std::cerr << "Error: Failed to get terminal attributes.\n";
+        return;
     }
+
+    original_term = term;  // Store original settings
+    term.c_lflag &= ~ECHOCTL; // Disable control character echoing
+
+    // Apply the new settings immediately
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &term) != 0)
+    {
+        std::cerr << "Error: Failed to set terminal attributes.\n";
+    }
+
+    // Ensure terminal settings are restored when the program exits
+    atexit(restoreTerminalSettings);
 }
 
-// Function to restore terminal attributes
-void restoreTerminalAttributes()
+/**
+ * @brief Logs the exit message and performs cleanup before termination.
+ * @details This function logs the signal type and description, restores 
+ *          terminal settings, and ensures a proper exit status.
+ * 
+ * @param sig The signal number that caused the termination.
+ * @param severity Log level (INFO for normal, FATAL for system errors).
+ */
+void handleExitSignal(int sig, int severity)
 {
-    struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0)
+    std::string log_message;
+
+    switch (sig)
     {
-        term.c_lflag |= ECHOCTL; // Re-enable echoing control characters
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+        case SIGINT:   log_message = "Exiting due to interrupt (Ctrl+C)."; break;
+        case SIGTERM:  log_message = "Exiting due to termination request (SIGTERM)."; break;
+        case SIGUSR1:  log_message = "Exiting due to user-defined signal 1 (SIGUSR1)."; break;
+        case SIGUSR2:  log_message = "Exiting due to user-defined signal 2 (SIGUSR2)."; break;
+        case SIGQUIT:  log_message = "Exiting due to quit signal (SIGQUIT)."; break;
+        case SIGPWR:   log_message = "Exiting due to power failure signal (SIGPWR)."; break;
+        case SIGCONT:  log_message = "Exiting due to continue signal (SIGCONT)."; break;
+        case SIGKILL:  log_message = "Exiting due to kill signal (SIGKILL)."; break;
+        case SIGSEGV:  log_message = "Exiting due to segmentation fault (SIGSEGV)."; break;
+        case SIGBUS:   log_message = "Exiting due to bus error (SIGBUS)."; break;
+        case SIGFPE:   log_message = "Exiting due to floating point exception (SIGFPE)."; break;
+        case SIGILL:   log_message = "Exiting due to illegal instruction (SIGILL)."; break;
+        case SIGHUP:   log_message = "Exiting due to hangup signal (SIGHUP)."; break;
+        default:       log_message = "Exiting due to unknown signal."; break;
     }
+
+    // Log signal details
+    llog.logS(INFO, log_message);
+    llog.logS(INFO, "Signal: ", sig);
+
+    // Log error if it's a critical signal
+    if (severity == FATAL)
+    {
+        llog.logE(FATAL, log_message);
+        llog.logE(FATAL, "Signal: ", sig);
+    }
+
+    // Restore terminal settings before exiting
+    restoreTerminalSettings();
+
+    // Perform necessary cleanup before exit
+#ifdef LED_PIN
+    pinLow(LED_PIN);
+#endif
+    disable_clock();
+    unSetupDMA();
+    deallocMemPool();
+    unlink(LOCAL_DEVICE_FILE_NAME);
+
+    // Determine exit status
+    exit(severity == FATAL ? -1 : 0);
+}
+
+/**
+ * @brief Handles termination signals, logs exit messages, and cleans up.
+ * @details This function is registered as a signal handler and calls 
+ *          `handleExitSignal()` with the appropriate severity level.
+ * 
+ * @param sig The signal number received by the process.
+ */
+void cleanupAndExit(int sig)
+{
+    bool is_fatal = (sig == SIGSEGV || sig == SIGBUS || sig == SIGFPE || sig == SIGILL || sig == SIGKILL);
+    handleExitSignal(sig, is_fatal ? FATAL : INFO);
 }
 
 int main(const int argc, char *const argv[])
 {
     llog.setLogLevel(DEBUG);
-    disableSignalEcho(); // Disable echo for signals like Ctrl+C
-    atexit(restoreTerminalAttributes); // Ensure terminal settings are restored on exit
+
+    // Set up signal handlers
+    signal(SIGINT, cleanupAndExit);
+    signal(SIGTERM, cleanupAndExit);
+    signal(SIGQUIT, cleanupAndExit);
+    signal(SIGSEGV, cleanupAndExit);
+    signal(SIGBUS, cleanupAndExit);
+    signal(SIGFPE, cleanupAndExit);
+    signal(SIGILL, cleanupAndExit);
+    signal(SIGHUP, cleanupAndExit);
+
+    // Modify terminal settings
+    disableSignalEcho();
 
     if ( ! parse_commandline(argc, argv) ) return 1;
 
@@ -1612,9 +1561,9 @@ int main(const int argc, char *const argv[])
 
     getPLLD(); // Get PLLD Frequency
 
-#ifdef LED_PIN
+    #ifdef LED_PIN
     setupGPIO(LED_PIN);
-#endif
+    #endif
 
     if ( ! parseConfigData(argc, argv) ) return 1;
 
@@ -1634,15 +1583,12 @@ int main(const int argc, char *const argv[])
         return 1;
     }
 
-    // Set up custom signal handlers
-    setup_signal_handlers();
-    atexit(cleanup);
-
     setSchedPriority(30);
 
     // Initialize the RNG
     srand(time(NULL));
 
+    // TODO:  Is this where #57 breaks?
     int nbands = config.center_freq_set.size();
 
     // Initial configuration
@@ -1707,25 +1653,28 @@ int main(const int argc, char *const argv[])
         for (;;)
         { // Reload Loop >
             // Initialize WSPR Message (message)
-            WsprMessage message(
-                const_cast<char *>(config.callsign.c_str()),
-                const_cast<char *>(config.grid_square.c_str()),
-                std::stoi(config.tx_power)
-            );
+            WsprMessage message(config.callsign, config.grid_square, config.tx_power);
 
             // Access the generated symbols
             unsigned char* symbols = message.symbols;
 
-#ifdef WSPR_DEBUG
-            // Print encoded packet
-            std::cout << "WSPR codeblock:";
-            std::cout << std::endl;
-            for (int i = 0; i < WsprMessage::size; i++) {
-                if (i) std::cout << ",";
-                std::cout << static_cast<int>(symbols[i]);
+            #ifdef WSPR_DEBUG
+            // Use a string stream to concatenate symbols
+            std::ostringstream symbols_stream;
+
+            for (int i = 0; i < WsprMessage::size; ++i)
+            {
+                symbols_stream << static_cast<int>(message.symbols[i]);
+                if (i < WsprMessage::size - 1)
+                {
+                    symbols_stream << ","; // Append a comma except for the last element
+                }
             }
-            std::cout << std::endl;
-#endif
+
+            // Print the concatenated string in one call
+            llog.logS(DEBUG, "Generated WSPR symbols: ", symbols_stream.str());
+            // std::cout << symbols_stream.str() << std::endl;
+            #endif
 
             llog.logS(INFO, "Ready to transmit (setup complete).");
             int band = 0;
@@ -1823,6 +1772,7 @@ int main(const int argc, char *const argv[])
                     std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
                     double num_seconds = elapsed.count();
                     llog.logS(INFO, "Transmission completed, (", num_seconds, " sec.)");
+                    // TODO:  Add a failsafe here for short windows?
                 }
                 else
                 {
@@ -1846,3 +1796,8 @@ int main(const int argc, char *const argv[])
 
     return 0;
 }
+
+// TODO:  Make it so logger will add a sspace if ":" is at the end of a string
+// TODO:  Transmission completed, (74.4248 sec.) - Working now?  NFC.
+// TODO:  Add in server
+// TODO:  Move singleton to server maybe

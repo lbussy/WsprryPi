@@ -1,4 +1,5 @@
 # GitIgnore for WsprryPi
+wsprrypi
 
 ## General Rules
 .DS_Store
