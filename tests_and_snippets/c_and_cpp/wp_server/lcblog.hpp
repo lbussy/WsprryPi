@@ -6,7 +6,7 @@
  * This logging class provides a flexible and thread-safe logging mechanism
  * with support for multiple log levels, timestamped logs, and customizable
  * output streams. include the header (`lcblog.hpp`), implementation
- * (`lcblog.cpp`), and template definitions (`lcblog.tpp`) when using in
+ * (`lcblog.cpp`), and template definitions (`lcblog.tpp`)when using in
  * a project.
  *
  * This software is distributed under the MIT License. See LICENSE.MIT.md for
@@ -58,7 +58,7 @@ enum LogLevel {
     FATAL      ///< Critical errors that result in program termination.
 };
 
-/**
+std::string logLevelToString(LogLevel level);/**
  * @brief Converts a log level to its string representation.
  *
  * @param level The log level to convert.

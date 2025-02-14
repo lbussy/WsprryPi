@@ -1,6 +1,6 @@
 /**
  * @file utils.cpp
- * @brief Miscellaneous functions for the project. 
+ * @brief Miscellaneous functions for the project.
  *
  * This file is part of WsprryPi, a project originally forked from
  * threeme3/WsprryPi (no longer active on GitHub).

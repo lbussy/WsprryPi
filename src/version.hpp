@@ -35,14 +35,14 @@
 #include <string>
 
 // Function prototype for getRaspberryPiModel
-const char* getRaspberryPiModel();
-const char* getProcessorType();
-const char* getAppVersion();
-const char* exe_version();
-const char* branch();
-const char* exe_name();
-const char* project_name();
-const char* version_string();
+std::string getRaspberryPiModel();
+std::string getProcessorType();
+std::string getAppVersion();
+std::string exe_version();
+std::string branch();
+std::string exe_name();
+std::string project_name();
+std::string version_string();
 int getProcessorTypeAsInt();
 
 unsigned get_dt_ranges(const char *filename, unsigned offset);

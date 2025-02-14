@@ -13,8 +13,8 @@ IFS=$'\n\t'
 # and updates the branch name locally and on the remote repository.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-remove_bcm+109.59592e9
-# @date 2025-02-05
+# @version 1.2.1-config_lib+40.9925967-dirty
+# @date 2025-02-14
 # @copyright MIT License
 #
 # @license

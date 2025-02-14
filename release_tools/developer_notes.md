@@ -139,19 +139,56 @@ If you are going to use VS Code from your workstation:
 
    ``` bash
    # Extensions installed on SSH: wsprrypi.local:
+   # Generated with:
+   # code --list-extensions | xargs -L 1 echo code --install-extension
+   code --install-extension Extensions installed on SSH: wspr4:
+   code --install-extension bierner.github-markdown-preview
+   code --install-extension bierner.markdown-checkbox
+   code --install-extension bierner.markdown-emoji
+   code --install-extension bierner.markdown-footnotes
+   code --install-extension bierner.markdown-mermaid
+   code --install-extension bierner.markdown-preview-github-styles
+   code --install-extension bmalehorn.shell-syntax
+   code --install-extension bmewburn.vscode-intelephense-client
+   code --install-extension brapifra.phpserver
+   code --install-extension codezombiech.gitignore
+   code --install-extension cschlosser.doxdocgen
+   code --install-extension davidanson.vscode-markdownlint
+   code --install-extension donjayamanne.githistory
+   code --install-extension eamodio.gitlens
+   code --install-extension ecmel.vscode-html-css
+   code --install-extension feiskyer.chatgpt-copilot
+   code --install-extension felipecaputo.git-project-manager
+   code --install-extension github.copilot
+   code --install-extension github.copilot-chat
+   code --install-extension github.vscode-github-actions
+   code --install-extension github.vscode-pull-request-github
+   code --install-extension mhutchie.git-graph
+   code --install-extension ms-python.black-formatter
    code --install-extension ms-python.debugpy
+   code --install-extension ms-python.isort
+   code --install-extension ms-python.pylint
    code --install-extension ms-python.python
    code --install-extension ms-python.vscode-pylance
+   code --install-extension ms-vscode.cmake-tools
    code --install-extension ms-vscode.cpptools
    code --install-extension ms-vscode.cpptools-extension-pack
    code --install-extension ms-vscode.cpptools-themes
+   code --install-extension ms-vscode.live-server
    code --install-extension ms-vscode.makefile-tools
+   code --install-extension ms-vscode.vscode-serial-monitor
+   code --install-extension rifi2k.format-html-in-php
+   code --install-extension ritwickdey.liveserver
+   code --install-extension steoates.autoimport
+   code --install-extension symbolk.somanyconflicts
+   code --install-extension timonwong.shellcheck
+   code --install-extension twxs.cmake
+   code --install-extension waderyan.gitblame
+   code --install-extension xdebug.php-debug
    code --install-extension yzhang.markdown-all-in-one
    ```
 
-   (List generated with `code --list-extensions | xargs -L 1 echo code --install-extension`.)
-
-8. Set up the `venv`:
+1. Set up the `venv`:
 
    ``` bash
    python3 -m venv ./.venv
@@ -160,11 +197,11 @@ If you are going to use VS Code from your workstation:
    pip install -r ./requirements.txt
    ```
 
-9. For Python script and document development, always use `venv` (VS Code should do this or prompt you to select it).
+2. For Python script and document development, always use `venv` (VS Code should do this or prompt you to select it).
 
-10. Use the "Open Folder" button and select the root of your repo on the Pi.
+3.  Use the "Open Folder" button and select the root of your repo on the Pi.
 
-11. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
+4.  Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
 Remember that the **Wsprry Pi** and optional **Shutdown Watch** systemd daemons are running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 

@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-remove_bcm+109.59592e9
-# @date 2025-02-05
+# @version 1.2.1-config_lib+40.9925967-dirty
+# @date 2025-02-14
 # @copyright MIT License
 #
 # @license
@@ -1861,8 +1861,6 @@ determine_execution_context() {
 
     local script_path   # Full path of the script
     local current_dir   # Temporary variable to traverse directories
-    local max_depth=10  # Limit for directory traversal depth
-    local depth=0       # Counter for directory traversal
 
     # Check if the script is executed via pipe
     if [[ "$0" == "bash" ]]; then
@@ -1914,7 +1912,7 @@ determine_execution_context() {
     debug_print "Default context: Script executed directly." "$debug"
 
     debug_end "$debug"
-    printf "2\n" && return 0  
+    printf "2\n" && return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -5769,7 +5767,7 @@ manage_wsprry_pi() {
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_exe \"$SHUTDOWN_WATCH_EXE\""
-        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE\" \"true\""
+        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE -D -w\" \"true\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"

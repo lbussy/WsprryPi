@@ -27,8 +27,6 @@
 # Allow threading by default using all available processors
 MAKEFLAGS += -j$(nproc)
 
-# TODO: Implement and test the 'test' target.
-
 # Output binary name
 OUT = wsprrypi
 
@@ -38,6 +36,8 @@ EXE = $(OUT)
 # Macro for LED pin number, used as a compile-time constant
 # Pin 12, GPIO18, BCM18
 LED_PIN = 18
+
+INI_FILE = /usr/local/etc/wsprrypi.ini
 
 # Installation directory for the binary
 prefix = /usr/local
@@ -50,14 +50,23 @@ CC = gcc             # C compiler
 COMMON_FLAGS = -Wall -Werror -fmax-errors=10
 
 # Additional C++ compiler flags
-COMM_CXX_FLAGS = -static-libgcc -Wno-psabi -lstdc++fs -std=c++17
+COMM_CXX_FLAGS = -Wno-psabi -lstdc++fs -std=c++17
+
+# Define LED pin number as a compile-time constant
+CXXFLAGS += -DLED_PIN=$(LED_PIN)
+CFLAGS += -DLED_PIN=$(LED_PIN)
+
+CXXFLAGS += -static-libgcc -static-libstdc++
 CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
+CXXFLAGS += -ILCBLog/src
+CXXFLAGS += -IINI-Handler/src
+CXXFLAGS += -IWSPR-Message/src
 
 # Additional C compiler flags
 CFLAGS += $(COMMON_FLAGS)
 
 # Linker flags for required libraries
-# LDLIBS += -lm -lbcm_host
+LDLIBS += -static
 
 # Enable verbose output if VERBOSE=1 is specified during the build
 VERBOSE ?= 0
@@ -82,7 +91,7 @@ CXXFLAGS += -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(P
 
 # Define source and object files
 C_SOURCES := $(shell find . -name "*.c")
-CPP_SOURCES := $(shell find . -name "*.cpp")
+CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp" ! -path "./WSPR-Message/src/main.cpp")
 C_OBJECTS := $(patsubst %.c,%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,%.o,$(CPP_SOURCES))
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
@@ -97,8 +106,8 @@ all: $(OUT)
 
 # Link the binary from object files
 $(OUT): $(OBJECTS)
-	@echo "Linking executable: $(OUT)"
-	$(Q)$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS)
+	@echo "Linking statically: $(OUT)"
+	$(Q)$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS) -static
 
 # Compile C++ source files
 %.o: %.cpp
@@ -110,20 +119,31 @@ $(OUT): $(OBJECTS)
 	@echo "Compiling object file for $<."
 	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Clean build artifacts
+# Clean build artifacts recursively
 .PHONY: clean
 clean:
-	@echo "Cleaning old executables and object files."
-	$(Q)$(RM) $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump. $(OBJECTS:.o=.d) >/dev/null 2>&1 || true
+	@echo "Cleaning old executables, object files, and temporary files recursively."
+	$(Q)$(RM) -r $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.* $(OBJECTS:.o=.d)
+	$(Q)find . -type f \( -name '*.o' -o -name '*.d' -o -name '*~' -o -name '*.log' -o -name 'core' -o -name 'dump.*' \) -exec $(RM) {} +
+	$(Q)find . -type d -name 'CMakeFiles' -exec $(RM) -r {} +
+	$(Q)find . -type f -name 'CMakeCache.txt' -exec $(RM) {} +
 
-# Debug target to print detected files and variables
-.PHONY: files
-debug:
-	@echo "C_SOURCES:\t$(C_SOURCES)"
-	@echo "CPP_SOURCES:\t$(CPP_SOURCES)"
-	@echo "C_OBJECTS:\t$(C_OBJECTS)"
-	@echo "CPP_OBJECTS:\t$(CPP_OBJECTS)"
-	@echo "OBJECTS:\t$(OBJECTS)"
+# Debug target to print target output files
+.PHONY: targets
+targets:
+	@echo "Output Binary: $(OUT)"
+	@echo "Executable Name: $(EXE)"
+	@echo "Build Artifacts: $(OBJECTS)"
+	@echo "Linked Libraries: $(LDLIBS)"
+	@echo "Defined Macros: -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(PRJ)"
+
+# Test target: Build with WSPR_DEBUG and run the executable
+.PHONY: test
+test: clean
+	@echo "Building WSPR test mode with WSPR_DEBUG enabled"
+	$(Q)$(MAKE) CXXFLAGS="$(CXXFLAGS) -DWSPR_DEBUG" CFLAGS="$(CFLAGS) -DWSPR_DEBUG" all
+	@echo "Running WSPR test mode."
+	$(Q)sudo ./$(OUT) -D -i $(INI_FILE)
 
 # Show only user-defined macros from the Makefile
 .PHONY: defines
@@ -132,6 +152,13 @@ defines:
 	@$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
 	@echo "Showing user-defined macros for the C compiler:"
 	@$(CC) $(CFLAGS) -dM -E -x c /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
+
+# Debug target to build with WSPR_DEBUG defined
+.PHONY: debug
+debug: CXXFLAGS += -DWSPR_DEBUG
+debug: CFLAGS += -DWSPR_DEBUG
+debug: clean all
+	@echo "Debug build completed with WSPR_DEBUG enabled."
 
 # Display available make targets
 .PHONY: help
@@ -143,6 +170,7 @@ help:
 	@echo "  defines    Show all defined macros"
 	@echo "  install    Install the binary to $(prefix)/bin."
 	@echo "  uninstall  Remove the installed binary."
+	@echo "  debug      Build the project with WSPR_DEBUG defined."
 	@echo "  test       Run unit tests (if available)."
 	@echo "  lint       Run static analysis on the source files."
 

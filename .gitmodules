@@ -1,0 +1,9 @@
+[submodule "src/LCBLog"]
+	path = src/LCBLog
+	url = https://github.com/lbussy/LCBLog.git
+[submodule "src/INI-Handler"]
+	path = src/INI-Handler
+	url = https://github.com/lbussy/INI-Handler.git
+[submodule "src/WSPR-Message"]
+	path = src/WSPR-Message
+	url = https://github.com/lbussy/WSPR-Message
