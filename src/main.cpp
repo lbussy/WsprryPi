@@ -51,10 +51,10 @@
 
 #include "main.hpp"
 
-/** 
+/**
  * @var original_term
  * @brief Stores the original terminal settings.
- * @details This structure is used to restore the terminal settings 
+ * @details This structure is used to restore the terminal settings
  *          before the program exits.
  */
 static struct termios original_term;
@@ -1090,7 +1090,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         while (s >> token) {
             freq_list.push_back(token); // Add each extracted token to the vector
         }
-        
+
         // Parse the list as a list of strings, and convert them to doubles
         for (const auto& f : freq_list)
         {
@@ -1380,7 +1380,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 
 /**
  * @brief Restores the terminal settings to their original state.
- * @details This function restores terminal attributes that were saved 
+ * @details This function restores terminal attributes that were saved
  *          before modifications. It is registered with `atexit()` and
  *          is also called in the signal handler.
  */
@@ -1394,8 +1394,8 @@ void restoreTerminalSettings()
 
 /**
  * @brief Disables the echoing of control characters in the terminal.
- * @details This function modifies terminal attributes to prevent control 
- *          characters (like ^C) from being displayed. It ensures settings 
+ * @details This function modifies terminal attributes to prevent control
+ *          characters (like ^C) from being displayed. It ensures settings
  *          are restored on exit.
  */
 void disableSignalEcho()
@@ -1424,9 +1424,9 @@ void disableSignalEcho()
 
 /**
  * @brief Logs the exit message and performs cleanup before termination.
- * @details This function logs the signal type and description, restores 
+ * @details This function logs the signal type and description, restores
  *          terminal settings, and ensures a proper exit status.
- * 
+ *
  * @param sig The signal number that caused the termination.
  * @param severity Log level (INFO for normal, FATAL for system errors).
  */
@@ -1481,9 +1481,9 @@ void handleExitSignal(int sig, int severity)
 
 /**
  * @brief Handles termination signals, logs exit messages, and cleans up.
- * @details This function is registered as a signal handler and calls 
+ * @details This function is registered as a signal handler and calls
  *          `handleExitSignal()` with the appropriate severity level.
- * 
+ *
  * @param sig The signal number received by the process.
  */
 void cleanupAndExit(int sig)
