@@ -826,6 +826,24 @@ bool getINIValues(bool reload = false)
 {
     if (ini.load())
     {
+        // Load all the values
+        //
+        // [Control]
+        config.xmit_enabled =  ini.get_bool_value("Control", "Transmit");
+        // [Common]
+        config.callsign = ini.get_string_value("Common", "Call Sign");
+        config.grid_square = ini.get_string_value("Common", "Grid Square");
+        config.tx_power = ini.get_int_value("Common", "TX Power");
+        config.frequency_string = ini.get_string_value("Common", "Frequency");
+        // [Extended]
+        config.ppm = ini.get_double_value("Extended", "PPM");
+        config.self_cal = ini.get_bool_value("Extended", "Self Cal");
+        config.random_offset = ini.get_bool_value("Extended", "Offset");
+        config.use_led = ini.get_bool_value("Extended", "Use LED");
+        config.power_level = ini.get_int_value("Extended", "Power Level");
+        // [Server]
+        config.port = ini.get_int_value("Server", "Port");
+
         if (! config.daemon_mode )
             llog.logS(INFO, "\n============================================");
         llog.logS(INFO, "Config:", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
@@ -1495,6 +1513,8 @@ void cleanupAndExit(int sig)
 int main(const int argc, char *const argv[])
 {
     llog.setLogLevel(DEBUG);
+    llog.logS(INFO, "Starting Wsprry Pi.", "(", 0.0, ")");
+    llog.logS(INFO, "Starting Wsprry Pi. (", 0.0, ")");
 
     // Set up signal handlers
     signal(SIGINT, cleanupAndExit);
@@ -1726,7 +1746,7 @@ int main(const int argc, char *const argv[])
                     // Calculate duration in <double> seconds
                     std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
                     double num_seconds = elapsed.count();
-                    llog.logS(INFO, "Transmission completed, (", num_seconds, " sec.)");
+                    llog.logS(INFO, "Transmission complete (", num_seconds, " sec.)");
                     // TODO:  Add a failsafe here for short windows?
                 }
                 else
