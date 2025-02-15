@@ -22,22 +22,22 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <algorithm>    // transform support
-#include <vector>       // vector support
-#include <assert.h>     // 'assert' support
-#include <fcntl.h>      // O_RDWR support
-#include <getopt.h>     // getopt_long support
-#include <iterator>     // istream_iterator support
-#include <math.h>       // NAN support
-#include <signal.h>     // Sig interrupt support
-#include <stdexcept>    // no_argument, required_argument support
-#include <sys/mman.h>   // PROT_READ, PROT_WRITE, MAP_FAILED support
-#include <sys/time.h>   // gettimeofday support
-#include <sys/timex.h>  // ntp_adjtime, TIME_OK support
-#include <cctype>       // isdigit() support
-#include <cstdlib>      // strtod() support
-#include <string>       // string support
-#include <unordered_map>    // unordered_map support
+#include <algorithm>     // transform support
+#include <vector>        // vector support
+#include <assert.h>      // 'assert' support
+#include <fcntl.h>       // O_RDWR support
+#include <getopt.h>      // getopt_long support
+#include <iterator>      // istream_iterator support
+#include <math.h>        // NAN support
+#include <signal.h>      // Sig interrupt support
+#include <stdexcept>     // no_argument, required_argument support
+#include <sys/mman.h>    // PROT_READ, PROT_WRITE, MAP_FAILED support
+#include <sys/time.h>    // gettimeofday support
+#include <sys/timex.h>   // ntp_adjtime, TIME_OK support
+#include <cctype>        // isdigit() support
+#include <cstdlib>       // strtod() support
+#include <string>        // string support
+#include <unordered_map> // unordered_map support
 #include <iostream>
 #include <termios.h>
 #include <unistd.h>
@@ -51,10 +51,10 @@
 
 #include "main.hpp"
 
-/** 
+/**
  * @var original_term
  * @brief Stores the original terminal settings.
- * @details This structure is used to restore the terminal settings 
+ * @details This structure is used to restore the terminal settings
  *          before the program exits.
  */
 static struct termios original_term;
@@ -144,7 +144,7 @@ IniFile ini;
 // 0x7e000000 from the supplied bus address to calculate the offset into
 // the peripheral address space. Then, this offset is added to peri_base_virt
 // Which is the base address of the peripherals, in virtual address space.
-#define ACCESS_BUS_ADDR(buss_addr) *(volatile int *)((long int)peri_base_virt + (buss_addr)-0x7e000000)
+#define ACCESS_BUS_ADDR(buss_addr) *(volatile int *)((long int)peri_base_virt + (buss_addr) - 0x7e000000)
 // Given a bus address in the peripheral address space, set or clear a bit.
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
@@ -162,12 +162,14 @@ IniFile ini;
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
 #define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
 #define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
-#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3 : 2) << (((g) % 10) * 3))
-#define GPIO_SET *(gpio + 7)    // sets bits which are 1 ignores bits which are 0
-#define GPIO_CLR *(gpio + 10) // clears bits which are 1 ignores bits which are 0
+#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3  \
+                                                                                     : 2) \
+                                                      << (((g) % 10) * 3))
+#define GPIO_SET *(gpio + 7)                  // sets bits which are 1 ignores bits which are 0
+#define GPIO_CLR *(gpio + 10)                 // clears bits which are 1 ignores bits which are 0
 #define GET_GPIO(g) (*(gpio + 13) & (1 << g)) // 0 if LOW, (1<<g) if HIGH
-#define GPIO_PULL *(gpio + 37) // Pull up/pull down
-#define GPIO_PULLCLK0 *(gpio + 38) // Pull up/pull down clock
+#define GPIO_PULL *(gpio + 37)                // Pull up/pull down
+#define GPIO_PULLCLK0 *(gpio + 38)            // Pull up/pull down clock
 
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
@@ -255,27 +257,16 @@ static struct
 
 struct wConfig
 {
-    // Global configuration items from command line and ini file
+    // Global configuration items
     bool useini = false;
     std::string inifile;
-    bool xmit_enabled = false;
     bool repeat = false;
-    std::string callsign;
-    std::string grid_square;
-    int tx_power;
-    std::string frequency_string;
     std::vector<double> center_freq_set;
-    double ppm = 0;
-    bool self_cal = true;
-    bool random_offset = false;
     double test_tone = NAN;
     bool no_delay = false;
     mode_type mode = WSPR;
     int terminate = -1;
-    bool use_led = false;
     bool daemon_mode = false;
-    int power_level = 7;
-    int port = 31415;
     // PLLD clock frequency.
     double f_plld_clk;
     // MEM_FLAG_L1_NONALLOCATING?
@@ -286,7 +277,8 @@ struct wConfig
 
 void setupGPIO(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     // Set up gpio pointer for direct register access
     int mem_fd;
     // Set up a memory regions to access GPIO
@@ -294,8 +286,8 @@ void setupGPIO(int pin = 0)
 
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        llog.logE(FATAL,"Unable to open /dev/mem (running as root?)");
-        exit(-1);
+        llog.logE(FATAL, "Unable to open /dev/mem (running as root?)");
+        std::exit(EXIT_FAILURE);
     }
 
     /* mmap GPIO */
@@ -313,7 +305,7 @@ void setupGPIO(int pin = 0)
     if (gpio_map == MAP_FAILED)
     {
         printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
 
     // Always use volatile pointer
@@ -327,13 +319,15 @@ void setupGPIO(int pin = 0)
 
 void pinHigh(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     GPIO_SET = 1 << pin;
 }
 
 void pinLow(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     GPIO_CLR = 1 << pin;
 }
 
@@ -367,7 +361,7 @@ void getPLLD()
         break;
     default:
         fprintf(stderr, "Error: Unknown chipset (%d).", procType);
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
 }
 
@@ -398,7 +392,7 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     if (mbox.pool_cnt >= mbox.pool_size)
     {
         llog.logE(FATAL, "Unable to allocated more pages.");
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
     unsigned offset = mbox.pool_cnt * 4096;
     *vAddr = (void *)(((unsigned)mbox.virt_addr) + offset);
@@ -450,7 +444,8 @@ void txon(bool led = false, int power_level = 7)
 {
     // Turn on TX
 #ifdef LED_PIN
-    if (led) pinHigh(LED_PIN);
+    if (led)
+        pinHigh(LED_PIN);
 #endif
     // Set function select for GPIO4.
     // Fsel 000 => input
@@ -469,27 +464,28 @@ void txon(bool led = false, int power_level = 7)
     CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
 
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    switch (power_level)  {
+    switch (power_level)
+    {
     case 0:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0; // 2mA -3.4dBm
         break;
     case 1:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1; // 4mA +2.1dBm
         break;
     case 2:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2; // 6mA +4.9dBm
         break;
     case 3:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3; // 8mA +6.6dBm(default)
         break;
     case 4:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4; // 10mA +8.2dBm
         break;
     case 5:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5; // 12mA +9.2dBm
         break;
     case 6:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6; // 14mA +10.0dBm
         break;
     case 7:
     default:
@@ -513,7 +509,8 @@ void txoff(bool led = false)
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
 #ifdef LED_PIN
-    if (led) pinLow(LED_PIN);
+    if (led)
+        pinLow(LED_PIN);
 #endif
     disable_clock();
 }
@@ -826,43 +823,26 @@ bool getINIValues(bool reload = false)
 {
     if (ini.load())
     {
-        // Load all the values
-        //
-        // [Control]
-        config.xmit_enabled =  ini.get_bool_value("Control", "Transmit");
-        // [Common]
-        config.callsign = ini.get_string_value("Common", "Call Sign");
-        config.grid_square = ini.get_string_value("Common", "Grid Square");
-        config.tx_power = ini.get_int_value("Common", "TX Power");
-        config.frequency_string = ini.get_string_value("Common", "Frequency");
-        // [Extended]
-        config.ppm = ini.get_double_value("Extended", "PPM");
-        config.self_cal = ini.get_bool_value("Extended", "Self Cal");
-        config.random_offset = ini.get_bool_value("Extended", "Offset");
-        config.use_led = ini.get_bool_value("Extended", "Use LED");
-        config.power_level = ini.get_int_value("Extended", "Power Level");
-        // [Server]
-        config.port = ini.get_int_value("Server", "Port");
-
-        if (! config.daemon_mode )
+        if (!config.daemon_mode)
             llog.logS(INFO, "\n============================================");
         llog.logS(INFO, "Config:", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
-        if (! config.daemon_mode )
+        if (!config.daemon_mode)
             llog.logS(INFO, "============================================");
         // TODO:  Align these values?
-        llog.logS(INFO, "Transmit Enabled:", ((config.xmit_enabled) ? "true" : "false"));
-        llog.logS(INFO, "Call Sign:", config.callsign);
-        llog.logS(INFO, "Grid Square:", config.grid_square);
-        llog.logS(INFO, "Transmit Power:", config.tx_power);
-        llog.logS(INFO, "Frequencies:", config.frequency_string);
-        llog.logS(INFO, "PPM Offset:", config.ppm);
-        llog.logS(INFO, "Do not use NTP sync:", ((!config.self_cal) ? "true" : "false"));
-        llog.logS(INFO, "Check NTP Each Run (default):", ((config.self_cal) ? "true" : "false"));
-        llog.logS(INFO, "Use Frequency Randomization:", ((config.random_offset) ? "true" : "false"));
-        llog.logS(INFO, "Power Level:", config.power_level);
-        llog.logS(INFO, "Server Port:", config.port);
-        llog.logS(INFO, "Use LED:", ((config.use_led) ? "true" : "false"));
-        if (! config.daemon_mode )
+        llog.logS(INFO, "Transmit Enabled:", ((ini.get_bool_value("Control", "Transmit")) ? "true" : "false"));
+        llog.logS(INFO, "Call Sign:", ini.get_string_value("Common", "Call Sign"));
+        llog.logS(INFO, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
+        llog.logS(INFO, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
+        llog.logS(INFO, "Frequencies:", ini.get_string_value("Common", "Frequency"));
+        llog.logS(INFO, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
+        // TODO:  This is convoluted AF
+        llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
+        llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
+        llog.logS(INFO, "Use Frequency Randomization:", ((ini.get_bool_value("Extended", "Offset")) ? "true" : "false"));
+        llog.logS(INFO, "Power Level:", ini.get_int_value("Extended", "Power Level"));
+        llog.logS(INFO, "Server Port:", ini.get_int_value("Server", "Port"));
+        llog.logS(INFO, "Use LED:", (ini.get_bool_value("Extended", "Use LED")) ? "true" : "false");
+        if (!config.daemon_mode)
             llog.logS(INFO, "============================================\n");
         return true;
     }
@@ -870,7 +850,6 @@ bool getINIValues(bool reload = false)
     {
         return false;
     }
-
 }
 
 /**
@@ -879,10 +858,12 @@ bool getINIValues(bool reload = false)
  * @param str The input string.
  * @return The uppercase version of the string.
  */
-std::string to_uppercase(const std::string &str) {
+std::string to_uppercase(const std::string &str)
+{
     std::string upper_str = str;
     std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
-                   [](unsigned char c) { return std::toupper(c); });
+                   [](unsigned char c)
+                   { return std::toupper(c); });
     return upper_str;
 }
 
@@ -893,27 +874,23 @@ std::string to_uppercase(const std::string &str) {
  * @return The corresponding frequency in Hz.
  * @throws Exits with a fatal log error if the input is invalid.
  */
-double string_to_frequency(const std::string &option) {
+double string_to_frequency(const std::string &option)
+{
     /**
      * @brief Mapping of frequency labels to their corresponding values in Hz.
      *
      * The keys are stored in uppercase to enable case-insensitive lookup.
      */
     static const std::unordered_map<std::string, double> frequency_map = {
-        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0},
-        {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5},
-        {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0},
-        {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0},
-        {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0},
-        {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}
-    };
+        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0}, {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5}, {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0}, {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0}, {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0}, {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}};
 
     // Convert the input to uppercase for case-insensitive comparison
     std::string key = to_uppercase(option);
 
     // Check if the given option exists in the predefined frequency map
     auto it = frequency_map.find(key);
-    if (it != frequency_map.end()) {
+    if (it != frequency_map.end())
+    {
         return it->second;
     }
 
@@ -921,7 +898,8 @@ double string_to_frequency(const std::string &option) {
     char *endp;
     double parsed_freq = std::strtod(option.c_str(), &endp);
 
-    if (endp == option.c_str() || *endp != '\0') {
+    if (endp == option.c_str() || *endp != '\0')
+    {
         llog.logE(FATAL, "Could not parse transmit frequency:", option);
         return 0.0;
     }
@@ -979,21 +957,29 @@ bool parse_commandline(const int &argc, char *const argv[])
             return false;
             break;
         case 'p':
-            // Set PPM to X
-            config.ppm = strtod(optarg, &endp);
-            if ((optarg == endp) || (*endp != '\0'))
+            try
             {
-                llog.logE(FATAL, "Could not parse ppm value.");
+                double ppm = std::stod(optarg);
+                ini.set_double_value("Extended", "PPM", ppm);
+            }
+            catch (const std::invalid_argument &)
+            {
+                llog.logE(FATAL, "Could not parse PPM value: invalid input.");
+                return false;
+            }
+            catch (const std::out_of_range &)
+            {
+                llog.logE(FATAL, "Could not parse PPM value: out of range.");
                 return false;
             }
             break;
         case 's':
             // Self-Cal
-            config.self_cal = true;
+            ini.set_bool_value("Extended", "Self Cal", true);
             break;
         case 'f':
             // Free Running
-            config.self_cal = false;
+            ini.set_bool_value("Extended", "Self Cal", false);
             break;
         case 'r':
             // Repeat
@@ -1015,7 +1001,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'o':
             // Use random offset
-            config.random_offset = true;
+            ini.set_bool_value("Extended", "Offset", true);
             break;
         case 't':
             // Set a test tone
@@ -1039,7 +1025,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'l':
             // Use LED
-            config.use_led = true;
+            ini.set_bool_value("Extended", "Use LED", true);
             break;
         case 'D':
             // Daemon mode, repeats indefinitely
@@ -1048,38 +1034,57 @@ bool parse_commandline(const int &argc, char *const argv[])
             llog.enableTimestamps(config.daemon_mode);
             break;
         case 'd':
+        {
+            try
             {
-                // Set power output 0-7
-                int _pwr = strtol(optarg, NULL, 10);
-                if (_pwr < 0 || _pwr > 7 )
-                {
-                    config.power_level = 7;
-                }
-                else
-                {
-                    config.power_level = _pwr;
-                }
-                break;
+                int power = std::stoi(optarg);
+                power = std::clamp(power, 0, 7); // Ensure power is within [0, 7]
+                ini.set_int_value("Extended", "Power Level", power);
             }
+            catch (const std::invalid_argument &)
+            {
+                llog.logE(FATAL, "Invalid power level: non-numeric input.");
+                ini.set_int_value("Extended", "Power Level", 7); // Default fallback
+            }
+            catch (const std::out_of_range &)
+            {
+                llog.logE(FATAL, "Invalid power level: out of range.");
+                ini.set_int_value("Extended", "Power Level", 7); // Default fallback
+            }
+            break;
+        }
         case 'e':
+        {
+            try
             {
-                // Set power output 0-7
-                int _port = strtol(optarg, NULL, 10);
-                if (_port < 49152 || _port > 65535)
+                int port = std::stoi(optarg);
+                if (port < 49152 || port > 65535)
                 {
-                    config.port = 31415;
+                    llog.logE(WARN, "Invalid port number. Using default: 31415.");
+                    port = 31415; // Default fallback port
                 }
-                else
-                {
-                    config.port = _port;
-                }
-                break;
+                ini.set_int_value("Server", "Port", port);
             }
+            catch (const std::invalid_argument &)
+            {
+                llog.logE(FATAL, "Invalid port number: non-numeric input.");
+                ini.set_int_value("Server", "Port", 31415); // Default fallback
+            }
+            catch (const std::out_of_range &)
+            {
+                llog.logE(FATAL, "Invalid port number: out of range.");
+                ini.set_int_value("Server", "Port", 31415); // Default fallback
+            }
+            break;
+        }
         default:
             return false;
         }
     }
-    if (config.useini == false) { config.xmit_enabled = true; }
+    if (config.useini == false)
+    {
+        ini.set_bool_value("Control", "Transmit", true);
+    }
     return true;
 }
 
@@ -1087,107 +1092,148 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
 {
     if (config.useini)
     {
-        if (! reparse) iniMonitor.filemon(config.inifile.c_str());
-        if ( !getINIValues(reparse) )
+        if (!reparse)
+            iniMonitor.filemon(config.inifile.c_str());
+        if (!getINIValues(reparse))
         {
             llog.logE(FATAL, "Failed to reload the INI.");
-            exit(-1);
+            std::exit(EXIT_FAILURE);
         }
-        config.center_freq_set.clear();
-
-        // Declare a vector to store the extracted frequency values as strings
-        std::vector<std::string> freq_list;
-
-        // Create an input string stream from the frequency string to process it word by word
-        std::istringstream s(config.frequency_string);
-
-        // Temporary variable to hold each extracted token
+        config.center_freq_set = {}; // Clears implicitly
+        std::istringstream s(ini.get_string_value("Common", "Frequency"));
         std::string token;
 
-        // Read words from the input stream and store them in freq_list
-        while (s >> token) {
-            freq_list.push_back(token); // Add each extracted token to the vector
-        }
-        
-        // Parse the list as a list of strings, and convert them to doubles
-        for (const auto& f : freq_list)
+        while (s >> token)
         {
-            double parsed_freq = string_to_frequency(f);
-            config.center_freq_set.push_back(parsed_freq);
+            double parsed_freq = string_to_frequency(token);
+            if (parsed_freq > 0)
+            {
+                config.center_freq_set.push_back(parsed_freq);
+            }
+            else
+            {
+                llog.logE(WARN, "Invalid frequency ignored:" + token);
+            }
         }
     }
     else
     {
-        if ( ! reparse)
+        if (!reparse)
         {
+            config.center_freq_set.clear(); // Clear before processing frequencies
+
             unsigned int n_free_args = 0;
             while (optind < argc)
             {
-                // Check for callsign, grid_square, tx_power
-                if (n_free_args == 0)
+                std::string argument = argv[optind];
+
+                switch (n_free_args)
                 {
-                    config.callsign = argv[optind++];
-                    n_free_args++;
-                    continue;
+                case 0:
+                {
+                    // Convert Call Sign to uppercase
+                    std::transform(argument.begin(), argument.end(), argument.begin(), ::toupper);
+                    ini.set_string_value("Common", "Call Sign", argument);
+                    break;
                 }
-                if (n_free_args == 1)
+                case 1:
                 {
-                    config.grid_square = argv[optind++];
-                    n_free_args++;
-                    continue;
+                    // Convert Grid Square to uppercase
+                    std::transform(argument.begin(), argument.end(), argument.begin(), ::toupper);
+                    ini.set_string_value("Common", "Grid Square", argument);
+                    break;
                 }
-                if (n_free_args == 2)
-                {
-                    // Convert to an integer
-                    try {
-                        config.tx_power = std::stoi(argv[optind++]);
-                    } catch (const std::exception &e) {
-                        std::cerr << "Error: Invalid power value: " << argv[optind - 1] << std::endl;
-                        return 1;  // Exit with error code
+                case 2:
+                    try
+                    {
+                        int tx_power = std::stoi(argument);
+                        ini.set_int_value("Common", "TX Power", tx_power);
                     }
-                    n_free_args++;
-                    continue;
+                    catch (const std::invalid_argument &)
+                    {
+                        std::cerr << "Error: Invalid power value (non-numeric): " << argument << std::endl;
+                        return 1;
+                    }
+                    catch (const std::out_of_range &)
+                    {
+                        std::cerr << "Error: Invalid power value (out of range): " << argument << std::endl;
+                        return 1;
+                    }
+                    break;
+                default:
+                    // Treat as a frequency and convert
+                    double parsed_freq = string_to_frequency(argument);
+                    config.center_freq_set.push_back(parsed_freq);
+                    break;
                 }
-                // Treat the freq as a string, and convert it to a double
-                std::string argument = argv[optind];  // Convert to std::string
-                double parsed_freq = string_to_frequency(argument);  // Call the new function
-                config.center_freq_set.push_back(parsed_freq);  // Store the result
+
                 optind++;
+                n_free_args++;
             }
         }
     }
 
-    // Convert to uppercase
-    transform(config.callsign.begin(), config.callsign.end(), config.callsign.begin(), ::toupper);
-    transform(config.grid_square.begin(), config.grid_square.end(), config.grid_square.begin(), ::toupper);
-
     // Check consistency among command line options.
-    if (config.ppm && config.self_cal)
+    double ppm_value = ini.get_double_value("Extended", "PPM"); // Use a distinct default
+
+    if (ppm_value != 0.0 && ini.get_bool_value("Extended", "Self Cal"))
     {
         llog.logE(INFO, "PPM value is being ignored.");
-        config.ppm = 0.0;
+        ini.set_double_value("Extended", "PPM", 0.0); // Only update if it was actually set
     }
+
+    // TONE does not need Callsign, gridsquare, etc.
     if (config.mode == TONE)
     {
-        if ((config.callsign.empty()) || (config.grid_square.empty()) || (config.tx_power > 0) || (config.center_freq_set.empty()) || config.random_offset)
+        bool missing_call_or_grid = ini.get_string_value("Common", "Call Sign").empty() ||
+                                    ini.get_string_value("Common", "Grid Square").empty();
+        bool has_tx_power = ini.get_int_value("Common", "TX Power") > 0;
+        bool has_offset = ini.get_bool_value("Extended", "Offset");
+
+        if (missing_call_or_grid || has_tx_power || config.center_freq_set.empty() || has_offset)
         {
             llog.logE(INFO, "Callsign, gridsquare, etc. are ignored when generating test tone.");
         }
-        config.random_offset = 0;
+
+        ini.set_bool_value("Extended", "Offset", false);
+
         if (config.test_tone <= 0)
         {
             llog.logE(FATAL, "Test tone frequency must be positive.");
-            exit(-1);
+            std::exit(EXIT_FAILURE);
         }
     }
     else
     {
+        // Check if required parameters are missing
+        bool missing_call_sign = ini.get_string_value("Common", "Call Sign").empty();
+        bool missing_grid_square = ini.get_string_value("Common", "Grid Square").empty();
+        bool invalid_tx_power = ini.get_int_value("Common", "TX Power") <= 0;
+        bool no_frequencies = config.center_freq_set.empty();
 
-        if ((config.callsign == "") || (config.grid_square == "") || (config.tx_power <= 0) || (config.center_freq_set.size() == 0))
+        if (missing_call_sign || missing_grid_square || invalid_tx_power || no_frequencies)
         {
-            llog.logE(FATAL, "must specify callsign, gridsquare, dBm, and at least one frequency.");
+            llog.logE(FATAL, "Error: Missing required parameters.");
+
+            if (missing_call_sign)
+            {
+                llog.logE(FATAL, " - Missing callsign.");
+            }
+            if (missing_grid_square)
+            {
+                llog.logE(FATAL, " - Missing grid square.");
+            }
+            if (invalid_tx_power)
+            {
+                llog.logE(FATAL, " - TX power must be greater than 0 dBm.");
+            }
+            if (no_frequencies)
+            {
+                llog.logE(FATAL, " - At least one frequency must be specified.");
+            }
+
             llog.logE(FATAL, "Try: wsprrypi --help");
-            exit(-1);
+            std::exit(EXIT_FAILURE);
         }
     }
 
@@ -1195,57 +1241,75 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     if (config.mode == WSPR)
     {
         llog.logS(INFO, "WSPR packet payload:");
-        llog.logS(INFO, "- Callsign:", config.callsign);
-        llog.logS(INFO, "- Locator:", config.grid_square);
-        llog.logS(INFO, "- Power:", config.tx_power, " dBm");
+        llog.logS(INFO, "- Callsign:", ini.get_string_value("Common", "Call Sign"));
+        llog.logS(INFO, "- Locator:", ini.get_string_value("Common", "Grid Square"));
+        llog.logS(INFO, "- Power:", ini.get_int_value("Common", "TX Power"), " dBm");
         llog.logS(INFO, "Requested TX frequencies:");
 
-        // Concatenate a message
+        // Concatenate frequency messages for logging
         std::ostringstream log_message;
-        for (unsigned int t = 0; t < config.center_freq_set.size(); t++) {
-            log_message << "- " << std::setprecision(6) << std::fixed
-                        << config.center_freq_set[t] / 1e6 << " MHz\n";
+        for (const auto &freq : config.center_freq_set)
+        {
+            log_message << "- " << std::setprecision(6) << std::fixed << (freq / 1e6) << " MHz";
         }
 
-        // Log the concatenated message
+        // Log the formatted message
         llog.logS(INFO, log_message.str());
 
+        // Store values locally to avoid repeated INI lookups
+        bool self_cal = ini.get_bool_value("Extended", "Self Cal");
+        bool offset_enabled = ini.get_bool_value("Extended", "Offset");
+        int terminate_time = config.terminate;
+        bool repeat_mode = config.repeat;
+        bool daemon_mode = config.daemon_mode;
 
-        if (config.self_cal)
+        // Self Calibration or PPM correction
+        if (self_cal)
         {
-            llog.logS(INFO, "- Using NTP to calibrate transmission frequency.");
+            llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
         }
-        else if (config.ppm)
+        else
         {
-            llog.logS(INFO, "- PPM value to be used for all transmissions:", config.ppm);
-        }
-
-        if (config.terminate > 0)
-        {
-            llog.logS(INFO, "- TX will stop after:", config.terminate);
-        }
-        else if (config.repeat && !config.daemon_mode)
-        {
-            llog.logS(INFO, "- Transmissions will continue forever until stopped with CTRL-C.");
+            // Check if PPM was explicitly set (not the default placeholder)
+            if (ppm_value != 0.0)
+            {
+                llog.logS(INFO, "PPM value to be used for all transmissions:", std::fixed, std::setprecision(2), ppm_value);
+            }
         }
 
-        if (config.random_offset)
+        // Termination or Continuous Transmission Mode
+        if (terminate_time > 0)
+        {
+            llog.logS(INFO, "TX will stop after:", terminate_time);
+        }
+
+        if (repeat_mode && !daemon_mode)
+        {
+            llog.logS(INFO, "Transmissions will continue forever until stopped with CTRL-C.");
+        }
+
+        // Frequency Offset Handling
+        if (offset_enabled)
         {
             llog.logS(INFO, "- A small random frequency offset will be added to all transmissions.");
         }
     }
     else
     {
-        llog.logS(INFO, (std::ostringstream() << std::setprecision(6) << std::fixed
-                                 << "A test tone will be generated at frequency "
-                                 << config.test_tone / 1e6 << " MHz.").str());
-        if (config.self_cal)
+        // Log test tone frequency
+        llog.logS(INFO, "A test tone will be generated at frequency ",
+                  std::fixed, std::setprecision(6), config.test_tone / 1e6, " MHz.");
+
+        if (ini.get_bool_value("Extended", "Self Cal"))
         {
             llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
         }
-        else if (config.ppm)
+        else
         {
-            llog.logS(INFO, "PPM value to be used to generate the tone:", config.ppm);
+            if (ppm_value != 0.0)
+            {
+                llog.logS(INFO, "PPM value to be used to generate the tone:", std::fixed, std::setprecision(2), ppm_value);
+            }
         }
     }
     return true;
@@ -1267,7 +1331,11 @@ bool wait_every(int minute)
         {
             // Delay and make sure the file is done changing
             usleep(500000);
-            while (iniMonitor.changed()) {;;}
+            while (iniMonitor.changed())
+            {
+                ;
+                ;
+            }
 
             llog.logS(INFO, "INI file changed, reloading parameters.");
             parseConfigData(true);
@@ -1280,7 +1348,7 @@ bool wait_every(int minute)
         usleep(1000);
     }
     usleep(1000000); // Wait another second
-    return true; // OK to proceed
+    return true;     // OK to proceed
 }
 
 bool update_ppm()
@@ -1308,11 +1376,11 @@ bool update_ppm()
     }
     else
     {
-        if (config.ppm != ppm_new)
+        if (ini.get_double_value("Extended", "PPM") != ppm_new)
         {
             llog.logS(INFO, "Obtained new ppm value:", ppm_new);
         }
-        config.ppm = ppm_new;
+        ini.set_double_value("Extended", "PPM", ppm_new);
         return true;
     }
 }
@@ -1349,7 +1417,7 @@ void open_mbox()
     if (mbox.handle < 0)
     {
         llog.logE(FATAL, "Failed to open mailbox.");
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
 }
 
@@ -1378,7 +1446,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
         llog.logE(FATAL, "Can't open /dev/mem");
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
     peri_base_virt = (unsigned *)mmap(
         NULL,
@@ -1391,14 +1459,14 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     if ((long int)peri_base_virt == -1)
     {
         llog.logE(FATAL, "peri_base_virt mmap error.");
-        exit(-1);
+        std::exit(EXIT_FAILURE);
     }
     close(mem_fd);
 }
 
 /**
  * @brief Restores the terminal settings to their original state.
- * @details This function restores terminal attributes that were saved 
+ * @details This function restores terminal attributes that were saved
  *          before modifications. It is registered with `atexit()` and
  *          is also called in the signal handler.
  */
@@ -1412,8 +1480,8 @@ void restoreTerminalSettings()
 
 /**
  * @brief Disables the echoing of control characters in the terminal.
- * @details This function modifies terminal attributes to prevent control 
- *          characters (like ^C) from being displayed. It ensures settings 
+ * @details This function modifies terminal attributes to prevent control
+ *          characters (like ^C) from being displayed. It ensures settings
  *          are restored on exit.
  */
 void disableSignalEcho()
@@ -1427,7 +1495,7 @@ void disableSignalEcho()
         return;
     }
 
-    original_term = term;  // Store original settings
+    original_term = term;     // Store original settings
     term.c_lflag &= ~ECHOCTL; // Disable control character echoing
 
     // Apply the new settings immediately
@@ -1442,9 +1510,9 @@ void disableSignalEcho()
 
 /**
  * @brief Logs the exit message and performs cleanup before termination.
- * @details This function logs the signal type and description, restores 
+ * @details This function logs the signal type and description, restores
  *          terminal settings, and ensures a proper exit status.
- * 
+ *
  * @param sig The signal number that caused the termination.
  * @param severity Log level (INFO for normal, FATAL for system errors).
  */
@@ -1454,20 +1522,48 @@ void handleExitSignal(int sig, int severity)
 
     switch (sig)
     {
-        case SIGINT:   log_message = "Exiting due to interrupt (Ctrl+C)."; break;
-        case SIGTERM:  log_message = "Exiting due to termination request (SIGTERM)."; break;
-        case SIGUSR1:  log_message = "Exiting due to user-defined signal 1 (SIGUSR1)."; break;
-        case SIGUSR2:  log_message = "Exiting due to user-defined signal 2 (SIGUSR2)."; break;
-        case SIGQUIT:  log_message = "Exiting due to quit signal (SIGQUIT)."; break;
-        case SIGPWR:   log_message = "Exiting due to power failure signal (SIGPWR)."; break;
-        case SIGCONT:  log_message = "Exiting due to continue signal (SIGCONT)."; break;
-        case SIGKILL:  log_message = "Exiting due to kill signal (SIGKILL)."; break;
-        case SIGSEGV:  log_message = "Exiting due to segmentation fault (SIGSEGV)."; break;
-        case SIGBUS:   log_message = "Exiting due to bus error (SIGBUS)."; break;
-        case SIGFPE:   log_message = "Exiting due to floating point exception (SIGFPE)."; break;
-        case SIGILL:   log_message = "Exiting due to illegal instruction (SIGILL)."; break;
-        case SIGHUP:   log_message = "Exiting due to hangup signal (SIGHUP)."; break;
-        default:       log_message = "Exiting due to unknown signal."; break;
+    case SIGINT:
+        log_message = "Exiting due to interrupt (Ctrl+C).";
+        break;
+    case SIGTERM:
+        log_message = "Exiting due to termination request (SIGTERM).";
+        break;
+    case SIGUSR1:
+        log_message = "Exiting due to user-defined signal 1 (SIGUSR1).";
+        break;
+    case SIGUSR2:
+        log_message = "Exiting due to user-defined signal 2 (SIGUSR2).";
+        break;
+    case SIGQUIT:
+        log_message = "Exiting due to quit signal (SIGQUIT).";
+        break;
+    case SIGPWR:
+        log_message = "Exiting due to power failure signal (SIGPWR).";
+        break;
+    case SIGCONT:
+        log_message = "Exiting due to continue signal (SIGCONT).";
+        break;
+    case SIGKILL:
+        log_message = "Exiting due to kill signal (SIGKILL).";
+        break;
+    case SIGSEGV:
+        log_message = "Exiting due to segmentation fault (SIGSEGV).";
+        break;
+    case SIGBUS:
+        log_message = "Exiting due to bus error (SIGBUS).";
+        break;
+    case SIGFPE:
+        log_message = "Exiting due to floating point exception (SIGFPE).";
+        break;
+    case SIGILL:
+        log_message = "Exiting due to illegal instruction (SIGILL).";
+        break;
+    case SIGHUP:
+        log_message = "Exiting due to hangup signal (SIGHUP).";
+        break;
+    default:
+        log_message = "Exiting due to unknown signal.";
+        break;
     }
 
     // Log signal details
@@ -1494,14 +1590,14 @@ void handleExitSignal(int sig, int severity)
     unlink(LOCAL_DEVICE_FILE_NAME);
 
     // Determine exit status
-    exit(severity == FATAL ? -1 : 0);
+    exit(severity == FATAL ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /**
  * @brief Handles termination signals, logs exit messages, and cleans up.
- * @details This function is registered as a signal handler and calls 
+ * @details This function is registered as a signal handler and calls
  *          `handleExitSignal()` with the appropriate severity level.
- * 
+ *
  * @param sig The signal number received by the process.
  */
 void cleanupAndExit(int sig)
@@ -1513,8 +1609,6 @@ void cleanupAndExit(int sig)
 int main(const int argc, char *const argv[])
 {
     llog.setLogLevel(DEBUG);
-    llog.logS(INFO, "Starting Wsprry Pi.", "(", 0.0, ")");
-    llog.logS(INFO, "Starting Wsprry Pi. (", 0.0, ")");
 
     // Set up signal handlers
     signal(SIGINT, cleanupAndExit);
@@ -1529,18 +1623,20 @@ int main(const int argc, char *const argv[])
     // Modify terminal settings
     disableSignalEcho();
 
-    if ( ! parse_commandline(argc, argv) ) return 1;
+    if (!parse_commandline(argc, argv))
+        return 1;
 
     llog.logS(INFO, version_string());
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
 
     getPLLD(); // Get PLLD Frequency
 
-    #ifdef LED_PIN
+#ifdef LED_PIN
     setupGPIO(LED_PIN);
-    #endif
+#endif
 
-    if ( ! parseConfigData(argc, argv) ) return 1;
+    if (!parseConfigData(argc, argv))
+        return 1;
 
     // Make sure we're the only wsprrypi process
     wsprrypi::SingletonProcess singleton(SINGLETON_PORT);
@@ -1552,7 +1648,7 @@ int main(const int argc, char *const argv[])
             return 1;
         }
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         llog.logE(FATAL, "Failed to enforce singleton:", e.what());
         return 1;
@@ -1592,7 +1688,7 @@ int main(const int argc, char *const argv[])
         llog.logS(INFO, temp.str());
         llog.logS(INFO, "Press CTRL-C to exit.");
 
-        txon(config.use_led, config.power_level);
+        txon(ini.get_bool_value("Extended", "Use LED"), ini.get_int_value("Extended", "Power Level"));
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1600,13 +1696,14 @@ int main(const int argc, char *const argv[])
         double center_freq_actual;
         while (true)
         {
-            if (config.self_cal)
+            if (ini.get_bool_value("Extended", "Self Cal"))
             {
-                if (! update_ppm()) cleanupAndExit(-1);
+                if (!update_ppm())
+                    cleanupAndExit(-1);
             }
-            if (config.ppm != ppm_prev)
+            if (ini.get_double_value("Extended", "PPM") != ppm_prev)
             {
-                setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_table_freq, center_freq_actual, constPage);
                 // cout << std::setprecision(30) << dma_table_freq[0] << std::endl;
                 // cout << std::setprecision(30) << dma_table_freq[1] << std::endl;
                 // cout << std::setprecision(30) << dma_table_freq[2] << std::endl;
@@ -1617,7 +1714,7 @@ int main(const int argc, char *const argv[])
                     temp << std::setprecision(6) << std::fixed << "Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations." << std::endl;
                     llog.logE(INFO, temp.str());
                 }
-                ppm_prev = config.ppm;
+                ppm_prev = ini.get_double_value("Extended", "PPM");
             }
             txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
         }
@@ -1628,12 +1725,12 @@ int main(const int argc, char *const argv[])
         for (;;)
         { // Reload Loop >
             // Initialize WSPR Message (message)
-            WsprMessage message(config.callsign, config.grid_square, config.tx_power);
+            WsprMessage message(ini.get_string_value("Common", "Call Sign"), ini.get_string_value("Common", "Grid Square"), ini.get_int_value("Common", "TX Power"));
 
             // Access the generated symbols
-            unsigned char* symbols = message.symbols;
+            unsigned char *symbols = message.symbols;
 
-            #ifdef WSPR_DEBUG
+#ifdef WSPR_DEBUG
             // Use a string stream to concatenate symbols
             std::ostringstream symbols_stream;
 
@@ -1648,8 +1745,8 @@ int main(const int argc, char *const argv[])
 
             // Print the concatenated string in one call
             llog.logS(DEBUG, "Generated WSPR symbols:", symbols_stream.str());
-            // std::cout << symbols_stream.str() << std::endl;
-            #endif
+// std::cout << symbols_stream.str() << std::endl;
+#endif
 
             llog.logS(INFO, "Ready to transmit (setup complete).");
             int band = 0;
@@ -1667,7 +1764,7 @@ int main(const int argc, char *const argv[])
                 double tone_spacing = 1.0 / wspr_symtime;
 
                 // Add random offset
-                if ((center_freq_desired != 0) && config.random_offset)
+                if ((center_freq_desired != 0) && ini.get_bool_value("Extended", "Offset"))
                 {
                     center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
                 }
@@ -1686,7 +1783,7 @@ int main(const int argc, char *const argv[])
                 else
                 {
                     llog.logS(INFO, "Waiting for next WSPR transmission window.");
-                    if ( ! wait_every((wspr15) ? 15 : 2) )
+                    if (!wait_every((wspr15) ? 15 : 2))
                     {
                         // Break and reload if ini changes
                         break;
@@ -1694,9 +1791,10 @@ int main(const int argc, char *const argv[])
                 }
 
                 // Update crystal calibration information
-                if (config.self_cal)
+                if (ini.get_bool_value("Extended", "Self Cal"))
                 {
-                    if (! update_ppm()) cleanupAndExit(-1);
+                    if (!update_ppm())
+                        cleanupAndExit(-1);
                 }
 
                 // Create the DMA table for this center frequency
@@ -1704,7 +1802,7 @@ int main(const int argc, char *const argv[])
                 double center_freq_actual;
                 if (center_freq_desired)
                 {
-                    setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+                    setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_table_freq, center_freq_actual, constPage);
                 }
                 else
                 {
@@ -1712,7 +1810,7 @@ int main(const int argc, char *const argv[])
                 }
 
                 // Send the message if freq != 0 and transmission is enabled
-                if (center_freq_actual && config.xmit_enabled)
+                if (center_freq_actual && ini.get_bool_value("Control", "Transmit"))
                 {
                     // Print a status message right before transmission begins.
                     llog.logS(INFO, "Transmission started.");
@@ -1724,7 +1822,7 @@ int main(const int argc, char *const argv[])
                     // Get Begin Timestamp
                     auto txBegin = std::chrono::high_resolution_clock::now();
 
-                    txon(config.use_led, config.power_level);
+                    txon(ini.get_bool_value("Extended", "Use LED"), ini.get_int_value("Extended", "Power Level"));
                     for (int i = 0; i < 162; i++)
                     {
                         gettimeofday(&sym_start, NULL);
@@ -1739,7 +1837,7 @@ int main(const int argc, char *const argv[])
                     n_tx++;
 
                     // Turn transmitter off
-                    txoff(config.use_led);
+                    txoff(ini.get_bool_value("Extended", "Use LED"));
 
                     // Get End Timestamp
                     auto txEnd = std::chrono::high_resolution_clock::now();
@@ -1775,3 +1873,7 @@ int main(const int argc, char *const argv[])
 // TODO:  Add in tcp server
 // TODO:  Move singleton to server maybe
 // TODO:  Consider an external file for band to frequency lookups
+// TODO:  Add LED pin to config?
+// TODO:  This is convoluted AF
+//          llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
+//          llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
