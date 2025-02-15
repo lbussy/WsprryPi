@@ -440,13 +440,11 @@ void disable_clock()
     }
 }
 
-void txon(bool led = false, int power_level = 7)
+void txon()
 {
-    // Turn on TX
-#ifdef LED_PIN
-    if (led)
-        pinHigh(LED_PIN);
-#endif
+    // Turn on LED'
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        pinHigh(ini.get_int_value("Extended", "LED Pin"));
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -464,7 +462,7 @@ void txon(bool led = false, int power_level = 7)
     CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
 
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    switch (power_level)
+    switch (ini.get_int_value("Extended", "Power Level"))
     {
     case 0:
         ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0; // 2mA -3.4dBm
@@ -503,15 +501,12 @@ void txon(bool led = false, int power_level = 7)
     ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
 }
 
-void txoff(bool led = false)
+void txoff()
 {
-    // Turn transmitter on
-    // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
-#ifdef LED_PIN
-    if (led)
-        pinLow(LED_PIN);
-#endif
+    // Turn off LED
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        pinLow(ini.get_int_value("Extended", "LED Pin"));
+    // Turn transmitter off
     disable_clock();
 }
 
@@ -825,7 +820,7 @@ bool getINIValues(bool reload = false)
     {
         if (!config.daemon_mode)
             llog.logS(INFO, "\n============================================");
-        llog.logS(INFO, "Config:", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
+        llog.logS(INFO, "Config", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
         if (!config.daemon_mode)
             llog.logS(INFO, "============================================");
         // TODO:  Align these values?
@@ -842,6 +837,7 @@ bool getINIValues(bool reload = false)
         llog.logS(INFO, "Power Level:", ini.get_int_value("Extended", "Power Level"));
         llog.logS(INFO, "Server Port:", ini.get_int_value("Server", "Port"));
         llog.logS(INFO, "Use LED:", (ini.get_bool_value("Extended", "Use LED")) ? "true" : "false");
+        llog.logS(INFO, "LED Pin:", ini.get_int_value("Extended", "LED Pin"));
         if (!config.daemon_mode)
             llog.logS(INFO, "============================================\n");
         return true;
@@ -921,6 +917,7 @@ bool parse_commandline(const int &argc, char *const argv[])
         {"test-tone", required_argument, 0, 't'},
         {"no-delay", no_argument, 0, 'n'},
         {"led", no_argument, 0, 'l'},
+        {"led_pin", required_argument, 0, 'b'},
         {"ini-file", required_argument, 0, 'i'},
         {"daemon-mode", no_argument, 0, 'D'},
         {"power_level", required_argument, 0, 'd'},
@@ -931,7 +928,7 @@ bool parse_commandline(const int &argc, char *const argv[])
     {
         /* getopt_long stores the option index here. */
         int option_index = 0;
-        int c = getopt_long(argc, argv, "?vhp:sfrxde:ot:nli:D",
+        int c = getopt_long(argc, argv, "?vhp:sfrxde:ot:bnli:D",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -1026,6 +1023,19 @@ bool parse_commandline(const int &argc, char *const argv[])
         case 'l':
             // Use LED
             ini.set_bool_value("Extended", "Use LED", true);
+            break;
+        case 'b':
+            try {
+                // Convert optarg to an integer and store it in the INI file
+                int led_pin = std::stoi(optarg);
+                ini.set_int_value("Extended", "LED Pin", led_pin);
+            } catch (const std::invalid_argument&) {
+                llog.logE(FATAL, "Invalid LED pin: non-numeric value provided.");
+                return 1;
+            } catch (const std::out_of_range&) {
+                llog.logE(FATAL, "Invalid LED pin: value out of range.");
+                return 1;
+            }
             break;
         case 'D':
             // Daemon mode, repeats indefinitely
@@ -1581,9 +1591,8 @@ void handleExitSignal(int sig, int severity)
     restoreTerminalSettings();
 
     // Perform necessary cleanup before exit
-#ifdef LED_PIN
-    pinLow(LED_PIN);
-#endif
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        pinLow(ini.get_int_value("Extended", "LED Pin"));
     disable_clock();
     unSetupDMA();
     deallocMemPool();
@@ -1631,9 +1640,9 @@ int main(const int argc, char *const argv[])
 
     getPLLD(); // Get PLLD Frequency
 
-#ifdef LED_PIN
-    setupGPIO(LED_PIN);
-#endif
+    // Set up GPIO if LED option is on
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        setupGPIO(ini.get_int_value("Extended", "LED Pin"));
 
     if (!parseConfigData(argc, argv))
         return 1;
@@ -1670,7 +1679,7 @@ int main(const int argc, char *const argv[])
 
     // Set up DMA
     open_mbox();
-    txon(false, 0);
+    txon();
     setupDMA(constPage, instrPage, instrs);
     txoff();
 
@@ -1688,7 +1697,7 @@ int main(const int argc, char *const argv[])
         llog.logS(INFO, temp.str());
         llog.logS(INFO, "Press CTRL-C to exit.");
 
-        txon(ini.get_bool_value("Extended", "Use LED"), ini.get_int_value("Extended", "Power Level"));
+        txon();
         int bufPtr = 0;
         std::vector<double> dma_table_freq;
         // Set to non-zero value to ensure setupDMATab is called at least once.
@@ -1822,7 +1831,7 @@ int main(const int argc, char *const argv[])
                     // Get Begin Timestamp
                     auto txBegin = std::chrono::high_resolution_clock::now();
 
-                    txon(ini.get_bool_value("Extended", "Use LED"), ini.get_int_value("Extended", "Power Level"));
+                    txon();
                     for (int i = 0; i < 162; i++)
                     {
                         gettimeofday(&sym_start, NULL);
@@ -1837,7 +1846,7 @@ int main(const int argc, char *const argv[])
                     n_tx++;
 
                     // Turn transmitter off
-                    txoff(ini.get_bool_value("Extended", "Use LED"));
+                    txoff();
 
                     // Get End Timestamp
                     auto txEnd = std::chrono::high_resolution_clock::now();
@@ -1873,7 +1882,6 @@ int main(const int argc, char *const argv[])
 // TODO:  Add in tcp server
 // TODO:  Move singleton to server maybe
 // TODO:  Consider an external file for band to frequency lookups
-// TODO:  Add LED pin to config?
 // TODO:  This is convoluted AF
 //          llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
 //          llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));

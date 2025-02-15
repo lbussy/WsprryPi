@@ -33,10 +33,7 @@ OUT = wsprrypi
 # Executable name derived from the output binary name
 EXE = $(OUT)
 
-# Macro for LED pin number, used as a compile-time constant
-# Pin 12, GPIO18, BCM18
-LED_PIN = 18
-
+# INI file for test target
 INI_FILE = /usr/local/etc/wsprrypi.ini
 
 # Installation directory for the binary
