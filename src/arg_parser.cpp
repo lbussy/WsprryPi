@@ -427,7 +427,7 @@ bool validate_config_data()
         {
             config.terminate = config.terminate.value_or(1);
             llog.logS(INFO, "TX will stop after:", config.terminate.value(), "iterations.");
-    
+
             if (config.repeat)
             {
                 llog.logS(INFO, "Transmissions will continue until stopped with CTRL-C.");

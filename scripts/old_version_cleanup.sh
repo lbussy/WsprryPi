@@ -8,8 +8,8 @@ IFS=$'\n\t'
 # @details Cleans all files and folders used by versions before 1.3.0.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config_lib+40.9925967-dirty
-# @date 2025-02-14
+# @version 1.2.1-config_lib+50.0985f26-dirty
+# @date 2025-02-16
 # @copyright MIT License
 #
 # @license

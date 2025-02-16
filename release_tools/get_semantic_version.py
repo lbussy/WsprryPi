@@ -6,8 +6,8 @@
 # @brief Creates a semantic version from local repo.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config_lib+40.9925967-dirty
-# @date 2025-02-14
+# @version 1.2.1-config_lib+50.0985f26-dirty
+# @date 2025-02-16
 # @copyright MIT License
 #
 # @license
@@ -47,7 +47,7 @@ import os
 import inspect
 import argparse
 
-__version__ = "1.2.1-config_lib+40.9925967-dirty"
+__version__ = "1.2.1-config_lib+50.0985f26-dirty"
 
 
 class SemanticVersion:

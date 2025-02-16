@@ -144,8 +144,8 @@ extern IniFile ini;
 /**
  * @brief Global instance for monitoring file changes.
  *
- * This external instance of `MonitorFile` is responsible for detecting 
- * modifications to the INI configuration file. It allows the application 
+ * This external instance of `MonitorFile` is responsible for detecting
+ * modifications to the INI configuration file. It allows the application
  * to respond dynamically to configuration updates without requiring a restart.
  *
  * @note This is particularly useful for live configuration updates.

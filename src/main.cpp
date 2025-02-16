@@ -1287,13 +1287,10 @@ int main(const int argc, char *const argv[])
 }
 
 // TODO: Add in tcp server
-// TODO: Move singleton to server maybe
 // TODO: Consider an external file for band to frequency lookups
-// TODO: This is convoluted AF
-//          llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
-//          llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
-// TODO:  Set daemon mode in INI
+// TODO: Set daemon mode in INI?
 // TODO: Modern C++ prefers constexpr over preprocessor macros (#define). Maybe all of them can go in a separate file.
 // TODO: See if we can use C++ 20 and .contains() (in arg parsing)
 // TODO: Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
 // TODO: Documentation needs updates with changes to command line parsing (including INI vs option precedence)
+// TODO: Update web page for INI fle changes
