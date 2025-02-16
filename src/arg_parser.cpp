@@ -5,8 +5,8 @@
  * This file is part of WsprryPi, a project originally forked from
  * threeme3/WsprryPi (no longer active on GitHub).
  *
- * However, this new code added to the project is distributed under under
- * the MIT License. See LICENSE.MIT.md for more information.
+ * However, this new code added to the project is licensed under the
+ * MIT License. See LICENSE.MIT.md for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
@@ -29,7 +29,8 @@
  * SOFTWARE.
  */
 
-#include "arg_parser.hpp"
+#include "arg_parser.hpp"   // Header for this code
+#include "constants.hpp"    // Program constants
 
 /**
  * @brief Global configuration instance for argument parsing.

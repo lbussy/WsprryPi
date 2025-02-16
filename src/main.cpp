@@ -49,6 +49,7 @@
 #include "monitorfile.hpp"
 #include "singleton.hpp"
 #include "arg_parser.hpp"
+#include "constants.hpp"
 
 #include "main.hpp"
 
@@ -64,6 +65,7 @@ static struct termios original_term;
 // #define WSPR_DEBUG
 
 // TCP port to bind to check for Singleton
+// TODO: We may not need this with tcp_server running
 #define SINGLETON_PORT 1234
 
 // Logging library
@@ -124,33 +126,6 @@ MonitorFile iniMonitor;
 // addresses and structures are created and calculations performed in this
 // program to figure out how to access them with virtual addresses.
 
-// Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
-// 0.682s long. For some reason, despite the use of DMA, the load on the PI
-// affects the TX length of the symbols. However, the varying symbol length is
-// compensated for in the main loop.
-#define F_PWM_CLK_INIT (31156186.6125761)
-
-// WSRP nominal symbol time
-#define WSPR_SYMTIME (8192.0 / 12000.0)
-
-/**
- * @brief Random frequency offset for WSPR transmissions.
- *
- * These constants define the amount of random frequency offset applied
- * to WSPR transmissions when the `--offset` option is enabled.
- *
- * - `WSPR_RAND_OFFSET`: Specifies the offset range for standard WSPR transmissions.
- * - `WSPR15_RAND_OFFSET`: Specifies the offset range for WSPR-15 transmissions.
- */
-// TODO:  See where these should be used
-constexpr int WSPR_RAND_OFFSET = 80;  ///< Random offset (±80 Hz) for WSPR transmissions.
-constexpr int WSPR15_RAND_OFFSET = 8; ///< Random offset (±8 Hz) for WSPR-15 transmissions.
-
-#define PAGE_SIZE (4 * 1024)
-#define BLOCK_SIZE (4 * 1024)
-
-#define PWM_CLOCKS_PER_ITER_NOMINAL 1000
-
 // Given an address in the bus address space of the peripherals, this
 // macro calculates the appropriate virtual address to use to access
 // the requested bus address space. It does this by first subtracting
@@ -162,14 +137,6 @@ constexpr int WSPR15_RAND_OFFSET = 8; ///< Random offset (±8 Hz) for WSPR-15 tr
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
 
-// The following are all bus addresses.
-#define GPIO_BUS_BASE (0x7E200000)
-#define CM_GP0CTL_BUS (0x7e101070)
-#define CM_GP0DIV_BUS (0x7e101074)
-#define PADS_GPIO_0_27_BUS (0x7e10002c)
-#define CLK_BUS_BASE (0x7E101000)
-#define DMA_BUS_BASE (0x7E007000)
-#define PWM_BUS_BASE (0x7e20C000) /* PWM controller */
 
 // Used for GPIO DIO Access:
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
