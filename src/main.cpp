@@ -48,6 +48,7 @@
 #include "version.hpp"
 #include "monitorfile.hpp"
 #include "singleton.hpp"
+#include "arg_parser.hpp"
 
 #include "main.hpp"
 
@@ -70,6 +71,9 @@ LCBLog llog;
 
 // INI File Library
 IniFile ini;
+
+// Class to monitor for file changes
+MonitorFile iniMonitor;
 
 // Note on accessing memory in RPi:
 //
@@ -128,10 +132,19 @@ IniFile ini;
 
 // WSRP nominal symbol time
 #define WSPR_SYMTIME (8192.0 / 12000.0)
-// How much random frequency offset should be added to WSPR transmissions
-// if the --offset option has been turned on.
-#define WSPR_RAND_OFFSET 80
-#define WSPR15_RAND_OFFSET 8
+
+/**
+ * @brief Random frequency offset for WSPR transmissions.
+ *
+ * These constants define the amount of random frequency offset applied
+ * to WSPR transmissions when the `--offset` option is enabled.
+ *
+ * - `WSPR_RAND_OFFSET`: Specifies the offset range for standard WSPR transmissions.
+ * - `WSPR15_RAND_OFFSET`: Specifies the offset range for WSPR-15 transmissions.
+ */
+// TODO:  See where these should be used
+constexpr int WSPR_RAND_OFFSET = 80;  ///< Random offset (±80 Hz) for WSPR transmissions.
+constexpr int WSPR15_RAND_OFFSET = 8; ///< Random offset (±8 Hz) for WSPR-15 transmissions.
 
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
@@ -186,15 +199,6 @@ volatile unsigned *peri_base_virt = NULL;
 void *gpio_map;
 // I/O access
 volatile unsigned *gpio;
-
-// Class to monitor for file changes
-MonitorFile iniMonitor;
-
-typedef enum
-{
-    WSPR,
-    TONE
-} mode_type;
 
 struct GPCTL
 {
@@ -254,24 +258,6 @@ static struct
     unsigned pool_size;
     unsigned pool_cnt;
 } mbox;
-
-struct wConfig
-{
-    // Global configuration items
-    bool useini = false;
-    std::string inifile;
-    bool repeat = false;
-    std::vector<double> center_freq_set;
-    double test_tone = NAN;
-    bool no_delay = false;
-    mode_type mode = WSPR;
-    int terminate = -1;
-    bool daemon_mode = false;
-    // PLLD clock frequency.
-    double f_plld_clk;
-    // MEM_FLAG_L1_NONALLOCATING?
-    int mem_flag;
-} config;
 
 // GPIO/DIO Control:
 
@@ -754,582 +740,6 @@ void setupDMA(
     DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
-void print_usage()
-{
-    llog.logS(INFO, "Usage:");
-    llog.logS(INFO, "  wsprrypi [options] callsign gridsquare tx_pwr_dBm f1 <f2> <f3> ...");
-    llog.logS(INFO, "    OR");
-    llog.logS(INFO, "  wsprrypi [options] --test-tone {frequency}");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "Options:");
-    llog.logS(INFO, "  -h --help");
-    llog.logS(INFO, "    Print out this help screen.");
-    llog.logS(INFO, "  -v --version");
-    llog.logS(INFO, "    Show the Wsprry Pi version.");
-    llog.logS(INFO, "  -p --ppm ppm");
-    llog.logS(INFO, "    Known PPM correction to 19.2MHz RPi nominal crystal frequency.");
-    llog.logS(INFO, "  -s --self-calibration");
-    llog.logS(INFO, "    Check NTP before every transmission to obtain the PPM error of the");
-    llog.logS(INFO, "    crystal (default setting.)");
-    llog.logS(INFO, "  -f --free-running");
-    llog.logS(INFO, "    Do not use NTP to correct the frequency error of RPi crystal.");
-    llog.logS(INFO, "  -r --repeat");
-    llog.logS(INFO, "    Repeatedly and in order, transmit on all the specified command line");
-    llog.logS(INFO, "    freqs.");
-    llog.logS(INFO, "  -x --terminate <n>");
-    llog.logS(INFO, "    Terminate after completing <n> transmissions.");
-    llog.logS(INFO, "  -o --offset");
-    llog.logS(INFO, "    Add a random frequency offset to each transmission:");
-    llog.logS(INFO, "      +/-:", WSPR_RAND_OFFSET, "Hz for WSPR");
-    llog.logS(INFO, "      +/-:", WSPR15_RAND_OFFSET, "Hz for WSPR-15");
-    llog.logS(INFO, "  -t --test-tone freq");
-    llog.logS(INFO, "    Output a test tone at the specified frequency. Only used for");
-    llog.logS(INFO, "    debugging and verifying calibration.");
-    llog.logS(INFO, "  -l --led");
-    llog.logS(INFO, "    Use LED as a transmit indicator (TAPR board).");
-    llog.logS(INFO, "  -n --no-delay;");
-    llog.logS(INFO, "    Transmit immediately without waiting for a WSPR TX window. Used for");
-    llog.logS(INFO, "    testing only.");
-    llog.logS(INFO, "  -i --ini-file");
-    llog.logS(INFO, "    Load parameters from an ini file. Supply path and file name.");
-    llog.logS(INFO, "  -D --daemon-mode");
-    llog.logS(INFO, "    Run with terse messaging.");
-    llog.logS(INFO, "  -d --power_level");
-    llog.logS(INFO, "    Set actual TX power, 0-7.");
-    llog.logS(INFO, "  -e --port");
-    llog.logS(INFO, "    Set server port, 49152–65535.");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "Frequencies can be specified either as an absolute TX carrier frequency,");
-    llog.logS(INFO, "or using one of the following bands:");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "  LF, LF-15, MF, MF-15, 160m, 160m-15, 80m, 60m, 40m, 30m, 20m,");
-    llog.logS(INFO, "  17m, 15m, 12m, 10m, 6m, 4m, and 2m");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "If you specify a band, the transmission will happen in the middle of the");
-    llog.logS(INFO, "WSPR region of the selected band.");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "The \"-15\" suffix indicates the WSPR-15 region of the band.");
-    llog.logS(INFO, "");
-    llog.logS(INFO, "You may create transmission gaps by specifying a TX frequency of 0.");
-    llog.logS(INFO, "");
-}
-
-bool getINIValues(bool reload = false)
-{
-    if (ini.load())
-    {
-        if (!config.daemon_mode)
-            llog.logS(INFO, "\n============================================");
-        llog.logS(INFO, "Config", ((reload) ? "re-loaded" : "loaded"), "from:", config.inifile);
-        if (!config.daemon_mode)
-            llog.logS(INFO, "============================================");
-        // TODO:  Align these values?
-        llog.logS(INFO, "Transmit Enabled:", ((ini.get_bool_value("Control", "Transmit")) ? "true" : "false"));
-        llog.logS(INFO, "Call Sign:", ini.get_string_value("Common", "Call Sign"));
-        llog.logS(INFO, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
-        llog.logS(INFO, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
-        llog.logS(INFO, "Frequencies:", ini.get_string_value("Common", "Frequency"));
-        llog.logS(INFO, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
-        // TODO:  This is convoluted AF
-        llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
-        llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
-        llog.logS(INFO, "Use Frequency Randomization:", ((ini.get_bool_value("Extended", "Offset")) ? "true" : "false"));
-        llog.logS(INFO, "Power Level:", ini.get_int_value("Extended", "Power Level"));
-        llog.logS(INFO, "Server Port:", ini.get_int_value("Server", "Port"));
-        llog.logS(INFO, "Use LED:", (ini.get_bool_value("Extended", "Use LED")) ? "true" : "false");
-        llog.logS(INFO, "LED Pin:", ini.get_int_value("Extended", "LED Pin"));
-        if (!config.daemon_mode)
-            llog.logS(INFO, "============================================\n");
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-/**
- * @brief Converts a string to uppercase.
- *
- * @param str The input string.
- * @return The uppercase version of the string.
- */
-std::string to_uppercase(const std::string &str)
-{
-    std::string upper_str = str;
-    std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
-                   [](unsigned char c)
-                   { return std::toupper(c); });
-    return upper_str;
-}
-
-/**
- * @brief Converts a frequency label or numeric string to its corresponding frequency.
- *
- * @param option The string representing the frequency band or a numeric value.
- * @return The corresponding frequency in Hz.
- * @throws Exits with a fatal log error if the input is invalid.
- */
-double string_to_frequency(const std::string &option)
-{
-    /**
-     * @brief Mapping of frequency labels to their corresponding values in Hz.
-     *
-     * The keys are stored in uppercase to enable case-insensitive lookup.
-     */
-    static const std::unordered_map<std::string, double> frequency_map = {
-        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0}, {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5}, {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0}, {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0}, {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0}, {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}};
-
-    // Convert the input to uppercase for case-insensitive comparison
-    std::string key = to_uppercase(option);
-
-    // Check if the given option exists in the predefined frequency map
-    auto it = frequency_map.find(key);
-    if (it != frequency_map.end())
-    {
-        return it->second;
-    }
-
-    // Attempt to parse as a numeric frequency
-    char *endp;
-    double parsed_freq = std::strtod(option.c_str(), &endp);
-
-    if (endp == option.c_str() || *endp != '\0')
-    {
-        llog.logE(FATAL, "Could not parse transmit frequency:", option);
-        return 0.0;
-    }
-
-    return parsed_freq;
-}
-
-bool parse_commandline(const int &argc, char *const argv[])
-{
-    static struct option long_options[] = {
-        {"help", no_argument, 0, 'h'},
-        {"version", no_argument, 0, 'v'},
-        {"ppm", required_argument, 0, 'p'},
-        {"self-calibration", no_argument, 0, 's'},
-        {"free-running", no_argument, 0, 'f'},
-        {"repeat", no_argument, 0, 'r'},
-        {"terminate", required_argument, 0, 'x'},
-        {"offset", no_argument, 0, 'o'},
-        {"test-tone", required_argument, 0, 't'},
-        {"no-delay", no_argument, 0, 'n'},
-        {"led", no_argument, 0, 'l'},
-        {"led_pin", required_argument, 0, 'b'},
-        {"ini-file", required_argument, 0, 'i'},
-        {"daemon-mode", no_argument, 0, 'D'},
-        {"power_level", required_argument, 0, 'd'},
-        {"port", required_argument, 0, 'e'},
-        {0, 0, 0, 0}};
-
-    while (true)
-    {
-        /* getopt_long stores the option index here. */
-        int option_index = 0;
-        int c = getopt_long(argc, argv, "?vhp:sfrxde:ot:bnli:D",
-                            long_options, &option_index);
-        if (c == -1)
-            break;
-
-        switch (c)
-        {
-            char *endp;
-        case 0:
-            // Code should only get here if a long option was given a non-null
-            // flag value.
-            llog.logE(FATAL, "Check code.");
-            return false;
-            break;
-        case 'h':
-        case '?':
-            // Help
-            print_usage();
-            return false;
-            break;
-        case 'v':
-            // Version
-            std::cout << version_string() << std::endl;
-            return false;
-            break;
-        case 'p':
-            try
-            {
-                double ppm = std::stod(optarg);
-                ini.set_double_value("Extended", "PPM", ppm);
-            }
-            catch (const std::invalid_argument &)
-            {
-                llog.logE(FATAL, "Could not parse PPM value: invalid input.");
-                return false;
-            }
-            catch (const std::out_of_range &)
-            {
-                llog.logE(FATAL, "Could not parse PPM value: out of range.");
-                return false;
-            }
-            break;
-        case 's':
-            // Self-Cal
-            ini.set_bool_value("Extended", "Self Cal", true);
-            break;
-        case 'f':
-            // Free Running
-            ini.set_bool_value("Extended", "Self Cal", false);
-            break;
-        case 'r':
-            // Repeat
-            config.repeat = true;
-            break;
-        case 'x':
-            // Terminate after X
-            config.terminate = strtol(optarg, &endp, 10);
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                llog.logE(FATAL, "Could not parse termination argument.");
-                return false;
-            }
-            if (config.terminate < 1)
-            {
-                llog.logE(FATAL, "Termination parameter must be >= 1.");
-                return false;
-            }
-            break;
-        case 'o':
-            // Use random offset
-            ini.set_bool_value("Extended", "Offset", true);
-            break;
-        case 't':
-            // Set a test tone
-            config.test_tone = strtod(optarg, &endp);
-            config.mode = TONE;
-            if ((optarg == endp) || (*endp != '\0'))
-            {
-                llog.logE(FATAL, "Could not parse test tone frequency.");
-                return false;
-            }
-            break;
-        case 'i':
-            // Use INI file
-            config.inifile = optarg;
-            config.useini = true;
-            ini.set_filename(config.inifile);
-            break;
-        case 'n':
-            // No delay, transmit immediately
-            config.no_delay = true;
-            break;
-        case 'l':
-            // Use LED
-            ini.set_bool_value("Extended", "Use LED", true);
-            break;
-        case 'b':
-            try {
-                // Convert optarg to an integer and store it in the INI file
-                int led_pin = std::stoi(optarg);
-                ini.set_int_value("Extended", "LED Pin", led_pin);
-            } catch (const std::invalid_argument&) {
-                llog.logE(FATAL, "Invalid LED pin: non-numeric value provided.");
-                return 1;
-            } catch (const std::out_of_range&) {
-                llog.logE(FATAL, "Invalid LED pin: value out of range.");
-                return 1;
-            }
-            break;
-        case 'D':
-            // Daemon mode, repeats indefinitely
-            config.daemon_mode = true;
-            config.repeat = true; // Repeat must be true in a daemon setup
-            llog.enableTimestamps(config.daemon_mode);
-            break;
-        case 'd':
-        {
-            try
-            {
-                int power = std::stoi(optarg);
-                power = std::clamp(power, 0, 7); // Ensure power is within [0, 7]
-                ini.set_int_value("Extended", "Power Level", power);
-            }
-            catch (const std::invalid_argument &)
-            {
-                llog.logE(FATAL, "Invalid power level: non-numeric input.");
-                ini.set_int_value("Extended", "Power Level", 7); // Default fallback
-            }
-            catch (const std::out_of_range &)
-            {
-                llog.logE(FATAL, "Invalid power level: out of range.");
-                ini.set_int_value("Extended", "Power Level", 7); // Default fallback
-            }
-            break;
-        }
-        case 'e':
-        {
-            try
-            {
-                int port = std::stoi(optarg);
-                if (port < 49152 || port > 65535)
-                {
-                    llog.logE(WARN, "Invalid port number. Using default: 31415.");
-                    port = 31415; // Default fallback port
-                }
-                ini.set_int_value("Server", "Port", port);
-            }
-            catch (const std::invalid_argument &)
-            {
-                llog.logE(FATAL, "Invalid port number: non-numeric input.");
-                ini.set_int_value("Server", "Port", 31415); // Default fallback
-            }
-            catch (const std::out_of_range &)
-            {
-                llog.logE(FATAL, "Invalid port number: out of range.");
-                ini.set_int_value("Server", "Port", 31415); // Default fallback
-            }
-            break;
-        }
-        default:
-            return false;
-        }
-    }
-    if (config.useini == false)
-    {
-        ini.set_bool_value("Control", "Transmit", true);
-    }
-    return true;
-}
-
-bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
-{
-    if (config.useini)
-    {
-        if (!reparse)
-            iniMonitor.filemon(config.inifile.c_str());
-        if (!getINIValues(reparse))
-        {
-            llog.logE(FATAL, "Failed to reload the INI.");
-            std::exit(EXIT_FAILURE);
-        }
-        config.center_freq_set = {}; // Clears implicitly
-        std::istringstream s(ini.get_string_value("Common", "Frequency"));
-        std::string token;
-
-        while (s >> token)
-        {
-            double parsed_freq = string_to_frequency(token);
-            if (parsed_freq > 0)
-            {
-                config.center_freq_set.push_back(parsed_freq);
-            }
-            else
-            {
-                llog.logE(WARN, "Invalid frequency ignored:" + token);
-            }
-        }
-    }
-    else
-    {
-        if (!reparse)
-        {
-            config.center_freq_set.clear(); // Clear before processing frequencies
-
-            unsigned int n_free_args = 0;
-            while (optind < argc)
-            {
-                std::string argument = argv[optind];
-
-                switch (n_free_args)
-                {
-                case 0:
-                {
-                    // Convert Call Sign to uppercase
-                    std::transform(argument.begin(), argument.end(), argument.begin(), ::toupper);
-                    ini.set_string_value("Common", "Call Sign", argument);
-                    break;
-                }
-                case 1:
-                {
-                    // Convert Grid Square to uppercase
-                    std::transform(argument.begin(), argument.end(), argument.begin(), ::toupper);
-                    ini.set_string_value("Common", "Grid Square", argument);
-                    break;
-                }
-                case 2:
-                    try
-                    {
-                        int tx_power = std::stoi(argument);
-                        ini.set_int_value("Common", "TX Power", tx_power);
-                    }
-                    catch (const std::invalid_argument &)
-                    {
-                        std::cerr << "Error: Invalid power value (non-numeric): " << argument << std::endl;
-                        return 1;
-                    }
-                    catch (const std::out_of_range &)
-                    {
-                        std::cerr << "Error: Invalid power value (out of range): " << argument << std::endl;
-                        return 1;
-                    }
-                    break;
-                default:
-                    // Treat as a frequency and convert
-                    double parsed_freq = string_to_frequency(argument);
-                    config.center_freq_set.push_back(parsed_freq);
-                    break;
-                }
-
-                optind++;
-                n_free_args++;
-            }
-        }
-    }
-
-    // Check consistency among command line options.
-    double ppm_value = ini.get_double_value("Extended", "PPM"); // Use a distinct default
-
-    if (ppm_value != 0.0 && ini.get_bool_value("Extended", "Self Cal"))
-    {
-        llog.logE(INFO, "PPM value is being ignored.");
-        ini.set_double_value("Extended", "PPM", 0.0); // Only update if it was actually set
-    }
-
-    // TONE does not need Callsign, gridsquare, etc.
-    if (config.mode == TONE)
-    {
-        bool missing_call_or_grid = ini.get_string_value("Common", "Call Sign").empty() ||
-                                    ini.get_string_value("Common", "Grid Square").empty();
-        bool has_tx_power = ini.get_int_value("Common", "TX Power") > 0;
-        bool has_offset = ini.get_bool_value("Extended", "Offset");
-
-        if (missing_call_or_grid || has_tx_power || config.center_freq_set.empty() || has_offset)
-        {
-            llog.logE(INFO, "Callsign, gridsquare, etc. are ignored when generating test tone.");
-        }
-
-        ini.set_bool_value("Extended", "Offset", false);
-
-        if (config.test_tone <= 0)
-        {
-            llog.logE(FATAL, "Test tone frequency must be positive.");
-            std::exit(EXIT_FAILURE);
-        }
-    }
-    else
-    {
-        // Check if required parameters are missing
-        bool missing_call_sign = ini.get_string_value("Common", "Call Sign").empty();
-        bool missing_grid_square = ini.get_string_value("Common", "Grid Square").empty();
-        bool invalid_tx_power = ini.get_int_value("Common", "TX Power") <= 0;
-        bool no_frequencies = config.center_freq_set.empty();
-
-        if (missing_call_sign || missing_grid_square || invalid_tx_power || no_frequencies)
-        {
-            llog.logE(FATAL, "Error: Missing required parameters.");
-
-            if (missing_call_sign)
-            {
-                llog.logE(FATAL, " - Missing callsign.");
-            }
-            if (missing_grid_square)
-            {
-                llog.logE(FATAL, " - Missing grid square.");
-            }
-            if (invalid_tx_power)
-            {
-                llog.logE(FATAL, " - TX power must be greater than 0 dBm.");
-            }
-            if (no_frequencies)
-            {
-                llog.logE(FATAL, " - At least one frequency must be specified.");
-            }
-
-            llog.logE(FATAL, "Try: wsprrypi --help");
-            std::exit(EXIT_FAILURE);
-        }
-    }
-
-    // Print a summary of the parsed options
-    if (config.mode == WSPR)
-    {
-        llog.logS(INFO, "WSPR packet payload:");
-        llog.logS(INFO, "- Callsign:", ini.get_string_value("Common", "Call Sign"));
-        llog.logS(INFO, "- Locator:", ini.get_string_value("Common", "Grid Square"));
-        llog.logS(INFO, "- Power:", ini.get_int_value("Common", "TX Power"), " dBm");
-        llog.logS(INFO, "Requested TX frequencies:");
-
-        // Concatenate frequency messages for logging
-        std::ostringstream log_message;
-        for (const auto &freq : config.center_freq_set)
-        {
-            log_message << "- " << std::setprecision(6) << std::fixed << (freq / 1e6) << " MHz";
-        }
-
-        // Log the formatted message
-        llog.logS(INFO, log_message.str());
-
-        // Store values locally to avoid repeated INI lookups
-        bool self_cal = ini.get_bool_value("Extended", "Self Cal");
-        bool offset_enabled = ini.get_bool_value("Extended", "Offset");
-        int terminate_time = config.terminate;
-        bool repeat_mode = config.repeat;
-        bool daemon_mode = config.daemon_mode;
-
-        // Self Calibration or PPM correction
-        if (self_cal)
-        {
-            llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
-        }
-        else
-        {
-            // Check if PPM was explicitly set (not the default placeholder)
-            if (ppm_value != 0.0)
-            {
-                llog.logS(INFO, "PPM value to be used for all transmissions:", std::fixed, std::setprecision(2), ppm_value);
-            }
-        }
-
-        // Termination or Continuous Transmission Mode
-        if (terminate_time > 0)
-        {
-            llog.logS(INFO, "TX will stop after:", terminate_time);
-        }
-
-        if (repeat_mode && !daemon_mode)
-        {
-            llog.logS(INFO, "Transmissions will continue forever until stopped with CTRL-C.");
-        }
-
-        // Frequency Offset Handling
-        if (offset_enabled)
-        {
-            llog.logS(INFO, "- A small random frequency offset will be added to all transmissions.");
-        }
-    }
-    else
-    {
-        // Log test tone frequency
-        llog.logS(INFO, "A test tone will be generated at frequency ",
-                  std::fixed, std::setprecision(6), config.test_tone / 1e6, " MHz.");
-
-        if (ini.get_bool_value("Extended", "Self Cal"))
-        {
-            llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
-        }
-        else
-        {
-            if (ppm_value != 0.0)
-            {
-                llog.logS(INFO, "PPM value to be used to generate the tone:", std::fixed, std::setprecision(2), ppm_value);
-            }
-        }
-    }
-    return true;
-}
-
-bool parseConfigData(bool reparse)
-{
-    return parseConfigData(0, {}, reparse);
-}
-
 bool wait_every(int minute)
 {
     // Wait for the system clock's minute to reach one second past 'minute'
@@ -1348,7 +758,7 @@ bool wait_every(int minute)
             }
 
             llog.logS(INFO, "INI file changed, reloading parameters.");
-            parseConfigData(true);
+            validate_config_data();
             return false; // Need to reload
         }
         time(&t);
@@ -1615,10 +1025,30 @@ void cleanupAndExit(int sig)
     handleExitSignal(sig, is_fatal ? FATAL : INFO);
 }
 
-int main(const int argc, char *const argv[])
+/**
+ * @brief Sets up signal handlers for safe program termination.
+ *
+ * This function registers handlers for various termination and error signals,
+ * ensuring that the program can perform necessary cleanup before exiting.
+ * The registered signals are:
+ * - `SIGINT`  (Ctrl+C interrupt)
+ * - `SIGTERM` (Termination request)
+ * - `SIGQUIT` (Quit request)
+ * - `SIGSEGV` (Segmentation fault)
+ * - `SIGBUS`  (Bus error)
+ * - `SIGFPE`  (Floating point exception)
+ * - `SIGILL`  (Illegal instruction)
+ * - `SIGHUP`  (Hangup signal, often sent when a terminal closes)
+ *
+ * Each of these signals is handled by the `cleanupAndExit` function, which should
+ * perform any necessary cleanup before terminating the process.
+ *
+ * @note This function should be called at the beginning of `main()` to ensure proper signal handling.
+ *
+ * @see cleanupAndExit()
+ */
+void set_signal_handler()
 {
-    llog.setLogLevel(DEBUG);
-
     // Set up signal handlers
     signal(SIGINT, cleanupAndExit);
     signal(SIGTERM, cleanupAndExit);
@@ -1628,12 +1058,23 @@ int main(const int argc, char *const argv[])
     signal(SIGFPE, cleanupAndExit);
     signal(SIGILL, cleanupAndExit);
     signal(SIGHUP, cleanupAndExit);
+}
+
+int main(const int argc, char *const argv[])
+{
+    llog.setLogLevel(DEBUG);
+
+    set_signal_handler();
 
     // Modify terminal settings
     disableSignalEcho();
 
-    if (!parse_commandline(argc, argv))
-        return 1;
+    // Parse command line arguments
+    if (!parse_command_line(argc, argv))return false;
+    // Show the net configuration values after ini and command line parsing
+    show_config_values();
+    // Check initial load
+    if (!validate_config_data()) return false;
 
     llog.logS(INFO, version_string());
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
@@ -1643,9 +1084,6 @@ int main(const int argc, char *const argv[])
     // Set up GPIO if LED option is on
     if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
         setupGPIO(ini.get_int_value("Extended", "LED Pin"));
-
-    if (!parseConfigData(argc, argv))
-        return 1;
 
     // Make sure we're the only wsprrypi process
     wsprrypi::SingletonProcess singleton(SINGLETON_PORT);
@@ -1686,7 +1124,7 @@ int main(const int argc, char *const argv[])
     // Display the PID:
     llog.logS(INFO, "Process PID:", getpid());
 
-    if (config.mode == TONE)
+    if (config.mode == ModeType::TONE)
     {
         // Test tone mode...
         double wspr_symtime = WSPR_SYMTIME;
@@ -1705,7 +1143,7 @@ int main(const int argc, char *const argv[])
         double center_freq_actual;
         while (true)
         {
-            if (ini.get_bool_value("Extended", "Self Cal"))
+            if (ini.get_bool_value("Extended", "Use NTP"))
             {
                 if (!update_ppm())
                     cleanupAndExit(-1);
@@ -1728,7 +1166,7 @@ int main(const int argc, char *const argv[])
             txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
         }
     }
-    else
+    else if (config.mode == ModeType::WSPR)
     {
         // WSPR mode
         for (;;)
@@ -1759,7 +1197,7 @@ int main(const int argc, char *const argv[])
 
             llog.logS(INFO, "Ready to transmit (setup complete).");
             int band = 0;
-            int n_tx = 0;
+            int transmit_counter = 0;
             for (;;)
             {
                 // Calculate WSPR parameters for this transmission
@@ -1800,7 +1238,7 @@ int main(const int argc, char *const argv[])
                 }
 
                 // Update crystal calibration information
-                if (ini.get_bool_value("Extended", "Self Cal"))
+                if (ini.get_bool_value("Extended", "Use NTP"))
                 {
                     if (!update_ppm())
                         cleanupAndExit(-1);
@@ -1843,7 +1281,7 @@ int main(const int argc, char *const argv[])
                         this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
                         txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
                     }
-                    n_tx++;
+                    transmit_counter++;
 
                     // Turn transmitter off
                     txoff();
@@ -1854,7 +1292,6 @@ int main(const int argc, char *const argv[])
                     std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
                     double num_seconds = elapsed.count();
                     llog.logS(INFO, "Transmission complete (", num_seconds, " sec.)");
-                    // TODO:  Add a failsafe here for short windows?
                 }
                 else
                 {
@@ -1868,20 +1305,31 @@ int main(const int argc, char *const argv[])
                 {
                     return 0;
                 }
-                if ((config.terminate > 0) && (n_tx >= config.terminate))
+                // If config.terminate has a value, it's > 0, and counter is >= config.terminate (we finished our run then retur)
+                if (config.terminate.has_value() && (config.terminate.value() > 0) && (transmit_counter >= config.terminate.value()))
                 {
                     return 0;
                 }
             }
         } // < Reload Loop
     }
+    else
+    {
+        llog.logE(FATAL, "Mode must be either WSPR or TONE.");
+        std::exit(EXIT_FAILURE);
+    }
 
     return 0;
 }
 
-// TODO:  Add in tcp server
-// TODO:  Move singleton to server maybe
-// TODO:  Consider an external file for band to frequency lookups
-// TODO:  This is convoluted AF
+// TODO: Add in tcp server
+// TODO: Move singleton to server maybe
+// TODO: Consider an external file for band to frequency lookups
+// TODO: This is convoluted AF
 //          llog.logS(INFO, "Do not use NTP sync:", ((!ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
 //          llog.logS(INFO, "Check NTP Each Run (default):", ((ini.get_bool_value("Extended", "Self Cal")) ? "true" : "false"));
+// TODO:  Set daemon mode in INI
+// TODO: Modern C++ prefers constexpr over preprocessor macros (#define). Maybe all of them can go in a separate file.
+// TODO: See if we can use C++ 20 and .contains() (in arg parsing)
+// TODO: Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
+// TODO: Documentation needs updates with changes to command line parsing (including INI vs option precedence)
