@@ -281,7 +281,7 @@
     </div>
 
     <script src="bootstrap.bundle.min.js"></script>
-    <script src="fa.js" crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/e51821420e.js" crossorigin="anonymous"></script>
 
     <script>
         var url = "wspr_ini.php";
