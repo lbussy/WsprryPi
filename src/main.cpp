@@ -50,6 +50,7 @@
 #include "singleton.hpp"
 #include "arg_parser.hpp"
 #include "constants.hpp"
+// #include "hardware_access.hpp"
 
 #include "main.hpp"
 
@@ -63,10 +64,6 @@ static struct termios original_term;
 
 // Set with "make debug"
 // #define WSPR_DEBUG
-
-// TCP port to bind to check for Singleton
-// TODO: We may not need this with tcp_server running
-#define SINGLETON_PORT 1234
 
 // Logging library
 LCBLog llog;
