@@ -108,7 +108,7 @@
                                             Call Sign:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input minlength="4" type="text" pattern="[-a-zA-Z0-9\/]+" class="form-control" id="callsign" placeholder="Enter callsign" required>
+                                            <input type="text" pattern="^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$" minlength="3" maxlength="6" class="form-control" id="callsign" placeholder="Enter callsign" required>    
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Please enter your callsign.</div>
                                         </div>
@@ -201,12 +201,12 @@
                                 <div class="col-md-6">
                                     <div class="row gx-1 ">
                                         <div class="col-md-4 text-end">
-                                            <label class="form-check-label" for="selfcal">Self
-                                                Calibration:&nbsp;</label>
+                                            <label class="form-check-label" for="use_ntp">
+                                                Use NTP for Calibration:&nbsp;</label>
                                         </div>
                                         <div class="col-md-8">
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="selfcal" data-form-type="other">
+                                                <input class="form-check-input" type="checkbox" id="use_ntp" data-form-type="other">
                                             </div>
                                         </div>
                                     </div>
@@ -254,6 +254,10 @@
                         </div>
 
                         </fieldset>
+                    <!-- :Hidden Form Items: -->
+                    <input type="text" class="form-control" id="led_pin" placeholder="">
+                    <input type="text" class="form-control" id="server_port" placeholder="">
+                    <!-- ^Hidden Form Items^ -->
                 </form>
             </div>
         </div>
@@ -305,9 +309,9 @@
         });
 
         function bindActions() {
-            // Grab Self Cal Switch
-            $("#selfcal").on("click", function() {
-                clickSelfCal();
+            // Grab Use NTP Switch
+            $("#use_ntp").on("click", function() {
+                clickUseNTP();
             });
 
             // Grab Submit and Reset Buttons
@@ -464,9 +468,9 @@
                         $('#dbm').val(configJson["Common"]["TX Power"]);
                         $('#frequencies').val(configJson["Common"]["Frequency"]);
                         $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
-                        $('#selfcal').prop('checked', configJson["Extended"]["Self Cal"]);
+                        $('#use_ntp').prop('checked', configJson["Extended"]["Use NTP"]);
                         $('#ppm').val(configJson["Extended"]["PPM"]);
-                        if ($('#selfcal').is(":checked")) {
+                        if ($('#use_ntp').is(":checked")) {
                             // Disable PPM when using self-cal
                             $('#ppm').prop("disabled", true);
                         } else {
@@ -475,6 +479,10 @@
                         }
                         $('#power_level').val(configJson["Extended"]["Power Level"]);
                         $('#power_level').change();
+
+                        // New Items - Hidden form Ffelds
+                        $('#led_pin').val(configJson["Extended"]["LED Pin"]);
+                        $('#server_port').val(configJson["Server"]["Port"]);
 
                         // Enable Form
                         $('#submit').prop("disabled", false);
@@ -523,16 +531,22 @@
             var Extended = {
                 "PPM": parseFloat($('#ppm').val()),
                 "Power Level": parseInt($('#power_level').val()),
-                "Self Cal": $('#selfcal').is(":checked"),
+                "Use NTP": $('#use_ntp').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
                 "Offset": $('#useoffset').is(":checked"),
                 "Use LED": $('#use_led').is(":checked"),
+                "LED Pin": $('#led_pin').val(),
+            };
+
+            var Server = {
+                "Port": $('#server_port').val(),
             };
 
             var Config = {
                 Control,
                 Common,
-                Extended
+                Extended,
+                Server
             };
             var json = JSON.stringify(Config);
 
@@ -566,8 +580,8 @@
             populateConfig();
         };
 
-        function clickSelfCal() {
-            if ($('#selfcal').is(":checked")) {
+        function clickUseNTP() {
+            if ($('#use_ntp').is(":checked")) {
                 // Disable PPM when using self-cal
                 $('#ppm').prop("disabled", true);
             } else {
