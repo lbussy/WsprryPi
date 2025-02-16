@@ -7,3 +7,9 @@
 [submodule "src/WSPR-Message"]
 	path = src/WSPR-Message
 	url = https://github.com/lbussy/WSPR-Message
+[submodule "src/MonitorFile"]
+	path = src/MonitorFile
+	url = https://github.com/lbussy/MonitorFile.git
+[submodule "src/Singleton"]
+	path = src/Singleton
+	url = https://github.com/lbussy/Singleton.git

@@ -1050,7 +1050,7 @@ int main(const int argc, char *const argv[])
         setupGPIO(ini.get_int_value("Extended", "LED Pin"));
 
     // Make sure we're the only wsprrypi process
-    wsprrypi::SingletonProcess singleton(SINGLETON_PORT);
+    SingletonProcess singleton(SINGLETON_PORT);
     try
     {
         if (!singleton())
