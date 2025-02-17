@@ -28,13 +28,13 @@ This script is designed for **Raspberry Pi and similar systems**, monitoring bot
 ---
 
 ## Features:
-- **GPIO Monitoring:** Listens for a button press to trigger a shutdown.  
-- **File-Based Shutdown/Reboot:** Detects specific files to trigger system actions.  
-- **Logging System:** Logs events at different levels (INFO, WARNING, ERROR).  
-- **Debug Mode (`-d`):** Allows testing without executing shutdown/reboot.  
-- **Signal Handling:** Gracefully exits when receiving `SIGINT`, `SIGTERM`, or `SIGHUP`.  
-- **Daemon Mode (`-D`):** Supports logging with timestamps for background execution.  
-- **Ensures Safe Shutdowns:** Uses `sleep 1` to prevent accidental multiple triggers.  
+- **GPIO Monitoring:** Listens for a button press to trigger a shutdown.
+- **File-Based Shutdown/Reboot:** Detects specific files to trigger system actions.
+- **Logging System:** Logs events at different levels (INFO, WARNING, ERROR).
+- **Debug Mode (`-d`):** Allows testing without executing shutdown/reboot.
+- **Signal Handling:** Gracefully exits when receiving `SIGINT`, `SIGTERM`, or `SIGHUP`.
+- **Daemon Mode (`-D`):** Supports logging with timestamps for background execution.
+- **Ensures Safe Shutdowns:** Uses `sleep 1` to prevent accidental multiple triggers.
 
 ---
 
@@ -139,7 +139,7 @@ except ImportError:
 
 
 # Version information
-__version__ = "1.2.1-config_lib+50.0985f26-dirty"
+__version__ = "1.2.1-update_ui+54.7716cd3-dirty"
 
 # Filenames for shutdown and reboot triggers
 STOP_FILE_NAME = "shutdown"
@@ -385,7 +385,7 @@ def process_arguments():
         - Uses `argparse.RawTextHelpFormatter` for improved help message formatting.
         - The script name is dynamically included in the `usage` message via `get_script_name()`.
         - Ensures that help is shown if no arguments are provided (`TODO` item).
-    
+
     @note
         - Debug mode (`-d`) allows logging without executing shutdown actions.
         - Date/Time mode (`-D`) adds timestamps to logs for background execution.
@@ -623,8 +623,8 @@ def initiate_action(logger, debug, stop_button=None, file_path=None):
     @param stop_button
         (Optional) `gpiozero.Button` instance that triggered the shutdown event.
     @param file_path
-        (Optional) Path to the file that triggered the action 
-        (e.g., `STOP_FILE_PATH` or `REBOOT_FILE_PATH`). If not provided, 
+        (Optional) Path to the file that triggered the action
+        (e.g., `STOP_FILE_PATH` or `REBOOT_FILE_PATH`). If not provided,
         the action is assumed to be triggered by a GPIO event.
 
     @return

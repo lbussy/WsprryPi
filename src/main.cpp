@@ -739,6 +739,8 @@ bool update_ppm()
 {
     // Call ntp_adjtime() to obtain the latest calibration coefficient.
 
+    // TODO: Review this
+
     struct timex ntx;
     int status;
     double ppm_new;
@@ -1286,12 +1288,14 @@ int main(const int argc, char *const argv[])
     return 0;
 }
 
+// Have to do:
+// TODO: Documentation needs updates from/related to changes to command line parsing (including INI vs option precedence)
+// TODO: Obtained new ppm value: -11.5494 - not working
+// TODO: Reload on ini change not working
+
+// Nice to do:
 // TODO: Add in tcp server
 // TODO: Consider an external file for band to frequency lookups
-// TODO: Set daemon mode in INI?
 // TODO: Modern C++ prefers constexpr over preprocessor macros (#define). Maybe all of them can go in a separate file.
 // TODO: See if we can use C++ 20 and .contains() (in arg parsing)
 // TODO: Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
-// TODO: Documentation needs updates with changes to command line parsing (including INI vs option precedence)
-// TODO: Update web page for INI fle changes
-// TODO: Obtained new ppm value: -11.5494  (might not be updating)
