@@ -1,39 +1,24 @@
 # To Do
 
-- Clean up config - it's rredundant now in main
-- Save config INI on setter in cconfig - allow saving when we change via the server.  MAke sure it is threadsafe.
+- Customize pin on wspr_watch.py service file
 - See if we can thread the transmit, or if it's threaded.  Check threadsave things.
 - Merge Singleton port with server port
-- Fix shutdown-watch
 - Create release script orchestration
-- Fix LED
 - Fix freq change (#57)
 - Show current time on web page (#63)
 - Show logs on web page (#27)
-- Allow reboots (#62)
 - Show transission indicator (#64)
-- Run lint
 - Put version on web page (#97)
-- Unable to instal when lib versions differ (#92)
+- Unable to install when lib versions differ (#92)
 - Put spots on web page: https://www.wsprnet.org/olddb?mode=html&band=all&limit=50&findcall=AA0NT&sort=date
 
 ## Stuff to Remember
 
-### Branches:
-
-- Working on update_installer
-- It will go back into refactoring
-
 ### Stuff to do:
 
 - See if we can include libs in compile
-- If in daemon mode, do not suppress SIGINT
 - Inline the apache_tool into install.
-- Need to lint and unit test main
 - Need to add unit tests for mailbox
-- Do we need a venv for shutdown_watch.py
-- Move shutdown watch to C++
-- Add --debug for runtime debugging
 - Add notes about gh:
     ``` bash
     $ gh auth login

@@ -67,6 +67,7 @@ remove_files_and_dirs() {
             "/usr/local/bin/shutdown-button.py"
             "/usr/local/bin/shutdown-watch.py"
             "/usr/local/bin/shutdown_watch.py"
+            "/usr/local/bin/wspr_watch.py"
             "/var/www/html/wspr/"
             "/var/log/wspr/"
             "/var/log/wsprrypi/"

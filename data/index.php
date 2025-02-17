@@ -50,9 +50,16 @@
 
         <div class="card border-primary mb-3">
             <div class="card-header d-flex">
-                For server: <?php echo gethostname(); ?>
-                <span class="ms-auto text-muted">
-                    <form action="shutdown.php" method="post">
+                Connected to: <?php echo gethostname(); ?>
+                <span class="ms-auto text-muted d-flex">
+                    <form action="semaphore.php" method="post">
+                        <input type="hidden" name="action" value="reboot">
+                        <button type="submit" class="btn-fafa me-2" data-toggle="tooltip" title="Reboot">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </form>
+                    <form action="semaphore.php" method="post">
+                        <input type="hidden" name="action" value="reboot">
                         <button type="submit" class="btn-fafa" data-toggle="tooltip" title="Shutdown">
                             <i class="fa-solid fa-power-off"></i>
                         </button>
@@ -108,7 +115,7 @@
                                             Call Sign:&nbsp;
                                         </div>
                                         <div class="col-md-9">
-                                            <input type="text" pattern="^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$" minlength="3" maxlength="6" class="form-control" id="callsign" placeholder="Enter callsign" required>    
+                                            <input type="text" pattern="^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$" minlength="3" maxlength="6" class="form-control" id="callsign" placeholder="Enter callsign" required>
                                             <div class="valid-feedback">Valid.</div>
                                             <div class="invalid-feedback">Please enter your callsign.</div>
                                         </div>
@@ -254,10 +261,10 @@
                         </div>
 
                         </fieldset>
-                    <!-- :Hidden Form Items: -->
-                    <input type="text" class="form-control" id="led_pin" placeholder="">
-                    <input type="text" class="form-control" id="server_port" placeholder="">
-                    <!-- ^Hidden Form Items^ -->
+                        <!-- :Hidden Form Items: -->
+                        <input type="text" class="form-control" id="led_pin" placeholder="">
+                        <input type="text" class="form-control" id="server_port" placeholder="">
+                        <!-- ^Hidden Form Items^ -->
                 </form>
             </div>
         </div>
@@ -287,7 +294,7 @@
         var url = "wspr_ini.php";
         var populateConfigRunning = false;
 
-        $(function () {
+        $(function() {
             $('[data-toggle="tooltip"]').tooltip()
         })
 
