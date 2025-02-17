@@ -188,14 +188,7 @@ void show_config_values(bool reload)
         return;
 
     // Print configuration details if successfully loaded
-    if (!config.daemon_mode)
-        llog.logS(INFO, "============================================");
-
     llog.logS(INFO, "Config", (reload ? "re-loaded" : "loaded"), "from:", config.inifile);
-
-    if (!config.daemon_mode)
-        llog.logS(INFO, "============================================");
-
     // [Control]
     llog.logS(INFO, "Transmit Enabled:", ini.get_bool_value("Control", "Transmit") ? "true" : "false");
     // [Common]
@@ -213,9 +206,6 @@ void show_config_values(bool reload)
     llog.logS(INFO, "LED Pin:", ini.get_int_value("Extended", "LED Pin"));
     // [Server]
     llog.logS(INFO, "Server runs on port:", ini.get_int_value("Server", "Port"));
-
-    if (!config.daemon_mode)
-        llog.logS(INFO, "============================================");
 }
 
 /**

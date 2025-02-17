@@ -96,7 +96,7 @@ check_wspri_installed() {
 # This function stops the following services:
 # - `wsprrypi` service.
 # - `shutdown-button` service.
-# - `shutdown_button` service.
+# - `wspr_watch` service.
 #
 # If any service fails to stop, an error message is displayed, but the function
 # continues attempting to stop the other services.
@@ -117,9 +117,9 @@ stop_services() {
         return 1
     fi
 
-    # Stop the shutdown_button service
-    if ! sudo systemctl stop shutdown_button 2>/dev/null; then
-        printf "Error: Failed to stop the shutdown_button service.\n" >&2
+    # Stop the wspr_watch service
+    if ! sudo systemctl stop wspr_watch 2>/dev/null; then
+        printf "Error: Failed to stop the wspr_watch service.\n" >&2
         return 1
     fi
 
@@ -171,8 +171,8 @@ copy_files() {
     # Refresh shutdown button if it was installed
     sudo rm -f "/usr/local/bin/shutdown-watch.py" || return 1
     if systemctl list-unit-files --type=service | grep -q "^shutdown-button"; then
-        if ! sudo cp -f "$repo_root/scripts/shutdown_button.py" /usr/local/bin; then
-            printf "Error: Failed to copy shutdown_button.py to /usr/local/bin.\n" >&2
+        if ! sudo cp -f "$repo_root/scripts/wspr_watch.py" /usr/local/bin; then
+            printf "Error: Failed to copy wspr_watch.py to /usr/local/bin.\n" >&2
             return 1
         fi
     fi

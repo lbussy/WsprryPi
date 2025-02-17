@@ -259,7 +259,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 # @details This variable defines the logrotate configuration file, used to manage
 #          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
 #
-# @var SHUTDOWN_WATCH_EXE
+# @var WSPR_WATCH_EXE
 # @brief The shutdown monitoring script.
 # @details This variable holds the name of the shutdown watch script, which
 #          monitors the TAPR shutdown button functionality to enable safe shutdown.
@@ -267,7 +267,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
 readonly WSPR_EXE="wsprrypi"
 readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
-readonly SHUTDOWN_WATCH_EXE="shutdown_watch.py"
+readonly WSPR_WATCH_EXE="wspr_watch.py"
 
 # -----------------------------------------------------------------------------
 # @var USER_HOME
@@ -714,6 +714,8 @@ readonly APT_PACKAGES=(
     "php"
     "libraspberrypi-dev"
     "raspberrypi-kernel-headers"
+    "python3-gpiozero"
+    "python3-lgpio"
 )
 
 # -----------------------------------------------------------------------------
@@ -5744,7 +5746,7 @@ finish_script() {
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
 # @global WSPR_EXE The executable name for WsprryPi.
 # @global WSPR_INI The configuration file name for WsprryPi.
-# @global SHUTDOWN_WATCH_EXE The shutdown watch executable.
+# @global WSPR_WATCH_EXE The WsprryPi watch executable.
 # @global REPO_NAME The repository name for log file management.
 #
 # @param $1 Debug flag for enabling or disabling debug output.
@@ -5766,8 +5768,8 @@ manage_wsprry_pi() {
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
-        "manage_exe \"$SHUTDOWN_WATCH_EXE\""
-        "manage_service \"/usr/bin/$SHUTDOWN_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$SHUTDOWN_WATCH_EXE -D -w\" \"true\""
+        "manage_exe \"$WSPR_WATCH_EXE\""
+        "manage_service \"/usr/bin/$WSPR_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$WSPR_WATCH_EXE -D -p 19 -w\" \"false\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
