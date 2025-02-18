@@ -205,8 +205,8 @@ declare DRY_RUN="${DRY_RUN:-false}"
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"
 declare REPO_ORG="${REPO_ORG:-lbussy}"
-declare REPO_NAME="WsprryPi"
-declare UI_REPO_DIR="WsprryPi-UI"
+declare REPO_NAME="WsprryPi"        # Case Sensitive
+declare UI_REPO_DIR="WsprryPi-UI"   # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-update_installer}"
 declare GIT_TAG="${GIT_TAG:-1.2.1}"
@@ -4168,7 +4168,9 @@ git_clone() {
         return 1
     }
 
-    git config --global --add safe.directory "$dest_root"
+    local git_command
+    git_command="git config --global --add safe.directory $dest_root"
+    printf "\e[1;31mGit command: %s\e[0m\n" "$git_command"
     logI "Repository cloned successfully to '$dest_root'"
     pause
     debug_end "$debug"
