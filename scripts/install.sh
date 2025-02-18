@@ -4150,21 +4150,23 @@ download_file() {
 # shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local clone_command safe_command chown_command
     local dest_root="$LOCAL_REPO_DIR"
     local retval=0
+    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE"
+    safe_command="git config --global --add safe.directory $dest_root"
+    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
 
-    logI "Ensuring destination directory exists: '$dest_root'"
+    logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     pause
-    mkdir -p "$dest_root" || {
-        warn "Failed to create destination directory: '$dest_root'"
+    printf "\e[1;31mDEBUG:  Make sure %s does not exist.\e[0m\n" "$dest_root"
+    if [[ -d "$dest_root" ]]; then
+        warn "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
         return 1
-    }
-
-    local clone_command safe_command chown_command
-    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE"
-        safe_command="git config --global --add safe.directory $dest_root"
-    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
+    fi
+    printf "\e[1;31mDEBUG:  Make sure %s exists.\e[0m\n" "$dest_root"
+    pause
 
     printf "\e[1;31mDEBUG:  Clone command: %s\e[0m\n" "$clone_command"
     pause
