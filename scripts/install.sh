@@ -4150,7 +4150,7 @@ download_file() {
 # shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local clone_command safe_command chown_command submodule_command
+    local clone_command safe_command chown_command # submodule_command
     local dest_root="$LOCAL_REPO_DIR"
     local retval=0
     clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
