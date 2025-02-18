@@ -4156,7 +4156,7 @@ git_clone() {
     clone_command="sudo -u $SUDO_USER git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     safe_command="sudo -u $SUDO_USER git config --global --add safe.directory $dest_root"
     chown_command="chown -R $SUDO_USER:$SUDO_USER $dest_root"
-    branch_command="sudo -u git checkout $REPO_BRANCH"
+    branch_command="sudo -u $SUDO_USER git checkout $REPO_BRANCH"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
@@ -4171,16 +4171,12 @@ git_clone() {
         return 1
     }
 
-    printf "\e[1;31mDEBUG:  Chown command: %s\e[0m\n" "$chown_command"
-    pause
     exec_command "Changing ownership of '$dest_root'" "$chown_command" "$debug" || {
         warn "Failed to change ownership of '$dest_root'"
         debug_end "$debug"
         return 1
     }
 
-    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$safe_command"
-    pause
     exec_command "Marking '$dest_root' safe in git" "$safe_command" "$debug" || {
         warn "Failed to mark '$dest_root' safe"
         debug_end "$debug"
