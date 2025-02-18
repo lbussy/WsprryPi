@@ -4168,8 +4168,9 @@ git_clone() {
         return 1
     }
 
-    local git_command
+    local git_command chown_command
     git_command="git config --global --add safe.directory $dest_root"
+    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
     printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$git_command"
     logI "Repository cloned successfully to '$dest_root'"
     eval "$git_command"
