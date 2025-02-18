@@ -16,3 +16,4 @@
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
 	url = https://github.com/lbussy/WsprryPi-UI.git
+	branch = bootstrap_5
