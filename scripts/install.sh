@@ -206,6 +206,7 @@ declare DRY_RUN="${DRY_RUN:-false}"
 declare IS_REPO="${IS_REPO:-false}"
 declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="${REPO_NAME:-wsprrypi}"
+declare UI_REPO_DIR="WsprryPi-UI"
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-install_update}"
 declare GIT_TAG="${GIT_TAG:-1.3.0}"
@@ -224,7 +225,7 @@ declare GIT_CLONE_BASE="https://github.com"
 #
 # @default false
 # -----------------------------------------------------------------------------
-declare USE_TAPR="${USE_TAPR:-false}"
+declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to change the LED/Shutdown behavior
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -241,7 +242,7 @@ declare OPTIONS_LIST=()     # List of -f--fl arguemtns for command line parsing
 #          in the script to determine which content to fetch from the
 #          repository.
 # -----------------------------------------------------------------------------
-readonly GIT_DIRS="${GIT_DIRS:-("config" "data" "executables" "systemd")}"
+readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "systemd")}"
 
 # -----------------------------------------------------------------------------
 # @var WSPR_EXE
@@ -739,7 +740,7 @@ readonly APT_PACKAGES=(
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 
 ############
-### Template Functions
+### Standard Functions
 ############
 
 # -----------------------------------------------------------------------------
@@ -1740,14 +1741,9 @@ replace_string_in_script() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 pause() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
     printf "Press any key to continue.\n"
     read -n 1 -sr key < /dev/tty || true
     printf "\n"
-    debug_print "$key" "$debug"
-
-    debug_end "$debug"
     return 0
 }
 
@@ -4003,8 +3999,9 @@ get_proj_params() {
         fi
 
         # Set local script paths based on repository structure
-        LOCAL_WWW_DIR="$LOCAL_REPO_DIR/data"
+        LOCAL_WWW_DIR="$LOCAL_REPO_DIR/$UI_REPO_DIR/data"
         if [[ ! -d "${LOCAL_WWW_DIR:-}" ]]; then
+            logD "HTML source directory $LOCAL_WWW_DIR (UI: $UI_REPO_DIR) does not exist."
             debug_end "$debug"
             die 1 "HTML source directory does not exist."
         fi
@@ -4044,7 +4041,7 @@ get_proj_params() {
         LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
-        LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/data"
+        LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/${UI_REPO_DIR}/data"
         GIT_RAW="$GIT_RAW_BASE/$REPO_ORG/$REPO_NAME"
         GIT_API="$GIT_API_BASE/$REPO_ORG/$REPO_NAME"
         GIT_CLONE="$GIT_CLONE_BASE/$REPO_ORG/$REPO_NAME"
@@ -4153,17 +4150,27 @@ download_file() {
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local dest_root="$LOCAL_REPO_DIR"
-    mkdir -p "$dest_root"
+    local retval=0
 
-    logI "Cloning repository from $GIT_CLONE to $dest_root"
-    git clone "$GIT_CLONE" "$dest_root" || {
-        warn "Failed to clone repository: $GIT_CLONE to $dest_root"
+    logI "Ensuring destination directory exists: '$dest_root'"
+    pause
+    mkdir -p "$dest_root" || {
+        warn "Failed to create destination directory: '$dest_root'"
+        debug_end "$debug"
         return 1
     }
 
-    logI "Repository cloned successfully to $dest_root"
+    logI "Cloning repository from '$GIT_CLONE' to '$dest_root'"
+    pause
+    git clone --recurse-submodules -j8 "$GIT_CLONE" "$dest_root" || {
+        warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
+        debug_end "$debug"
+        return 1
+    }
+
+    logI "Repository cloned successfully to '$dest_root'"
     debug_end "$debug"
-    return
+    return "$retval"
 }
 
 # -----------------------------------------------------------------------------
@@ -5764,7 +5771,7 @@ manage_wsprry_pi() {
 
     # Define the group of functions to install/uninstall
     local install_group=(
-        "download_files_in_directories"
+        "git_clone" # TODO: Change to clone repo
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
@@ -5773,7 +5780,7 @@ manage_wsprry_pi() {
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
-        "cleanup_files_in_directories"
+        "cleanup_files_in_directories" # TODO: Make sure this deletes repo
     )
 
     # Define functions to skip on uninstall using an associative array (hashmap)

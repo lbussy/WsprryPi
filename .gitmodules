@@ -13,3 +13,6 @@
 [submodule "src/Singleton"]
 	path = src/Singleton
 	url = https://github.com/lbussy/Singleton.git
+[submodule "WsprryPi-UI"]
+	path = WsprryPi-UI
+	url = https://github.com/lbussy/WsprryPi-UI.git

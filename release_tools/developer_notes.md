@@ -3,12 +3,19 @@
 
 I use VS Code installed on my working laptop (Windows or Mac) and the [Visual Studio Code Remote—SSH](https://code.visualstudio.com/docs/remote/ssh) extension to access VS Code's feature set on a Raspberry Pi from a familiar Dev UI on my laptop.
 
+> [!IMPORTANT]  
+> You MUST clone the repo with `--recurse-submodules` to get all parts.
+
+<!-- omit in toc -->
+## Table of Contents
+
 - [Set up SSH to your PI](#set-up-ssh-to-your-pi)
 - [Optional Housekeeping](#optional-housekeeping)
 - [VS Code](#vs-code)
 - [Required Libs](#required-libs)
 - [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
+
 
 ## Set up SSH to your PI
 
@@ -107,11 +114,14 @@ If you are going to use VS Code from your workstation:
 
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
+   > [!IMPORTANT]  
+   > You MUST clone the repo with `--recurse-submodules` to get all parts.
+
    Either:
 
    ``` bash
    sudo apt install git -y
-   git clone https://github.com/lbussy/WsprryPi.git
+   git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
    cd ~/WsprryPi/
    sudo ./scripts/install.sh -l
    ```
@@ -122,7 +132,7 @@ If you are going to use VS Code from your workstation:
 
    ``` bash
    curl -L installwspr.aa0nt.net | sudo bash
-   git clone https://github.com/lbussy/WsprryPi.git
+   git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
    cd ~/WsprryPi/
    ```
 
