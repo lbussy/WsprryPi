@@ -1820,6 +1820,7 @@ print_version() {
     if [[ "$caller" == "process_args" ]]; then
         printf "%s: version %s\n" "$REPO_TITLE" "$SEM_VER" # Display the script name and version
     else
+        # TODO:  Update this for piped scripts
         logI "Running ${REPO_TITLE}'s '${THIS_SCRIPT}', version $SEM_VER"
     fi
 
@@ -4162,6 +4163,7 @@ git_clone() {
 
     local clone_command safe_command chown_command
     logI "Cloning repository from '$GIT_CLONE' to '$dest_root'"
+    printf "\e[1;31mDEBUG:  Clone command: %s\e[0m\n" "$clone_command"
     pause
     clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     exec_command "$clone_command" "$debug" || {
@@ -4172,9 +4174,11 @@ git_clone() {
 
     safe_command="git config --global --add safe.directory $dest_root"
     chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
-    printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$git_command"
+    printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$clone_command"
     logI "Repository cloned successfully to '$dest_root'"
+    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$clone_command"
     exec_command "$safe_command" "$debug"
+    printf "\e[1;31mDEBUG:  Chown command: %s\e[0m\n" "$clone_command"
     exec_command "$chown_command" "$debug"
     pause
     debug_end "$debug"
