@@ -4170,8 +4170,9 @@ git_clone() {
 
     local git_command
     git_command="git config --global --add safe.directory $dest_root"
-    printf "\e[1;31mGit command: %s\e[0m\n" "$git_command"
+    printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$git_command"
     logI "Repository cloned successfully to '$dest_root'"
+    eval "$git_command"
     pause
     debug_end "$debug"
     return "$retval"
