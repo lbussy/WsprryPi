@@ -226,7 +226,13 @@
             </div>
             <div class="card-body">
 
-                <h3 class="card-title">Wsprry Pi Configuration</h3>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3 class="card-title mb-0">Wsprry Pi Configuration</h3>
+                    <div class="text-muted small text-end">
+                        <span id="localTime"></span><br>
+                        <span id="utcTime"></span>
+                    </div>
+                </div>
 
                 <form id="wsprform">
                     <fieldset id="wsprconfig" class="form-group" disabled="disabled">
@@ -461,6 +467,7 @@
             </div>
         </div>
     </div>
+
     <footer id="footer" class="bg-dark text-white fixed-bottom w-100">
         <div class="container py-2">
             <div class="row text-center">
@@ -475,7 +482,11 @@
                         <li class="list-inline-item"><a href="https://www.wsprnet.org/" class="text-white">WSPRNet</a></li>
                     </ul>
                     <p class="mb-1 small">
-                        Created by Lee Bussy, AA0NT. <span id="wspr-version">Loading version...</span>
+                        Created by Lee Bussy, AA0NT. 
+                        <span class="d-none d-md-inline" id="wspr-version">Loading version...</span>
+                    </p>
+                    <p class="d-md-none text-center small mb-1">
+                        <span id="wspr-version-mobile">Loading version...</span>
                     </p>
                     <p class="mb-0 small">
                         Original WsprryPi: <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md" class="text-white">GPL</a> | 
@@ -516,9 +527,7 @@
 
         function bindActions() {
             // Grab Use NTP Switch
-            $("#use_ntp").on("click", function() {
-                clickUseNTP();
-            });
+            $('#use_ntp').on("change", clickUseNTP);
 
             // Grab Use LED switch (key) {
             $("#use_led").on("click", function() {
@@ -544,6 +553,10 @@
                 percentage = ((percentage * offsetRange) + minOffset) * 100;
                 $('#rangeText').css("left", percentage + "%");
             });
+
+            // H
+            $('#ppm').on("input", validatePPM);         // Attach event listener for validation when in PPM
+            
         }
 
         function checkFreq() {
@@ -665,6 +678,9 @@
 
         function loadPage() {
             populateConfig();
+            fetchWsprVersion();
+            updateTime();
+            setInterval(updateTime, 1000);
         };
 
         function validatePage() {
@@ -847,10 +863,6 @@
             }
         }
 
-        // Attach event listener for validation when in PPM
-        $('#ppm').on("input", validatePPM);
-        $('#use_ntp').on("change", clickUseNTP); // Ensure function runs when checkbox changes
-
         function clickUseLED() {
             if ($('#use_led').is(":checked")) {
                 // Enable LED pin when using LED
@@ -895,9 +907,25 @@
                 });
         }
 
-        // Run the function when the page loads
-        $(document).ready(fetchWsprVersion);
+        function updateTime() {
+            let now = new Date();
 
+            // Format Local Time (24-hour format)
+            let localHours = String(now.getHours()).padStart(2, "0");
+            let localMinutes = String(now.getMinutes()).padStart(2, "0");
+            let localSeconds = String(now.getSeconds()).padStart(2, "0");
+            let localTime = `Local: ${localHours}:${localMinutes}:${localSeconds}`;
+
+            // Format UTC Time (24-hour format)
+            let utcHours = String(now.getUTCHours()).padStart(2, "0");
+            let utcMinutes = String(now.getUTCMinutes()).padStart(2, "0");
+            let utcSeconds = String(now.getUTCSeconds()).padStart(2, "0");
+            let utcTime = `UTC: ${utcHours}:${utcMinutes}:${utcSeconds}`;
+
+            // Update the elements
+            document.getElementById("localTime").textContent = localTime;
+            document.getElementById("utcTime").textContent = utcTime;
+        }
     </script>
 </body>
 
