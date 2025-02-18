@@ -4153,8 +4153,8 @@ git_clone() {
     local clone_command safe_command chown_command
     local dest_root="$LOCAL_REPO_DIR"
     local retval=0
-    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
-    safe_command="git config --global --add safe.directory $dest_root"
+    clone_command="sudo -u $SUDO_USER git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    safe_command="sudo -u $SUDO_USER git config --global --add safe.directory $dest_root"
     chown_command="chown -R $SUDO_USER:$SUDO_USER $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
@@ -4164,18 +4164,8 @@ git_clone() {
         return 1
     fi
 
-    printf "\e[1;31mDEBUG:  Clone command: %s\e[0m\n" "$clone_command"
-    pause
     exec_command "Cloning repository from '$GIT_CLONE' to '$dest_root'" "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
-        debug_end "$debug"
-        return 1
-    }
-
-    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$safe_command"
-    pause
-    exec_command "Marking '$dest_root' safe in git" "$safe_command" "$debug" || {
-        warn "Failed to mark '$dest_root' safe"
         debug_end "$debug"
         return 1
     }
@@ -4184,6 +4174,14 @@ git_clone() {
     pause
     exec_command "Changing ownership of '$dest_root'" "$chown_command" "$debug" || {
         warn "Failed to change ownership of '$dest_root'"
+        debug_end "$debug"
+        return 1
+    }
+
+    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$safe_command"
+    pause
+    exec_command "Marking '$dest_root' safe in git" "$safe_command" "$debug" || {
+        warn "Failed to mark '$dest_root' safe"
         debug_end "$debug"
         return 1
     }
