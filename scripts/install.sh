@@ -4160,20 +4160,22 @@ git_clone() {
         return 1
     }
 
+    local clone_command safe_command chown_command
     logI "Cloning repository from '$GIT_CLONE' to '$dest_root'"
     pause
-    git clone --recurse-submodules -j8 "$GIT_CLONE" "$dest_root" || {
+    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    exec_command "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
         return 1
     }
 
-    local git_command chown_command
-    git_command="git config --global --add safe.directory $dest_root"
+    safe_command="git config --global --add safe.directory $dest_root"
     chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
     printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$git_command"
     logI "Repository cloned successfully to '$dest_root'"
-    eval "$git_command"
+    exec_command "$safe_command" "$debug"
+    exec_command "$chown_command" "$debug"
     pause
     debug_end "$debug"
     return "$retval"
