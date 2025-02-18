@@ -4163,9 +4163,9 @@ git_clone() {
 
     local clone_command safe_command chown_command
     logI "Cloning repository from '$GIT_CLONE' to '$dest_root'"
+    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     printf "\e[1;31mDEBUG:  Clone command: %s\e[0m\n" "$clone_command"
     pause
-    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     exec_command "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
@@ -4177,8 +4177,10 @@ git_clone() {
     printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$clone_command"
     logI "Repository cloned successfully to '$dest_root'"
     printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$clone_command"
+    pause
     exec_command "$safe_command" "$debug"
     printf "\e[1;31mDEBUG:  Chown command: %s\e[0m\n" "$clone_command"
+    pause
     exec_command "$chown_command" "$debug"
     pause
     debug_end "$debug"
