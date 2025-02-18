@@ -4162,27 +4162,37 @@ git_clone() {
     }
 
     local clone_command safe_command chown_command
-    logI "Cloning repository from '$GIT_CLONE' to '$dest_root'"
-    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    clone_command="git clone --recurse-submodules -j8 $GIT_CLONE"
+        safe_command="git config --global --add safe.directory $dest_root"
+    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
+
     printf "\e[1;31mDEBUG:  Clone command: %s\e[0m\n" "$clone_command"
     pause
-    exec_command "$clone_command" "$debug" || {
+    exec_command "Cloning repository from '$GIT_CLONE' to '$dest_root'" "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
         return 1
     }
 
-    safe_command="git config --global --add safe.directory $dest_root"
-    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
-    printf "\e[1;31mDEBUG:  Git command: %s\e[0m\n" "$clone_command"
-    logI "Repository cloned successfully to '$dest_root'"
-    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$clone_command"
+    printf "\e[1;31mDEBUG:  Safe command: %s\e[0m\n" "$safe_command"
     pause
-    exec_command "$safe_command" "$debug"
-    printf "\e[1;31mDEBUG:  Chown command: %s\e[0m\n" "$clone_command"
+    exec_command "Marking '$dest_root' safe in git" "$safe_command" "$debug" || {
+        warn "Failed to mark '$dest_root' safe"
+        debug_end "$debug"
+        return 1
+    }
+
+    printf "\e[1;31mDEBUG:  Chown command: %s\e[0m\n" "$chown_command"
     pause
-    exec_command "$chown_command" "$debug"
+    exec_command "Changing ownership of '$dest_root'" "$chown_command" "$debug" || {
+        warn "Failed to change ownership of '$dest_root'"
+        debug_end "$debug"
+        return 1
+    }
+
+    printf "\e[1;31mDEBUG:  Git process complete.\e[0m\n"
     pause
+
     debug_end "$debug"
     return "$retval"
 }
