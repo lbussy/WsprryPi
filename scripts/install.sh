@@ -4150,12 +4150,13 @@ download_file() {
 # shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local clone_command safe_command chown_command
+    local clone_command safe_command chown_command branch_command
     local dest_root="$LOCAL_REPO_DIR"
     local retval=0
     clone_command="sudo -u $SUDO_USER git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     safe_command="sudo -u $SUDO_USER git config --global --add safe.directory $dest_root"
     chown_command="chown -R $SUDO_USER:$SUDO_USER $dest_root"
+    branch_command="sudo -u git checkout $REPO_BRANCH"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
@@ -4182,6 +4183,14 @@ git_clone() {
     pause
     exec_command "Marking '$dest_root' safe in git" "$safe_command" "$debug" || {
         warn "Failed to mark '$dest_root' safe"
+        debug_end "$debug"
+        return 1
+    }
+
+    printf "\e[1;31mDEBUG:  Checkout command: %s\e[0m\n" "$branch_command"
+    pause
+    exec_command "Checking out branch $REPO_BRANCH." "$branch_command" "$debug" || {
+        warn "Failed to check out $REPO_BRANCH."
         debug_end "$debug"
         return 1
     }
