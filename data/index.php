@@ -462,27 +462,29 @@
         </div>
     </div>
     <footer id="footer" class="bg-dark text-white fixed-bottom w-100">
-        `    <div class="container py-2"> <!-- Reduce padding -->
-                <div class="row text-center">
-                    <div class="col-lg-12">
-                        <ul class="list-inline mb-1 small"> <!-- Smaller font size -->
-                            <li class="list-inline-item"><a href="http://wsprdocs.aa0nt.net" class="text-white">Docs</a></li>
-                            <li class="list-inline-item">|</li>
-                            <li class="list-inline-item"><a href="https://github.com/lbussy/WsprryPi" class="text-white">GitHub</a></li>
-                            <li class="list-inline-item">|</li>
-                            <li class="list-inline-item"><a href="https://tapr.org/" class="text-white">TAPR</a></li>
-                            <li class="list-inline-item">|</li>
-                            <li class="list-inline-item"><a href="https://www.wsprnet.org/" class="text-white">WSPRNet</a></li>
-                        </ul>
-                        <p class="mb-1 small">Created by Lee Bussy, AA0NT.</p>
-                        <p class="mb-0 small">
-                            Original WsprryPi: <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md" class="text-white">GPL</a> | 
-                            New Code & Web UI: <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md" class="text-white">MIT License</a>
-                        </p>
-                    </div>
+        <div class="container py-2">
+            <div class="row text-center">
+                <div class="col-lg-12">
+                    <ul class="list-inline mb-1 small">
+                        <li class="list-inline-item"><a href="http://wsprdocs.aa0nt.net" class="text-white">Docs</a></li>
+                        <li class="list-inline-item">|</li>
+                        <li class="list-inline-item"><a href="https://github.com/lbussy/WsprryPi" class="text-white">GitHub</a></li>
+                        <li class="list-inline-item">|</li>
+                        <li class="list-inline-item"><a href="https://tapr.org/" class="text-white">TAPR</a></li>
+                        <li class="list-inline-item">|</li>
+                        <li class="list-inline-item"><a href="https://www.wsprnet.org/" class="text-white">WSPRNet</a></li>
+                    </ul>
+                    <p class="mb-1 small">
+                        Created by Lee Bussy, AA0NT. <span id="wspr-version">Loading version...</span>
+                    </p>
+                    <p class="mb-0 small">
+                        Original WsprryPi: <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md" class="text-white">GPL</a> | 
+                        New Code & Web UI: <a href="https://github.com/lbussy/WsprryPi/blob/main/LICENSE.md" class="text-white">MIT License</a>
+                    </p>
                 </div>
             </div>
-        </footer>`
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script src="https://kit.fontawesome.com/e51821420e.js" crossorigin="anonymous"></script>
@@ -709,7 +711,7 @@
                         $('#use_ntp').prop('checked', configJson["Extended"]["Use NTP"]);
                         $('#useoffset').prop('checked', configJson["Extended"]["Offset"]);
                         $('#use_led').prop('checked', configJson["Extended"]["Use LED"]);
-                        setGpioSelect(configJson["Extended"]["LED Pin"]);
+                        setGPIOSelect(configJson["Extended"]["LED Pin"]);
                         $('#power_level').val(configJson["Extended"]["Power Level"]).change();
                         // [Server]
                         $('#server_port').val(configJson["Server"]["Port"]);
@@ -817,38 +819,37 @@
             populateConfig();
         };
 
-function clickUseNTP() {
-    if ($('#use_ntp').is(":checked")) {
-        // Disable PPM when using self-cal and remove validation
-        $('#ppm').prop("disabled", true);
-        $('#ppm').removeClass("is-valid is-invalid"); // ✅ Clear validation classes
-    } else {
-        // Enable PPM when not using self-cal and trigger validation
-        $('#ppm').prop("disabled", false).trigger("input");
-    }
-}
+        function clickUseNTP() {
+            if ($('#use_ntp').is(":checked")) {
+                // Disable PPM when using self-cal and remove validation
+                $('#ppm').prop("disabled", true);
+                $('#ppm').removeClass("is-valid is-invalid"); // ✅ Clear validation classes
+            } else {
+                // Enable PPM when not using self-cal and trigger validation
+                $('#ppm').prop("disabled", false).trigger("input");
+            }
+        }
 
-// ✅ Custom function to validate PPM when enabled
-function validatePPM() {
-    let ppmInput = $('#ppm');
-    let value = parseFloat(ppmInput.val());
+        function validatePPM() {
+            let ppmInput = $('#ppm');
+            let value = parseFloat(ppmInput.val());
 
-    if ($('#use_ntp').is(":checked")) {
-        // ✅ If NTP is checked, ignore validation
-        ppmInput.removeClass("is-valid is-invalid");
-        return;
-    }
+            if ($('#use_ntp').is(":checked")) {
+                // ✅ If NTP is checked, ignore validation
+                ppmInput.removeClass("is-valid is-invalid");
+                return;
+            }
 
-    if (isNaN(value) || value < -200 || value > 200) {
-        ppmInput.addClass("is-invalid").removeClass("is-valid");
-    } else {
-        ppmInput.addClass("is-valid").removeClass("is-invalid");
-    }
-}
+            if (isNaN(value) || value < -200 || value > 200) {
+                ppmInput.addClass("is-invalid").removeClass("is-valid");
+            } else {
+                ppmInput.addClass("is-valid").removeClass("is-invalid");
+            }
+        }
 
-// ✅ Attach event listener for validation when typing
-$('#ppm').on("input", validatePPM);
-$('#use_ntp').on("change", clickUseNTP); // Ensure function runs when checkbox changes
+        // Attach event listener for validation when in PPM
+        $('#ppm').on("input", validatePPM);
+        $('#use_ntp').on("change", clickUseNTP); // Ensure function runs when checkbox changes
 
         function clickUseLED() {
             if ($('#use_led').is(":checked")) {
@@ -867,7 +868,7 @@ $('#use_ntp').on("change", clickUseNTP); // Ensure function runs when checkbox c
             return gpioNumber ? parseInt(gpioNumber[0]) : null; // Convert to integer and return
         };
 
-        function setGpioSelect(gpioNumber) {
+        function setGPIOSelect(gpioNumber) {
             let gpioValue = "GPIO" + gpioNumber; // Construct the expected value, e.g., "GPIO17"
             
             // Check if the option exists before setting it
@@ -877,6 +878,26 @@ $('#use_ntp').on("change", clickUseNTP); // Ensure function runs when checkbox c
                 console.warn("GPIO value not found:", gpioValue);
             }
         };
+
+        function fetchWsprVersion() {
+            $.getJSON(window.location.pathname + "/version.php")
+                .done(function(response) {
+                    if (response && response.wspr_version) {
+                        $("#wspr-version").text("WSPR Version: " + response.wspr_version);
+                    } else {
+                        console.error("Invalid JSON format from version:", response);
+                        $("#wspr-version").text("Version unavailable");
+                    }
+                })
+                .fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error("Error fetching WSPR version:", textStatus, errorThrown);
+                    $("#wspr-version").text("Version unavailable");
+                });
+        }
+
+        // Run the function when the page loads
+        $(document).ready(fetchWsprVersion);
+
     </script>
 </body>
 
