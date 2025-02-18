@@ -4155,7 +4155,7 @@ git_clone() {
     local retval=0
     clone_command="git clone --recurse-submodules -j8 $GIT_CLONE $dest_root"
     safe_command="git config --global --add safe.directory $dest_root"
-    chown_command="chown -R $USER_HOME:$USER_HOME $dest_root"
+    chown_command="chown -R $SUDO_USER:$SUDO_USER $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
