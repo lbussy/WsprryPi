@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# TODO:  Get parameters from INI file
+
 """
 @file wspr_watch.py
 @brief Monitors GPIO and file-based triggers to initiate a system shutdown or reboot.
