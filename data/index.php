@@ -678,7 +678,7 @@
 
         function loadPage() {
             populateConfig();
-            fetchWsprVersion();
+            updateWsprryPiVersion();
             updateTime();
             setInterval(updateTime, 1000);
         };
@@ -891,7 +891,7 @@
             }
         };
 
-        function fetchWsprVersion() {
+        function updateWsprryPiVersion() {
             $.getJSON(window.location.pathname + "/version.php")
                 .done(function(response) {
                     if (response && response.wspr_version) {
@@ -930,3 +930,7 @@
 </body>
 
 </html>
+<!--
+    TODO: Fix stacking in mobile mode.
+    TODO: Fix version loading in mobole mode.
+-->

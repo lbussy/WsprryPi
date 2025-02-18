@@ -1299,3 +1299,4 @@ int main(const int argc, char *const argv[])
 // TODO: Modern C++ prefers constexpr over preprocessor macros (#define). Maybe all of them can go in a separate file.
 // TODO: See if we can use C++ 20 and .contains() (in arg parsing)
 // TODO: Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
+// TODO: DMA notes at: https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial
