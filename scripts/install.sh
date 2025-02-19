@@ -5632,25 +5632,27 @@ cleanup_files_in_directories() {
     fi
 
     # Prevent deletion if running inside the repository
-    if [[ -d "$dest_root" && ("$IS_REPO" == "true" || "$(realpath "$dest_root")" == "$(realpath "$LOCAL_REPO_DIR")") ]]; then
+    if [[ "$IS_REPO" == "true" ]]; then
         logI "Running from repo, skipping cleanup."
         debug_end "$debug"
         return 0
-    fi
-
-    logI "Deleting local repository tree."
-
-    if [[ "$DRY_RUN" == "true" ]]; then
-        logD "Delete local repo files (dry-run)."
-        debug_end "$debug"
-        return 0
     else
-        # Delete the repository directory
-        exec_command "Delete local repository" "sudo rm -fr $dest_root" "$debug" || {
-            logE "Failed to delete local install files."
+        logI "Deleting local repository tree."
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Delete local repo files (dry-run)."
             debug_end "$debug"
-            return 1
-        }
+            return 0
+        elif [[ -d "$dest_root" ]]; then
+            # Delete the repository directory
+            exec_command "Delete local repository" "sudo rm -fr $dest_root" "$debug" || {
+                logE "Failed to delete local install files."
+                debug_end "$debug"
+                return 1
+            }
+        else
+            logW "Unable to delet '$dest_root', not a directory."
+        fi
     fi
 
     debug_end "$debug"
