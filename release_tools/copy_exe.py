@@ -1,35 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Copy project executables to installed location."""
+"""Update installed executables from Git repo."""
 
 import os
 import subprocess
-import sys
 
 def get_git_root():
     """Determine the Git repository root directory."""
     try:
         return subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()
     except subprocess.CalledProcessError:
-        return None  # Indicate failure to find the git root
+        print("Error: Not inside a Git repository.")
+        exit(1)
 
 def service_exists(service_name):
     """Check if a systemd service exists."""
-    try:
-        result = subprocess.check_output(['systemctl', 'list-unit-files', '--type=service', '--no-pager'], text=True)
-        return service_name in result
-    except subprocess.CalledProcessError:
-        return False  # If the command fails, assume the service does not exist
+    subprocess.call(['systemctl', 'list-units', '--type=service', '--all', '--no-pager'],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return service_name in subprocess.check_output(
+        ['systemctl', 'list-units', '--type=service', '--all', '--no-pager'],
+        text=True
+    )
 
 def stop_and_disable_service(service_name):
     """Stop and disable a systemd service if it exists."""
     if service_exists(service_name):
         subprocess.call(['sudo', 'systemctl', 'stop', service_name])
         subprocess.call(['sudo', 'systemctl', 'disable', service_name])
-    else:
-        print(f"Error: Service '{service_name}' is not installed. Exiting.")
-        sys.exit(1)
 
 def copy_file(src, dest):
     """Copy a file to a destination with correct permissions."""
@@ -38,32 +36,21 @@ def copy_file(src, dest):
         subprocess.call(['sudo', 'chown', 'root:root', dest])
         subprocess.call(['sudo', 'chmod', '755', dest])
     else:
-        print(f"Error: Required executable '{src}' not found. Exiting.")
-        sys.exit(1)
+        print(f"Warning: {src} does not exist, skipping.")
 
 def clear_logs(log_dir):
     """Delete all logs in a specified directory."""
     if os.path.exists(log_dir):
-        try:
-            subprocess.call(['sudo', 'rm', '-rf', os.path.join(log_dir, '*')])
-        except Exception as e:
-            print(f"Error clearing logs in {log_dir}: {e}")
+        subprocess.call(['sudo', 'rm', '-rf', os.path.join(log_dir, '*')])
 
 def enable_and_start_service(service_name):
-    """Enable and start a systemd service if it exists."""
-    if service_exists(service_name):
-        subprocess.call(['sudo', 'systemctl', 'enable', service_name])
-        subprocess.call(['sudo', 'systemctl', 'start', service_name])
-    else:
-        print(f"Error: Service '{service_name}' does not exist. Exiting.")
-        sys.exit(1)
+    """Enable and start a systemd service."""
+    subprocess.call(['sudo', 'systemctl', 'enable', service_name])
+    subprocess.call(['sudo', 'systemctl', 'start', service_name])
 
 def main():
+    """Check for and repoace executables."""
     git_root = get_git_root()
-
-    if not git_root:
-        print("Error: Not inside a Git repository.")
-        sys.exit(1)  # Exit with an error code
 
     wsprrypi_service = "wsprrypi.service"
     wspr_watch_service = "wspr_watch.service"
@@ -75,24 +62,6 @@ def main():
     wsprrypi_dest = "/usr/local/bin/wsprrypi"
     wspr_watch_dest = "/usr/local/bin/wspr_watch.py"
     log_dir = "/var/log/wsprrypi"
-
-    # Check if required executables exist before proceeding
-    if not os.path.exists(wsprrypi_bin):
-        print(f"Error: '{wsprrypi_bin}' not found. Build the project before running this script.")
-        sys.exit(1)
-
-    if not os.path.exists(wspr_watch_script):
-        print(f"Error: '{wspr_watch_script}' not found. Ensure it is available before running this script.")
-        sys.exit(1)
-
-    # Check if required services exist
-    if not service_exists(wsprrypi_service):
-        print(f"Error: Service '{wsprrypi_service}' does not exist. Ensure it is installed.")
-        sys.exit(1)
-
-    if not service_exists(wspr_watch_service):
-        print(f"Error: Service '{wspr_watch_service}' does not exist. Ensure it is installed.")
-        sys.exit(1)
 
     # Handle wsprrypi service
     stop_and_disable_service(wsprrypi_service)

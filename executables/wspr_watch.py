@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# TODO:  Get parameters from INI file
+
 """
 @file wspr_watch.py
 @brief Monitors GPIO and file-based triggers to initiate a system shutdown or reboot.
@@ -139,7 +141,7 @@ except ImportError:
 
 
 # Version information
-__version__ = "1.2.1-update_ui+54.7716cd3-dirty"
+__version__ = "1.2.1-ui_features+55.c921e43-dirty"
 
 # Filenames for shutdown and reboot triggers
 STOP_FILE_NAME = "shutdown"

@@ -6,8 +6,8 @@
 # @brief Update versions in scripts and source files.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-update_ui+54.7716cd3-dirty
-# @date 2025-02-17
+# @version 1.2.1-ui_features+55.c921e43-dirty
+# @date 2025-02-18
 # @copyright MIT License
 #
 # @license
@@ -50,7 +50,7 @@ import inspect
 
 from get_semantic_version import SemanticVersion
 
-__version__ = "1.2.1-update_ui+54.7716cd3-dirty"
+__version__ = "1.2.1-ui_features+55.c921e43-dirty"
 
 
 # List of files to update
