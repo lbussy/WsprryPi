@@ -141,7 +141,7 @@ except ImportError:
 
 
 # Version information
-__version__ = "1.2.1-ui_features+55.c921e43-dirty"
+__version__ = "1.2.1-config_lib+55.34ec249"
 
 # Filenames for shutdown and reboot triggers
 STOP_FILE_NAME = "shutdown"
