@@ -1820,8 +1820,11 @@ print_version() {
     if [[ "$caller" == "process_args" ]]; then
         printf "%s: version %s\n" "$REPO_TITLE" "$SEM_VER" # Display the script name and version
     else
-        # TODO:  Update this for piped scripts
-        logI "Running ${REPO_TITLE}'s '${THIS_SCRIPT}', version $SEM_VER"
+        if [[ "$THIS_SCRIPT" == "piped_script" ]]; then
+            logI "Running ${REPO_TITLE}'s install script, version $SEM_VER."
+        else
+            logI "Running ${REPO_TITLE}'s '${THIS_SCRIPT}', version $SEM_VER"
+        fi
     fi
 
     debug_end "$debug"
@@ -3895,8 +3898,8 @@ get_sem_ver() {
     tag=$(get_last_tag "$debug")
     debug_print "Received tag: $tag from get_last_tag()." "$debug"
     if [[ -z "$tag" || "$tag" == "0.0.1" ]]; then
-        debug_print "No semantic version tag found (or version is 0.0.1). Using default: 0.0.1" "$debug"
-        version_string="0.0.1"
+        debug_print "No semantic version tag found (or version is 0.0.1). Using script version: $GIT_TAG" "$debug"
+        version_string="$GIT_TAG"
     else
         version_string="$tag"
     fi
@@ -4150,9 +4153,9 @@ download_file() {
 # shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local clone_command
-    local dest_root="$LOCAL_REPO_DIR"
-    local retval=0
+    local clone_command dest_root retval
+    dest_root="$LOCAL_REPO_DIR"
+    retval=0
     clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
@@ -4733,7 +4736,8 @@ process_args() {
                         # Exit if exit_flag is set
                         if (( exit_flag == 1 )); then
                             debug_end "$debug"
-                            exit_script "$retval"
+                            printf "\n"
+                            exit
                         fi
                         continue
                     fi
@@ -4826,7 +4830,6 @@ usage() {
     script_name+=" ./$THIS_SCRIPT"
 
     # Print the usage with the correct script name
-    printf "\n"
     printf "Usage: %s [debug] <option1> [<option2> ...]\n\n" "$script_name" >&$output_redirect
 
     # Word Arguments section
@@ -5770,7 +5773,7 @@ manage_wsprry_pi() {
 
     # Define the group of functions to install/uninstall
     local install_group=(
-        "git_clone" # TODO: Change to clone repo
+        "git_clone"
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
@@ -5779,13 +5782,14 @@ manage_wsprry_pi() {
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
-        "cleanup_files_in_directories" # TODO: Make sure this deletes repo
+        "cleanup_files_in_directories"
     )
 
-    # Define functions to skip on uninstall using an associative array (hashmap)
-    declare -A skip_on_uninstall=()  # Ensure associative array is initialized
-    skip_on_uninstall["download_files_in_directories"]=1
-    skip_on_uninstall["cleanup_files_in_directories"]=1
+    # Define functions to skip on uninstall using an indexed array
+    local skip_on_uninstall=(
+        "download_files_in_directories"
+        "cleanup_files_in_directories"
+    )
 
     # Start the script
     start_script "$debug"
@@ -5796,37 +5800,59 @@ manage_wsprry_pi() {
     # Track overall success/failure
     local overall_status=0
 
-    # Iterate over the group of functions and call them with the action and debug flag
-    local group_to_execute=()
-    if [[ "$ACTION" == "install" ]]; then
-        group_to_execute=("${install_group[@]}")
-    elif [[ "$ACTION" == "uninstall" ]]; then
-        mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
-    else
-        die 1 "Invalid action. Use 'install' or 'uninstall'."
-    fi
+    # Debug print the original install_group list
+    debug_print "Original install_group list:" "$debug"
+    for func in "${install_group[@]}"; do
+        debug_print "  - $func" "$debug"
+    done
 
+    # Select the execution order based on the action
+    local group_to_execute=()
+    case "$ACTION" in
+        install)
+            group_to_execute=("${install_group[@]}")
+            ;;
+        uninstall)
+            if command -v tac &>/dev/null; then
+                mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
+            else
+                # Manual reverse if `tac` is unavailable
+                for ((i=${#install_group[@]}-1; i>=0; i--)); do
+                    group_to_execute+=("${install_group[i]}")
+                done
+            fi
+            ;;
+        *)
+            die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
+            ;;
+    esac
+
+    # Debug print the final group_to_execute list
+    debug_print "Final group_to_execute list (after processing):" "$debug"
+    for func in "${group_to_execute[@]}"; do
+        debug_print "  - $func" "$debug"
+    done
+
+    # Execute functions while skipping those in skip_on_uninstall
     for func in "${group_to_execute[@]}"; do
         local function_name="${func%% *}"  # Extract only function name
 
         # Skip functions listed in skip_on_uninstall
-        if [[ -n "${skip_on_uninstall[$function_name]:-}" ]]; then
+        if [[ " ${skip_on_uninstall[*]} " =~ " $function_name " ]]; then
             debug_print "Skipping $function_name during uninstall." "$debug"
             continue
         fi
 
+        # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
-
-        # Call the function with action and debug flag
         eval "$func \"$debug\""
         local status=$?
 
         # Check if the function failed
         if [[ $status -ne 0 ]]; then
-            logE "$func failed with status $status"
+            logE "$func failed with status $status" "$debug"
             overall_status=1
             debug_end "$debug"
-            return 1
         else
             debug_print "$func succeeded." "$debug"
         fi
@@ -5864,8 +5890,7 @@ manage_wsprry_pi() {
 # -----------------------------------------------------------------------------
 _main() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    printf "\n"
+    [[ "$debug" != "debug" ]] && printf "\n\n" # Just a visual when not in debug.
 
     # Check and set up the environment
     handle_execution_context "$debug"  # Get execution context and set environment variables
