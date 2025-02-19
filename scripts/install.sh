@@ -5651,7 +5651,7 @@ cleanup_files_in_directories() {
                 return 1
             }
         else
-            logW "Unable to delet '$dest_root', not a directory."
+            logW "Unable to delete '$dest_root', not a directory."
         fi
     fi
 
