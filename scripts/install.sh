@@ -225,7 +225,7 @@ declare GIT_CLONE_BASE="https://github.com"
 #
 # @default false
 # -----------------------------------------------------------------------------
-declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to change the LED/Shutdown behavior
+declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables

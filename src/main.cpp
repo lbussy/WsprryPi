@@ -134,7 +134,6 @@ MonitorFile iniMonitor;
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
 
-
 // Used for GPIO DIO Access:
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
 #define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
@@ -1036,11 +1035,13 @@ int main(const int argc, char *const argv[])
     disableSignalEcho();
 
     // Parse command line arguments
-    if (!parse_command_line(argc, argv))return false;
+    if (!parse_command_line(argc, argv))
+        return false;
     // Show the net configuration values after ini and command line parsing
     show_config_values();
     // Check initial load
-    if (!validate_config_data()) return false;
+    if (!validate_config_data())
+        return false;
 
     llog.logS(INFO, version_string());
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
