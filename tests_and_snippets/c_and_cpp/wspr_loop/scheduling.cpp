@@ -14,6 +14,7 @@
 #include <atomic>
 #include <thread>
 #include <condition_variable>
+#include <regex>
 
 std::condition_variable cv;
 std::mutex cv_mtx;
@@ -35,7 +36,7 @@ void set_scheduling_priority()
 void set_transmission_realtime()
 {
     struct sched_param sp;
-    sp.sched_priority = 75; // Choose a priority in the mid-high range (1–99)
+    sp.sched_priority = 75; // mid-high range (1–99)
 
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (ret != 0)
@@ -48,63 +49,196 @@ void set_transmission_realtime()
     }
 }
 
-std::string get_current_governor()
+bool get_current_governors()
 {
-    std::ifstream file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor");
-    std::string governor;
-    if (file.is_open())
+    config.previous_governor.clear();
+    bool success = false;
+
+    for (const auto &entry : std::filesystem::directory_iterator("/sys/devices/system/cpu/"))
     {
-        file >> governor;
-        file.close();
+        if (!entry.is_directory())
+            continue;
+
+        std::string dirName = entry.path().filename().string();
+        // Only handle directories like "cpu0", "cpu1", etc.
+        if (!std::regex_match(dirName, std::regex("^cpu[0-9]+$")))
+        {
+            // skip cpufreq, cpuidle, etc.
+            continue;
+        }
+
+        // Real CPU -> read scaling_governor
+        std::string governor_path = entry.path().string() + "/cpufreq/scaling_governor";
+        if (std::filesystem::exists(governor_path))
+        {
+            std::ifstream file(governor_path);
+            if (file.is_open())
+            {
+                std::string governor;
+                file >> governor;
+                file.close();
+                config.previous_governor[dirName] = governor;
+                success = true;
+            }
+        }
     }
-    return governor;
+
+    return success;
+}
+
+bool set_cpu_governor_for_core(const std::string &core, const std::string &governor)
+{
+    // e.g. core = "cpu0"
+    std::string cpufreq_path = "/sys/devices/system/cpu/" + core + "/cpufreq";
+    if (!std::filesystem::exists(cpufreq_path))
+    {
+        llog.logE(WARN, "cpufreq directory not found for:", core);
+        return false;
+    }
+
+    std::string governor_path = cpufreq_path + "/scaling_governor";
+    std::ofstream file(governor_path);
+    if (!file.is_open())
+    {
+        llog.logE(ERROR, "Failed to set CPU governor to:", governor, "for", core);
+        return false;
+    }
+
+    file << governor;
+    file.close();
+    llog.logS(DEBUG, "CPU governor set to:", governor, "for", core);
+    return true;
 }
 
 bool set_cpu_governor(const std::string &governor)
 {
-    std::ofstream file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor");
-    if (file.is_open())
+    bool success = true;
+
+    for (const auto &entry : std::filesystem::directory_iterator("/sys/devices/system/cpu/"))
     {
-        file << governor;
-        file.close();
-        llog.logS(INFO, "CPU governor set to:", governor);
-        return true;
+        if (!entry.is_directory())
+            continue;
+
+        std::string dirName = entry.path().filename().string();
+
+        // Only proceed if this is a real CPU directory like "cpu0", "cpu1", etc.
+        if (!std::regex_match(dirName, std::regex("^cpu[0-9]+$")))
+            continue;
+
+        // cpufreq path for this CPU
+        std::string cpufreq_path = entry.path().string() + "/cpufreq";
+        if (!std::filesystem::exists(cpufreq_path))
+        {
+            llog.logE(WARN, "cpufreq directory not found for:", dirName);
+            continue;
+        }
+
+        // Attempt to set scaling_governor
+        std::string governor_path = cpufreq_path + "/scaling_governor";
+        std::ofstream file(governor_path);
+        if (file.is_open())
+        {
+            file << governor;
+            file.close();
+            llog.logS(DEBUG, "CPU governor set to:", governor, "for", dirName);
+        }
+        else
+        {
+            llog.logE(ERROR, "Failed to set CPU governor to:", governor, "for", dirName);
+            success = false;
+        }
     }
-    llog.logE(ERROR, "Failed to set CPU governor to:", governor);
-    return false;
+
+    if (!success)
+    {
+        llog.logE(ERROR, "One or more CPU cores failed to set the governor to:", governor);
+    }
+
+    return success;
 }
 
 void enable_performance_mode()
 {
-    config.previous_governor = get_current_governor();
-    if (config.previous_governor.empty())
+    // 1) Refresh map of previous governors
+    bool success = get_current_governors();
+    if (!success)
     {
-        llog.logE(ERROR, "Failed to retrieve current CPU governor.");
+        llog.logE(ERROR, "Failed to retrieve current CPU governors.");
         return;
     }
 
-    if (config.previous_governor != "performance")
+    // 2) If map is empty, there's no CPU info
+    if (config.previous_governor.empty())
+    {
+        llog.logE(ERROR, "No CPU governors found.");
+        return;
+    }
+
+    // 3) Check if all are already performance
+    bool all_in_performance = true;
+    for (const auto &entry : config.previous_governor)
+    {
+        if (entry.second != "performance")
+        {
+            all_in_performance = false;
+            break;
+        }
+    }
+
+    // 4) If not all performance, set them
+    if (!all_in_performance)
     {
         if (set_cpu_governor("performance"))
         {
-            llog.logS(INFO, "Performance mode enabled.");
+            llog.logS(INFO, "Performance mode enabled for all CPU cores.");
+        }
+        else
+        {
+            llog.logE(ERROR, "Failed to enable performance mode on all cores.");
         }
     }
     else
     {
-        // TODO: Restore the mode in the config file, this got abandoned during testing
-        llog.logS(DEBUG, "CPU already in performance mode.");
+        llog.logS(DEBUG, "All CPU cores are already in performance mode.");
     }
 }
 
 void restore_governor()
 {
-    if (!config.previous_governor.empty() && config.previous_governor != "performance")
+    // Make sure we have stored data
+    if (config.previous_governor.empty())
     {
-        if (set_cpu_governor(config.previous_governor))
+        llog.logE(ERROR, "No previous CPU governor settings found.");
+        return;
+    }
+
+    bool success = true;
+
+    // Iterate the map: (cpu0 -> ondemand, cpu1 -> performance, etc.)
+    for (const auto &entry : config.previous_governor)
+    {
+        const std::string &core = entry.first;
+        const std::string &governor = entry.second;
+
+        // Use the single-core function:
+        if (!set_cpu_governor_for_core(core, governor))
         {
-            llog.logS(INFO, "CPU governor restored to:", config.previous_governor);
+            llog.logE(ERROR, "Failed to restore governor for", core, "to", governor);
+            success = false;
         }
+        else
+        {
+            llog.logS(DEBUG, "Restored governor for", core, "to", governor);
+        }
+    }
+
+    if (success)
+    {
+        llog.logS(INFO, "All CPU governors restored successfully.");
+    }
+    else
+    {
+        llog.logE(ERROR, "Failed to restore some CPU governors.");
     }
 }
 
@@ -113,50 +247,40 @@ void precise_sleep_until(const timespec &target)
     while (true)
     {
         int res = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &target, nullptr);
-        if (res == 0)
-        {
-            break; // Success
-        }
+        if (res == 0) break;  // Success
         if (res != EINTR)
         {
             llog.logE(ERROR, "clock_nanosleep failed:", std::string(strerror(res)));
             break;
         }
-        // If interrupted, continue sleeping until the target time
+        // If interrupted, keep trying until target
     }
 }
 
 bool wait_every(int interval)
 {
     using namespace std::chrono;
-
     auto now = system_clock::now();
 
     // Convert current time to integral minutes since epoch
     auto current_min_time = time_point_cast<minutes>(now);
     auto total_minutes = duration_cast<minutes>(current_min_time.time_since_epoch()).count();
 
-    // Calculate next boundary minute
+    // Next boundary minute
     auto next_boundary = ((total_minutes / interval) + 1) * interval;
-
-    // Next boundary time in <system_clock, minutes>
     auto next_boundary_time = system_clock::time_point{minutes(next_boundary)};
-
-    // Add one second for the desired target time
     auto desired_time = next_boundary_time + seconds(1);
 
-    // If in the past, nudge forward by `interval` minutes
     if (desired_time <= now)
         desired_time += minutes(interval);
 
-    // Convert the desired_time to a human-readable form for logs
     auto desired_time_t = system_clock::to_time_t(desired_time);
     auto desired_tm = *std::gmtime(&desired_time_t);
 
-    // Determine the mode string based on the interval
-    std::string mode_string = (interval == WSPR_2) ? "WSPR-2" : (interval == WSPR_15 ? "WSPR-15" : "Unknown mode");
+    std::string mode_string = (interval == WSPR_2) ? "WSPR-2"
+                           : (interval == WSPR_15) ? "WSPR-15"
+                                                   : "Unknown mode";
 
-    // Log the next transmission time
     std::ostringstream info_message;
     info_message << "Next transmission at "
                  << std::setw(2) << std::setfill('0') << desired_tm.tm_hour << ":"
@@ -164,33 +288,27 @@ bool wait_every(int interval)
                  << "01 UTC (" << mode_string << ").";
     llog.logS(INFO, info_message.str());
 
-    // **Sleep with periodic interrupt checks**
+    // Sleep until desired_time
     while (system_clock::now() < desired_time)
     {
-        if (exit_scheduler.load())
-        {
-            // Shutdown requested. Exiting scheduler.
-            return false;
-        }
-        std::this_thread::sleep_for(milliseconds(100));  // Sleep in 100 ms chunks
+        if (exit_scheduler.load()) return false;
+        std::this_thread::sleep_for(milliseconds(100));
     }
 
-    // Capture the actual wake-up time
+    // Actual wake-up
     auto final_time = system_clock::now();
     auto final_t = system_clock::to_time_t(final_time);
     auto final_tm = *std::gmtime(&final_t);
 
-    // Calculate the offset in milliseconds from the desired target
     auto offset_ns = duration_cast<nanoseconds>(final_time - desired_time).count();
-    double offset_ms = offset_ns / 1e6;  // Convert nanoseconds to milliseconds
+    double offset_ms = offset_ns / 1e6;
 
-    // Prepare offset message
     std::ostringstream offset_message;
     offset_message << "Offset from desired target: "
                    << (offset_ms >= 0 ? "+" : "-")
-                   << std::fixed << std::setprecision(4) << std::abs(offset_ms) << " ms.";
+                   << std::fixed << std::setprecision(4)
+                   << std::abs(offset_ms) << " ms.";
 
-    // Check if we hit the target interval
     if ((final_tm.tm_min % interval == 0) && final_tm.tm_sec >= 1)
     {
         llog.logS(INFO, "Transmission triggered at the target interval (" + std::to_string(interval) + " min).");
@@ -198,7 +316,6 @@ bool wait_every(int interval)
         return true;
     }
 
-    // Log an error if the interval was missed
     llog.logE(ERROR, "Missed target interval. " + offset_message.str());
     return false;
 }
@@ -219,7 +336,7 @@ void scheduler_thread()
 
     while (!exit_scheduler)
     {
-        // Check for CPU throttling every minute
+        // Periodically check throttling
         check_and_restore_governor();
 
         // Monitor for INI changes
@@ -229,17 +346,15 @@ void scheduler_thread()
             validate_config_data();
         }
 
-        // Read the current interval dynamically
+        // WSPR interval
         int current_interval = wspr_interval.load();
         llog.logS(DEBUG, "Current WSPR interval set to:", current_interval, "minutes.");
 
-        // Wait for the next interval based on the updated value
         if (wait_every(current_interval))
         {
             transmit();
         }
 
-        // Avoid busy-waiting with a conditional sleep
         cv.wait_for(lock, std::chrono::seconds(1), [] { return exit_scheduler.load(); });
     }
 
@@ -250,27 +365,24 @@ void wspr_loop()
 {
     while (!exit_scheduler.load())
     {
-        exit_scheduler = false;  // Ensure clean state
+        exit_scheduler = false;
 
-        // Start scheduler thread
+        // Start scheduler
         active_threads.emplace_back(scheduler_thread);
 
         std::unique_lock<std::mutex> lock(cv_mtx);
         cv.wait(lock, [] { return exit_scheduler.load(); });
 
-        // Join all threads
+        // Join all
         for (auto &thread : active_threads)
         {
-            if (thread.joinable())
-            {
-                thread.join();
-            }
+            if (thread.joinable()) thread.join();
         }
         active_threads.clear();
 
         if (!exit_scheduler.load())
         {
-            transmit();  // Only transmit if shutdown wasn't requested
+            transmit();
         }
     }
 }
@@ -283,31 +395,24 @@ bool is_cpu_throttled()
     int temp = 0;
     int cur_freq = 0;
 
-    if (temp_file.is_open())
-    {
+    if (temp_file.is_open()) {
         temp_file >> temp;
         temp_file.close();
-    }
-    else
-    {
+    } else {
         llog.logE(ERROR, "Failed to read CPU temperature.");
         return false;
     }
 
-    if (freq_file.is_open())
-    {
+    if (freq_file.is_open()) {
         freq_file >> cur_freq;
         freq_file.close();
-    }
-    else
-    {
+    } else {
         llog.logE(ERROR, "Failed to read current CPU frequency.");
         return false;
     }
 
-    // Check if the temperature is above 80°C (throttling threshold)
-    bool temp_throttled = (temp > 80000);  // Temp is in millidegrees
-    bool freq_throttled = (cur_freq < 1000000);  // Below 1 GHz usually indicates throttling
+    bool temp_throttled = (temp > 80000);        // > 80°C
+    bool freq_throttled = (cur_freq < 1000000);  // < 1GHz
 
     if (temp_throttled || freq_throttled)
     {
@@ -325,21 +430,28 @@ void check_and_restore_governor()
     {
         llog.logE(WARN, "CPU Throttling detected.");
 
-        // Restore the previous governor if it was changed
-        if (!config.previous_governor.empty() && config.previous_governor != "performance")
+        // Instead of comparing a map to "performance", check if *all* are "performance"
+        bool all_perf = true;
+        for (auto &kv : config.previous_governor)
         {
-            if (set_cpu_governor(config.previous_governor))
+            if (kv.second != "performance")
             {
-                llog.logS(INFO, "CPU governor restored to:", config.previous_governor);
+                all_perf = false;
+                break;
             }
-            else
-            {
-                llog.logE(ERROR, "Failed to restore CPU governor.");
-            }
+        }
+
+        // If there's at least one non-performance, attempt to restore
+        if (!config.previous_governor.empty() && !all_perf)
+        {
+            // We want to revert them all to their old settings:
+            //   In your original code, you did `set_cpu_governor(config.previous_governor)`
+            //   which doesn't exist. Instead, let's loop or call restore_governor():
+            restore_governor();
         }
         else
         {
-            llog.logE(WARN, "Governor was already 'performance' or not set.");
+            llog.logE(WARN, "Governor was already 'performance' or map was empty.");
         }
     }
 }

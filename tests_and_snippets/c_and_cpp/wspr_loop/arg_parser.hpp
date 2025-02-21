@@ -73,19 +73,19 @@ enum class ModeType
  */
 struct ArgParserConfig
 {
-    bool useini;                         ///< Flag indicating if an INI file is used for configuration.
-    std::string inifile;                 ///< Path to the INI configuration file.
-    bool repeat;                         ///< Flag to enable repeated transmission cycles.
-    std::vector<double> center_freq_set; ///< List of transmission frequencies.
-    bool no_delay;                       ///< Flag to disable WSPR TX window synchronization.
-    std::optional<int> terminate;        ///< Number of transmissions before termination (if set).
-    bool daemon_mode;                    ///< Flag for enabling daemon (terse) mode.
-    double f_plld_clk;                   ///< TODO:  Define this - PLLD clock frequency (unused in current implementation).
-    int mem_flag;                        ///< TODO:  Define this - Placeholder for memory management flags.
-    float test_tone;                     ///< Frequency for test tone mode.
-    ModeType mode;                       ///< Current operating mode (WSPR or test tone).
-    double last_ppm;                     ///< TODO New: Stores the oprevious PPM value.
-    std::string previous_governor;       ///< TODO New: Stores the original CPU frequency governor.
+    bool useini;                                          ///< Flag indicating if an INI file is used for configuration.
+    std::string inifile;                                  ///< Path to the INI configuration file.
+    bool repeat;                                          ///< Flag to enable repeated transmission cycles.
+    std::vector<double> center_freq_set;                  ///< List of transmission frequencies.
+    bool no_delay;                                        ///< Flag to disable WSPR TX window synchronization.
+    std::optional<int> terminate;                         ///< Number of transmissions before termination (if set).
+    bool daemon_mode;                                     ///< Flag for enabling daemon (terse) mode.
+    double f_plld_clk;                                    ///< TODO:  Define this - PLLD clock frequency (unused in current implementation).
+    int mem_flag;                                         ///< TODO:  Define this - Placeholder for memory management flags.
+    float test_tone;                                      ///< Frequency for test tone mode.
+    ModeType mode;                                        ///< Current operating mode (WSPR or test tone).
+    double last_ppm;                                      ///< TODO New: Stores the oprevious PPM value.
+    std::map<std::string, std::string> previous_governor; ///< TODO New: Stores the original CPU frequency governor.
 
     /**
      * @brief Default constructor initializing all configuration parameters.
@@ -114,7 +114,8 @@ struct ArgParserConfig
                         test_tone(0.0f),
                         mode(ModeType::WSPR),
                         last_ppm(0.0)
-                        {}
+    {
+    }
 };
 
 /**
