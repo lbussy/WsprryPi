@@ -3,3 +3,4 @@ wspr_test
 *.o
 *.d
 *.ini
+build/

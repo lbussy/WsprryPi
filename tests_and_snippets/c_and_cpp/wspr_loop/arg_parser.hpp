@@ -32,9 +32,9 @@
 #ifndef ARG_PARSER_HPP
 #define ARG_PARSER_HPP
 
-#include "../../../src/LCBLog/src/lcblog.hpp"
-#include "../../../src/INI-Handler/src/ini_file.hpp"
-#include "../../../src/MonitorFile/src/monitorfile.hpp"
+#include "lcblog.hpp"
+#include "ini_file.hpp"
+#include "monitorfile.hpp"
 // TODO: #include "version.hpp" //
 
 // #include <algorithm>
@@ -112,7 +112,9 @@ struct ArgParserConfig
                         f_plld_clk(0.0),
                         mem_flag(0),
                         test_tone(0.0f),
-                        mode(ModeType::WSPR) {}
+                        mode(ModeType::WSPR),
+                        last_ppm(0.0)
+                        {}
 };
 
 /**

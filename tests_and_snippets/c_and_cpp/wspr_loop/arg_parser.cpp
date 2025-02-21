@@ -29,7 +29,7 @@
  * SOFTWARE.
  */
 
-#include "arg_parser.hpp"   // Header for this code
+#include "arg_parser.hpp"
 
 #include "constants.hpp"
 
@@ -498,7 +498,7 @@ bool parse_command_line(const int &argc, char *const argv[])
             config.inifile = argv[i + 1];
             config.useini = true;
             ini.set_filename(config.inifile); // Load the INI file
-            iniMonitor.filemon(config.inifile.c_str()); // Set the INI file to monitored
+            iniMonitor.filemon(config.inifile); // Set the INI file to monitored
             break; // We're done pre-scanning, hit the main checks
         }
     }

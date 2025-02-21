@@ -44,7 +44,7 @@ void block_signals()
     sigemptyset(&set);
 
     // Add signals to block
-    int signals[] = {SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGHUP, SIGABRT};
+    const int signals[] = {SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGHUP, SIGABRT};
     for (int signum : signals)
     {
         sigaddset(&set, signum);

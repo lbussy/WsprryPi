@@ -92,13 +92,13 @@ bool check_ntp_status()
             // Ensure there are enough fields after splitting
             if (tokens.size() >= 11)
             {
-                std::string refid = tokens[2];
-                std::string stratum = tokens[3];
-                std::string type = tokens[4];
-                std::string when = tokens[5];
-                std::string poll = tokens[6];
+                // std::string refid = tokens[2];
+                // std::string stratum = tokens[3];
+                // std::string type = tokens[4];
+                // std::string when = tokens[5];
+                // std::string poll = tokens[6];
                 std::string reach = tokens[7];
-                std::string delay = tokens[8];
+                // std::string delay = tokens[8];
                 std::string offset = tokens[9];
                 std::string jitter = tokens[10];
 

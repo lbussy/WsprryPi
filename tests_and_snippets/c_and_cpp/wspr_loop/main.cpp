@@ -6,7 +6,7 @@
 #include "constants.hpp"
 #include "signal_handler.hpp"
 
-std::string ini_file = "./wsprrypi.ini";
+std::string ini_file = "/usr/local/etc/wsprrypi.ini";
 
 int main()
 {
@@ -14,7 +14,7 @@ int main()
     llog.enableTimestamps(true);
     llog.logS(INFO, "Starting handlers.");
     ini.set_filename(ini_file);           // Load the INI file
-    iniMonitor.filemon(ini_file.c_str()); // Monitor the INI file
+    iniMonitor.filemon(ini_file); // Monitor the INI file
 
     // Handle signals and teminal supression of ctrl codes
     register_signal_handlers();
