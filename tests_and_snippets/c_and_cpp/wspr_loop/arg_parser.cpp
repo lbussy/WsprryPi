@@ -238,7 +238,7 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    return true; // TODO: 
+    return true; // TODO:
     // Clear frequency list when we reload
     config.center_freq_set.clear();
 

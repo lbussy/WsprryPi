@@ -4,7 +4,7 @@
 """
 @file copy_ui.py
 @brief Deploys the WsprryPi-UI submodule to a web directory.
-@details This script verifies the existence of the WsprryPi-UI submodule 
+@details This script verifies the existence of the WsprryPi-UI submodule
          in a Git repository, then copies its data to the /var/www/html/wsprrypi directory.
          It ensures correct ownership (www-data) and permissions for all copied files.
 
@@ -21,7 +21,7 @@ import subprocess
 import sys
 
 def get_git_root():
-    """ 
+    """
     @brief Determine the Git repository root directory.
     @return The Git root directory as a string, or None if not in a Git repo.
     """
@@ -31,7 +31,7 @@ def get_git_root():
         return None  # Not in a Git repository
 
 def submodule_exists(git_root, submodule_name):
-    """ 
+    """
     @brief Check if a specified submodule exists in the Git repository.
     @param git_root The root directory of the Git repository.
     @param submodule_name The name of the submodule to check.
@@ -41,7 +41,7 @@ def submodule_exists(git_root, submodule_name):
     return os.path.exists(submodule_path)
 
 def remove_existing_web_directory(web_path):
-    """ 
+    """
     @brief Removes the existing web directory if it exists.
     @param web_path The directory to remove.
     @return True on success, False otherwise.
@@ -56,7 +56,7 @@ def remove_existing_web_directory(web_path):
     return True  # Nothing to remove
 
 def copy_files(src, dest):
-    """ 
+    """
     @brief Copy files recursively from source to destination.
     @param src The source directory.
     @param dest The destination directory.
@@ -73,7 +73,7 @@ def copy_files(src, dest):
     return False
 
 def set_permissions(dest):
-    """ 
+    """
     @brief Set owner and permissions for copied files.
     @param dest The destination directory where files were copied.
     @return True on success, False otherwise.
@@ -94,7 +94,7 @@ def set_permissions(dest):
         return False
 
 def main():
-    """ 
+    """
     @brief Main function to check submodule existence and deploy files.
     """
     git_root = get_git_root()

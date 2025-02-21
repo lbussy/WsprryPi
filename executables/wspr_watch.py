@@ -142,7 +142,7 @@ except ImportError:
 
 
 # Version information
-__version__ = "1.2.1-config_lib+55.34ec249"
+__version__ = "1.2.1-timing_loop+58.8eb9a00"
 
 # Filenames for shutdown and reboot triggers
 STOP_FILE_NAME = "shutdown"

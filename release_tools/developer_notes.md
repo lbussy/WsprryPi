@@ -3,7 +3,7 @@
 
 I use VS Code installed on my working laptop (Windows or Mac) and the [Visual Studio Code Remote—SSH](https://code.visualstudio.com/docs/remote/ssh) extension to access VS Code's feature set on a Raspberry Pi from a familiar Dev UI on my laptop.
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > You MUST clone the repo with `--recurse-submodules` to get all parts.
 
 <!-- omit in toc -->
@@ -114,7 +114,7 @@ If you are going to use VS Code from your workstation:
 
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
-   > [!IMPORTANT]  
+   > [!IMPORTANT]
    > You MUST clone the repo with `--recurse-submodules` to get all parts.
 
    Either:
