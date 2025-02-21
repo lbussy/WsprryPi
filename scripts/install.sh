@@ -225,7 +225,7 @@ declare GIT_CLONE_BASE="https://github.com"
 #
 # @default false
 # -----------------------------------------------------------------------------
-declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI
+declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI & exe
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -717,6 +717,7 @@ readonly APT_PACKAGES=(
     "raspberrypi-kernel-headers"
     "python3-gpiozero"
     "python3-lgpio"
+    "ntp"
 )
 
 # -----------------------------------------------------------------------------

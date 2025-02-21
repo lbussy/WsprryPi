@@ -41,6 +41,9 @@
 #include <iostream>
 #include <termios.h>
 #include <unistd.h>
+#include <chrono>
+#include <ctime>
+#include <thread>
 
 #include "lcblog.hpp"       // Submodule path included in Makefile
 #include "ini_file.hpp"     // Submodule path included in Makefile
@@ -73,55 +76,6 @@ IniFile ini;
 
 // Class to monitor for file changes
 MonitorFile iniMonitor;
-
-// Note on accessing memory in RPi:
-//
-// There are 3 (yes three) address spaces in the Pi:
-// Physical addresses
-//   These are the actual address locations of the RAM and are equivalent
-//   to offsets into /dev/mem.
-//   The peripherals (DMA engine, PWM, etc.) are located at physical
-//   address 0x2000000 for RPi1 and 0x3F000000 for RPi2/3.
-// Virtual addresses
-//   These are the addresses that a program sees and can read/write to.
-//   Addresses 0x00000000 through 0xBFFFFFFF are the addresses available
-//   to a program running in user space.
-//   Addresses 0xC0000000 and above are available only to the kernel.
-//   The peripherals start at address 0xF2000000 in virtual space but
-//   this range is only accessible by the kernel. The kernel could directly
-//   access peripherals from virtual addresses. It is not clear to me my
-//   a user space application running as 'root' does not have access to this
-//   memory range.
-// Bus addresses
-//   This is a different (virtual?) address space that also maps onto
-//   physical memory.
-//   The peripherals start at address 0x7E000000 of the bus address space.
-//   The DRAM is also available in bus address space in 4 different locations:
-//   0x00000000 "L1 and L2 cached alias"
-//   0x40000000 "L2 cache coherent (non allocating)"
-//   0x80000000 "L2 cache (only)"
-//   0xC0000000 "Direct, uncached access"
-//
-// Accessing peripherals from user space (virtual addresses):
-//   The technique used in this program is that mmap is used to map portions of
-//   /dev/mem to an arbitrary virtual address. For example, to access the
-//   GPIO's, the gpio range of addresses in /dev/mem (physical addresses) are
-//   mapped to a kernel chosen virtual address. After the mapping has been
-//   set up, writing to the kernel chosen virtual address will actually
-//   write to the GPIO addresses in physical memory.
-//
-// Accessing RAM from DMA engine
-//   The DMA engine is programmed by accessing the peripheral registers but
-//   must use bus addresses to access memory. Thus, to use the DMA engine to
-//   move memory from one virtual address to another virtual address, one needs
-//   to first find the physical addresses that corresponds to the virtual
-//   addresses. Then, one needs to find the bus addresses that corresponds to
-//   those physical addresses. Finally, the DMA engine can be programmed. i.e.
-//   DMA engine access should use addresses starting with 0xC.
-//
-// The perhipherals in the Broadcom documentation are described using their bus
-// addresses and structures are created and calculations performed in this
-// program to figure out how to access them with virtual addresses.
 
 // Given an address in the bus address space of the peripherals, this
 // macro calculates the appropriate virtual address to use to access
@@ -705,33 +659,31 @@ void setupDMA(
 
 bool wait_every(int minute)
 {
-    // Wait for the system clock's minute to reach one second past 'minute'
-    time_t t;
-    struct tm *ptm;
-    for (;;)
+    // Continuously wait for the system clock's minute to reach 'minute'
+    while (true)
     {
         if (config.useini && iniMonitor.changed())
         {
-            // Delay and make sure the file is done changing
-            usleep(500000);
-            while (iniMonitor.changed())
-            {
-                ;
-                ;
-            }
-
             llog.logS(INFO, "INI file changed, reloading parameters.");
             validate_config_data();
-            return false; // Need to reload
+            return false;  // Configuration changed, reload required
         }
-        time(&t);
-        ptm = gmtime(&t);
-        if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
-            break;
-        usleep(1000);
+
+        // Get current time
+        time_t t = time(nullptr);
+        struct tm ptm;
+        gmtime_r(&t, &ptm);  // Thread-safe version of gmtime
+
+        // Check if the current minute is divisible by the given interval and second is zero
+        if ((ptm.tm_min % minute) == 0 && ptm.tm_sec == 0)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));  // Ensure we're past the boundary
+            return true;  // Ready to proceed
+        }
+
+        // Sleep for a short while to avoid busy-waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    usleep(1000000); // Wait another second
-    return true;     // OK to proceed
 }
 
 bool update_ppm()
@@ -1049,6 +1001,7 @@ int main(const int argc, char *const argv[])
     getPLLD(); // Get PLLD Frequency
 
     // Set up GPIO if LED option is on
+    // TODO: Move to INI load/reload
     if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
         setupGPIO(ini.get_int_value("Extended", "LED Pin"));
 
@@ -1073,7 +1026,7 @@ int main(const int argc, char *const argv[])
     // Initialize the RNG
     srand(time(NULL));
 
-    // TODO:  Is this where #57 breaks?
+    // TODO: Is this where #57 breaks?
     int nbands = config.center_freq_set.size();
 
     // Initial configuration
@@ -1112,6 +1065,7 @@ int main(const int argc, char *const argv[])
         {
             if (ini.get_bool_value("Extended", "Use NTP"))
             {
+                // TODO: Is this where we are not getting the new NTP/PPM hack?
                 if (!update_ppm())
                     cleanupAndExit(-1);
             }
@@ -1144,7 +1098,7 @@ int main(const int argc, char *const argv[])
             // Access the generated symbols
             unsigned char *symbols = message.symbols;
 
-#ifdef WSPR_DEBUG
+            #ifdef WSPR_DEBUG
             // Use a string stream to concatenate symbols
             std::ostringstream symbols_stream;
 
@@ -1159,8 +1113,8 @@ int main(const int argc, char *const argv[])
 
             // Print the concatenated string in one call
             llog.logS(DEBUG, "Generated WSPR symbols:", symbols_stream.str());
-// std::cout << symbols_stream.str() << std::endl;
-#endif
+            // std::cout << symbols_stream.str() << std::endl;
+            #endif
 
             llog.logS(INFO, "Ready to transmit (setup complete).");
             int band = 0;
@@ -1196,8 +1150,9 @@ int main(const int argc, char *const argv[])
                 }
                 else
                 {
-                    llog.logS(INFO, "Waiting for next WSPR transmission window.");
-                    if (!wait_every((wspr15) ? 15 : 2))
+                    int interval = wspr15 ? 15 : 2;
+                    llog.logS(INFO, "Waiting for next WSPR (", interval, ") transmission window.");
+                    if (!wait_every(interval))
                     {
                         // Break and reload if ini changes
                         break;
@@ -1295,9 +1250,10 @@ int main(const int argc, char *const argv[])
 // TODO: Reload on ini change not working
 
 // Nice to do:
-// TODO: Add in tcp server
+// TODO: Add in TCP server? (needed only for transmission indicator now)
 // TODO: Consider an external file for band to frequency lookups
 // TODO: Modern C++ prefers constexpr over preprocessor macros (#define). Maybe all of them can go in a separate file.
 // TODO: See if we can use C++ 20 and .contains() (in arg parsing)
 // TODO: Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
 // TODO: DMA notes at: https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial
+// TODO: CTRL_C does not stop program

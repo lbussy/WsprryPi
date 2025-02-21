@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # TODO:  Get parameters from INI file
+# TODO:  Move to wsprrypi exe
 
 """
 @file wspr_watch.py

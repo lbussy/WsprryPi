@@ -29,6 +29,57 @@
  * SOFTWARE.
  */
 
+ /*
+Note on accessing memory in RPi:
+
+There are 3 (yes three) address spaces in the Pi:
+Physical addresses
+  These are the actual address locations of the RAM and are equivalent
+  to offsets into /dev/mem.
+  The peripherals (DMA engine, PWM, etc.) are located at physical
+  address 0x2000000 for RPi1 and 0x3F000000 for RPi2/3.
+Virtual addresses
+  These are the addresses that a program sees and can read/write to.
+  Addresses 0x00000000 through 0xBFFFFFFF are the addresses available
+  to a program running in user space.
+  Addresses 0xC0000000 and above are available only to the kernel.
+  The peripherals start at address 0xF2000000 in virtual space but
+  this range is only accessible by the kernel. The kernel could directly
+  access peripherals from virtual addresses. It is not clear to me my
+  a user space application running as 'root' does not have access to this
+  memory range.
+Bus addresses
+  This is a different (virtual?) address space that also maps onto
+  physical memory.
+  The peripherals start at address 0x7E000000 of the bus address space.
+  The DRAM is also available in bus address space in 4 different locations:
+  0x00000000 "L1 and L2 cached alias"
+  0x40000000 "L2 cache coherent (non allocating)"
+  0x80000000 "L2 cache (only)"
+  0xC0000000 "Direct, uncached access"
+
+Accessing peripherals from user space (virtual addresses):
+  The technique used in this program is that mmap is used to map portions of
+  /dev/mem to an arbitrary virtual address. For example, to access the
+  GPIO's, the gpio range of addresses in /dev/mem (physical addresses) are
+  mapped to a kernel chosen virtual address. After the mapping has been
+  set up, writing to the kernel chosen virtual address will actually
+  write to the GPIO addresses in physical memory.
+
+Accessing RAM from DMA engine
+  The DMA engine is programmed by accessing the peripheral registers but
+  must use bus addresses to access memory. Thus, to use the DMA engine to
+  move memory from one virtual address to another virtual address, one needs
+  to first find the physical addresses that corresponds to the virtual
+  addresses. Then, one needs to find the bus addresses that corresponds to
+  those physical addresses. Finally, the DMA engine can be programmed. i.e.
+  DMA engine access should use addresses starting with 0xC.
+
+The perhipherals in the Broadcom documentation are described using their bus
+addresses and structures are created and calculations performed in this
+program to figure out how to access them with virtual addresses.
+*/
+
 #ifndef HARDWARE_ACCESS_HPP
 #define HARDWARE_ACCESS_HPP
 

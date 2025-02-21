@@ -58,6 +58,9 @@ constexpr int SINGLETON_PORT = 1234;
 constexpr int WSPR_RAND_OFFSET = 80;  ///< Random offset (±80 Hz) for WSPR transmissions.
 constexpr int WSPR15_RAND_OFFSET = 8; ///< Random offset (±8 Hz) for WSPR-15 transmissions.
 
+constexpr int WSPR_15 = 15;
+constexpr int WSPR_2 = 2;
+
 /**
  * @brief Nominal symbol duration for WSPR transmissions.
  *
