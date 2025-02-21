@@ -5843,7 +5843,7 @@ manage_wsprry_pi() {
         local function_name="${func%% *}"  # Extract only function name
 
         # Skip functions listed in skip_on_uninstall
-        if [[ " ${skip_on_uninstall[*]} " =~ " $function_name " ]]; then
+        if [[ " ${skip_on_uninstall[*]} " =~ \b"$function_name"\b ]]; then
             debug_print "Skipping $function_name during uninstall." "$debug"
             continue
         fi
