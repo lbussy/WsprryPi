@@ -208,7 +208,8 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"        # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI"   # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-update_installer}"
+# TODO: Update this when we do a version bump
+declare REPO_BRANCH="${REPO_BRANCH:-timing_loop}"
 declare GIT_TAG="${GIT_TAG:-1.2.1}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
@@ -4160,6 +4161,7 @@ git_clone() {
     clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
+    # TODO: Local install tries to clone to current directory (WsprryPi-Source)
     if [[ -d "$dest_root" ]]; then
         warn "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
