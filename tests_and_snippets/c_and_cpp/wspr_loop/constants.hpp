@@ -32,6 +32,7 @@
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
 
+// Standard library headers
 #include <cstdint> // Required for uint32_t
 
 /**
@@ -47,18 +48,57 @@
 constexpr int SINGLETON_PORT = 1234;
 
 /**
- * @brief Random frequency offset for WSPR transmissions.
+ * @brief Random frequency offset for standard WSPR transmissions.
  *
- * These constants define the amount of random frequency offset applied
- * to WSPR transmissions when the `--offset` option is enabled.
+ * This constant defines the range, in Hertz, for random frequency offsets
+ * applied to standard WSPR transmissions. The offset is applied symmetrically
+ * around the target frequency, resulting in a random variation of ±80 Hz.
  *
- * - `WSPR_RAND_OFFSET`: Specifies the offset range for standard WSPR transmissions.
- * - `WSPR15_RAND_OFFSET`: Specifies the offset range for WSPR-15 transmissions.
+ * This helps distribute transmissions within the WSPR band, reducing the
+ * likelihood of overlapping signals.
+ *
+ * @note This offset is applicable for standard WSPR transmissions (2-minute cycles).
+ *
+ * @see WSPR15_RAND_OFFSET
  */
-constexpr int WSPR_RAND_OFFSET = 80;  ///< Random offset (±80 Hz) for WSPR transmissions.
-constexpr int WSPR15_RAND_OFFSET = 8; ///< Random offset (±8 Hz) for WSPR-15 transmissions.
+constexpr int WSPR_RAND_OFFSET = 80;
 
+/**
+ * @brief Random frequency offset for WSPR-15 transmissions.
+ *
+ * This constant defines the range, in Hertz, for random frequency offsets
+ * applied to WSPR-15 transmissions. The offset is applied symmetrically
+ * around the target frequency, resulting in a random variation of ±8 Hz.
+ *
+ * This ensures that WSPR-15 transmissions remain within the allocated band
+ * while introducing slight variations to minimize signal collisions.
+ *
+ * @note This offset is specific to WSPR-15 transmissions (15-minute cycles).
+ *
+ * @see WSPR_RAND_OFFSET
+ */
+constexpr int WSPR15_RAND_OFFSET = 8;
+
+/**
+ * @brief WSPR transmission interval for 15-minute cycles.
+ *
+ * This constant defines the interval, in minutes, for WSPR transmissions
+ * when operating in the 15-minute mode. It is used by the scheduler to
+ * determine the next transmission window.
+ *
+ * @see WSPR_2, wspr_interval
+ */
 constexpr int WSPR_15 = 15;
+
+/**
+ * @brief WSPR transmission interval for 2-minute cycles.
+ *
+ * This constant defines the interval, in minutes, for WSPR transmissions
+ * when operating in the 2-minute mode. It is commonly used for quick 
+ * transmission cycles, ensuring frequent beaconing.
+ *
+ * @see WSPR_15, wspr_interval
+ */
 constexpr int WSPR_2 = 2;
 
 /**
@@ -76,7 +116,8 @@ constexpr int WSPR_2 = 2;
 constexpr double WSPR_SYMTIME = 8192.0 / 12000.0;
 
 /**
- * @brief Initial empirical value for the PWM clock frequency used in WSPR transmissions.
+ * @brief Initial empirical value for the PWM clock frequency used in WSPR
+ * transmissions.
  *
  * This constant represents an empirically determined value for `F_PWM_CLK`
  * that produces WSPR symbols approximately 0.682 seconds long (WSPR_SYMTIME).
@@ -90,7 +131,8 @@ constexpr double WSPR_SYMTIME = 8192.0 / 12000.0;
 constexpr double F_PWM_CLK_INIT = 31156186.6125761;
 
 /**
- * @brief Base bus address for the General-Purpose Input/Output (GPIO) registers.
+ * @brief Base bus address for the General-Purpose Input/Output (GPIO)
+ * registers.
  *
  * The GPIO peripheral bus base address is used to access GPIO-related
  * registers for pin configuration and control.

@@ -32,22 +32,16 @@
 #ifndef ARG_PARSER_HPP
 #define ARG_PARSER_HPP
 
-#include "lcblog.hpp"
+// Project headers
 #include "ini_file.hpp"
+#include "lcblog.hpp"
 #include "monitorfile.hpp"
-// TODO: #include "version.hpp" //
+#include "version.hpp"
 
-// #include <algorithm>
-// #include <stdexcept>
-// #include <getopt.h>
-// #include <string>
-// #include <iostream>
+// Standard library headers
 #include <optional>
 #include <atomic>
-// #include <unordered_map>
-
-// Declare the atomic interval variable globally
-extern std::atomic<int> wspr_interval;
+#include <thread>
 
 /**
  * @enum ModeType
@@ -64,12 +58,17 @@ enum class ModeType
 };
 
 /**
- * @brief Configuration structure for WSPR and test tone transmissions.
+ * @brief Global configuration instance for argument parsing.
  *
- * This structure holds various configuration parameters related to
- * WSPR transmissions and test tone generation. It stores values
- * obtained from the command line and INI file, providing runtime
- * settings for the application.
+ * This global instance of `ArgParserConfig` holds the parsed
+ * command-line arguments and configuration settings used throughout
+ * the application. It is defined in `arg_parser.cpp` and declared
+ * as `extern` in `arg_parser.hpp` so it can be accessed globally.
+ *
+ * @note Ensure that `arg_parser.hpp` is included in any file that
+ *       needs access to this configuration instance.
+ *
+ * @see ArgParserConfig
  */
 struct ArgParserConfig
 {
@@ -80,12 +79,12 @@ struct ArgParserConfig
     bool no_delay;                                        ///< Flag to disable WSPR TX window synchronization.
     std::optional<int> terminate;                         ///< Number of transmissions before termination (if set).
     bool daemon_mode;                                     ///< Flag for enabling daemon (terse) mode.
-    double f_plld_clk;                                    ///< TODO:  Define this - PLLD clock frequency (unused in current implementation).
+    double f_plld_clk;                                    ///< Phase-Locked Loop D clock, default is 500 MHz
     int mem_flag;                                         ///< TODO:  Define this - Placeholder for memory management flags.
     float test_tone;                                      ///< Frequency for test tone mode.
     ModeType mode;                                        ///< Current operating mode (WSPR or test tone).
-    double last_ppm;                                      ///< TODO New: Stores the oprevious PPM value.
-    std::map<std::string, std::string> previous_governor; ///< TODO New: Stores the original CPU frequency governor.
+    double last_ppm;                                      ///< Stores the previous PPM value.
+    std::map<std::string, std::string> previous_governor; ///< Stores the original CPU frequency governor value.
 
     /**
      * @brief Default constructor initializing all configuration parameters.
@@ -118,48 +117,154 @@ struct ArgParserConfig
     }
 };
 
-/**
- * @brief Global configuration instance for argument parsing.
- *
- * This global instance of `ArgParserConfig` stores the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is populated via `parse_command_line()`
- * and accessed by various components to retrieve runtime parameters.
- *
- * @note This variable is defined in `arg_parser.cpp` and declared as
- *       `extern` in `arg_parser.hpp` to ensure a single definition
- *       across the application.
- */
+// Extern declaration for global configuration object.
 extern ArgParserConfig config;
 
 /**
- * @brief Global logging instance for application-wide logging.
+ * @brief Global instance of the LCBLog logging utility.
  *
- * This external instance of `LCBLog` is used for logging messages, including
- * informational messages, warnings, and errors. It provides structured logging
- * for debugging and runtime diagnostics.
+ * The `llog` object provides thread-safe logging functionality with support for
+ * multiple log levels, including DEBUG, INFO, WARN, ERROR, and FATAL.
+ * It is used throughout the application to log messages for debugging,
+ * monitoring, and error reporting.
+ *
+ * This instance is initialized globally to allow consistent logging across all
+ * modules. Log messages can include timestamps and are output to standard streams
+ * or log files depending on the configuration.
+ *
+ * Example usage:
+ * @code
+ * llog.logS(INFO, "Application started.");
+ * llog.logE(ERROR, "Failed to open configuration file.");
+ * @endcode
+ *
+ * @see https://github.com/lbussy/LCBLog for detailed documentation and examples.
  */
 extern LCBLog llog;
 
 /**
- * @brief Global INI file handler for configuration management.
+ * @brief Global instance of the IniFile configuration handler.
  *
- * This external instance of `IniFile` is responsible for loading, parsing,
- * and retrieving configuration values from an INI file. It allows the application
- * to store and manage user-defined settings persistently.
+ * The `ini` object provides an interface for reading, writing, and managing
+ * INI-style configuration files. It supports key-value pair retrieval, type-safe
+ * conversions, and file monitoring for changes.
+ *
+ * This instance is initialized globally to allow centralized configuration
+ * management across all modules of the application.
+ *
+ * Example usage:
+ * @code
+ * std::string callsign = ini.get_string_value("Common", "Call Sign");
+ * int power = ini.get_int_value("Common", "TX Power");
+ * @endcode
+ *
+ * The `ini` object is commonly used alongside `iniMonitor` to detect and apply
+ * configuration changes dynamically without restarting the application.
+ *
+ * @see https://github.com/lbussy/INI-Handler for detailed documentation and examples.
  */
 extern IniFile ini;
 
 /**
- * @brief Global instance for monitoring file changes.
+ * @brief Global instance of the MonitorFile for INI file change detection.
  *
- * This external instance of `MonitorFile` is responsible for detecting
- * modifications to the INI configuration file. It allows the application
- * to respond dynamically to configuration updates without requiring a restart.
+ * The `iniMonitor` object continuously monitors the specified INI file for changes.
+ * It provides real-time notifications when the file is modified, enabling the application
+ * to reload configuration settings dynamically without requiring a restart.
  *
- * @note This is particularly useful for live configuration updates.
+ * This instance is typically used alongside the `ini` object to automatically re-validate
+ * and apply updated configuration settings.
+ *
+ * Example usage:
+ * @code
+ * if (iniMonitor.changed())
+ * {
+ *     llog.logS(INFO, "INI file changed. Reloading configuration.");
+ *     validate_config_data();
+ * }
+ * @endcode
+ *
+ * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
+ * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
+ *
+ * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
  */
 extern MonitorFile iniMonitor;
+
+/**
+ * @brief Atomic variable representing the current WSPR transmission interval.
+ *
+ * This variable defines the transmission interval for WSPR signals.
+ * It can be set to one of the predefined constants:
+ * - `WSPR_2` for a 2-minute interval.
+ * - `WSPR_15` for a 15-minute interval.
+ *
+ * This value is updated dynamically based on the INI configuration
+ * and influences when the scheduler triggers the next transmission.
+ *
+ * @note Access to this variable is thread-safe due to its atomic nature.
+ */
+extern std::atomic<int> wspr_interval;
+
+/**
+ * @brief Semaphore indicating a pending INI file reload.
+ *
+ * The `ini_reload_pending` atomic flag acts as a semaphore to signal when an
+ * INI file change has been detected and a configuration reload is required.
+ * This ensures that the reload process does not conflict with an ongoing
+ * transmission.
+ *
+ * - `true` indicates that an INI reload is pending.
+ * - `false` indicates that no reload is currently required.
+ *
+ * This flag is typically set when the `iniMonitor` detects a file change and
+ * is checked periodically by the INI monitoring thread. If a transmission is
+ * in progress, the reload is deferred until the transmission completes.
+ *
+ * @note The atomic nature ensures thread-safe access across multiple threads.
+ */
+extern std::atomic<bool> ini_reload_pending;
+
+/**
+ * @brief Thread for monitoring INI file changes.
+ *
+ * The `iniMonitorThread` is responsible for running the INI file monitoring
+ * loop. This thread continuously checks for changes in the monitored INI file
+ * and triggers appropriate actions when changes are detected.
+ *
+ * When an INI file change is detected:
+ * - If no transmission is active, it immediately reloads the configuration
+ *   using `validate_config_data()`.
+ * - If a transmission is active, it sets the `ini_reload_pending` flag,
+ *   deferring the reload until after the transmission completes.
+ *
+ * This thread runs independently of the main program loop and ensures
+ * configuration changes are processed safely without affecting ongoing operations.
+ *
+ * @note This thread should be properly joined during shutdown to avoid
+ * potential race conditions or dangling threads.
+ */
+extern std::thread iniMonitorThread;
+
+/**
+ * @brief Monitors the INI file for changes and handles configuration reload.
+ *
+ * This function runs as a background thread, periodically checking for changes
+ * in the INI configuration file. When a change is detected:
+ * - If the system is not transmitting, it immediately reloads the configuration
+ *   by calling `validate_config_data()`.
+ * - If a transmission is ongoing, it sets the `ini_reload_pending` flag to defer
+ *   the reload until the transmission completes.
+ *
+ * The thread runs continuously until the `exit_scheduler` flag is set to true,
+ * signaling shutdown.
+ *
+ * @note This function is intended to be executed as a separate thread and does
+ *       not return until shutdown is requested.
+ *
+ * @see validate_config_data(), ini_reload_pending, exit_scheduler
+ */
+extern void ini_monitor_thread();
 
 /**
  * @brief Converts a string to uppercase.

@@ -29,14 +29,22 @@
  * SOFTWARE.
  */
 
+// Primary header for this source file
 #include "arg_parser.hpp"
 
+// Project headers
 #include "constants.hpp"
+#include "scheduling.hpp"
+#include "transmit.hpp"
 
+// Standard library headers
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
-#include <getopt.h>
 #include <string>
+
+// System headers
+#include <getopt.h>
 
 /**
  * @brief Global configuration instance for argument parsing.
@@ -53,14 +61,218 @@
  */
 ArgParserConfig config;
 
+/**
+ * @brief Global instance of the LCBLog logging utility.
+ *
+ * The `llog` object provides thread-safe logging functionality with support for
+ * multiple log levels, including DEBUG, INFO, WARN, ERROR, and FATAL.
+ * It is used throughout the application to log messages for debugging,
+ * monitoring, and error reporting.
+ *
+ * This instance is initialized globally to allow consistent logging across all
+ * modules. Log messages can include timestamps and are output to standard streams
+ * or log files depending on the configuration.
+ *
+ * Example usage:
+ * @code
+ * llog.logS(INFO, "Application started.");
+ * llog.logE(ERROR, "Failed to open configuration file.");
+ * @endcode
+ *
+ * @see https://github.com/lbussy/LCBLog for detailed documentation and examples.
+ */
 LCBLog llog;
 
+/**
+ * @brief Global instance of the IniFile configuration handler.
+ *
+ * The `ini` object provides an interface for reading, writing, and managing
+ * INI-style configuration files. It supports key-value pair retrieval, type-safe
+ * conversions, and file monitoring for changes.
+ *
+ * This instance is initialized globally to allow centralized configuration
+ * management across all modules of the application.
+ *
+ * Example usage:
+ * @code
+ * std::string callsign = ini.get_string_value("Common", "Call Sign");
+ * int power = ini.get_int_value("Common", "TX Power");
+ * @endcode
+ *
+ * The `ini` object is commonly used alongside `iniMonitor` to detect and apply
+ * configuration changes dynamically without restarting the application.
+ *
+ * @see https://github.com/lbussy/INI-Handler for detailed documentation and examples.
+ */
 IniFile ini;
 
+/**
+ * @brief Global instance of the MonitorFile for INI file change detection.
+ *
+ * The `iniMonitor` object continuously monitors the specified INI file for changes.
+ * It provides real-time notifications when the file is modified, enabling the application
+ * to reload configuration settings dynamically without requiring a restart.
+ *
+ * This instance is typically used alongside the `ini` object to automatically re-validate
+ * and apply updated configuration settings.
+ *
+ * Example usage:
+ * @code
+ * if (iniMonitor.changed())
+ * {
+ *     llog.logS(INFO, "INI file changed. Reloading configuration.");
+ *     validate_config_data();
+ * }
+ * @endcode
+ *
+ * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
+ * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
+ *
+ * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
+ */
 MonitorFile iniMonitor;
 
-// Define the atomic interval variable
-std::atomic<int> wspr_interval(WSPR_2);  // Default interval (2 minutes)
+/**
+ * @brief Atomic variable representing the current WSPR transmission interval.
+ *
+ * This variable defines the transmission interval for WSPR signals.
+ * It can be set to one of the predefined constants:
+ * - `WSPR_2` for a 2-minute interval.
+ * - `WSPR_15` for a 15-minute interval.
+ *
+ * This value is updated dynamically based on the INI configuration
+ * and influences when the scheduler triggers the next transmission.
+ *
+ * @note Access to this variable is thread-safe due to its atomic nature.
+ */
+std::atomic<int> wspr_interval(WSPR_2);
+
+/**
+ * @brief Semaphore indicating a pending INI file reload.
+ *
+ * The `ini_reload_pending` atomic flag acts as a semaphore to signal when an
+ * INI file change has been detected and a configuration reload is required.
+ * This ensures that the reload process does not conflict with an ongoing
+ * transmission.
+ *
+ * - `true` indicates that an INI reload is pending.
+ * - `false` indicates that no reload is currently required.
+ *
+ * This flag is typically set when the `iniMonitor` detects a file change and
+ * is checked periodically by the INI monitoring thread. If a transmission is
+ * in progress, the reload is deferred until the transmission completes.
+ *
+ * Example usage:
+ * @code
+ * if (iniMonitor.changed())
+ * {
+ *     llog.logS(INFO, "INI file changed.");
+ *     ini_reload_pending.store(true);
+ * }
+ *
+ * // During housekeeping or after transmission:
+ * if (ini_changed.load() && !in_transmission.load())
+ * {
+ *     ini_reload_pending.store(false);
+ *     llog.logS(INFO, "Applying deferred INI changes.");
+ *     validate_config_data();
+ * }
+ * @endcode
+ *
+ * @note The atomic nature ensures thread-safe access across multiple threads.
+ */
+std::atomic<bool> ini_reload_pending(false);
+
+/**
+ * @brief Thread for monitoring INI file changes.
+ *
+ * The `iniMonitorThread` is responsible for running the INI file monitoring 
+ * loop. This thread continuously checks for changes in the monitored INI file 
+ * and triggers appropriate actions when changes are detected.
+ *
+ * When an INI file change is detected:
+ * - If no transmission is active, it immediately reloads the configuration 
+ *   using `validate_config_data()`.
+ * - If a transmission is active, it sets the `ini_reload_pending` flag, 
+ *   deferring the reload until after the transmission completes.
+ *
+ * This thread runs independently of the main program loop and ensures 
+ * configuration changes are processed safely without affecting ongoing operations.
+ *
+ * Example usage:
+ * @code
+ * // Start the INI monitoring thread.
+ * iniMonitorThread = std::thread(ini_monitor_thread);
+ *
+ * // Join the thread during shutdown.
+ * if (iniMonitorThread.joinable())
+ * {
+ *     iniMonitorThread.join();
+ * }
+ * @endcode
+ *
+ * @note This thread should be properly joined during shutdown to avoid 
+ * potential race conditions or dangling threads.
+ */
+std::thread iniMonitorThread;
+
+/**
+ * @brief Monitors the INI configuration file for changes.
+ *
+ * This function runs as a background thread, periodically checking
+ * if the monitored INI file has been modified. When a change is detected:
+ *
+ * - If the system is not currently transmitting, it immediately reloads the configuration
+ *   by calling `validate_config_data()`.
+ * - If a transmission is active, it sets a deferred reload flag (`ini_reload_pending`)
+ *   to apply the changes after the transmission completes.
+ *
+ * Additionally, if a reload was deferred and the system is no longer transmitting,
+ * the configuration is reloaded immediately.
+ *
+ * @note This thread continues running until `exit_scheduler` is set to `true`.
+ *       It checks for file changes every second.
+ */
+void ini_monitor_thread()
+{
+    while (!exit_scheduler.load())
+    {
+        // 1. Check if the INI file has changed
+        if (iniMonitor.changed())
+        {
+            // Log detection of change
+            llog.logS(INFO, "INI file changed.");
+
+            // If not transmitting, reload configuration immediately
+            if (!in_transmission.load())
+            {
+                llog.logS(INFO, "Reloading configuration now.");
+                validate_config_data();
+            }
+            else
+            {
+                // Otherwise, defer reload until transmission completes
+                llog.logS(INFO, "Configuration reload deferred until transmission completes.");
+                ini_reload_pending.store(true);
+            }
+        }
+
+        // 2. Apply deferred reload if transmission has ended
+        if (ini_reload_pending.load() && !in_transmission.load())
+        {
+            // Clear the pending flag and reload configuration
+            ini_reload_pending.store(false);
+            llog.logS(INFO, "Applying deferred INI changes after transmission.");
+            validate_config_data();
+        }
+
+        // 3. Sleep briefly before the next check
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // Log thread exit
+    llog.logS(DEBUG, "INI monitor thread exiting.");
+}
 
 /**
  * @brief Converts a string to uppercase.
@@ -238,8 +450,6 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    return true; // TODO:
-    // Clear frequency list when we reload
     config.center_freq_set.clear();
 
     std::istringstream frequency_list(
@@ -522,7 +732,7 @@ bool parse_command_line(const int &argc, char *const argv[])
             print_usage();
             return false;
         case 'v':
-            // TODO std::cout << version_string() << std::endl; // TODO
+            std::cout << version_string() << std::endl;
             return false;
         case 'p': // PPM correction
             if (optarg == nullptr)
