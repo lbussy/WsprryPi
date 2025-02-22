@@ -1,25 +1,34 @@
 /**
  * @file main.cpp
- * @brief
+ * @brief Entry point for the Wsprry Pi application.
  *
- * This file is part of WsprryPi, forked from threeme3/WsprryPi (no longer
- * active).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * Copyright (C) @threeme3 (unknown dates)
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
+ *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * WsprryPi is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 // Primary header for this source file
@@ -32,6 +41,9 @@
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "version.hpp"
+
+// System headers
+#include <unistd.h>
 
 /**
  * @brief Entry point for the WsprryPi application.
@@ -48,12 +60,12 @@
  * @note Ensure that NTP synchronization is stable before proceeding.
  *       If NTP verification fails, the program exits immediately.
  *       The log level is set to INFO by default, but can be changed
- *       via a TODO macro or configuration option.
+ *       via a macro or configuration option.
  */
 int main(const int argc, char *const argv[])
 {
-    // Set the default log level to INFO. Consider making this configurable.
-    llog.setLogLevel(INFO);  // TODO: Enable DEBUG via Macro or Config
+    // Sets up logger based on DEBUG flag: INFO or DEBUG
+    initialize_logger(); 
 
     // Parse command-line arguments and exit if invalid.
     if (!parse_command_line(argc, argv))
@@ -61,6 +73,11 @@ int main(const int argc, char *const argv[])
         llog.logE(ERROR, "Failed to parse command-line arguments.");
         return EXIT_FAILURE;
     }
+
+    // Display version, Raspberry Pi model, and process ID for context.
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Process PID:", getpid());
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
@@ -72,16 +89,8 @@ int main(const int argc, char *const argv[])
         return EXIT_FAILURE;
     }
 
-    // Display version, Raspberry Pi model, and process ID for context.
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-    llog.logS(INFO, "Process PID:", getpid());
-
     // Register signal handlers for safe shutdown and terminal management.
     register_signal_handlers();
-
-    // Enable CPU performance mode to ensure accurate transmission timing.
-    enable_performance_mode();
 
     // Verify NTP synchronization before proceeding. Exit if unstable.
     if (!ensure_ntp_stable())

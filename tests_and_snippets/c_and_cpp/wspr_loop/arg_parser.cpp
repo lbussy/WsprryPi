@@ -2,19 +2,21 @@
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -186,17 +188,17 @@ std::atomic<bool> ini_reload_pending(false);
 /**
  * @brief Thread for monitoring INI file changes.
  *
- * The `iniMonitorThread` is responsible for running the INI file monitoring 
- * loop. This thread continuously checks for changes in the monitored INI file 
+ * The `iniMonitorThread` is responsible for running the INI file monitoring
+ * loop. This thread continuously checks for changes in the monitored INI file
  * and triggers appropriate actions when changes are detected.
  *
  * When an INI file change is detected:
- * - If no transmission is active, it immediately reloads the configuration 
+ * - If no transmission is active, it immediately reloads the configuration
  *   using `validate_config_data()`.
- * - If a transmission is active, it sets the `ini_reload_pending` flag, 
+ * - If a transmission is active, it sets the `ini_reload_pending` flag,
  *   deferring the reload until after the transmission completes.
  *
- * This thread runs independently of the main program loop and ensures 
+ * This thread runs independently of the main program loop and ensures
  * configuration changes are processed safely without affecting ongoing operations.
  *
  * Example usage:
@@ -211,10 +213,40 @@ std::atomic<bool> ini_reload_pending(false);
  * }
  * @endcode
  *
- * @note This thread should be properly joined during shutdown to avoid 
+ * @note This thread should be properly joined during shutdown to avoid
  * potential race conditions or dangling threads.
  */
 std::thread iniMonitorThread;
+
+/**
+ * @brief Initializes the logger with the appropriate log level.
+ * 
+ * This function sets the log level based on the current debug state. If the 
+ * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
+ * Otherwise, it defaults to INFO.
+ *
+ * @note Ensure that the `get_debug_state()` function correctly reflects the 
+ *       build configuration for accurate log level assignment.
+ *
+ * @example
+ * initialize_logger();
+ * // Sets llog to DEBUG or INFO depending on the build mode.
+ */
+void initialize_logger()
+{
+    // Determine the log level based on the build mode.
+    const std::string debug_state = get_debug_state();
+
+    // Set the appropriate log level.
+    if (debug_state == "DEBUG")
+    {
+        llog.setLogLevel(DEBUG);  // Enable detailed debug logging.
+    }
+    else
+    {
+        llog.setLogLevel(INFO);   // Default to informational logging.
+    }
+}
 
 /**
  * @brief Monitors the INI configuration file for changes.
@@ -639,7 +671,7 @@ bool validate_config_data()
         }
 
         // Set termination count (defaults to 1 if unset) if ot in daemon mode
-        if ( ! config.daemon_mode )
+        if (!config.daemon_mode)
         {
             config.terminate = config.terminate.value_or(1);
             llog.logS(INFO, "TX will stop after:", config.terminate.value(), "iterations.");
@@ -707,9 +739,9 @@ bool parse_command_line(const int &argc, char *const argv[])
         {
             config.inifile = argv[i + 1];
             config.useini = true;
-            ini.set_filename(config.inifile); // Load the INI file
+            ini.set_filename(config.inifile);   // Load the INI file
             iniMonitor.filemon(config.inifile); // Set the INI file to monitored
-            break; // We're done pre-scanning, hit the main checks
+            break;                              // We're done pre-scanning, hit the main checks
         }
     }
 

@@ -1,170 +1,336 @@
+/**
+ * @file signal_handler.cpp
+ * @brief Manages signal handling, and cleanup.
+ *
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
+ *
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+// Primary header for this source file
 #include "signal_handler.hpp"
+
+// Project headers
 #include "scheduling.hpp"
 #include "arg_parser.hpp"
 
-#include <cstring>
-#include <csignal>
-#include <iostream>
-#include <vector>
-#include <thread>
+// Standard library headers
 #include <atomic>
-#include <condition_variable>
+#include <cstring>
+#include <string>
+
+// System headers
+#include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 
-extern std::atomic<bool> exit_scheduler;
-extern std::condition_variable cv;
-extern std::mutex cv_mtx;
 std::atomic<bool> shutdown_in_progress(false);
-static struct termios original_tty;  // Store original terminal settings
+static struct termios original_tty;
 static bool tty_saved = false;
 
+/**
+ * @brief Suppresses terminal signals and disables echoing of input.
+ *
+ * This function modifies the terminal settings to suppress input echo while
+ * preserving the ability to receive signals. It saves the original terminal
+ * settings for later restoration by `restore_terminal_signals()`.
+ *
+ * @note This function should be called during application initialization to
+ *       prevent terminal input from interfering with program execution.
+ */
 void suppress_terminal_signals()
 {
+    // Save current terminal settings if possible.
     if (tcgetattr(STDIN_FILENO, &original_tty) == 0)
     {
         tty_saved = true;
         struct termios tty = original_tty;
-        tty.c_lflag &= ~(ECHO);  // Suppress echo, keep ISIG enabled
-        tcsetattr(STDIN_FILENO, TCSANOW, &tty);
+
+        // Disable input echo while keeping signals enabled.
+        tty.c_lflag &= ~ECHO;
+
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) != 0)
+        {
+            llog.logE(ERROR, "Failed to suppress terminal signals: ", std::strerror(errno));
+        }
+        else
+        {
+            llog.logS(DEBUG, "Terminal signals suppressed (input echo disabled).");
+        }
+    }
+    else
+    {
+        llog.logE(ERROR, "Failed to retrieve terminal settings: ", std::strerror(errno));
     }
 }
 
+/**
+ * @brief Restores the terminal to its original signal handling state.
+ *
+ * This function resets the terminal attributes to the state saved by
+ * `suppress_terminal_signals()`. It ensures that standard terminal behavior,
+ * such as echoing input and handling signals, is restored after program execution.
+ *
+ * @note This function should be called during cleanup to avoid leaving the terminal
+ *       in an inconsistent state.
+ */
 void restore_terminal_signals()
 {
+    // Restore terminal attributes if they were previously saved.
     if (tty_saved)
     {
-        tcsetattr(STDIN_FILENO, TCSANOW, &original_tty);
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &original_tty) != 0)
+        {
+            llog.logE(ERROR, "Failed to restore terminal settings: ", std::strerror(errno));
+        }
+        else
+        {
+            llog.logS(DEBUG, "Terminal signals restored to original state.");
+        }
+    }
+    else
+    {
+        llog.logS(WARN, "Terminal settings were not saved. Nothing to restore.");
     }
 }
 
+/**
+ * @brief Blocks specific signals for the current thread.
+ *
+ * This function blocks common termination and fault signals, preventing the default
+ * signal handling behavior. It ensures that signals like SIGINT and SIGSEGV do not
+ * interrupt the main thread but can be handled by a dedicated signal-handling thread.
+ *
+ * @note This function should be called during application initialization to ensure
+ *       proper signal management throughout the program's lifecycle.
+ */
 void block_signals()
 {
     sigset_t set;
-    sigemptyset(&set);
+    sigemptyset(&set); // Initialize an empty signal set.
 
-    // Add signals to block
-    const int signals[] = {SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGHUP, SIGABRT};
+    // List of signals to block.
+    const int signals[] = {
+        SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS,
+        SIGFPE, SIGILL, SIGHUP, SIGABRT};
+
+    // Add each signal to the set.
     for (int signum : signals)
     {
         sigaddset(&set, signum);
     }
 
-    // Block signals for the current thread (main)
-    pthread_sigmask(SIG_BLOCK, &set, nullptr);
-    llog.logS(DEBUG, "Blocked signals in the main thread.");
+    // Block the signals for the current thread.
+    if (pthread_sigmask(SIG_BLOCK, &set, nullptr) != 0)
+    {
+        llog.logE(ERROR, "Failed to block signals: ", std::strerror(errno));
+    }
+    else
+    {
+        llog.logS(DEBUG, "Blocked signals in the main thread.");
+    }
 }
 
+/**
+ * @brief Converts a signal number to its corresponding string representation.
+ *
+ * This function maps common signal numbers to their human-readable names, such as
+ * SIGINT, SIGTERM, and SIGSEGV. If the signal is not recognized, it returns
+ * "UNKNOWN_SIGNAL".
+ *
+ * @param signum The signal number to convert.
+ * @return std::string The corresponding signal name or "UNKNOWN_SIGNAL" if unknown.
+ */
 std::string signal_to_string(int signum)
 {
+    // Map of signal numbers to their corresponding string representations.
     static const std::unordered_map<int, std::string> signal_map = {
-        {SIGINT, "SIGINT"},   {SIGTERM, "SIGTERM"}, {SIGQUIT, "SIGQUIT"},
-        {SIGSEGV, "SIGSEGV"}, {SIGBUS, "SIGBUS"},   {SIGFPE, "SIGFPE"},
-        {SIGILL, "SIGILL"},   {SIGHUP, "SIGHUP"},   {SIGABRT, "SIGABRT"}
-    };
+        {SIGINT, "SIGINT"},
+        {SIGTERM, "SIGTERM"},
+        {SIGQUIT, "SIGQUIT"},
+        {SIGSEGV, "SIGSEGV"},
+        {SIGBUS, "SIGBUS"},
+        {SIGFPE, "SIGFPE"},
+        {SIGILL, "SIGILL"},
+        {SIGHUP, "SIGHUP"},
+        {SIGABRT, "SIGABRT"}};
 
+    // Find the signal in the map and return its string representation.
     auto it = signal_map.find(signum);
     return (it != signal_map.end()) ? it->second : "UNKNOWN_SIGNAL";
 }
 
+/**
+ * @brief Performs cleanup of active threads and ensures graceful shutdown.
+ *
+ * This function stops the scheduler and INI monitor threads, restores terminal
+ * settings, and ensures that all resources are released before exiting the
+ * application. It is called during signal handling and shutdown procedures.
+ */
 void cleanup_threads()
 {
     llog.logS(DEBUG, "Cleaning up active threads.");
-    exit_scheduler.store(true);
-    cv.notify_all();
+    exit_scheduler.store(true); // Signal threads to exit.
+    cv.notify_all();            // Wake up any waiting threads.
 
-    for (auto &thread : active_threads)
+    // Ensure the scheduler thread is properly joined.
+    if (schedulerThread.joinable())
     {
-        if (thread.joinable())
-        {
-            thread.join();
-        }
+        llog.logS(DEBUG, "Joining scheduler thread.");
+        schedulerThread.join();
     }
 
+    // Ensure the INI monitor thread is properly joined.
+    if (iniMonitorThread.joinable())
+    {
+        llog.logS(DEBUG, "Joining INI monitor thread.");
+        iniMonitorThread.join();
+    }
+
+    // Restore terminal signals to their original state.
     restore_terminal_signals();
-    restore_governor();
-    llog.logS(INFO, "Exiting Wsprry Pi");
-    std::exit(0); // Ensure clean exit
+
+    llog.logS(INFO, "Exiting Wsprry Pi.");
+    std::exit(0); // Ensure clean exit.
 }
 
+/**
+ * @brief Handles signals received by the application and triggers cleanup.
+ *
+ * This function processes signals such as SIGINT, SIGTERM, SIGSEGV, and others.
+ * It logs the received signal, performs necessary cleanup, and ensures graceful
+ * shutdown. Fatal signals like SIGSEGV trigger an immediate exit, while cleanup
+ * signals like SIGINT allow threads to terminate properly.
+ *
+ * @param signum The signal number received by the application.
+ */
 void signal_handler(int signum)
 {
-    // Log the received signal
+    // Convert signal number to a human-readable string.
     std::string signal_name = signal_to_string(signum);
     std::ostringstream oss;
     oss << "Caught " << signal_name << ". Shutting down.";
-    std::string log_message = oss.str();  // Convert to a standard string
+    std::string log_message = oss.str();
 
-    // Perform cleanup based on the signal type
+    // Handle the signal based on type.
     switch (signum)
     {
-    // Fatal errors not allowing cleanup
+    // Fatal signals that require immediate exit.
     case SIGSEGV:
     case SIGBUS:
     case SIGFPE:
     case SIGILL:
     case SIGABRT:
         llog.logE(FATAL, log_message);
-        restore_governor();
         restore_terminal_signals();
-        std::quick_exit(signum); // Ensure immediate exit
+        std::quick_exit(signum); // Immediate exit without cleanup.
         break;
 
-    // Signals allowing cleanup
+    // Graceful shutdown signals.
     case SIGINT:
     case SIGTERM:
     case SIGQUIT:
     case SIGHUP:
         llog.logS(INFO, log_message);
-        cleanup_threads(); // Graceful cleanup
+        cleanup_threads(); // Perform full cleanup.
         break;
 
+    // Unknown signals are treated as fatal.
     default:
         llog.logE(FATAL, "Unknown signal caught. Exiting.");
         break;
     }
 
-    // Ignore further signals during shutdown
+    // If shutdown is already in progress, ignore additional signals.
     if (shutdown_in_progress.load())
     {
-        llog.logE(WARN, "Shutdown already in progress. Ignoring signal:", signal);
+        llog.logE(WARN, "Shutdown already in progress. Ignoring signal:", signal_name);
         return;
     }
 
-    exit_scheduler.store(true); // Ensure shutdown flag is set
-    cv.notify_all();            // Wake up threads blocked on condition variable
+    // Set shutdown flag and notify waiting threads.
+    shutdown_in_progress.store(true);
+    exit_scheduler.store(true);
+    cv.notify_all();
 
+    // Ensure graceful cleanup.
     cleanup_threads();
 }
 
+/**
+ * @brief Registers signal handlers to manage application termination and cleanup.
+ *
+ * This function sets up signal handling for common termination signals such as
+ * SIGINT, SIGTERM, and fatal signals like SIGSEGV. It suppresses terminal signals,
+ * blocks signals in the main thread, and spawns a separate thread to wait for
+ * and handle signals using `sigwait()`.
+ *
+ * When a signal is caught, `signal_handler()` is called to perform cleanup and
+ * ensure graceful shutdown.
+ *
+ * @note This function should be called during application initialization to
+ *       ensure proper signal management throughout the program's lifecycle.
+ */
 void register_signal_handlers()
 {
+    // Block signals in the main thread to prevent default handling.
     block_signals();
+
+    // Suppress terminal signals to avoid disruption during execution.
     suppress_terminal_signals();
+
+    // Spawn a detached thread to handle signals asynchronously.
     std::thread([]
                 {
         sigset_t set;
         sigemptyset(&set);
-        sigaddset(&set, SIGINT);
-        sigaddset(&set, SIGTERM);
-        sigaddset(&set, SIGQUIT);
-        sigaddset(&set, SIGSEGV);
-        sigaddset(&set, SIGBUS);
-        sigaddset(&set, SIGFPE);
-        sigaddset(&set, SIGILL);
-        sigaddset(&set, SIGHUP);
+
+        // Signals to handle
+        const int signals[] = {SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS,
+                               SIGFPE, SIGILL, SIGHUP};
+
+        // Add each signal to the set
+        for (int signum : signals)
+        {
+            sigaddset(&set, signum);
+        }
 
         int sig;
-        while (!shutdown_in_progress)
+        while (!shutdown_in_progress.load())
         {
+            // Wait for any of the defined signals
             int ret = sigwait(&set, &sig);
             if (ret == 0)
             {
-                signal_handler(sig);  // Handle the signal
+                signal_handler(sig); // Handle the caught signal
             }
             else
             {
-                llog.logE(ERROR, "Failed to wait for signals:", std::strerror(errno));
+                llog.logE(ERROR, "Failed to wait for signals: ", std::strerror(errno));
             }
         } })
         .detach();

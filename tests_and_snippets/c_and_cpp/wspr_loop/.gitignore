@@ -1,6 +1,0 @@
-# WSPR Loop Ignore
-wspr_test
-*.o
-*.d
-*.ini
-build/

@@ -1,286 +1,337 @@
+/**
+ * @file scheduling.cpp
+ * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
+ *
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
+ *
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+ // Primary header for this source file
 #include "scheduling.hpp"
 
+// Project headers
 #include "arg_parser.hpp"
-#include "transmit.hpp"
 #include "constants.hpp"
 #include "signal_handler.hpp"
+#include "transmit.hpp"
 
-#include <sys/resource.h>
-#include <string.h>
-#include <string>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
+// Standard library headers
 #include <atomic>
-#include <thread>
 #include <condition_variable>
-#include <regex>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <vector>
 
+// System headers
+#include <string.h>
+#include <sys/resource.h>
+
+/**
+ * @brief Condition variable used for thread synchronization.
+ * 
+ * This condition variable allows the scheduler thread to wait for 
+ * specific conditions, such as the exit signal or the next transmission 
+ * interval.
+ */
 std::condition_variable cv;
+
+/**
+ * @brief Mutex for protecting access to shared resources.
+ * 
+ * This mutex is used to synchronize access to shared data between threads,
+ * ensuring thread safety when accessing the condition variable.
+ */
 std::mutex cv_mtx;
+
+/**
+ * @brief Atomic flag indicating when the scheduler should exit.
+ * 
+ * This flag allows threads to gracefully exit by checking its value.
+ * It is set to `true` when the program needs to terminate the scheduler
+ * and associated threads.
+ */
 std::atomic<bool> exit_scheduler(false);
-std::vector<std::thread> active_threads;
 
-void set_scheduling_priority()
+/**
+ * @brief Thread handle for the scheduler.
+ * 
+ * This thread runs the `scheduler_thread` function, managing the timing
+ * of WSPR transmissions and ensuring they occur at the correct intervals.
+ */
+std::thread schedulerThread;
+
+/**
+ * @brief Stores the names of all detected CPU cores.
+ * 
+ * This static vector holds the names of the available CPU cores on the system.
+ * It is populated by `discover_cpu_cores()` and used for frequency checks in 
+ * the `is_cpu_throttled()` function.
+ */
+static std::vector<std::string> all_cpu_cores;
+
+/**
+ * @brief Checks if the directory name represents a real CPU directory (e.g. "cpu0").
+ *
+ * We do a quick check:
+ * - Must start with "cpu"
+ * - Must have at least 4 characters ("cpu0" is the shortest)
+ * - All characters after "cpu" must be digits.
+ */
+bool is_cpu_directory(const std::string &dirName)
 {
-    if (setpriority(PRIO_PROCESS, 0, -10) == -1)
-    {
-        llog.logE(ERROR, "Failed to set scheduler priority:", std::string(strerror(errno)));
-    }
-    else
-    {
-        llog.logS(INFO, "Housekeeping priority set to -10 (increased priority).");
-    }
-}
+    // Must start with "cpu"
+    if (dirName.rfind("cpu", 0) != 0) // or dirName.compare(0, 3, "cpu") == 0
+        return false;
 
-void set_transmission_realtime()
-{
-    struct sched_param sp;
-    sp.sched_priority = 75; // mid-high range (1–99)
+    // Must have at least one digit after "cpu"
+    if (dirName.size() < 4) // e.g. "cpu0" is length 4
+        return false;
 
-    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
-    if (ret != 0)
+    // Check if characters after "cpu" are digits
+    for (size_t i = 3; i < dirName.size(); ++i)
     {
-        llog.logE(ERROR, "Failed to set real-time priority for transmission:", strerror(ret));
-    }
-    else
-    {
-        llog.logS(DEBUG, "Transmission thread set to real-time for FIFO.");
-    }
-}
-
-bool get_current_governors()
-{
-    config.previous_governor.clear();
-    bool success = false;
-
-    for (const auto &entry : std::filesystem::directory_iterator("/sys/devices/system/cpu/"))
-    {
-        if (!entry.is_directory())
-            continue;
-
-        std::string dirName = entry.path().filename().string();
-        // Only handle directories like "cpu0", "cpu1", etc.
-        if (!std::regex_match(dirName, std::regex("^cpu[0-9]+$")))
+        if (!std::isdigit(static_cast<unsigned char>(dirName[i])))
         {
-            // skip cpufreq, cpuidle, etc.
-            continue;
-        }
-
-        // Real CPU -> read scaling_governor
-        std::string governor_path = entry.path().string() + "/cpufreq/scaling_governor";
-        if (std::filesystem::exists(governor_path))
-        {
-            std::ifstream file(governor_path);
-            if (file.is_open())
-            {
-                std::string governor;
-                file >> governor;
-                file.close();
-                config.previous_governor[dirName] = governor;
-                success = true;
-            }
+            return false;
         }
     }
-
-    return success;
-}
-
-bool set_cpu_governor_for_core(const std::string &core, const std::string &governor)
-{
-    // e.g. core = "cpu0"
-    std::string cpufreq_path = "/sys/devices/system/cpu/" + core + "/cpufreq";
-    if (!std::filesystem::exists(cpufreq_path))
-    {
-        llog.logE(WARN, "cpufreq directory not found for:", core);
-        return false;
-    }
-
-    std::string governor_path = cpufreq_path + "/scaling_governor";
-    std::ofstream file(governor_path);
-    if (!file.is_open())
-    {
-        llog.logE(ERROR, "Failed to set CPU governor to:", governor, "for", core);
-        return false;
-    }
-
-    file << governor;
-    file.close();
-    llog.logS(DEBUG, "CPU governor set to:", governor, "for", core);
     return true;
 }
 
-bool set_cpu_governor(const std::string &governor)
+/**
+ * @brief Populates the list of valid CPU core directories.
+ *
+ * This function scans `/sys/devices/system/cpu/` and stores directory names like
+ * "cpu0", "cpu1", etc. in the global `all_cpu_cores` vector for later use.
+ */
+void discover_cpu_cores()
 {
-    bool success = true;
+    // Avoid re-discovery if already populated
+    if (!all_cpu_cores.empty()) return;
 
     for (const auto &entry : std::filesystem::directory_iterator("/sys/devices/system/cpu/"))
     {
+        // We only care about directories
         if (!entry.is_directory())
             continue;
 
         std::string dirName = entry.path().filename().string();
 
-        // Only proceed if this is a real CPU directory like "cpu0", "cpu1", etc.
-        if (!std::regex_match(dirName, std::regex("^cpu[0-9]+$")))
-            continue;
-
-        // cpufreq path for this CPU
-        std::string cpufreq_path = entry.path().string() + "/cpufreq";
-        if (!std::filesystem::exists(cpufreq_path))
+        // If it's a real CPU directory like "cpu0", "cpu1", etc.
+        if (is_cpu_directory(dirName))
         {
-            llog.logE(WARN, "cpufreq directory not found for:", dirName);
-            continue;
-        }
-
-        // Attempt to set scaling_governor
-        std::string governor_path = cpufreq_path + "/scaling_governor";
-        std::ofstream file(governor_path);
-        if (file.is_open())
-        {
-            file << governor;
-            file.close();
-            llog.logS(DEBUG, "CPU governor set to:", governor, "for", dirName);
-        }
-        else
-        {
-            llog.logE(ERROR, "Failed to set CPU governor to:", governor, "for", dirName);
-            success = false;
+            all_cpu_cores.push_back(dirName);
         }
     }
-
-    if (!success)
-    {
-        llog.logE(ERROR, "One or more CPU cores failed to set the governor to:", governor);
-    }
-
-    return success;
 }
 
-void enable_performance_mode()
+/**
+ * @brief Checks if any CPU core is throttled due to temperature or frequency.
+ * 
+ * This function evaluates CPU throttling by:
+ * - Checking the highest CPU temperature from `/sys/class/thermal/thermal_zone0/temp`.
+ * - Verifying the current frequency of each CPU core from 
+ *   `/sys/devices/system/cpu/n/cpufreq/scaling_cur_freq`.
+ * 
+ * Logs warnings if the temperature exceeds 80°C or if any core runs below its
+ * default frequency based on the detected processor type.
+ *
+ * @note Ensure the application has sufficient permissions to read the required
+ *       system files. Missing permissions or invalid paths will log errors.
+ *
+ * @return true if any CPU throttling is detected (temperature or frequency).
+ * @return false if no throttling is detected and all cores operate normally.
+ */
+bool is_cpu_throttled()
 {
-    // 1) Refresh map of previous governors
-    bool success = get_current_governors();
-    if (!success)
+    // Ensure core discovery if not already populated.
+    if (all_cpu_cores.empty())
     {
-        llog.logE(ERROR, "Failed to retrieve current CPU governors.");
-        return;
+        discover_cpu_cores();
     }
 
-    // 2) If map is empty, there's no CPU info
-    if (config.previous_governor.empty())
+    // Get the default CPU frequency based on processor type.
+    int defaultFrequencyHz = getDefaultCpuFrequencyHz();
+    if (defaultFrequencyHz == 0)
     {
-        llog.logE(ERROR, "No CPU governors found.");
-        return;
+        llog.logE(ERROR, "Failed to determine default CPU frequency.");
+        return false;  // Cannot determine throttling without a valid threshold.
     }
 
-    // 3) Check if all are already performance
-    bool all_in_performance = true;
-    for (const auto &entry : config.previous_governor)
-    {
-        if (entry.second != "performance")
-        {
-            all_in_performance = false;
-            break;
-        }
-    }
+    // Read the current CPU temperature.
+    std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
+    int highest_temp = 0;
 
-    // 4) If not all performance, set them
-    if (!all_in_performance)
+    if (temp_file.is_open())
     {
-        if (set_cpu_governor("performance"))
-        {
-            llog.logS(INFO, "Performance mode enabled for all CPU cores.");
-        }
-        else
-        {
-            llog.logE(ERROR, "Failed to enable performance mode on all cores.");
-        }
+        int current_temp = 0;
+        temp_file >> current_temp;
+        temp_file.close();
+        highest_temp = current_temp;
     }
     else
     {
-        llog.logS(DEBUG, "All CPU cores are already in performance mode.");
-    }
-}
-
-void restore_governor()
-{
-    // Make sure we have stored data
-    if (config.previous_governor.empty())
-    {
-        llog.logE(ERROR, "No previous CPU governor settings found.");
-        return;
+        llog.logE(ERROR, "Failed to read CPU temperature.");
+        return false;  // Assume no throttling if temperature cannot be checked.
     }
 
-    bool success = true;
+    // Track throttling status.
+    bool throttled = false;
 
-    // Iterate the map: (cpu0 -> ondemand, cpu1 -> performance, etc.)
-    for (const auto &entry : config.previous_governor)
+    // Check each CPU core's current frequency.
+    for (const auto& core : all_cpu_cores)
     {
-        const std::string &core = entry.first;
-        const std::string &governor = entry.second;
+        std::string freq_path = "/sys/devices/system/cpu/" + core + "/cpufreq/scaling_cur_freq";
+        std::ifstream freq_file(freq_path);
+        int cur_freq = 0;
 
-        // Use the single-core function:
-        if (!set_cpu_governor_for_core(core, governor))
+        if (freq_file.is_open())
         {
-            llog.logE(ERROR, "Failed to restore governor for", core, "to", governor);
-            success = false;
+            freq_file >> cur_freq;
+            freq_file.close();
+
+            // Detect frequency throttling if below the default frequency.
+            if (cur_freq < defaultFrequencyHz)
+            {
+                throttled = true;
+            }
         }
         else
         {
-            llog.logS(DEBUG, "Restored governor for", core, "to", governor);
+            llog.logE(ERROR, "Failed to read current frequency for core", core);
         }
     }
 
-    if (success)
+    // Check for temperature throttling (>80°C).
+    constexpr int kMaxSafeTempMilliC = 80000;  // 80°C threshold.
+    if (highest_temp > kMaxSafeTempMilliC)
     {
-        llog.logS(INFO, "All CPU governors restored successfully.");
+        llog.logE(WARN, "CPU temperature throttling detected. Highest temp:",
+                  highest_temp / 1000, "°C.");
+        throttled = true;
+    }
+
+    // Log normal operation if no throttling is detected.
+    if (!throttled)
+    {
+        llog.logS(DEBUG, "All CPU cores running normally. Highest temp:",
+                  highest_temp / 1000, "°C. Frequency threshold:",
+                  defaultFrequencyHz / 1000000, "MHz.");
+    }
+
+    return throttled;
+}
+
+/**
+ * @brief Sets the current transmission thread to real-time priority.
+ * 
+ * This function configures the calling thread to use the `SCHED_FIFO` 
+ * scheduling policy with a mid-to-high priority level of 75. This ensures 
+ * that the transmission thread receives preferential CPU time, reducing 
+ * latency and jitter during critical operations.
+ *
+ * If setting the real-time priority fails, an error is logged with the 
+ * corresponding system error message.
+ *
+ * @note This function requires appropriate system privileges (e.g., CAP_SYS_NICE) 
+ *       to modify thread priorities. Without elevated permissions, the call 
+ *       to `pthread_setschedparam()` will fail.
+ *
+ */
+void set_transmission_realtime()
+{
+    // Define scheduling parameters.
+    struct sched_param sp;
+    sp.sched_priority = 75;  // Mid-high priority (range: 1–99).
+
+    // Attempt to set real-time priority for the current thread.
+    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    if (ret != 0)
+    {
+        // Log an error if the priority change fails.
+        llog.logE(ERROR, "Failed to set real-time priority for transmission: ", strerror(ret));
     }
     else
     {
-        llog.logE(ERROR, "Failed to restore some CPU governors.");
+        // Confirm success if the priority change succeeds.
+        llog.logS(DEBUG, "Transmission thread set to real-time using SCHED_FIFO.");
     }
 }
 
-void precise_sleep_until(const timespec &target)
-{
-    while (true)
-    {
-        int res = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &target, nullptr);
-        if (res == 0) break;  // Success
-        if (res != EINTR)
-        {
-            llog.logE(ERROR, "clock_nanosleep failed:", std::string(strerror(res)));
-            break;
-        }
-        // If interrupted, keep trying until target
-    }
-}
-
+/**
+ * @brief Waits until the next transmission interval boundary and triggers transmission.
+ * 
+ * This function waits until one second after the next interval boundary, ensuring 
+ * that the transmission aligns with the desired schedule. It supports WSPR-2 and 
+ * WSPR-15 modes, defined by the interval parameter.
+ *
+ * @param interval The transmission interval in minutes (e.g., 2 for WSPR-2, 15 for WSPR-15).
+ * @return true if the wake-up occurred at the expected interval.
+ * @return false if interrupted by the exit scheduler or if the target interval was missed.
+ *
+ * @note This function relies on the `exit_scheduler` atomic flag to exit early.
+ *       Ensure `exit_scheduler` is defined and managed appropriately.
+ */
 bool wait_every(int interval)
 {
     using namespace std::chrono;
+
+    // Get the current system time.
     auto now = system_clock::now();
 
-    // Convert current time to integral minutes since epoch
+    // Convert current time to integral minutes since epoch.
     auto current_min_time = time_point_cast<minutes>(now);
     auto total_minutes = duration_cast<minutes>(current_min_time.time_since_epoch()).count();
 
-    // Next boundary minute
+    // Calculate the next interval boundary.
     auto next_boundary = ((total_minutes / interval) + 1) * interval;
     auto next_boundary_time = system_clock::time_point{minutes(next_boundary)};
-    auto desired_time = next_boundary_time + seconds(1);
+    auto desired_time = next_boundary_time + seconds(1);  // Start transmission 1 second after boundary.
 
+    // Ensure the desired time is in the future.
     if (desired_time <= now)
+    {
         desired_time += minutes(interval);
+    }
 
+    // Convert desired time to human-readable format.
     auto desired_time_t = system_clock::to_time_t(desired_time);
     auto desired_tm = *std::gmtime(&desired_time_t);
 
+    // Determine mode string based on interval.
     std::string mode_string = (interval == WSPR_2) ? "WSPR-2"
                            : (interval == WSPR_15) ? "WSPR-15"
                                                    : "Unknown mode";
 
+    // Log the next transmission time.
     std::ostringstream info_message;
     info_message << "Next transmission at "
                  << std::setw(2) << std::setfill('0') << desired_tm.tm_hour << ":"
@@ -288,18 +339,23 @@ bool wait_every(int interval)
                  << "01 UTC (" << mode_string << ").";
     llog.logS(INFO, info_message.str());
 
-    // Sleep until desired_time
+    // Sleep until the desired time while monitoring exit conditions.
     while (system_clock::now() < desired_time)
     {
-        if (exit_scheduler.load()) return false;
+        if (exit_scheduler.load())
+        {
+            llog.logE(WARN, "Transmission wait interrupted by exit scheduler.");
+            return false;
+        }
         std::this_thread::sleep_for(milliseconds(100));
     }
 
-    // Actual wake-up
+    // Measure the actual wake-up time.
     auto final_time = system_clock::now();
     auto final_t = system_clock::to_time_t(final_time);
     auto final_tm = *std::gmtime(&final_t);
 
+    // Calculate the offset from the desired wake-up time.
     auto offset_ns = duration_cast<nanoseconds>(final_time - desired_time).count();
     double offset_ms = offset_ns / 1e6;
 
@@ -309,22 +365,74 @@ bool wait_every(int interval)
                    << std::fixed << std::setprecision(4)
                    << std::abs(offset_ms) << " ms.";
 
+    // Verify if the wake-up happened within the expected interval.
     if ((final_tm.tm_min % interval == 0) && final_tm.tm_sec >= 1)
     {
-        llog.logS(INFO, "Transmission triggered at the target interval (" + std::to_string(interval) + " min).");
+        llog.logS(DEBUG, "Transmission triggered at the target interval (" + std::to_string(interval) + " min).");
         llog.logS(DEBUG, offset_message.str());
         return true;
     }
 
+    // Log an error if the target interval was missed.
     llog.logE(ERROR, "Missed target interval. " + offset_message.str());
     return false;
 }
 
-void scheduler_thread()
+/**
+ * @brief Sets the scheduling priority for the current process.
+ * 
+ * This function increases the process priority by setting its nice value to -10.
+ * A lower nice value increases priority, ensuring the housekeeping thread receives
+ * more CPU time when competing with other processes.
+ *
+ * If the priority change fails, an error message is logged with the corresponding
+ * system error description.
+ *
+ * @note Changing priority requires appropriate system privileges. Without sufficient
+ *       permissions (CAP_SYS_NICE), the call to `setpriority()` will fail.
+ *
+ * @return void
+ */
+void set_scheduling_priority()
 {
+    // Attempt to set the process priority to -10 (higher priority).
     if (setpriority(PRIO_PROCESS, 0, -10) == -1)
     {
-        llog.logE(ERROR, "Failed to set scheduler thread priority:", std::string(strerror(errno)));
+        // Log an error if the priority change fails.
+        llog.logE(ERROR, "Failed to set scheduler priority: ", std::string(strerror(errno)));
+    }
+    else
+    {
+        // Log success if the priority change succeeds.
+        llog.logS(INFO, "Housekeeping priority set to -10 (increased priority).");
+    }
+}
+
+/**
+ * @brief Manages the scheduling of WSPR transmissions.
+ * 
+ * This function runs as a dedicated thread, setting an elevated priority (-10)
+ * to ensure timely execution. It waits for the next transmission interval based
+ * on the configured `wspr_interval` and triggers the transmission process.
+ *
+ * During each cycle, it:
+ * - Retrieves the current WSPR interval.
+ * - Waits until the next interval boundary using `wait_every()`.
+ * - Initiates a transmission using `transmit()`.
+ * - Checks for CPU throttling using `is_cpu_throttled()`.
+ *
+ * The thread exits when the `exit_scheduler` atomic flag is set.
+ *
+ * @note Requires appropriate system privileges for priority adjustments.
+ *
+ * @return void
+ */
+void scheduler_thread()
+{
+    // Set scheduler priority to -10 (higher priority).
+    if (setpriority(PRIO_PROCESS, 0, -10) == -1)
+    {
+        llog.logE(ERROR, "Failed to set scheduler thread priority: ", std::string(strerror(errno)));
     }
     else
     {
@@ -332,126 +440,85 @@ void scheduler_thread()
     }
 
     llog.logS(DEBUG, "Scheduler thread started.");
+
+    // Lock for condition variable synchronization.
     std::unique_lock<std::mutex> lock(cv_mtx);
 
+    // Main scheduling loop.
     while (!exit_scheduler)
     {
-        // Periodically check throttling
-        check_and_restore_governor();
-
-        // Monitor for INI changes
-        if (iniMonitor.changed())
-        {
-            llog.logS(INFO, "INI file changed. Reloading configuration.");
-            validate_config_data();
-        }
-
-        // WSPR interval
+        // Retrieve the current WSPR interval.
         int current_interval = wspr_interval.load();
-        llog.logS(DEBUG, "Current WSPR interval set to:", current_interval, "minutes.");
+        llog.logS(DEBUG, "Current WSPR interval set to: ", current_interval, " minutes.");
 
+        // Wait until the next transmission interval.
         if (wait_every(current_interval))
         {
-            transmit();
+            transmit();         // Start transmission.
+            is_cpu_throttled(); // Check for CPU throttling.
         }
 
+        // Wait for exit signal or timeout.
         cv.wait_for(lock, std::chrono::seconds(1), [] { return exit_scheduler.load(); });
     }
 
     llog.logS(DEBUG, "Scheduler thread exiting.");
 }
 
+/**
+ * @brief Manages the main WSPR transmission loop.
+ * 
+ * This function runs the primary WSPR transmission loop, coordinating the 
+ * INI monitor thread and the scheduler thread. It continuously:
+ * - Starts the `ini_monitor_thread` to detect INI file changes.
+ * - Spawns the `scheduler_thread` to manage transmission intervals.
+ * - Waits for the scheduler to signal transmission readiness.
+ * - Initiates a transmission when the interval is reached.
+ *
+ * The loop exits when the `exit_scheduler` atomic flag is set.
+ *
+ * @note This function runs until externally signaled to stop.
+ *
+ * @return void
+ */
 void wspr_loop()
 {
+    // Start the INI monitor thread.
+    iniMonitorThread = std::thread(ini_monitor_thread);
+
+    // Main loop to manage scheduler and transmissions.
     while (!exit_scheduler.load())
     {
-        exit_scheduler = false;
+        exit_scheduler = false;  // Reset exit flag for the new cycle.
 
-        // Start scheduler
-        active_threads.emplace_back(scheduler_thread);
+        // Start the scheduler thread.
+        schedulerThread = std::thread(scheduler_thread);
 
-        std::unique_lock<std::mutex> lock(cv_mtx);
-        cv.wait(lock, [] { return exit_scheduler.load(); });
-
-        // Join all
-        for (auto &thread : active_threads)
+        // Wait for the scheduler to signal transmission readiness.
         {
-            if (thread.joinable()) thread.join();
+            std::unique_lock<std::mutex> lock(cv_mtx);
+            cv.wait(lock, [] { return exit_scheduler.load(); });
         }
-        active_threads.clear();
 
+        // Join the scheduler thread once signaled.
+        if (schedulerThread.joinable())
+        {
+            schedulerThread.join();
+        }
+
+        // Trigger transmission if not exiting.
         if (!exit_scheduler.load())
         {
             transmit();
         }
     }
-}
 
-bool is_cpu_throttled()
-{
-    std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
-    std::ifstream freq_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
+    // Signal the INI monitor thread to terminate.
+    exit_scheduler.store(true);
 
-    int temp = 0;
-    int cur_freq = 0;
-
-    if (temp_file.is_open()) {
-        temp_file >> temp;
-        temp_file.close();
-    } else {
-        llog.logE(ERROR, "Failed to read CPU temperature.");
-        return false;
-    }
-
-    if (freq_file.is_open()) {
-        freq_file >> cur_freq;
-        freq_file.close();
-    } else {
-        llog.logE(ERROR, "Failed to read current CPU frequency.");
-        return false;
-    }
-
-    bool temp_throttled = (temp > 80000);        // > 80°C
-    bool freq_throttled = (cur_freq < 1000000);  // < 1GHz
-
-    if (temp_throttled || freq_throttled)
+    // Join the INI monitor thread to ensure a clean exit.
+    if (iniMonitorThread.joinable())
     {
-        llog.logE(WARN, "CPU throttling detected! Temp:", temp / 1000, "°C\nCPU Frequency:", cur_freq / 1000, "MHz.");
-        return true;
-    }
-
-    llog.logS(DEBUG, "CPU running normally. Temp:", temp / 1000, "°C\nCPU Frequency:", cur_freq / 1000, "MHz.");
-    return false;
-}
-
-void check_and_restore_governor()
-{
-    if (is_cpu_throttled())
-    {
-        llog.logE(WARN, "CPU Throttling detected.");
-
-        // Instead of comparing a map to "performance", check if *all* are "performance"
-        bool all_perf = true;
-        for (auto &kv : config.previous_governor)
-        {
-            if (kv.second != "performance")
-            {
-                all_perf = false;
-                break;
-            }
-        }
-
-        // If there's at least one non-performance, attempt to restore
-        if (!config.previous_governor.empty() && !all_perf)
-        {
-            // We want to revert them all to their old settings:
-            //   In your original code, you did `set_cpu_governor(config.previous_governor)`
-            //   which doesn't exist. Instead, let's loop or call restore_governor():
-            restore_governor();
-        }
-        else
-        {
-            llog.logE(WARN, "Governor was already 'performance' or map was empty.");
-        }
+        iniMonitorThread.join();
     }
 }

@@ -1,17 +1,67 @@
-#include <vector>
-#include <thread>
-#include <array>
-#include <sys/timex.h>
-#include <string.h>
+/**
+ * @file ppm_ntp.cpp
+ * @brief Handles periodic NTP time synchronization duties as well as clock
+ * calibration.
+ *
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
+ *
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
+// Primary header for this source file
 #include "ppm_ntp.hpp"
+
+// Project headers
 #include "arg_parser.hpp"
 
-#include "../../../src/LCBLog/src/lcblog.hpp"
+// Standard library headers
+#include <array>
+#include <cstring>
+#include <string>
 
+// System headers
+#include <sys/timex.h>
+
+/**
+ * @brief Executes a shell command and returns the output as a string.
+ *
+ * This function runs the provided shell command using `popen` and captures
+ * its standard output. If the command fails or produces no output, an empty
+ * string is returned.
+ *
+ * @param command The shell command to execute.
+ * @return std::string The output of the command, or an empty string if an error occurs.
+ *
+ * @note This function should not be used with untrusted input due to potential
+ * command injection risks.
+ */
 std::string run_command(const std::string &command)
 {
-    std::array<char, 128> buffer;
+    std::array<char, 128> buffer{};
     std::string result;
     FILE *pipe = popen(command.c_str(), "r");
 
@@ -33,10 +83,17 @@ std::string run_command(const std::string &command)
         return "";
     }
 
-    // Ensure a return value even if the command fails
     return result.empty() ? "" : result;
 }
 
+/**
+ * @brief Checks if the system is synchronized with an NTP server.
+ *
+ * This function runs `ntpq -c 'rv 0'` and checks for the `sync_ntp` keyword
+ * in the output, indicating successful synchronization.
+ *
+ * @return true if the system is synchronized with NTP, false otherwise.
+ */
 bool is_ntp_synchronized()
 {
     try
@@ -59,6 +116,15 @@ bool is_ntp_synchronized()
     }
 }
 
+/**
+ * @brief Checks the NTP status by analyzing `ntpq -pn` output.
+ *
+ * This function parses the output of `ntpq -pn` to identify synchronized
+ * servers marked by `*` or `#`. If at least one server is synchronized,
+ * it returns true.
+ *
+ * @return true if a synchronized NTP server is found, false otherwise.
+ */
 bool check_ntp_status()
 {
     std::string output = run_command("ntpq -pn");
@@ -68,11 +134,9 @@ bool check_ntp_status()
 
     while (std::getline(stream, line))
     {
-        // Skip empty lines and headers
         if (line.empty() || line.find("remote") != std::string::npos || line.find("=") != std::string::npos)
             continue;
 
-        // Check if the line starts with * or # indicating synchronization
         std::istringstream fields(line);
         std::vector<std::string> tokens;
         std::string token;
@@ -85,38 +149,43 @@ bool check_ntp_status()
             std::string sync_flag = tokens[0].substr(0, 1); // * or #
             std::string remote = tokens[0].substr(1);       // IP address
 
-            // Replace the first token with separated sync flag and remote address
             tokens[0] = sync_flag;
             tokens.insert(tokens.begin() + 1, remote);
 
-            // Ensure there are enough fields after splitting
             if (tokens.size() >= 11)
             {
-                // std::string refid = tokens[2];
-                // std::string stratum = tokens[3];
-                // std::string type = tokens[4];
-                // std::string when = tokens[5];
-                // std::string poll = tokens[6];
+                std::string type = tokens[4];
+                std::string when = tokens[5];
+                std::string poll = tokens[6];
                 std::string reach = tokens[7];
-                // std::string delay = tokens[8];
+                std::string delay = tokens[8];
                 std::string offset = tokens[9];
                 std::string jitter = tokens[10];
 
-                llog.logS(DEBUG, "NTP synchronized server:", remote, "\nNTP Offset:", offset, "ms \nNTP Jitter:", jitter, "ms \nNTP Reach:", reach);
+                llog.logS(DEBUG, "NTP synchronized server:", remote, "\nNTP Offset:", offset,
+                          "ms \nNTP Jitter:", jitter, "ms \nNTP Reach:", reach);
                 llog.logS(INFO, "NTP synchronization verified.");
                 return true;
             }
             else
             {
-                llog.logE(WARN, "NTP Insufficient fields in line:", line);
+                llog.logE(WARN, "NTP insufficient fields in line:", line);
             }
         }
     }
 
-    llog.logE(FATAL, "NTP No synchronized server found.");
+    llog.logE(FATAL, "No synchronized NTP server found.");
     return false;
 }
 
+/**
+ * @brief Restarts the NTPsec service and verifies synchronization.
+ *
+ * This function attempts to restart the NTPsec service and verifies
+ * if synchronization is restored within a specified retry interval.
+ *
+ * @return true if synchronization is restored after the restart, false otherwise.
+ */
 bool restart_ntp_service()
 {
     llog.logS(WARN, "Restarting NTPsec service...");
@@ -130,7 +199,6 @@ bool restart_ntp_service()
     llog.logS(INFO, "NTPsec service restarted. Verifying synchronization...");
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    // Check for restored synchronization
     for (int i = 0; i < 5; ++i)
     {
         if (check_ntp_status())
@@ -147,50 +215,63 @@ bool restart_ntp_service()
     return false;
 }
 
+/**
+ * @brief Ensures NTP stability by checking status with retries.
+ *
+ * This function performs multiple retries to ensure NTP synchronization,
+ * using an exponential backoff strategy.
+ *
+ * @return true if NTP is stable, false if retries are exhausted.
+ */
 bool ensure_ntp_stable()
 {
-    const int max_retries = 3;
-    const int initial_retry_interval = 10; // Start with 10 seconds
+    constexpr int max_retries = 3;
+    constexpr int initial_retry_interval = 10;
     int current_retry_interval = initial_retry_interval;
 
     for (int attempt = 1; attempt <= max_retries; ++attempt)
     {
         if (check_ntp_status())
         {
-            return true; // NTP is stable
+            return true;
         }
 
-        // Log failure for the current attempt
-        llog.logE(WARN, "NTP Check failed (attempt ", attempt, " of ", max_retries, ").");
+        llog.logE(WARN, "NTP check failed (attempt", attempt, "of", max_retries, ").");
 
         if (attempt < max_retries)
         {
-            llog.logS(INFO, "NTP Retrying in ", current_retry_interval, " seconds...");
+            llog.logS(INFO, "Retrying NTP check in", current_retry_interval, "seconds...");
             std::this_thread::sleep_for(std::chrono::seconds(current_retry_interval));
-
-            // Exponential backoff: double the wait time for the next retry
             current_retry_interval *= 2;
         }
         else
         {
-            // Final attempt failed, log and exit
-            llog.logE(FATAL, "NTP Failed after ", max_retries, " attempts. Exiting.");
+            llog.logE(FATAL, "NTP check failed after", max_retries, "attempts. Exiting.");
             std::exit(EXIT_FAILURE);
         }
     }
 
-    return false; // Unreachable, but ensures function signature completeness
+    return false;
 }
 
+/**
+ * @brief Updates the PPM (parts per million) value based on NTP adjustment.
+ *
+ * This function retrieves the NTP frequency adjustment using `ntp_adjtime`
+ * and calculates the PPM value. It updates `config.last_ppm` if a significant
+ * change is detected.
+ *
+ * @return true if the PPM value is successfully updated, false otherwise.
+ */
 bool update_ppm()
 {
-    struct timex ntx = {};
+    struct timex ntx{};
     errno = 0;
 
     int status = ntp_adjtime(&ntx);
     if (status == -1)
     {
-        llog.logE(FATAL, "PPM check failed to adjust NTP time:", std::string(strerror(errno)));
+        llog.logE(FATAL, "Failed to adjust NTP time for PPM check:", std::string(strerror(errno)));
         return false;
     }
 

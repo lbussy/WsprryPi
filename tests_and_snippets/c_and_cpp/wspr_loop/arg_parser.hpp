@@ -2,19 +2,21 @@
  * @file arg_parser.hpp
  * @brief Command-line argument parser and configuration handler.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -84,7 +86,6 @@ struct ArgParserConfig
     float test_tone;                                      ///< Frequency for test tone mode.
     ModeType mode;                                        ///< Current operating mode (WSPR or test tone).
     double last_ppm;                                      ///< Stores the previous PPM value.
-    std::map<std::string, std::string> previous_governor; ///< Stores the original CPU frequency governor value.
 
     /**
      * @brief Default constructor initializing all configuration parameters.
@@ -245,6 +246,22 @@ extern std::atomic<bool> ini_reload_pending;
  * potential race conditions or dangling threads.
  */
 extern std::thread iniMonitorThread;
+
+/**
+ * @brief Initializes the logger with the appropriate log level.
+ * 
+ * This function sets the log level based on the current debug state. If the 
+ * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
+ * Otherwise, it defaults to INFO.
+ *
+ * @note Ensure that the `get_debug_state()` function correctly reflects the 
+ *       build configuration for accurate log level assignment.
+ *
+ * @example
+ * initialize_logger();
+ * // Sets llog to DEBUG or INFO depending on the build mode.
+ */
+extern void initialize_logger();
 
 /**
  * @brief Monitors the INI file for changes and handles configuration reload.
