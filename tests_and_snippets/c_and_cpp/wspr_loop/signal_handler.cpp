@@ -242,6 +242,7 @@ void cleanup_threads()
  */
 void signal_handler(int signum)
 {
+    llog.logS(DEBUG, "Signal caught:", signum);
     // Convert signal number to a human-readable string.
     std::string signal_name = signal_to_string(signum);
     std::ostringstream oss;
@@ -367,7 +368,6 @@ void enable_shutdown_pin(int pin)
 
     shutdown_pin_number = pin;
     shutdown_pin = std::make_unique<GpioHandler>(pin, true, true, shutdown_system, std::chrono::milliseconds(200));
-    llog.logS(DEBUG, "Shutdown pin enabled on GPIO", pin);
 }
 
 /**
@@ -400,7 +400,6 @@ void enable_led_pin(int pin)
 
     led_pin_number = pin;
     led_pin = std::make_unique<GpioHandler>(pin, false, false);
-    llog.logS(DEBUG, "LED Pin enabled on GPIO", pin);
 }
 
 /**

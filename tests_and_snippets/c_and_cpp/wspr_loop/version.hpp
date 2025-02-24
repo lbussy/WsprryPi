@@ -208,16 +208,4 @@ extern unsigned get_dt_ranges(const char *filename, unsigned offset);
  */
 extern unsigned get_peripheral_address(void);
 
-/**
- * @brief Retrieves the default (non-throttled) CPU frequency for the current processor type.
- *
- * This function identifies the Raspberry Pi processor type and returns the
- * nominal base operating frequency in Hertz, used as a reference for detecting
- * CPU throttling.
- *
- * @return int The default CPU frequency in Hertz. Returns 0 if the processor type
- * is unknown or if an error occurs while reading the device tree.
- */
-extern int getDefaultCpuFrequencyHz();
-
 #endif // VERSION_H
