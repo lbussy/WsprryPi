@@ -4,8 +4,7 @@
     `2025-02-20 23:10:00 UTC [INFO ] Transmission started.`
     ... this is a floating point rounding issue.
 - [ ] [INFO ] TX will stop after: 1 iterations <- This functionality not yet implemented
-- [ ] Unknown CPU type: BCM2711. Cannot determine default frequency.
-- [ ] Add configurable transmission pin
+- [ ] Add configurable transmission to transmission logic: ini.get_int_value("Common", "Transmit Pin"));
 - [ ] Add in WSPR-Message
-- [ ] Figure out hot to add in DMA stuff for transmission
+- [ ] Figure out how to add in DMA stuff for transmission
 - [ ] ...

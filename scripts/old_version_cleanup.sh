@@ -63,14 +63,17 @@ remove_files_and_dirs() {
     if [ ${#files_and_dirs[@]} -eq 0 ]; then
         files_and_dirs=(
             "/usr/local/bin/wspr"
+            "/usr/local/bin/wsprrypi"
             "/usr/local/etc/wspr.ini"
             "/usr/local/bin/shutdown-button.py"
             "/usr/local/bin/shutdown-watch.py"
             "/usr/local/bin/shutdown_watch.py"
             "/usr/local/bin/wspr_watch.py"
             "/var/www/html/wspr/"
+            "/var/www/html/wsprrypi/"
             "/var/log/wspr/"
             "/var/log/wsprrypi/"
+            "/var/log/WsprryPi/"
             "/etc/logrotate.d/wspr/"
             "/etc/logrotate.d/wsprrypi/"
         )
@@ -128,7 +131,13 @@ remove_services() {
     # Accept services as arguments or use a default list if none provided
     local services=("$@")
     if [ ${#services[@]} -eq 0 ]; then
-        services=("wspr" "shutdown-button" "shutdown-watch" "shutdown_watch")
+        services=(
+            "wspr"
+            "shutdown-button"
+            "shutdown-watch"
+            "shutdown_watch"
+            "wspr_watch"
+        )
     fi
 
     local retval=0  # Initialize return value

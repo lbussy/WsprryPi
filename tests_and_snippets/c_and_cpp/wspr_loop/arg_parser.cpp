@@ -430,6 +430,7 @@ void show_config_values(bool reload)
     llog.logS(INFO, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
     llog.logS(INFO, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
     llog.logS(INFO, "Frequencies:", ini.get_string_value("Common", "Frequency"));
+    llog.logS(INFO, "Transmit Pin:", ini.get_int_value("Common", "Transmit Pin"));
     // [Extended]
     llog.logS(INFO, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
     llog.logS(INFO, "Check NTP Each Run:", ini.get_bool_value("Extended", "Use NTP") ? "true" : "false");
@@ -487,7 +488,7 @@ bool validate_config_data()
             llog.logE(WARN, "Invalid frequency ignored:", token);
         }
     }
-
+    
     // Extract values from INI file, handling errors as needed
     bool offset_enabled = false;
     try
