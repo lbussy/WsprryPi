@@ -102,7 +102,9 @@ void transmit()
     in_transmission.store(true);
 
     // Set real-time priority for transmission
+#ifdef USE_GPIO_PINS
     if (led_pin) toggle_led(true);
+#endif
     set_transmission_realtime();
     llog.logS(INFO, "Transmission started.");
 
@@ -151,7 +153,9 @@ void transmit()
             break;
         }
     }
+#ifdef USE_GPIO_PINS
     if (led_pin) toggle_led(false);
+#endif
 
     // Record the end time, even if interrupted
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) == -1)

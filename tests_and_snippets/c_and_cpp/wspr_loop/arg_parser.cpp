@@ -522,6 +522,7 @@ bool validate_config_data()
         }
     }();
 
+#ifdef USE_GPIO_PINS
     // Turn on LED functionality
     //
     // Get PIN number
@@ -571,6 +572,7 @@ bool validate_config_data()
     } else {
         disable_shutdown_pin();
     }
+#endif
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)

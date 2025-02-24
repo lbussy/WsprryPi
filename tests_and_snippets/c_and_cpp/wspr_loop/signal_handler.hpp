@@ -35,15 +35,19 @@
 #define SIGNAL_HANDLER_HPP
 
 // Project headers
+#ifdef USE_GPIO_PINS
 #include "gpio_handler.hpp"
+#endif
 
 // Standard library headers
 #include <string>
 
+#ifdef USE_GPIO_PINS
 // Global GPIO instances.
 extern std::unique_ptr<GpioHandler> shutdown_pin;
 extern std::unique_ptr<GpioHandler> led_pin;
 extern std::mutex gpioMutex;
+#endif
 
 // Default GPIO pins.
 extern int shutdown_pin_number;
@@ -162,6 +166,7 @@ void disable_led_pin();
  */
 void toggle_led(bool state);
 
+#ifdef USE_GPIO_PINS
 /**
  * @brief Shuts down the system after a 3-second delay.
  * @details This function checks if the user has root privileges and, if so,
@@ -174,5 +179,6 @@ void toggle_led(bool state);
  *       Ensure the program runs with elevated privileges (e.g., using `sudo`).
  */
 extern void shutdown_system(GpioHandler::EdgeType edge, bool state);
+#endif
 
 #endif // SIGNAL_HANDLER_HPP

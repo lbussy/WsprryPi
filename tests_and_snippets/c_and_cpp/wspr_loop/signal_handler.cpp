@@ -55,10 +55,12 @@ std::atomic<bool> shutdown_in_progress(false);
 static struct termios original_tty;
 static bool tty_saved = false;
 
+#ifdef USE_GPIO_PINS
 // Global GPIO instances.
 std::unique_ptr<GpioHandler> shutdown_pin;
 std::unique_ptr<GpioHandler> led_pin;
 std::mutex gpioMutex;
+#endif
 
 // Default GPIO pins.
 int shutdown_pin_number = 19;
@@ -351,6 +353,8 @@ void register_signal_handlers()
     llog.logS(DEBUG, "Signal handling thread started.");
 }
 
+#ifdef USE_GPIO_PINS
+
 /**
  * @brief Creates or reinitializes the shutdown_pin GPIO input.
  * @param pin The GPIO pin number (default: 19).
@@ -474,3 +478,5 @@ void shutdown_system(GpioHandler::EdgeType edge, bool state)
         }
     }
 }
+
+#endif
