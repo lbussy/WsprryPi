@@ -195,12 +195,12 @@ std::thread iniMonitorThread;
 
 /**
  * @brief Initializes the logger with the appropriate log level.
- * 
- * This function sets the log level based on the current debug state. If the 
+ *
+ * This function sets the log level based on the current debug state. If the
  * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
  * Otherwise, it defaults to INFO.
  *
- * @note Ensure that the `get_debug_state()` function correctly reflects the 
+ * @note Ensure that the `get_debug_state()` function correctly reflects the
  *       build configuration for accurate log level assignment.
  *
  * @example
@@ -440,7 +440,7 @@ void show_config_values(bool reload)
     // [Server]
     llog.logS(INFO, "Server runs on port:", ini.get_int_value("Server", "Port"));
     llog.logS(INFO, "Use shutdown buton:", ini.get_bool_value("Server", "Use Shutdown") ? "true" : "false");
-    llog.logS(INFO, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));    
+    llog.logS(INFO, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));
 }
 
 /**

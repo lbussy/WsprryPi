@@ -56,16 +56,16 @@
 
 /**
  * @brief Condition variable used for thread synchronization.
- * 
- * This condition variable allows the scheduler thread to wait for 
- * specific conditions, such as the exit signal or the next transmission 
+ *
+ * This condition variable allows the scheduler thread to wait for
+ * specific conditions, such as the exit signal or the next transmission
  * interval.
  */
 std::condition_variable cv;
 
 /**
  * @brief Mutex for protecting access to shared resources.
- * 
+ *
  * This mutex is used to synchronize access to shared data between threads,
  * ensuring thread safety when accessing the condition variable.
  */
@@ -73,7 +73,7 @@ std::mutex cv_mtx;
 
 /**
  * @brief Atomic flag indicating when the scheduler should exit.
- * 
+ *
  * This flag allows threads to gracefully exit by checking its value.
  * It is set to `true` when the program needs to terminate the scheduler
  * and associated threads.
@@ -82,7 +82,7 @@ std::atomic<bool> exit_scheduler(false);
 
 /**
  * @brief Thread handle for the scheduler.
- * 
+ *
  * This thread runs the `scheduler_thread` function, managing the timing
  * of WSPR transmissions and ensuring they occur at the correct intervals.
  */
@@ -90,9 +90,9 @@ std::thread schedulerThread;
 
 /**
  * @brief Stores the names of all detected CPU cores.
- * 
+ *
  * This static vector holds the names of the available CPU cores on the system.
- * It is populated by `discover_cpu_cores()` and used for frequency checks in 
+ * It is populated by `discover_cpu_cores()` and used for frequency checks in
  * the `is_cpu_throttled()` function.
  */
 static std::vector<std::string> all_cpu_cores;
@@ -155,12 +155,12 @@ void discover_cpu_cores()
 
 /**
  * @brief Checks if any CPU core is throttled due to temperature or frequency.
- * 
+ *
  * This function evaluates CPU throttling by:
  * - Checking the highest CPU temperature from `/sys/class/thermal/thermal_zone0/temp`.
- * - Verifying the current frequency of each CPU core from 
+ * - Verifying the current frequency of each CPU core from
  *   `/sys/devices/system/cpu/n/cpufreq/scaling_cur_freq`.
- * 
+ *
  * Logs warnings if the temperature exceeds 80°C or if any core runs below its
  * default frequency based on the detected processor type.
  *
@@ -252,17 +252,17 @@ bool is_cpu_throttled()
 
 /**
  * @brief Sets the current transmission thread to real-time priority.
- * 
- * This function configures the calling thread to use the `SCHED_FIFO` 
- * scheduling policy with a mid-to-high priority level of 75. This ensures 
- * that the transmission thread receives preferential CPU time, reducing 
+ *
+ * This function configures the calling thread to use the `SCHED_FIFO`
+ * scheduling policy with a mid-to-high priority level of 75. This ensures
+ * that the transmission thread receives preferential CPU time, reducing
  * latency and jitter during critical operations.
  *
- * If setting the real-time priority fails, an error is logged with the 
+ * If setting the real-time priority fails, an error is logged with the
  * corresponding system error message.
  *
- * @note This function requires appropriate system privileges (e.g., CAP_SYS_NICE) 
- *       to modify thread priorities. Without elevated permissions, the call 
+ * @note This function requires appropriate system privileges (e.g., CAP_SYS_NICE)
+ *       to modify thread priorities. Without elevated permissions, the call
  *       to `pthread_setschedparam()` will fail.
  *
  */
@@ -288,9 +288,9 @@ void set_transmission_realtime()
 
 /**
  * @brief Waits until the next transmission interval boundary and triggers transmission.
- * 
- * This function waits until one second after the next interval boundary, ensuring 
- * that the transmission aligns with the desired schedule. It supports WSPR-2 and 
+ *
+ * This function waits until one second after the next interval boundary, ensuring
+ * that the transmission aligns with the desired schedule. It supports WSPR-2 and
  * WSPR-15 modes, defined by the interval parameter.
  *
  * @param interval The transmission interval in minutes (e.g., 2 for WSPR-2, 15 for WSPR-15).
@@ -380,7 +380,7 @@ bool wait_every(int interval)
 
 /**
  * @brief Sets the scheduling priority for the current process.
- * 
+ *
  * This function increases the process priority by setting its nice value to -10.
  * A lower nice value increases priority, ensuring the housekeeping thread receives
  * more CPU time when competing with other processes.
@@ -410,7 +410,7 @@ void set_scheduling_priority()
 
 /**
  * @brief Manages the scheduling of WSPR transmissions.
- * 
+ *
  * This function runs as a dedicated thread, setting an elevated priority (-10)
  * to ensure timely execution. It waits for the next transmission interval based
  * on the configured `wspr_interval` and triggers the transmission process.
@@ -467,8 +467,8 @@ void scheduler_thread()
 
 /**
  * @brief Manages the main WSPR transmission loop.
- * 
- * This function runs the primary WSPR transmission loop, coordinating the 
+ *
+ * This function runs the primary WSPR transmission loop, coordinating the
  * INI monitor thread and the scheduler thread. It continuously:
  * - Starts the `ini_monitor_thread` to detect INI file changes.
  * - Spawns the `scheduler_thread` to manage transmission intervals.

@@ -450,7 +450,7 @@ void shutdown_system(GpioHandler::EdgeType edge, bool state)
     if (edge == GpioHandler::EdgeType::FALLING)
     {
         llog.logS(WARN, "Shutdown triggered by GPIO event. Shutting down.");
-        
+
         // Check if the user has root privileges.
         if (geteuid() != 0) {
             throw std::runtime_error("Root privileges are required to shut down the system.");

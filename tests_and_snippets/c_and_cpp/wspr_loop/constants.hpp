@@ -96,7 +96,7 @@ constexpr int WSPR_15 = 15;
  * @brief WSPR transmission interval for 2-minute cycles.
  *
  * This constant defines the interval, in minutes, for WSPR transmissions
- * when operating in the 2-minute mode. It is commonly used for quick 
+ * when operating in the 2-minute mode. It is commonly used for quick
  * transmission cycles, ensuring frequent beaconing.
  *
  * @see WSPR_15, wspr_interval

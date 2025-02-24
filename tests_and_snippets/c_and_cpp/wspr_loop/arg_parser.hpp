@@ -249,12 +249,12 @@ extern std::thread iniMonitorThread;
 
 /**
  * @brief Initializes the logger with the appropriate log level.
- * 
- * This function sets the log level based on the current debug state. If the 
+ *
+ * This function sets the log level based on the current debug state. If the
  * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
  * Otherwise, it defaults to INFO.
  *
- * @note Ensure that the `get_debug_state()` function correctly reflects the 
+ * @note Ensure that the `get_debug_state()` function correctly reflects the
  *       build configuration for accurate log level assignment.
  *
  * @example

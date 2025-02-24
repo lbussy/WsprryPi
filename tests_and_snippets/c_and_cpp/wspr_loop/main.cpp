@@ -50,7 +50,7 @@
  *
  * This function initializes the application, parses command-line arguments,
  * loads the INI configuration, verifies NTP synchronization, and starts the
- * main WSPR transmission loop. It also sets system performance modes and 
+ * main WSPR transmission loop. It also sets system performance modes and
  * handles signal management for graceful shutdown.
  *
  * @param argc The number of command-line arguments.
@@ -65,7 +65,7 @@
 int main(const int argc, char *const argv[])
 {
     // Sets up logger based on DEBUG flag: INFO or DEBUG
-    initialize_logger(); 
+    initialize_logger();
 
     // Parse command-line arguments and exit if invalid.
     if (!parse_command_line(argc, argv))

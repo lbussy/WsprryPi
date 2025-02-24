@@ -11,20 +11,20 @@
  #include "gpio_handler.hpp"
  #include <iostream>
  #include <sstream>
- 
+
  /**
   * @brief Global logger instance for system-wide logging.
   * @details Initializes the LCBLog instance to log messages to standard output
   * and error streams.
   */
  LCBLog llog(std::cout, std::cerr);
- 
+
  /// @brief GPIO pin number for the LED output.
  constexpr int LED = 18;
- 
+
  /// @brief GPIO pin number for the button input.
  constexpr int BUTTON = 19;
- 
+
  /**
   * @brief Callback function for GPIO edge detection.
   * @details This function is triggered when an edge (rising or falling) is
@@ -39,11 +39,11 @@
      std::ostringstream msg;
      msg << "GPIO Callback: Edge " << (edge == GpioHandler::EdgeType::RISING ? "RISING" : "FALLING")
          << ", State: " << (state ? "HIGH" : "LOW") << ".";
- 
+
      // Log the detected edge and state.
      llog.logS(INFO, msg.str());
  }
- 
+
  /**
   * @brief Main function to initialize GPIO handlers and run the program.
   * @details Initializes GPIO handlers for an LED output and a button input
@@ -57,19 +57,19 @@
      // Set the logging level to INFO.
      llog.setLogLevel(INFO);
      llog.logS(INFO, "Starting main.");
- 
+
      try
      {
          // Create GPIO handlers for the button (input) and LED (output).
          GpioHandler inputHandler(BUTTON, true, true, gpio_callback, std::chrono::milliseconds(200));
          GpioHandler outputHandler(LED, false, false);
- 
+
          llog.logS(INFO, "GPIO handler instances created.");
          llog.logS(INFO, "Press Enter to exit.");
- 
+
          // Wait for the user to press Enter.
          std::cin.get();
- 
+
          llog.logS(INFO, "Exiting main.");
          return 0;
      }
