@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-timing_loop+67.477644f-dirty
-# @date 2025-02-23
+# @version 1.2.1-config_lib+55.34ec249
+# @date 2025-02-19
 # @copyright MIT License
 #
 # @license
@@ -208,7 +208,6 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"        # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI"   # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-# TODO: Update this when we do a version bump
 declare REPO_BRANCH="${REPO_BRANCH:-timing_loop}"
 declare GIT_TAG="${GIT_TAG:-1.2.1}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -226,7 +225,7 @@ declare GIT_CLONE_BASE="https://github.com"
 #
 # @default false
 # -----------------------------------------------------------------------------
-declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI & exe
+declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -710,8 +709,8 @@ readonly SYSTEM_READS
 # done
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
-    "jq"   # JSON parsing utility
-    "git"  # Version control system
+    "jq"
+    "git"
     "apache2"
     "php"
     "libraspberrypi-dev"
@@ -4161,7 +4160,6 @@ git_clone() {
     clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
-    # TODO: Local install tries to clone to current directory (WsprryPi-Source)
     if [[ -d "$dest_root" ]]; then
         warn "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
@@ -5843,7 +5841,7 @@ manage_wsprry_pi() {
         local function_name="${func%% *}"  # Extract only function name
 
         # Skip functions listed in skip_on_uninstall
-        if [[ " ${skip_on_uninstall[*]} " =~ \b"$function_name"\b ]]; then
+        if [[ " ${skip_on_uninstall[*]} " =~ " $function_name " ]]; then
             debug_print "Skipping $function_name during uninstall." "$debug"
             continue
         fi
