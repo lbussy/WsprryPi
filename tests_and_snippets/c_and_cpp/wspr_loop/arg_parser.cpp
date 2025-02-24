@@ -38,6 +38,7 @@
 
 // Project headers
 #include "constants.hpp"
+#include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
@@ -65,28 +66,6 @@
  * @see ArgParserConfig
  */
 ArgParserConfig config;
-
-/**
- * @brief Global instance of the LCBLog logging utility.
- *
- * The `llog` object provides thread-safe logging functionality with support for
- * multiple log levels, including DEBUG, INFO, WARN, ERROR, and FATAL.
- * It is used throughout the application to log messages for debugging,
- * monitoring, and error reporting.
- *
- * This instance is initialized globally to allow consistent logging across all
- * modules. Log messages can include timestamps and are output to standard streams
- * or log files depending on the configuration.
- *
- * Example usage:
- * @code
- * llog.logS(INFO, "Application started.");
- * llog.logE(ERROR, "Failed to open configuration file.");
- * @endcode
- *
- * @see https://github.com/lbussy/LCBLog for detailed documentation and examples.
- */
-LCBLog llog;
 
 /**
  * @brief Global instance of the IniFile configuration handler.
@@ -164,35 +143,6 @@ std::atomic<bool> ini_reload_pending(false);
 
 std::thread ini_thread;
 
-/**
- * @brief Initializes the logger with the appropriate log level.
- *
- * This function sets the log level based on the current debug state. If the
- * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
- * Otherwise, it defaults to INFO.
- *
- * @note Ensure that the `get_debug_state()` function correctly reflects the
- *       build configuration for accurate log level assignment.
- *
- * @example
- * initialize_logger();
- * // Sets llog to DEBUG or INFO depending on the build mode.
- */
-void initialize_logger()
-{
-    // Determine the log level based on the build mode.
-    const std::string debug_state = get_debug_state();
-
-    // Set the appropriate log level.
-    if (debug_state == "DEBUG")
-    {
-        llog.setLogLevel(DEBUG);  // Enable detailed debug logging.
-    }
-    else
-    {
-        llog.setLogLevel(INFO);   // Default to informational logging.
-    }
-}
 
 /**
  * @brief Monitors the INI configuration file for changes.
@@ -390,26 +340,26 @@ void show_config_values(bool reload)
         return;
 
     // Print configuration details if successfully loaded
-    llog.logS(INFO, "Config", (reload ? "re-loaded" : "loaded"), "from:", config.inifile);
+    llog.logS(DEBUG, "Config", (reload ? "re-loaded" : "loaded"), "from:", config.inifile);
     // [Control]
-    llog.logS(INFO, "Transmit Enabled:", ini.get_bool_value("Control", "Transmit") ? "true" : "false");
+    llog.logS(DEBUG, "Transmit Enabled:", ini.get_bool_value("Control", "Transmit") ? "true" : "false");
     // [Common]
-    llog.logS(INFO, "Call Sign:", ini.get_string_value("Common", "Call Sign"));
-    llog.logS(INFO, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
-    llog.logS(INFO, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
-    llog.logS(INFO, "Frequencies:", ini.get_string_value("Common", "Frequency"));
-    llog.logS(INFO, "Transmit Pin:", ini.get_int_value("Common", "Transmit Pin"));
+    llog.logS(DEBUG, "Call Sign:", ini.get_string_value("Common", "Call Sign"));
+    llog.logS(DEBUG, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
+    llog.logS(DEBUG, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
+    llog.logS(DEBUG, "Frequencies:", ini.get_string_value("Common", "Frequency"));
+    llog.logS(DEBUG, "Transmit Pin:", ini.get_int_value("Common", "Transmit Pin"));
     // [Extended]
-    llog.logS(INFO, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
-    llog.logS(INFO, "Check NTP Each Run:", ini.get_bool_value("Extended", "Use NTP") ? "true" : "false");
-    llog.logS(INFO, "Use Frequency Randomization:", ini.get_bool_value("Extended", "Offset") ? "true" : "false");
-    llog.logS(INFO, "Power Level:", ini.get_int_value("Extended", "Power Level"));
-    llog.logS(INFO, "Use LED:", ini.get_bool_value("Extended", "Use LED") ? "true" : "false");
-    llog.logS(INFO, "LED on GPIO", ini.get_int_value("Extended", "LED Pin"));
+    llog.logS(DEBUG, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
+    llog.logS(DEBUG, "Check NTP Each Run:", ini.get_bool_value("Extended", "Use NTP") ? "true" : "false");
+    llog.logS(DEBUG, "Use Frequency Randomization:", ini.get_bool_value("Extended", "Offset") ? "true" : "false");
+    llog.logS(DEBUG, "Power Level:", ini.get_int_value("Extended", "Power Level"));
+    llog.logS(DEBUG, "Use LED:", ini.get_bool_value("Extended", "Use LED") ? "true" : "false");
+    llog.logS(DEBUG, "LED on GPIO", ini.get_int_value("Extended", "LED Pin"));
     // [Server]
-    llog.logS(INFO, "Server runs on port:", ini.get_int_value("Server", "Port"));
-    llog.logS(INFO, "Use shutdown buton:", ini.get_bool_value("Server", "Use Shutdown") ? "true" : "false");
-    llog.logS(INFO, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));
+    llog.logS(DEBUG, "Server runs on port:", ini.get_int_value("Server", "Port"));
+    llog.logS(DEBUG, "Use shutdown buton:", ini.get_bool_value("Server", "Use Shutdown") ? "true" : "false");
+    llog.logS(DEBUG, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));
 }
 
 /**

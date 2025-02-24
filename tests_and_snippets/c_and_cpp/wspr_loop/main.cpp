@@ -38,14 +38,12 @@
 
 // Project headers
 #include "arg_parser.hpp"
-#include "constants.hpp"
-#include "ppm_ntp.hpp"
 #include "scheduling.hpp"
-#include "signal_handler.hpp"
 #include "version.hpp"
+#include "logging.hpp"
 
 // System headers
-#include <unistd.h>
+#include <unistd.h> // For getpid()
 
 /**
  * @brief Entry point for the WsprryPi application.

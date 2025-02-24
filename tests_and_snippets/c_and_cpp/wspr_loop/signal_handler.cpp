@@ -40,6 +40,7 @@
 #include "scheduling.hpp"
 #include "arg_parser.hpp"
 #include "ppm_ntp.hpp"
+#include "logging.hpp"
 
 // Standard library headers
 #include <atomic>

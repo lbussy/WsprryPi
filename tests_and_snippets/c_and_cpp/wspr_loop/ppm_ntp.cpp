@@ -7,6 +7,7 @@
 #include "arg_parser.hpp"
 #include "scheduling.hpp"
 #include "transmit.hpp"
+#include "logging.hpp"
 
 // Standard library headers
 #include <array>

@@ -7,4 +7,5 @@
 - [ ] Add configurable transmission to transmission logic: ini.get_int_value("Common", "Transmit Pin"));
 - [ ] Add in WSPR-Message
 - [ ] Figure out how to add in DMA stuff for transmission
+- [ ] Re-implement GPIO
 - [ ] ...
