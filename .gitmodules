@@ -14,7 +14,7 @@
 	path = src/Singleton
 	url = https://github.com/lbussy/Singleton.git
 [submodule "WsprryPi-UI"]
-	path = WsprryPi-UIclear
+	path = WsprryPi-UI
 	url = https://github.com/lbussy/WsprryPi-UI.git
 	branch = bootstrap_5
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/LCBLog"]
