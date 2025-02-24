@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file arg_parser.hpp
  * @brief Command-line argument parser and configuration handler.
@@ -44,6 +46,8 @@
 #include <optional>
 #include <atomic>
 #include <thread>
+
+extern std::thread ini_thread;
 
 /**
  * @enum ModeType
@@ -227,27 +231,6 @@ extern std::atomic<int> wspr_interval;
 extern std::atomic<bool> ini_reload_pending;
 
 /**
- * @brief Thread for monitoring INI file changes.
- *
- * The `iniMonitorThread` is responsible for running the INI file monitoring
- * loop. This thread continuously checks for changes in the monitored INI file
- * and triggers appropriate actions when changes are detected.
- *
- * When an INI file change is detected:
- * - If no transmission is active, it immediately reloads the configuration
- *   using `validate_config_data()`.
- * - If a transmission is active, it sets the `ini_reload_pending` flag,
- *   deferring the reload until after the transmission completes.
- *
- * This thread runs independently of the main program loop and ensures
- * configuration changes are processed safely without affecting ongoing operations.
- *
- * @note This thread should be properly joined during shutdown to avoid
- * potential race conditions or dangling threads.
- */
-extern std::thread iniMonitorThread;
-
-/**
  * @brief Initializes the logger with the appropriate log level.
  *
  * This function sets the log level based on the current debug state. If the
@@ -273,13 +256,13 @@ extern void initialize_logger();
  * - If a transmission is ongoing, it sets the `ini_reload_pending` flag to defer
  *   the reload until the transmission completes.
  *
- * The thread runs continuously until the `exit_scheduler` flag is set to true,
+ * The thread runs continuously until the `exit_wspr_loop` flag is set to true,
  * signaling shutdown.
  *
  * @note This function is intended to be executed as a separate thread and does
  *       not return until shutdown is requested.
  *
- * @see validate_config_data(), ini_reload_pending, exit_scheduler
+ * @see validate_config_data(), ini_reload_pending, exit_wspr_loop
  */
 extern void ini_monitor_thread();
 

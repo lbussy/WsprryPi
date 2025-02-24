@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
@@ -160,38 +162,7 @@ std::atomic<int> wspr_interval(WSPR_2);
  */
 std::atomic<bool> ini_reload_pending(false);
 
-/**
- * @brief Thread for monitoring INI file changes.
- *
- * The `iniMonitorThread` is responsible for running the INI file monitoring
- * loop. This thread continuously checks for changes in the monitored INI file
- * and triggers appropriate actions when changes are detected.
- *
- * When an INI file change is detected:
- * - If no transmission is active, it immediately reloads the configuration
- *   using `validate_config_data()`.
- * - If a transmission is active, it sets the `ini_reload_pending` flag,
- *   deferring the reload until after the transmission completes.
- *
- * This thread runs independently of the main program loop and ensures
- * configuration changes are processed safely without affecting ongoing operations.
- *
- * Example usage:
- * @code
- * // Start the INI monitoring thread.
- * iniMonitorThread = std::thread(ini_monitor_thread);
- *
- * // Join the thread during shutdown.
- * if (iniMonitorThread.joinable())
- * {
- *     iniMonitorThread.join();
- * }
- * @endcode
- *
- * @note This thread should be properly joined during shutdown to avoid
- * potential race conditions or dangling threads.
- */
-std::thread iniMonitorThread;
+std::thread ini_thread;
 
 /**
  * @brief Initializes the logger with the appropriate log level.
@@ -237,12 +208,12 @@ void initialize_logger()
  * Additionally, if a reload was deferred and the system is no longer transmitting,
  * the configuration is reloaded immediately.
  *
- * @note This thread continues running until `exit_scheduler` is set to `true`.
+ * @note This thread continues running until `exit_wspr_loop` is set to `true`.
  *       It checks for file changes every second.
  */
 void ini_monitor_thread()
 {
-    while (!exit_scheduler.load())
+    while (!exit_wspr_loop.load())
     {
         // 1. Check if the INI file has changed
         if (iniMonitor.changed())
@@ -276,9 +247,6 @@ void ini_monitor_thread()
         // 3. Sleep briefly before the next check
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-
-    // Log thread exit
-    llog.logS(DEBUG, "INI monitor thread exiting.");
 }
 
 /**
@@ -714,7 +682,7 @@ bool validate_config_data()
         // Handle frequency offset
         if (offset_enabled)
         {
-            llog.logS(INFO, "- A small random frequency offset will be added to all transmissions.");
+            llog.logS(INFO, "- A random offset will be added to all transmissions.");
         }
     }
     else

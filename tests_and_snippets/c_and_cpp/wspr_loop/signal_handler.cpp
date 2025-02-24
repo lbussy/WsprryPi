@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file signal_handler.cpp
  * @brief Manages signal handling, and cleanup.
@@ -37,6 +39,7 @@
 // Project headers
 #include "scheduling.hpp"
 #include "arg_parser.hpp"
+#include "ppm_ntp.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -54,6 +57,7 @@
 std::atomic<bool> shutdown_in_progress(false);
 static struct termios original_tty;
 static bool tty_saved = false;
+std::atomic<bool> signal_shutdown{false};
 
 #ifdef USE_GPIO_PINS
 // Global GPIO instances.
@@ -207,29 +211,15 @@ std::string signal_to_string(int signum)
  */
 void cleanup_threads()
 {
-    llog.logS(DEBUG, "Cleaning up active threads.");
-    exit_scheduler.store(true); // Signal threads to exit.
-    cv.notify_all();            // Wake up any waiting threads.
+    llog.logS(DEBUG, "Cleaning up due to signal.");
+    signal_shutdown.store(true);  // Set the flag for signal-driven shutdown.
+    shutdown_threads();  // Use the unified cleanup function.
 
-    // Ensure the scheduler thread is properly joined.
-    if (schedulerThread.joinable())
+    if (!signal_shutdown.load())
     {
-        llog.logS(DEBUG, "Joining scheduler thread.");
-        schedulerThread.join();
+        llog.logS(INFO, "Wsprry Pi exiting due to signal.");
+        std::exit(EXIT_SUCCESS);
     }
-
-    // Ensure the INI monitor thread is properly joined.
-    if (iniMonitorThread.joinable())
-    {
-        llog.logS(DEBUG, "Joining INI monitor thread.");
-        iniMonitorThread.join();
-    }
-
-    // Restore terminal signals to their original state.
-    restore_terminal_signals();
-
-    llog.logS(INFO, "Exiting Wsprry Pi.");
-    std::exit(0); // Ensure clean exit.
 }
 
 /**
@@ -289,7 +279,7 @@ void signal_handler(int signum)
 
     // Set shutdown flag and notify waiting threads.
     shutdown_in_progress.store(true);
-    exit_scheduler.store(true);
+    exit_wspr_loop.store(true);
     cv.notify_all();
 
     // Ensure graceful cleanup.
@@ -470,7 +460,7 @@ void shutdown_system(GpioHandler::EdgeType edge, bool state)
         {
             // Set shutdown flag and notify waiting threads.
             shutdown_in_progress.store(true);
-            exit_scheduler.store(true);
+            exit_wspr_loop.store(true);
             cv.notify_all();
 
             // Ensure graceful cleanup.

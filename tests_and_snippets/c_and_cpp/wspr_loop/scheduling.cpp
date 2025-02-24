@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file scheduling.cpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
@@ -37,6 +39,7 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "constants.hpp"
+#include "ppm_ntp.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
 
@@ -49,10 +52,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <mutex>
 
 // System headers
 #include <string.h>
 #include <sys/resource.h>
+
+std::mutex shutdown_mtx;  // Global mutex for thread safety.
 
 /**
  * @brief Condition variable used for thread synchronization.
@@ -72,13 +78,13 @@ std::condition_variable cv;
 std::mutex cv_mtx;
 
 /**
- * @brief Atomic flag indicating when the scheduler should exit.
+ * @brief Atomic flag indicating when the WSPR loop should exit.
  *
  * This flag allows threads to gracefully exit by checking its value.
- * It is set to `true` when the program needs to terminate the scheduler
+ * It is set to `true` when the program needs to terminate the loop
  * and associated threads.
  */
-std::atomic<bool> exit_scheduler(false);
+std::atomic<bool> exit_wspr_loop(false);
 
 /**
  * @brief Thread handle for the scheduler.
@@ -298,8 +304,8 @@ void set_transmission_realtime()
  * @return true if the wake-up occurred at the expected interval.
  * @return false if interrupted by the exit scheduler or if the target interval was missed.
  *
- * @note This function relies on the `exit_scheduler` atomic flag to exit early.
- *       Ensure `exit_scheduler` is defined and managed appropriately.
+ * @note This function relies on the `exit_wspr_loop` atomic flag to exit early.
+ *       Ensure `exit_wspr_loop` is defined and managed appropriately.
  */
 bool wait_every(int interval)
 {
@@ -343,7 +349,7 @@ bool wait_every(int interval)
     // Sleep until the desired time while monitoring exit conditions.
     while (system_clock::now() < desired_time)
     {
-        if (exit_scheduler.load())
+        if (exit_wspr_loop.load())
         {
             llog.logE(WARN, "Transmission wait interrupted by exit scheduler.");
             return false;
@@ -422,7 +428,7 @@ void set_scheduling_priority()
  * - Initiates a transmission using `transmit()`.
  * - Checks for CPU throttling using `is_cpu_throttled()`.
  *
- * The thread exits when the `exit_scheduler` atomic flag is set.
+ * The thread exits when the `exit_wspr_loop` atomic flag is set.
  *
  * @note Requires appropriate system privileges for priority adjustments.
  *
@@ -446,7 +452,7 @@ void scheduler_thread()
     std::unique_lock<std::mutex> lock(cv_mtx);
 
     // Main scheduling loop.
-    while (!exit_scheduler)
+    while (!exit_wspr_loop)
     {
         // Retrieve the current WSPR interval.
         int current_interval = wspr_interval.load();
@@ -460,7 +466,7 @@ void scheduler_thread()
         }
 
         // Wait for exit signal or timeout.
-        cv.wait_for(lock, std::chrono::seconds(1), [] { return exit_scheduler.load(); });
+        cv.wait_for(lock, std::chrono::seconds(1), [] { return exit_wspr_loop.load(); });
     }
 
     llog.logS(DEBUG, "Scheduler thread exiting.");
@@ -476,50 +482,81 @@ void scheduler_thread()
  * - Waits for the scheduler to signal transmission readiness.
  * - Initiates a transmission when the interval is reached.
  *
- * The loop exits when the `exit_scheduler` atomic flag is set.
+ * The loop exits when the `exit_wspr_loop` atomic flag is set.
  *
  * @note This function runs until externally signaled to stop.
  *
  * @return void
  */
 void wspr_loop()
-{
-    // Start the INI monitor thread.
-    iniMonitorThread = std::thread(ini_monitor_thread);
+{    
+    // Register signal handlers for safe shutdown and terminal management.
+    register_signal_handlers();
 
-    // Main loop to manage scheduler and transmissions.
-    while (!exit_scheduler.load())
+    // Set the default WSPR interval to 2 minutes.
+    wspr_interval = WSPR_2;
+    
+    // Verify NTP and update PPM at startup.
+    if (!ensure_ntp_stable())
     {
-        exit_scheduler = false;  // Reset exit flag for the new cycle.
-
-        // Start the scheduler thread.
-        schedulerThread = std::thread(scheduler_thread);
-
-        // Wait for the scheduler to signal transmission readiness.
-        {
-            std::unique_lock<std::mutex> lock(cv_mtx);
-            cv.wait(lock, [] { return exit_scheduler.load(); });
-        }
-
-        // Join the scheduler thread once signaled.
-        if (schedulerThread.joinable())
-        {
-            schedulerThread.join();
-        }
-
-        // Trigger transmission if not exiting.
-        if (!exit_scheduler.load())
-        {
-            transmit();
-        }
+        llog.logE(ERROR, "NTP synchronization failed. Exiting.");
+        std::exit(EXIT_FAILURE);
     }
+    update_ppm();
 
-    // Signal the INI monitor thread to terminate.
-    exit_scheduler.store(true);
+    // Start monitor threads.
+    ppm_ntp_thread = std::thread(ppm_ntp_monitor_thread);
+    llog.logS(INFO, "PPM/NTP monitor thread started.");
 
-    // Join the INI monitor thread to ensure a clean exit.
-    if (iniMonitorThread.joinable())
+    ini_thread = std::thread(ini_monitor_thread);
+    llog.logS(INFO, "INI monitor thread started.");
+
+    // WSPR main loop.
+    llog.logS(INFO, "WSPR loop running.");
+
+
+    // Wait for exit signal.
+    std::unique_lock<std::mutex> lock(cv_mtx);
+    cv.wait(lock, [] { return exit_wspr_loop.load(); });
+
+    // Indicate normal exit.
+    signal_shutdown.store(true);
+
+    // Perform thread cleanup.
+    shutdown_threads();
+
+    // Skip the final log if shutdown was signal-driven.
+    if (!signal_shutdown.load())
     {
-        iniMonitorThread.join();
+        llog.logS(INFO, "Wsprry Pi exiting from WSPR loop.");
+    }
+    std::exit(EXIT_SUCCESS);
+}
+
+void shutdown_threads()
+{
+    std::lock_guard<std::mutex> lock(shutdown_mtx);  // Ensure only one cleanup runs.
+    if (!exit_wspr_loop.load())                      // Avoid redundant cleanup.
+    {
+        llog.logS(DEBUG, "Shutting down all active threads.");
+        exit_wspr_loop.store(true);
+
+        cv.notify_all();
+
+        if (ppm_ntp_thread.joinable())
+        {
+            ppm_ntp_thread.join();
+            llog.logS(INFO, "PPM/NTP monitor thread stopped.");
+        }
+
+        if (ini_thread.joinable())
+        {
+            ini_thread.join();
+            llog.logS(INFO, "INI monitor thread stopped.");
+        }
+        // Restore terminal signals to their original state.
+        restore_terminal_signals();
+
+        llog.logS(INFO, "All threads shut down safely.");
     }
 }

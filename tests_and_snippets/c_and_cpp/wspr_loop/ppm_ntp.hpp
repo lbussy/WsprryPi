@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file ppm_ntp.hpp
  * @brief Handles periodic NTP time synchronization duties as well as clock
@@ -36,6 +38,15 @@
 #define PPM_NTP_HPP
 
 #include <string>
+#include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <atomic>
+
+extern std::thread ppm_ntp_thread;
+extern std::atomic<bool> stop_ppm_ntp_monitor;
+
+extern std::mutex ppm_mtx;
 
 /**
  * @brief Executes a shell command and returns its output.
@@ -103,5 +114,7 @@ extern bool ensure_ntp_stable();
  * @return true if the PPM value is successfully updated, false otherwise.
  */
 extern bool update_ppm();
+
+extern void ppm_ntp_monitor_thread();
 
 #endif // PPM_NTP_HPP

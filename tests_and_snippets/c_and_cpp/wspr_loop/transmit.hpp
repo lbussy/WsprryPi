@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file transmit.cpp
  * @brief Handles Wsprry Pi transmission.
@@ -71,7 +73,7 @@ extern std::atomic<bool> in_transmission;
  *          in short intervals (100 ms) to allow interruption. It calculates the actual duration
  *          of the transmission and resets the process priority upon completion.
  *
- * @global exit_scheduler Atomic flag indicating if the scheduler should exit.
+ * @global exit_wspr_loop Atomic flag indicating if the scheduler should exit.
  * @global in_transmission Atomic flag indicating if a transmission is active.
  * @global llog Logger instance for logging messages.
  *

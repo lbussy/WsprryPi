@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file scheduling.hpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
@@ -59,7 +61,7 @@ extern std::condition_variable cv;
  * It is set to `true` when the program needs to terminate the scheduler
  * and associated threads.
  */
-extern std::atomic<bool> exit_scheduler;
+extern std::atomic<bool> exit_wspr_loop;
 
 /**
  * @brief Thread handle for the scheduler.
@@ -135,8 +137,8 @@ extern void set_transmission_realtime();
  * @return true if the wake-up occurred at the expected interval.
  * @return false if interrupted by the exit scheduler or if the target interval was missed.
  *
- * @note This function relies on the `exit_scheduler` atomic flag to exit early.
- *       Ensure `exit_scheduler` is defined and managed appropriately.
+ * @note This function relies on the `exit_wspr_loop` atomic flag to exit early.
+ *       Ensure `exit_wspr_loop` is defined and managed appropriately.
  */
 extern bool wait_every(int interval);
 
@@ -170,7 +172,7 @@ extern void set_scheduling_priority();
  * - Initiates a transmission using `transmit()`.
  * - Checks for CPU throttling using `is_cpu_throttled()`.
  *
- * The thread exits when the `exit_scheduler` atomic flag is set.
+ * The thread exits when the `exit_wspr_loop` atomic flag is set.
  *
  * @note Requires appropriate system privileges for priority adjustments.
  *
@@ -188,12 +190,14 @@ extern void scheduler_thread();
  * - Waits for the scheduler to signal transmission readiness.
  * - Initiates a transmission when the interval is reached.
  *
- * The loop exits when the `exit_scheduler` atomic flag is set.
+ * The loop exits when the `exit_wspr_loop` atomic flag is set.
  *
  * @note This function runs until externally signaled to stop.
  *
  * @return void
  */
 extern void wspr_loop();
+
+void shutdown_threads();
 
 #endif // _SCHEDULING_HPP

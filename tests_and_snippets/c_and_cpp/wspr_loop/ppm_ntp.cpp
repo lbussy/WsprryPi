@@ -1,64 +1,29 @@
-/**
- * @file ppm_ntp.cpp
- * @brief Handles periodic NTP time synchronization duties as well as clock
- * calibration.
- *
- * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
- * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
- *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
- * for more information.
- *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+// TODO:  Check Doxygen
 
 // Primary header for this source file
 #include "ppm_ntp.hpp"
 
 // Project headers
 #include "arg_parser.hpp"
+#include "scheduling.hpp"
+#include "transmit.hpp"
 
 // Standard library headers
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <string>
+#include <thread>
+#include <condition_variable>
 
 // System headers
 #include <sys/timex.h>
 
-/**
- * @brief Executes a shell command and returns the output as a string.
- *
- * This function runs the provided shell command using `popen` and captures
- * its standard output. If the command fails or produces no output, an empty
- * string is returned.
- *
- * @param command The shell command to execute.
- * @return std::string The output of the command, or an empty string if an error occurs.
- *
- * @note This function should not be used with untrusted input due to potential
- * command injection risks.
- */
+std::mutex ppm_mtx;
+
+std::atomic<bool> stop_ppm_ntp_monitor{false};
+std::thread ppm_ntp_thread;
+
 std::string run_command(const std::string &command)
 {
     std::array<char, 128> buffer{};
@@ -86,14 +51,6 @@ std::string run_command(const std::string &command)
     return result.empty() ? "" : result;
 }
 
-/**
- * @brief Checks if the system is synchronized with an NTP server.
- *
- * This function runs `ntpq -c 'rv 0'` and checks for the `sync_ntp` keyword
- * in the output, indicating successful synchronization.
- *
- * @return true if the system is synchronized with NTP, false otherwise.
- */
 bool is_ntp_synchronized()
 {
     try
@@ -116,15 +73,6 @@ bool is_ntp_synchronized()
     }
 }
 
-/**
- * @brief Checks the NTP status by analyzing `ntpq -pn` output.
- *
- * This function parses the output of `ntpq -pn` to identify synchronized
- * servers marked by `*` or `#`. If at least one server is synchronized,
- * it returns true.
- *
- * @return true if a synchronized NTP server is found, false otherwise.
- */
 bool check_ntp_status()
 {
     std::string output = run_command("ntpq -pn");
@@ -164,7 +112,7 @@ bool check_ntp_status()
 
                 llog.logS(DEBUG, "NTP synchronized server:", remote, "\nNTP Offset:", offset,
                           "ms \nNTP Jitter:", jitter, "ms \nNTP Reach:", reach);
-                llog.logS(INFO, "NTP synchronization verified.");
+                llog.logS(DEBUG, "NTP synchronization verified.");
                 return true;
             }
             else
@@ -178,14 +126,6 @@ bool check_ntp_status()
     return false;
 }
 
-/**
- * @brief Restarts the NTPsec service and verifies synchronization.
- *
- * This function attempts to restart the NTPsec service and verifies
- * if synchronization is restored within a specified retry interval.
- *
- * @return true if synchronization is restored after the restart, false otherwise.
- */
 bool restart_ntp_service()
 {
     llog.logS(WARN, "Restarting NTPsec service...");
@@ -215,14 +155,6 @@ bool restart_ntp_service()
     return false;
 }
 
-/**
- * @brief Ensures NTP stability by checking status with retries.
- *
- * This function performs multiple retries to ensure NTP synchronization,
- * using an exponential backoff strategy.
- *
- * @return true if NTP is stable, false if retries are exhausted.
- */
 bool ensure_ntp_stable()
 {
     constexpr int max_retries = 3;
@@ -254,15 +186,6 @@ bool ensure_ntp_stable()
     return false;
 }
 
-/**
- * @brief Updates the PPM (parts per million) value based on NTP adjustment.
- *
- * This function retrieves the NTP frequency adjustment using `ntp_adjtime`
- * and calculates the PPM value. It updates `config.last_ppm` if a significant
- * change is detected.
- *
- * @return true if the PPM value is successfully updated, false otherwise.
- */
 bool update_ppm()
 {
     struct timex ntx{};
@@ -287,4 +210,45 @@ bool update_ppm()
     }
 
     return true;
+}
+
+void ppm_ntp_monitor_thread()
+{
+    while (!exit_wspr_loop.load())
+    {
+        // Get current time and calculate next 55 seconds past the minute.
+        auto now = std::chrono::system_clock::now();
+        auto next_check = std::chrono::time_point_cast<std::chrono::seconds>(now) +
+                         std::chrono::minutes(1);
+        next_check -= std::chrono::seconds(next_check.time_since_epoch().count() % 60);
+        next_check += std::chrono::seconds(55);
+
+        // Sleep until the next check time or exit signal.
+        std::unique_lock<std::mutex> lock(ppm_mtx);
+        if (cv.wait_until(lock, next_check, [] { return exit_wspr_loop.load(); }))
+        {
+            break;  // Exit if the condition was triggered.
+        }
+
+        if (exit_wspr_loop.load())
+            break;
+
+        // Skip if in transmission.
+        if (in_transmission.load())
+        {
+            llog.logS(DEBUG, "Skipping NTP/PPM check due to active transmission.");
+            continue;
+        }
+
+        llog.logS(DEBUG, "Performing periodic NTP and PPM check.");
+
+        if (ensure_ntp_stable())
+        {
+            update_ppm();
+        }
+        else
+        {
+            llog.logE(WARN, "NTP check failed during periodic check.");
+        }
+    }
 }

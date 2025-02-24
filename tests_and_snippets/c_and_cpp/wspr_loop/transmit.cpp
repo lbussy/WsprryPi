@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file transmit.cpp
  * @brief Handles Wsprry Pi transmission.
@@ -83,7 +85,7 @@ std::atomic<bool> in_transmission(false);
  *          in short intervals (100 ms) to allow interruption. It calculates the actual duration
  *          of the transmission and resets the process priority upon completion.
  *
- * @global exit_scheduler Atomic flag indicating if the scheduler should exit.
+ * @global exit_wspr_loop Atomic flag indicating if the scheduler should exit.
  * @global in_transmission Atomic flag indicating if a transmission is active.
  * @global llog Logger instance for logging messages.
  *
@@ -92,7 +94,7 @@ std::atomic<bool> in_transmission(false);
 void transmit()
 {
     // Check if shutdown is requested before starting
-    if (exit_scheduler.load())
+    if (exit_wspr_loop.load())
     {
         llog.logS(WARN, "Shutdown requested. Skipping transmission.");
         return;
@@ -124,7 +126,7 @@ void transmit()
     // Perform the transmission with periodic checks for shutdown
     while (true)
     {
-        if (exit_scheduler.load())
+        if (exit_wspr_loop.load())
         {
             llog.logS(WARN, "Shutdown requested. Aborting transmission.");
             break; // Exit early if shutdown is requested
@@ -170,7 +172,7 @@ void transmit()
                              (end_time.tv_nsec - start_time.tv_nsec) / 1e9;
 
     // Log the transmission result (completed or interrupted)
-    if (exit_scheduler.load())
+    if (exit_wspr_loop.load())
     {
         llog.logS(WARN, "Transmission aborted after ", std::fixed, std::setprecision(6),
                   actual_duration, " seconds.");

@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file signal_handler.cpp
  * @brief Manages signal handling, and cleanup.
@@ -41,6 +43,7 @@
 
 // Standard library headers
 #include <string>
+#include <atomic>
 
 #ifdef USE_GPIO_PINS
 // Global GPIO instances.
@@ -48,6 +51,8 @@ extern std::unique_ptr<GpioHandler> shutdown_pin;
 extern std::unique_ptr<GpioHandler> led_pin;
 extern std::mutex gpioMutex;
 #endif
+
+extern std::atomic<bool> signal_shutdown;
 
 // Default GPIO pins.
 extern int shutdown_pin_number;

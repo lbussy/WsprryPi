@@ -1,3 +1,5 @@
+// TODO:  Check Doxygen
+
 /**
  * @file main.cpp
  * @brief Entry point for the Wsprry Pi application.
@@ -88,24 +90,6 @@ int main(const int argc, char *const argv[])
         llog.logE(ERROR, "Configuration validation failed.");
         return EXIT_FAILURE;
     }
-
-    // Register signal handlers for safe shutdown and terminal management.
-    register_signal_handlers();
-
-    // Verify NTP synchronization before proceeding. Exit if unstable.
-    if (!ensure_ntp_stable())
-    {
-        llog.logE(ERROR, "NTP synchronization failed. Exiting.");
-        std::exit(EXIT_FAILURE);
-    }
-
-    llog.logS(DEBUG, "NTP verified at startup.");
-
-    // Update PPM (Parts Per Million) calibration for accurate frequency.
-    update_ppm();
-
-    // Set the default WSPR interval to 2 minutes.
-    wspr_interval = WSPR_2;
 
     // Start the main WSPR transmission loop.
     wspr_loop();
