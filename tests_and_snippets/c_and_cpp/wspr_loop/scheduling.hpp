@@ -64,14 +64,6 @@ extern std::condition_variable cv;
 extern std::atomic<bool> exit_wspr_loop;
 
 /**
- * @brief Thread handle for the scheduler.
- *
- * This thread runs the `scheduler_thread` function, managing the timing
- * of WSPR transmissions and ensuring they occur at the correct intervals.
- */
-extern std::thread schedulerThread;
-
-/**
  * @brief Checks if the directory name represents a real CPU directory (e.g. "cpu0").
  *
  * We do a quick check:
@@ -127,22 +119,6 @@ extern bool is_cpu_throttled();
 extern void set_transmission_realtime();
 
 /**
- * @brief Waits until the next transmission interval boundary and triggers transmission.
- *
- * This function waits until one second after the next interval boundary, ensuring
- * that the transmission aligns with the desired schedule. It supports WSPR-2 and
- * WSPR-15 modes, defined by the interval parameter.
- *
- * @param interval The transmission interval in minutes (e.g., 2 for WSPR-2, 15 for WSPR-15).
- * @return true if the wake-up occurred at the expected interval.
- * @return false if interrupted by the exit scheduler or if the target interval was missed.
- *
- * @note This function relies on the `exit_wspr_loop` atomic flag to exit early.
- *       Ensure `exit_wspr_loop` is defined and managed appropriately.
- */
-extern bool wait_every(int interval);
-
-/**
  * @brief Sets the scheduling priority for the current process.
  *
  * This function increases the process priority by setting its nice value to -10.
@@ -158,27 +134,6 @@ extern bool wait_every(int interval);
  * @return void
  */
 extern void set_scheduling_priority();
-
-/**
- * @brief Manages the scheduling of WSPR transmissions.
- *
- * This function runs as a dedicated thread, setting an elevated priority (-10)
- * to ensure timely execution. It waits for the next transmission interval based
- * on the configured `wspr_interval` and triggers the transmission process.
- *
- * During each cycle, it:
- * - Retrieves the current WSPR interval.
- * - Waits until the next interval boundary using `wait_every()`.
- * - Initiates a transmission using `transmit()`.
- * - Checks for CPU throttling using `is_cpu_throttled()`.
- *
- * The thread exits when the `exit_wspr_loop` atomic flag is set.
- *
- * @note Requires appropriate system privileges for priority adjustments.
- *
- * @return void
- */
-extern void scheduler_thread();
 
 /**
  * @brief Manages the main WSPR transmission loop.

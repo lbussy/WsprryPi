@@ -42,6 +42,7 @@
 #include "ppm_ntp.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
+#include "logging.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -85,14 +86,6 @@ std::mutex cv_mtx;
  * and associated threads.
  */
 std::atomic<bool> exit_wspr_loop(false);
-
-/**
- * @brief Thread handle for the scheduler.
- *
- * This thread runs the `scheduler_thread` function, managing the timing
- * of WSPR transmissions and ensuring they occur at the correct intervals.
- */
-std::thread schedulerThread;
 
 /**
  * @brief Stores the names of all detected CPU cores.
@@ -294,98 +287,6 @@ void set_transmission_realtime()
 }
 
 /**
- * @brief Waits until the next transmission interval boundary and triggers transmission.
- *
- * This function waits until one second after the next interval boundary, ensuring
- * that the transmission aligns with the desired schedule. It supports WSPR-2 and
- * WSPR-15 modes, defined by the interval parameter.
- *
- * @param interval The transmission interval in minutes (e.g., 2 for WSPR-2, 15 for WSPR-15).
- * @return true if the wake-up occurred at the expected interval.
- * @return false if interrupted by the exit scheduler or if the target interval was missed.
- *
- * @note This function relies on the `exit_wspr_loop` atomic flag to exit early.
- *       Ensure `exit_wspr_loop` is defined and managed appropriately.
- */
-bool wait_every(int interval)
-{
-    using namespace std::chrono;
-
-    // Get the current system time.
-    auto now = system_clock::now();
-
-    // Convert current time to integral minutes since epoch.
-    auto current_min_time = time_point_cast<minutes>(now);
-    auto total_minutes = duration_cast<minutes>(current_min_time.time_since_epoch()).count();
-
-    // Calculate the next interval boundary.
-    auto next_boundary = ((total_minutes / interval) + 1) * interval;
-    auto next_boundary_time = system_clock::time_point{minutes(next_boundary)};
-    auto desired_time = next_boundary_time + seconds(1);  // Start transmission 1 second after boundary.
-
-    // Ensure the desired time is in the future.
-    if (desired_time <= now)
-    {
-        desired_time += minutes(interval);
-    }
-
-    // Convert desired time to human-readable format.
-    auto desired_time_t = system_clock::to_time_t(desired_time);
-    auto desired_tm = *std::gmtime(&desired_time_t);
-
-    // Determine mode string based on interval.
-    std::string mode_string = (interval == WSPR_2) ? "WSPR-2"
-                           : (interval == WSPR_15) ? "WSPR-15"
-                                                   : "Unknown mode";
-
-    // Log the next transmission time.
-    std::ostringstream info_message;
-    info_message << "Next transmission at "
-                 << std::setw(2) << std::setfill('0') << desired_tm.tm_hour << ":"
-                 << std::setw(2) << std::setfill('0') << desired_tm.tm_min << ":"
-                 << "01 UTC (" << mode_string << ").";
-    llog.logS(INFO, info_message.str());
-
-    // Sleep until the desired time while monitoring exit conditions.
-    while (system_clock::now() < desired_time)
-    {
-        if (exit_wspr_loop.load())
-        {
-            llog.logE(WARN, "Transmission wait interrupted by exit scheduler.");
-            return false;
-        }
-        std::this_thread::sleep_for(milliseconds(100));
-    }
-
-    // Measure the actual wake-up time.
-    auto final_time = system_clock::now();
-    auto final_t = system_clock::to_time_t(final_time);
-    auto final_tm = *std::gmtime(&final_t);
-
-    // Calculate the offset from the desired wake-up time.
-    auto offset_ns = duration_cast<nanoseconds>(final_time - desired_time).count();
-    double offset_ms = offset_ns / 1e6;
-
-    std::ostringstream offset_message;
-    offset_message << "Offset from desired target: "
-                   << (offset_ms >= 0 ? "+" : "-")
-                   << std::fixed << std::setprecision(4)
-                   << std::abs(offset_ms) << " ms.";
-
-    // Verify if the wake-up happened within the expected interval.
-    if ((final_tm.tm_min % interval == 0) && final_tm.tm_sec >= 1)
-    {
-        llog.logS(DEBUG, "Transmission triggered at the target interval (" + std::to_string(interval) + " min).");
-        llog.logS(DEBUG, offset_message.str());
-        return true;
-    }
-
-    // Log an error if the target interval was missed.
-    llog.logE(ERROR, "Missed target interval. " + offset_message.str());
-    return false;
-}
-
-/**
  * @brief Sets the scheduling priority for the current process.
  *
  * This function increases the process priority by setting its nice value to -10.
@@ -415,86 +316,10 @@ void set_scheduling_priority()
     }
 }
 
-/**
- * @brief Manages the scheduling of WSPR transmissions.
- *
- * This function runs as a dedicated thread, setting an elevated priority (-10)
- * to ensure timely execution. It waits for the next transmission interval based
- * on the configured `wspr_interval` and triggers the transmission process.
- *
- * During each cycle, it:
- * - Retrieves the current WSPR interval.
- * - Waits until the next interval boundary using `wait_every()`.
- * - Initiates a transmission using `transmit()`.
- * - Checks for CPU throttling using `is_cpu_throttled()`.
- *
- * The thread exits when the `exit_wspr_loop` atomic flag is set.
- *
- * @note Requires appropriate system privileges for priority adjustments.
- *
- * @return void
- */
-void scheduler_thread()
-{
-    // Set scheduler priority to -10 (higher priority).
-    if (setpriority(PRIO_PROCESS, 0, -10) == -1)
-    {
-        llog.logE(ERROR, "Failed to set scheduler thread priority: ", std::string(strerror(errno)));
-    }
-    else
-    {
-        llog.logS(DEBUG, "Scheduler thread priority set.");
-    }
-
-    llog.logS(DEBUG, "Scheduler thread started.");
-
-    // Lock for condition variable synchronization.
-    std::unique_lock<std::mutex> lock(cv_mtx);
-
-    // Main scheduling loop.
-    while (!exit_wspr_loop)
-    {
-        // Retrieve the current WSPR interval.
-        int current_interval = wspr_interval.load();
-        llog.logS(DEBUG, "Current WSPR interval set to: ", current_interval, " minutes.");
-
-        // Wait until the next transmission interval.
-        if (wait_every(current_interval))
-        {
-            transmit();         // Start transmission.
-            is_cpu_throttled(); // Check for CPU throttling.
-        }
-
-        // Wait for exit signal or timeout.
-        cv.wait_for(lock, std::chrono::seconds(1), [] { return exit_wspr_loop.load(); });
-    }
-
-    llog.logS(DEBUG, "Scheduler thread exiting.");
-}
-
-/**
- * @brief Manages the main WSPR transmission loop.
- *
- * This function runs the primary WSPR transmission loop, coordinating the
- * INI monitor thread and the scheduler thread. It continuously:
- * - Starts the `ini_monitor_thread` to detect INI file changes.
- * - Spawns the `scheduler_thread` to manage transmission intervals.
- * - Waits for the scheduler to signal transmission readiness.
- * - Initiates a transmission when the interval is reached.
- *
- * The loop exits when the `exit_wspr_loop` atomic flag is set.
- *
- * @note This function runs until externally signaled to stop.
- *
- * @return void
- */
 void wspr_loop()
 {    
     // Register signal handlers for safe shutdown and terminal management.
     register_signal_handlers();
-
-    // Set the default WSPR interval to 2 minutes.
-    wspr_interval = WSPR_2;
     
     // Verify NTP and update PPM at startup.
     if (!ensure_ntp_stable())
@@ -510,6 +335,10 @@ void wspr_loop()
 
     ini_thread = std::thread(ini_monitor_thread);
     llog.logS(INFO, "INI monitor thread started.");
+
+    // Start the transmit thread.
+    transmit_thread = std::thread(transmit_loop);
+    llog.logS(INFO, "Transmit thread started.");
 
     // WSPR main loop.
     llog.logS(INFO, "WSPR loop running.");
@@ -554,6 +383,13 @@ void shutdown_threads()
             ini_thread.join();
             llog.logS(INFO, "INI monitor thread stopped.");
         }
+
+        if (transmit_thread.joinable())
+        {
+            transmit_thread.join();
+            llog.logS(INFO, "Transmit thread stopped.");
+        }
+
         // Restore terminal signals to their original state.
         restore_terminal_signals();
 

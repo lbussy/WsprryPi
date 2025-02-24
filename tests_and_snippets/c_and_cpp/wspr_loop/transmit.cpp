@@ -1,198 +1,122 @@
 // TODO:  Check Doxygen
 
-/**
- * @file transmit.cpp
- * @brief Handles Wsprry Pi transmission.
- *
- * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
- * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
- *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
- * for more information.
- *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
 // Primary header for this source file
 #include "transmit.hpp"
 
-// Project headers
-#include "arg_parser.hpp"
+#include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
+#include "arg_parser.hpp"
 
-// Standard library headers
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <iomanip>
+#include <iostream>
+#include <mutex>
+#include <thread>
 
-// System headers
-#include <string.h>
-#include <sys/resource.h>
-#include <time.h>
-
-/**
- * @brief Indicates whether a transmission is currently active.
- *
- * This atomic boolean flag is used to signal the start and end of a transmission.
- * It ensures thread-safe access across multiple threads, preventing race conditions.
- *
- * @details
- * - **true:** Transmission is in progress.
- * - **false:** No active transmission.
- *
- * This flag is primarily updated by the `transmit()` function and read by other threads
- * to determine if the system is currently transmitting.
- *
- * @note Using `std::atomic` ensures safe concurrent access without the need for external locks.
- *
- * Example usage:
- * @code
- * in_transmission.store(true);  // Mark transmission start
- * bool status = in_transmission.load();  // Check status
- * in_transmission.store(false); // Mark transmission end
- * @endcode
- */
 std::atomic<bool> in_transmission(false);
+std::thread transmit_thread;
+std::mutex transmit_mtx;
 
-/**
- * @brief Initiates and manages the transmission process.
- *
- * This function performs a transmission for 110 seconds unless interrupted by a shutdown request.
- * It ensures real-time priority during transmission and resets priority upon completion.
- * The transmission duration is logged, including early termination if requested.
- *
- * @details The function continuously checks for a shutdown signal while transmitting, sleeping
- *          in short intervals (100 ms) to allow interruption. It calculates the actual duration
- *          of the transmission and resets the process priority upon completion.
- *
- * @global exit_wspr_loop Atomic flag indicating if the scheduler should exit.
- * @global in_transmission Atomic flag indicating if a transmission is active.
- * @global llog Logger instance for logging messages.
- *
- * @throws Logs an error if priority reset fails after transmission.
- */
-void transmit()
+void perform_transmission(int duration)
 {
-    // Check if shutdown is requested before starting
-    if (exit_wspr_loop.load())
-    {
-        llog.logS(WARN, "Shutdown requested. Skipping transmission.");
-        return;
-    }
-
-    // Mark that transmission is in progress
+    llog.logS(INFO, "Transmission started for", duration, "seconds.");
     in_transmission.store(true);
 
-    // Set real-time priority for transmission
 #ifdef USE_GPIO_PINS
     if (led_pin) toggle_led(true);
 #endif
-    set_transmission_realtime();
-    llog.logS(INFO, "Transmission started.");
 
-    // Record the start time of the transmission
-    timespec start_time{}, end_time{};
-    if (clock_gettime(CLOCK_MONOTONIC, &start_time) == -1)
+    // Monitor for shutdown while transmitting
+    auto start_time = std::chrono::steady_clock::now();
+    auto end_time = start_time + std::chrono::seconds(duration);
+
+    while (std::chrono::steady_clock::now() < end_time)
     {
-        llog.logE(ERROR, "Failed to get start time:", std::string(strerror(errno)));
-        in_transmission.store(false);
-        return;
-    }
-
-    // Define the target end time for the transmission (110 seconds)
-    timespec target_time = start_time;
-    target_time.tv_sec += 110;
-
-    // Perform the transmission with periodic checks for shutdown
-    while (true)
-    {
-        if (exit_wspr_loop.load())
+        if (exit_wspr_loop.load() || signal_shutdown.load())
         {
-            llog.logS(WARN, "Shutdown requested. Aborting transmission.");
-            break; // Exit early if shutdown is requested
-        }
-
-        // Check the current time to determine if the transmission should end
-        timespec now{};
-        if (clock_gettime(CLOCK_MONOTONIC, &now) == -1)
-        {
-            llog.logE(ERROR, "Failed to get current time:", std::string(strerror(errno)));
+            llog.logS(WARN, "Transmission aborted due to shutdown.");
             break;
         }
 
-        // Break if the target time has been reached
-        if ((now.tv_sec > target_time.tv_sec) ||
-            (now.tv_sec == target_time.tv_sec && now.tv_nsec >= target_time.tv_nsec))
-        {
-            break; // Transmission time completed
-        }
-
-        // Sleep for a short interval (100 milliseconds) and recheck
-        timespec sleep_interval = {0, 100'000'000}; // 100 ms in nanoseconds
-        if (clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_interval, nullptr) != 0)
-        {
-            llog.logE(ERROR, "Sleep interrupted:", std::string(strerror(errno)));
-            break;
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Check every 100 ms
     }
+
 #ifdef USE_GPIO_PINS
     if (led_pin) toggle_led(false);
 #endif
 
-    // Record the end time, even if interrupted
-    if (clock_gettime(CLOCK_MONOTONIC, &end_time) == -1)
-    {
-        llog.logE(ERROR, "Failed to get end time:", std::string(strerror(errno)));
-        in_transmission.store(false);
-        return;
-    }
-
-    // Calculate the actual duration of the transmission
-    double actual_duration = (end_time.tv_sec - start_time.tv_sec) +
-                             (end_time.tv_nsec - start_time.tv_nsec) / 1e9;
-
-    // Log the transmission result (completed or interrupted)
-    if (exit_wspr_loop.load())
-    {
-        llog.logS(WARN, "Transmission aborted after ", std::fixed, std::setprecision(6),
-                  actual_duration, " seconds.");
-    }
-    else
-    {
-        llog.logS(INFO, std::fixed, std::setprecision(6),
-                  "Transmission complete: ", actual_duration, " seconds.");
-    }
-
-    // Mark transmission as complete
     in_transmission.store(false);
+    llog.logS(INFO, "Transmission ended.");
+}
 
-    // Reset process priority after transmission
-    if (setpriority(PRIO_PROCESS, 0, 0) == -1)
+void transmit_loop()
+{
+    while (!exit_wspr_loop.load() && !signal_shutdown.load())
     {
-        llog.logE(ERROR, "Failed to reset transmission priority:", std::string(strerror(errno)));
+        auto now = std::chrono::system_clock::now();
+        auto next_wakeup = now;
+
+        int interval = wspr_interval.load();
+
+        if (interval == 2)
+        {
+            // Wake every even minute at one second past.
+            int current_minute = std::chrono::duration_cast<std::chrono::minutes>(
+                                     now.time_since_epoch())
+                                     .count() %
+                                 2;
+            next_wakeup += std::chrono::minutes(current_minute == 0 ? 2 : 1);
+            next_wakeup -= std::chrono::seconds(
+                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() %
+                60);
+            next_wakeup += std::chrono::seconds(1); // 1 second past the minute.
+        }
+        else if (interval == 15)
+        {
+            // Wake at 0, 15, 30, 45 minutes.
+            int current_minute = std::chrono::duration_cast<std::chrono::minutes>(
+                                     now.time_since_epoch())
+                                     .count() %
+                                 60;
+            int next_target = ((current_minute / 15) + 1) * 15 % 60;
+            next_wakeup += std::chrono::minutes(next_target - current_minute);
+            next_wakeup -= std::chrono::seconds(
+                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() %
+                60);
+            next_wakeup += std::chrono::seconds(1); // 1 second past the minute.
+        }
+        else
+        {
+            llog.logE(ERROR, "Invalid WSPR interval:", interval, "minutes.");
+            std::this_thread::sleep_for(std::chrono::minutes(1));
+            continue;
+        }
+
+        // Sleep until the next transmission time or shutdown signal.
+        std::unique_lock<std::mutex> lock(transmit_mtx);
+        if (cv.wait_until(lock, next_wakeup, [] {
+                return exit_wspr_loop.load() || signal_shutdown.load();
+            }))
+        {
+            break;  // Exit loop if shutdown is requested.
+        }
+
+        // Perform the placeholder event based on the interval.
+        if (!exit_wspr_loop.load() && !signal_shutdown.load())
+        {
+            if (interval == 2)
+            {
+                perform_transmission(110); // 2-minute interval = 110 seconds transmission.
+            }
+            else if (interval == 15)
+            {
+                perform_transmission(885); // 15-minute interval = 885 seconds transmission.
+            }
+        }
     }
-    else
-    {
-        llog.logS(DEBUG, "Transmission priority reset to normal.");
-    }
+
+    llog.logS(INFO, "Transmit loop exiting.");
 }
