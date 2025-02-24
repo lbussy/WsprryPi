@@ -178,8 +178,9 @@ bool is_cpu_throttled()
         discover_cpu_cores();
     }
 
-    // Get the default CPU frequency based on processor type.
-    int defaultFrequencyHz = getDefaultCpuFrequencyHz();
+    // Can get the default CPU frequency based on processor type.
+    // 600000000 is probably good enough as a general test
+    int defaultFrequencyHz = 600000000;
     if (defaultFrequencyHz == 0)
     {
         llog.logE(ERROR, "Failed to determine default CPU frequency.");
