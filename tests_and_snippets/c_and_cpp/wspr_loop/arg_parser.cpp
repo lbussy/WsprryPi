@@ -37,6 +37,7 @@
 // Project headers
 #include "constants.hpp"
 #include "scheduling.hpp"
+#include "signal_handler.hpp"
 #include "transmit.hpp"
 
 // Standard library headers
@@ -118,15 +119,6 @@ IniFile ini;
  * This instance is typically used alongside the `ini` object to automatically re-validate
  * and apply updated configuration settings.
  *
- * Example usage:
- * @code
- * if (iniMonitor.changed())
- * {
- *     llog.logS(INFO, "INI file changed. Reloading configuration.");
- *     validate_config_data();
- * }
- * @endcode
- *
  * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
  * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
  *
@@ -163,23 +155,6 @@ std::atomic<int> wspr_interval(WSPR_2);
  * This flag is typically set when the `iniMonitor` detects a file change and
  * is checked periodically by the INI monitoring thread. If a transmission is
  * in progress, the reload is deferred until the transmission completes.
- *
- * Example usage:
- * @code
- * if (iniMonitor.changed())
- * {
- *     llog.logS(INFO, "INI file changed.");
- *     ini_reload_pending.store(true);
- * }
- *
- * // During housekeeping or after transmission:
- * if (ini_changed.load() && !in_transmission.load())
- * {
- *     ini_reload_pending.store(false);
- *     llog.logS(INFO, "Applying deferred INI changes.");
- *     validate_config_data();
- * }
- * @endcode
  *
  * @note The atomic nature ensures thread-safe access across multiple threads.
  */
@@ -460,11 +435,12 @@ void show_config_values(bool reload)
     llog.logS(INFO, "Check NTP Each Run:", ini.get_bool_value("Extended", "Use NTP") ? "true" : "false");
     llog.logS(INFO, "Use Frequency Randomization:", ini.get_bool_value("Extended", "Offset") ? "true" : "false");
     llog.logS(INFO, "Power Level:", ini.get_int_value("Extended", "Power Level"));
-    llog.logS(INFO, "Server Port:", ini.get_int_value("Server", "Port"));
     llog.logS(INFO, "Use LED:", ini.get_bool_value("Extended", "Use LED") ? "true" : "false");
-    llog.logS(INFO, "LED Pin:", ini.get_int_value("Extended", "LED Pin"));
+    llog.logS(INFO, "LED on GPIO", ini.get_int_value("Extended", "LED Pin"));
     // [Server]
     llog.logS(INFO, "Server runs on port:", ini.get_int_value("Server", "Port"));
+    llog.logS(INFO, "Use shutdown buton:", ini.get_bool_value("Server", "Use Shutdown") ? "true" : "false");
+    llog.logS(INFO, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));    
 }
 
 /**
@@ -544,6 +520,56 @@ bool validate_config_data()
             return 0.0; // Default to 0.0 on failure
         }
     }();
+
+    // Turn on LED functionality
+    //
+    // Get PIN number
+    int new_led_pin_number = -1;  // Use an invalid default value for easier error detection
+    try {
+        new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
+    } catch (const std::exception& e) {
+        llog.logE(ERROR, "Failed to get LED Pin value. Error:", e.what());
+        disable_led_pin();
+    }
+    // Get LED use choice
+    bool use_led = false;
+    try {
+        use_led = ini.get_bool_value("Extended", "Use LED");
+    } catch (const std::exception& e) {  // Added exception type
+        llog.logE(ERROR, "Failed to get LED use value. Error:", e.what());
+        disable_led_pin();
+    }
+    // Enable LED only if valid and desired
+    if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27)) {
+        enable_led_pin(new_led_pin_number);
+    } else {
+        disable_led_pin();
+    }
+
+    // Turn on shutdown pin functionality
+    //
+    // Get PIN number
+    int new_shutdown_pin_number = -1;  // Use an invalid default value for easier error detection
+    try {
+        new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
+    } catch (const std::exception& e) {
+        llog.logE(ERROR, "Failed to get shutdown pin value. Error:", e.what());
+        disable_shutdown_pin();
+    }
+    // Get shutdown button use choice
+    bool use_shutdown = false;
+    try {
+        use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
+    } catch (const std::exception& e) {  // Added exception type
+        llog.logE(ERROR, "Failed to get use shutdown pin value. Error:", e.what());
+        disable_shutdown_pin();
+    }
+    // Enable shutdown button only if valid and desired
+    if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27)) {
+        enable_shutdown_pin(new_shutdown_pin_number);
+    } else {
+        disable_shutdown_pin();
+    }
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)

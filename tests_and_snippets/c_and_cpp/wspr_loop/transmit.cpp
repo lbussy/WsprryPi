@@ -35,8 +35,9 @@
 #include "transmit.hpp"
 
 // Project headers
-#include "scheduling.hpp"
 #include "arg_parser.hpp"
+#include "scheduling.hpp"
+#include "signal_handler.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -101,6 +102,7 @@ void transmit()
     in_transmission.store(true);
 
     // Set real-time priority for transmission
+    if (led_pin) toggle_led(true);
     set_transmission_realtime();
     llog.logS(INFO, "Transmission started.");
 
@@ -149,6 +151,7 @@ void transmit()
             break;
         }
     }
+    if (led_pin) toggle_led(false);
 
     // Record the end time, even if interrupted
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) == -1)

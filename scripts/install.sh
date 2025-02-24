@@ -716,9 +716,9 @@ readonly APT_PACKAGES=(
     "php"
     "libraspberrypi-dev"
     "raspberrypi-kernel-headers"
-    "python3-gpiozero"
-    "python3-lgpio"
     "ntp"
+    "gpiod"
+    "libgpiod-dev"
 )
 
 # -----------------------------------------------------------------------------
