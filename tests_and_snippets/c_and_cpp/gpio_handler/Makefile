@@ -59,7 +59,7 @@ CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2			# Release optimized
-CXX_DEBUG_FLAGS := $(CXXFLAGS) -g -DDEBUG_BUILD	# Debug flags
+CXX_DEBUG_FLAGS := $(CXXFLAGS) -g  -O0 -DDEBUG_BUILD	# Debug flags
 # Strip whitespaces
 C_DEBUG_FLAGS := $(strip $(C_DEBUG_FLAGS))
 C_RELEASE_FLAGS := $(strip $(C_RELEASE_FLAGS))
@@ -145,7 +145,7 @@ debug: build/bin/$(TEST_OUT)
 .PHONY: test
 test: debug
 	$(Q)echo "Running test."
-	$(Q)./build/bin/$(TEST_OUT)
+	$(Q)sudo ./build/bin/$(TEST_OUT)
 
 # Show only user-defined macros
 .PHONY: macros
