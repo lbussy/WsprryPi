@@ -34,328 +34,236 @@
 // Primary header for this source file
 #include "gpio_handler.hpp"
 
+// Project headers
+// ...
+
+// Standard library headers
+#include <gpiod.hpp>
+#include <mutex>
+#include <stdexcept>
+#include <thread>
+
+// System headers
+// ...
+
+std::unique_ptr<GPIOHandler> led_handler;
+std::unique_ptr<GPIOHandler> shutdown_handler;
+std::thread button_thread;
+std::thread led_thread;
+
+constexpr int LED_PIN = 18;
+constexpr int SHUTDOWN_PIN = 19;
+
 /**
- * @brief Constructs a GpioHandler object to manage GPIO pin operations.
- *
- * This constructor initializes a GPIO pin as either an input or output,
- * configures the pin with optional pull-up or pull-down resistors, and
- * starts monitoring for edge events if the pin is configured as an input.
- *
- * @param pin The GPIO pin number to manage.
- * @param is_input Set to true to configure the pin as an input; false for output.
- * @param pull_up Set to true to enable a pull-up resistor; false for pull-down.
- * @param logger Reference to an LCBLog instance for logging operations.
- * @param callback Optional callback function to invoke on edge detection.
- * @param debounce Duration to debounce GPIO events, preventing false triggers.
- *
- * @throws std::runtime_error If GPIO initialization or pin configuration fails.
- *
- * This constructor will attempt to configure the specified GPIO pin and,
- * if successful, start a monitoring thread for edge events. If initialization
- * fails, an exception is thrown, and the object is not instantiated.
+ * @brief Default constructor for GPIOHandler.
  */
-GpioHandler::GpioHandler(int pin,
-                         bool is_input,
-                         bool pull_up,
-                         std::function<void(EdgeType, bool)> callback,
-                         std::chrono::milliseconds debounce)
-    : pin_(pin),
-      is_input_(is_input),
-      pull_up_(pull_up),
-      callback_(callback),
-      debounce_time_(debounce),
-      chip_(GpioHandler::GPIO_CHIP_PATH)
+GPIOHandler::GPIOHandler()
+    : pin_(-1), is_input_(false), pull_up_(false), debounce_time_(50), callback_(nullptr), chip_(GPIO_CHIP_PATH)
+{}
+
+/**
+ * @brief Parameterized constructor for GPIOHandler.
+ */
+GPIOHandler::GPIOHandler(int pin, bool is_input, bool pull_up, std::chrono::milliseconds debounce, Callback callback)
+    : pin_(pin), is_input_(is_input), pull_up_(pull_up), debounce_time_(debounce), chip_(GPIO_CHIP_PATH)
 {
     try
     {
-        running_ = true;
-        configurePin(); // This function will throw if it fails.
-
-        if (is_input_)
-        {
-            monitor_thread_ = std::thread(&GpioHandler::monitorInput, this);
-        }
+        setup(pin, is_input, pull_up, debounce, callback);
+        callback_ = std::move(callback);  // Move only after successful setup.
     }
     catch (const std::exception &e)
     {
-        throw std::runtime_error("Unable to create instance of GPIO Handler.");
+
+        throw std::runtime_error(std::string("Failed to construct GPIOHandler for pin ") +
+                         std::to_string(pin_) + ": " + e.what());
     }
 }
 
 /**
- * @brief Destructor for the GpioHandler class.
- * @details
- * Cleans up GPIO resources and ensures graceful shutdown of the monitoring thread.
- * This involves setting the `running_` flag to false, joining the thread if active,
- * and releasing the associated GPIO line to prevent resource leaks.
- *
- * The destructor guarantees that all GPIO operations are safely terminated
- * before the object is destroyed.
- *
- * @note This destructor should not be explicitly called. It is automatically
- *       invoked when a `GpioHandler` object goes out of scope.
+ * @brief Destructor for GPIOHandler.
  */
-GpioHandler::~GpioHandler()
-{
-    // Signal the monitoring thread to stop.
-    running_ = false;
-
-    // Join the monitoring thread if it is still running.
-    if (monitor_thread_.joinable())
-    {
-        monitor_thread_.join();
-    }
-
-    // Release the GPIO line and clean up resources.
-    cleanupPin();
+GPIOHandler::~GPIOHandler() {
+    stopMonitoring();  // Ensure thread exits before cleanup.
+    cleanupPin();      // Release GPIO resources.
 }
 
 /**
- * @brief Configures the GPIO pin for input or output mode.
- * @details
- * This function initializes the GPIO chip, acquires the specified GPIO line,
- * and configures it according to the object's parameters. If the pin is set as
- * an input, it enables edge detection and applies the appropriate pull-up or
- * pull-down bias. If configured as an output, it sets the pin direction accordingly.
- *
- * This method ensures exclusive access to GPIO resources using a mutex and
- * prevents conflicts by checking if the line is already requested.
- *
- * @throws std::runtime_error
- *         - If the GPIO chip cannot be opened.
- *         - If the GPIO line is already requested.
- *         - If any other error occurs during configuration.
- *
- * @note This function should only be called during initialization. Repeated calls
- *       without proper cleanup may result in resource conflicts.
+ * @brief Configures the GPIO pin.
  */
-void GpioHandler::configurePin()
+void GPIOHandler::setup(int pin, bool is_input, bool pull_up, std::chrono::milliseconds debounce, Callback callback)
 {
-    // Ensure exclusive access to GPIO resources.
-    std::lock_guard<std::mutex> lock(gpio_mutex);
+    pin_ = pin;
+    is_input_ = is_input;
+    pull_up_ = pull_up;
+    debounce_time_ = debounce;
 
     try
     {
-        // Open the GPIO chip.
+        configurePin();
+    }
+    catch (const std::exception &e)
+    {
+        throw std::runtime_error(std::string("Exception in setup() for pin ") +
+                         std::to_string(pin_) + ": " + e.what());
+    }
+}
+
+/**
+ * @brief Configures the GPIO pin for input or output.
+ */
+void GPIOHandler::configurePin()
+{
+    std::lock_guard<std::mutex> lock(gpio_mutex_);
+
+    if (pin_ < 0)
+    {
+        throw std::runtime_error("Invalid GPIO pin.");
+    }
+
+    try
+    {
         chip_ = gpiod::chip(GPIO_CHIP_PATH);
-        if (chip_.num_lines() == 0)
-        {
-            throw std::runtime_error("Unable to open GPIO chip.");
-        }
 
-        // Acquire the GPIO line for the specified pin.
         line_ = chip_.get_line(pin_);
-        if (line_.is_requested())
+        if (!line_)
         {
-            throw std::runtime_error("GPIO line already in use.");
+            throw std::runtime_error("Failed to get GPIO line for pin " + std::to_string(pin_));
         }
 
-        // Prepare the line request configuration.
         gpiod::line_request request;
-        request.consumer = "GpioHandler";
+        request.consumer = "GPIOHandler";
 
         if (is_input_)
         {
-            // Configure as input with edge detection.
             request.request_type = gpiod::line_request::EVENT_BOTH_EDGES;
-            request.flags = pull_up_ ? gpiod::line_request::FLAG_BIAS_PULL_UP
-                                     : gpiod::line_request::FLAG_BIAS_PULL_DOWN;
+            request.flags = pull_up_ ? gpiod::line_request::FLAG_BIAS_PULL_UP : gpiod::line_request::FLAG_BIAS_PULL_DOWN;
         }
         else
         {
-            // Configure as output.
             request.request_type = gpiod::line_request::DIRECTION_OUTPUT;
         }
 
-        // Request the GPIO line with the specified configuration.
         line_.request(request);
     }
     catch (const std::exception &e)
     {
-        throw std::runtime_error("Failed to configure GPIO " + std::to_string(pin_) + ": " + e.what());
+        throw std::runtime_error(std::string("Exception in configurePin() for pin ") +
+                         std::to_string(pin_) + ": " + e.what());
     }
 }
 
 /**
- * @brief Monitors the GPIO pin for edge events.
- * @details
- * This function continuously monitors the GPIO pin for rising or falling edge
- * events. When an edge is detected, it applies a debounce filter to prevent
- * false triggers, logs the event, and invokes the user-provided callback if set.
- *
- * The function runs in a separate thread while the `running_` flag remains true.
- * It safely exits when the flag is cleared during object destruction.
- *
- * @note This function operates as part of a background thread.
- *       Ensure proper cleanup by destroying the object or stopping the thread.
- *
- * @throws std::runtime_error
- *         - If an error occurs while reading GPIO events.
- *         - If the GPIO line becomes invalid during monitoring.
+ * @brief Starts monitoring the GPIO pin for edge events.
  */
-void GpioHandler::monitorInput()
-{
-    // Continuously monitor the GPIO pin until stopped.
-    while (running_)
-    {
-        try
-        {
-            // Wait for an edge event with a 1-second timeout.
-            if (line_.event_wait(std::chrono::seconds(1)))
-            {
-                // Read the detected event.
+void GPIOHandler::startMonitoring() {
+    if (running_.exchange(true)) {
+        return;
+    }
+    thread_exited_.store(false, std::memory_order_release);
+
+    // Launch the monitoring thread
+    std::thread([this]() {
+        monitoringLoop();
+        thread_exited_.store(true, std::memory_order_release);
+    }).detach();
+}
+
+void GPIOHandler::monitoringLoop() {
+    while (running_.load(std::memory_order_acquire)) {
+        try {
+            if (!line_.is_requested()) {
+                throw std::runtime_error(std::string("GPIO line not requested for pin ") +
+                    std::to_string(pin_) + ". Exiting loop.");
+            }
+
+            if (line_.event_wait(std::chrono::seconds(1))) {
                 auto event = line_.event_read();
-                auto now = std::chrono::steady_clock::now();
+                EdgeType edge = (event.event_type == gpiod::line_event::RISING_EDGE) ? EdgeType::RISING : EdgeType::FALLING;
 
-                // Apply debounce filter to avoid false triggers.
-                if (now - last_event_time < debounce_time_)
-                {
-                    continue;
-                }
-                last_event_time = now;
-
-                // Determine the edge type (RISING or FALLING).
-                EdgeType edge_type = (event.event_type == gpiod::line_event::RISING_EDGE)
-                                         ? EdgeType::RISING
-                                         : EdgeType::FALLING;
-
-                // Invoke the user-defined callback if available.
-                if (callback_)
-                {
-                    callback_(edge_type, line_.get_value());
+                // Invoke the callback if defined
+                if (callback_) {
+                    callback_(edge, line_.get_value());
                 }
             }
+        } catch (const std::system_error& e) {
+            if (e.code() == std::errc::resource_deadlock_would_occur) {
+                throw std::runtime_error(std::string("Resource deadlock in monitoring loop for GPIO pin ") +
+                    std::to_string(pin_));
+                break;
+            }
+            throw std::runtime_error(std::string("Exception in GPIO monitoring: ") +
+                    e.what());
+            break;
         }
-        catch (const std::exception &e)
-        {
-            // Throw exception on error and terminate monitoring.
-            throw std::runtime_error("Error monitoring GPIO " + std::to_string(pin_) + ": " + e.what());
+    }
+}
+
+/**
+ * @brief Stops monitoring the GPIO pin.
+ */
+void GPIOHandler::stopMonitoring() {
+    if (!running_.exchange(false)) {
+        return;
+    }
+
+    // Signal the monitoring thread to exit
+    {
+        std::unique_lock<std::mutex> lock(exit_mutex_);
+        exit_cv_.notify_all();
+    }
+
+    // Wait for the thread to exit
+    for (int i = 0; i < 20; ++i) {
+        if (thread_exited_.load(std::memory_order_acquire)) {
+            return;
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    throw std::runtime_error(std::string("Timeout waiting for thread exit for pin  ") +
+                    std::to_string(pin_) + ". Forcing cleanup.");
+    thread_exited_.store(true, std::memory_order_release);
 }
 
 /**
- * @brief Checks if a GPIO edge event has been detected.
- * @details This function returns whether an edge event has been detected
- *          on the monitored GPIO pin.
- *
- * @return true if an edge event has been detected, false otherwise.
+ * @brief Cleans up the GPIO pin, releasing resources.
  */
-bool GpioHandler::isEventDetected() const
-{
-    return event_detected;
-}
+void GPIOHandler::cleanupPin() {
+    std::lock_guard<std::mutex> lock(gpio_mutex_);
 
-/**
- * @brief Resets the input state for the GPIO pin.
- * @details This function clears the event detection and event lock flags,
- *          allowing the GPIO to detect new edge events.
- *
- * @return void
- */
-void GpioHandler::resetInputState()
-{
-    // Reset event detection and lock flags.
-    event_detected = false;
-    event_lock = false;
-}
-
-/**
- * @brief Sets the output state of the GPIO pin.
- * @details
- * This function sets the GPIO pin to the specified state (HIGH or LOW) if the
- * pin is configured as an output. If the pin is configured as an input, an
- * exception is thrown, and the state change is not applied.
- *
- * This method ensures thread safety by locking the GPIO mutex during execution.
- *
- * @param state A boolean value representing the desired output state:
- *              - `true`: Set the GPIO pin to HIGH.
- *              - `false`: Set the GPIO pin to LOW.
- *
- * @throws std::runtime_error
- *         - If the GPIO pin is configured as an input.
- */
-void GpioHandler::setOutput(bool state)
-{
-    // Ensure thread safety by locking the GPIO mutex.
-    std::lock_guard<std::mutex> lock(gpio_mutex);
-
-    // Verify that the pin is configured as an output.
-    if (!is_input_)
-    {
-        // Set the GPIO pin to the specified state.
-        line_.set_value(state ? 1 : 0);
-        input_state = state;
-    }
-    else
-    {
-        // Throw an exception if attempting to set an input pin as output.
-        throw std::runtime_error("Attempted to set an input pin as output: GPIO " + std::to_string(pin_));
-    }
-}
-
-/**
- * @brief Sets the callback function for GPIO edge events.
- * @details This function assigns a user-provided callback function to be
- *          triggered when a rising or falling edge is detected on the GPIO pin.
- *
- * @param callback A Callback function to be executed upon an edge event.
- *                 The callback takes two parameters:
- *                 - GpioHandler::EdgeType: Indicates the type of edge (RISING or FALLING).
- *                 - bool: Represents the current state of the GPIO pin (HIGH or LOW).
- *
- * @return void
- *
- * @throws None
- */
-void GpioHandler::setCallback(Callback callback)
-{
-    // Lock the GPIO mutex to ensure thread-safe access.
-    std::lock_guard<std::mutex> lock(gpio_mutex);
-
-    // Assign the provided callback to the edge callback member.
-    edge_callback = callback;
-}
-
-/**
- * @brief Releases the GPIO line associated with the specified pin.
- * @details This function ensures that the GPIO line is properly released
- *          when it is no longer needed. If the line has already been released
- *          or is invalid, a warning is logged.
- *
- * @return void
- *
- * @throws None
- */
-void GpioHandler::cleanupPin()
-{
-    // Lock the GPIO mutex to ensure thread-safe access.
-    std::lock_guard<std::mutex> lock(gpio_mutex);
-
-    // Check if the GPIO line is currently requested.
-    if (line_.is_requested())
-    {
-        // Release the GPIO line and log the successful release.
+    if (line_.is_requested()) {
         line_.release();
     }
 }
 
 /**
- * @brief Retrieves the current state of the GPIO input.
- * @details This function returns the current logical state of the GPIO pin
- *          if it is configured as an input. Thread safety is ensured by
- *          locking the associated mutex during access.
- *
- * @return bool - True if the input state is HIGH, false if LOW.
- *
- * @throws None
+ * @brief Sets the GPIO output state.
  */
-bool GpioHandler::getInputState() const
+void GPIOHandler::setOutput(bool state)
 {
-    // Lock the mutex to ensure thread-safe access to the input state.
-    std::lock_guard<std::mutex> lock(mutex_);
+    if (is_input_)
+        throw std::runtime_error("Cannot set value on input pin " + std::to_string(pin_));
 
-    // Return the current input state.
-    return input_state_;
+    line_.set_value(state ? 1 : 0);
+}
+
+/**
+ * @brief Gets the current input state.
+ */
+bool GPIOHandler::getInputState() const
+{
+    if (!is_input_)
+        throw std::runtime_error("Cannot read value from output pin " + std::to_string(pin_));
+
+    return line_.get_value();
+}
+
+/**
+ * @brief Checks if the monitoring thread has exited.
+ * @return True if the thread has exited, false otherwise.
+ */
+bool GPIOHandler::hasThreadExited() const
+{
+    return thread_exited_.load();
 }

@@ -440,7 +440,7 @@ bool validate_config_data()
         }
     }();
 
-#ifdef USE_GPIO_PINS
+#ifdef USE_GPIO_PINS // TODO
     // Turn on LED functionality
     //
     // Get PIN number

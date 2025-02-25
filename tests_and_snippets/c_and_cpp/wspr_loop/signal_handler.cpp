@@ -60,7 +60,7 @@ static struct termios original_tty;
 static bool tty_saved = false;
 std::atomic<bool> signal_shutdown{false};
 
-#ifdef USE_GPIO_PINS
+#ifdef USE_GPIO_PINS // TODO
 // Global GPIO instances.
 std::unique_ptr<GpioHandler> shutdown_pin;
 std::unique_ptr<GpioHandler> led_pin;
@@ -344,7 +344,7 @@ void register_signal_handlers()
     llog.logS(DEBUG, "Signal handling thread started.");
 }
 
-#ifdef USE_GPIO_PINS
+#ifdef USE_GPIO_PINS // TODO
 
 /**
  * @brief Creates or reinitializes the shutdown_pin GPIO input.

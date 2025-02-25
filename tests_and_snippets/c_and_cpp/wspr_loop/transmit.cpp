@@ -25,7 +25,7 @@ void perform_transmission(int duration)
     llog.logS(INFO, "Transmission started for", duration, "seconds.");
     in_transmission.store(true);
 
-#ifdef USE_GPIO_PINS
+#ifdef USE_GPIO_PINS // TODO
     if (led_pin) toggle_led(true);
 #endif
 
@@ -44,7 +44,7 @@ void perform_transmission(int duration)
         std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Check every 100 ms
     }
 
-#ifdef USE_GPIO_PINS
+#ifdef USE_GPIO_PINS // TODO
     if (led_pin) toggle_led(false);
 #endif
 

@@ -1,19 +1,20 @@
+// Primary header for this source file
+// ...
+
+// Project headers
 #include "gpio_handler.hpp"
-#include "semaphores.hpp"
+
+// Standard library headers
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <thread>
-#include <atomic>
-#include <chrono>
 
-std::unique_ptr<GPIOHandler> led_handler;
-std::unique_ptr<GPIOHandler> shutdown_handler;
-std::thread button_thread;
-std::thread led_thread;
+// System headers
+// ...
+
 std::atomic<bool> shutdown_triggered{false};
-
-constexpr int LED_PIN = 18;
-constexpr int SHUTDOWN_PIN = 19;
 
 /**
  * @brief Cleanly shuts down the application.
