@@ -3,6 +3,7 @@
 // Primary header for this source file
 #include "transmit.hpp"
 
+#include "gpio_handler.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
@@ -25,9 +26,9 @@ void perform_transmission(int duration)
     llog.logS(INFO, "Transmission started for", duration, "seconds.");
     in_transmission.store(true);
 
-#ifdef USE_GPIO_PINS // TODO
-    if (led_pin) toggle_led(true);
-#endif
+    // Turn on LED
+    if (led_handler)
+        toggle_led(true);
 
     // Monitor for shutdown while transmitting
     auto start_time = std::chrono::steady_clock::now();
@@ -44,9 +45,9 @@ void perform_transmission(int duration)
         std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Check every 100 ms
     }
 
-#ifdef USE_GPIO_PINS // TODO
-    if (led_pin) toggle_led(false);
-#endif
+    // Turn off LED
+    if (led_handler)
+        toggle_led(false);
 
     in_transmission.store(false);
     llog.logS(INFO, "Transmission ended.");
@@ -97,11 +98,10 @@ void transmit_loop()
 
         // Sleep until the next transmission time or shutdown signal.
         std::unique_lock<std::mutex> lock(transmit_mtx);
-        if (cv.wait_until(lock, next_wakeup, [] {
-                return exit_wspr_loop.load() || signal_shutdown.load();
-            }))
+        if (cv.wait_until(lock, next_wakeup, []
+                          { return exit_wspr_loop.load() || signal_shutdown.load(); }))
         {
-            break;  // Exit loop if shutdown is requested.
+            break; // Exit loop if shutdown is requested.
         }
 
         // Perform the placeholder event based on the interval.

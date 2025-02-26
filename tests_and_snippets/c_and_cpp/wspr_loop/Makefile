@@ -99,8 +99,6 @@ CXXFLAGS += -I$(abspath ./MonitorFile/src)
 CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
-# Turn on/off new GPIO pin usage
-# CXXFLAGS += -DUSE_GPIO_PINS
 # Target flags
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2			# Release optimized
 CXX_DEBUG_FLAGS := $(CXXFLAGS) -g -DDEBUG_BUILD	# Debug flags

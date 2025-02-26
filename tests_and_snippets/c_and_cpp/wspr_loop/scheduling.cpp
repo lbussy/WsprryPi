@@ -33,7 +33,7 @@
  * SOFTWARE.
  */
 
- // Primary header for this source file
+// Primary header for this source file
 #include "scheduling.hpp"
 
 // Project headers
@@ -43,6 +43,7 @@
 #include "signal_handler.hpp"
 #include "transmit.hpp"
 #include "logging.hpp"
+#include "gpio_handler.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -59,7 +60,7 @@
 #include <string.h>
 #include <sys/resource.h>
 
-std::mutex shutdown_mtx;  // Global mutex for thread safety.
+std::mutex shutdown_mtx; // Global mutex for thread safety.
 
 /**
  * @brief Condition variable used for thread synchronization.
@@ -134,7 +135,8 @@ bool is_cpu_directory(const std::string &dirName)
 void discover_cpu_cores()
 {
     // Avoid re-discovery if already populated
-    if (!all_cpu_cores.empty()) return;
+    if (!all_cpu_cores.empty())
+        return;
 
     for (const auto &entry : std::filesystem::directory_iterator("/sys/devices/system/cpu/"))
     {
@@ -183,7 +185,7 @@ bool is_cpu_throttled()
     if (defaultFrequencyHz == 0)
     {
         llog.logE(ERROR, "Failed to determine default CPU frequency.");
-        return false;  // Cannot determine throttling without a valid threshold.
+        return false; // Cannot determine throttling without a valid threshold.
     }
 
     // Read the current CPU temperature.
@@ -200,14 +202,14 @@ bool is_cpu_throttled()
     else
     {
         llog.logE(ERROR, "Failed to read CPU temperature.");
-        return false;  // Assume no throttling if temperature cannot be checked.
+        return false; // Assume no throttling if temperature cannot be checked.
     }
 
     // Track throttling status.
     bool throttled = false;
 
     // Check each CPU core's current frequency.
-    for (const auto& core : all_cpu_cores)
+    for (const auto &core : all_cpu_cores)
     {
         std::string freq_path = "/sys/devices/system/cpu/" + core + "/cpufreq/scaling_cur_freq";
         std::ifstream freq_file(freq_path);
@@ -231,7 +233,7 @@ bool is_cpu_throttled()
     }
 
     // Check for temperature throttling (>80°C).
-    constexpr int kMaxSafeTempMilliC = 80000;  // 80°C threshold.
+    constexpr int kMaxSafeTempMilliC = 80000; // 80°C threshold.
     if (highest_temp > kMaxSafeTempMilliC)
     {
         llog.logE(WARN, "CPU temperature throttling detected. Highest temp:",
@@ -270,7 +272,7 @@ void set_transmission_realtime()
 {
     // Define scheduling parameters.
     struct sched_param sp;
-    sp.sched_priority = 75;  // Mid-high priority (range: 1–99).
+    sp.sched_priority = 75; // Mid-high priority (range: 1–99).
 
     // Attempt to set real-time priority for the current thread.
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
@@ -317,10 +319,10 @@ void set_scheduling_priority()
 }
 
 void wspr_loop()
-{    
+{
     // Register signal handlers for safe shutdown and terminal management.
     register_signal_handlers();
-    
+
     // Verify NTP and update PPM at startup.
     if (!ensure_ntp_stable())
     {
@@ -343,10 +345,10 @@ void wspr_loop()
     // WSPR main loop.
     llog.logS(INFO, "WSPR loop running.");
 
-
     // Wait for exit signal.
     std::unique_lock<std::mutex> lock(cv_mtx);
-    cv.wait(lock, [] { return exit_wspr_loop.load(); });
+    cv.wait(lock, []
+            { return exit_wspr_loop.load(); });
 
     // Indicate normal exit.
     signal_shutdown.store(true);
@@ -364,13 +366,21 @@ void wspr_loop()
 
 void shutdown_threads()
 {
-    std::lock_guard<std::mutex> lock(shutdown_mtx);  // Ensure only one cleanup runs.
-    if (!exit_wspr_loop.load())                      // Avoid redundant cleanup.
+    std::lock_guard<std::mutex> lock(shutdown_mtx); // Ensure only one cleanup runs.
+    if (!exit_wspr_loop.load())                     // Avoid redundant cleanup.
     {
         llog.logS(DEBUG, "Shutting down all active threads.");
         exit_wspr_loop.store(true);
+        led_handler.reset();
+        shutdown_handler.reset();
 
         cv.notify_all();
+
+        if (button_thread.joinable())
+        {
+            button_thread.join();
+            llog.logS(INFO, "Closing button monitor threads.");
+        }
 
         if (ppm_ntp_thread.joinable())
         {

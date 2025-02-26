@@ -58,13 +58,18 @@ extern std::unique_ptr<GPIOHandler> shutdown_handler;
 extern std::thread button_thread;
 extern std::thread led_thread;
 
-extern const int LED_PIN;
-extern const int SHUTDOWN_PIN;
+// Default GPIO pins.
+extern int shutdown_pin_number;
+extern int led_pin_number;
 
 class GPIOHandler
 {
 public:
-    enum class EdgeType { RISING, FALLING };
+    enum class EdgeType
+    {
+        RISING,
+        FALLING
+    };
     using Callback = std::function<void(EdgeType, bool)>;
 
     GPIOHandler();
@@ -104,7 +109,7 @@ private:
 
     std::mutex gpio_mutex_;
 
-    void monitoringLoop();     // Private: Runs the actual monitoring logic.
+    void monitoringLoop(); // Private: Runs the actual monitoring logic.
     void configurePin();
     void cleanupPin();
 };

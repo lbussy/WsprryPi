@@ -8,5 +8,4 @@
 - [ ] Add in WSPR-Message
 - [ ] Figure out how to add in DMA stuff for transmission
 - [ ] Also change priority for transmissions
-- [ ] Re-implement GPIO
 - [ ] ...

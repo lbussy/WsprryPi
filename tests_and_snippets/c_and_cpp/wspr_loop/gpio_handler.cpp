@@ -51,15 +51,17 @@ std::unique_ptr<GPIOHandler> shutdown_handler;
 std::thread button_thread;
 std::thread led_thread;
 
-constexpr int LED_PIN = 18;
-constexpr int SHUTDOWN_PIN = 19;
+// Default GPIO pins.
+int shutdown_pin_number = 19;
+int led_pin_number = 18;
 
 /**
  * @brief Default constructor for GPIOHandler.
  */
 GPIOHandler::GPIOHandler()
     : pin_(-1), is_input_(false), pull_up_(false), debounce_time_(50), callback_(nullptr), chip_(GPIO_CHIP_PATH)
-{}
+{
+}
 
 /**
  * @brief Parameterized constructor for GPIOHandler.
@@ -70,22 +72,23 @@ GPIOHandler::GPIOHandler(int pin, bool is_input, bool pull_up, std::chrono::mill
     try
     {
         setup(pin, is_input, pull_up, debounce, callback);
-        callback_ = std::move(callback);  // Move only after successful setup.
+        callback_ = std::move(callback); // Move only after successful setup.
     }
     catch (const std::exception &e)
     {
 
         throw std::runtime_error(std::string("Failed to construct GPIOHandler for pin ") +
-                         std::to_string(pin_) + ": " + e.what());
+                                 std::to_string(pin_) + ": " + e.what());
     }
 }
 
 /**
  * @brief Destructor for GPIOHandler.
  */
-GPIOHandler::~GPIOHandler() {
-    stopMonitoring();  // Ensure thread exits before cleanup.
-    cleanupPin();      // Release GPIO resources.
+GPIOHandler::~GPIOHandler()
+{
+    stopMonitoring(); // Ensure thread exits before cleanup.
+    cleanupPin();     // Release GPIO resources.
 }
 
 /**
@@ -105,7 +108,7 @@ void GPIOHandler::setup(int pin, bool is_input, bool pull_up, std::chrono::milli
     catch (const std::exception &e)
     {
         throw std::runtime_error(std::string("Exception in setup() for pin ") +
-                         std::to_string(pin_) + ": " + e.what());
+                                 std::to_string(pin_) + ": " + e.what());
     }
 }
 
@@ -149,51 +152,63 @@ void GPIOHandler::configurePin()
     catch (const std::exception &e)
     {
         throw std::runtime_error(std::string("Exception in configurePin() for pin ") +
-                         std::to_string(pin_) + ": " + e.what());
+                                 std::to_string(pin_) + ": " + e.what());
     }
 }
 
 /**
  * @brief Starts monitoring the GPIO pin for edge events.
  */
-void GPIOHandler::startMonitoring() {
-    if (running_.exchange(true)) {
+void GPIOHandler::startMonitoring()
+{
+    if (running_.exchange(true))
+    {
         return;
     }
     thread_exited_.store(false, std::memory_order_release);
 
     // Launch the monitoring thread
-    std::thread([this]() {
+    std::thread([this]()
+                {
         monitoringLoop();
-        thread_exited_.store(true, std::memory_order_release);
-    }).detach();
+        thread_exited_.store(true, std::memory_order_release); })
+        .detach();
 }
 
-void GPIOHandler::monitoringLoop() {
-    while (running_.load(std::memory_order_acquire)) {
-        try {
-            if (!line_.is_requested()) {
+void GPIOHandler::monitoringLoop()
+{
+    while (running_.load(std::memory_order_acquire))
+    {
+        try
+        {
+            if (!line_.is_requested())
+            {
                 throw std::runtime_error(std::string("GPIO line not requested for pin ") +
-                    std::to_string(pin_) + ". Exiting loop.");
+                                         std::to_string(pin_) + ". Exiting loop.");
             }
 
-            if (line_.event_wait(std::chrono::seconds(1))) {
+            if (line_.event_wait(std::chrono::seconds(1)))
+            {
                 auto event = line_.event_read();
                 EdgeType edge = (event.event_type == gpiod::line_event::RISING_EDGE) ? EdgeType::RISING : EdgeType::FALLING;
 
                 // Invoke the callback if defined
-                if (callback_) {
+                if (callback_)
+                {
                     callback_(edge, line_.get_value());
                 }
             }
-        } catch (const std::system_error& e) {
-            if (e.code() == std::errc::resource_deadlock_would_occur) {
+        }
+        catch (const std::system_error &e)
+        {
+            if (e.code() == std::errc::resource_deadlock_would_occur)
+            {
                 throw std::runtime_error(std::string("Resource deadlock in monitoring loop for GPIO pin ") +
-                    std::to_string(pin_));
+                                         std::to_string(pin_));
                 break;
             }
             throw std::runtime_error(std::string("Exception in GPIO monitoring: ") +
-                    e.what());
+                                     e.what());
             break;
         }
     }
@@ -202,8 +217,10 @@ void GPIOHandler::monitoringLoop() {
 /**
  * @brief Stops monitoring the GPIO pin.
  */
-void GPIOHandler::stopMonitoring() {
-    if (!running_.exchange(false)) {
+void GPIOHandler::stopMonitoring()
+{
+    if (!running_.exchange(false))
+    {
         return;
     }
 
@@ -214,25 +231,29 @@ void GPIOHandler::stopMonitoring() {
     }
 
     // Wait for the thread to exit
-    for (int i = 0; i < 20; ++i) {
-        if (thread_exited_.load(std::memory_order_acquire)) {
+    for (int i = 0; i < 20; ++i)
+    {
+        if (thread_exited_.load(std::memory_order_acquire))
+        {
             return;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     throw std::runtime_error(std::string("Timeout waiting for thread exit for pin  ") +
-                    std::to_string(pin_) + ". Forcing cleanup.");
+                             std::to_string(pin_) + ". Forcing cleanup.");
     thread_exited_.store(true, std::memory_order_release);
 }
 
 /**
  * @brief Cleans up the GPIO pin, releasing resources.
  */
-void GPIOHandler::cleanupPin() {
+void GPIOHandler::cleanupPin()
+{
     std::lock_guard<std::mutex> lock(gpio_mutex_);
 
-    if (line_.is_requested()) {
+    if (line_.is_requested())
+    {
         line_.release();
     }
 }

@@ -37,6 +37,7 @@
 #include "signal_handler.hpp"
 
 // Project headers
+#include "gpio_handler.hpp"
 #include "scheduling.hpp"
 #include "arg_parser.hpp"
 #include "ppm_ntp.hpp"
@@ -59,17 +60,6 @@ std::atomic<bool> shutdown_in_progress(false);
 static struct termios original_tty;
 static bool tty_saved = false;
 std::atomic<bool> signal_shutdown{false};
-
-#ifdef USE_GPIO_PINS // TODO
-// Global GPIO instances.
-std::unique_ptr<GpioHandler> shutdown_pin;
-std::unique_ptr<GpioHandler> led_pin;
-std::mutex gpioMutex;
-#endif
-
-// Default GPIO pins.
-int shutdown_pin_number = 19;
-int led_pin_number = 18;
 
 /**
  * @brief Suppresses terminal signals and disables echoing of input.
@@ -213,8 +203,8 @@ std::string signal_to_string(int signum)
 void cleanup_threads()
 {
     llog.logS(DEBUG, "Cleaning up due to signal.");
-    signal_shutdown.store(true);  // Set the flag for signal-driven shutdown.
-    shutdown_threads();  // Use the unified cleanup function.
+    signal_shutdown.store(true); // Set the flag for signal-driven shutdown.
+    shutdown_threads();          // Use the unified cleanup function.
 
     if (!signal_shutdown.load())
     {
@@ -344,25 +334,28 @@ void register_signal_handlers()
     llog.logS(DEBUG, "Signal handling thread started.");
 }
 
-#ifdef USE_GPIO_PINS // TODO
-
 /**
  * @brief Creates or reinitializes the shutdown_pin GPIO input.
  * @param pin The GPIO pin number (default: 19).
  */
 void enable_shutdown_pin(int pin)
 {
-    std::lock_guard<std::mutex> lock(gpioMutex);
-
     // If already active, release and reconfigure.
-    if (shutdown_pin)
+    if (shutdown_handler)
     {
         llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
-        shutdown_pin.reset();
+        shutdown_handler.reset();
+
+        if (button_thread.joinable()) {
+            llog.logS(DEBUG, "Closing button monitor threads.");
+            button_thread.join();
+        }
     }
 
     shutdown_pin_number = pin;
-    shutdown_pin = std::make_unique<GpioHandler>(pin, true, true, shutdown_system, std::chrono::milliseconds(200));
+    shutdown_handler = std::make_unique<GPIOHandler>(shutdown_pin_number, true, true, std::chrono::milliseconds(50), shutdown_system);
+    button_thread = std::thread(&GPIOHandler::startMonitoring, shutdown_handler.get());
+    llog.logS(INFO, "Shutdown button enabled on GPIO", shutdown_pin_number, ".");
 }
 
 /**
@@ -370,11 +363,16 @@ void enable_shutdown_pin(int pin)
  */
 void disable_shutdown_pin()
 {
-    std::lock_guard<std::mutex> lock(gpioMutex);
-    if (shutdown_pin)
+    llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
+    if (shutdown_handler)
     {
-        shutdown_pin.reset();
-        llog.logS(INFO, "Shutdown pin disabled.");
+        shutdown_handler.reset();
+        llog.logS(INFO, "Shutdown button disabled.");
+    }
+
+    if (button_thread.joinable()) {
+        llog.logS(DEBUG, "Closing button monitor threads.");
+        button_thread.join();
     }
 }
 
@@ -384,17 +382,16 @@ void disable_shutdown_pin()
  */
 void enable_led_pin(int pin)
 {
-    std::lock_guard<std::mutex> lock(gpioMutex);
-
     // If already active, release and reconfigure.
-    if (led_pin)
+    if (led_handler)
     {
         llog.logS(DEBUG, "Releasing existing LED Pin (GPIO", led_pin_number, ")");
-        led_pin.reset();
+        led_handler.reset();
     }
 
     led_pin_number = pin;
-    led_pin = std::make_unique<GpioHandler>(pin, false, false);
+    led_handler = std::make_unique<GPIOHandler>(pin, false, false);
+    llog.logS(INFO, "LED enabled on GPIO", led_pin_number, ".");
 }
 
 /**
@@ -402,11 +399,10 @@ void enable_led_pin(int pin)
  */
 void disable_led_pin()
 {
-    std::lock_guard<std::mutex> lock(gpioMutex);
-    if (led_pin)
+    if (led_handler)
     {
-        llog.logS(DEBUG, "Disabling LED pin on GPIO", led_pin_number);
-        led_pin.reset();
+        llog.logS(DEBUG, "Disabling LED pin on GPIO", led_pin_number, ".");
+        led_handler.reset();
         llog.logS(INFO, "LED pin disabled.");
     }
 }
@@ -415,11 +411,11 @@ void disable_led_pin()
  * @brief Sets the LED state based on the given argument.
  * @param state True to turn the LED ON, false to turn it OFF.
  */
-void toggle_led(bool state)
+void toggle_led(bool state) 
 {
-    if (led_pin)
+    if (led_handler)
     {
-        led_pin->setOutput(state);
+        led_handler->setOutput(state);
         llog.logS(DEBUG, "LED state set to", (state ? "ON" : "OFF"));
     }
     else
@@ -439,35 +435,35 @@ void toggle_led(bool state)
  * @note This function requires root access to execute the shutdown command.
  *       Ensure the program runs with elevated privileges (e.g., using `sudo`).
  */
-void shutdown_system(GpioHandler::EdgeType edge, bool state)
+void shutdown_system(GPIOHandler::EdgeType edge, bool state)
 {
-    if (edge == GpioHandler::EdgeType::FALLING)
+    if (edge == GPIOHandler::EdgeType::FALLING)
     {
-        llog.logS(WARN, "Shutdown triggered by GPIO event. Shutting down.");
-
         // Check if the user has root privileges.
-        if (geteuid() != 0) {
+        if (geteuid() != 0)
+        {
             throw std::runtime_error("Root privileges are required to shut down the system.");
+            return;
         }
 
         // Execute the shutdown command with a 5-second delay.
         int result = std::system("sleep 5 && shutdown -h now &");
 
         // Check if the shutdown command was successful.
-        if (result != 0) {
+        if (result != 0)
+        {
             throw std::runtime_error("Failed to execute shutdown command.");
+            return;
         }
         else
         {
+            llog.logS(INFO, "Shutdown triggered by shutdown button.");
             // Set shutdown flag and notify waiting threads.
             shutdown_in_progress.store(true);
             exit_wspr_loop.store(true);
-            cv.notify_all();
 
             // Ensure graceful cleanup.
             cleanup_threads();
         }
     }
 }
-
-#endif
