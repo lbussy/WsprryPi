@@ -1,14 +1,11 @@
 # To Do
 
-- Customize pin on wspr_watch.py service file
-- See if we can thread the transmit, or if it's threaded.  Check threadsave things.
+- See if we can thread the transmit, or if it's threaded.  Check threadsafe things.
 - Merge Singleton port with server port
 - Create release script orchestration
 - Fix freq change (#57)
-- Show current time on web page (#63)
 - Show logs on web page (#27)
 - Show transission indicator (#64)
-- Put version on web page (#97)
 - Unable to install when lib versions differ (#92)
 - Put spots on web page: https://www.wsprnet.org/olddb?mode=html&band=all&limit=50&findcall=AA0NT&sort=date
 

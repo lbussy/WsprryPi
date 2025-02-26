@@ -16,10 +16,16 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 std::atomic<bool> in_transmission(false);
 std::thread transmit_thread;
 std::mutex transmit_mtx;
+std::vector<double> center_freq_set = {};   ///< Vector of frequencies in Hz
+std::optional<int> tx_iterations;           ///< Number of transmissions before termination (if set)
+bool loop_tx = false;                       ///< Flag to enable repeated transmission cycles.
+float test_tone = 0.0;                      ///< Frequency for test tone mode.
+ModeType mode = ModeType::WSPR;             ///< Current operating mode.
 
 void perform_transmission(int duration)
 {

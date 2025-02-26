@@ -13,6 +13,7 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 - [Optional Housekeeping](#optional-housekeeping)
 - [VS Code](#vs-code)
 - [Required Libs](#required-libs)
+- [Submodules](#submodules)
 - [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
 
@@ -145,19 +146,19 @@ If you are going to use VS Code from your workstation:
    git config --global user.name "Your Name"
    ```
 
-7. These are the extensions I use. Paste these commands in the terminal window one by one. When I paste them all at once, the system seems to hang:
+7. These are the extensions I use. If you paste them all in at once it will seem to hang, even for minutes on a slower Pi, but it will work:
 
    ``` bash
    # Extensions installed on SSH: wsprrypi.local:
    # Generated with:
    # code --list-extensions | xargs -L 1 echo code --install-extension
-   code --install-extension Extensions installed on SSH: wspr4:
    code --install-extension bierner.github-markdown-preview
    code --install-extension bierner.markdown-checkbox
    code --install-extension bierner.markdown-emoji
    code --install-extension bierner.markdown-footnotes
    code --install-extension bierner.markdown-mermaid
    code --install-extension bierner.markdown-preview-github-styles
+   code --install-extension bierner.markdown-yaml-preamble
    code --install-extension bmalehorn.shell-syntax
    code --install-extension bmewburn.vscode-intelephense-client
    code --install-extension brapifra.phpserver
@@ -169,8 +170,6 @@ If you are going to use VS Code from your workstation:
    code --install-extension ecmel.vscode-html-css
    code --install-extension feiskyer.chatgpt-copilot
    code --install-extension felipecaputo.git-project-manager
-   code --install-extension github.copilot
-   code --install-extension github.copilot-chat
    code --install-extension github.vscode-github-actions
    code --install-extension github.vscode-pull-request-github
    code --install-extension mhutchie.git-graph
@@ -184,7 +183,6 @@ If you are going to use VS Code from your workstation:
    code --install-extension ms-vscode.cpptools
    code --install-extension ms-vscode.cpptools-extension-pack
    code --install-extension ms-vscode.cpptools-themes
-   code --install-extension ms-vscode.live-server
    code --install-extension ms-vscode.makefile-tools
    code --install-extension ms-vscode.vscode-serial-monitor
    code --install-extension rifi2k.format-html-in-php
@@ -198,47 +196,44 @@ If you are going to use VS Code from your workstation:
    code --install-extension yzhang.markdown-all-in-one
    ```
 
-1. Set up the `venv`:
-
-   ``` bash
-   python3 -m venv ./.venv
-   source ./.venv/bin/activate
-   python -m pip install --upgrade pip
-   pip install -r ./requirements.txt
-   ```
-
-2. For Python script and document development, always use `venv` (VS Code should do this or prompt you to select it).
-
 3.  Use the "Open Folder" button and select the root of your repo on the Pi.
 
 4.  Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
-Remember that the **Wsprry Pi** and optional **Shutdown Watch** systemd daemons are running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
+Remember that the **Wsprry Pi** systemd daemon is running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 
 ``` bash
 sudo systemctl stop wsprrypi
 sudo systemctl disable wsprrypi
-sudo systemctl stop shutdown_watch
-sudo systemctl disable shutdown_watch
 ```
 
 ## Required Libs
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you would need some libs to compile the project:
 
-* git
-* gh
-* jq
-* apache2
-* php
-* colordiff
-* libraspberrypi-dev
-* raspberrypi-kernel-headers
+jq
+git
+apache2
+php
+libraspberrypi-dev
+raspberrypi-kernel-headers
+ntp
+gpiod
+libgpiod-dev
 
 Install these with:
 
 ``` bash
-sudo apt-get install git gh jq apache2 php colordiff libraspberrypi-dev raspberrypi-kernel-headers -y
+sudo apt install jq git apache2 php libraspberrypi-dev raspberrypi-kernel-headers ntp gpiod libgpiod-dev -y
+```
+
+## Submodules
+
+I have opted to use submodules to reuse common elements in my projects. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
+
+``` bash
+git submodule foreach --recursive 'git clean -xfd'
+git submodule update --init --recursive
 ```
 
 ## Reboot

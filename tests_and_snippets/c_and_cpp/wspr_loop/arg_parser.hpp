@@ -48,20 +48,8 @@
 #include <thread>
 
 extern std::thread ini_thread;
-
-/**
- * @enum ModeType
- * @brief Specifies the mode of operation for the application.
- *
- * This enumeration defines the available modes for operation.
- * - `WSPR`: Represents the WSPR (Weak Signal Propagation Reporter) transmission mode.
- * - `TONE`: Represents a test tone generation mode.
- */
-enum class ModeType
-{
-    WSPR, ///< WSPR transmission mode
-    TONE  ///< Test tone generation mode
-};
+extern bool useini;
+extern bool date_time_log;
 
 /**
  * @brief Global configuration instance for argument parsing.
@@ -78,46 +66,17 @@ enum class ModeType
  */
 struct ArgParserConfig
 {
-    bool useini;                                          ///< Flag indicating if an INI file is used for configuration.
-    std::string inifile;                                  ///< Path to the INI configuration file.
-    bool repeat;                                          ///< Flag to enable repeated transmission cycles.
-    std::vector<double> center_freq_set;                  ///< List of transmission frequencies.
-    bool no_delay;                                        ///< Flag to disable WSPR TX window synchronization.
-    std::optional<int> terminate;                         ///< Number of transmissions before termination (if set).
-    bool daemon_mode;                                     ///< Flag for enabling daemon (terse) mode.
-    double f_plld_clk;                                    ///< Phase-Locked Loop D clock, default is 500 MHz
-    int mem_flag;                                         ///< TODO:  Define this - Placeholder for memory management flags.
-    float test_tone;                                      ///< Frequency for test tone mode.
-    ModeType mode;                                        ///< Current operating mode (WSPR or test tone).
-    double last_ppm;                                      ///< Stores the previous PPM value.
-
+    double f_plld_clk; ///< Phase-Locked Loop D clock, default is 500 MHz
+    int mem_flag;      ///< TODO:  Define this - Placeholder for memory management flags.
     /**
      * @brief Default constructor initializing all configuration parameters.
      *
      * Initializes the structure with default values:
-     * - `useini = false`
-     * - `inifile = ""`
-     * - `repeat = false`
-     * - `center_freq_set = {}`
-     * - `no_delay = false`
-     * - `terminate = std::nullopt`
-     * - `daemon_mode = false`
      * - `f_plld_clk = 0.0`
      * - `mem_flag = 0`
-     * - `test_tone = 0.0f`
-     * - `mode = ModeType::WSPR`
      */
-    ArgParserConfig() : useini(false),
-                        inifile(""),
-                        repeat(false),
-                        center_freq_set(),
-                        no_delay(false),
-                        daemon_mode(false),
-                        f_plld_clk(0.0),
-                        mem_flag(0),
-                        test_tone(0.0f),
-                        mode(ModeType::WSPR),
-                        last_ppm(0.0)
+    ArgParserConfig() : f_plld_clk(0.0),
+                        mem_flag(0)
     {
     }
 };
@@ -246,28 +205,7 @@ extern void ini_monitor_thread();
  */
 extern std::string to_uppercase(const std::string &str);
 
-/**
- * @brief Converts a frequency string to its corresponding numeric value.
- *
- * This function takes a string representation of a frequency, which may be a predefined
- * band name (e.g., "20M"), an explicitly specified numeric frequency (e.g., "14097100.0"),
- * or an invalid input. The function attempts to match the string to a predefined set
- * of frequency mappings. If no match is found, it attempts to parse the input as a
- * numeric value. If parsing fails or the value is non-positive, an error is logged.
- *
- * @param option The input frequency string, which can be a predefined band name
- *               or an explicit numeric frequency.
- * @return An `std::optional<double>` containing the parsed frequency in Hz if valid,
- *         or `std::nullopt` if the input is invalid.
- *
- * @example
- * @code
- * auto freq1 = string_to_frequency("20M");  // Returns 14097100.0
- * auto freq2 = string_to_frequency("14097100.0");  // Returns 14097100.0
- * auto freq3 = string_to_frequency("INVALID");  // Returns std::nullopt
- * @endcode
- */
-extern std::optional<double> string_to_frequency(std::string option);
+std::optional<double> string_to_frequency(std::string_view option);
 
 /**
  * @brief Displays the usage information for the WsprryPi application.

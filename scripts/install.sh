@@ -215,19 +215,6 @@ declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
 
 # -----------------------------------------------------------------------------
-# @var USE_TAPR
-# @brief Indicates whether the TAPR shutdown button functionality is enabled.
-# @details This global variable is set to "true" if the user opts to enable
-#          the TAPR shutdown button feature, otherwise it defaults to "false".
-#          The value is determined via user input during installation.
-#
-# @note This variable is typically set by the function `set_use_tapr()`.
-#
-# @default false
-# -----------------------------------------------------------------------------
-declare USE_TAPR="${USE_TAPR:-false}" # TODO: Update this in the script to use INI
-
-# -----------------------------------------------------------------------------
 # Declare Arguments Variables
 # -----------------------------------------------------------------------------
 declare ARGUMENTS_LIST=()   # List of word arguments for command line parsing
@@ -259,16 +246,10 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # @brief The log rotation configuration file.
 # @details This variable defines the logrotate configuration file, used to manage
 #          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
-#
-# @var WSPR_WATCH_EXE
-# @brief The shutdown monitoring script.
-# @details This variable holds the name of the shutdown watch script, which
-#          monitors the TAPR shutdown button functionality to enable safe shutdown.
 # -----------------------------------------------------------------------------
 readonly WSPR_EXE="wsprrypi"
 readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
-readonly WSPR_WATCH_EXE="wspr_watch.py"
 
 # -----------------------------------------------------------------------------
 # @var USER_HOME
@@ -4967,68 +4948,6 @@ start_script() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Prompts the user to enable or disable TAPR shutdown button functionality.
-# @details This function asks the user if they have a TAPR button and whether
-#          they would like to enable its shutdown functionality. The choice is
-#          stored in the global variable `USE_TAPR` for later use.
-#
-# @global USE_TAPR Indicates whether TAPR shutdown functionality is enabled.
-#
-# @param $1 Debug flag for enabling or disabling debug output.
-#
-# @throws None.
-#
-# @return Returns 0 after setting the global variable.
-#
-# @example
-#   set_use_tapr "debug"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-set_use_tapr() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    local user_input
-
-    # Assume "Y" if TERSE is enabled
-    if [[ "${TERSE:-false}" == "true" ]]; then
-        USE_TAPR="true"
-        logI "Automatically enabling TAPR shutdown functionality." "$debug"
-        debug_end "$debug"
-        return 0
-    else
-        printf "\nTAPR Shutdown Button Configuration\n"
-        printf "%s\n" "-----------------------------------"
-        printf "The TAPR board includes a shutdown button feature.\n"
-        printf "Would you like to enable the TAPR shutdown button functionality? (y/n): "
-
-        # Read user input and validate response
-        while true; do
-            read -r user_input < /dev/tty
-            case "$user_input" in
-                [Yy]* | "")  # Default to Yes if Enter is pressed
-                    USE_TAPR="true"
-                    printf "\n"
-                    logI "Enabling TAPR button functionality." "$debug"
-                    break
-                    ;;
-                [Nn]*)
-                    USE_TAPR="false"
-                    printf "\n"
-                    logI "Not enabling TAPR button functionality." "$debug"
-                    break
-                    ;;
-                *)
-                    printf "Invalid input. Please enter 'y' or 'n': "
-                    ;;
-            esac
-        done
-    fi
-
-    debug_end "$debug"
-    return 0
-}
-
-# -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of an executable.
 # @details This function installs or removes an executable binary in
 #          `/usr/local/bin/`. During installation, it verifies the existence
@@ -5190,7 +5109,7 @@ manage_config() {
     if [[ "${config_file}" != "logrotate.conf" ]]; then
         config_path="${config_path}/${config_file}"
     else
-        config_path="${config_path}/${REPO_NAME}"
+        config_path="${config_path}/${REPO_NAME,,}"
     fi
 
     if [[ "$ACTION" == "install" ]]; then
@@ -5433,7 +5352,7 @@ manage_web() {
 
     # Declare local variables
     local source_path="$LOCAL_WWW_DIR"
-    local target_path="/var/www/html/$REPO_NAME"
+    local target_path="/var/www/html/${REPO_NAME,,}"
     local retval=0  # Initialize return value
 
     if [[ "$ACTION" == "install" ]]; then
@@ -5723,11 +5642,12 @@ finish_script() {
 
     # Display follow-up instructions only if install was successful
     if [[ "$ACTION" == "install" && "$overall_status" -eq 0 ]]; then
+        local repo_name="${REPO_NAME,,}"
         printf "\n"
         printf "To configure %s, open the following URL in your browser:\n\n" "$REPO_TITLE"
 
-        printf "  %bhttp://%s.local/$REPO_NAME%b\n" "${FGBLU}" "$HOSTNAME" "${RESET}"
-        printf "  %bhttp://%s/$REPO_NAME%b\n\n" "${FGBLU}" "$ip_address" "${RESET}"
+        printf "  %bhttp://%s.local/%s%b\n" "${FGBLU}" "${HOSTNAME}" "${repo_name}" "${RESET}"
+        printf "  %bhttp://%s/%s%b\n\n" "${FGBLU}" "${ip_address}" "${repo_name}" "${RESET}"
 
         printf "If the hostname URL does not work, try using the IP address.\n"
         printf "Ensure your device is on the same network and that mDNS is\n"
@@ -5780,8 +5700,6 @@ manage_wsprry_pi() {
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
-        "manage_exe \"$WSPR_WATCH_EXE\""
-        "manage_service \"/usr/bin/$WSPR_WATCH_EXE\" \"/usr/bin/python3 /usr/local/bin/$WSPR_WATCH_EXE -D -p 19 -w\" \"false\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_sound"
@@ -5796,9 +5714,6 @@ manage_wsprry_pi() {
 
     # Start the script
     start_script "$debug"
-
-    # Check if TAPR button should be used
-    set_use_tapr "$debug"
 
     # Track overall success/failure
     local overall_status=0

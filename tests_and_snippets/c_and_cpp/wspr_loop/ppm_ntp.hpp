@@ -47,6 +47,7 @@ extern std::thread ppm_ntp_thread;
 extern std::atomic<bool> stop_ppm_ntp_monitor;
 
 extern std::mutex ppm_mtx;
+extern double last_ppm;
 
 /**
  * @brief Executes a shell command and returns its output.
@@ -109,7 +110,7 @@ extern bool ensure_ntp_stable();
  *
  * This function retrieves the current NTP frequency adjustment using
  * `ntp_adjtime` and calculates the corresponding PPM value. If a significant
- * change is detected, it updates `config.last_ppm` accordingly.
+ * change is detected, it updates `last_ppm` accordingly.
  *
  * @return true if the PPM value is successfully updated, false otherwise.
  */

@@ -53,29 +53,21 @@ def main():
     git_root = get_git_root()
 
     wsprrypi_service = "wsprrypi.service"
-    wspr_watch_service = "wspr_watch.service"
 
     # Paths
     executables_dir = os.path.join(git_root, "executables")
     wsprrypi_bin = os.path.join(executables_dir, "wsprrypi")
-    wspr_watch_script = os.path.join(executables_dir, "wspr_watch.py")
     wsprrypi_dest = "/usr/local/bin/wsprrypi"
-    wspr_watch_dest = "/usr/local/bin/wspr_watch.py"
     log_dir = "/var/log/wsprrypi"
 
     # Handle wsprrypi service
     stop_and_disable_service(wsprrypi_service)
     copy_file(wsprrypi_bin, wsprrypi_dest)
 
-    # Handle wspr_watch service
-    stop_and_disable_service(wspr_watch_service)
-    copy_file(wspr_watch_script, wspr_watch_dest)
-
     # Clear logs
     clear_logs(log_dir)
 
     # Enable and start services
-    enable_and_start_service(wspr_watch_service)
     enable_and_start_service(wsprrypi_service)
 
 if __name__ == "__main__":

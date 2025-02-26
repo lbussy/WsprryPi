@@ -24,6 +24,7 @@ std::mutex ppm_mtx;
 
 std::atomic<bool> stop_ppm_ntp_monitor{false};
 std::thread ppm_ntp_thread;
+double last_ppm = 0.0;  ///< Stores the previous PPM value.
 
 std::string run_command(const std::string &command)
 {
@@ -200,10 +201,10 @@ bool update_ppm()
     }
 
     double ppm_new = static_cast<double>(ntx.freq) / (1 << 16);
-    if (std::abs(config.last_ppm - ppm_new) > std::numeric_limits<double>::epsilon())
+    if (std::abs(last_ppm - ppm_new) > std::numeric_limits<double>::epsilon())
     {
         llog.logS(INFO, "PPM check new value obtained:", std::fixed, std::setprecision(10), ppm_new);
-        config.last_ppm = ppm_new;
+        last_ppm = ppm_new;
     }
     else
     {

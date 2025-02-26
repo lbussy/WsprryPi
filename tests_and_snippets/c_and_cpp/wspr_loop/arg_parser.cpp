@@ -46,11 +46,41 @@
 // Standard library headers
 #include <algorithm>
 #include <atomic>
+#include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
 // System headers
 #include <getopt.h>
+
+bool useini = false;
+std::string inifile = "";
+bool date_time_log = true;
+
+namespace
+{
+    // Predefined frequency mappings in Hz for recognized band names.
+    const std::unordered_map<std::string_view, double> frequency_map = {
+        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0}, {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5}, {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0}, {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0}, {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0}, {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}};
+
+    // Helper function to trim whitespace from a string view
+    inline std::string_view trim(std::string_view str)
+    {
+        size_t start = str.find_first_not_of(" \t\n\r");
+        if (start == std::string_view::npos)
+            return {}; // Empty string view
+
+        size_t end = str.find_last_not_of(" \t\n\r");
+        return str.substr(start, end - start + 1);
+    }
+
+    // Helper function to convert a string to uppercase
+    inline void to_uppercase(std::string &str)
+    {
+        std::transform(str.begin(), str.end(), str.begin(), ::toupper);
+    }
+} // namespace
 
 /**
  * @brief Global configuration instance for argument parsing.
@@ -143,7 +173,6 @@ std::atomic<bool> ini_reload_pending(false);
 
 std::thread ini_thread;
 
-
 /**
  * @brief Monitors the INI configuration file for changes.
  *
@@ -224,68 +253,41 @@ std::string to_uppercase(const std::string &str)
     return upper_str;
 }
 
-/**
- * @brief Converts a frequency string to its corresponding numeric value.
- *
- * This function takes a string representation of a frequency, which may be a predefined
- * band name (e.g., "20M"), an explicitly specified numeric frequency (e.g., "14097100.0"),
- * or an invalid input. The function attempts to match the string to a predefined set
- * of frequency mappings. If no match is found, it attempts to parse the input as a
- * numeric value. If parsing fails or the value is non-positive, an error is logged.
- *
- * @param option The input frequency string, which can be a predefined band name
- *               or an explicit numeric frequency.
- * @return An `std::optional<double>` containing the parsed frequency in Hz if valid,
- *         or `std::nullopt` if the input is invalid.
- *
- * @example
- * @code
- * auto freq1 = string_to_frequency("20M");  // Returns 14097100.0
- * auto freq2 = string_to_frequency("14097100.0");  // Returns 14097100.0
- * auto freq3 = string_to_frequency("INVALID");  // Returns std::nullopt
- * @endcode
- */
-std::optional<double> string_to_frequency(std::string option)
+std::optional<double> string_to_frequency(std::string_view option)
 {
-    // Predefined frequency mappings in Hz for recognized band names.
-    static const std::unordered_map<std::string, double> frequency_map = {
-        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0}, {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5}, {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0}, {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0}, {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0}, {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}};
+    // Trim leading and trailing whitespace
+    option = trim(option);
+    if (option.empty())
+    {
+        llog.logE(ERROR, "Empty frequency input.");
+        return std::nullopt;
+    }
 
-    // Trim leading and trailing whitespace from the input.
-    option.erase(0, option.find_first_not_of(" \t\n\r"));
-    option.erase(option.find_last_not_of(" \t\n\r") + 1);
+    std::string key(option); // Convert to std::string for case transformation
+    to_uppercase(key);       // Convert once to uppercase
 
-    // Check if the input matches a predefined frequency band directly.
-    auto it = frequency_map.find(option);
+    // Check if the input matches a predefined frequency band
+    auto it = frequency_map.find(key);
     if (it != frequency_map.end())
     {
         return it->second;
     }
 
-    // Convert the input to uppercase and check again (for case insensitivity).
-    std::string key = to_uppercase(option);
-    it = frequency_map.find(key);
-    if (it != frequency_map.end())
-    {
-        return it->second;
-    }
-
-    // Attempt to parse the input as a numeric frequency value.
+    // Attempt to parse the input as a numeric frequency value
     try
     {
-        double parsed_freq = std::stod(option);
+        double parsed_freq = std::stod(std::string(option)); // Convert only if needed
 
-        // Ensure the frequency is positive.
-        if (parsed_freq <= 0)
+        // Ensure the frequency is positive (or sero for a null transmission period)
+        if (parsed_freq < 0)
         {
-            llog.logE(ERROR, "Invalid negative or zero frequency:", option);
+            llog.logE(ERROR, "Invalid frequency:", option);
             return std::nullopt;
         }
         return parsed_freq;
     }
     catch (const std::exception &)
     {
-        // Log an error if parsing fails.
         llog.logE(ERROR, "Could not parse transmit frequency:", option);
         return std::nullopt;
     }
@@ -334,13 +336,13 @@ void print_usage()
 void show_config_values(bool reload)
 {
     // Attempt to load INI file if used
-    bool loaded = config.useini && ini.load();
+    bool loaded = useini && ini.load();
 
     if (!loaded)
         return;
 
     // Print configuration details if successfully loaded
-    llog.logS(DEBUG, "Config", (reload ? "re-loaded" : "loaded"), "from:", config.inifile);
+    llog.logS(DEBUG, "Config", (reload ? "re-loaded" : "loaded"), "from:", inifile);
     // [Control]
     llog.logS(DEBUG, "Transmit Enabled:", ini.get_bool_value("Control", "Transmit") ? "true" : "false");
     // [Common]
@@ -377,7 +379,7 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    config.center_freq_set.clear();
+    // center_freq_set.clear(); // TODO:  Need to do this when we load INI and not when we hit this
 
     std::istringstream frequency_list(
         [&]() -> std::string
@@ -399,14 +401,14 @@ bool validate_config_data()
         std::optional<double> parsed_freq = string_to_frequency(token);
         if (parsed_freq)
         {
-            config.center_freq_set.push_back(parsed_freq.value());
+            center_freq_set.push_back(parsed_freq.value());
         }
         else
         {
             llog.logE(WARN, "Invalid frequency ignored:", token);
         }
     }
-    
+
     // Extract values from INI file, handling errors as needed
     bool offset_enabled = false;
     try
@@ -443,57 +445,75 @@ bool validate_config_data()
     // Turn on LED functionality
     //
     // Get PIN number
-    int new_led_pin_number = -1;  // Use an invalid default value for easier error detection
-    try {
+    int new_led_pin_number = led_pin_number; // Use default value
+    try
+    {
         new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
-    } catch (const std::exception& e) {
-        llog.logE(ERROR, "Failed to get LED Pin value. Error:", e.what());
+    }
+    catch (const std::exception &e)
+    {
+        llog.logS(DEBUG, "Failed to get LED Pin value, using default.");
         disable_led_pin();
     }
     // Get LED use choice
     bool use_led = false;
-    try {
+    try
+    {
         use_led = ini.get_bool_value("Extended", "Use LED");
-    } catch (const std::exception& e) {  // Added exception type
-        llog.logE(ERROR, "Failed to get LED use value. Error:", e.what());
+    }
+    catch (const std::exception &e)
+    { // Added exception type
+        llog.logS(DEBUG, "Failed to get LED use value, using default (false).");
         disable_led_pin();
     }
     // Enable LED only if valid and desired
-    if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27)) {
+    if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27))
+    {
         enable_led_pin(new_led_pin_number);
-    } else {
+    }
+    else
+    {
         disable_led_pin();
     }
 
     // Turn on shutdown pin functionality
     //
     // Get PIN number
-    int new_shutdown_pin_number = -1;  // Use an invalid default value for easier error detection
-    try {
+    int new_shutdown_pin_number = shutdown_pin_number; // Use default value
+    try
+    {
         new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
-    } catch (const std::exception& e) {
-        llog.logE(ERROR, "Failed to get shutdown pin value. Error:", e.what());
+    }
+    catch (const std::exception &e)
+    {
+        llog.logS(DEBUG, "Failed to get shutdown pin value, using default.");
         disable_shutdown_pin();
     }
     // Get shutdown button use choice
     bool use_shutdown = false;
-    try {
-        use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
-    } catch (const std::exception& e) {  // Added exception type
-        llog.logE(ERROR, "Failed to get use shutdown pin value. Error:", e.what());
+    try
+    {
+        use_shutdown = ini.get_bool_value("Server", "Use Shutdown") || false;
+    }
+    catch (const std::exception &e)
+    { // Added exception type
+        llog.logS(DEBUG, "Failed to get use shutdown pin value, using default (false).");
         disable_shutdown_pin();
     }
     // Enable shutdown button only if valid and desired
-    if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27)) {
+    if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
+    {
         enable_shutdown_pin(new_shutdown_pin_number);
-    } else {
+    }
+    else
+    {
         disable_shutdown_pin();
     }
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
-    if (config.mode == ModeType::TONE)
+    if (mode == ModeType::TONE)
     {
-        if (config.test_tone <= 0)
+        if (test_tone <= 0)
         {
             llog.logE(FATAL, "Test tone frequency must be positive.");
             std::exit(EXIT_FAILURE);
@@ -501,7 +521,7 @@ bool validate_config_data()
 
         // Log test tone frequency
         llog.logS(INFO, "A test tone will be generated at",
-                  std::fixed, std::setprecision(6), config.test_tone / 1e6, "MHz.");
+                  std::fixed, std::setprecision(6), test_tone / 1e6, "MHz.");
 
         if (use_ntp)
         {
@@ -513,7 +533,7 @@ bool validate_config_data()
                       std::fixed, std::setprecision(2), ppm_value);
         }
     }
-    else if (config.mode == ModeType::WSPR)
+    else if (mode == ModeType::WSPR)
     {
         // PPM value is ignored when using NTP
         if (ppm_value != 0.0 && use_ntp)
@@ -558,7 +578,7 @@ bool validate_config_data()
             }
         }();
 
-        bool no_frequencies = config.center_freq_set.empty();
+        bool no_frequencies = center_freq_set.empty();
 
         // If any required parameter is missing, log error and exit
         if (missing_call_sign || missing_grid_square || invalid_tx_power || no_frequencies)
@@ -596,7 +616,7 @@ bool validate_config_data()
 
         // Concatenate frequency messages for logging
         std::ostringstream log_message;
-        for (const auto &freq : config.center_freq_set)
+        for (const auto &freq : center_freq_set)
         {
             log_message << "- " << std::setprecision(6) << std::fixed << (freq / 1e6) << " MHz";
         }
@@ -615,16 +635,15 @@ bool validate_config_data()
                       std::fixed, std::setprecision(2), ppm_value);
         }
 
-        // Set termination count (defaults to 1 if unset) if ot in daemon mode
-        if (!config.daemon_mode)
+        // Set termination count (defaults to 1 if unset) if not in loop mode
+        if (loop_tx)
         {
-            config.terminate = config.terminate.value_or(1);
-            llog.logS(INFO, "TX will stop after:", config.terminate.value(), "iterations.");
-
-            if (config.repeat)
-            {
-                llog.logS(INFO, "Transmissions will continue until stopped with CTRL-C.");
-            }
+            llog.logS(INFO, "Transmissions will continue until stopped with CTRL-C.");
+        }
+        else
+        {
+            tx_iterations = tx_iterations.value_or(1);
+            llog.logS(INFO, "TX will stop after:", tx_iterations.value(), "iterations.");
         }
 
         // Handle frequency offset
@@ -668,50 +687,49 @@ bool parse_command_line(const int &argc, char *const argv[])
         {"terminate", required_argument, nullptr, 'x'},
         {"offset", no_argument, nullptr, 'o'},
         {"test-tone", required_argument, nullptr, 't'},
-        {"no-delay", no_argument, nullptr, 'n'},
         {"led", no_argument, nullptr, 'l'},
         {"led_pin", required_argument, nullptr, 'b'},
         {"ini-file", required_argument, nullptr, 'i'},
-        {"daemon-mode", no_argument, nullptr, 'D'},
+        {"date-time-log", no_argument, nullptr, 'D'},
         {"power_level", required_argument, nullptr, 'd'},
         {"port", required_argument, nullptr, 'e'},
         {nullptr, 0, nullptr, 0}};
+
+    std::regex callsign_regex(R"(^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$)");
+    std::regex gridsquare_regex(R"(^[A-Za-z]{2}[0-9]{2}$)");
 
     // First pass: Look for "-i <file>" before processing other options
     for (int i = 1; i < argc; ++i)
     {
         if ((std::string(argv[i]) == "-i" || std::string(argv[i]) == "--ini-file") && i + 1 < argc)
         {
-            config.inifile = argv[i + 1];
-            config.useini = true;
-            ini.set_filename(config.inifile);   // Load the INI file
-            iniMonitor.filemon(config.inifile); // Set the INI file to monitored
-            break;                              // We're done pre-scanning, hit the main checks
+            inifile = argv[i + 1];
+            useini = true;
+            ini.set_filename(inifile);
+            iniMonitor.filemon(inifile);
+            break;
         }
     }
 
+    // Parse options
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "hvp:sfrx:o:t:bnli:Dd:e:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hvp:sfrx:o:t:bli:Dd:e:", long_options, &option_index);
 
-        if (c == -1) // Exit loop when no more options are available
-        {
+        if (c == -1)
             break;
-        }
-
-        char *endp = nullptr;
 
         switch (c)
         {
         case 'h':
         case '?':
             print_usage();
-            return false;
+            std::exit(EXIT_SUCCESS);
         case 'v':
             std::cout << version_string() << std::endl;
-            return false;
-        case 'p': // PPM correction
+            std::exit(EXIT_SUCCESS);
+        case 'p':
             if (optarg == nullptr)
             {
                 llog.logE(ERROR, "Missing argument for PPM correction.");
@@ -728,16 +746,16 @@ bool parse_command_line(const int &argc, char *const argv[])
                 return false;
             }
             break;
-        case 's': // Enable self-calibration/Use NTP
+        case 's':
             ini.set_bool_value("Extended", "Use NTP", true);
             break;
-        case 'f': // Disable self-calibration (free-running)
+        case 'f':
             ini.set_bool_value("Extended", "Use NTP", false);
             break;
-        case 'r': // Repeat mode
-            config.repeat = true;
+        case 'r':
+            loop_tx = true;
             break;
-        case 'x': // Terminate after X transmissions
+        case 'x':
             if (optarg == nullptr)
             {
                 llog.logE(ERROR, "Missing argument for termination count.");
@@ -745,67 +763,43 @@ bool parse_command_line(const int &argc, char *const argv[])
             }
             try
             {
-                config.terminate = std::stoi(optarg);
-                if (config.terminate.value() < 1)
-                {
+                tx_iterations = std::stoi(optarg);
+                if (tx_iterations.value() < 1)
                     throw std::invalid_argument("Termination count must be >= 1");
-                }
             }
             catch (const std::exception &)
             {
                 llog.logE(WARN, "Invalid termination parameter, defaulting to 1.");
-                config.terminate = 1; // Set a valid default value
+                tx_iterations = 1;
             }
             break;
-        case 'o': // Use random frequency offset
+        case 'o':
             ini.set_bool_value("Extended", "Offset", true);
             break;
-        case 't': // Set test tone frequency
+        case 't':
             if (optarg == nullptr)
             {
                 llog.logE(ERROR, "Missing argument for test tone frequency.");
                 return false;
             }
-
-            errno = 0; // Reset errno before calling strtof()
-            config.test_tone = strtof(optarg, &endp);
-            config.mode = ModeType::TONE;
-
-            // Check for invalid characters in optarg
-            if (*endp != '\0')
+            test_tone = std::stof(optarg);
+            mode = ModeType::TONE;
+            if (test_tone <= 0.0f)
             {
-                llog.logE(ERROR, "Invalid test tone frequency: Non-numeric characters found.");
-                return false;
-            }
-
-            // Check for conversion errors (out-of-range or invalid)
-            if (errno == ERANGE || errno == EINVAL)
-            {
-                llog.logE(ERROR, "Invalid test tone frequency: Out of range.");
-                return false;
-            }
-
-            // Reject negative or zero frequencies
-            if (config.test_tone <= 0.0f)
-            {
-                llog.logE(ERROR, "Invalid test tone frequency: Must be greater than zero.");
+                llog.logE(ERROR, "Invalid test tone frequency.");
                 return false;
             }
             break;
-        case 'i': // Already handled in the first pass
+        case 'i':
             break;
-        case 'n': // No delay, transmit immediately
-            config.no_delay = true;
-            break;
-        case 'l': // Enable LED indicator
+        case 'l':
             ini.set_bool_value("Extended", "Use LED", true);
             break;
-        case 'D': // Daemon mode
-            config.daemon_mode = true;
-            config.repeat = true; // Daemon mode requires continuous operation
-            llog.enableTimestamps(config.daemon_mode);
+        case 'D':
+            date_time_log = true;
+            llog.enableTimestamps(date_time_log);
             break;
-        case 'd': // Power Level (0-7)
+        case 'd':
             if (optarg == nullptr)
             {
                 llog.logE(ERROR, "Missing argument for power level.");
@@ -823,7 +817,7 @@ bool parse_command_line(const int &argc, char *const argv[])
                 return false;
             }
             break;
-        case 'e': // Set server port
+        case 'e':
             if (optarg == nullptr)
             {
                 llog.logE(ERROR, "Missing argument for server port.");
@@ -851,8 +845,101 @@ bool parse_command_line(const int &argc, char *const argv[])
         }
     }
 
-    // Enable transmit if no INI file is used
-    ini.set_bool_value("Control", "Transmit", !config.useini);
+    // Capture and validate positional arguments if we are not using an INI file
+    if (!useini)
+    {
+        // Validate and store callsign
+        std::string callsign(argv[optind]);
+        if (!std::regex_match(callsign, callsign_regex))
+        {
+            llog.logE(ERROR, "Invalid callsign format: ", callsign);
+            return false;
+        }
+        ini.set_string_value("Common", "Call Sign", callsign);
+        ++optind;
+
+        // Validate and store grid square
+        std::string gridsquare(argv[optind]);
+        if (!std::regex_match(gridsquare, gridsquare_regex))
+        {
+            llog.logE(ERROR, "Invalid grid square format: ", gridsquare);
+            return false;
+        }
+        ini.set_string_value("Common", "Grid Square", gridsquare);
+        ++optind;
+
+        // Validate and store transmit power
+        std::string tx_power_str(argv[optind]);
+        int tx_power;
+        try
+        {
+            tx_power = std::stoi(tx_power_str);
+            if (tx_power < -10 || tx_power > 62)
+            {
+                llog.logE(ERROR, "Transmit power out of range (-10-62):", tx_power_str);
+                return false;
+            }
+        }
+        catch (const std::exception &)
+        {
+            llog.logE(ERROR, "Invalid transmit power: ", tx_power_str);
+            return false;
+        }
+        ini.set_int_value("Common", "TX Power", tx_power);
+        ++optind;
+
+        // Parse frequencies
+        center_freq_set.clear();
+        while (optind < argc)
+        {
+            std::string_view freq_input = argv[optind]; // Use string_view to avoid unnecessary copies
+
+            // Convert string input to frequency
+            std::optional<double> freq_opt = string_to_frequency(freq_input);
+            if (freq_opt)
+            {
+                double freq = freq_opt.value();
+                center_freq_set.push_back(freq);
+            }
+            else
+            {
+                llog.logE(WARN, "Ignoring invalid frequency: ", freq_input);
+            }
+
+            ++optind;
+        }
+
+        if (center_freq_set.empty())
+        {
+            llog.logE(ERROR, "No valid frequencies provided.");
+            return false;
+        }
+    }
+    else
+    {
+        ini.set_bool_value("Control", "Transmit", !useini);
+    }
+
+    // Debug print center_freq_set
+    std::ostringstream freq_stream;
+    freq_stream << "Frequencies in frequency set [";
+    freq_stream << center_freq_set.size() << "]: ";
+
+    for (const auto &freq : center_freq_set)
+    {
+        // Apply formatting explicitly for each number
+        freq_stream << std::fixed << std::setprecision(6) << (freq / 1e6) << " MHz, ";
+    }
+
+    // Remove trailing comma and space (if present)
+    std::string output = freq_stream.str();
+    if (!center_freq_set.empty())
+    {
+        output.pop_back(); // Remove last space
+        output.pop_back(); // Remove last comma
+    }
+    freq_stream << ".";
+    llog.logS(DEBUG, output);
 
     return true;
 }

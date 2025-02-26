@@ -335,8 +335,11 @@ void wspr_loop()
     ppm_ntp_thread = std::thread(ppm_ntp_monitor_thread);
     llog.logS(INFO, "PPM/NTP monitor thread started.");
 
-    ini_thread = std::thread(ini_monitor_thread);
-    llog.logS(INFO, "INI monitor thread started.");
+    if (useini)
+    {
+        ini_thread = std::thread(ini_monitor_thread);
+        llog.logS(INFO, "INI monitor thread started.");
+    }
 
     // Start the transmit thread.
     transmit_thread = std::thread(transmit_loop);
