@@ -229,7 +229,7 @@ void signal_handler(int signum)
     // Convert signal number to a human-readable string.
     std::string signal_name = signal_to_string(signum);
     std::ostringstream oss;
-    oss << "Caught " << signal_name << ". Shutting down.";
+    oss << "Received " << signal_name << ". Shutting down.";
     std::string log_message = oss.str();
 
     // Handle the signal based on type.

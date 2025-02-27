@@ -80,8 +80,7 @@ namespace
         {"10M", 28126100.0},
         {"6M", 50294500.0},
         {"4M", 70092500.0},
-        {"2M", 144490500.0}
-    };
+        {"2M", 144490500.0}};
 
     // Helper function to trim whitespace from a string view
     inline std::string_view trim(std::string_view str)
@@ -156,7 +155,7 @@ IniFile ini;
  */
 MonitorFile iniMonitor;
 
-WsprMessage *message = nullptr;  // Initialize to null
+WsprMessage *message = nullptr; // Initialize to null
 
 /**
  * @brief Atomic variable representing the current WSPR transmission interval.
@@ -633,8 +632,7 @@ bool validate_config_data()
             message = new WsprMessage(
                 ini.get_string_value("Common", "Call Sign"),
                 ini.get_string_value("Common", "Grid Square"),
-                ini.get_int_value("Common", "TX Power")
-            );
+                ini.get_int_value("Common", "TX Power"));
 
             // Example usage:
             if (message)
@@ -655,14 +653,19 @@ bool validate_config_data()
         llog.logS(INFO, "Requested TX frequencies:");
 
         // Concatenate frequency messages for logging
-        std::ostringstream log_message;
         for (const auto &freq : center_freq_set)
         {
-            log_message << "- " << std::setprecision(6) << std::fixed << (freq / 1e6) << " MHz";
+            if (freq == 0.0)
+            {
+                llog.logS(INFO, "- Skip");
+            }
+            else
+            {
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(6) << (freq / 1e6); // Format the frequency
+                llog.logS(INFO, "- ", oss.str(), " MHz");
+            }
         }
-
-        // Log the formatted message
-        llog.logS(INFO, log_message.str());
 
         // Handle calibration and frequency adjustments
         if (use_ntp)
@@ -683,7 +686,7 @@ bool validate_config_data()
         else
         {
             tx_iterations = tx_iterations.value_or(1);
-            llog.logS(INFO, "TX will stop after:", tx_iterations.value(), "iterations.");
+            llog.logS(INFO, "TX will stop after:", tx_iterations.value(), "iteration(s) of the frequency list.");
         }
 
         // Handle frequency offset
@@ -697,20 +700,20 @@ bool validate_config_data()
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
         std::exit(EXIT_FAILURE);
     }
-    
+
     // Build stream for WSPR symbols
     std::ostringstream wspr_stream;
     wspr_stream << "Generated WSPR symbols:\n";
-    
+
     for (int i = 0; i < WsprMessage::size; ++i)
     {
         wspr_stream << static_cast<int>(message->symbols[i]);
         if (i < WsprMessage::size - 1)
         {
-            wspr_stream << ",";  // Append a comma except for the last element
+            wspr_stream << ","; // Append a comma except for the last element
         }
     }
-    
+
     // Send the formatted string to logger
     llog.logS(INFO, wspr_stream.str());
 
