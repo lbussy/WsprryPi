@@ -89,9 +89,19 @@ int main(const int argc, char *const argv[])
         return EXIT_FAILURE;
     }
 
-    // Start the main WSPR transmission loop.
-    wspr_loop();
+    try
+    {
+        wspr_loop();
+    }
+    catch (const std::exception &e)
+    {
+        llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
+    }
+    catch (...)
+    {
+        llog.logE(ERROR, "Unknown fatal error in main().");
+    }
 
-    // Return success when the application exits gracefully.
+    llog.logS(INFO, project_name(), "exiting normally.");
     return EXIT_SUCCESS;
 }

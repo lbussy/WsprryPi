@@ -29,7 +29,7 @@ void clean_shutdown() {
 
     if (led_handler) {
         std::cerr << "[DEBUG] Resetting LED handler.\n";
-        led_handler.reset(); 
+        led_handler.reset();
     }
 
     if (button_thread.joinable()) {

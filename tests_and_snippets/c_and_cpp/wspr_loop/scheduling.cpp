@@ -345,7 +345,6 @@ void wspr_loop()
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
-    // WSPR main loop.
     llog.logS(INFO, "WSPR loop running.");
 
     // Wait for exit signal.
@@ -353,59 +352,66 @@ void wspr_loop()
     cv.wait(lock, []
             { return exit_wspr_loop.load(); });
 
-    // Indicate normal exit.
+    // Signal shutdown.
     signal_shutdown.store(true);
-
-    // Perform thread cleanup.
+    //cv.notify_all(); // Ensure all waiting threads wake up
     shutdown_threads();
 
-    // Skip the final log if shutdown was signal-driven.
-    if (!signal_shutdown.load())
+    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
+
+    if (led_handler)
+        toggle_led(false);
+    led_handler.reset();
+    shutdown_handler.reset();
+
+    // Identify any stuck threads
+    if (button_thread.joinable())
+        llog.logS(WARN, "button_thread still running!");
+    if (ppm_ntp_thread.joinable())
+        llog.logS(WARN, "ppm_ntp_thread still running!");
+    if (ini_thread.joinable())
+        llog.logS(WARN, "ini_thread still running!");
+    if (transmit_thread.joinable())
+        llog.logS(WARN, "transmit_thread still running!");
+
+    while (ppm_ntp_thread.joinable() || transmit_thread.joinable())
     {
-        llog.logS(INFO, "Wsprry Pi exiting from WSPR loop.");
+        llog.logS(WARN, "Waiting for remaining threads to exit before main().");
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    std::exit(EXIT_SUCCESS);
 }
 
 void shutdown_threads()
 {
-    std::lock_guard<std::mutex> lock(shutdown_mtx); // Ensure only one cleanup runs.
-    if (!exit_wspr_loop.load())                     // Avoid redundant cleanup.
+    std::lock_guard<std::mutex> lock(shutdown_mtx);
+
+    llog.logS(INFO, "Shutting down all active threads.");
+
+    exit_wspr_loop.store(true);
+    // signal_shutdown.store(true); // TODO: Not needed.
+    // cv.notify_all(); // Ensure all waiting threads wake up
+
+    // Force wake-up to avoid getting stuck in cv.wait()
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto safe_join = [](std::thread &t, const std::string &name)
     {
-        llog.logS(DEBUG, "Shutting down all active threads.");
-        exit_wspr_loop.store(true);
-        led_handler.reset();
-        shutdown_handler.reset();
-
-        cv.notify_all();
-
-        if (button_thread.joinable())
+        if (t.joinable())
         {
-            button_thread.join();
-            llog.logS(INFO, "Closing button monitor threads.");
+            llog.logS(DEBUG, "Joining ", name, "...");
+            t.join();
+            llog.logS(INFO, name, " stopped.");
         }
-
-        if (ppm_ntp_thread.joinable())
+        else
         {
-            ppm_ntp_thread.join();
-            llog.logS(INFO, "PPM/NTP monitor thread stopped.");
+            llog.logS(WARN, name, " already exited, skipping join.");
         }
+    };
 
-        if (ini_thread.joinable())
-        {
-            ini_thread.join();
-            llog.logS(INFO, "INI monitor thread stopped.");
-        }
+    safe_join(button_thread, "Button monitor thread");
+    safe_join(ppm_ntp_thread, "PPM/NTP monitor thread");
+    safe_join(ini_thread, "INI monitor thread");
+    safe_join(transmit_thread, "Transmit thread");
 
-        if (transmit_thread.joinable())
-        {
-            transmit_thread.join();
-            llog.logS(INFO, "Transmit thread stopped.");
-        }
-
-        // Restore terminal signals to their original state.
-        restore_terminal_signals();
-
-        llog.logS(INFO, "All threads shut down safely.");
-    }
+    llog.logS(INFO, "All threads shut down safely.");
 }

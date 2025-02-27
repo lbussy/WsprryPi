@@ -411,7 +411,7 @@ void disable_led_pin()
  * @brief Sets the LED state based on the given argument.
  * @param state True to turn the LED ON, false to turn it OFF.
  */
-void toggle_led(bool state) 
+void toggle_led(bool state)
 {
     if (led_handler)
     {

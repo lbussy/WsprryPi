@@ -7,7 +7,9 @@
 #include <optional>
 #include <thread>
 #include <vector>
+#include <mutex>
 
+extern std::mutex transmit_mtx;
 extern std::atomic<bool> in_transmission;
 extern std::thread transmit_thread;
 extern std::vector<double> center_freq_set;

@@ -87,6 +87,8 @@ void transmit_loop()
     size_t freq_index = 0;
     int total_iterations = 0;
 
+    llog.logS(DEBUG, "Transmit loop started.");
+
     while (!exit_wspr_loop.load() && !signal_shutdown.load())
     {
         auto now = std::chrono::system_clock::now();
@@ -96,94 +98,85 @@ void transmit_loop()
 
         if (interval == WSPR_2)
         {
-            // Wake every even minute at one second past.
             int current_minute = std::chrono::duration_cast<std::chrono::minutes>(
                                      now.time_since_epoch())
                                      .count() %
                                  2;
             next_wakeup += std::chrono::minutes(current_minute == 0 ? 2 : 1);
             next_wakeup -= std::chrono::seconds(
-                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() %
-                60);
+                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() % 60);
             next_wakeup += std::chrono::seconds(1);
         }
         else if (interval == WSPR_15)
         {
-            // Wake at 0, 15, 30, 45 minutes.
             int current_minute = std::chrono::duration_cast<std::chrono::minutes>(
                                      now.time_since_epoch())
-                                     .count() %
-                                 60;
+                                     .count() % 60;
             int next_target = ((current_minute / 15) + 1) * 15 % 60;
             next_wakeup += std::chrono::minutes(next_target - current_minute);
             next_wakeup -= std::chrono::seconds(
-                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() %
-                60);
+                std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count() % 60);
             next_wakeup += std::chrono::seconds(1);
         }
         else
         {
-            llog.logE(ERROR, "Invalid WSPR interval:", interval, "minutes.");
-            std::this_thread::sleep_for(std::chrono::minutes(1));
+            llog.logE(ERROR, "Invalid WSPR interval:", interval, "minutes. Retrying in 5s.");
+            std::this_thread::sleep_for(std::chrono::seconds(5));
             continue;
         }
 
-        // Sleep until the next transmission time or shutdown signal.
-        std::unique_lock<std::mutex> lock(transmit_mtx);
-        if (cv.wait_until(lock, next_wakeup, []
-                          { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+        // Ensure we wake up at the next transmission time or exit signal
         {
-            break;
+            std::unique_lock<std::mutex> lock(transmit_mtx);
+
+            if (cv.wait_until(lock, next_wakeup, [] { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+            {
+                llog.logS(DEBUG, "Transmit loop wake-up due to shutdown request.");
+                break;
+            }
         }
 
-        // Shutdown check before transmission.
+        // Final shutdown check before transmission
         if (exit_wspr_loop.load() || signal_shutdown.load())
         {
             break;
         }
 
-        // Fetch the current transmission frequency.
+        // Select transmission frequency
         if (center_freq_set.empty())
         {
-            llog.logE(ERROR, "No frequencies in frequency set. Exiting transmit loop.");
+            llog.logE(ERROR, "No frequencies available. Exiting transmit loop.");
             break;
         }
 
         double tx_freq = center_freq_set[freq_index];
 
-        // Skip transmission if the frequency is 0.0
+        // **PERFORM TRANSMISSION HERE**
         if (tx_freq != 0.0)
         {
-            if (interval == WSPR_2)
-            {
-                perform_transmission(mode, tx_freq); // 2-minute interval = 110 seconds transmission.
-            }
-            else if (interval == WSPR_15)
-            {
-                perform_transmission(mode, tx_freq); // 15-minute interval = 885 seconds transmission.
-            }
+            llog.logS(INFO, "Transmitting on frequency:", std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+            perform_transmission(mode, tx_freq);
         }
         else
         {
-            llog.logS(INFO, "Skipping transmission.");
+            llog.logS(INFO, "Skipping transmission per 0.0 freq request in list.");
         }
 
-        // Move to the next frequency in the list.
         freq_index = (freq_index + 1) % center_freq_set.size();
 
-        // Increment transmission counter if not in loop mode.
+        // Check if we've reached the transmission limit
         if (!loop_tx)
         {
             total_iterations++;
-
-            // Check full iterations of center_freq_set against tx_iterations
-            size_t iterations = static_cast<size_t>(tx_iterations.value_or(1)); // Convert to size_t
+            size_t iterations = static_cast<size_t>(tx_iterations.value_or(1));
 
             if (static_cast<size_t>(total_iterations) >= (iterations * center_freq_set.size()))
             {
-                llog.logS(INFO, "Completed all scheduled transmissions. Exiting.");
-                signal_handler(SIGTERM);
-                return;
+                llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
+                exit_wspr_loop.store(true);
+                signal_shutdown.store(true);
+                cv.notify_all();
+                break;
             }
         }
     }

@@ -8,6 +8,7 @@
 #include "scheduling.hpp"
 #include "transmit.hpp"
 #include "logging.hpp"
+#include "signal_handler.hpp"
 
 // Standard library headers
 #include <array>
@@ -130,7 +131,7 @@ bool check_ntp_status()
 
 bool restart_ntp_service()
 {
-    llog.logS(WARN, "Restarting NTPsec service...");
+    llog.logS(WARN, "Restarting NTPsec service.");
 
     if (system("sudo systemctl restart ntpsec") != 0)
     {
@@ -138,7 +139,7 @@ bool restart_ntp_service()
         return false;
     }
 
-    llog.logS(INFO, "NTPsec service restarted. Verifying synchronization...");
+    llog.logS(INFO, "NTPsec service restarted. Verifying synchronization.");
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
     for (int i = 0; i < 5; ++i)
@@ -149,7 +150,7 @@ bool restart_ntp_service()
             return true;
         }
 
-        llog.logS(WARN, "Waiting for NTP synchronization...");
+        llog.logS(WARN, "Waiting for NTP synchronization.");
         std::this_thread::sleep_for(std::chrono::seconds(5));
     }
 
@@ -174,7 +175,7 @@ bool ensure_ntp_stable()
 
         if (attempt < max_retries)
         {
-            llog.logS(INFO, "Retrying NTP check in", current_retry_interval, "seconds...");
+            llog.logS(INFO, "Retrying NTP check in", current_retry_interval, "seconds.");
             std::this_thread::sleep_for(std::chrono::seconds(current_retry_interval));
             current_retry_interval *= 2;
         }
@@ -216,41 +217,22 @@ bool update_ppm()
 
 void ppm_ntp_monitor_thread()
 {
-    while (!exit_wspr_loop.load())
+    while (!exit_wspr_loop.load() && !signal_shutdown.load())
     {
-        // Get current time and calculate next 55 seconds past the minute.
         auto now = std::chrono::system_clock::now();
         auto next_check = std::chrono::time_point_cast<std::chrono::seconds>(now) +
-                         std::chrono::minutes(1);
+                          std::chrono::minutes(1);
         next_check -= std::chrono::seconds(next_check.time_since_epoch().count() % 60);
         next_check += std::chrono::seconds(55);
 
-        // Sleep until the next check time or exit signal.
-        std::unique_lock<std::mutex> lock(ppm_mtx);
-        if (cv.wait_until(lock, next_check, [] { return exit_wspr_loop.load(); }))
         {
-            break;  // Exit if the condition was triggered.
-        }
-
-        if (exit_wspr_loop.load())
-            break;
-
-        // Skip if in transmission.
-        if (in_transmission.load())
-        {
-            llog.logS(DEBUG, "Skipping NTP/PPM check due to active transmission.");
-            continue;
-        }
-
-        llog.logS(DEBUG, "Performing periodic NTP and PPM check.");
-
-        if (ensure_ntp_stable())
-        {
-            update_ppm();
-        }
-        else
-        {
-            llog.logE(WARN, "NTP check failed during periodic check.");
+            std::unique_lock<std::mutex> lock(ppm_mtx);
+            if (cv.wait_until(lock, next_check, [] { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+            {
+                break;  // Ensure immediate exit
+            }
         }
     }
+
+    llog.logS(INFO, "PPM/NTP monitor thread exited.");
 }
