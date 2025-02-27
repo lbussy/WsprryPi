@@ -366,19 +366,20 @@ void wspr_loop()
 
     // Identify any stuck threads
     if (button_thread.joinable())
-        llog.logS(WARN, "button_thread still running!");
+        llog.logS(WARN, "Button thread still running.");
     if (ppm_ntp_thread.joinable())
-        llog.logS(WARN, "ppm_ntp_thread still running!");
+        llog.logS(WARN, "PPM/NTP thead still running.");
     if (ini_thread.joinable())
-        llog.logS(WARN, "ini_thread still running!");
+        llog.logS(WARN, "INI Monitor still running.");
     if (transmit_thread.joinable())
-        llog.logS(WARN, "transmit_thread still running!");
+        llog.logS(WARN, "Transmit thread still running.");
 
     while (ppm_ntp_thread.joinable() || transmit_thread.joinable())
     {
         llog.logS(WARN, "Waiting for remaining threads to exit before main().");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    return;
 }
 
 void shutdown_threads()
@@ -388,8 +389,6 @@ void shutdown_threads()
     llog.logS(INFO, "Shutting down all active threads.");
 
     exit_wspr_loop.store(true);
-    // signal_shutdown.store(true); // TODO: Not needed.
-    // cv.notify_all(); // Ensure all waiting threads wake up
 
     // Force wake-up to avoid getting stuck in cv.wait()
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
