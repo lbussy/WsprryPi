@@ -42,6 +42,7 @@
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
+#include "wspr_message.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -62,7 +63,25 @@ namespace
 {
     // Predefined frequency mappings in Hz for recognized band names.
     const std::unordered_map<std::string_view, double> frequency_map = {
-        {"LF", 137500.0}, {"LF-15", 137612.5}, {"MF", 475700.0}, {"MF-15", 475812.5}, {"160M", 1838100.0}, {"160M-15", 1838212.5}, {"80M", 3570100.0}, {"60M", 5288700.0}, {"40M", 7040100.0}, {"30M", 10140200.0}, {"20M", 14097100.0}, {"17M", 18106100.0}, {"15M", 21096100.0}, {"12M", 24926100.0}, {"10M", 28126100.0}, {"6M", 50294500.0}, {"4M", 70092500.0}, {"2M", 144490500.0}};
+        {"LF", 137500.0},
+        {"LF-15", 137612.5},
+        {"MF", 475700.0},
+        {"MF-15", 475812.5},
+        {"160M", 1838100.0},
+        {"160M-15", 1838212.5},
+        {"80M", 3570100.0},
+        {"60M", 5288700.0},
+        {"40M", 7040100.0},
+        {"30M", 10140200.0},
+        {"20M", 14097100.0},
+        {"17M", 18106100.0},
+        {"15M", 21096100.0},
+        {"12M", 24926100.0},
+        {"10M", 28126100.0},
+        {"6M", 50294500.0},
+        {"4M", 70092500.0},
+        {"2M", 144490500.0}
+    };
 
     // Helper function to trim whitespace from a string view
     inline std::string_view trim(std::string_view str)
@@ -136,6 +155,8 @@ IniFile ini;
  * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
  */
 MonitorFile iniMonitor;
+
+WsprMessage *message = nullptr;  // Initialize to null
 
 /**
  * @brief Atomic variable representing the current WSPR transmission interval.
@@ -606,6 +627,25 @@ bool validate_config_data()
             std::cerr << std::endl;
             std::exit(EXIT_FAILURE);
         }
+        else
+        {
+            // Initialize global WSPR message
+            message = new WsprMessage(
+                ini.get_string_value("Common", "Call Sign"),
+                ini.get_string_value("Common", "Grid Square"),
+                ini.get_int_value("Common", "TX Power")
+            );
+
+            // Example usage:
+            if (message)
+            {
+                llog.logS(INFO, "WSPR message initialized.");
+            }
+            else
+            {
+                return false;
+            }
+        }
 
         // Log WSPR packet details
         llog.logS(INFO, "WSPR packet payload:");
@@ -657,6 +697,23 @@ bool validate_config_data()
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
         std::exit(EXIT_FAILURE);
     }
+    
+    // Build stream for WSPR symbols
+    std::ostringstream wspr_stream;
+    wspr_stream << "Generated WSPR symbols:\n";
+    
+    for (int i = 0; i < WsprMessage::size; ++i)
+    {
+        wspr_stream << static_cast<int>(message->symbols[i]);
+        if (i < WsprMessage::size - 1)
+        {
+            wspr_stream << ",";  // Append a comma except for the last element
+        }
+    }
+    
+    // Send the formatted string to logger
+    llog.logS(INFO, wspr_stream.str());
+
     return true;
 }
 

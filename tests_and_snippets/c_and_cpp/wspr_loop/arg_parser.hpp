@@ -41,6 +41,7 @@
 #include "lcblog.hpp"
 #include "monitorfile.hpp"
 #include "version.hpp"
+#include "wspr_message.hpp"
 
 // Standard library headers
 #include <optional>
@@ -132,6 +133,8 @@ extern IniFile ini;
  * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
  */
 extern MonitorFile iniMonitor;
+
+extern WsprMessage *message;
 
 /**
  * @brief Atomic variable representing the current WSPR transmission interval.
