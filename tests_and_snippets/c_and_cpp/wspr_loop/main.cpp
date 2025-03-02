@@ -68,26 +68,36 @@ int main(const int argc, char *const argv[])
     initialize_logger();
 
     // Parse command-line arguments and exit if invalid.
-    if (!parse_command_line(argc, argv))
-    {
-        llog.logE(ERROR, "Failed to parse command-line arguments.");
-        return EXIT_FAILURE;
-    }
+    try {
+        parse_command_line(argc, argv);
+        try
+        {
+            // Validate configuration and ensure all required settings are present.
+            if (!validate_config_data())
+            {
+                llog.logE(ERROR, "Configuration validation failed.");
+                return EXIT_FAILURE;
+            }
+            // Display version, Raspberry Pi model, and process ID for context.
+            llog.logS(INFO, version_string());
+            llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+            llog.logS(INFO, "Process PID:", getpid());
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Exception caught validating configuration: " << e.what() << std::endl;
+            print_usage();
+            std::exit(EXIT_FAILURE);
+        }
 
-    // Display version, Raspberry Pi model, and process ID for context.
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-    llog.logS(INFO, "Process PID:", getpid());
+    } catch (const std::exception &e) {
+        std::cerr << "Exception caught processing arguments: " << e.what() << std::endl;
+        print_usage();
+        std::exit(EXIT_FAILURE);
+    }
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
-
-    // Validate configuration and ensure all required settings are present.
-    if (!validate_config_data())
-    {
-        llog.logE(ERROR, "Configuration validation failed.");
-        return EXIT_FAILURE;
-    }
 
     try
     {
