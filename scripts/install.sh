@@ -11,8 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config_lib+55.34ec249
-# @date 2025-02-19
+# @version 1.2.1-1.3.0_devel+13.a1eba8d
+# @date 2025-03-02
 # @copyright MIT License
 #
 # @license

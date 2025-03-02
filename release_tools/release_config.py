@@ -6,8 +6,8 @@
 # @brief Configuration for release management
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-timing_loop+67.477644f-dirty
-# @date 2025-02-23
+# @version 1.2.1-1.3.0_devel+13.a1eba8d
+# @date 2025-03-02
 # @copyright MIT License
 #
 # @license

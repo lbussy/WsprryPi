@@ -43,6 +43,7 @@
 #include <unistd.h>
 #include <chrono>
 #include <ctime>
+#include <cstring>
 #include <thread>
 
 #include "lcblog.hpp"       // Submodule path included in Makefile
@@ -401,7 +402,9 @@ void txon()
 
     // Enable clock.
     setupword = {6 /*SRC*/, 1, 0, 0, 0, 3, 0x5a};
-    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
+    uint32_t value;
+    std::memcpy(&value, &setupword, sizeof(value));
+    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = value;
 }
 
 void txoff()

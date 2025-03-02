@@ -1,21 +1,15 @@
 # To Do
 
-- See if we can thread the transmit, or if it's threaded.  Check threadsafe things.
-- Merge Singleton port with server port
 - Create release script orchestration
-- Fix freq change (#57)
 - Show logs on web page (#27)
 - Show transission indicator (#64)
 - Unable to install when lib versions differ (#92)
-- Put spots on web page: https://www.wsprnet.org/olddb?mode=html&band=all&limit=50&findcall=AA0NT&sort=date
 
 ## Stuff to Remember
 
 ### Stuff to do:
 
-- See if we can include libs in compile
 - Inline the apache_tool into install.
-- Need to add unit tests for mailbox
 - Add notes about gh:
     ``` bash
     $ gh auth login
@@ -31,48 +25,10 @@
     ✓ Configured git protocol
     ✓ Logged in as foo
     ```
-- See if we can implement something like daemonize instead of Singleton
 - Add a .wsprrypi-alias file and source it from the .bash_aliases
-- MOTD?
-    ``` bash
-    Linux wpsd 6.1.0-rpi7-rpi-v7 #1 SMP Raspbian 1:6.1.63-1+rpt1 (2023-11-24) armv7l
-    _      _____  _______
-    | | /| / / _ \/ __/ _ \
-    | |/ |/ / ___/\ \/ // /
-    |__/|__/_/  /___/____/
-
-    Version Status
-    ---------------
-    • WPSD Digital Voice Dashboard Software:
-        Ver. # 0f0841942a
-    • WPSD Support Utilites and Programs:
-        Ver. # 8382226eec
-    • WPSD Digital Voice and Related Binaries:
-        Ver. # 80c2f986cf
-
-    [?] Your WPSD dashboard can be accesed from:
-        • http://wpsd.local/
-        • http://wpsd/
-        • http://10.0.0.38/
-
-    [i] WPSD command-line tools are all prefixed with "wpsd-".
-        Simply type wpsd- and then the TAB key twice to see a list.
-
-    pi-star@wpsd:~
-    ```
-
 
 ### Nice to Do
 
 - Make a log viewing page
 - No need to disable_sound() on Pi 5 and up (install and uninstall)
-- Move LED to differnet code with pigpio.h
 - Implement freq_test
-
-## Previous Issues
-
-1. If running from the console, recent versions of Jessie cause WsprryPi to
-crash when the console screen blanks. The symptom is that WsppryPi works
-for several transmissions and then crashes. The fix is to add "consoleblank=0"
-to /boot/cmdline.txt.
-https://github.com/JamesP6000/WsprryPi/issues/10

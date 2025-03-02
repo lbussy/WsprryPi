@@ -22,192 +22,215 @@
 # SOFTWARE.
 # -----------------------------------------------------------------------------
 
-# Makefile for building the WSPR project
+# Makefile for building the Wsprry Pi project
 
-# Allow threading by default using all available processors
-MAKEFLAGS += -j$(nproc)
+# Extract project details from Git
+#
+# Project name from remote origin URL (fallback to 'unknown' if not available)
+PRJ := $(shell git config --local remote.origin.url 2>/dev/null | sed -n 's#.*/\([^.]*\)\.git#\1#p' || echo "unknown")
+# Current Git branch (sanitize non-alphanumeric characters to '-')
+BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed -E 's/[^a-zA-Z0-9]/-/g' || echo "unknown")
+# Latest Git tag (version) without leading 'v'
+VER := $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+)/\1/' || echo "0.0.0")
+# Append branch name if not on 'main' or 'master'
+PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "-$(BRH)"; fi)
+# Append branch name to version only if not already suffixed
+VER := $(VER)$(PRE)
+# Append commit hash if current commit is not an exact tag
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
+# Lower-case based executable name
+EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
-# Output binary name
-OUT = wsprrypi
+# Output Items
+OUT := $(EXE_NAME)						# Normal release binary
+TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
+INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
+PREFIX :=	/usr/local					# Installation directory for the binary
+# Strip whitespace from comments
+OUT := $(strip $(OUT))
+TEST_OUT := $(strip $(TEST_OUT))
+INI_FILE := $(strip $(INI_FILE))
+PREFIX := $(strip $(PREFIX))
 
-# Executable name derived from the output binary name
-EXE = $(OUT)
+# Output directories
+OBJ_DIR_RELEASE = build/obj/release
+OBJ_DIR_DEBUG   = build/obj/debug
+DEP_DIR         = build/dep
+BIN_DIR		 	= build/bin
 
-# INI file for test target
-INI_FILE = /usr/local/etc/wsprrypi.ini
+# Collect source files
+C_SOURCES   := $(shell find . -name "*.c")
+CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
+# Collect object files
+C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
+CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
+# Linker Flags
+LDFLAGS := $(shell pkg-config --cflags --libs libgpiod) -lpthread
+LDFLAGS += $(shell pkg-config --libs libgpiodcxx)
+# Collect dependency files
+DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
+# Include dependencies if they exist
+-include $(DEPFILES)
 
-INI_FILE = /usr/local/etc/wsprrypi.ini
+# Compiler Executables
+CXX = g++
+CC = gcc
 
-# Installation directory for the binary
-prefix = /usr/local
+# Allow threading using all available processors
+MAKEFLAGS := -j$(nproc)
 
-# Compiler settings
-CXX = g++            # C++ compiler
-CC = gcc             # C compiler
-
-# Common compiler flags for warnings and error handling
-COMMON_FLAGS = -Wall -Werror -fmax-errors=10
-
-# Additional C++ compiler flags
-COMM_CXX_FLAGS = -Wno-psabi -lstdc++fs -std=c++17
-
-# Define LED pin number as a compile-time constant
-CXXFLAGS += -DLED_PIN=$(LED_PIN)
-CFLAGS += -DLED_PIN=$(LED_PIN)
-
-CXXFLAGS += -static-libgcc -static-libstdc++
-CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
-CXXFLAGS += -ILCBLog/src
-CXXFLAGS += -IINI-Handler/src
-CXXFLAGS += -IWSPR-Message/src
-<<<<<<< HEAD
-CXXFLAGS += -IMonitorFile/src
-CXXFLAGS += -ISingleton/src
-=======
->>>>>>> origin/1.3.0_devel
-
-# Additional C compiler flags
-CFLAGS += $(COMMON_FLAGS)
-
-# Linker flags for required libraries
-LDLIBS += -static
+# Compiler Flags
+#
+# Common flags for both C and C++ compilers
+COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
+# C Flags
+CFLAGS := $(COMMON_FLAGS)
+# Target Flags
+C_DEBUG_FLAGS := $(CFLAGS) -g -DDEBUG_BUILD	# Debug flags
+C_RELEASE_FLAGS := $(CFLAGS) -O2			# Release optimized
+# C++ Flags
+COMM_CXX_FLAGS := -Wno-psabi -lstdc++fs -std=c++17
+CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
+# Include paths for libraries
+CXXFLAGS += -I$(abspath ./INI-Handler/src)
+CXXFLAGS += -I$(abspath ./LCBLog/src)
+CXXFLAGS += -I$(abspath ./MonitorFile/src)
+CXXFLAGS += -I$(abspath ./WSPR-Message/src)
+CXXFLAGS += -I$(abspath ./Singleton/src)
+CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
+# Define additional macros for the compiler
+CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
+# Target flags
+CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2			# Release optimized
+CXX_DEBUG_FLAGS := $(CXXFLAGS) -g -DDEBUG_BUILD	# Debug flags
+# Strip whitespaces
+C_DEBUG_FLAGS := $(strip $(C_DEBUG_FLAGS))
+C_RELEASE_FLAGS := $(strip $(C_RELEASE_FLAGS))
+CXX_DEBUG_FLAGS := $(strip $(CXX_DEBUG_FLAGS))
+CXX_RELEASE_FLAGS := $(strip $(CXX_RELEASE_FLAGS))
 
 # Enable verbose output if VERBOSE=1 is specified during the build
 VERBOSE ?= 0
 ifeq ($(VERBOSE), 1)
-	Q =
+	Q :=
 else
-	Q = @
+	Q := @
 endif
 
-# Extract project details from the Git repository
-PRJ := $(shell git config --local remote.origin.url | sed -n 's#.*/\([^.]*\)\.git#\1#p')
-BRH := $(shell git rev-parse --abbrev-ref HEAD | sed -E 's/[^a-zA-Z0-9]/-/g')
+##
+# Compile and Link
+##
 
-# Determine the semantic version and append branch or build metadata if necessary
-VER := $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+)/\1/')
-PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "$(BRH)"; fi)
-VER := $(shell if ! echo "$(VER)" | grep -q -- '-'; then [ -n "$(PRE)" ] && echo "$(VER)-$(PRE)" || echo "$(VER)"; else echo "$(VER)"; fi)
-VER := $(shell if [ -z "$(git describe --tags --exact-match 2>/dev/null)" ]; then echo "$(VER)+$(shell git rev-parse --short HEAD)"; else echo "$(VER)"; fi)
+# Compile C source files for debug
+$(OBJ_DIR_DEBUG)/%.o: %.c
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CC) $(C_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Define additional macros for the compiler
-CXXFLAGS += -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(PRJ)
+# Compile C++ source files for debug
+$(OBJ_DIR_DEBUG)/%.o: %.cpp
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Define source and object files
-C_SOURCES := $(shell find . -name "*.c")
-<<<<<<< HEAD
-CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp" ! -path "./WSPR-Message/src/main.cpp" ! -path "./MonitorFile/src/main.cpp" ! -path "./Singleton/src/main.cpp")
-=======
-CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp" ! -path "./WSPR-Message/src/main.cpp")
->>>>>>> origin/1.3.0_devel
-C_OBJECTS := $(patsubst %.c,%.o,$(C_SOURCES))
-CPP_OBJECTS := $(patsubst %.cpp,%.o,$(CPP_SOURCES))
-OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
+# Link the debug binary
+build/bin/$(TEST_OUT): $(patsubst %.cpp,$(OBJ_DIR_DEBUG)/%.o,$(CPP_SOURCES)) $(patsubst %.c,$(OBJ_DIR_DEBUG)/%.o,$(C_SOURCES))
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug: $(TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o build/bin/$(TEST_OUT) $(LDFLAGS)
 
-# Include dependency files if available
--include $(OBJECTS:.o=.d)
+# Compile C++ source files (release)
+$(OBJ_DIR_RELEASE)/%.o: %.cpp
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (release) $< into $@"
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Default target: build the binary
-.PHONY: all
-all: $(OUT)
-	@echo "Build completed successfully."
+# Compile C source files (release)
+$(OBJ_DIR_RELEASE)/%.o: %.c
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/$(dir $<)
+	$(Q)echo "Compiling (release) $< into $@"
+	$(Q)$(CC) $(C_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Link the binary from object files
-$(OUT): $(OBJECTS)
-	@echo "Linking statically: $(OUT)"
-	$(Q)$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDLIBS) -static
+# Link the final binary (release)
+build/bin/$(OUT): $(C_OBJECTS) $(CPP_OBJECTS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking release binary: $(OUT)"
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) $^ -o $@ $(LDFLAGS)
 
-# Compile C++ source files
-%.o: %.cpp
-	@echo "Compiling object file for $<."
-	$(Q)$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+##
+# Make Targets
+##
 
-# Compile C source files
-%.o: %.c
-	@echo "Compiling object file for $<."
-	$(Q)$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+# Force the fefault to be release (order matters in targets otherwise)
+.DEFAULT_GOAL := release
 
-# Clean build artifacts recursively
+# Clean dirs
 .PHONY: clean
 clean:
-	@echo "Cleaning old executables, object files, and temporary files recursively."
-	$(Q)$(RM) -r $(C_OBJECTS) $(CPP_OBJECTS) $(OUT) *~ *.log core dump.* $(OBJECTS:.o=.d)
-	$(Q)find . -type f \( -name '*.o' -o -name '*.d' -o -name '*~' -o -name '*.log' -o -name 'core' -o -name 'dump.*' \) -exec $(RM) {} +
-	$(Q)find . -type d -name 'CMakeFiles' -exec $(RM) -r {} +
-	$(Q)find . -type f -name 'CMakeCache.txt' -exec $(RM) {} +
+	$(Q)echo "Cleaning up build artifacts."
+	$(Q)rm -rf build
 
-# Debug target to print target output files
-.PHONY: targets
-targets:
-	@echo "Output Binary: $(OUT)"
-	@echo "Executable Name: $(EXE)"
-	@echo "Build Artifacts: $(OBJECTS)"
-	@echo "Linked Libraries: $(LDLIBS)"
-	@echo "Defined Macros: -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(PRJ)"
+# Release target
+.PHONY: release
+release: build/bin/$(OUT)
+	$(Q)echo "Release build completed successfully."
 
-# Test target: Build with WSPR_DEBUG and run the executable
-.PHONY: test
-test: clean
-	@echo "Building WSPR test mode with WSPR_DEBUG enabled"
-	$(Q)$(MAKE) CXXFLAGS="$(CXXFLAGS) -DWSPR_DEBUG" CFLAGS="$(CFLAGS) -DWSPR_DEBUG" all
-	@echo "Running WSPR test mode."
-	$(Q)sudo ./$(OUT) -D -i $(INI_FILE)
-
-# Show only user-defined macros from the Makefile
-.PHONY: defines
-defines:
-	@echo "Showing user-defined macros for the C++ compiler:"
-	@$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
-	@echo "Showing user-defined macros for the C compiler:"
-	@$(CC) $(CFLAGS) -dM -E -x c /dev/null | grep -E 'MAKE_TAG|MAKE_BRH|MAKE_EXE|MAKE_PRJ|LED_PIN' || true
-
-# Debug target to build with WSPR_DEBUG defined
+# Debug target
 .PHONY: debug
-debug: CXXFLAGS += -DWSPR_DEBUG
-debug: CFLAGS += -DWSPR_DEBUG
-debug: clean all
-	@echo "Debug build completed with WSPR_DEBUG enabled."
+debug: build/bin/$(TEST_OUT)
+	$(Q)echo "Debug build completed successfully."
+
+# Test target
+.PHONY: test
+test: debug
+	$(Q)echo "Running test with sudo privileges."
+	sudo ./build/bin/$(TEST_OUT) -i $(INI_FILE)
+
+# Install target (install only the release binary)
+.PHONY: install
+install: $(OUT)
+	$(Q)echo "Installing $(OUT) to $(PREFIX)/bin."
+	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo install -d $(PREFIX)/bin
+	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/bin/$(OUT)
+	$(Q)sudo systemctl start $(OUT).service || true
+
+# Uninstall target
+.PHONY: uninstall
+uninstall:
+	$(Q)echo "Removing $(PREFIX)/bin/$(OUT)."
+	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo systemctl disable $(OUT).service || true
+	$(Q)sudo rm -f $(PREFIX)/bin/$(OUT)
+
+# Show only user-defined macros
+.PHONY: macros
+macros:
+	$(Q)echo "Defined Project Macros:"
+	$(Q)$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null | grep -v '^#define _' || true
+
+# Lint target
+.PHONY: lint
+lint:
+	$(Q)echo "Running static analysis with cppcheck."
+	$(Q)cppcheck --platform=unix32 --std=c++17 --enable=all --inconclusive --force --inline-suppr --quiet $(CPP_SOURCES)
 
 # Display available make targets
 .PHONY: help
 help:
-	@echo "Available targets:"
-	@echo "  all        Build the project."
-	@echo "  clean      Remove build artifacts."
-	@echo "  files      Show detected source and object files."
-	@echo "  defines    Show all defined macros"
-	@echo "  install    Install the binary to $(prefix)/bin."
-	@echo "  uninstall  Remove the installed binary."
-	@echo "  debug      Build the project with WSPR_DEBUG defined."
-	@echo "  test       Run unit tests (if available)."
-	@echo "  lint       Run static analysis on the source files."
-
-# Install the binary and restart the service
-.PHONY: install
-install: $(OUT)
-	@echo "Stopping wsprrypi service."
-	$(Q)sudo systemctl stop wsprrypi.service
-	@echo "Copying executable to /usr/local/bin/wsprrypi."
-	$(Q)sudo cp $(OUT) /usr/local/bin/wsprrypi
-	@echo "Changing ownership to root and setting permissions."
-	$(Q)sudo chown root:root /usr/local/bin/wsprrypi
-	$(Q)sudo chmod 755 /usr/local/bin/wsprrypi
-	@echo "Restarting wsprrypi service."
-	$(Q)sudo systemctl start wsprrypi.service
-	@echo "Installation completed."
-
-# Uninstall the binary and disable the service
-.PHONY: uninstall
-uninstall:
-	@echo "Stopping and disabling wsprrypi service."
-	$(Q)sudo systemctl stop wsprrypi.service
-	$(Q)sudo systemctl disable wsprrypi.service
-	@echo "Removing executable from /usr/local/bin/wsprrypi."
-	$(Q)sudo rm -f /usr/local/bin/wsprrypi
-	@echo "Uninstallation completed."
-
-# Lint the source files using cppcheck
-.PHONY: lint
-lint:
-	@echo "Running static analysis with cppcheck..."
-	$(Q)cppcheck --enable=all --inconclusive --std=c++17 --force --quiet $(CPP_SOURCES) $(C_SOURCES)
+	$(Q)echo "Available targets:"
+	$(Q)echo "  all        Build the project (default: release)."
+	$(Q)echo "  clean      Remove build artifacts."
+	$(Q)echo "  test       Run the binary."
+	$(Q)echo "  install    Install the binary to $(PREFIX)/bin."
+	$(Q)echo "  uninstall  Remove the installed binary."
+	$(Q)echo "  lint       Run static analysis."
+	$(Q)echo "  macros     Show defined project macros."
+	$(Q)echo "  debug      Build with debugging symbols."
+	$(Q)echo "  release    Build optimized for production."
+	$(Q)echo "  help       Show this help message."
