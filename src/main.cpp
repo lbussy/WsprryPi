@@ -1011,7 +1011,7 @@ int main(const int argc, char *const argv[])
     {
         if (!singleton())
         {
-            llog.logE(FATAL, "Process already running; see:", singleton.GetLockFileName());
+            llog.logE(FATAL, "Process already running; see port:", SINGLETON_PORT);
             return 1;
         }
     }

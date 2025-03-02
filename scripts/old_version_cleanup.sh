@@ -89,7 +89,7 @@ remove_files_and_dirs() {
 
             # Ask for confirmation if the item is a directory and it's not in the default list
             if [ -d "$item" ]; then
-                read -p "Do you want to continue and remove directory $item? (y/n): " confirm < /dev/tty || true
+                read -rp "Do you want to continue and remove directory $item? (y/n): " confirm < /dev/tty || true
                 if [[ "$confirm" != "y" ]]; then
                     printf "Skipping removal of directory: %s\n" "$item"
                     continue
@@ -156,7 +156,7 @@ remove_services() {
 
             if [ -n "$dependencies" ]; then
                 printf "Warning: '%s.service' has dependencies. Please review before removing.\n" "$service_name"
-                read -p "Do you want to continue and remove this service? (y/n): " confirm
+                read -rp "Do you want to continue and remove this service? (y/n): " confirm
                 if [[ "$confirm" != "y" ]]; then
                     printf "Skipping removal of '%s.service' due to dependencies.\n" "$service_name"
                     continue

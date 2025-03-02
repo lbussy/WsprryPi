@@ -36,6 +36,8 @@ EXE = $(OUT)
 # INI file for test target
 INI_FILE = /usr/local/etc/wsprrypi.ini
 
+INI_FILE = /usr/local/etc/wsprrypi.ini
+
 # Installation directory for the binary
 prefix = /usr/local
 
@@ -58,8 +60,11 @@ CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 CXXFLAGS += -ILCBLog/src
 CXXFLAGS += -IINI-Handler/src
 CXXFLAGS += -IWSPR-Message/src
+<<<<<<< HEAD
 CXXFLAGS += -IMonitorFile/src
 CXXFLAGS += -ISingleton/src
+=======
+>>>>>>> origin/1.3.0_devel
 
 # Additional C compiler flags
 CFLAGS += $(COMMON_FLAGS)
@@ -90,7 +95,11 @@ CXXFLAGS += -DMAKE_TAG=$(VER) -DMAKE_BRH=$(BRH) -DMAKE_EXE=$(EXE) -DMAKE_PRJ=$(P
 
 # Define source and object files
 C_SOURCES := $(shell find . -name "*.c")
+<<<<<<< HEAD
 CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp" ! -path "./WSPR-Message/src/main.cpp" ! -path "./MonitorFile/src/main.cpp" ! -path "./Singleton/src/main.cpp")
+=======
+CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./LCBLog/src/main.cpp" ! -path "./INI-Handler/src/main.cpp" ! -path "./WSPR-Message/src/main.cpp")
+>>>>>>> origin/1.3.0_devel
 C_OBJECTS := $(patsubst %.c,%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,%.o,$(CPP_SOURCES))
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)

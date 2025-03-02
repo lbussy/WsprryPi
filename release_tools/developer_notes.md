@@ -17,7 +17,6 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 - [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
 
-
 ## Set up SSH to your PI
 
 Any references to `{hostname}` should be replaced with the hostname of your target Pi.
@@ -26,13 +25,13 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 2. Check that you have an SSH key generated on your system:
 
-   * Linux or Mac (one line):
+   - Linux or Mac (one line):
 
       ``` bash
       [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
       ```
 
-   * Windows PowerShell:
+   - Windows PowerShell:
 
       ``` PowerShell
       if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
@@ -42,7 +41,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
       }
       ```
 
-   * Windows Command Line:
+   - Windows Command Line:
 
       ``` cmd
       @echo off
@@ -59,15 +58,15 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 3. `ssh` to your `pi@{hostname}.local` with the target host password to ensure your `ssh` client and name resolution via zeroconf or mDNS. If you see:
 
-   ```
+   ``` text
    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
    @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
    ```
 
-   * Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
-   * "Yes" to a prompt to continue connecting
-   * Exit back out
+   - Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
+   - "Yes" to a prompt to continue connecting
+   - Exit back out
 
 4. Copy keys to host with (enter target host password when asked):
 
@@ -183,6 +182,7 @@ If you are going to use VS Code from your workstation:
    code --install-extension ms-vscode.cpptools
    code --install-extension ms-vscode.cpptools-extension-pack
    code --install-extension ms-vscode.cpptools-themes
+   code --install-extension ms-vscode.live-server
    code --install-extension ms-vscode.makefile-tools
    code --install-extension ms-vscode.vscode-serial-monitor
    code --install-extension rifi2k.format-html-in-php
@@ -196,9 +196,9 @@ If you are going to use VS Code from your workstation:
    code --install-extension yzhang.markdown-all-in-one
    ```
 
-3.  Use the "Open Folder" button and select the root of your repo on the Pi.
+8. Use the "Open Folder" button and select the root of your repo on the Pi.
 
-4.  Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
+9. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
 Remember that the **Wsprry Pi** systemd daemon is running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 
