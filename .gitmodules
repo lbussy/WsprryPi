@@ -32,3 +32,6 @@
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/Singleton"]
 	path = tests_and_snippets/c_and_cpp/wspr_loop/Singleton
 	url = https://github.com/lbussy/Singleton.git
+[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Broadcom-Mailbox"]
+	path = tests_and_snippets/c_and_cpp/wspr_loop/Broadcom-Mailbox
+	url = https://github.com/lbussy/Broadcom-Mailbox.git
