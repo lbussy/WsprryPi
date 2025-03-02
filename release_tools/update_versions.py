@@ -6,8 +6,8 @@
 # @brief Update versions in scripts and source files.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config_lib+40.9925967-dirty
-# @date 2025-02-14
+# @version 1.2.1-timing_loop+67.477644f-dirty
+# @date 2025-02-23
 # @copyright MIT License
 #
 # @license
@@ -50,7 +50,7 @@ import inspect
 
 from get_semantic_version import SemanticVersion
 
-__version__ = "1.2.1-config_lib+40.9925967-dirty"
+__version__ = "1.2.1-timing_loop+67.477644f-dirty"
 
 
 # List of files to update

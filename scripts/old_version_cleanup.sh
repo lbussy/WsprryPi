@@ -8,8 +8,8 @@ IFS=$'\n\t'
 # @details Cleans all files and folders used by versions before 1.3.0.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-config_lib+40.9925967-dirty
-# @date 2025-02-14
+# @version 1.2.1-timing_loop+67.477644f-dirty
+# @date 2025-02-23
 # @copyright MIT License
 #
 # @license
@@ -63,13 +63,17 @@ remove_files_and_dirs() {
     if [ ${#files_and_dirs[@]} -eq 0 ]; then
         files_and_dirs=(
             "/usr/local/bin/wspr"
+            "/usr/local/bin/wsprrypi"
             "/usr/local/etc/wspr.ini"
             "/usr/local/bin/shutdown-button.py"
             "/usr/local/bin/shutdown-watch.py"
             "/usr/local/bin/shutdown_watch.py"
+            "/usr/local/bin/wspr_watch.py"
             "/var/www/html/wspr/"
+            "/var/www/html/wsprrypi/"
             "/var/log/wspr/"
             "/var/log/wsprrypi/"
+            "/var/log/WsprryPi/"
             "/etc/logrotate.d/wspr/"
             "/etc/logrotate.d/wsprrypi/"
         )
@@ -85,7 +89,7 @@ remove_files_and_dirs() {
 
             # Ask for confirmation if the item is a directory and it's not in the default list
             if [ -d "$item" ]; then
-                read -p "Do you want to continue and remove directory $item? (y/n): " confirm < /dev/tty || true
+                read -rp "Do you want to continue and remove directory $item? (y/n): " confirm < /dev/tty || true
                 if [[ "$confirm" != "y" ]]; then
                     printf "Skipping removal of directory: %s\n" "$item"
                     continue
@@ -127,7 +131,13 @@ remove_services() {
     # Accept services as arguments or use a default list if none provided
     local services=("$@")
     if [ ${#services[@]} -eq 0 ]; then
-        services=("wspr" "shutdown-button" "shutdown-watch" "shutdown_watch")
+        services=(
+            "wspr"
+            "shutdown-button"
+            "shutdown-watch"
+            "shutdown_watch"
+            "wspr_watch"
+        )
     fi
 
     local retval=0  # Initialize return value
@@ -146,7 +156,7 @@ remove_services() {
 
             if [ -n "$dependencies" ]; then
                 printf "Warning: '%s.service' has dependencies. Please review before removing.\n" "$service_name"
-                read -p "Do you want to continue and remove this service? (y/n): " confirm
+                read -rp "Do you want to continue and remove this service? (y/n): " confirm
                 if [[ "$confirm" != "y" ]]; then
                     printf "Skipping removal of '%s.service' due to dependencies.\n" "$service_name"
                     continue
