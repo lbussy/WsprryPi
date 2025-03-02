@@ -41,9 +41,12 @@
 #include "scheduling.hpp"
 #include "version.hpp"
 #include "logging.hpp"
+#include "singleton.hpp"
 
 // System headers
 #include <unistd.h> // For getpid()
+
+constexpr const int SINGLETON_PORT = 1234;
 
 /**
  * @brief Entry point for the WsprryPi application.
@@ -93,6 +96,18 @@ int main(const int argc, char *const argv[])
     } catch (const std::exception &e) {
         std::cerr << "Exception caught processing arguments: " << e.what() << std::endl;
         print_usage();
+        std::exit(EXIT_FAILURE);
+    }
+
+    SingletonProcess singleton(SINGLETON_PORT);
+
+    if (singleton())
+    {
+        llog.logS(DEBUG, "Singleton instance created successfully on port:", SINGLETON_PORT);
+    }
+    else
+    {
+        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
         std::exit(EXIT_FAILURE);
     }
 
