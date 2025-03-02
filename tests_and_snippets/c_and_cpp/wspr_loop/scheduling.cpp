@@ -352,9 +352,11 @@ void wspr_loop()
     cv.wait(lock, []
             { return exit_wspr_loop.load(); });
 
+    // Restore normal terminal behavior
+    restore_terminal_signals();
     // Signal shutdown.
     signal_shutdown.store(true);
-    //cv.notify_all(); // Ensure all waiting threads wake up
+    // Cleanup threads
     shutdown_threads();
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
@@ -387,30 +389,26 @@ void shutdown_threads()
     std::lock_guard<std::mutex> lock(shutdown_mtx);
 
     llog.logS(INFO, "Shutting down all active threads.");
-
-    exit_wspr_loop.store(true);
-
-    // Force wake-up to avoid getting stuck in cv.wait()
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    signal_shutdown.store(true);
 
     auto safe_join = [](std::thread &t, const std::string &name)
     {
         if (t.joinable())
         {
-            llog.logS(DEBUG, "Joining ", name, "...");
+            llog.logS(DEBUG, "Joining:", name);
             t.join();
-            llog.logS(INFO, name, " stopped.");
+            llog.logS(DEBUG, name, "stopped.");
         }
         else
         {
-            llog.logS(WARN, name, " already exited, skipping join.");
+            llog.logS(DEBUG, name, " already exited, skipping join.");
         }
     };
 
+    safe_join(transmit_thread, "Transmit thread");
+    safe_join(ini_thread, "INI monitor thread");
     safe_join(button_thread, "Button monitor thread");
     safe_join(ppm_ntp_thread, "PPM/NTP monitor thread");
-    safe_join(ini_thread, "INI monitor thread");
-    safe_join(transmit_thread, "Transmit thread");
 
     llog.logS(INFO, "All threads shut down safely.");
 }

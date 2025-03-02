@@ -87,8 +87,6 @@ void transmit_loop()
     size_t freq_index = 0;
     int total_iterations = 0;
 
-    llog.logS(DEBUG, "Transmit loop started.");
-
     while (!exit_wspr_loop.load() && !signal_shutdown.load())
     {
         auto now = std::chrono::system_clock::now();
@@ -173,13 +171,12 @@ void transmit_loop()
             if (static_cast<size_t>(total_iterations) >= (iterations * center_freq_set.size()))
             {
                 llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
-                exit_wspr_loop.store(true);
-                signal_shutdown.store(true);
-                cv.notify_all();
+                exit_wspr_loop.store(true); // Set exit flag
+                cv.notify_all();            // Wake up waiting threads
                 break;
             }
         }
     }
 
-    llog.logS(INFO, "Transmit loop exiting.");
+    llog.logS(INFO, "Transmit loop exited.");
 }
