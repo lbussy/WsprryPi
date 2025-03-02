@@ -268,6 +268,6 @@ extern bool validate_config_data();
  * @param argv The array of command-line argument strings.
  * @return true if parsing is successful, false if an error occurs.
  */
-extern bool parse_command_line(const int &argc, char *const argv[]);
+bool parse_command_line(int argc, char *const argv[]);
 
 #endif // ARG_PARSER_HPP

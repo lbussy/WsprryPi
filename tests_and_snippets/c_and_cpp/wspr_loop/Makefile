@@ -97,6 +97,7 @@ CXXFLAGS += -I$(abspath ./INI-Handler/src)
 CXXFLAGS += -I$(abspath ./LCBLog/src)
 CXXFLAGS += -I$(abspath ./MonitorFile/src)
 CXXFLAGS += -I$(abspath ./WSPR-Message/src)
+CXXFLAGS += -I$(abspath ./Singleton/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags

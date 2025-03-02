@@ -203,8 +203,8 @@ std::string signal_to_string(int signum)
 void cleanup_threads()
 {
     llog.logS(DEBUG, "Cleaning up due to signal.");
-    signal_shutdown.store(true); // Set the flag for signal-driven shutdown.
-    shutdown_threads();          // Use the unified cleanup function.
+    exit_wspr_loop.store(true); // Set exit flag
+    cv.notify_all();            // Wake up waiting threads
 
     if (!signal_shutdown.load())
     {
@@ -242,7 +242,6 @@ void signal_handler(int signum)
     case SIGILL:
     case SIGABRT:
         llog.logE(FATAL, log_message);
-        restore_terminal_signals();
         std::quick_exit(signum); // Immediate exit without cleanup.
         break;
 
@@ -252,7 +251,9 @@ void signal_handler(int signum)
     case SIGQUIT:
     case SIGHUP:
         llog.logS(INFO, log_message);
-        cleanup_threads(); // Perform full cleanup.
+        // Set shutdown flag and notify waiting threads.
+        exit_wspr_loop.store(true); // Set exit flag
+        cv.notify_all();            // Wake up waiting threads
         break;
 
     // Unknown signals are treated as fatal.
@@ -267,14 +268,6 @@ void signal_handler(int signum)
         llog.logE(WARN, "Shutdown already in progress. Ignoring signal:", signal_name);
         return;
     }
-
-    // Set shutdown flag and notify waiting threads.
-    shutdown_in_progress.store(true);
-    exit_wspr_loop.store(true);
-    cv.notify_all();
-
-    // Ensure graceful cleanup.
-    cleanup_threads();
 }
 
 /**
@@ -343,7 +336,6 @@ void enable_shutdown_pin(int pin)
     // If already active, release and reconfigure.
     if (shutdown_handler)
     {
-        llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
         shutdown_handler.reset();
 
         if (button_thread.joinable()) {
@@ -363,11 +355,10 @@ void enable_shutdown_pin(int pin)
  */
 void disable_shutdown_pin()
 {
-    llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
     if (shutdown_handler)
     {
         shutdown_handler.reset();
-        llog.logS(INFO, "Shutdown button disabled.");
+        llog.logS(INFO, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
     }
 
     if (button_thread.joinable()) {
@@ -460,10 +451,8 @@ void shutdown_system(GPIOHandler::EdgeType edge, bool state)
             llog.logS(INFO, "Shutdown triggered by shutdown button.");
             // Set shutdown flag and notify waiting threads.
             shutdown_in_progress.store(true);
-            exit_wspr_loop.store(true);
-
-            // Ensure graceful cleanup.
-            cleanup_threads();
+            exit_wspr_loop.store(true); // Set exit flag
+            cv.notify_all();            // Wake up waiting threads
         }
     }
 }

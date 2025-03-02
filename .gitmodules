@@ -29,3 +29,6 @@
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/MonitorFile"]
 	path = tests_and_snippets/c_and_cpp/wspr_loop/MonitorFile
 	url = https://github.com/lbussy/MonitorFile.git
+[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Singleton"]
+	path = tests_and_snippets/c_and_cpp/wspr_loop/Singleton
+	url = https://github.com/lbussy/Singleton.git

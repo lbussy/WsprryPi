@@ -41,9 +41,12 @@
 #include "scheduling.hpp"
 #include "version.hpp"
 #include "logging.hpp"
+#include "singleton.hpp"
 
 // System headers
 #include <unistd.h> // For getpid()
+
+constexpr const int SINGLETON_PORT = 1234;
 
 /**
  * @brief Entry point for the WsprryPi application.
@@ -68,26 +71,48 @@ int main(const int argc, char *const argv[])
     initialize_logger();
 
     // Parse command-line arguments and exit if invalid.
-    if (!parse_command_line(argc, argv))
-    {
-        llog.logE(ERROR, "Failed to parse command-line arguments.");
-        return EXIT_FAILURE;
+    try {
+        parse_command_line(argc, argv);
+        try
+        {
+            // Validate configuration and ensure all required settings are present.
+            if (!validate_config_data())
+            {
+                llog.logE(ERROR, "Configuration validation failed.");
+                return EXIT_FAILURE;
+            }
+            // Display version, Raspberry Pi model, and process ID for context.
+            llog.logS(INFO, version_string());
+            llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+            llog.logS(INFO, "Process PID:", getpid());
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Exception caught validating configuration: " << e.what() << std::endl;
+            print_usage();
+            std::exit(EXIT_FAILURE);
+        }
+
+    } catch (const std::exception &e) {
+        std::cerr << "Exception caught processing arguments: " << e.what() << std::endl;
+        print_usage();
+        std::exit(EXIT_FAILURE);
     }
 
-    // Display version, Raspberry Pi model, and process ID for context.
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-    llog.logS(INFO, "Process PID:", getpid());
+    SingletonProcess singleton(SINGLETON_PORT);
+
+    if (singleton())
+    {
+        llog.logS(DEBUG, "Singleton instance created successfully on port:", SINGLETON_PORT);
+    }
+    else
+    {
+        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
+        std::exit(EXIT_FAILURE);
+    }
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
-
-    // Validate configuration and ensure all required settings are present.
-    if (!validate_config_data())
-    {
-        llog.logE(ERROR, "Configuration validation failed.");
-        return EXIT_FAILURE;
-    }
 
     try
     {

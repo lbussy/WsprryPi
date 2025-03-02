@@ -330,7 +330,7 @@ std::optional<double> string_to_frequency(std::string_view option)
  */
 void print_usage()
 {
-    std::cerr << "Usage:\n"
+    std::cerr << "\nUsage:\n"
               << "  wsprrypi [options] callsign gridsquare transmit_power frequency <f2> <f3> ...\n"
               << "    OR\n"
               << "  wsprrypi [options] --test-tone {frequency}\n\n"
@@ -399,8 +399,6 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    // center_freq_set.clear(); // TODO:  Need to do this when we load INI and not when we hit this
-
     std::istringstream frequency_list(
         [&]() -> std::string
         {
@@ -464,69 +462,70 @@ bool validate_config_data()
 
     // Turn on LED functionality
     //
-    // Get PIN number
-    int new_led_pin_number = led_pin_number; // Use default value
-    try
-    {
-        new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get LED Pin value, using default.");
-        disable_led_pin();
-    }
     // Get LED use choice
     bool use_led = false;
     try
     {
         use_led = ini.get_bool_value("Extended", "Use LED");
+        // Get PIN number
+        int new_led_pin_number = led_pin_number; // Use default value
+        try
+        {
+            new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
+            // Enable LED only if valid and desired
+            if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27))
+            {
+                enable_led_pin(new_led_pin_number);
+            }
+            else
+            {
+                llog.logS(DEBUG, "Failure retrieving LED values, disabling LED.");
+                disable_led_pin();
+            }
+        }
+        catch (const std::exception &e)
+        {
+            llog.logS(DEBUG, "Failed to get LED Pin value, using default.");
+        }
     }
     catch (const std::exception &e)
     { // Added exception type
-        llog.logS(DEBUG, "Failed to get LED use value, using default (false).");
-        disable_led_pin();
-    }
-    // Enable LED only if valid and desired
-    if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27))
-    {
-        enable_led_pin(new_led_pin_number);
-    }
-    else
-    {
+        llog.logS(DEBUG, "Failed to get LED use value, disabling LED.");
         disable_led_pin();
     }
 
     // Turn on shutdown pin functionality
     //
-    // Get PIN number
-    int new_shutdown_pin_number = shutdown_pin_number; // Use default value
-    try
-    {
-        new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get shutdown pin value, using default.");
-        disable_shutdown_pin();
-    }
     // Get shutdown button use choice
     bool use_shutdown = false;
     try
     {
         use_shutdown = ini.get_bool_value("Server", "Use Shutdown") || false;
+        // Get PIN number
+        int new_shutdown_pin_number = shutdown_pin_number; // Use default value
+        try
+        {
+            new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
+
+            // Enable shutdown button only if valid and desired
+            if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
+            {
+                enable_shutdown_pin(new_shutdown_pin_number);
+            }
+            else
+            {
+                disable_shutdown_pin();
+            }
+        }
+        catch (const std::exception &e)
+        {
+            llog.logS(DEBUG, "Failed to get shutdown pin preferences, disabling functionality.");
+            disable_shutdown_pin();
+        }
     }
     catch (const std::exception &e)
     { // Added exception type
-        llog.logS(DEBUG, "Failed to get use shutdown pin value, using default (false).");
-        disable_shutdown_pin();
-    }
-    // Enable shutdown button only if valid and desired
-    if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
-    {
-        enable_shutdown_pin(new_shutdown_pin_number);
-    }
-    else
-    {
+        llog.logS(DEBUG, "Failed to get shutdown pin use value, disabling shutdown.");
         disable_shutdown_pin();
     }
 
@@ -536,7 +535,7 @@ bool validate_config_data()
         if (test_tone <= 0)
         {
             llog.logE(FATAL, "Test tone frequency must be positive.");
-            std::exit(EXIT_FAILURE);
+            return false;
         }
 
         // Log test tone frequency
@@ -634,10 +633,10 @@ bool validate_config_data()
                 ini.get_string_value("Common", "Grid Square"),
                 ini.get_int_value("Common", "TX Power"));
 
-            // Example usage:
+            // Validate message
             if (message)
             {
-                llog.logS(INFO, "WSPR message initialized.");
+                llog.logS(DEBUG, "WSPR message initialized.");
             }
             else
             {
@@ -715,7 +714,7 @@ bool validate_config_data()
     }
 
     // Send the formatted string to logger
-    llog.logS(INFO, wspr_stream.str());
+    llog.logS(DEBUG, wspr_stream.str());
 
     return true;
 }
@@ -735,8 +734,21 @@ bool validate_config_data()
  * @param argv The array of command-line argument strings.
  * @return true if parsing is successful, false if an error occurs.
  */
-bool parse_command_line(const int &argc, char *const argv[])
+bool parse_command_line(int argc, char *const argv[])
 {
+    // First pass: Look for "-i <file>" before processing other options
+    for (int i = 1; i < argc; ++i)
+    {
+        if ((std::string(argv[i]) == "-i" || std::string(argv[i]) == "--ini-file") && i + 1 < argc)
+        {
+            inifile = argv[i + 1];
+            useini = true;
+            ini.set_filename(inifile);
+            iniMonitor.filemon(inifile);
+            break;
+        }
+    }
+
     static struct option long_options[] = {
         {"help", no_argument, nullptr, 'h'},
         {"version", no_argument, nullptr, 'v'},
@@ -757,19 +769,6 @@ bool parse_command_line(const int &argc, char *const argv[])
 
     std::regex callsign_regex(R"(^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$)");
     std::regex gridsquare_regex(R"(^[A-Za-z]{2}[0-9]{2}$)");
-
-    // First pass: Look for "-i <file>" before processing other options
-    for (int i = 1; i < argc; ++i)
-    {
-        if ((std::string(argv[i]) == "-i" || std::string(argv[i]) == "--ini-file") && i + 1 < argc)
-        {
-            inifile = argv[i + 1];
-            useini = true;
-            ini.set_filename(inifile);
-            iniMonitor.filemon(inifile);
-            break;
-        }
-    }
 
     // Parse options
     while (true)
@@ -908,25 +907,35 @@ bool parse_command_line(const int &argc, char *const argv[])
     // Capture and validate positional arguments if we are not using an INI file
     if (!useini)
     {
+        if (optind >= argc) {
+            throw std::runtime_error("Missing required argument: Call Sign.");
+        }
+
         // Validate and store callsign
         std::string callsign(argv[optind]);
         if (!std::regex_match(callsign, callsign_regex))
         {
-            llog.logE(ERROR, "Invalid callsign format: ", callsign);
-            return false;
+            throw std::invalid_argument("Invalid callsign format: " + callsign);
         }
         ini.set_string_value("Common", "Call Sign", callsign);
         ++optind;
+
+        if (optind >= argc) {
+            throw std::runtime_error("Missing required argument: Grid Square.");
+        }
 
         // Validate and store grid square
         std::string gridsquare(argv[optind]);
         if (!std::regex_match(gridsquare, gridsquare_regex))
         {
-            llog.logE(ERROR, "Invalid grid square format: ", gridsquare);
-            return false;
+            throw std::invalid_argument("Invalid grid square format: " + gridsquare);
         }
         ini.set_string_value("Common", "Grid Square", gridsquare);
         ++optind;
+
+        if (optind >= argc) {
+            throw std::runtime_error("Missing required argument: Transmit Power.");
+        }
 
         // Validate and store transmit power
         std::string tx_power_str(argv[optind]);
@@ -936,14 +945,12 @@ bool parse_command_line(const int &argc, char *const argv[])
             tx_power = std::stoi(tx_power_str);
             if (tx_power < -10 || tx_power > 62)
             {
-                llog.logE(ERROR, "Transmit power out of range (-10-62):", tx_power_str);
-                return false;
+                throw std::out_of_range("Transmit power out of range (-10-62): " + tx_power_str);
             }
         }
         catch (const std::exception &)
         {
-            llog.logE(ERROR, "Invalid transmit power: ", tx_power_str);
-            return false;
+            throw std::invalid_argument("Invalid transmit power: " + tx_power_str);
         }
         ini.set_int_value("Common", "TX Power", tx_power);
         ++optind;
@@ -963,7 +970,7 @@ bool parse_command_line(const int &argc, char *const argv[])
             }
             else
             {
-                llog.logE(WARN, "Ignoring invalid frequency: ", freq_input);
+                throw std::invalid_argument("Ignoring invalid frequency: " + std::string(freq_input));
             }
 
             ++optind;
@@ -971,8 +978,7 @@ bool parse_command_line(const int &argc, char *const argv[])
 
         if (center_freq_set.empty())
         {
-            llog.logE(ERROR, "No valid frequencies provided.");
-            return false;
+            throw std::runtime_error("No valid frequencies provided.");
         }
     }
     else
