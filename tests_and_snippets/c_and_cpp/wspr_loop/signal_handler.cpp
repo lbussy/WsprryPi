@@ -226,6 +226,8 @@ void cleanup_threads()
 void signal_handler(int signum)
 {
     llog.logS(DEBUG, "Signal caught:", signum);
+    // Restore normal terminal behavior
+    restore_terminal_signals();
     // Convert signal number to a human-readable string.
     std::string signal_name = signal_to_string(signum);
     std::ostringstream oss;
@@ -242,7 +244,6 @@ void signal_handler(int signum)
     case SIGILL:
     case SIGABRT:
         llog.logE(FATAL, log_message);
-        restore_terminal_signals();
         std::quick_exit(signum); // Immediate exit without cleanup.
         break;
 
@@ -343,7 +344,6 @@ void enable_shutdown_pin(int pin)
     // If already active, release and reconfigure.
     if (shutdown_handler)
     {
-        llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
         shutdown_handler.reset();
 
         if (button_thread.joinable()) {
@@ -363,11 +363,10 @@ void enable_shutdown_pin(int pin)
  */
 void disable_shutdown_pin()
 {
-    llog.logS(DEBUG, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
     if (shutdown_handler)
     {
         shutdown_handler.reset();
-        llog.logS(INFO, "Shutdown button disabled.");
+        llog.logS(INFO, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
     }
 
     if (button_thread.joinable()) {
