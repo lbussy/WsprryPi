@@ -1,20 +1,24 @@
+// TODO:  Redo doxygen
+
 /**
  * @file wp_server.cpp
  * @brief TCP server to get/set WsprryPi parameters.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * However, this new code added to the project is distributed under under
- * the MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -40,10 +44,66 @@
 #include <unistd.h>
 #include <regex>
 #include <algorithm>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <vector>
 
 // 🚨 External Exposure Risks
 // If you bind to 0.0.0.0, use a firewall (ufw) to restrict access:
 // Recommended UFW: sudo ufw allow from 192.168.1.0/24 to any port 31415
+
+std::atomic<bool> running{false};
+
+ThreadPool::ThreadPool(size_t num_threads) : stop(false)
+{
+    for (size_t i = 0; i < num_threads; ++i)
+    {
+        workers.emplace_back([this]
+                             {
+            while (true) {
+                std::vector<std::function<void()>> batch;
+                {
+                    std::unique_lock<std::mutex> lock(queue_mutex);
+                    condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                    if (stop && tasks.empty()) return;
+                    
+                    while (!tasks.empty()) {
+                        batch.push_back(std::move(tasks.front()));
+                        tasks.pop();
+                    }
+                }
+            
+                for (auto &task : batch) {
+                    task();
+                }
+            } });
+    }
+}
+
+ThreadPool::~ThreadPool()
+{
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for (std::thread &worker : workers)
+        worker.join();
+}
+
+void ThreadPool::enqueue(std::function<void()> task)
+{
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        if (tasks.size() >= max_queue_size)
+        {
+            return; // Prevent unbounded queue growth
+        }
+        tasks.push(std::move(task));
+    }
+    condition.notify_one();
+}
 
 /**
  * @var WsprryPi_Server::active_connections
@@ -65,8 +125,7 @@ std::atomic<int> WsprryPi_Server::active_connections = 0;
  */
 const std::unordered_set<std::string> WsprryPi_Server::valid_commands = {
     "transmit", "call", "grid", "power", "freq", "ppm", "selfcal", "offset",
-    "led", "port", "xmit", "version"
-};
+    "led", "port", "xmit", "version"};
 
 /**
  * @brief Constructs a new WsprryPi_Server instance.
@@ -80,8 +139,11 @@ const std::unordered_set<std::string> WsprryPi_Server::valid_commands = {
  *
  * @note The server does not start automatically upon construction; `start()` must be called.
  */
-WsprryPi_Server::WsprryPi_Server(int port, LCBLog& logger)
-    : server_fd(-1), port(port), running(false), log(logger) {}
+WsprryPi_Server::WsprryPi_Server(int port, LCBLog &logger)
+    : server_fd(-1), port(port), running(false), log(logger), pool(4)
+{
+    initializeCommandMap();
+}
 
 /**
  * @brief Destructor for WsprryPi_Server.
@@ -92,7 +154,8 @@ WsprryPi_Server::WsprryPi_Server(int port, LCBLog& logger)
  * @note If the server is still running when the destructor is called, `stop()`
  *       will be executed to perform a clean shutdown.
  */
-WsprryPi_Server::~WsprryPi_Server() {
+WsprryPi_Server::~WsprryPi_Server()
+{
     stop();
 }
 
@@ -107,8 +170,10 @@ WsprryPi_Server::~WsprryPi_Server() {
  *
  * @see WsprryPi_Server::stop()
  */
-void WsprryPi_Server::start() {
-    if (running) return;  ///< Prevent multiple starts
+void WsprryPi_Server::start()
+{
+    if (running)
+        return; ///< Prevent multiple starts
     running = true;
     server_thread = std::thread(&WsprryPi_Server::run_server, this);
 }
@@ -126,22 +191,25 @@ void WsprryPi_Server::start() {
  *
  * @see WsprryPi_Server::start()
  */
-void WsprryPi_Server::stop() {
-    if (!running) return;  ///< Prevent stopping an already stopped server
+void WsprryPi_Server::stop()
+{
+    if (!running)
+        return;
     running = false;
 
-    // Close the server socket if it is open
-    if (server_fd != -1) {
+    if (server_fd != -1)
+    {
+        shutdown(server_fd, SHUT_RDWR);
         close(server_fd);
         server_fd = -1;
     }
 
-    // Ensure the server thread is safely joined
-    if (server_thread.joinable()) {
-        // Force break out of accept() by connecting to the server
+    if (server_thread.joinable())
+    {
         int tmp_socket = socket(AF_INET, SOCK_STREAM, 0);
-        if (tmp_socket >= 0) {
-            struct sockaddr_in tmp_addr;
+        if (tmp_socket >= 0)
+        {
+            struct sockaddr_in tmp_addr{};
             tmp_addr.sin_family = AF_INET;
             tmp_addr.sin_port = htons(port);
             inet_pton(AF_INET, "127.0.0.1", &tmp_addr.sin_addr);
@@ -171,38 +239,27 @@ void WsprryPi_Server::stop() {
  * @see WsprryPi_Server::start()
  * @see WsprryPi_Server::stop()
  */
-void WsprryPi_Server::run_server() {
-    struct timeval accept_timeout;
-    accept_timeout.tv_sec = 10;  // Wait max 10 seconds for new connections
-    accept_timeout.tv_usec = 0;
-    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(accept_timeout));
-
-    struct sockaddr_in address, client_addr;
+void WsprryPi_Server::run_server()
+{
+    struct sockaddr_in address{}, client_addr{};
     socklen_t client_len = sizeof(client_addr);
     int opt = 1;
 
-    // Create server socket
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
         log.logE(ERROR, "Socket creation failed.");
         running = false;
         return;
     }
 
-    // Allow address reuse
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        log.logE(ERROR, "setsockopt failed.");
-        close(server_fd);
-        server_fd = -1;
-        running = false;
-        return;
-    }
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    // Bind to localhost (127.0.0.1) and the specified port
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
 
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    {
         log.logE(ERROR, "Bind failed.");
         close(server_fd);
         server_fd = -1;
@@ -210,8 +267,8 @@ void WsprryPi_Server::run_server() {
         return;
     }
 
-    // Start listening for connections
-    if (listen(server_fd, 5) < 0) {
+    if (listen(server_fd, 5) < 0)
+    {
         log.logE(ERROR, "Listen failed.");
         close(server_fd);
         server_fd = -1;
@@ -221,34 +278,21 @@ void WsprryPi_Server::run_server() {
 
     log.logS(INFO, "Server listening on 127.0.0.1:" + std::to_string(port));
 
-    while (running) {
-        // Reject new clients if too many active connections
-        if (active_connections.load(std::memory_order_relaxed) >= MAX_CONNECTIONS) {
-            log.logE(ERROR, "Too many connections. Rejecting client.");
-            continue;
-        }
-
-        // Accept an incoming client connection
+    while (running)
+    {
         int client_socket = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
-        if (client_socket < 0) {
-            if (!running) break; // Exit loop if the server is shutting down
-            log.logE(ERROR, "Accept failed.");
+        if (client_socket < 0)
+        {
+            if (!running)
+                break;
             continue;
         }
 
-        // Reject non-localhost connections (security measure)
-        if (ntohl(client_addr.sin_addr.s_addr) != INADDR_LOOPBACK) {
-            log.logE(ERROR, "Rejected connection from non-localhost client.");
-            close(client_socket);
-            continue;
-        }
-
-        // Increment active connection count and start handling the client in a new thread
-        active_connections.fetch_add(1, std::memory_order_relaxed);
-        std::thread(&WsprryPi_Server::handle_client, this, client_socket).detach();
+        pool.enqueue([this, client_socket]()
+                     { handle_client(client_socket); });
     }
 
-    // Cleanup: Close the server socket before exiting
+    shutdown(server_fd, SHUT_RDWR);
     close(server_fd);
     server_fd = -1;
 }
@@ -272,50 +316,36 @@ void WsprryPi_Server::run_server() {
  *
  * @see WsprryPi_Server::process_command()
  */
-void WsprryPi_Server::handle_client(int client_socket) {
-    // Apply a timeout to prevent idle clients from blocking the server
-    struct timeval timeout;
-    timeout.tv_sec = 5;  // Close idle connections after 5 seconds
-    timeout.tv_usec = 0;
-    setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-    setsockopt(client_socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout));
-
+void WsprryPi_Server::handle_client(int client_socket)
+{
     char buffer[1024] = {0};
-    int bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
-
-    // Reject commands that are too long
-    if (bytes_read >= static_cast<int>(sizeof(buffer) - 1)) {
-        log.logE(ERROR, "Received command too long. Connection closed.");
+    ssize_t bytes_read = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+    if (bytes_read == -1)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            log.logS(WARN, "Timeout while reading from client.");
+        }
+        else
+        {
+            log.logE(ERROR, "Client read error: " + std::string(strerror(errno)));
+        }
         close(client_socket);
-        active_connections.fetch_sub(1, std::memory_order_relaxed);
+        active_connections.fetch_sub(1, std::memory_order_release);
         return;
     }
 
-    // Handle client read errors or disconnections
-    if (bytes_read <= 0) {
-        log.logE(ERROR, "Client read error or disconnected.");
+    if (bytes_read <= 0)
+    {
         close(client_socket);
-        active_connections.fetch_sub(1, std::memory_order_relaxed);
         return;
     }
 
-    buffer[bytes_read] = '\0'; // Ensure proper string termination
-    std::string input(buffer);
+    buffer[bytes_read] = '\0';
+    std::string response = process_command(buffer);
 
-    // Trim leading and trailing whitespace
-    input.erase(0, input.find_first_not_of(" \t\r\n"));
-    input.erase(input.find_last_not_of(" \t\r\n") + 1);
-
-    // Process the command and generate a response
-    std::string response = process_command(input);
-
-    // Send response back to the client
-    send(client_socket, response.c_str(), response.length(), 0);
-    log.logS(INFO, "Processed command: " + input);
-
-    // Close connection and decrement active connection count
+    send(client_socket, response.c_str(), response.length(), MSG_NOSIGNAL);
     close(client_socket);
-    active_connections.fetch_sub(1, std::memory_order_relaxed);
 }
 
 /**
@@ -348,154 +378,220 @@ void WsprryPi_Server::handle_client(int client_socket) {
  * @see WsprryPi_Server::handlePort()
  * @see WsprryPi_Server::handleXMIT()
  */
-std::string WsprryPi_Server::process_command(const std::string& input) {
-    std::string command = input;
+std::string WsprryPi_Server::process_command(const std::string &input)
+{
+    // Remove trailing newline or carriage return from input
+    std::string_view command = input;
+    while (!command.empty() && (command.back() == '\n' || command.back() == '\r'))
+    {
+        command.remove_suffix(1);
+    }
 
-    // Debug log to check raw input
-    log.logS(INFO, "Raw received command: [" + input + "]");
+    log.logS(DEBUG, "Raw received command: [" + std::string(command) + "]");
 
-    // Remove leading/trailing spaces
-    command.erase(0, command.find_first_not_of(" \t\r\n"));
-    command.erase(command.find_last_not_of(" \t\r\n") + 1);
+    // Trim leading and trailing whitespace
+    command.remove_prefix(std::min(command.find_first_not_of(" \t\r\n"), command.size()));
+    size_t last_non_space = command.find_last_not_of(" \t\r\n");
+    if (last_non_space != std::string_view::npos)
+        command.remove_suffix(command.size() - last_non_space - 1);
+    else
+        return "ERROR: Empty command received\n";
 
-    // Convert to lowercase
-    std::transform(command.begin(), command.end(), command.begin(), ::tolower);
+    log.logS(DEBUG, "Trimmed command: [" + std::string(command) + "]");
 
-    // Debug log to check processed input
-    log.logS(INFO, "Processed command: [" + command + "]");
+    // Convert to lowercase in-place
+    std::string cmd(command);
+    std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
 
-    // Split command and argument
-    auto pos = command.find(' ');
-    std::string cmd = (pos == std::string::npos) ? command : command.substr(0, pos);
-    std::string arg = (pos == std::string::npos) ? "" : command.substr(pos + 1);
+    log.logS(DEBUG, "Processed command: [" + cmd + "]");
 
-    // Debug log to verify extracted parts
-    log.logS(INFO, "Command: [" + cmd + "], Argument: [" + arg + "]");
+    // Split into command name and argument
+    auto pos = cmd.find(' ');
+    std::string command_name = (pos == std::string::npos) ? cmd : cmd.substr(0, pos);
+    std::string arg = (pos == std::string::npos) ? "" : cmd.substr(pos + 1);
 
-    // Check if command exists in valid_commands
-    if (valid_commands.find(cmd) == valid_commands.end()) {
-        log.logE(ERROR, "Invalid command received: [" + cmd + "]");
+    log.logS(DEBUG, "Command: [" + command_name + "], Argument: [" + arg + "]");
+
+    // Fast lookup using unordered_map
+    auto it = command_map.find(command_name);
+    if (it == command_map.end())
+    {
+        log.logE(ERROR, "Invalid command received: [" + command_name + "]");
         return "ERROR: Unknown or invalid command\n";
     }
 
-    // Process Commands (Read if no arg, Write if arg)
-    if (cmd == "transmit") return handleTransmit(arg);
-    if (cmd == "call") return handleCall(arg);
-    if (cmd == "grid") return handleGrid(arg);
-    if (cmd == "power") return handlePower(arg);
-    if (cmd == "freq") return handleFreq(arg);
-    if (cmd == "ppm") return handlePPM(arg);
-    if (cmd == "selfcal") return handleSelfCal(arg);
-    if (cmd == "offset") return handleOffset(arg);
-    if (cmd == "led") return handleLED(arg);
-    if (cmd == "port" && arg.empty()) return handlePort();
-    if (cmd == "xmit" && arg.empty()) return handleXMIT();
-
-    log.logE(ERROR, "Valid command but incorrect usage: [" + cmd + "]");
-    return "ERROR: Unknown or invalid command\n";
+    // Execute the associated handler function
+    return it->second(arg);
 }
 
-std::string WsprryPi_Server::handleTransmit(const std::string& arg) {
-    if (arg.empty()) {
+void WsprryPi_Server::initializeCommandMap()
+{
+    command_map["transmit"] = [this](const std::string &arg)
+    { return handleTransmit(arg); };
+    command_map["call"] = [this](const std::string &arg)
+    { return handleCall(arg); };
+    command_map["grid"] = [this](const std::string &arg)
+    { return handleGrid(arg); };
+    command_map["power"] = [this](const std::string &arg)
+    { return handlePower(arg); };
+    command_map["freq"] = [this](const std::string &arg)
+    { return handleFreq(arg); };
+    command_map["ppm"] = [this](const std::string &arg)
+    { return handlePPM(arg); };
+    command_map["selfcal"] = [this](const std::string &arg)
+    { return handleSelfCal(arg); };
+    command_map["offset"] = [this](const std::string &arg)
+    { return handleOffset(arg); };
+    command_map["led"] = [this](const std::string &arg)
+    { return handleLED(arg); };
+    command_map["port"] = [this](const std::string &arg)
+    { return arg.empty() ? handlePort() : "ERROR: Invalid argument for port\n"; };
+    command_map["xmit"] = [this](const std::string &arg)
+    { return arg.empty() ? handleXMIT() : "ERROR: Invalid argument for xmit\n"; };
+    command_map["version"] = [this](const std::string &arg)
+    { return arg.empty() ? handleVersion() : "ERROR: Invalid argument for version\n"; };
+}
+
+std::string WsprryPi_Server::handleTransmit(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Transmit value");
-        return "Transmit value: <dummy>\n";  // Replace <dummy> with actual read logic
-    } else {
+        return "Transmit value: <dummy>\n"; // Replace <dummy> with actual read logic
+    }
+    else
+    {
         log.logS(INFO, "Setting Transmit to: " + arg);
         return "Transmit set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleCall(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleCall(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Call value");
         return "Call value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting Call to: " + arg);
         return "Call set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleGrid(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleGrid(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Grid value");
         return "Grid value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting Grid to: " + arg);
         return "Grid set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handlePower(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handlePower(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Power value");
         return "Power value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting Power to: " + arg);
         return "Power set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleFreq(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleFreq(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Frequency value");
         return "Frequency value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting Frequency to: " + arg);
         return "Frequency set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handlePPM(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handlePPM(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading PPM value");
         return "PPM value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting PPM to: " + arg);
         return "PPM set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleSelfCal(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleSelfCal(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading SelfCal value");
         return "SelfCal value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting SelfCal to: " + arg);
         return "SelfCal set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleOffset(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleOffset(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading Offset value");
         return "Offset value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting Offset to: " + arg);
         return "Offset set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handleLED(const std::string& arg) {
-    if (arg.empty()) {
+std::string WsprryPi_Server::handleLED(const std::string &arg)
+{
+    if (arg.empty())
+    {
         log.logS(INFO, "Reading LED value");
         return "LED value: <dummy>\n";
-    } else {
+    }
+    else
+    {
         log.logS(INFO, "Setting LED to: " + arg);
         return "LED set to: " + arg + "\n";
     }
 }
 
-std::string WsprryPi_Server::handlePort() {
+std::string WsprryPi_Server::handlePort()
+{
     log.logS(INFO, "Reading Port value");
     return "Port value: <dummy>\n";
 }
 
-std::string WsprryPi_Server::handleXMIT() {
+std::string WsprryPi_Server::handleXMIT()
+{
     log.logS(INFO, "Reading XMIT value");
     return "XMIT value: <dummy>\n";
 }
 
-std::string WsprryPi_Server::handleVersion() {
+std::string WsprryPi_Server::handleVersion()
+{
     log.logS(INFO, "Reading Version value");
     return "Version value: <dummy>\n";
 }

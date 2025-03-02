@@ -1,20 +1,24 @@
+// TODO:  Redo doxygen
+
 /**
  * @file wp_server.hpp
  * @brief TCP server to get/set WsprryPi parameters.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * However, this new code added to the project is distributed under under
- * the MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -36,9 +40,45 @@
 #include <string>
 #include <atomic>
 #include <unordered_set>
-#include "lcblog.hpp"  // Include logging class
+#include <vector>
+#include <queue>
+#include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <functional>
+#include "lcblog.hpp"
 
-#define MAX_CONNECTIONS 10  ///< Maximum number of active connections allowed.
+#define MAX_CONNECTIONS 10 ///< Maximum number of active connections allowed.
+
+class ThreadPool
+{
+public:
+    /**
+     * @brief Constructs a thread pool with a specified number of worker threads.
+     * @param num_threads Number of threads to create in the pool.
+     */
+    explicit ThreadPool(size_t num_threads);
+
+    /**
+     * @brief Destructor for the thread pool.
+     * @details Ensures all worker threads are stopped and joined before destruction.
+     */
+    ~ThreadPool();
+
+    /**
+     * @brief Enqueues a new task to be executed by the thread pool.
+     * @param task A function or callable object to execute asynchronously.
+     */
+    void enqueue(std::function<void()> task);
+
+private:
+    size_t max_queue_size = 100;
+    std::vector<std::thread> workers;        ///< Worker threads.
+    std::queue<std::function<void()>> tasks; ///< Task queue.
+    std::mutex queue_mutex;                  ///< Mutex for synchronizing task queue access.
+    std::condition_variable condition;       ///< Condition variable for task scheduling.
+    bool stop;                               ///< Flag to signal workers to terminate.
+};
 
 /**
  * @class WsprryPi_Server
@@ -48,7 +88,8 @@
  *          (Weak Signal Propagation Reporter). Commands can be read-only or
  *          set operations, depending on whether an argument is provided.
  */
-class WsprryPi_Server {
+class WsprryPi_Server
+{
 public:
     /**
      * @brief Constructs a new WsprryPi_Server instance.
@@ -60,7 +101,7 @@ public:
      *
      * @note The server does not start automatically upon construction; `start()` must be called.
      */
-    explicit WsprryPi_Server(int port, LCBLog& logger);
+    explicit WsprryPi_Server(int port, LCBLog &logger);
 
     /**
      * @brief Destructor to clean up server resources.
@@ -98,11 +139,17 @@ private:
      */
     static const std::unordered_set<std::string> valid_commands;
 
-    int server_fd;   ///< File descriptor for the server socket.
-    int port;        ///< Configurable port number.
-    bool running;    ///< Indicates whether the server is currently running.
-    std::thread server_thread;     ///< Thread responsible for running the server loop.
-    LCBLog& log;     ///< Reference to the logging system.
+    int server_fd;             ///< File descriptor for the server socket.
+    int port;                  ///< Configurable port number.
+    bool running;              ///< Indicates whether the server is currently running.
+    std::thread server_thread; ///< Thread responsible for running the server loop.
+    LCBLog &log;               ///< Reference to the logging system.
+    ThreadPool pool;
+
+    using CommandHandler = std::function<std::string(const std::string &)>;
+    std::unordered_map<std::string, CommandHandler> command_map;
+
+    void initializeCommandMap(); // Function to populate the map
 
     /**
      * @var active_connections
@@ -117,63 +164,63 @@ private:
      * @param arg The optional argument specifying the new transmit value.
      * @return Response string with either the current transmit value or confirmation of the update.
      */
-    std::string handleTransmit(const std::string& arg);
+    std::string handleTransmit(const std::string &arg);
 
     /**
      * @brief Handles the "Call" command.
      * @param arg The optional argument specifying the new call sign.
      * @return Response string with either the current call sign or confirmation of the update.
      */
-    std::string handleCall(const std::string& arg);
+    std::string handleCall(const std::string &arg);
 
     /**
      * @brief Handles the "Grid" command.
      * @param arg The optional argument specifying the new grid locator.
      * @return Response string with either the current grid value or confirmation of the update.
      */
-    std::string handleGrid(const std::string& arg);
+    std::string handleGrid(const std::string &arg);
 
     /**
      * @brief Handles the "Power" command.
      * @param arg The optional argument specifying the new power level.
      * @return Response string with either the current power level or confirmation of the update.
      */
-    std::string handlePower(const std::string& arg);
+    std::string handlePower(const std::string &arg);
 
     /**
      * @brief Handles the "Frequency" command.
      * @param arg The optional argument specifying the new frequency.
      * @return Response string with either the current frequency or confirmation of the update.
      */
-    std::string handleFreq(const std::string& arg);
+    std::string handleFreq(const std::string &arg);
 
     /**
      * @brief Handles the "PPM" (Parts Per Million) command.
      * @param arg The optional argument specifying the new PPM correction.
      * @return Response string with either the current PPM value or confirmation of the update.
      */
-    std::string handlePPM(const std::string& arg);
+    std::string handlePPM(const std::string &arg);
 
     /**
      * @brief Handles the "SelfCal" (Self Calibration) command.
      * @param arg The optional argument specifying the new self-calibration state.
      * @return Response string with either the current state or confirmation of the update.
      */
-    std::string handleSelfCal(const std::string& arg);
+    std::string handleSelfCal(const std::string &arg);
 
     /**
      * @brief Handles the "Offset" command.
      * @param arg The optional argument specifying the new frequency offset.
      * @return Response string with either the current offset or confirmation of the update.
      */
-    std::string handleOffset(const std::string& arg);
+    std::string handleOffset(const std::string &arg);
 
     /**
      * @brief Handles the "LED" command.
      * @param arg The optional argument specifying the new LED state.
      * @return Response string with either the current LED state or confirmation of the update.
      */
-    std::string handleLED(const std::string& arg);
+    std::string handleLED(const std::string &arg);
 
     /**
      * @brief Handles the "Port" command (read-only).
@@ -232,7 +279,7 @@ private:
      *
      * @throws Logs an error if an invalid command is received.
      */
-    std::string process_command(const std::string& input);
+    std::string process_command(const std::string &input);
 };
 
 #endif // WP_SERVER_HPP
