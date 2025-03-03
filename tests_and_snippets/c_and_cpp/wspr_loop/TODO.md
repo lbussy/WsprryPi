@@ -6,5 +6,5 @@
 - [ ] Add configurable transmission pin to transmission logic: ini.get_int_value("Common", "Transmit Pin"));
 - [ ] Figure out how to add in DMA stuff for transmission
 - [ ] Also change priority for transmissions
-- [ ] Add wp_server
+- [ ] Add wp_server command processing
 - [ ] 
