@@ -11,4 +11,5 @@
 - [ ] Figure out how to add in DMA stuff for transmission
 - [ ] Also change priority for transmissions
 - [ ] Add wp_server command processing
-- [ ] MA notes at: `https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial`
+- [ ] DMA notes at: `https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial`
+= [ ] Add sudo check
