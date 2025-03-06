@@ -1,84 +1,47 @@
-#include <algorithm>     // transform support
-#include <vector>        // vector support
-#include <assert.h>      // 'assert' support
-#include <fcntl.h>       // O_RDWR support
-#include <getopt.h>      // getopt_long support
-#include <iterator>      // istream_iterator support
-#include <math.h>        // NAN support
-#include <signal.h>      // Sig interrupt support
-#include <stdexcept>     // no_argument, required_argument support
-#include <sys/mman.h>    // PROT_READ, PROT_WRITE, MAP_FAILED support
-#include <sys/time.h>    // gettimeofday support
-#include <sys/timex.h>   // ntp_adjtime, TIME_OK support
-#include <cctype>        // isdigit() support
-#include <cstdlib>       // strtod() support
-#include <string>        // string support
-#include <unordered_map> // unordered_map support
+#include "dma_handler.hpp"
+
+#include "arg_parser.hpp"
+#include "constants.hpp"
+#include "ini_file.hpp"
+#include "logging.hpp"
+#include "monitorfile.hpp"
+#include "singleton.hpp"
+#include "transmit.hpp"
+#include "wspr_message.hpp"
+#include "version.hpp"
+// #include "hardware_access.hpp"
+
+#include <algorithm>
+#include <vector>
+#include <iterator>
+#include <stdexcept>
+#include <cctype>
+#include <cstdlib>
+#include <string>
+#include <unordered_map>
 #include <iostream>
-#include <termios.h>
-#include <unistd.h>
 #include <chrono>
 #include <ctime>
 #include <cstring>
 #include <thread>
 
-#include "lcblog.hpp"
-#include "wspr_message.hpp"
-#include "version.hpp"
-#include "constants.hpp"
-#include "hardware_access.hpp"
+#include <assert.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <math.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/time.h>
+#include <sys/timex.h>
+#include <termios.h>
+#include <unistd.h>
 
-#include "main.hpp"
-
-#ifdef _TEST
-constexpr const std::string_view MODE = "TONE";
-constexpr const double TEST_TONE = 780000.0;
-constexpr const double WSPR_FREQUENCY = 7040100.0;
-constexpr const double PPM_VAL = 12.0;
-constexpr const char *CALL = "AA0NT";
-constexpr const char *GRID = "EM18";
-constexpr const int PWR = 20;
-static struct termios original_tty; // TODO:  Temporary for signal handling
-static bool tty_saved = false;
-volatile sig_atomic_t running = 1;
-#endif // _TEST
-
-/**
- * @brief Global configuration instance for argument parsing.
- *
- * This global instance of `ArgParserConfig` holds the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is defined in `arg_parser.cpp` and declared
- * as `extern` in `arg_parser.hpp` so it can be accessed globally.
- *
- * @note Ensure that `arg_parser.hpp` is included in any file that
- *       needs access to this configuration instance.
- *
- * @see ArgParserConfig
- */
-struct ArgParserConfig
-{
-    double f_plld_clk; ///< Phase-Locked Loop D clock, default is 500 MHz
-                       // Output of: vcgencmd measure_clock plld
-    int mem_flag;      ///< TODO:  Define this - Placeholder for memory management flags.
-    /**
-     * @brief Default constructor initializing all configuration parameters.
-     *
-     * Initializes the structure with default values:
-     * - `f_plld_clk = 0.0`
-     * - `mem_flag = 0`
-     */
-    ArgParserConfig() : f_plld_clk(0.0),
-                        mem_flag(0)
-    {
-    }
-};
-
-// TODO: declaration for global configuration object.
-ArgParserConfig config;
-
-// Logging library
-LCBLog llog;
+struct PageInfo constPage;
+struct PageInfo instrPage;
+struct PageInfo instrs[1024];
+double wspr_symtime;
+double tone_spacing;
+std::vector<double> dma_frequency_table;
 
 // Given an address in the bus address space of the peripherals, this
 // macro calculates the appropriate virtual address to use to access
@@ -91,6 +54,19 @@ LCBLog llog;
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
 
+// Used for GPIO DIO Access:
+// GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
+#define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
+#define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
+#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3  \
+                                                                                     : 2) \
+                                                      << (((g) % 10) * 3))
+#define GPIO_SET *(gpio + 7)                  // sets bits which are 1 ignores bits which are 0
+#define GPIO_CLR *(gpio + 10)                 // clears bits which are 1 ignores bits which are 0
+#define GET_GPIO(g) (*(gpio + 13) & (1 << g)) // 0 if LOW, (1<<g) if HIGH
+#define GPIO_PULL *(gpio + 37)                // Pull up/pull down
+#define GPIO_PULLCLK0 *(gpio + 38)            // Pull up/pull down clock
+
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
@@ -101,6 +77,9 @@ LCBLog llog;
 // function.
 volatile unsigned *peri_base_virt = NULL;
 
+// Used for GPIO DIO Access:
+// Map to GPIO register
+void *gpio_map;
 // I/O access
 volatile unsigned *gpio;
 
@@ -162,6 +141,66 @@ static struct
     unsigned pool_size;
     unsigned pool_cnt;
 } mbox;
+
+// GPIO/DIO Control:
+
+void setupGPIO(int pin = 0)
+{
+    if (pin == 0)
+        return;
+    // Set up gpio pointer for direct register access
+    int mem_fd;
+    // Set up a memory regions to access GPIO
+    unsigned gpio_base = get_peripheral_address() + 0x200000;
+
+    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
+    {
+        llog.logE(FATAL, "Unable to open /dev/mem (running as root?)");
+        std::exit(EXIT_FAILURE);
+    }
+
+    /* mmap GPIO */
+    gpio_map = mmap(
+        NULL,                   // Any adddress in our space will do
+        BLOCK_SIZE,             // Map length
+        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
+        MAP_SHARED,             // Shared with other processes
+        mem_fd,                 // File to map
+        gpio_base               // Offset to GPIO peripheral
+    );
+
+    close(mem_fd); // No need to keep mem_fd open after mmap
+
+    if (gpio_map == MAP_FAILED)
+    {
+        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set
+        std::exit(EXIT_FAILURE);
+    }
+
+    // Always use volatile pointer
+    gpio = (volatile unsigned *)gpio_map;
+
+    // Set GPIO pins to output
+    // Must use INP_GPIO before we can use OUT_GPIO
+    INP_GPIO(pin);
+    OUT_GPIO(pin);
+}
+
+void pinHigh(int pin = 0)
+{
+    if (pin == 0)
+        return;
+    GPIO_SET = 1 << pin;
+}
+
+void pinLow(int pin = 0)
+{
+    if (pin == 0)
+        return;
+    GPIO_CLR = 1 << pin;
+}
+
+// GPIO/DIO Control^
 
 void getPLLD()
 {
@@ -272,6 +311,9 @@ void disable_clock()
 
 void txon()
 {
+    // Turn on LED'
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        pinHigh(ini.get_int_value("Extended", "LED Pin"));
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -289,7 +331,7 @@ void txon()
     CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
 
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    switch (7) // TODO:  Un-hardcode this
+    switch (ini.get_int_value("Extended", "Power Level"))
     {
     case 0:
         ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0; // 2mA -3.4dBm
@@ -332,6 +374,9 @@ void txon()
 
 void txoff()
 {
+    // Turn off LED
+    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
+        pinLow(ini.get_int_value("Extended", "LED Pin"));
     // Turn transmitter off
     disable_clock();
 }
@@ -341,7 +386,7 @@ void txSym(
     const double &center_freq,
     const double &tone_spacing,
     const double &tsym,
-    const std::vector<double> &dma_table_freq,
+    const std::vector<double> &dma_frequency_table,
     const double &f_pwm_clk,
     struct PageInfo instrs[],
     struct PageInfo &constPage,
@@ -354,8 +399,8 @@ void txSym(
     // do not know which DMA table entry is being processed by the DMA engine.
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
-    const double f0_freq = dma_table_freq[f0_idx];
-    const double f1_freq = dma_table_freq[f1_idx];
+    const double f0_freq = dma_frequency_table[f0_idx];
+    const double f1_freq = dma_frequency_table[f1_idx];
     const double tone_freq = center_freq - 1.5 * tone_spacing + sym_num * tone_spacing;
     // Double check...
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
@@ -436,18 +481,28 @@ double bit_trunc(const double &d, const int &lsb)
     return floor(d / pow(2.0, lsb)) * pow(2.0, lsb);
 }
 
-void setupDMATab(
+void set_dma_tone_table(
     const double &center_freq_desired,
     const double &tone_spacing,
     const double &plld_actual_freq,
-    std::vector<double> &dma_table_freq,
+    std::vector<double> &dma_frequency_table,
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
-    // Program the tuning words into the DMA table.
-
-    // Make sure that all the WSPR tones can be produced solely by
-    // varying the fractional part of the frequency divider.
+    // Make sure that all the WSPR tones can be produced solely by varying the fractional
+    // part of the frequency divider (second 12 bits.)
+    //
+    // Each tuning word is 32-bits, first 8 bits are the "magic word" 0x5a (90 in decimal).
+    // The next 12 bits after that, the integer part, is the coarse tuning and must be
+    // consistent across all words to prevent phase noise when switching, this section tweaks
+    // the requested (center_freq_desired) frequency freq up/down to fit that and returns the
+    // result in center_freq_actual.
+    //
+    // An integer part change, or a "coarse tuning word", is a 4.5 kHz step, where the fine 
+    // tuning word is approximately 1.1 Hz.
+    //
+    // The max potential change applied here is 2 x tone spacing with four words, so the
+    // rewquested frequencyncould change +- (2 * 1.46 Hz) or 2.92 Hz.
     center_freq_actual = center_freq_desired;
     double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + pow(2.0, -12);
     double div_hi = bit_trunc(plld_actual_freq / (center_freq_desired + 1.5 * tone_spacing), -12);
@@ -481,10 +536,10 @@ void setupDMATab(
     }
 
     // Program the table
-    dma_table_freq.resize(1024);
+    dma_frequency_table.resize(1024);
     for (int i = 0; i < 1024; i++)
     {
-        dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / pow(2.0, 12));
+        dma_frequency_table[i] = plld_actual_freq / (tuning_word[i] / pow(2.0, 12));
         ((int *)(constPage.v))[i] = (0x5a << 24) + tuning_word[i];
         if ((i % 2 == 0) && (i < 8))
         {
@@ -493,7 +548,7 @@ void setupDMATab(
     }
 }
 
-void setupDMA(
+void setup_dma_instructions(
     struct PageInfo &constPage,
     struct PageInfo &instrPage,
     struct PageInfo instrs[])
@@ -590,6 +645,21 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
     return (diff < 0);
 }
 
+void timeval_print(struct timeval *tv)
+{
+    // Print Time Stamp
+
+    char buffer[30];
+    time_t curtime;
+
+    // printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
+    curtime = tv->tv_sec;
+    // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
+    strftime(buffer, 30, "%Y-%m-%d %T", gmtime(&curtime));
+    printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
+    std::cout << " UTC";
+}
+
 void open_mbox()
 {
     // Create the mbox special files and open mbox.
@@ -601,8 +671,10 @@ void open_mbox()
     }
 }
 
-void setSchedPriority(int priority)
+void set_scheduling_priority(int priority)
 {
+    // TODO:  We have this in scheduling.*
+
     // In order to get the best timing at a decent queue size, we want the kernel
     // to avoid interrupting us for long durations.  This is done by giving our
     // process a high priority. Note, must run as super-user for this to work.
@@ -644,219 +716,139 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     close(mem_fd);
 }
 
-// TODO:  Delete this
-void restore_terminal_signals()
+void cleanup_dma_registers()
 {
-    // Restore terminal attributes if they were previously saved.
-    if (tty_saved)
-    {
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &original_tty) != 0)
-        {
-            llog.logE(ERROR, "Failed to restore terminal settings: ", std::strerror(errno));
-        }
-        else
-        {
-            llog.logS(DEBUG, "Terminal signals restored to original state.");
-        }
-    }
-    else
-    {
-        llog.logS(WARN, "Terminal settings were not saved. Nothing to restore.");
-    }
-}
-
-void exit_and_cleanup()
-{
-    restore_terminal_signals();
     disable_clock();
     unSetupDMA();
     deallocMemPool();
     unlink(LOCAL_DEVICE_FILE_NAME);
-    std::exit(EXIT_SUCCESS);
 }
 
-// TODO:  Delete this
-void suppress_terminal_signals()
+int dma_prep()
 {
-    // Save current terminal settings if possible.
-    if (tcgetattr(STDIN_FILENO, &original_tty) == 0)
-    {
-        tty_saved = true;
-        struct termios tty = original_tty;
-
-        // Disable input echo while keeping signals enabled.
-        tty.c_lflag &= ~ECHO;
-
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &tty) != 0)
-        {
-            llog.logE(ERROR, "Failed to suppress terminal signals: ", std::strerror(errno));
-        }
-        else
-        {
-            llog.logS(DEBUG, "Terminal signals suppressed (input echo disabled).");
-        }
-    }
-    else
-    {
-        llog.logE(ERROR, "Failed to retrieve terminal settings: ", std::strerror(errno));
-    }
-}
-
-// TODO:  Delete this
-std::string signal_to_string(int signum)
-{
-    // Map of signal numbers to their corresponding string representations.
-    static const std::unordered_map<int, std::string> signal_map = {
-        {SIGINT, "SIGINT"},
-        {SIGTERM, "SIGTERM"},
-        {SIGQUIT, "SIGQUIT"},
-        {SIGSEGV, "SIGSEGV"},
-        {SIGBUS, "SIGBUS"},
-        {SIGFPE, "SIGFPE"},
-        {SIGILL, "SIGILL"},
-        {SIGHUP, "SIGHUP"},
-        {SIGABRT, "SIGABRT"}};
-
-    // Find the signal in the map and return its string representation.
-    auto it = signal_map.find(signum);
-    return (it != signal_map.end()) ? it->second : "UNKNOWN_SIGNAL";
-}
-
-// TODO:  Delete this
-void signal_handler(int signum)
-{
-    llog.logS(DEBUG, "Signal caught:", signum);
-    running = 0; // Stop main loop
-    // Convert signal number to a human-readable string.
-    std::string signal_name = signal_to_string(signum);
-    std::ostringstream oss;
-    oss << "Received " << signal_name << ". Shutting down.";
-    std::string log_message = oss.str();
-
-    // Handle the signal based on type.
-    switch (signum)
-    {
-    // Fatal signals that require immediate exit.
-    case SIGSEGV:
-    case SIGBUS:
-    case SIGFPE:
-    case SIGILL:
-    case SIGABRT:
-        llog.logE(FATAL, log_message);
-        exit_and_cleanup();
-        restore_terminal_signals();
-        std::quick_exit(signum); // Immediate exit without cleanup.
-        break;
-
-    // Graceful shutdown signals.
-    case SIGINT:
-    case SIGTERM:
-    case SIGQUIT:
-    case SIGHUP:
-        llog.logS(INFO, log_message);
-        exit_and_cleanup();
-        restore_terminal_signals();
-        break;
-
-    // Unknown signals are treated as fatal.
-    default:
-        llog.logE(FATAL, "Unknown signal caught. Exiting.");
-        break;
-    }
-}
-
-// TODO:  Delete this
-void register_signal_handlers()
-{
-    // Block signals in the main thread to prevent default handling.
-    struct sigaction sa;
-    sa.sa_handler = signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-
-    // Register each signal
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGQUIT, &sa, NULL);
-    sigaction(SIGHUP, &sa, NULL);
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGBUS, &sa, NULL);
-    sigaction(SIGFPE, &sa, NULL);
-    sigaction(SIGILL, &sa, NULL);
-    sigaction(SIGABRT, &sa, NULL);
-
-    llog.logS(DEBUG, "Signal handlers installed.");
-
-    // Suppress terminal signals to avoid disruption during execution.
-    suppress_terminal_signals();
-
-    llog.logS(DEBUG, "Signal handling thread started.");
-}
-
-int main(const int argc, char *const argv[])
-{
-    llog.setLogLevel(DEBUG);
-
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-
-    // TODO: Temporary
-    register_signal_handlers();
-
     getPLLD(); // Get PLLD Frequency
 
-    setSchedPriority(30);
+    set_scheduling_priority(30);
 
     // Initialize the RNG
     srand(time(NULL));
 
     // Initial configuration
-    struct PageInfo constPage;
-    struct PageInfo instrPage;
-    struct PageInfo instrs[1024];
     setup_peri_base_virt(peri_base_virt);
 
     // Set up DMA
     open_mbox();
     txon();
-    setupDMA(constPage, instrPage, instrs);
+    setup_dma_instructions(constPage, instrPage, instrs);
+    txoff();
+}
+
+double dma_setup(double center_freq_desired)
+{
+    // TODO: Do this once per frequency or PPM change
+    // Determine if this is a WSSPR15 request
+    bool wspr15 =
+        (center_freq_desired > 137600 && center_freq_desired < 137625) ||
+        (center_freq_desired > 475800 && center_freq_desired < 475825) ||
+        (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+
+    // Setup symbol time and spacing for WSPR type
+    wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+    tone_spacing = 1.0 / wspr_symtime;
+
+    // Add random offset (+-)
+    if (ini.get_bool_value("Extended", "Offset"))
+    {
+        center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+    }
+
+    // Status message before transmission
+    {
+        std::stringstream temp;
+        temp << std::setprecision(6) << std::fixed;
+        temp << "Center frequency set for " << (wspr15 ? "WSPR-15" : "WSPR") << " trans: " << center_freq_desired / 1e6 << " MHz.";
+        llog.logS(INFO, temp.str());
+    }
+
+    // Create the DMA table for this center frequency
+    double center_freq_actual; // This may be modified by reference in set_dma_tone_table()
+    set_dma_tone_table(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constPage);
+    return center_freq_actual;
+}
+
+void tx_wspr(WsprMessage message, double center_freq_actual)
+{
+    // Access the generated symbols
+    unsigned char *symbols = message.symbols;
+
+    // Print a status message right before transmission begins.
+    llog.logS(INFO, "Transmission started.");
+
+    struct timeval tvBegin, sym_start, diff;
+    gettimeofday(&tvBegin, NULL);
+    int bufPtr = 0;
+
+    // Get Begin Timestamp
+    auto txBegin = std::chrono::high_resolution_clock::now();
+
+    txon();
+    for (int i = 0; i < 162; i++)
+    {
+        gettimeofday(&sym_start, NULL);
+        timeval_subtract(&diff, &sym_start, &tvBegin);
+        double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+        double sched_end = (i + 1) * wspr_symtime;
+        double this_sym = sched_end - elapsed;
+        this_sym = (this_sym < .2) ? .2 : this_sym;
+        this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
+        txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_frequency_table, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+    }
+
+    // Turn transmitter off
     txoff();
 
+    // Get End Timestamp
+    auto txEnd = std::chrono::high_resolution_clock::now();
+    // Calculate duration in <double> seconds
+    std::chrono::duration<double, std::milli> elapsed = (txEnd - txBegin) / 1000;
+    double num_seconds = elapsed.count();
+    llog.logS(INFO, "Transmission complete (", num_seconds, " sec.)");
+}
+
+void tx_tone()
+{
     // Test tone mode...
     double wspr_symtime = WSPR_SYMTIME;
     double tone_spacing = 1.0 / wspr_symtime;
 
-    {
-        std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << TEST_TONE / 1.0e6 << " MHz.";
-        llog.logS(INFO, temp.str());
-        llog.logS(INFO, "Press CTRL-C to exit.");
-    }
+    std::stringstream temp;
+    temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << test_tone / 1.0e6 << " MHz.";
+    llog.logS(INFO, temp.str());
+    llog.logS(INFO, "Press CTRL-C to exit.");
 
     txon();
     int bufPtr = 0;
-    std::vector<double> dma_table_freq;
-    // Set PPM_PREV to non-zero value to ensure setupDMATab is called at least once.
+    std::vector<double> dma_frequency_table;
+    // Set to non-zero value to ensure set_dma_tone_table is called at least once.
+    double ppm_prev = 123456;
     double center_freq_actual;
-    while (running)
+    while (true)
     {
-        if (PPM_VAL == PPM_VAL)
+        if (true) // TODO:  Run this at least once and after every PPM update
         {
-            setupDMATab(TEST_TONE + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - PPM_VAL / 1e6), dma_table_freq, center_freq_actual, constPage);
-            // cout << std::setprecision(30) << dma_table_freq[0] << std::endl;
-            // cout << std::setprecision(30) << dma_table_freq[1] << std::endl;
-            // cout << std::setprecision(30) << dma_table_freq[2] << std::endl;
-            // cout << std::setprecision(30) << dma_table_freq[3] << std::endl;
-            if (center_freq_actual != TEST_TONE + 1.5 * tone_spacing)
+            set_dma_tone_table(test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constPage);
+            // cout << std::setprecision(30) << dma_frequency_table[0] << std::endl;
+            // cout << std::setprecision(30) << dma_frequency_table[1] << std::endl;
+            // cout << std::setprecision(30) << dma_frequency_table[2] << std::endl;
+            // cout << std::setprecision(30) << dma_frequency_table[3] << std::endl;
+            if (center_freq_actual != test_tone + 1.5 * tone_spacing)
             {
                 std::stringstream temp;
                 temp << std::setprecision(6) << std::fixed << "Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations." << std::endl;
                 llog.logE(INFO, temp.str());
             }
+            ppm_prev = ini.get_double_value("Extended", "PPM");
         }
-        txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        txSym(0, center_freq_actual, tone_spacing, 60, dma_frequency_table, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
     }
-
-    exit_and_cleanup();
-    std::exit(EXIT_SUCCESS);
 }
