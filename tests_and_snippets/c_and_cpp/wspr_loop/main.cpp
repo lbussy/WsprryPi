@@ -42,6 +42,7 @@
 #include "version.hpp"
 #include "logging.hpp"
 #include "singleton.hpp"
+#include "dma_handler.hpp"
 
 // System headers
 #include <unistd.h> // For getpid()
@@ -114,18 +115,21 @@ int main(const int argc, char *const argv[])
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
 
-    try
-    {
-        wspr_loop();
-    }
-    catch (const std::exception &e)
-    {
-        llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
-    }
-    catch (...)
-    {
-        llog.logE(ERROR, "Unknown fatal error in main().");
-    }
+    dma_prep();
+    tx_tone(730000);
+
+    // try
+    // {
+    //     wspr_loop();
+    // }
+    // catch (const std::exception &e)
+    // {
+    //     llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
+    // }
+    // catch (...)
+    // {
+    //     llog.logE(ERROR, "Unknown fatal error in main().");
+    // }
 
     llog.logS(INFO, project_name(), "exiting normally.");
     return EXIT_SUCCESS;

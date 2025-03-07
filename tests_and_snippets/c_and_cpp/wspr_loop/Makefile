@@ -189,7 +189,7 @@ debug: build/bin/$(TEST_OUT)
 .PHONY: test
 test: debug
 	$(Q)echo "Running test with sudo privileges."
-	sudo ./build/bin/$(TEST_OUT) -i $(INI_FILE)
+	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone 730000
 
 # Install target (install only the release binary)
 .PHONY: install

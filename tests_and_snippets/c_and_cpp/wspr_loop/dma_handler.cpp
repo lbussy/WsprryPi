@@ -36,9 +36,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-struct PageInfo constPage;
-struct PageInfo instrPage;
-struct PageInfo instrs[1024];
 double wspr_symtime;
 double tone_spacing;
 std::vector<double> dma_frequency_table;
@@ -124,13 +121,6 @@ struct DMAregs
     volatile unsigned int DEBUG;
 };
 
-struct PageInfo
-{
-    // Virtual and bus addresses of a page of physical memory.
-    void *b; // bus address
-    void *v; // virtual address
-};
-
 static struct
 {
     // Must be global so that exit handlers can access this.
@@ -142,65 +132,16 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
-// GPIO/DIO Control:
-
-void setupGPIO(int pin = 0)
+struct PageInfo
 {
-    if (pin == 0)
-        return;
-    // Set up gpio pointer for direct register access
-    int mem_fd;
-    // Set up a memory regions to access GPIO
-    unsigned gpio_base = get_peripheral_address() + 0x200000;
+    // Virtual and bus addresses of a page of physical memory.
+    void *b; // bus address
+    void *v; // virtual address
+};
 
-    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
-    {
-        llog.logE(FATAL, "Unable to open /dev/mem (running as root?)");
-        std::exit(EXIT_FAILURE);
-    }
-
-    /* mmap GPIO */
-    gpio_map = mmap(
-        NULL,                   // Any adddress in our space will do
-        BLOCK_SIZE,             // Map length
-        PROT_READ | PROT_WRITE, // Enable reading & writting to mapped memory
-        MAP_SHARED,             // Shared with other processes
-        mem_fd,                 // File to map
-        gpio_base               // Offset to GPIO peripheral
-    );
-
-    close(mem_fd); // No need to keep mem_fd open after mmap
-
-    if (gpio_map == MAP_FAILED)
-    {
-        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set
-        std::exit(EXIT_FAILURE);
-    }
-
-    // Always use volatile pointer
-    gpio = (volatile unsigned *)gpio_map;
-
-    // Set GPIO pins to output
-    // Must use INP_GPIO before we can use OUT_GPIO
-    INP_GPIO(pin);
-    OUT_GPIO(pin);
-}
-
-void pinHigh(int pin = 0)
-{
-    if (pin == 0)
-        return;
-    GPIO_SET = 1 << pin;
-}
-
-void pinLow(int pin = 0)
-{
-    if (pin == 0)
-        return;
-    GPIO_CLR = 1 << pin;
-}
-
-// GPIO/DIO Control^
+struct PageInfo constantsPage;
+struct PageInfo instructionsPage;
+struct PageInfo instructions[1024];
 
 void getPLLD()
 {
@@ -311,9 +252,6 @@ void disable_clock()
 
 void txon()
 {
-    // Turn on LED'
-    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
-        pinHigh(ini.get_int_value("Extended", "LED Pin"));
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -374,9 +312,6 @@ void txon()
 
 void txoff()
 {
-    // Turn off LED
-    if (ini.get_bool_value("Extended", "Use LED") && ini.get_int_value("Extended", "LED Pin") > 0)
-        pinLow(ini.get_int_value("Extended", "LED Pin"));
     // Turn transmitter off
     disable_clock();
 }
@@ -388,8 +323,8 @@ void txSym(
     const double &tsym,
     const std::vector<double> &dma_frequency_table,
     const double &f_pwm_clk,
-    struct PageInfo instrs[],
-    struct PageInfo &constPage,
+    struct PageInfo instructions[],
+    struct PageInfo &constantsPage,
     int &bufPtr)
 {
     // Transmit symbol sym for tsym seconds.
@@ -411,7 +346,7 @@ void txSym(
 
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
-    // printf("<instrs[bufPtr] begin=%x>",(unsigned)&instrs[bufPtr]);
+    // printf("<instructions[bufPtr] begin=%x>",(unsigned)&instructions[bufPtr]);
     while (n_pwmclk_transmitted < n_pwmclk_per_sym)
     {
         // Number of PWM clocks for this iteration
@@ -433,33 +368,33 @@ void txSym(
         // Configure the transmission for this iteration
         // Set GPIO pin to transmit f0
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instructions[bufPtr].b))
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f0_idx * 4;
+        ((struct CB *)(instructions[bufPtr].v))->SOURCE_AD = (long int)constantsPage.b + f0_idx * 4;
 
         // Wait for n_f0 PWM clocks
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instructions[bufPtr].b))
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->TXFR_LEN = n_f0;
+        ((struct CB *)(instructions[bufPtr].v))->TXFR_LEN = n_f0;
 
         // Set GPIO pin to transmit f1
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instructions[bufPtr].b))
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f1_idx * 4;
+        ((struct CB *)(instructions[bufPtr].v))->SOURCE_AD = (long int)constantsPage.b + f1_idx * 4;
 
         // Wait for n_f1 PWM clocks
         bufPtr = (bufPtr + 1) % (1024);
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instructions[bufPtr].b))
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->TXFR_LEN = n_f1;
+        ((struct CB *)(instructions[bufPtr].v))->TXFR_LEN = n_f1;
 
         // Update counters
         n_pwmclk_transmitted += n_pwmclk;
         n_f0_transmitted += n_f0;
     }
-    // printf("<instrs[bufPtr]=%x %x>",(unsigned)instrs[bufPtr].v,(unsigned)instrs[bufPtr].b);
+    // printf("<instructions[bufPtr]=%x %x>",(unsigned)instructions[bufPtr].v,(unsigned)instructions[bufPtr].b);
 }
 
 void unSetupDMA()
@@ -487,7 +422,7 @@ void set_dma_tone_table(
     const double &plld_actual_freq,
     std::vector<double> &dma_frequency_table,
     double &center_freq_actual,
-    struct PageInfo &constPage)
+    struct PageInfo &constantsPage)
 {
     // Make sure that all the WSPR tones can be produced solely by varying the fractional
     // part of the frequency divider (second 12 bits.)
@@ -540,7 +475,7 @@ void set_dma_tone_table(
     for (int i = 0; i < 1024; i++)
     {
         dma_frequency_table[i] = plld_actual_freq / (tuning_word[i] / pow(2.0, 12));
-        ((int *)(constPage.v))[i] = (0x5a << 24) + tuning_word[i];
+        ((int *)(constantsPage.v))[i] = (0x5a << 24) + tuning_word[i];
         if ((i % 2 == 0) && (i < 8))
         {
             assert((tuning_word[i] & (~0xfff)) == (tuning_word[i + 1] & (~0xfff)));
@@ -549,9 +484,9 @@ void set_dma_tone_table(
 }
 
 void setup_dma_instructions(
-    struct PageInfo &constPage,
-    struct PageInfo &instrPage,
-    struct PageInfo instrs[])
+    struct PageInfo &constantsPage,
+    struct PageInfo &instructionsPage,
+    struct PageInfo instructions[])
 {
     // Create the memory structures needed by the DMA engine and perform initial
     // clock configuration.
@@ -559,7 +494,7 @@ void setup_dma_instructions(
     allocMemPool(1025);
 
     // Allocate a page of ram for the constants
-    getRealMemPageFromPool(&constPage.v, &constPage.b);
+    getRealMemPageFromPool(&constantsPage.v, &constantsPage.b);
 
     // Create 1024 instructions allocating one page at a time.
     // Even instructions target the GP0 Clock divider
@@ -568,23 +503,23 @@ void setup_dma_instructions(
     while (instrCnt < 1024)
     {
         // Allocate a page of ram for the instructions
-        getRealMemPageFromPool(&instrPage.v, &instrPage.b);
+        getRealMemPageFromPool(&instructionsPage.v, &instructionsPage.b);
 
         // Make copy instructions
         // Only create as many instructions as will fit in the recently
         // allocated page. If not enough space for all instructions, the
         // next loop will allocate another page.
-        struct CB *instr0 = (struct CB *)instrPage.v;
+        struct CB *instr0 = (struct CB *)instructionsPage.v;
         int i;
         for (i = 0; i < (signed)(4096 / sizeof(struct CB)); i++)
         {
-            instrs[instrCnt].v = (void *)((long int)instrPage.v + sizeof(struct CB) * i);
-            instrs[instrCnt].b = (void *)((long int)instrPage.b + sizeof(struct CB) * i);
-            instr0->SOURCE_AD = (unsigned long int)constPage.b + 2048;
+            instructions[instrCnt].v = (void *)((long int)instructionsPage.v + sizeof(struct CB) * i);
+            instructions[instrCnt].b = (void *)((long int)instructionsPage.b + sizeof(struct CB) * i);
+            instr0->SOURCE_AD = (unsigned long int)constantsPage.b + 2048;
             instr0->DEST_AD = PWM_BUS_BASE + 0x18 /* FIF1 */;
             instr0->TXFR_LEN = 4;
             instr0->STRIDE = 0;
-            // instr0->NEXTCONBK = (int)instrPage.b + sizeof(struct CB)*(i+1);
+            // instr0->NEXTCONBK = (int)instructionsPage.b + sizeof(struct CB)*(i+1);
             instr0->TI = (1 /* DREQ  */ << 6) | (5 /* PWM */ << 16) | (1 << 26 /* no wide*/);
             instr0->RES1 = 0;
             instr0->RES2 = 0;
@@ -598,13 +533,13 @@ void setup_dma_instructions(
             }
 
             if (instrCnt != 0)
-                ((struct CB *)(instrs[instrCnt - 1].v))->NEXTCONBK = (long int)instrs[instrCnt].b;
+                ((struct CB *)(instructions[instrCnt - 1].v))->NEXTCONBK = (long int)instructions[instrCnt].b;
             instr0++;
             instrCnt++;
         }
     }
     // Create a circular linked list of instructions
-    ((struct CB *)(instrs[1023].v))->NEXTCONBK = (long int)instrs[0].b;
+    ((struct CB *)(instructions[1023].v))->NEXTCONBK = (long int)instructions[0].b;
 
     // set up a clock for the PWM
     ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4 /*PWMCLK_CNTL*/) = 0x5A000026; // Source=PLLD and disable
@@ -631,7 +566,7 @@ void setup_dma_instructions(
     DMA0->CS = 1 << 31; // reset
     DMA0->CONBLK_AD = 0;
     DMA0->TI = 0;
-    DMA0->CONBLK_AD = (unsigned long int)(instrPage.b);
+    DMA0->CONBLK_AD = (unsigned long int)(instructionsPage.b);
     DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
 }
 
@@ -724,7 +659,7 @@ void cleanup_dma_registers()
     unlink(LOCAL_DEVICE_FILE_NAME);
 }
 
-int dma_prep()
+void dma_prep()
 {
     getPLLD(); // Get PLLD Frequency
 
@@ -739,7 +674,7 @@ int dma_prep()
     // Set up DMA
     open_mbox();
     txon();
-    setup_dma_instructions(constPage, instrPage, instrs);
+    setup_dma_instructions(constantsPage, instructionsPage, instructions);
     txoff();
 }
 
@@ -772,7 +707,7 @@ double dma_setup(double center_freq_desired)
 
     // Create the DMA table for this center frequency
     double center_freq_actual; // This may be modified by reference in set_dma_tone_table()
-    set_dma_tone_table(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constPage);
+    set_dma_tone_table(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constantsPage);
     return center_freq_actual;
 }
 
@@ -801,7 +736,7 @@ void tx_wspr(WsprMessage message, double center_freq_actual)
         double this_sym = sched_end - elapsed;
         this_sym = (this_sym < .2) ? .2 : this_sym;
         this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
-        txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_frequency_table, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_frequency_table, F_PWM_CLK_INIT, instructions, constantsPage, bufPtr);
     }
 
     // Turn transmitter off
@@ -815,40 +750,37 @@ void tx_wspr(WsprMessage message, double center_freq_actual)
     llog.logS(INFO, "Transmission complete (", num_seconds, " sec.)");
 }
 
-void tx_tone()
+void tx_tone(double tone_frequency)
 {
     // Test tone mode...
     double wspr_symtime = WSPR_SYMTIME;
     double tone_spacing = 1.0 / wspr_symtime;
 
     std::stringstream temp;
-    temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << test_tone / 1.0e6 << " MHz.";
+    temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << tone_frequency / 1.0e6 << " MHz.";
     llog.logS(INFO, temp.str());
     llog.logS(INFO, "Press CTRL-C to exit.");
 
     txon();
     int bufPtr = 0;
     std::vector<double> dma_frequency_table;
-    // Set to non-zero value to ensure set_dma_tone_table is called at least once.
-    double ppm_prev = 123456;
     double center_freq_actual;
     while (true)
     {
         if (true) // TODO:  Run this at least once and after every PPM update
         {
-            set_dma_tone_table(test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constPage);
+            set_dma_tone_table(tone_frequency + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - ini.get_double_value("Extended", "PPM") / 1e6), dma_frequency_table, center_freq_actual, constantsPage);
             // cout << std::setprecision(30) << dma_frequency_table[0] << std::endl;
             // cout << std::setprecision(30) << dma_frequency_table[1] << std::endl;
             // cout << std::setprecision(30) << dma_frequency_table[2] << std::endl;
             // cout << std::setprecision(30) << dma_frequency_table[3] << std::endl;
-            if (center_freq_actual != test_tone + 1.5 * tone_spacing)
+            if (center_freq_actual != tone_frequency + 1.5 * tone_spacing)
             {
                 std::stringstream temp;
                 temp << std::setprecision(6) << std::fixed << "Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations." << std::endl;
                 llog.logE(INFO, temp.str());
             }
-            ppm_prev = ini.get_double_value("Extended", "PPM");
         }
-        txSym(0, center_freq_actual, tone_spacing, 60, dma_frequency_table, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        txSym(0, center_freq_actual, tone_spacing, 60, dma_frequency_table, F_PWM_CLK_INIT, instructions, constantsPage, bufPtr);
     }
 }

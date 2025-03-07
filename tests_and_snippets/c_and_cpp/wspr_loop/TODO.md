@@ -1,5 +1,7 @@
 # TODO
 
+- [ ] Fix command line parsing when not using callsig, grid, power, freq. (e.g. Test Tone)
+
 - [ ] Documentation needs updates from/related to changes to command line parsing (including INI vs option precedence)
 - [ ] See if we can use C++ 20 and .contains() (in arg parsing)
 - [ ] Replace manual trimming – Use std::erase_if() (C++20) instead of manually erasing whitespace.
