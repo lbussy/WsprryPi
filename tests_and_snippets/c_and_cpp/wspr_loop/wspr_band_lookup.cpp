@@ -39,6 +39,10 @@
 #include <stdexcept>
 #include <regex>
 
+#include "lcblog.hpp"
+
+extern LCBLog llog;
+
 /**
  * @brief Constructs the WSPRBandLookup object and initializes frequency data.
  *
@@ -52,36 +56,34 @@
  * case-insensitive lookups.
  */
 WSPRBandLookup::WSPRBandLookup()
-    : validHamFrequencies({
-        {135700, 137800, "2200M"},
-        {472000, 479000, "630M"},
-        {1800000, 2000000, "160M"},
-        {3500000, 4000000, "80M"},
-        {5332000, 5405000, "60M (Channelized)"},
-        {7000000, 7300000, "40M"},
-        {10100000, 10150000, "30M"},
-        {14000000, 14350000, "20M"},
-        {18068000, 18168000, "17M"},
-        {21000000, 21450000, "15M"},
-        {24890000, 24990000, "12M"},
-        {28000000, 29700000, "10M"},
-        {50000000, 54000000, "6M"},
-        {144000000, 148000000, "2M"},
-        {222000000, 225000000, "1.25M"},
-        {420000000, 450000000, "70CM"},
-        {902000000, 928000000, "33CM"},
-        {1240000000, 1300000000, "23CM"},
-        {2300000000, 2450000000, "13CM"},
-        {3300000000, 3500000000, "9CM"},
-        {5650000000, 5925000000, "6CM"},
-        {10000000000, 10500000000, "3CM"},
-        {24000000000, 24250000000, "1.2CM"},
-        {47000000000, 47200000000, "6MM"},
-        {75500000000, 81000000000, "4MM"},
-        {122250000000, 123000000000, "2.5MM"},
-        {134000000000, 141000000000, "2MM"},
-        {241000000000, 250000000000, "1MM"}
-    })
+    : validHamFrequencies({{135700, 137800, "2200M"},
+                           {472000, 479000, "630M"},
+                           {1800000, 2000000, "160M"},
+                           {3500000, 4000000, "80M"},
+                           {5332000, 5405000, "60M (Channelized)"},
+                           {7000000, 7300000, "40M"},
+                           {10100000, 10150000, "30M"},
+                           {14000000, 14350000, "20M"},
+                           {18068000, 18168000, "17M"},
+                           {21000000, 21450000, "15M"},
+                           {24890000, 24990000, "12M"},
+                           {28000000, 29700000, "10M"},
+                           {50000000, 54000000, "6M"},
+                           {144000000, 148000000, "2M"},
+                           {222000000, 225000000, "1.25M"},
+                           {420000000, 450000000, "70CM"},
+                           {902000000, 928000000, "33CM"},
+                           {1240000000, 1300000000, "23CM"},
+                           {2300000000, 2450000000, "13CM"},
+                           {3300000000, 3500000000, "9CM"},
+                           {5650000000, 5925000000, "6CM"},
+                           {10000000000, 10500000000, "3CM"},
+                           {24000000000, 24250000000, "1.2CM"},
+                           {47000000000, 47200000000, "6MM"},
+                           {75500000000, 81000000000, "4MM"},
+                           {122250000000, 123000000000, "2.5MM"},
+                           {134000000000, 141000000000, "2MM"},
+                           {241000000000, 250000000000, "1MM"}})
 {
     // Initialize WSPR band frequencies
     wsprFrequencies = {
@@ -102,8 +104,7 @@ WSPRBandLookup::WSPRBandLookup()
         {"10m", 28126100},
         {"6m", 50294500},
         {"4m", 70092500},
-        {"2m", 14449050}
-    };
+        {"2m", 14449050}};
 
     // Normalize keys to lowercase for case-insensitive lookups
     std::unordered_map<std::string, double> normalized_table;
@@ -148,6 +149,8 @@ long long WSPRBandLookup::parse_frequency_string(const std::string &freq_str) co
             return static_cast<long long>(value * 1e6);
         if (unit == "khz")
             return static_cast<long long>(value * 1e3);
+        if (unit == "hz")
+            return static_cast<long long>(value);
 
         // If no unit is provided, assume Hz
         return static_cast<long long>(value);
@@ -293,6 +296,79 @@ std::variant<double, std::string> WSPRBandLookup::lookup(const std::variant<std:
 
     // If the input type is unsupported, throw an exception
     throw std::invalid_argument("Unsupported input type.");
+}
+
+/**
+ * @brief Parses an input string as a frequency, with optional validation.
+ * 
+ * This function first checks if the input is a known WSPR band name (e.g., "20m").
+ * If not, it attempts to parse the input as a frequency string (e.g., "7.040 MHz").
+ * If the input is a plain number (e.g., "7040100"), it can either validate it
+ * against known ham bands or return it as-is based on the `validate` parameter.
+ * 
+ * @param input The input string, which can be:
+ *              - A WSPR band name (e.g., "20m")
+ *              - A frequency with a unit (e.g., "7.040 MHz")
+ *              - A raw numeric value (e.g., "7040100")
+ * @param validate If `true`, checks raw numeric values against known ham bands.
+ *                 If `false`, returns raw values as-is.
+ * 
+ * @return A `double` representing the frequency in Hz.
+ * 
+ * @throws std::invalid_argument If the input is invalid or unrecognized.
+ */
+double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool validate) const
+{
+    std::string input_str(input);
+
+    // Trim spaces
+    input_str.erase(0, input_str.find_first_not_of(" \t\n\r"));
+    input_str.erase(input_str.find_last_not_of(" \t\n\r") + 1);
+
+    llog.logS(DEBUG, "Parsing input frequency: ", input_str);
+
+    // If the input contains only numbers (no letters), treat it as a raw numeric value
+    if (input_str.find_first_not_of("0123456789.-") == std::string::npos)
+    {
+        llog.logS(DEBUG, "Detected raw numeric input: ", input_str);
+
+        try
+        {
+            double raw_freq = std::stod(input_str);
+            llog.logS(DEBUG, "Raw parsed frequency: ", raw_freq, " Hz");
+
+            // Validate if requested
+            if (validate)
+            {
+                std::string band = validate_frequency(static_cast<long long>(raw_freq));
+                if (band == "Invalid Frequency")
+                {
+                    llog.logE(ERROR, "Frequency does not match known bands: ", input_str);
+                    throw std::invalid_argument("Frequency does not match known bands: " + input_str);
+                }
+            }
+
+            return raw_freq;
+        }
+        catch (const std::exception &e)
+        {
+            llog.logE(ERROR, "Failed to parse frequency: ", input_str, " -> ", e.what());
+            throw std::invalid_argument("Invalid frequency format: " + input_str);
+        }
+    }
+
+    llog.logS(DEBUG, "Not a raw number, checking if it is a WSPR band...");
+
+    // Check if input is a known WSPR band name
+    auto result = lookup(input_str);
+    if (std::holds_alternative<double>(result))
+    {
+        llog.logS(DEBUG, "Recognized WSPR band: ", input_str, " -> ", std::get<double>(result), " Hz");
+        return std::get<double>(result);
+    }
+
+    llog.logE(ERROR, "Invalid input: ", input_str);
+    throw std::invalid_argument("Invalid frequency format: " + input_str);
 }
 
 /**

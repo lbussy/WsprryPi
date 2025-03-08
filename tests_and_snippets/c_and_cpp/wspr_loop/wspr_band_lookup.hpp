@@ -131,6 +131,34 @@ public:
     long long parse_frequency_string(const std::string &freq_str) const;
 
     /**
+     * @brief Parses an input string as a frequency, with optional validation.
+     *
+     * This function first checks if the input is a known WSPR band name (e.g., "20m").
+     * If found, it returns the associated WSPR frequency in Hz.
+     *
+     * If not a known band, the function attempts to parse the input as a frequency
+     * string with a unit (e.g., "7.040100 MHz"). If parsing succeeds, the resulting
+     * frequency is returned in Hz.
+     *
+     * If the input is a plain numeric value (e.g., "7040100"), it can either be
+     * validated against known ham bands or returned as-is, depending on the `validate` flag.
+     *
+     * @param input The input string, which can be:
+     *              - A WSPR band name (e.g., "20m")
+     *              - A frequency string with a unit (e.g., "7.040100 MHz")
+     *              - A raw numeric value (e.g., "7040100")
+     * @param validate If `true`, checks raw numeric values against known ham bands
+     *                 and rejects unrecognized frequencies.
+     *                 If `false`, returns the frequency as-is without validation.
+     *
+     * @return A `double` representing the frequency in Hz.
+     *
+     * @throws std::invalid_argument If the input is invalid, or if validation is enabled
+     *         and the frequency does not match any known ham band.
+     */
+    double parse_string_to_frequency(std::string_view input, bool validate = true) const;
+
+    /**
      * @brief Prints all predefined WSPR frequencies to standard output.
      */
     void print_wspr_frequencies() const;
