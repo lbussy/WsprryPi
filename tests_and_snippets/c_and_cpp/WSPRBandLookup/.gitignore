@@ -1,0 +1,97 @@
+# GitIgnore for WsprryPi
+wspr_lookup
+wspr_lookup_test
+
+## General Rules
+.DS_Store
+Thumbs.db
+*.log
+*.bak
+*.zip
+
+# Ignore all files without extensions in src/
+src/[^/]*[^.][^/]*$
+
+# Allow the src/ directory itself
+!src/
+
+# Allow all directories inside src/ (this is crucial)
+!src/**/
+
+# Explicitly allow submodules
+!src/LCBLog/
+!src/LCBLog/**/*
+!src/INI-Handler/
+!src/INI-Handler/**/*
+
+# Ignore all other files inside src/, but not directories
+src/*/*
+
+# Ensure .o and .d files remain ignored even with the rule above
+src/*.o
+src/*.d
+
+## Allow specific files in /src
+!/src/Makefile
+
+## C/C++ Ignores
+*.d            # Dependency files
+*.o            # Compiled object files
+*.obj
+*.so           # Shared objects
+*.dll
+*.dylib
+*.a            # Static libraries
+*.lib
+*.exe          # Executables
+*.out
+*.app
+*.gch          # Precompiled headers
+*.pch
+*.pdb          # Program database files
+*.ilk          # Incremental linker files
+*.map          # Linker map files
+*.sbr
+*.idb
+*.ipch         # IntelliSense precompiled headers
+*.sdf          # SQL Server Compact files
+*.tlog         # Task logs
+*.vcxproj.user
+.vscode/
+
+## Build Directories
+[bB]in/
+[Oo]bj/
+build/
+dist/
+x64/
+x86/
+
+## Python Ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+*.manifest
+*.spec
+
+# Python virtual environment
+.venv/
+
+## Sphinx Documentation
+docs/_build/
+
+## Ignore IDE/editor-specific files
+.idea/         # IntelliJ IDEA
+.vscode/       # Visual Studio Code
+*.code-workspace
+
+## Backup Files
+*.tmp
+*.swp
+*.swo
+*~
+*.bak
+*.old

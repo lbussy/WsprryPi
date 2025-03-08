@@ -42,6 +42,7 @@
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
+#include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
 
 // Standard library headers
@@ -58,47 +59,6 @@
 bool useini = false;
 std::string inifile = "";
 bool date_time_log = true;
-
-namespace
-{
-    // Predefined frequency mappings in Hz for recognized band names.
-    const std::unordered_map<std::string_view, double> frequency_map = {
-        {"LF", 137500.0},
-        {"LF-15", 137612.5},
-        {"MF", 475700.0},
-        {"MF-15", 475812.5},
-        {"160M", 1838100.0},
-        {"160M-15", 1838212.5},
-        {"80M", 3570100.0},
-        {"60M", 5288700.0},
-        {"40M", 7040100.0},
-        {"30M", 10140200.0},
-        {"20M", 14097100.0},
-        {"17M", 18106100.0},
-        {"15M", 21096100.0},
-        {"12M", 24926100.0},
-        {"10M", 28126100.0},
-        {"6M", 50294500.0},
-        {"4M", 70092500.0},
-        {"2M", 144490500.0}};
-
-    // Helper function to trim whitespace from a string view
-    inline std::string_view trim(std::string_view str)
-    {
-        size_t start = str.find_first_not_of(" \t\n\r");
-        if (start == std::string_view::npos)
-            return {}; // Empty string view
-
-        size_t end = str.find_last_not_of(" \t\n\r");
-        return str.substr(start, end - start + 1);
-    }
-
-    // Helper function to convert a string to uppercase
-    inline void to_uppercase(std::string &str)
-    {
-        std::transform(str.begin(), str.end(), str.begin(), ::toupper);
-    }
-} // namespace
 
 /**
  * @brief Global configuration instance for argument parsing.
@@ -156,6 +116,8 @@ IniFile ini;
 MonitorFile iniMonitor;
 
 WsprMessage *message = nullptr; // Initialize to null
+
+WSPRBandLookup lookup;
 
 /**
  * @brief Atomic variable representing the current WSPR transmission interval.
@@ -245,71 +207,6 @@ void ini_monitor_thread()
 
         // 3. Sleep briefly before the next check
         std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-}
-
-/**
- * @brief Converts a string to uppercase.
- *
- * This function takes an input string and returns a new string where all
- * characters have been converted to uppercase. It ensures proper handling
- * of character conversion by using `std::toupper` with an explicit cast to `unsigned char`.
- *
- * @param str The input string to be converted.
- * @return A new string with all characters converted to uppercase.
- *
- * @example
- * @code
- * std::string result = to_uppercase("Hello");
- * // result = "HELLO"
- * @endcode
- */
-std::string to_uppercase(const std::string &str)
-{
-    std::string upper_str = str; // Create a mutable copy
-    std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
-                   [](unsigned char c)
-                   { return std::toupper(c); });
-    return upper_str;
-}
-
-std::optional<double> string_to_frequency(std::string_view option)
-{
-    // Trim leading and trailing whitespace
-    option = trim(option);
-    if (option.empty())
-    {
-        llog.logE(ERROR, "Empty frequency input.");
-        return std::nullopt;
-    }
-
-    std::string key(option); // Convert to std::string for case transformation
-    to_uppercase(key);       // Convert once to uppercase
-
-    // Check if the input matches a predefined frequency band
-    auto it = frequency_map.find(key);
-    if (it != frequency_map.end())
-    {
-        return it->second;
-    }
-
-    // Attempt to parse the input as a numeric frequency value
-    try
-    {
-        double parsed_freq = std::stod(std::string(option)); // Convert only if needed
-
-        // Ensure the frequency is positive (or sero for a null transmission period)
-        if (parsed_freq < 0)
-        {
-            llog.logE(ERROR, "Invalid frequency:", option);
-            return std::nullopt;
-        }
-        return parsed_freq;
-    }
-    catch (const std::exception &)
-    {
-        llog.logE(ERROR, "Could not parse transmit frequency:", option);
-        return std::nullopt;
     }
 }
 
@@ -413,15 +310,15 @@ bool validate_config_data()
         }());
     std::string token;
 
-    // Parse frequency(ies) to double
     while (frequency_list >> token)
     {
-        std::optional<double> parsed_freq = string_to_frequency(token);
-        if (parsed_freq)
+        try
         {
-            center_freq_set.push_back(parsed_freq.value());
+            // Parse frequency(ies) to double with validation
+            double parsed_freq = lookup.parse_string_to_frequency(token, true);
+            center_freq_set.push_back(parsed_freq);
         }
-        else
+        catch (const std::invalid_argument &e)
         {
             llog.logE(WARN, "Invalid frequency ignored:", token);
         }
@@ -540,7 +437,7 @@ bool validate_config_data()
 
         // Log test tone frequency
         llog.logS(INFO, "A test tone will be generated at",
-                  std::fixed, std::setprecision(6), test_tone / 1e6, "MHz.");
+            lookup.freq_display_string(test_tone), ".");
 
         if (use_ntp)
         {
@@ -750,21 +647,23 @@ bool parse_command_line(int argc, char *const argv[])
     }
 
     static struct option long_options[] = {
+        // No arguments
         {"help", no_argument, nullptr, 'h'},
+        {"help", no_argument, nullptr, '?'},
         {"version", no_argument, nullptr, 'v'},
-        {"ppm", required_argument, nullptr, 'p'},
-        {"self-calibration", no_argument, nullptr, 's'},
-        {"free-running", no_argument, nullptr, 'f'},
+        {"use-ntp", no_argument, nullptr, 'n'},
         {"repeat", no_argument, nullptr, 'r'},
-        {"terminate", required_argument, nullptr, 'x'},
         {"offset", no_argument, nullptr, 'o'},
-        {"test-tone", required_argument, nullptr, 't'},
         {"led", no_argument, nullptr, 'l'},
-        {"led_pin", required_argument, nullptr, 'b'},
-        {"ini-file", required_argument, nullptr, 'i'},
         {"date-time-log", no_argument, nullptr, 'D'},
+        // Arguments required
+        {"ppm", required_argument, nullptr, 'p'},
+        {"terminate", required_argument, nullptr, 'x'},
+        {"test-tone", required_argument, nullptr, 't'},
+        {"led_pin", required_argument, nullptr, 'b'},
         {"power_level", required_argument, nullptr, 'd'},
         {"port", required_argument, nullptr, 'e'},
+
         {nullptr, 0, nullptr, 0}};
 
     std::regex callsign_regex(R"(^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$)");
@@ -774,26 +673,46 @@ bool parse_command_line(int argc, char *const argv[])
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "hvp:sfrx:o:t:bli:Dd:e:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnrlDp:x:t:b:d:e:", long_options, &option_index);
 
         if (c == -1)
             break;
 
         switch (c)
         {
-        case 'h':
+        // No arguments
+        case 'h': // Print usage (help)
         case '?':
             print_usage();
             std::exit(EXIT_SUCCESS);
-        case 'v':
+
+        case 'v': // Print version
             std::cout << version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
-        case 'p':
-            if (optarg == nullptr)
-            {
-                llog.logE(ERROR, "Missing argument for PPM correction.");
-                return false;
-            }
+
+        case 'n':
+            ini.set_bool_value("Extended", "Use NTP", true);
+            break;
+
+        case 'r':
+            loop_tx = true;
+            break;
+
+        case 'o':
+            ini.set_bool_value("Extended", "Offset", true);
+            break;
+
+        case 'l':
+            ini.set_bool_value("Extended", "Use LED", true);
+            break;
+
+        case 'D':
+            date_time_log = true;
+            llog.enableTimestamps(date_time_log);
+            break;
+
+        // Options that require arguments
+        case 'p': // PPM Value
             try
             {
                 double ppm = std::stod(optarg);
@@ -805,21 +724,8 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-        case 's':
-            ini.set_bool_value("Extended", "Use NTP", true);
-            break;
-        case 'f':
-            ini.set_bool_value("Extended", "Use NTP", false);
-            break;
-        case 'r':
-            loop_tx = true;
-            break;
-        case 'x':
-            if (optarg == nullptr)
-            {
-                llog.logE(ERROR, "Missing argument for termination count.");
-                return false;
-            }
+
+        case 'x': // Terminate after x iterations
             try
             {
                 tx_iterations = std::stoi(optarg);
@@ -832,38 +738,42 @@ bool parse_command_line(int argc, char *const argv[])
                 tx_iterations = 1;
             }
             break;
-        case 'o':
-            ini.set_bool_value("Extended", "Offset", true);
-            break;
-        case 't':
-            if (optarg == nullptr)
+
+        case 't': // Test-tone
+            try
             {
-                llog.logE(ERROR, "Missing argument for test tone frequency.");
+                // Parse frequency(ies) to double without ham band validation
+                test_tone = lookup.parse_string_to_frequency(optarg, false);
+                mode = ModeType::TONE;
+
+                if (test_tone <= 0.0)
+                {
+                    llog.logE(ERROR, "Invalid test tone frequency (<=0).");
+                    return false;
+                }
+            }
+            catch (const std::exception &e)
+            {
+                llog.logE(ERROR, "Invalid test tone frequency: ", optarg);
                 return false;
             }
-            test_tone = std::stof(optarg);
-            mode = ModeType::TONE;
-            if (test_tone <= 0.0f)
+            break;
+
+        case 'b': // LED Pin
+            try
             {
-                llog.logE(ERROR, "Invalid test tone frequency.");
+                int led_pin = std::stoi(optarg);
+                led_pin = std::clamp(led_pin, 0, 27);
+                ini.set_int_value("Extended", "LED Pin", led_pin);
+            }
+            catch (const std::exception &)
+            {
+                llog.logE(ERROR, "Invalid LED pin.");
                 return false;
             }
             break;
-        case 'i':
-            break;
-        case 'l':
-            ini.set_bool_value("Extended", "Use LED", true);
-            break;
-        case 'D':
-            date_time_log = true;
-            llog.enableTimestamps(date_time_log);
-            break;
-        case 'd':
-            if (optarg == nullptr)
-            {
-                llog.logE(ERROR, "Missing argument for power level.");
-                return false;
-            }
+
+        case 'd': // Power level on GPIO pin
             try
             {
                 int power = std::stoi(optarg);
@@ -876,12 +786,8 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-        case 'e':
-            if (optarg == nullptr)
-            {
-                llog.logE(ERROR, "Missing argument for server port.");
-                return false;
-            }
+
+        case 'e': // Services port number
             try
             {
                 int port = std::stoi(optarg);
@@ -898,6 +804,7 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
+
         default:
             llog.logE(ERROR, "Unknown argument: '", static_cast<char>(c), "'");
             return false;
@@ -905,9 +812,10 @@ bool parse_command_line(int argc, char *const argv[])
     }
 
     // Capture and validate positional arguments if we are not using an INI file
-    if (!useini)
+    if (!useini && mode == ModeType::WSPR)
     {
-        if (optind >= argc) {
+        if (optind >= argc)
+        {
             throw std::runtime_error("Missing required argument: Call Sign.");
         }
 
@@ -920,7 +828,8 @@ bool parse_command_line(int argc, char *const argv[])
         ini.set_string_value("Common", "Call Sign", callsign);
         ++optind;
 
-        if (optind >= argc) {
+        if (optind >= argc)
+        {
             throw std::runtime_error("Missing required argument: Grid Square.");
         }
 
@@ -933,7 +842,8 @@ bool parse_command_line(int argc, char *const argv[])
         ini.set_string_value("Common", "Grid Square", gridsquare);
         ++optind;
 
-        if (optind >= argc) {
+        if (optind >= argc)
+        {
             throw std::runtime_error("Missing required argument: Transmit Power.");
         }
 
@@ -959,16 +869,14 @@ bool parse_command_line(int argc, char *const argv[])
         center_freq_set.clear();
         while (optind < argc)
         {
-            std::string_view freq_input = argv[optind]; // Use string_view to avoid unnecessary copies
+            std::string_view freq_input = argv[optind]; // No unnecessary copies
 
-            // Convert string input to frequency
-            std::optional<double> freq_opt = string_to_frequency(freq_input);
-            if (freq_opt)
+            try
             {
-                double freq = freq_opt.value();
-                center_freq_set.push_back(freq);
+                double parsed_freq = lookup.parse_string_to_frequency(freq_input, true);
+                center_freq_set.push_back(parsed_freq);
             }
-            else
+            catch (const std::invalid_argument &e)
             {
                 throw std::invalid_argument("Ignoring invalid frequency: " + std::string(freq_input));
             }
@@ -980,32 +888,40 @@ bool parse_command_line(int argc, char *const argv[])
         {
             throw std::runtime_error("No valid frequencies provided.");
         }
+
+        // Debug print center_freq_set
+        std::ostringstream freq_stream;
+        freq_stream << "Frequencies in frequency set [";
+        freq_stream << center_freq_set.size() << "]: ";
+
+        for (const auto &freq : center_freq_set)
+        {
+            // Apply formatting explicitly for each number
+            freq_stream << std::fixed << std::setprecision(6) << (freq / 1e6) << " MHz, ";
+        }
+
+        // Remove trailing comma and space (if present)
+        std::string output = freq_stream.str();
+        if (!center_freq_set.empty())
+        {
+            output.pop_back(); // Remove last space
+            output.pop_back(); // Remove last comma
+        }
+        freq_stream << ".";
+        llog.logS(DEBUG, output);
+
+        return true;
     }
-    else
+    else if (mode == ModeType::TONE)
     {
-        ini.set_bool_value("Control", "Transmit", !useini);
+        return true;
     }
-
-    // Debug print center_freq_set
-    std::ostringstream freq_stream;
-    freq_stream << "Frequencies in frequency set [";
-    freq_stream << center_freq_set.size() << "]: ";
-
-    for (const auto &freq : center_freq_set)
+    else if (mode == ModeType::WSPR)
     {
-        // Apply formatting explicitly for each number
-        freq_stream << std::fixed << std::setprecision(6) << (freq / 1e6) << " MHz, ";
+        return true;
     }
 
-    // Remove trailing comma and space (if present)
-    std::string output = freq_stream.str();
-    if (!center_freq_set.empty())
-    {
-        output.pop_back(); // Remove last space
-        output.pop_back(); // Remove last comma
-    }
-    freq_stream << ".";
-    llog.logS(DEBUG, output);
-
-    return true;
+    // Unknown conditions
+    throw std::runtime_error("Unknown argument set.");
+    return false;
 }

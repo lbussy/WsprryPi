@@ -1,57 +1,16 @@
-# -----------------------------------------------------------------------------
-# MIT License
-# 
-# Copyright (c) 2025 Lee C. Bussy (@lbussy)
-# 
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# provided to do so, subject to the following conditions:
-# 
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-# 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-# -----------------------------------------------------------------------------
+# Makefile for building the WSPRBandLookup class tests
 
-# Makefile for building the Wsprry Pi project
-
-# Extract project details from Git
-#
-# Project name from remote origin URL (fallback to 'unknown' if not available)
-PRJ := $(shell git config --local remote.origin.url 2>/dev/null | sed -n 's#.*/\([^.]*\)\.git#\1#p' || echo "unknown")
-# Current Git branch (sanitize non-alphanumeric characters to '-')
-BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed -E 's/[^a-zA-Z0-9]/-/g' || echo "unknown")
-# Latest Git tag (version) without leading 'v'
-VER := $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+)/\1/' || echo "0.0.0")
-# Append branch name if not on 'main' or 'master'
-PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "-$(BRH)"; fi)
-# Append branch name to version only if not already suffixed
-VER := $(VER)$(PRE)
-# Append commit hash if current commit is not an exact tag
-COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
 # Lower-case based executable name
-EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
+EXE_NAME := wspr_lookup
 
 # Output Items
 OUT := $(EXE_NAME)						# Normal release binary
 TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
-INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
-TEST_FREQ := 730000						# Frequency for test tone
-PREFIX := /usr/local					# Installation directory for the binary
+
 # Strip whitespace from comments
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))
-TEST_FREQ := $(strip $(TEST_FREQ))
+INI_FILE := $(strip $(INI_FILE))
 PREFIX := $(strip $(PREFIX))
 
 # Output directories
@@ -93,15 +52,6 @@ C_RELEASE_FLAGS := $(CFLAGS) -O2			# Release optimized
 # C++ Flags
 COMM_CXX_FLAGS := -Wno-psabi -lstdc++fs -std=c++17
 CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
-# Include paths for libraries
-CXXFLAGS += -I$(abspath ./INI-Handler/src)
-CXXFLAGS += -I$(abspath ./LCBLog/src)
-CXXFLAGS += -I$(abspath ./MonitorFile/src)
-CXXFLAGS += -I$(abspath ./WSPR-Message/src)
-CXXFLAGS += -I$(abspath ./Singleton/src)
-CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
-# Define additional macros for the compiler
-CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2			# Release optimized
 CXX_DEBUG_FLAGS := $(CXXFLAGS) -g -DDEBUG_BUILD	# Debug flags
@@ -189,31 +139,8 @@ debug: build/bin/$(TEST_OUT)
 # Test target
 .PHONY: test
 test: debug
-	$(Q)echo "Running test with sudo privileges."
-	$(Q)sudo ./build/bin/$(TEST_OUT) -i $(INI_FILE)
-
-# Test tone target
-.PHONY: test-tone
-test-tone: debug
-	$(Q)echo "Running test tone with sudo privileges."
-	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
-
-# Install target (install only the release binary)
-.PHONY: install
-install: $(OUT)
-	$(Q)echo "Installing $(OUT) to $(PREFIX)/bin."
-	$(Q)sudo systemctl stop $(OUT).service || true
-	$(Q)sudo install -d $(PREFIX)/bin
-	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/bin/$(OUT)
-	$(Q)sudo systemctl start $(OUT).service || true
-
-# Uninstall target
-.PHONY: uninstall
-uninstall:
-	$(Q)echo "Removing $(PREFIX)/bin/$(OUT)."
-	$(Q)sudo systemctl stop $(OUT).service || true
-	$(Q)sudo systemctl disable $(OUT).service || true
-	$(Q)sudo rm -f $(PREFIX)/bin/$(OUT)
+	$(Q)echo "Running test."
+	$(Q)./build/bin/$(TEST_OUT)
 
 # Show only user-defined macros
 .PHONY: macros
@@ -233,10 +160,7 @@ help:
 	$(Q)echo "Available targets:"
 	$(Q)echo "  all        Build the project (default: release)."
 	$(Q)echo "  clean      Remove build artifacts."
-	$(Q)echo "  test       Run the binary with the INI file."
-	$(Q)echo "  test-tone  Run the binary with a test tone."
-	$(Q)echo "  install    Install the binary to $(PREFIX)/bin."
-	$(Q)echo "  uninstall  Remove the installed binary."
+	$(Q)echo "  test       Run the binary."
 	$(Q)echo "  lint       Run static analysis."
 	$(Q)echo "  macros     Show defined project macros."
 	$(Q)echo "  debug      Build with debugging symbols."

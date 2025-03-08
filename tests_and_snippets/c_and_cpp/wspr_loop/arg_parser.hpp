@@ -191,26 +191,6 @@ extern std::atomic<bool> ini_reload_pending;
 extern void ini_monitor_thread();
 
 /**
- * @brief Converts a string to uppercase.
- *
- * This function takes an input string and returns a new string where all
- * characters have been converted to uppercase. It ensures proper handling
- * of character conversion by using `std::toupper` with an explicit cast to `unsigned char`.
- *
- * @param str The input string to be converted.
- * @return A new string with all characters converted to uppercase.
- *
- * @example
- * @code
- * std::string result = to_uppercase("Hello");
- * // result = "HELLO"
- * @endcode
- */
-extern std::string to_uppercase(const std::string &str);
-
-std::optional<double> string_to_frequency(std::string_view option);
-
-/**
  * @brief Displays the usage information for the WsprryPi application.
  *
  * This function prints out a brief help message to `std::cerr`, outlining
