@@ -46,11 +46,12 @@ EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 OUT := $(EXE_NAME)						# Normal release binary
 TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
 INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
-PREFIX :=	/usr/local					# Installation directory for the binary
+TEST_FREQ := 730000						# Frequency for test tone
+PREFIX := /usr/local					# Installation directory for the binary
 # Strip whitespace from comments
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))
-INI_FILE := $(strip $(INI_FILE))
+TEST_FREQ := $(strip $(TEST_FREQ))
 PREFIX := $(strip $(PREFIX))
 
 # Output directories
@@ -189,7 +190,13 @@ debug: build/bin/$(TEST_OUT)
 .PHONY: test
 test: debug
 	$(Q)echo "Running test with sudo privileges."
-	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone 730000
+	$(Q)sudo ./build/bin/$(TEST_OUT) -i $(INI_FILE)
+
+# Test tone target
+.PHONY: test-tone
+test-tone: debug
+	$(Q)echo "Running test tone with sudo privileges."
+	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
 
 # Install target (install only the release binary)
 .PHONY: install
@@ -226,7 +233,8 @@ help:
 	$(Q)echo "Available targets:"
 	$(Q)echo "  all        Build the project (default: release)."
 	$(Q)echo "  clean      Remove build artifacts."
-	$(Q)echo "  test       Run the binary."
+	$(Q)echo "  test       Run the binary with the INI file."
+	$(Q)echo "  test-tone  Run the binary with a test tone."
 	$(Q)echo "  install    Install the binary to $(PREFIX)/bin."
 	$(Q)echo "  uninstall  Remove the installed binary."
 	$(Q)echo "  lint       Run static analysis."
