@@ -433,7 +433,7 @@ void set_dma_tone_table(
     // the requested (center_freq_desired) frequency freq up/down to fit that and returns the
     // result in center_freq_actual.
     //
-    // An integer part change, or a "coarse tuning word", is a 4.5 kHz step, where the fine 
+    // An integer part change, or a "coarse tuning word", is a 4.5 kHz step, where the fine
     // tuning word is approximately 1.1 Hz.
     //
     // The max potential change applied here is 2 x tone spacing with four words, so the

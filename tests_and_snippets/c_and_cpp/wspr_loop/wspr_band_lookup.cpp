@@ -39,10 +39,6 @@
 #include <stdexcept>
 #include <regex>
 
-#include "lcblog.hpp"
-
-extern LCBLog llog;
-
 /**
  * @brief Constructs the WSPRBandLookup object and initializes frequency data.
  *
@@ -300,21 +296,21 @@ std::variant<double, std::string> WSPRBandLookup::lookup(const std::variant<std:
 
 /**
  * @brief Parses an input string as a frequency, with optional validation.
- * 
+ *
  * This function first checks if the input is a known WSPR band name (e.g., "20m").
  * If not, it attempts to parse the input as a frequency string (e.g., "7.040 MHz").
  * If the input is a plain number (e.g., "7040100"), it can either validate it
  * against known ham bands or return it as-is based on the `validate` parameter.
- * 
+ *
  * @param input The input string, which can be:
  *              - A WSPR band name (e.g., "20m")
  *              - A frequency with a unit (e.g., "7.040 MHz")
  *              - A raw numeric value (e.g., "7040100")
  * @param validate If `true`, checks raw numeric values against known ham bands.
  *                 If `false`, returns raw values as-is.
- * 
+ *
  * @return A `double` representing the frequency in Hz.
- * 
+ *
  * @throws std::invalid_argument If the input is invalid or unrecognized.
  */
 double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool validate) const
@@ -325,17 +321,12 @@ double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool va
     input_str.erase(0, input_str.find_first_not_of(" \t\n\r"));
     input_str.erase(input_str.find_last_not_of(" \t\n\r") + 1);
 
-    llog.logS(DEBUG, "Parsing input frequency: ", input_str);
-
     // If the input contains only numbers (no letters), treat it as a raw numeric value
     if (input_str.find_first_not_of("0123456789.-") == std::string::npos)
     {
-        llog.logS(DEBUG, "Detected raw numeric input: ", input_str);
-
         try
         {
             double raw_freq = std::stod(input_str);
-            llog.logS(DEBUG, "Raw parsed frequency: ", raw_freq, " Hz");
 
             // Validate if requested
             if (validate)
@@ -343,7 +334,6 @@ double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool va
                 std::string band = validate_frequency(static_cast<long long>(raw_freq));
                 if (band == "Invalid Frequency")
                 {
-                    llog.logE(ERROR, "Frequency does not match known bands: ", input_str);
                     throw std::invalid_argument("Frequency does not match known bands: " + input_str);
                 }
             }
@@ -352,22 +342,17 @@ double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool va
         }
         catch (const std::exception &e)
         {
-            llog.logE(ERROR, "Failed to parse frequency: ", input_str, " -> ", e.what());
             throw std::invalid_argument("Invalid frequency format: " + input_str);
         }
     }
-
-    llog.logS(DEBUG, "Not a raw number, checking if it is a WSPR band...");
 
     // Check if input is a known WSPR band name
     auto result = lookup(input_str);
     if (std::holds_alternative<double>(result))
     {
-        llog.logS(DEBUG, "Recognized WSPR band: ", input_str, " -> ", std::get<double>(result), " Hz");
         return std::get<double>(result);
     }
 
-    llog.logE(ERROR, "Invalid input: ", input_str);
     throw std::invalid_argument("Invalid frequency format: " + input_str);
 }
 
