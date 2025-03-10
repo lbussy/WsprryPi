@@ -26,7 +26,7 @@ int main()
     atexit(dma_cleanup);
 
     setup_dma();
-    tx_tone();
+    tx_wspr();
 
     return 0;
 }

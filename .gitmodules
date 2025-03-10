@@ -41,3 +41,6 @@
 [submodule "tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox"]
 	path = tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox
 	url = https://github.com/lbussy/Broadcom-Mailbox.git
+[submodule "tests_and_snippets/c_and_cpp/dma/WSPR-Message"]
+	path = tests_and_snippets/c_and_cpp/dma/WSPR-Message
+	url = https://github.com/lbussy/WSPR-Message.git

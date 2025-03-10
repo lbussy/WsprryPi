@@ -1,5 +1,8 @@
 #include "dma.hpp"
 
+// Submodules
+#include "wspr_message.hpp"
+
 // C Standard Library Headers
 #include <assert.h>
 #include <ctype.h>
@@ -223,7 +226,7 @@ struct wConfig
     bool repeat = true;                        // No repeat transmission by default
     std::string callsign = "AA0NT";            // Default to empty, requiring user input
     std::string locator = "EM18";              // Default to empty, requiring user input
-    std::string tx_power = "20";               // Default to 37 dBm (5W), a common WSPR power level
+    int tx_power = 20;                         // Default to 37 dBm (5W), a common WSPR power level
     std::string frequency_string = "7040100."; // Default to empty
     std::vector<double> center_freq_set = {};  // Empty vector, frequencies to be defined
     double ppm = 0.0;                          // Default to zero, meaning no frequency correction applied
@@ -786,144 +789,6 @@ void to_upper(char *str)
     }
 }
 
-void wspr(
-    const char *call,
-    const char *l_pre,
-    const char *dbm,
-    unsigned char *symbols)
-{
-    // Encode call, locator, and dBm into WSPR codeblock.
-
-    // pack prefix in nadd, call in n1, grid, dbm in n2
-    char *c, buf[16];
-    strncpy(buf, call, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0'; // Ensure null-termination
-    c = buf;
-    to_upper(c);
-    unsigned long ng, nadd = 0;
-
-    if (strchr(c, '/'))
-    { // prefix-suffix
-        nadd = 2;
-        int i = strchr(c, '/') - c; // stroke position
-        int n = strlen(c) - i - 1;  // suffix len, prefix-call len
-        c[i] = '\0';
-        if (n == 1)
-            ng = 60000 - 32768 + (c[i + 1] >= '0' && c[i + 1] <= '9' ? c[i + 1] - '0' : c[i + 1] == ' ' ? 38
-                                                                                                        : c[i + 1] - 'A' + 10); // suffix /A to /Z, /0 to /9
-        if (n == 2)
-            ng = 60000 + 26 + 10 * (c[i + 1] - '0') + (c[i + 2] - '0'); // suffix /10 to /99
-        if (n > 2)
-        { // prefix EA8/, right align
-            ng = (i < 3 ? 36 : c[i - 3] >= '0' && c[i - 3] <= '9' ? c[i - 3] - '0'
-                                                                  : c[i - 3] - 'A' + 10);
-            ng = 37 * ng + (i < 2 ? 36 : c[i - 2] >= '0' && c[i - 2] <= '9' ? c[i - 2] - '0'
-                                                                            : c[i - 2] - 'A' + 10);
-            ng = 37 * ng + (i < 1 ? 36 : c[i - 1] >= '0' && c[i - 1] <= '9' ? c[i - 1] - '0'
-                                                                            : c[i - 1] - 'A' + 10);
-            if (ng < 32768)
-                nadd = 1;
-            else
-                ng = ng - 32768;
-            c = c + i + 1;
-        }
-    }
-
-    int i = (isdigit(c[2]) ? 2 : isdigit(c[1]) ? 1
-                                               : 0); // last prefix digit of de-suffixed/de-prefixed callsign
-    int n = strlen(c) - i - 1;                       // 2nd part of call len
-    unsigned long n1;
-    n1 = (i < 2 ? 36 : c[i - 2] >= '0' && c[i - 2] <= '9' ? c[i - 2] - '0'
-                                                          : c[i - 2] - 'A' + 10);
-    n1 = 36 * n1 + (i < 1 ? 36 : c[i - 1] >= '0' && c[i - 1] <= '9' ? c[i - 1] - '0'
-                                                                    : c[i - 1] - 'A' + 10);
-    n1 = 10 * n1 + c[i] - '0';
-    n1 = 27 * n1 + (n < 1 ? 26 : c[i + 1] - 'A');
-    n1 = 27 * n1 + (n < 2 ? 26 : c[i + 2] - 'A');
-    n1 = 27 * n1 + (n < 3 ? 26 : c[i + 3] - 'A');
-
-    // if(rand() % 2) nadd=0;
-    if (!nadd)
-    {
-        // Copy locator locally since it is declared const and we cannot modify
-        // its contents in-place.
-        char l[5]; // Increase size to hold null terminator
-        strncpy(l, l_pre, sizeof(l) - 1);
-        l[sizeof(l) - 1] = '\0'; // Ensure null-termination
-        to_upper(l);             // grid square Maidenhead locator (uppercase)
-        ng = 180 * (179 - 10 * (l[0] - 'A') - (l[2] - '0')) + 10 * (l[1] - 'A') + (l[3] - '0');
-    }
-    int p = atoi(dbm); // EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
-    int corr[] = {0, -1, 1, 0, -1, 2, 1, 0, -1, 1};
-    p = p > 60 ? 60 : p < 0 ? 0
-                            : p + corr[p % 10];
-    unsigned long n2 = (ng << 7) | (p + 64 + nadd);
-
-    // pack n1,n2,zero-tail into 50 bits
-    char packed[11] = {
-        static_cast<char>(n1 >> 20),
-        static_cast<char>(n1 >> 12),
-        static_cast<char>(n1 >> 4),
-        static_cast<char>(((n1 & 0x0f) << 4) | ((n2 >> 18) & 0x0f)),
-        static_cast<char>(n2 >> 10),
-        static_cast<char>(n2 >> 2),
-        static_cast<char>((n2 & 0x03) << 6),
-        0,
-        0,
-        0,
-        0};
-
-    // convolutional encoding K=32, r=1/2, Layland-Lushbaugh polynomials
-    int k = 0;
-    int j, s;
-    int nstate = 0;
-    unsigned char symbol[176];
-    for (j = 0; j != sizeof(packed); j++)
-    {
-        for (i = 7; i >= 0; i--)
-        {
-            unsigned long poly[2] = {0xf2d05351L, 0xe4613c47L};
-            nstate = (nstate << 1) | ((packed[j] >> i) & 1);
-            for (s = 0; s != 2; s++)
-            { // convolve
-                unsigned long n = nstate & poly[s];
-                int even = 0; // even := parity(n)
-                while (n)
-                {
-                    even = 1 - even;
-                    n = n & (n - 1);
-                }
-                symbol[k] = even;
-                k++;
-            }
-        }
-    }
-
-    // interleave symbols
-    const unsigned char npr3[162] = {
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0,
-        0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1,
-        0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0,
-        0, 0};
-    for (i = 0; i != 162; i++)
-    {
-        // j0 := bit reversed_values_smaller_than_161[i]
-        unsigned char j0 = 0; // Ensure j0 is initialized
-        p = -1;
-        for (k = 0; p != i; k++)
-        {
-            j0 = 0;                  // Reset j0 before each use
-            for (j = 0; j != 8; j++) // j0 := bit_reverse(k)
-                j0 = ((k >> j) & 1) | (j0 << 1);
-            if (j0 < 162)
-                p++;
-        }
-        symbols[j0] = npr3[j0] | (symbol[i] << 1); // interleave and add sync std::vector
-    }
-}
-
 bool wait_every(int minute)
 {
     // Wait for the system clock's minute to reach one second past 'minute'
@@ -1183,18 +1048,22 @@ void tx_wspr()
     for (;;)
     { // Reload Loop >
         // Create WSPR symbols
-        unsigned char symbols[162];
-        wspr(config.callsign.c_str(), config.locator.c_str(), config.tx_power.c_str(), symbols);
+        WsprMessage message(config.callsign, config.locator, config.tx_power);
 
-        // // Print encodeed packet
-        // printf("WSPR codeblock: ");
-        // for (int i = 0; i < (signed)(sizeof(symbols)/sizeof(*symbols)); i++) {
-        // if (i) {
-        //     std::cout << ",";
-        // }
-        // printf("%d", symbols[i]);
-        // }
-        // printf("\n");
+        #include <iostream>
+        #include <cstdio>
+
+        constexpr int SYMBOL_COUNT = 162; // Explicitly define the number of symbols
+
+        // Print encoded packet
+        std::cout << "WSPR codeblock: ";
+        for (int i = 0; i < SYMBOL_COUNT; i++) {
+            if (i > 0) {
+                std::cout << ",";
+            }
+            std::cout << static_cast<int>(message.symbols[i]); // Ensure correct formatting
+        }
+        std::cout << std::endl;
 
         prtStdOut("Ready to transmit (setup complete).\n");
         int band = 0;
@@ -1285,7 +1154,7 @@ void tx_wspr()
                 struct timeval diff;
                 int bufPtr = 0;
                 txon(config.useled);
-                for (int i = 0; i < 162; i++)
+                for (int i = 0; i < SYMBOL_COUNT; i++)
                 {
                     gettimeofday(&sym_start, NULL);
                     timeval_subtract(&diff, &sym_start, &tvBegin);
@@ -1294,7 +1163,7 @@ void tx_wspr()
                     double this_sym = sched_end - elapsed;
                     this_sym = (this_sym < .2) ? .2 : this_sym;
                     this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
-                    txSym(symbols[i], center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
                 }
                 n_tx++;
 

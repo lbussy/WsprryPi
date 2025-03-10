@@ -79,7 +79,7 @@ CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 # CXXFLAGS += -I$(abspath ./INI-Handler/src)
 # CXXFLAGS += -I$(abspath ./LCBLog/src)
 # CXXFLAGS += -I$(abspath ./MonitorFile/src)
-# CXXFLAGS += -I$(abspath ./WSPR-Message/src)
+CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 # CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
 # Define additional macros for the compiler
