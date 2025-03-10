@@ -238,7 +238,6 @@ struct PageInfo constPage;
 struct PageInfo instrPage;
 struct PageInfo instrs[1024];
 
-
 // Former BCM_HOST Stuff:
 constexpr unsigned INVALID_ADDRESS = ~0u;
 constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0;
@@ -332,32 +331,6 @@ int get_processor_id()
 }
 // Former BCM_HOST Stuff^
 
-// TODO: Get rid of these:
-// Recursive variadic functions for stdout/err control
-template <typename T>
-void prtStdOut(T t)
-{
-    std::cout << t;
-}
-template <typename T, typename... Args>
-void prtStdOut(T t, Args... args)
-{
-    std::cout << t;
-    prtStdOut(args...);
-}
-// TODO: Get rid of these:
-template <typename T>
-void prtStdErr(T t)
-{
-    std::cerr << t;
-}
-template <typename T, typename... Args>
-void prtStdErr(T t, Args... args)
-{
-    std::cerr << t;
-    prtStdErr(args...);
-}
-
 void getPLLD()
 {
     // Nominal clock frequencies
@@ -384,12 +357,12 @@ void getPLLD()
         config.f_plld_clk = (750000000.0);
         break;
     default:
-        fprintf(stderr, "Error: Unknown chipset (%d).", get_processor_id());
+        std::cerr << "Error: Unknown chipset (" << get_processor_id() << ")." << std::endl;
         exit(-1);
     }
     if (config.f_plld_clk <= 0)
     {
-        prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+        std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
         config.f_plld_clk = 500000000.0;
     }
 }
@@ -420,7 +393,7 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     // page in the pool.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
-        prtStdErr("Error: unable to allocated more pages.");
+        std::cerr << "Error: unable to allocated more pages." << std::endl;
         exit(-1);
     }
     unsigned offset = mbox.pool_cnt * 4096;
@@ -629,7 +602,7 @@ void setupDMATab(
 {
     if (dma_table_freq.size() < 1024)
     {
-        prtStdErr("Error: DMA table frequency array not initialized properly.\n");
+        std::cerr << "Error: DMA table frequency array not initialized properly." << std::endl;
         dma_table_freq.resize(1024);
     }
     // Program the tuning words into the DMA table.
@@ -644,7 +617,7 @@ void setupDMATab(
         center_freq_actual = plld_actual_freq / floor(div_lo) - 1.6 * tone_spacing;
         std::stringstream temp;
         temp << std::setprecision(6) << std::fixed << "Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
-        prtStdErr(temp.str(), " because of hardware limitations.\n");
+        std::cerr << temp.str() << " because of hardware limitations." << std::endl;
     }
 
     // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
@@ -809,7 +782,7 @@ void update_ppm()
 
         if (status < 0)
         {
-            prtStdErr("Error: ntp_adjtime() failed. Retrying in 2 seconds.\n");
+            std::cerr << "Error: ntp_adjtime() failed. Retrying in 2 seconds." << std::endl;
             sleep(2);
             retry_count++;
             continue;
@@ -820,14 +793,14 @@ void update_ppm()
             break; // Valid value, exit retry loop
         }
 
-        prtStdErr("Warning: Invalid ntx.freq. Retrying in 2 seconds.\n");
+        std::cerr << "Warning: Invalid ntx.freq. Retrying in 2 seconds." << std::endl;
         sleep(2);
         retry_count++;
     }
 
     if (ntx.freq < -500000 || ntx.freq > 500000)
     {
-        prtStdErr("Error: ntx.freq remains out of range after retries. Using clamped value.\n");
+        std::cerr << "Error: ntx.freq remains out of range after retries. Using clamped value." << std::endl;
         ntx.freq = std::max(-500000L, std::min(ntx.freq, 500000L));
     }
 
@@ -835,17 +808,17 @@ void update_ppm()
 
     if (abs(ppm_new) > 200)
     {
-        prtStdErr("Warning: Absolute ppm value is greater than 200 and is being ignored.\n");
+        std::cerr << "Warning: Absolute ppm value is greater than 200 and is being ignored." << std::endl;
     }
     else
     {
         if (config.ppm != ppm_new)
         {
-            prtStdOut("Obtained new ppm value: ", ppm_new, "\n");
+            std::cout << "Obtained new ppm value: " << ppm_new << std::endl;
         }
         if (!std::isfinite(ppm_new) || ppm_new < -500 || ppm_new > 500)
         {
-            prtStdErr("Warning: Invalid PPM value. Clamping to ±500.\n");
+            std::cerr << "Warning: Invalid PPM value. Clamping to ±500." << std::endl;
             config.ppm = std::max(-500.0, std::min(ppm_new, 500.0));
         }
         else
@@ -886,7 +859,7 @@ void open_mbox()
     mbox.handle = mbox_open();
     if (mbox.handle < 0)
     {
-        prtStdErr("Failed to open mailbox.\n");
+        std::cerr << "Failed to open mailbox." << std::endl;
         exit(-1);
     }
 }
@@ -901,7 +874,7 @@ void setSchedPriority(int priority)
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (ret)
     {
-        prtStdErr("Warning: pthread_setschedparam (increase thread priority) returned non-zero: ", ret, "\n");
+        std::cerr << "Warning: pthread_setschedparam (increase thread priority) returned non-zero: " << ret << std::endl;
     }
 }
 
@@ -915,7 +888,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        prtStdErr("Error: Can't open /dev/mem\n");
+        std::cerr << "Error: Can't open /dev/mem" << std::endl;
         exit(-1);
     }
     peri_base_virt = (unsigned *)mmap(
@@ -928,7 +901,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     );
     if ((long int)peri_base_virt == -1)
     {
-        prtStdErr("Error: peri_base_virt mmap error.\n");
+        std::cerr <<  "Error: peri_base_virt mmap error." << std::endl;
         exit(-1);
     }
     close(mem_fd);
@@ -954,7 +927,7 @@ void setup_dma()
     // Initialize the RNG
     srand(time(NULL));
 
-    // TODO: Push the single hardcoded band to center_freq_set
+    // TODO: Push the single hardcoded band to center_freq_set:
     double temp_center_freq_desired;
     try
     {
@@ -967,9 +940,10 @@ void setup_dma()
     }
     catch (const std::exception &e)
     {
-        prtStdErr("Error: Invalid frequency string. Using default 7040100 Hz.\n");
+        std::cerr << "Error: Invalid frequency string. Using default 7040100 Hz." << std::endl;
         config.center_freq_set.push_back(7040100.0);
     }
+    // TODO: Push the single hardcoded band to center_freq_set^
 
     // Initial configuration
     setup_peri_base_virt(peri_base_virt);
@@ -991,8 +965,8 @@ void tx_tone()
 
     std::stringstream temp;
     temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
-    prtStdOut(temp.str(), "\n");
-    prtStdOut("Press CTRL-C to exit.\n");
+    std::cout << temp.str() << std::endl;
+    std::cout << "Press CTRL-C to exit." << std::endl;
 
     txon(config.useled);
     int bufPtr = 0;
@@ -1010,7 +984,7 @@ void tx_tone()
         {
             if (config.f_plld_clk <= 0)
             {
-                prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+                std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
                 config.f_plld_clk = 500000000.0;
             }
             setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
@@ -1021,8 +995,8 @@ void tx_tone()
             if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
             {
                 std::stringstream temp;
-                temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.\n";
-                prtStdErr(temp.str());
+                temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.";
+                std::cerr << temp.str() << std::endl;
             }
             ppm_prev = config.ppm;
         }
@@ -1054,7 +1028,7 @@ void tx_wspr()
         }
         std::cout << std::endl;
 
-        prtStdOut("Ready to transmit (setup complete).\n");
+        std::cout << "Ready to transmit (setup complete)." << std::endl;
         int band = 0;
         int n_tx = 0;
         for (;;)
@@ -1063,12 +1037,12 @@ void tx_wspr()
             double center_freq_desired;
             if (config.center_freq_set.empty())
             {
-                prtStdErr("Error: center_freq_set is empty. Cannot access band=", band, "\n");
+                std::cerr << "Error: center_freq_set is empty. Cannot access band [" << band << "]." << std::endl;
                 exit(1);
             }
             if (band < 0 || band >= static_cast<int>(config.center_freq_set.size()))
             {
-                prtStdErr("Error: Band index out of range. band=", band, " size=", config.center_freq_set.size(), "\n");
+                std::cerr << "Error: Band index out of range. band [" << band << "] size [" << config.center_freq_set.size() << "]." << std::endl;
                 exit(1);
             }
             center_freq_desired = config.center_freq_set[band];
@@ -1089,16 +1063,16 @@ void tx_wspr()
             std::stringstream temp;
             temp << std::setprecision(6) << std::fixed;
             temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
-            prtStdOut(temp.str(), "\n");
+            std::cout << temp.str() << std::endl;
 
             // Wait for WSPR transmission window to arrive.
             if (config.no_delay)
             {
-                prtStdOut("Transmitting immediately (not waiting for WSPR window.)\n");
+                std::cout << "Transmitting immediately (not waiting for WSPR window.)" << std::endl;
             }
             else
             {
-                prtStdOut("Waiting for next WSPR transmission window.\n");
+                std::cout << "Waiting for next WSPR transmission window." << std::endl;
                 if (!wait_every((wspr15) ? 15 : 2))
                 {
                     // Break and reload if ini changes
@@ -1119,7 +1093,7 @@ void tx_wspr()
             {
                 if (config.f_plld_clk <= 0)
                 {
-                    prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+                    std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
                     config.f_plld_clk = 500000000.0;
                 }
                 setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
@@ -1168,7 +1142,7 @@ void tx_wspr()
             }
             else
             {
-                prtStdOut("Skipping transmission.\n");
+                std::cout << "Skipping transmission." << std::endl;
                 usleep(1000000);
             }
 
