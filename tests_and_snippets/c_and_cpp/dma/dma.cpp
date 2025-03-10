@@ -90,6 +90,11 @@
 #define WSPR_RAND_OFFSET 80
 #define WSPR15_RAND_OFFSET 8
 
+// TODO:
+// Not sure what the difference between a page and a block is in this
+// context.  Previously these were not used so I searched for "4096"
+// and guessed which one was which.
+// Only the mbox.mem_ref = mem_alloc() used both valies.
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
@@ -115,19 +120,6 @@
 #define DMA_BUS_BASE (0x7E007000)
 #define PWM_BUS_BASE (0x7e20C000) /* PWM controller */
 
-// Used for GPIO DIO Access:
-// GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
-#define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
-#define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
-#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3  \
-                                                                                     : 2) \
-                                                      << (((g) % 10) * 3))
-#define GPIO_SET *(gpio + 7)                  // sets bits which are 1 ignores bits which are 0
-#define GPIO_CLR *(gpio + 10)                 // clears bits which are 1 ignores bits which are 0
-#define GET_GPIO(g) (*(gpio + 13) & (1 << g)) // 0 if LOW, (1<<g) if HIGH
-#define GPIO_PULL *(gpio + 37)                // Pull up/pull down
-#define GPIO_PULLCLK0 *(gpio + 38)            // Pull up/pull down clock
-
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
@@ -137,12 +129,6 @@
 // This must be declared global so that it can be called by the atexit
 // function.
 volatile unsigned *peri_base_virt = NULL;
-
-// Used for GPIO DIO Access:
-// Map to GPIO register
-void *gpio_map;
-// I/O access
-volatile unsigned *gpio;
 
 typedef enum
 {
@@ -201,10 +187,10 @@ struct PageInfo
 static struct
 {
     // Must be global so that exit handlers can access this.
-    int handle;                         /* From mbox_open() */
-    unsigned mem_ref = 0;               /* From mem_alloc() */
-    unsigned bus_addr;                  /* From mem_lock() */
-    unsigned char *virt_addr = NULL;    /* From mapmem() */ // ha7ilm: originally uint8_t
+    int handle;                                          /* From mbox_open() */
+    unsigned mem_ref = 0;                                /* From mem_alloc() */
+    unsigned bus_addr;                                   /* From mem_lock() */
+    unsigned char *virt_addr = NULL; /* From mapmem() */ // ha7ilm: originally uint8_t
     unsigned pool_size;
     unsigned pool_cnt;
 } mbox;
@@ -282,11 +268,6 @@ unsigned get_peripheral_address()
     }
 
     return 0x20000000; // Fallback default
-}
-//
-unsigned gpioBase()
-{
-    return get_peripheral_address();
 }
 //
 std::optional<unsigned> read_string_from_file(const std::string &filename, const std::string &format)
@@ -374,17 +355,23 @@ void allocMemPool(unsigned numpages)
     // are saved in the mbox structure.
 
     // Allocate space.
-    mbox.mem_ref = mem_alloc(mbox.handle, 4096 * numpages, 4096, config.mem_flag);
+    mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, config.mem_flag);
     // Lock down the allocated space and return its bus address.
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
     // Conert the bus address to a physical address and map this to virtual
     // (aka user) space.
-    mbox.virt_addr = (unsigned char *)mapmem(BUS_TO_PHYS(mbox.bus_addr), 4096 * numpages);
+    mbox.virt_addr = (unsigned char *)mapmem(BUS_TO_PHYS(mbox.bus_addr), PAGE_SIZE * numpages);
     // The number of pages in the pool. Never changes
     mbox.pool_size = numpages;
     // How many of the created pages have actually been used.
     mbox.pool_cnt = 0;
-    // printf("allocMemoryPool bus_addr=%x virt_addr=%x mem_ref=%x\n",mbox.bus_addr,(unsigned)mbox.virt_addr,mbox.mem_ref);
+
+    // Debug print:
+    std::cout << "DEBUG: allocMemoryPool bus_addr=0x"
+              << std::hex << mbox.bus_addr
+              << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
+              << " mem_ref=0x" << mbox.mem_ref
+              << std::dec << std::endl;
 }
 
 void getRealMemPageFromPool(void **vAddr, void **bAddr)
@@ -396,10 +383,16 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
         std::cerr << "Error: unable to allocated more pages." << std::endl;
         exit(-1);
     }
-    unsigned offset = mbox.pool_cnt * 4096;
+    unsigned offset = mbox.pool_cnt * PAGE_SIZE;
     *vAddr = (void *)(((unsigned)mbox.virt_addr) + offset);
     *bAddr = (void *)(((unsigned)mbox.bus_addr) + offset);
-    // printf("getRealMemoryPageFromPool bus_addr=%x virt_addr=%x\n", (unsigned)*pAddr,(unsigned)*vAddr);
+
+    // Debug print:
+    std::cout << "DEBUG: getRealMemoryPageFromPool bus_addr=0x"
+              << std::hex << reinterpret_cast<unsigned long>(*bAddr)
+              << " virt_addr=0x" << reinterpret_cast<unsigned long>(*vAddr)
+              << std::dec << std::endl;
+
     mbox.pool_cnt++;
 }
 
@@ -408,7 +401,7 @@ void deallocMemPool()
     // Free the memory pool
     if (mbox.virt_addr != NULL)
     {
-        unmapmem(mbox.virt_addr, mbox.pool_size * 4096);
+        unmapmem(mbox.virt_addr, mbox.pool_size * PAGE_SIZE);
     }
     if (mbox.mem_ref != 0)
     {
@@ -515,13 +508,19 @@ void txSym(
     // Double check.
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
     const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
-    // cout << "f0_ratio = " << f0_ratio << "\n";
+
+    std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
+
     assert((f0_ratio >= 0) && (f0_ratio <= 1));
     const long int n_pwmclk_per_sym = round(f_pwm_clk * tsym);
 
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
-    // printf("<instrs[bufPtr] begin=%x>",(unsigned)&instrs[bufPtr]);
+
+    std::cout << "DEBUG: <instrs[bufPtr] begin=0x"
+              << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
+              << ">" << std::dec << std::endl;
+
     while (n_pwmclk_transmitted < n_pwmclk_per_sym)
     {
         // Number of PWM clocks for this iteration
@@ -569,7 +568,11 @@ void txSym(
         n_pwmclk_transmitted += n_pwmclk;
         n_f0_transmitted += n_f0;
     }
-    // printf("<instrs[bufPtr]=%x %x>",(unsigned)instrs[bufPtr].v,(unsigned)instrs[bufPtr].b);
+
+    std::cout << "DEBUG: <instrs[bufPtr]=0x"
+              << std::hex << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
+              << " 0x" << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
+              << ">" << std::dec << std::endl;
 }
 
 void unSetupDMA()
@@ -682,7 +685,7 @@ void setupDMA(
         // next loop will allocate another page.
         struct CB *instr0 = (struct CB *)instrPage.v;
         int i;
-        for (i = 0; i < (signed)(4096 / sizeof(struct CB)); i++)
+        for (i = 0; i < (signed)(PAGE_SIZE / sizeof(struct CB)); i++)
         {
             instrs[instrCnt].v = (void *)((long int)instrPage.v + sizeof(struct CB) * i);
             instrs[instrCnt].b = (void *)((long int)instrPage.b + sizeof(struct CB) * i);
@@ -739,16 +742,6 @@ void setupDMA(
     DMA0->TI = 0;
     DMA0->CONBLK_AD = (unsigned long int)(instrPage.b);
     DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
-}
-
-void to_upper(char *str)
-{
-    // Convert string to uppercase
-    while (*str)
-    {
-        *str = toupper(*str);
-        str++;
-    }
 }
 
 bool wait_every(int minute)
@@ -884,7 +877,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     // of physical memory.
 
     int mem_fd;
-    unsigned gpio_base = gpioBase();
+    unsigned gpio_base = get_peripheral_address();
     // open /dev/mem
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
@@ -901,7 +894,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     );
     if ((long int)peri_base_virt == -1)
     {
-        std::cerr <<  "Error: peri_base_virt mmap error." << std::endl;
+        std::cerr << "Error: peri_base_virt mmap error." << std::endl;
         exit(-1);
     }
     close(mem_fd);
@@ -917,10 +910,9 @@ void dma_cleanup()
 
 void setup_dma()
 {
-    getPLLD();      // Get PLLD Frequency
+    getPLLD(); // Get PLLD Frequency
 
-    update_ppm();   // Initial time/clock calibration
-
+    update_ppm(); // Initial time/clock calibration
 
     setSchedPriority(30);
 
@@ -988,10 +980,11 @@ void tx_tone()
                 config.f_plld_clk = 500000000.0;
             }
             setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
-            // cout << std::setprecision(30) << dma_table_freq[0] << "\n";
-            // cout << std::setprecision(30) << dma_table_freq[1] << "\n";
-            // cout << std::setprecision(30) << dma_table_freq[2] << "\n";
-            // cout << std::setprecision(30) << dma_table_freq[3] << "\n";
+            std::cout << std::setprecision(30)
+                      << "DEBUG: dma_table_freq[0] = " << dma_table_freq[0] << "\n"
+                      << "DEBUG: dma_table_freq[1] = " << dma_table_freq[1] << "\n"
+                      << "DEBUG: dma_table_freq[2] = " << dma_table_freq[2] << "\n"
+                      << "DEBUG: dma_table_freq[3] = " << dma_table_freq[3] << std::endl;
             if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
             {
                 std::stringstream temp;
@@ -1013,15 +1006,14 @@ void tx_wspr()
         // Create WSPR symbols
         WsprMessage message(config.callsign, config.locator, config.tx_power);
 
-        #include <iostream>
-        #include <cstdio>
-
         constexpr int SYMBOL_COUNT = 162; // Explicitly define the number of symbols
 
         // Print encoded packet
         std::cout << "WSPR codeblock: ";
-        for (int i = 0; i < SYMBOL_COUNT; i++) {
-            if (i > 0) {
+        for (int i = 0; i < SYMBOL_COUNT; i++)
+        {
+            if (i > 0)
+            {
                 std::cout << ",";
             }
             std::cout << static_cast<int>(message.symbols[i]); // Ensure correct formatting
