@@ -198,7 +198,7 @@ struct wConfig
     bool random_offset = true;                 // No random offset by default
     double test_tone = 7040100;                // Default to NAN, meaning no test tone
     bool no_delay = false;                     // Delay enabled by default
-    mode_type mode = TONE;                     // Default mode is WSPR
+    mode_type mode = WSPR;                     // Default mode is WSPR
     int terminate = -1;                        // -1 to indicate no termination signal
     bool useled = false;                       // No LED signaling by default
     bool daemon_mode = false;                  // Not running as a daemon by default
@@ -428,6 +428,11 @@ void getPLLD()
         fprintf(stderr, "Error: Unknown chipset (%d).", ver());
         exit(-1);
     }
+    if (config.f_plld_clk <= 0)
+    {
+        prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+        config.f_plld_clk = 500000000.0;
+    }
 }
 
 void allocMemPool(unsigned numpages)
@@ -575,7 +580,7 @@ void txSym(
     const double f0_freq = dma_table_freq[f0_idx];
     const double f1_freq = dma_table_freq[f1_idx];
     const double tone_freq = center_freq - 1.5 * tone_spacing + sym_num * tone_spacing;
-    // Double check...
+    // Double check.
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
     const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
     // cout << "f0_ratio = " << f0_ratio << "\n";
@@ -663,6 +668,11 @@ void setupDMATab(
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
+    if (dma_table_freq.size() < 1024)
+    {
+        prtStdErr("Error: DMA table frequency array not initialized properly.\n");
+        dma_table_freq.resize(1024);
+    }
     // Program the tuning words into the DMA table.
 
     // Make sure that all the WSPR tones can be produced solely by
@@ -692,7 +702,7 @@ void setupDMATab(
         }
         tuning_word[i] = ((int)(div * pow(2.0, 12)));
     }
-    // Fill the remaining table, just in case...
+    // Fill the remaining table, just in case.
     for (int i = 8; i < 1024; i++)
     {
         double div = 500 + i;
@@ -1022,33 +1032,45 @@ bool wait_every(int minute)
 
 void update_ppm()
 {
-    // Call ntp_adjtime() to obtain the latest calibration coefficient.
-
     struct timex ntx;
     int status;
     double ppm_new;
+    int retry_count = 0;
 
-    ntx.modes = 0; /* only read */
-    status = ntp_adjtime(&ntx);
+    while (retry_count < 5) {
+        ntx.modes = 0; /* only read */
+        status = ntp_adjtime(&ntx);
 
-    if (status != TIME_OK)
-    {
-        // cerr << "Error: clock not synchronized" << "\n";
-        // return;
+        // Check if ntx.freq is within valid range
+        if (ntx.freq >= -500000 && ntx.freq <= 500000) {
+            break;  // Valid value, exit retry loop
+        }
+
+        prtStdErr("Warning: Invalid ntx.freq. Retrying in 2 seconds.\n");
+        sleep(2);
+        retry_count++;
     }
 
-    ppm_new = (double)ntx.freq / (double)(1 << 16); /* frequency scale */
-    if (abs(ppm_new) > 200)
-    {
+    // Final check before using ntx.freq
+    if (ntx.freq < -500000 || ntx.freq > 500000) {
+        prtStdErr("Error: ntx.freq remains out of range after retries. Using clamped value.\n");
+        ntx.freq = std::max(-500000L, std::min(ntx.freq, 500000L));
+    }
+
+    ppm_new = (double)ntx.freq / (double)(1 << 16);
+    
+    if (abs(ppm_new) > 200) {
         prtStdErr("Warning: Absolute ppm value is greater than 200 and is being ignored.\n");
-    }
-    else
-    {
-        if (config.ppm != ppm_new)
-        {
+    } else {
+        if (config.ppm != ppm_new) {
             prtStdOut("Obtained new ppm value: ", ppm_new, "\n");
         }
-        config.ppm = ppm_new;
+        if (!std::isfinite(ppm_new) || ppm_new < -500 || ppm_new > 500) {
+            prtStdErr("Warning: Invalid PPM value. Clamping to ±500.\n");
+            config.ppm = std::max(-500.0, std::min(ppm_new, 500.0));
+        } else {
+            config.ppm = ppm_new;
+        }
     }
 }
 
@@ -1152,6 +1174,8 @@ int main(const int argc, char *const argv[])
 {
     getPLLD(); // Get PLLD Frequency
 
+    update_ppm();
+
     // Catch all signals (like ctrl+c, ctrl+z, ...) to ensure DMA is disabled
     for (int i = 0; i < 64; i++)
     {
@@ -1165,6 +1189,23 @@ int main(const int argc, char *const argv[])
 
     // Initialize the RNG
     srand(time(NULL));
+
+    // TODO: Push the single hardcoded band to center_freq_set
+    double temp_center_freq_desired;
+    try
+    {
+        temp_center_freq_desired = std::stod(config.frequency_string);
+        config.center_freq_set.push_back(temp_center_freq_desired);
+        if (!std::isfinite(temp_center_freq_desired))
+        {
+            throw std::runtime_error("Invalid floating-point value");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        prtStdErr("Error: Invalid frequency string. Using default 7040100 Hz.\n");
+        config.center_freq_set.push_back(7040100.0);
+    }
 
     int nbands = config.center_freq_set.size();
 
@@ -1205,6 +1246,11 @@ int main(const int argc, char *const argv[])
             }
             if (config.ppm != ppm_prev)
             {
+                if (config.f_plld_clk <= 0)
+                {
+                    prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+                    config.f_plld_clk = 500000000.0;
+                }
                 setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
                 // cout << std::setprecision(30) << dma_table_freq[0] << "\n";
                 // cout << std::setprecision(30) << dma_table_freq[1] << "\n";
@@ -1247,6 +1293,16 @@ int main(const int argc, char *const argv[])
             {
                 // Calculate WSPR parameters for this transmission
                 double center_freq_desired;
+                if (config.center_freq_set.empty())
+                {
+                    prtStdErr("Error: center_freq_set is empty. Cannot access band=", band, "\n");
+                    exit(1);
+                }
+                if (band < 0 || band >= static_cast<int>(config.center_freq_set.size()))
+                {
+                    prtStdErr("Error: Band index out of range. band=", band, " size=", config.center_freq_set.size(), "\n");
+                    exit(1);
+                }
                 center_freq_desired = config.center_freq_set[band];
                 bool wspr15 =
                     (center_freq_desired > 137600 && center_freq_desired < 137625) ||
@@ -1289,10 +1345,15 @@ int main(const int argc, char *const argv[])
                 }
 
                 // Create the DMA table for this center frequency
-                std::vector<double> dma_table_freq;
+                std::vector<double> dma_table_freq(1024, 0.0); // Ensure vector is properly sized
                 double center_freq_actual;
                 if (center_freq_desired)
                 {
+                    if (config.f_plld_clk <= 0)
+                    {
+                        prtStdErr("Error: Invalid PLL clock frequency. Using default 500MHz.\n");
+                        config.f_plld_clk = 500000000.0;
+                    }
                     setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
                 }
                 else
