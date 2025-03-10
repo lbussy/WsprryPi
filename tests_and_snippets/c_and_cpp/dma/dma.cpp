@@ -5,23 +5,13 @@
 
 // C Standard Library Headers
 #include <assert.h>
-#include <ctype.h>
-#include <dirent.h>
 #include <fcntl.h>
-#include <malloc.h>
-#include <math.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
+#include <string.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 // POSIX & System-Specific Headers
-#include <getopt.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <sys/timex.h>
@@ -30,10 +20,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
+#include <optional>
 #include <sstream>
+#include <string>
 #include <vector>
 
 // Note on accessing memory in RPi:
@@ -246,102 +238,99 @@ struct PageInfo constPage;
 struct PageInfo instrPage;
 struct PageInfo instrs[1024];
 
-static unsigned get_dt_ranges(const char *filename, unsigned offset)
+
+// Former BCM_HOST Stuff:
+constexpr unsigned INVALID_ADDRESS = ~0u;
+constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0;
+constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1;
+constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2;
+constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3;
+//
+std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offset)
 {
-    unsigned address = ~0;
-    FILE *fp = fopen(filename, "rb");
-    if (fp)
+    std::ifstream file(filename, std::ios::binary);
+    if (!file)
     {
-        unsigned char buf[4];
-        fseek(fp, offset, SEEK_SET);
-        if (fread(buf, 1, sizeof buf, fp) == sizeof buf)
-            address = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3] << 0;
-        fclose(fp);
+        return std::nullopt; // File not found or unreadable
     }
-    return address;
-}
 
-unsigned bcm_host_get_peripheral_address(void)
+    file.seekg(offset);
+    if (!file.good())
+    {
+        return std::nullopt; // Invalid seek
+    }
+
+    unsigned char buf[4] = {};
+    file.read(reinterpret_cast<char *>(buf), sizeof(buf));
+    if (file.gcount() != sizeof(buf))
+    {
+        return std::nullopt; // Read failure
+    }
+
+    // Convert bytes to unsigned integer
+    return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+}
+//
+unsigned get_peripheral_address()
 {
-    unsigned address = get_dt_ranges("/proc/device-tree/soc/ranges", 4);
-    if (address == 0)
-        address = get_dt_ranges("/proc/device-tree/soc/ranges", 8);
+    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
+    {
+        return *addr;
+    }
+    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 8); addr)
+    {
+        return *addr;
+    }
 
-    return address == (unsigned)~0 ? 0x20000000 : address;
+    return 0x20000000; // Fallback default
 }
-
+//
 unsigned gpioBase()
 {
-    return bcm_host_get_peripheral_address();
+    return get_peripheral_address();
 }
-
-static int read_string_from_file(const char *filename, const char *format, unsigned int *value)
+//
+std::optional<unsigned> read_string_from_file(const std::string &filename, const std::string &format)
 {
-    FILE *fin;
-    char str[256];
-    int found = 0;
-
-    fin = fopen(filename, "rt");
-
-    if (fin == NULL)
-        return 0;
-
-    while (fgets(str, sizeof(str), fin) != NULL)
+    std::ifstream file(filename);
+    if (!file)
     {
-        if (value)
+        return std::nullopt;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        unsigned value;
+        if (sscanf(line.c_str(), format.c_str(), &value) == 1)
         {
-            if (sscanf(str, format, value) == 1)
-            {
-                found = 1;
-                break;
-            }
+            return value;
         }
-        else
+        if (line == format)
         {
-            if (!strcmp(str, format))
-            {
-                found = 1;
-                break;
-            }
+            return 1; // Found match (without numeric extraction)
         }
     }
 
-    fclose(fin);
-
-    return found;
+    return std::nullopt;
 }
-
-static unsigned int get_revision_code()
+//
+unsigned get_revision_code()
 {
-    static unsigned int revision_num = (unsigned int)-1;
-    unsigned int num;
-
-    if (revision_num == (unsigned int)-1 && read_string_from_file("/proc/cpuinfo", "Revision : %x", &num))
-        revision_num = num;
-
-    return revision_num;
+    static std::optional<unsigned> cached_revision;
+    if (!cached_revision)
+    {
+        cached_revision = read_string_from_file("/proc/cpuinfo", "Revision : %x").value_or(-1);
+    }
+    return *cached_revision;
 }
-
-#define BCM_HOST_PROCESSOR_BCM2835 0
-#define BCM_HOST_PROCESSOR_BCM2836 1
-#define BCM_HOST_PROCESSOR_BCM2837 2
-#define BCM_HOST_PROCESSOR_BCM2838 3 /* Deprecated name */
-#define BCM_HOST_PROCESSOR_BCM2711 3
-
+//
 int get_processor_id()
 {
-    unsigned int revision_num = get_revision_code();
-
-    if (revision_num & 0x800000)
-    {
-        return (revision_num & 0xf000) >> 12;
-    }
-    else
-    {
-        // Old style number only used 2835
-        return BCM_HOST_PROCESSOR_BCM2835;
-    }
+    unsigned rev = get_revision_code();
+    return (rev & 0x800000) ? ((rev & 0xf000) >> 12) : BCM_HOST_PROCESSOR_BCM2835;
 }
+// Former BCM_HOST Stuff^
 
 // TODO: Get rid of these:
 // Recursive variadic functions for stdout/err control
