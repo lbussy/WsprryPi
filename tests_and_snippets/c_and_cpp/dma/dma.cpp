@@ -13,18 +13,24 @@
 
 // POSIX & System-Specific Headers
 #include <pthread.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/timex.h>
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -224,38 +230,56 @@ struct PageInfo constPage;
 struct PageInfo instrPage;
 struct PageInfo instrs[1024];
 
-// Former BCM_HOST Stuff:
+/// Invalid memory address marker
 constexpr unsigned INVALID_ADDRESS = ~0u;
-constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0;
-constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1;
-constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2;
-constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3;
-//
+
+/// Processor IDs
+constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0; // BCM2835 (RPi1)
+constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1; // BCM2836 (RPi2)
+constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2; // BCM2837 (RPi3)
+constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
+
+/**
+ * @brief Reads a 32-bit value from the device tree ranges.
+ * @details Reads an unsigned 32-bit integer from a specific offset
+ *          within a device tree file.
+ *
+ * @param filename Path to the device tree file.
+ * @param offset Byte offset in the file to read from.
+ * @return The read value wrapped in std::optional, or std::nullopt on failure.
+ */
 std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offset)
 {
     std::ifstream file(filename, std::ios::binary);
     if (!file)
     {
-        return std::nullopt; // File not found or unreadable
+        return std::nullopt; // File could not be opened
     }
 
     file.seekg(offset);
     if (!file.good())
     {
-        return std::nullopt; // Invalid seek
+        return std::nullopt; // Invalid seek position
     }
 
-    unsigned char buf[4] = {};
+    unsigned char buf[4] = {}; // Buffer to store read bytes
     file.read(reinterpret_cast<char *>(buf), sizeof(buf));
     if (file.gcount() != sizeof(buf))
     {
-        return std::nullopt; // Read failure
+        return std::nullopt; // Read operation failed
     }
 
-    // Convert bytes to unsigned integer
+    // Convert the 4-byte buffer to an unsigned integer (big-endian format)
     return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
 }
-//
+
+/**
+ * @brief Retrieves the base address of the Raspberry Pi peripherals.
+ * @details Reads from the `/proc/device-tree/soc/ranges` file to determine
+ *          the peripheral base address.
+ *
+ * @return The peripheral base address. Defaults to `0x20000000` if not found.
+ */
 unsigned get_peripheral_address()
 {
     if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
@@ -267,193 +291,245 @@ unsigned get_peripheral_address()
         return *addr;
     }
 
-    return 0x20000000; // Fallback default
+    return 0x20000000; // Default address fallback
 }
-//
+
+/**
+ * @brief Reads a formatted string value from a file.
+ * @details Reads lines from a file and attempts to extract an unsigned integer
+ *          based on the given format string.
+ *
+ * @param filename Path to the file to read.
+ * @param format The format string expected in the file.
+ * @return The extracted value wrapped in std::optional, or std::nullopt on failure.
+ */
 std::optional<unsigned> read_string_from_file(const std::string &filename, const std::string &format)
 {
     std::ifstream file(filename);
     if (!file)
     {
-        return std::nullopt;
+        return std::nullopt; // File could not be opened
     }
 
     std::string line;
+    unsigned value = 0;
     while (std::getline(file, line))
     {
-        unsigned value;
         if (sscanf(line.c_str(), format.c_str(), &value) == 1)
         {
             return value;
         }
-        if (line == format)
-        {
-            return 1; // Found match (without numeric extraction)
-        }
     }
 
-    return std::nullopt;
+    return std::nullopt; // No match found
 }
-//
+
+/**
+ * @brief Retrieves the Raspberry Pi board revision code.
+ * @details Reads `/proc/cpuinfo` and extracts the board revision.
+ *
+ * @return The revision code, or 0 if retrieval fails.
+ */
 unsigned get_revision_code()
 {
     static std::optional<unsigned> cached_revision;
     if (!cached_revision)
     {
-        cached_revision = read_string_from_file("/proc/cpuinfo", "Revision : %x").value_or(-1);
+        cached_revision = read_string_from_file("/proc/cpuinfo", "Revision : %x").value_or(0);
     }
     return *cached_revision;
 }
-//
+
+/**
+ * @brief Determines the processor ID from the revision code.
+ * @details Uses the revision code to identify the specific Broadcom processor.
+ *
+ * @return The processor ID (BCM2835, BCM2836, BCM2837, or BCM2711).
+ */
 int get_processor_id()
 {
     unsigned rev = get_revision_code();
     return (rev & 0x800000) ? ((rev & 0xf000) >> 12) : BCM_HOST_PROCESSOR_BCM2835;
 }
-// Former BCM_HOST Stuff^
 
+/**
+ * @brief Configures PLLD settings based on processor type.
+ * @details Determines the correct PLLD frequency and memory flag values
+ *          for different Raspberry Pi versions.
+ */
 void getPLLD()
 {
-    // Nominal clock frequencies
-    // double f_xtal = 19200000.0;
-    // PLLD clock frequency.
-    // For RPi1, after NTP converges, these is a 2.5 PPM difference between
-    // the PPM correction reported by NTP and the actual frequency offset of
-    // the crystal. This 2.5 PPM offset is not present in the RPi2 and RPi3 (RPI4).
-    // This 2.5 PPM offset is compensated for here, but only for the RPi1.
+    int processor_id = get_processor_id(); // Store processor ID to avoid redundant calls
 
-    switch (get_processor_id())
+    switch (processor_id)
     {
-    case 0: // RPi1
+    case BCM_HOST_PROCESSOR_BCM2835: // Raspberry Pi 1
         config.mem_flag = 0x0c;
-        config.f_plld_clk = (500000000.0 * (1 - 2.500e-6));
+        config.f_plld_clk = 500000000.0 * (1 - 2.500e-6); // Apply 2.5 PPM correction
         break;
-    case 1: // RPi2
-    case 2: // RPi3
+    case BCM_HOST_PROCESSOR_BCM2836: // Raspberry Pi 2
+    case BCM_HOST_PROCESSOR_BCM2837: // Raspberry Pi 3
         config.mem_flag = 0x04;
-        config.f_plld_clk = (500000000.0);
+        config.f_plld_clk = 500000000.0; // Standard 500 MHz clock
         break;
-    case 3: // RPi 4
+    case BCM_HOST_PROCESSOR_BCM2711: // Raspberry Pi 4
         config.mem_flag = 0x04;
-        config.f_plld_clk = (750000000.0);
+        config.f_plld_clk = 750000000.0; // Higher 750 MHz clock
         break;
     default:
-        std::cerr << "Error: Unknown chipset (" << get_processor_id() << ")." << std::endl;
-        exit(-1);
+        std::cerr << "Error: Unknown chipset (" << processor_id << ")." << std::endl;
+        std::exit(EXIT_FAILURE);
     }
+
+    // Ensure a valid PLLD frequency
     if (config.f_plld_clk <= 0)
     {
-        std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
+        std::cerr << "Error: Invalid PLL clock frequency. Using default 500 MHz." << std::endl;
         config.f_plld_clk = 500000000.0;
     }
 }
 
+/**
+ * @brief Allocates a memory pool for DMA usage.
+ * @details Uses the mailbox interface to allocate a contiguous block of memory.
+ *          The memory is locked down, mapped to virtual user space, and its
+ *          bus address is stored for further use.
+ *
+ * @param numpages Number of memory pages to allocate.
+ */
 void allocMemPool(unsigned numpages)
 {
-    // Use the mbox interface to allocate a single chunk of memory to hold
-    // all the pages we will need. The bus address and the virtual address
-    // are saved in the mbox structure.
-
-    // Allocate space.
+    // Allocate a contiguous block of memory using the mailbox interface.
     mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, config.mem_flag);
-    // Lock down the allocated space and return its bus address.
+
+    // Lock the allocated memory block and retrieve its bus address.
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
-    // Conert the bus address to a physical address and map this to virtual
-    // (aka user) space.
-    mbox.virt_addr = (unsigned char *)mapmem(BUS_TO_PHYS(mbox.bus_addr), PAGE_SIZE * numpages);
-    // The number of pages in the pool. Never changes
+
+    // Convert the bus address to a physical address and map it to user space.
+    mbox.virt_addr = static_cast<unsigned char *>(mapmem(BUS_TO_PHYS(mbox.bus_addr), PAGE_SIZE * numpages));
+
+    // Store the total number of pages allocated in the pool (constant for its lifetime).
     mbox.pool_size = numpages;
-    // How many of the created pages have actually been used.
+
+    // Initialize the count of used pages in the pool.
     mbox.pool_cnt = 0;
 
-    // Debug print:
-    std::cout << "DEBUG: allocMemoryPool bus_addr=0x"
+    // Debug print: Displays memory allocation details in hexadecimal format.
+    std::cout << "DEBUG: allocMemPool bus_addr=0x"
               << std::hex << mbox.bus_addr
               << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
               << " mem_ref=0x" << mbox.mem_ref
               << std::dec << std::endl;
 }
 
+/**
+ * @brief Retrieves the next available memory page from the allocated pool.
+ * @details Provides a virtual and bus address for a memory page in the pool.
+ *          If no more pages are available, the function prints an error and exits.
+ *
+ * @param[out] vAddr Pointer to store the virtual address of the allocated page.
+ * @param[out] bAddr Pointer to store the bus address of the allocated page.
+ */
 void getRealMemPageFromPool(void **vAddr, void **bAddr)
 {
-    // Returns the virtual and bus address (NOT physical address) of another
-    // page in the pool.
+    // Ensure that we do not exceed the allocated pool size.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
-        std::cerr << "Error: unable to allocated more pages." << std::endl;
-        exit(-1);
+        std::cerr << "Error: unable to allocate more pages." << std::endl;
+        std::exit(EXIT_FAILURE);
     }
-    unsigned offset = mbox.pool_cnt * PAGE_SIZE;
-    *vAddr = (void *)(((unsigned)mbox.virt_addr) + offset);
-    *bAddr = (void *)(((unsigned)mbox.bus_addr) + offset);
 
-    // Debug print:
-    std::cout << "DEBUG: getRealMemoryPageFromPool bus_addr=0x"
-              << std::hex << reinterpret_cast<unsigned long>(*bAddr)
-              << " virt_addr=0x" << reinterpret_cast<unsigned long>(*vAddr)
+    // Compute the offset for the next available page.
+    unsigned offset = mbox.pool_cnt * PAGE_SIZE;
+
+    // Retrieve the virtual and bus addresses based on the offset.
+    *vAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.virt_addr) + offset);
+    *bAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.bus_addr) + offset);
+
+    // Debug print: Displays allocated memory details.
+    std::cout << "DEBUG: getRealMemPageFromPool bus_addr=0x"
+              << std::hex << reinterpret_cast<uintptr_t>(*bAddr)
+              << " virt_addr=0x" << reinterpret_cast<uintptr_t>(*vAddr)
               << std::dec << std::endl;
 
+    // Increment the count of allocated pages.
     mbox.pool_cnt++;
 }
 
+/**
+ * @brief Deallocates the memory pool.
+ * @details Releases the allocated memory by unmapping virtual memory,
+ *          unlocking, and freeing the memory via the mailbox interface.
+ */
 void deallocMemPool()
 {
-    // Free the memory pool
-    if (mbox.virt_addr != NULL)
+    // Free virtual memory mapping if it was allocated.
+    if (mbox.virt_addr != nullptr)
     {
         unmapmem(mbox.virt_addr, mbox.pool_size * PAGE_SIZE);
+        mbox.virt_addr = nullptr; // Prevent dangling pointer usage
     }
+
+    // Free the allocated memory block if it was successfully allocated.
     if (mbox.mem_ref != 0)
     {
         mem_unlock(mbox.handle, mbox.mem_ref);
         mem_free(mbox.handle, mbox.mem_ref);
+        mbox.mem_ref = 0; // Ensure it does not reference a freed block
     }
+
+    // Reset pool tracking variables
+    mbox.pool_size = 0;
+    mbox.pool_cnt = 0;
 }
 
+/**
+ * @brief Disables the PWM clock.
+ * @details Clears the enable bit in the clock control register and waits
+ *          until the clock is no longer busy. Ensures proper synchronization.
+ */
 void disable_clock()
 {
-    // Disable the PWM clock and wait for it to become 'not busy'.
-    // Check if mapping has been set up yet.
-    if (peri_base_virt == NULL)
+    // Ensure memory-mapped peripherals are initialized before proceeding.
+    if (peri_base_virt == nullptr)
     {
         return;
     }
-    // Disable the clock (in case it's already running) by reading current
-    // settings and only clearing the enable bit.
+
+    // Read current clock settings from the clock control register.
     auto settings = ACCESS_BUS_ADDR(CM_GP0CTL_BUS);
-    // Clear enable bit and add password
+
+    // Disable the clock: clear the enable bit while preserving other settings.
+    // Apply the required password (0x5A000000) to modify the register.
     settings = (settings & 0x7EF) | 0x5A000000;
-    // Disable
-    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&settings);
-    // Wait for clock to not be busy.
-    while (true)
+    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = static_cast<int>(settings);
+
+    // Wait until the clock is no longer busy.
+    while (ACCESS_BUS_ADDR(CM_GP0CTL_BUS) & (1 << 7))
     {
-        if (!(ACCESS_BUS_ADDR(CM_GP0CTL_BUS) & (1 << 7)))
-        {
-            break;
-        }
+        // Busy-wait loop to ensure clock disable is complete.
     }
 }
 
+/**
+ * @brief Enables TX by configuring GPIO4 and setting the clock source.
+ * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
+ *          strength, disables any active clock, and then enables the clock with PLLD.
+ *
+ * @param led (Optional) Unused parameter; defaults to false.
+ */
 void txon(bool led = false)
 {
-    // Turn on TX
-    // Set function select for GPIO4.
-    // Fsel 000 => input
-    // Fsel 001 => output
-    // Fsel 100 => alternate function 0
-    // Fsel 101 => alternate function 1
-    // Fsel 110 => alternate function 2
-    // Fsel 111 => alternate function 3
-    // Fsel 011 => alternate function 4
-    // Fsel 010 => alternate function 5
-    // Function select for GPIO is configured as 'b100 which selects
-    // alternate function 0 for GPIO4. Alternate function 0 is GPCLK0.
-    // See section 6.2 of Arm Peripherals Manual.
-    SETBIT_BUS_ADDR(GPIO_BUS_BASE, 14);
-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 13);
-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
+    // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
+    // This setting follows Section 6.2 of the ARM Peripherals Manual.
+    SETBIT_BUS_ADDR(GPIO_BUS_BASE, 14); // Set bit 14
+    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 13); // Clear bit 13
+    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12); // Clear bit 12
 
+    // Set GPIO drive strength to 16mA (+10.6dBm output power).
+    // Values range from 2mA (-3.4dBm) to 16mA (+10.6dBm).
+    ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5A000018 + 7;
+    // TODO:
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
     // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
     // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
@@ -462,28 +538,48 @@ void txon(bool led = false)
     // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
     // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
     // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
-    ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 7; // 16mA +10.6dBm
 
+    // Ensure the clock is disabled before modifying settings.
     disable_clock();
 
-    // Set clock source as PLLD.
-    struct GPCTL setupword = {6 /*SRC*/, 0, 0, 0, 0, 3, 0x5a};
+    // Define clock control structure and set PLLD as the clock source.
+    struct GPCTL setupword = {6 /*SRC*/, 0, 0, 0, 0, 3, 0x5A};
 
-    // Enable clock.
-    setupword = {6 /*SRC*/, 1, 0, 0, 0, 3, 0x5a};
+    // Enable the clock by modifying the control word.
+    setupword = {6 /*SRC*/, 1, 0, 0, 0, 3, 0x5A};
     int temp;
-    memcpy(&temp, &setupword, sizeof(int));
+    std::memcpy(&temp, &setupword, sizeof(int));
+
+    // Apply clock control settings.
     ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = temp;
 }
 
-void txoff(bool led = false)
+/**
+ * @brief Disables the transmitter.
+ * @details Turns off the transmission by disabling the clock source.
+ */
+void txoff()
 {
-    // Turn transmitter on
-    // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
-    // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
+    // Disable the clock, effectively turning off transmission.
     disable_clock();
 }
 
+/**
+ * @brief Transmits a symbol for a specified duration using DMA.
+ * @details Configures the DMA to transmit a symbol (tone) for the specified
+ *          time interval (`tsym`). Uses PWM clocks and adjusts frequency
+ *          dynamically based on the desired tone spacing.
+ *
+ * @param[in] sym_num The symbol number to transmit.
+ * @param[in] center_freq The center frequency in Hz.
+ * @param[in] tone_spacing The frequency spacing between tones in Hz.
+ * @param[in] tsym The duration (seconds) for which the symbol is transmitted.
+ * @param[in] dma_table_freq The DMA frequency lookup table.
+ * @param[in] f_pwm_clk The frequency of the PWM clock in Hz.
+ * @param[in,out] instrs The DMA instruction page array.
+ * @param[in] constPage The memory page containing constant data.
+ * @param[in,out] bufPtr The buffer pointer index for DMA instruction handling.
+ */
 void txSym(
     const int &sym_num,
     const double &center_freq,
@@ -495,25 +591,30 @@ void txSym(
     struct PageInfo &constPage,
     int &bufPtr)
 {
-    // Transmit symbol sym for tsym seconds.
-    //
-    // Note:
-    // Upon entering this function at the beginning of a WSPR transmission, we
-    // do not know which DMA table entry is being processed by the DMA engine.
+    // Determine indices for DMA frequency table
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
+
+    // Retrieve frequency values from the DMA table
     const double f0_freq = dma_table_freq[f0_idx];
     const double f1_freq = dma_table_freq[f1_idx];
+
+    // Calculate the expected tone frequency
     const double tone_freq = center_freq - 1.5 * tone_spacing + sym_num * tone_spacing;
-    // Double check.
+
+    // Ensure the tone frequency is within bounds
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
+
+    // Compute frequency ratio for symbol transmission
     const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
 
     std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
-
     assert((f0_ratio >= 0) && (f0_ratio <= 1));
-    const long int n_pwmclk_per_sym = round(f_pwm_clk * tsym);
 
+    // Compute total number of PWM clock cycles required for the symbol duration
+    const long int n_pwmclk_per_sym = std::round(f_pwm_clk * tsym);
+
+    // Counters for tracking transmitted PWM clocks and f0 occurrences
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
 
@@ -521,50 +622,58 @@ void txSym(
               << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
               << ">" << std::dec << std::endl;
 
+    // Transmit the symbol using PWM clocks
     while (n_pwmclk_transmitted < n_pwmclk_per_sym)
     {
-        // Number of PWM clocks for this iteration
+        // Set the nominal number of PWM clocks per iteration
         long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
-        // Iterations may produce spurs around the main peak based on the iteration
-        // frequency. Randomize the iteration period so as to spread this peak
-        // around.
-        n_pwmclk += round((rand() / ((double)RAND_MAX + 1.0) - .5) * n_pwmclk) * 1;
+
+        // Introduce slight randomization to spread spectral spurs
+        n_pwmclk += std::round((std::rand() / (static_cast<double>(RAND_MAX) + 1.0) - 0.5) * n_pwmclk);
+
+        // Ensure we do not exceed the required clock cycles for the symbol
         if (n_pwmclk_transmitted + n_pwmclk > n_pwmclk_per_sym)
         {
             n_pwmclk = n_pwmclk_per_sym - n_pwmclk_transmitted;
         }
 
-        // Calculate number of clocks to transmit f0 during this iteration so
-        // that the long term average is as close to f0_ratio as possible.
-        const long int n_f0 = round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
+        // Compute the number of f0 and f1 cycles for this iteration
+        const long int n_f0 = std::round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
         const long int n_f1 = n_pwmclk - n_f0;
 
-        // Configure the transmission for this iteration
-        // Set GPIO pin to transmit f0
+        // Transmit frequency f0
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        {
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f0_idx * 4;
+        }
+        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f0_idx * 4;
 
-        // Wait for n_f0 PWM clocks
+        // Wait for f0 PWM clocks
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        {
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->TXFR_LEN = n_f0;
+        }
+        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f0;
 
-        // Set GPIO pin to transmit f1
+        // Transmit frequency f1
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        {
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->SOURCE_AD = (long int)constPage.b + f1_idx * 4;
+        }
+        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f1_idx * 4;
 
-        // Wait for n_f1 PWM clocks
-        bufPtr = (bufPtr + 1) % (1024);
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock*/) == (long int)(instrs[bufPtr].b))
+        // Wait for f1 PWM clocks
+        bufPtr = (bufPtr + 1) % 1024;
+        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        {
             usleep(100);
-        ((struct CB *)(instrs[bufPtr].v))->TXFR_LEN = n_f1;
+        }
+        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f1;
 
-        // Update counters
+        // Update transmission counters
         n_pwmclk_transmitted += n_pwmclk;
         n_f0_transmitted += n_f0;
     }
@@ -575,26 +684,58 @@ void txSym(
               << ">" << std::dec << std::endl;
 }
 
+/**
+ * @brief Disables and resets the DMA engine.
+ * @details Ensures that the DMA controller is properly reset before exiting.
+ *          If the peripheral memory mapping is not set up, the function returns early.
+ */
 void unSetupDMA()
 {
-    // Turn off (reset) DMA engine
-    // Check if mapping has been set up yet.
-    if (peri_base_virt == NULL)
+    // Ensure memory-mapped peripherals are initialized before proceeding.
+    if (peri_base_virt == nullptr)
     {
         return;
     }
-    // cout << "Exiting." << "\n";
-    struct DMAregs *DMA0 = (struct DMAregs *)&(ACCESS_BUS_ADDR(DMA_BUS_BASE));
-    DMA0->CS = 1 << 31; // reset dma controller
+
+    // Obtain a pointer to the DMA control registers.
+    volatile DMAregs *DMA0 = reinterpret_cast<volatile DMAregs *>(&(ACCESS_BUS_ADDR(DMA_BUS_BASE)));
+
+    // Reset the DMA controller by setting the reset bit (bit 31) in the control/status register.
+    DMA0->CS = 1 << 31;
+
+    // Turn off transmission.
     txoff();
 }
 
+/**
+ * @brief Truncates a floating-point number at a specified bit position.
+ * @details Sets all bits less significant than the given LSB to zero.
+ *
+ * @param d The input floating-point number to be truncated.
+ * @param lsb The least significant bit position to retain.
+ * @return The truncated value with lower bits set to zero.
+ */
 double bit_trunc(const double &d, const int &lsb)
 {
-    // Truncate at bit lsb. i.e. set all bits less than lsb to zero.
-    return floor(d / pow(2.0, lsb)) * pow(2.0, lsb);
+    // Compute the truncation factor as a power of 2.
+    const double factor = std::pow(2.0, lsb);
+
+    // Truncate the number by dividing, flooring, and multiplying back.
+    return std::floor(d / factor) * factor;
 }
 
+/**
+ * @brief Configures the DMA frequency table for signal generation.
+ * @details Generates a tuning word table based on the desired center frequency
+ *          and tone spacing, adjusting for hardware limitations if necessary.
+ *
+ * @param[in] center_freq_desired The desired center frequency in Hz.
+ * @param[in] tone_spacing The spacing between frequency tones in Hz.
+ * @param[in] plld_actual_freq The actual PLLD clock frequency in Hz.
+ * @param[out] dma_table_freq The generated DMA table containing output frequencies.
+ * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
+ * @param[in,out] constPage The PageInfo structure for storing tuning words.
+ */
 void setupDMATab(
     const double &center_freq_desired,
     const double &tone_spacing,
@@ -603,174 +744,226 @@ void setupDMATab(
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
+    // Ensure DMA frequency table has a minimum size of 1024.
     if (dma_table_freq.size() < 1024)
     {
         std::cerr << "Error: DMA table frequency array not initialized properly." << std::endl;
         dma_table_freq.resize(1024);
     }
-    // Program the tuning words into the DMA table.
 
-    // Make sure that all the WSPR tones can be produced solely by
-    // varying the fractional part of the frequency divider.
+    // Set the actual center frequency initially to the desired frequency.
     center_freq_actual = center_freq_desired;
-    double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + pow(2.0, -12);
+
+    // Compute the divider values for the lowest and highest WSPR tones.
+    double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + std::pow(2.0, -12);
     double div_hi = bit_trunc(plld_actual_freq / (center_freq_desired + 1.5 * tone_spacing), -12);
-    if (floor(div_lo) != floor(div_hi))
+
+    // If the integer portion of dividers differ, adjust the center frequency.
+    if (std::floor(div_lo) != std::floor(div_hi))
     {
-        center_freq_actual = plld_actual_freq / floor(div_lo) - 1.6 * tone_spacing;
+        center_freq_actual = plld_actual_freq / std::floor(div_lo) - 1.6 * tone_spacing;
         std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed << "Warning: center frequency has been changed to " << center_freq_actual / 1e6 << " MHz";
+        temp << std::fixed << std::setprecision(6)
+             << "Warning: center frequency has been changed to "
+             << center_freq_actual / 1e6 << " MHz";
         std::cerr << temp.str() << " because of hardware limitations." << std::endl;
     }
 
-    // Create DMA table of tuning words. WSPR tone i will use entries 2*i and
-    // 2*i+1 to generate the appropriate tone.
+    // Initialize tuning word table.
     double tone0_freq = center_freq_actual - 1.5 * tone_spacing;
     std::vector<long int> tuning_word(1024);
+
+    // Generate tuning words for WSPR tones.
     for (int i = 0; i < 8; i++)
     {
         double tone_freq = tone0_freq + (i >> 1) * tone_spacing;
         double div = bit_trunc(plld_actual_freq / tone_freq, -12);
+
+        // Apply rounding for even indices.
         if (i % 2 == 0)
         {
-            div = div + pow(2.0, -12);
+            div += std::pow(2.0, -12);
         }
-        tuning_word[i] = ((int)(div * pow(2.0, 12)));
+
+        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
     }
-    // Fill the remaining table, just in case.
+
+    // Fill the remaining table with default values.
     for (int i = 8; i < 1024; i++)
     {
         double div = 500 + i;
-        tuning_word[i] = ((int)(div * pow(2.0, 12)));
+        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
     }
 
-    // Program the table
+    // Program the DMA table.
     dma_table_freq.resize(1024);
     for (int i = 0; i < 1024; i++)
     {
-        dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / pow(2.0, 12));
-        ((int *)(constPage.v))[i] = (0x5a << 24) + tuning_word[i];
+        dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
+
+        // Store values in the memory-mapped page.
+        reinterpret_cast<int *>(constPage.v)[i] = (0x5A << 24) + tuning_word[i];
+
+        // Ensure adjacent tuning words have the same integer portion for valid tone generation.
         if ((i % 2 == 0) && (i < 8))
         {
-            assert((tuning_word[i] & (~0xfff)) == (tuning_word[i + 1] & (~0xfff)));
+            assert((tuning_word[i] & (~0xFFF)) == (tuning_word[i + 1] & (~0xFFF)));
         }
     }
 }
 
+/**
+ * @brief Configures and initializes DMA for PWM signal generation.
+ * @details Allocates memory pages, creates DMA control blocks, sets up a circular
+ *          linked list of DMA instructions, and configures the PWM clock and registers.
+ *
+ * @param[out] constPage PageInfo structure for storing constant data.
+ * @param[out] instrPage PageInfo structure for the initial DMA instruction page.
+ * @param[out] instrs Array of PageInfo structures for DMA instructions.
+ */
 void setupDMA(
     struct PageInfo &constPage,
     struct PageInfo &instrPage,
     struct PageInfo instrs[])
 {
-    // Create the memory structures needed by the DMA engine and perform initial
-    // clock configuration.
-
+    // Allocate memory pool for DMA operation
     allocMemPool(1025);
 
-    // Allocate a page of ram for the constants
+    // Allocate a memory page for storing constants
     getRealMemPageFromPool(&constPage.v, &constPage.b);
 
-    // Create 1024 instructions allocating one page at a time.
-    // Even instructions target the GP0 Clock divider
-    // Odd instructions target the PWM FIFO
+    // Initialize instruction counter
     int instrCnt = 0;
+
+    // Allocate memory pages and create DMA instructions
     while (instrCnt < 1024)
     {
-        // Allocate a page of ram for the instructions
+        // Allocate a memory page for instructions
         getRealMemPageFromPool(&instrPage.v, &instrPage.b);
 
-        // Make copy instructions
-        // Only create as many instructions as will fit in the recently
-        // allocated page. If not enough space for all instructions, the
-        // next loop will allocate another page.
-        struct CB *instr0 = (struct CB *)instrPage.v;
-        int i;
-        for (i = 0; i < (signed)(PAGE_SIZE / sizeof(struct CB)); i++)
+        // Create DMA control blocks (CBs)
+        struct CB *instr0 = reinterpret_cast<struct CB *>(instrPage.v);
+
+        for (int i = 0; i < static_cast<int>(PAGE_SIZE / sizeof(struct CB)); i++)
         {
-            instrs[instrCnt].v = (void *)((long int)instrPage.v + sizeof(struct CB) * i);
-            instrs[instrCnt].b = (void *)((long int)instrPage.b + sizeof(struct CB) * i);
-            instr0->SOURCE_AD = (unsigned long int)constPage.b + 2048;
-            instr0->DEST_AD = PWM_BUS_BASE + 0x18 /* FIF1 */;
+            // Assign virtual and bus addresses for each instruction
+            instrs[instrCnt].v = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.v) + sizeof(struct CB) * i);
+            instrs[instrCnt].b = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.b) + sizeof(struct CB) * i);
+
+            // Configure DMA transfer: Source = constant memory page, Destination = PWM FIFO
+            instr0->SOURCE_AD = reinterpret_cast<unsigned long int>(constPage.b) + 2048;
+            instr0->DEST_AD = PWM_BUS_BASE + 0x18; // FIFO1
             instr0->TXFR_LEN = 4;
             instr0->STRIDE = 0;
-            // instr0->NEXTCONBK = (int)instrPage.b + sizeof(struct CB)*(i+1);
-            instr0->TI = (1 /* DREQ  */ << 6) | (5 /* PWM */ << 16) | (1 << 26 /* no wide*/);
+            instr0->TI = (1 << 6) | (5 << 16) | (1 << 26); // DREQ = 1, PWM = 5, No wide mode
             instr0->RES1 = 0;
             instr0->RES2 = 0;
 
-            // Shouldn't this be (instrCnt%2) ???
+            // Odd instructions modify the GP0 clock divider instead of PWM FIFO
             if (i % 2)
             {
                 instr0->DEST_AD = CM_GP0DIV_BUS;
                 instr0->STRIDE = 4;
-                instr0->TI = (1 << 26 /* no wide*/);
+                instr0->TI = (1 << 26); // No wide mode
             }
 
+            // Link previous instruction to the next in the DMA sequence
             if (instrCnt != 0)
-                ((struct CB *)(instrs[instrCnt - 1].v))->NEXTCONBK = (long int)instrs[instrCnt].b;
+            {
+                reinterpret_cast<struct CB *>(instrs[instrCnt - 1].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[instrCnt].b);
+            }
+
             instr0++;
             instrCnt++;
         }
     }
-    // Create a circular linked list of instructions
-    ((struct CB *)(instrs[1023].v))->NEXTCONBK = (long int)instrs[0].b;
 
-    // set up a clock for the PWM
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4 /*PWMCLK_CNTL*/) = 0x5A000026; // Source=PLLD and disable
+    // Create a circular linked list of DMA instructions
+    reinterpret_cast<struct CB *>(instrs[1023].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[0].b);
+
+    // Configure the PWM clock (disable, set divisor, enable)
+    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4) = 0x5A000026; // Source = PLLD, disable
     usleep(1000);
-    // ACCESS_BUS_ADDR(CLK_BUS_BASE + 41*4 /*PWMCLK_DIV*/)  = 0x5A002800;
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 41 * 4 /*PWMCLK_DIV*/) = 0x5A002000;  // set PWM div to 2, for 250MHz
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4 /*PWMCLK_CNTL*/) = 0x5A000016; // Source=PLLD and enable
+    ACCESS_BUS_ADDR(CLK_BUS_BASE + 41 * 4) = 0x5A002000; // Set PWM divider to 2 (250MHz)
+    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4) = 0x5A000016; // Source = PLLD, enable
     usleep(1000);
 
-    // set up pwm
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0 /* CTRL*/) = 0;
+    // Configure PWM registers
+    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0) = 0; // Disable PWM
     usleep(1000);
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x4 /* status*/) = -1; // clear errors
+    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x4) = -1; // Clear status errors
     usleep(1000);
-    // Range should default to 32, but it is set at 2048 after reset on my RPi.
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x10) = 32;
+    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x10) = 32; // Set default range
     ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x20) = 32;
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0 /* CTRL*/) = -1; //(1<<13 /* Use fifo */) | (1<<10 /* repeat */) | (1<<9 /* serializer */) | (1<<8 /* enable ch */) ;
+    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0) = -1; // Enable FIFO mode, repeat, serializer, and channel
     usleep(1000);
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x8 /* DMAC*/) = (1 << 31 /* DMA enable */) | 0x0707;
+    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
 
-    // activate dma
-    struct DMAregs *DMA0 = (struct DMAregs *)&(ACCESS_BUS_ADDR(DMA_BUS_BASE));
-    DMA0->CS = 1 << 31; // reset
+    // Activate DMA
+    // Obtain the base address as an integer pointer
+    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)peri_base_virt + DMA_BUS_BASE - 0x7e000000);
+    // Now cast to DMAregs pointer
+    volatile struct DMAregs *DMA0 = reinterpret_cast<volatile struct DMAregs *>(dma_base);
+    DMA0->CS = 1 << 31; // Reset DMA
     DMA0->CONBLK_AD = 0;
     DMA0->TI = 0;
-    DMA0->CONBLK_AD = (unsigned long int)(instrPage.b);
-    DMA0->CS = (1 << 0) | (255 << 16); // enable bit = 0, clear end flag = 1, prio=19-16
+    DMA0->CONBLK_AD = reinterpret_cast<unsigned long int>(instrPage.b);
+    DMA0->CS = (1 << 0) | (255 << 16); // Enable DMA, priority level 255
 }
 
+/**
+ * @brief Waits until the system time reaches one second past a specified minute interval.
+ * @details Continuously checks the system clock and waits until `tm_min % minute == 0`
+ *          and `tm_sec == 0`. Once the condition is met, it waits an additional second
+ *          before returning.
+ *
+ * @param[in] minute The minute interval at which to synchronize execution.
+ * @return `true` when the time condition is met, allowing the program to proceed.
+ */
 bool wait_every(int minute)
 {
-    // Wait for the system clock's minute to reach one second past 'minute'
     time_t t;
     struct tm *ptm;
-    for (;;)
+
+    // Loop until the system time reaches the desired minute and second
+    while (true)
     {
         time(&t);
         ptm = gmtime(&t);
+
+        // Check if the current minute matches the interval and the second is 0
         if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
+        {
             break;
+        }
+
+        // Sleep for 1 millisecond to avoid excessive CPU usage
         usleep(1000);
     }
-    usleep(1000000); // Wait another second
-    return true;     // OK to proceed
+
+    // Ensure at least one full second has passed before proceeding
+    usleep(1000000);
+
+    return true; // OK to proceed
 }
 
+/**
+ * @brief Updates the parts-per-million (PPM) frequency correction based on NTP.
+ * @details Queries the NTP subsystem for frequency offset, applies sanity checks,
+ *          and updates the global configuration if the new PPM value is valid.
+ *          Retries up to 5 times if `ntp_adjtime()` fails or returns an out-of-range value.
+ */
 void update_ppm()
 {
-    struct timex ntx;
+    struct timex ntx = {};
     int status;
     double ppm_new;
     int retry_count = 0;
 
+    // Attempt to retrieve valid frequency correction value from NTP
     while (retry_count < 5)
     {
-        ntx.modes = 0; /* only read */
+        ntx.modes = 0; // Only read current time adjustment values
         status = ntp_adjtime(&ntx);
 
         if (status < 0)
@@ -781,38 +974,45 @@ void update_ppm()
             continue;
         }
 
+        // Ensure frequency is within valid range (-500000 to 500000)
         if (ntx.freq >= -500000 && ntx.freq <= 500000)
         {
             break; // Valid value, exit retry loop
         }
 
-        std::cerr << "Warning: Invalid ntx.freq. Retrying in 2 seconds." << std::endl;
+        std::cerr << "Warning: Invalid ntx.freq value. Retrying in 2 seconds." << std::endl;
         sleep(2);
         retry_count++;
     }
 
+    // If the value remains out of range after retries, clamp it
     if (ntx.freq < -500000 || ntx.freq > 500000)
     {
-        std::cerr << "Error: ntx.freq remains out of range after retries. Using clamped value." << std::endl;
-        ntx.freq = std::max(-500000L, std::min(ntx.freq, 500000L));
+        std::cerr << "Error: ntx.freq remains out of range after retries. Clamping to valid range." << std::endl;
+        ntx.freq = std::clamp(ntx.freq, -500000L, 500000L);
     }
 
-    ppm_new = (double)ntx.freq / (double)(1 << 16);
+    // Convert frequency adjustment to PPM (parts per million)
+    ppm_new = static_cast<double>(ntx.freq) / static_cast<double>(1 << 16);
 
-    if (abs(ppm_new) > 200)
+    // Ignore extreme PPM values
+    if (std::abs(ppm_new) > 200)
     {
-        std::cerr << "Warning: Absolute ppm value is greater than 200 and is being ignored." << std::endl;
+        std::cerr << "Warning: Absolute PPM value exceeds 200 and will be ignored." << std::endl;
     }
     else
     {
+        // Log and update configuration if the new value differs
         if (config.ppm != ppm_new)
         {
-            std::cout << "Obtained new ppm value: " << ppm_new << std::endl;
+            std::cout << "Obtained new PPM value: " << ppm_new << std::endl;
         }
+
+        // Validate and clamp PPM value
         if (!std::isfinite(ppm_new) || ppm_new < -500 || ppm_new > 500)
         {
             std::cerr << "Warning: Invalid PPM value. Clamping to ±500." << std::endl;
-            config.ppm = std::max(-500.0, std::min(ppm_new, 500.0));
+            config.ppm = std::clamp(ppm_new, -500.0, 500.0);
         }
         else
         {
@@ -821,110 +1021,227 @@ void update_ppm()
     }
 }
 
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1)
+/**
+ * @brief Computes the difference between two time values.
+ * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
+ *          the function returns `1`, otherwise, it returns `0`.
+ *
+ * @param[out] result Pointer to `timeval` struct to store the difference.
+ * @param[in] t2 Pointer to the later `timeval` structure.
+ * @param[in] t1 Pointer to the earlier `timeval` structure.
+ * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
+ */
+int timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
 {
-    // Return 1 if the difference is negative, otherwise 0.
-    long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-    result->tv_sec = diff / 1000000;
-    result->tv_usec = diff % 1000000;
+    // Compute the time difference in microseconds
+    long int diff_usec = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
 
-    return (diff < 0);
+    // Compute seconds and microseconds for the result
+    result->tv_sec = diff_usec / 1000000;
+    result->tv_usec = diff_usec % 1000000;
+
+    // Return 1 if t2 < t1 (negative difference), otherwise 0
+    return (diff_usec < 0) ? 1 : 0;
 }
 
-void timeval_print(struct timeval *tv)
+/**
+ * @brief Formats a timestamp from a `timeval` structure into a string.
+ * @details Converts the given `timeval` structure into a formatted `YYYY-MM-DD HH:MM:SS.mmm UTC` string.
+ *
+ * @param[in] tv Pointer to `timeval` structure containing the timestamp.
+ * @return A formatted string representation of the timestamp.
+ */
+std::string timeval_print(const struct timeval *tv)
 {
-    // Print Time Stamp
+    if (!tv)
+    {
+        return "Invalid timeval";
+    }
 
     char buffer[30];
-    time_t curtime;
+    time_t curtime = tv->tv_sec;
+    struct tm *timeinfo = gmtime(&curtime);
 
-    // printf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
-    curtime = tv->tv_sec;
-    // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
-    strftime(buffer, 30, "%Y-%m-%d %T", gmtime(&curtime));
-    printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
-    std::cout << " UTC";
+    if (!timeinfo)
+    {
+        return "Invalid time";
+    }
+
+    // Format the timestamp
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %T", timeinfo);
+
+    // Construct the final string with millisecond precision
+    std::ostringstream oss;
+    oss << buffer << "." << ((tv->tv_usec + 500) / 1000) << " UTC";
+    return oss.str();
 }
 
+/**
+ * @brief Opens the mailbox device.
+ * @details Creates the mailbox special files and attempts to open the mailbox.
+ *          If opening the mailbox fails, an error message is printed, and the program exits.
+ */
 void open_mbox()
 {
-    // Create the mbox special files and open mbox.
+    // Attempt to open the mailbox
     mbox.handle = mbox_open();
+
+    // Check for failure and handle the error
     if (mbox.handle < 0)
     {
-        std::cerr << "Failed to open mailbox." << std::endl;
-        exit(-1);
+        std::cerr << "Error: Failed to open mailbox." << std::endl;
+        std::exit(EXIT_FAILURE);
     }
 }
 
+/**
+ * @brief Sets the scheduling priority of the current thread.
+ * @details Assigns the thread to the `SCHED_FIFO` real-time scheduling policy with
+ *          the specified priority. Requires superuser privileges.
+ *
+ * @param[in] priority The priority level to set (higher values indicate higher priority).
+ */
 void setSchedPriority(int priority)
 {
-    // In order to get the best timing at a decent queue size, we want the kernel
-    // to avoid interrupting us for long durations.  This is done by giving our
-    // process a high priority. Note, must run as super-user for this to work.
+    // Define scheduling parameters
     struct sched_param sp;
     sp.sched_priority = priority;
+
+    // Attempt to set thread scheduling parameters to SCHED_FIFO with the given priority
     int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
-    if (ret)
+
+    // Handle potential failure
+    if (ret != 0)
     {
-        std::cerr << "Warning: pthread_setschedparam (increase thread priority) returned non-zero: " << ret << std::endl;
+        std::cerr << "Warning: pthread_setschedparam (increase thread priority) failed with error code: "
+                  << ret << std::endl;
     }
 }
 
+/**
+ * @brief Maps peripheral base address to virtual memory.
+ * @details Creates a memory-mapped region for accessing the peripheral range of physical memory.
+ *          This function opens `/dev/mem` and maps the peripheral base address.
+ *
+ * @param[out] peri_base_virt Reference to a pointer that will store the mapped virtual memory address.
+ */
 void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 {
-    // Create the memory map between virtual memory and the peripheral range
-    // of physical memory.
-
+    // File descriptor for accessing memory
     int mem_fd;
+
+    // Retrieve the peripheral base address
     unsigned gpio_base = get_peripheral_address();
-    // open /dev/mem
+
+    // Open `/dev/mem` with read/write and synchronous access
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
     {
-        std::cerr << "Error: Can't open /dev/mem" << std::endl;
-        exit(-1);
+        std::cerr << "Error: Cannot open /dev/mem." << std::endl;
+        std::exit(EXIT_FAILURE);
     }
-    peri_base_virt = (unsigned *)mmap(
-        NULL,
-        0x01000000, // len
-        PROT_READ | PROT_WRITE,
-        MAP_SHARED,
+
+    // Map the peripheral base address into virtual memory
+    peri_base_virt = static_cast<unsigned *>(mmap(
+        nullptr,
+        0x01000000,             // Length of mapped memory region (16MB)
+        PROT_READ | PROT_WRITE, // Enable read and write access
+        MAP_SHARED,             // Shared memory mapping
         mem_fd,
-        gpio_base // base
-    );
-    if ((long int)peri_base_virt == -1)
+        gpio_base // Peripheral base physical address
+        ));
+
+    // Check for mmap failure
+    if (reinterpret_cast<long int>(peri_base_virt) == -1)
     {
-        std::cerr << "Error: peri_base_virt mmap error." << std::endl;
-        exit(-1);
+        std::cerr << "Error: peri_base_virt mmap failed." << std::endl;
+        std::exit(EXIT_FAILURE);
     }
+
+    // Close the file descriptor as it is no longer needed after mmap
     close(mem_fd);
 }
 
-void dma_cleanup()
+/**
+ * @brief Safely removes a file if it exists.
+ * @details Checks whether the specified file exists before attempting to remove it.
+ *          If the file exists but removal fails, a warning is displayed.
+ *
+ * @param[in] filename Pointer to a null-terminated string containing the file path.
+ */
+void safe_remove(const char *filename)
 {
-    disable_clock();
-    unSetupDMA();
-    deallocMemPool();
-    unlink(LOCAL_DEVICE_FILE_NAME);
+    if (!filename)
+    {
+        std::cerr << "Warning: Null filename provided to safe_remove()." << std::endl;
+        return;
+    }
+
+    struct stat buffer;
+
+    // Check if the file exists before attempting to remove it
+    if (stat(filename, &buffer) == 0)
+    {
+        // Attempt to remove the file
+        if (unlink(filename) != 0)
+        {
+            std::cerr << "Warning: Failed to remove " << filename << std::endl;
+        }
+    }
 }
 
+/**
+ * @brief Cleans up DMA resources.
+ * @details Disables the clock, resets the DMA engine, deallocates memory,
+ *          and removes the local device file if it exists.
+ */
+void dma_cleanup()
+{
+    static bool cleanup_done = false;
+    if (cleanup_done) return; // Prevent duplicate cleanup
+    cleanup_done = true;
+
+    // Disable the clock to prevent unintended operation
+    disable_clock();
+
+    // Reset and clean up DMA-related settings
+    unSetupDMA();
+
+    // Deallocate memory pool to free allocated resources
+    deallocMemPool();
+
+    // Remove the local device file
+    safe_remove(LOCAL_DEVICE_FILE_NAME);
+}
+
+/**
+ * @brief Configures and initializes the DMA system for transmission.
+ * @details Retrieves PLLD frequency, calibrates timing, sets scheduling priority,
+ *          initializes random number generator, validates the frequency setting,
+ *          and sets up DMA with peripherals.
+ */
 void setup_dma()
 {
-    getPLLD(); // Get PLLD Frequency
+    // Retrieve PLLD frequency
+    getPLLD();
 
-    update_ppm(); // Initial time/clock calibration
+    // Perform initial time/clock calibration
+    update_ppm();
 
+    // Set high scheduling priority to reduce kernel interruptions
     setSchedPriority(30);
 
-    // Initialize the RNG
-    srand(time(NULL));
+    // Initialize random number generator for transmission timing
+    srand(time(nullptr));
 
-    // TODO: Push the single hardcoded band to center_freq_set:
+    // Push a single hardcoded band to `center_freq_set`
     double temp_center_freq_desired;
     try
     {
+        // Convert frequency string to double and push to the set
         temp_center_freq_desired = std::stod(config.frequency_string);
         config.center_freq_set.push_back(temp_center_freq_desired);
+
+        // Ensure the frequency value is valid
         if (!std::isfinite(temp_center_freq_desired))
         {
             throw std::runtime_error("Invalid floating-point value");
@@ -935,82 +1252,122 @@ void setup_dma()
         std::cerr << "Error: Invalid frequency string. Using default 7040100 Hz." << std::endl;
         config.center_freq_set.push_back(7040100.0);
     }
-    // TODO: Push the single hardcoded band to center_freq_set^
 
-    // Initial configuration
+    // Initialize peripheral memory mapping
     setup_peri_base_virt(peri_base_virt);
 
     // Set up DMA
-    open_mbox();
-    txon();
-    setupDMA(constPage, instrPage, instrs);
-    txoff();
-
-    return;
+    open_mbox();                            // Open mailbox for communication
+    txon();                                 // Enable transmission mode
+    setupDMA(constPage, instrPage, instrs); // Configure DMA for transmission
+    txoff();                                // Disable transmission mode
 }
 
+/**
+ * @brief Continuously transmits a test tone.
+ * @details Generates a single test tone using the DMA setup, continuously transmitting it
+ *          until the user exits with `CTRL-C`. The tone frequency is dynamically adjusted
+ *          based on PPM calibration.
+ */
 void tx_tone()
 {
-    // Test tone mode...
-    double wspr_symtime = WSPR_SYMTIME;
-    double tone_spacing = 1.0 / wspr_symtime;
+    // Define WSPR symbol time and tone spacing
+    const double wspr_symtime = WSPR_SYMTIME;
+    const double tone_spacing = 1.0 / wspr_symtime;
 
+    // Display test tone transmission details
     std::stringstream temp;
-    temp << std::setprecision(6) << std::fixed << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
+    temp << std::setprecision(6) << std::fixed
+         << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
     std::cout << temp.str() << std::endl;
     std::cout << "Press CTRL-C to exit." << std::endl;
 
-    txon(config.useled);
+    // Enable transmission mode
+    txon();
+
+    // DMA buffer pointer
     int bufPtr = 0;
+
+    // DMA frequency table
     std::vector<double> dma_table_freq;
-    // Set to non-zero value to ensure setupDMATab is called at least once.
+
+    // Set to an arbitrary non-zero value to ensure `setupDMATab` is called at least once
     double ppm_prev = 123456;
     double center_freq_actual;
+
+    // Continuous transmission loop
     while (true)
     {
+        // Perform self-calibration if enabled
         if (config.self_cal)
         {
             update_ppm();
         }
+
+        // If PPM value has changed, update the DMA table
         if (config.ppm != ppm_prev)
         {
+            // Validate PLLD clock frequency
             if (config.f_plld_clk <= 0)
             {
                 std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
                 config.f_plld_clk = 500000000.0;
             }
-            setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
+
+            // Compute actual PLL-adjusted frequency
+            double adjusted_plld_freq = config.f_plld_clk * (1 - config.ppm / 1e6);
+
+            // Setup the DMA frequency table
+            setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
+                        dma_table_freq, center_freq_actual, constPage);
+
+            // Debug output for DMA frequency table
             std::cout << std::setprecision(30)
                       << "DEBUG: dma_table_freq[0] = " << dma_table_freq[0] << "\n"
                       << "DEBUG: dma_table_freq[1] = " << dma_table_freq[1] << "\n"
                       << "DEBUG: dma_table_freq[2] = " << dma_table_freq[2] << "\n"
                       << "DEBUG: dma_table_freq[3] = " << dma_table_freq[3] << std::endl;
+
+            // Warn if the actual transmission frequency differs from the desired frequency
             if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
             {
                 std::stringstream temp;
-                temp << std::setprecision(6) << std::fixed << "Warning: Test tone will be transmitted on " << (center_freq_actual - 1.5 * tone_spacing) / 1e6 << " MHz due to hardware limitations.";
+                temp << std::setprecision(6) << std::fixed
+                     << "Warning: Test tone will be transmitted on "
+                     << (center_freq_actual - 1.5 * tone_spacing) / 1e6
+                     << " MHz due to hardware limitations.";
                 std::cerr << temp.str() << std::endl;
             }
+
+            // Update previous PPM value to avoid redundant updates
             ppm_prev = config.ppm;
         }
+
+        // Transmit the test tone symbol
         txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
     }
 }
 
+/**
+ * @brief Transmits WSPR (Weak Signal Propagation Reporter) messages.
+ * @details Continuously loops through available bands, waiting for WSPR transmission
+ *          windows, generating WSPR symbols, and transmitting them.
+ *          The function dynamically adjusts transmission frequency based on
+ *          PPM calibration and ensures accurate symbol timing.
+ */
 void tx_wspr()
 {
-    // WSPR mode
+    // Retrieve the number of bands available for transmission
     int nbands = config.center_freq_set.size();
-    for (;;)
-    { // Reload Loop >
-        // Create WSPR symbols
-        WsprMessage message(config.callsign, config.locator, config.tx_power);
 
-        constexpr int SYMBOL_COUNT = 162; // Explicitly define the number of symbols
+    while (true) // Reload Loop
+    {
+        // Generate a new WSPR message
+        WsprMessage message(config.callsign, config.locator, config.tx_power);
 
         // Print encoded packet
         std::cout << "WSPR codeblock: ";
-        for (int i = 0; i < SYMBOL_COUNT; i++)
+        for (int i = 0; i < MSG_SIZE; i++)
         {
             if (i > 0)
             {
@@ -1021,12 +1378,13 @@ void tx_wspr()
         std::cout << std::endl;
 
         std::cout << "Ready to transmit (setup complete)." << std::endl;
+
         int band = 0;
         int n_tx = 0;
-        for (;;)
+
+        while (true)
         {
-            // Calculate WSPR parameters for this transmission
-            double center_freq_desired;
+            // Validate available bands
             if (config.center_freq_set.empty())
             {
                 std::cerr << "Error: center_freq_set is empty. Cannot access band [" << band << "]." << std::endl;
@@ -1037,50 +1395,58 @@ void tx_wspr()
                 std::cerr << "Error: Band index out of range. band [" << band << "] size [" << config.center_freq_set.size() << "]." << std::endl;
                 exit(1);
             }
-            center_freq_desired = config.center_freq_set[band];
+
+            // Determine center frequency
+            double center_freq_desired = config.center_freq_set[band];
+
+            // Determine if using WSPR-15 mode (longer symbol time)
             bool wspr15 =
                 (center_freq_desired > 137600 && center_freq_desired < 137625) ||
                 (center_freq_desired > 475800 && center_freq_desired < 475825) ||
                 (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+
             double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
             double tone_spacing = 1.0 / wspr_symtime;
 
-            // Add random offset
+            // Apply random offset if enabled
             if ((center_freq_desired != 0) && config.random_offset)
             {
-                center_freq_desired += (2.0 * rand() / ((double)RAND_MAX + 1.0) - 1.0) * (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+                center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
+                                       (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
             }
 
-            // Status message before transmission
+            // Display transmission information
             std::stringstream temp;
-            temp << std::setprecision(6) << std::fixed;
-            temp << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR") << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+            temp << std::setprecision(6) << std::fixed
+                 << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
+                 << " transmission: " << center_freq_desired / 1e6 << " MHz.";
             std::cout << temp.str() << std::endl;
 
-            // Wait for WSPR transmission window to arrive.
+            // Wait for the next WSPR transmission window
             if (config.no_delay)
             {
-                std::cout << "Transmitting immediately (not waiting for WSPR window.)" << std::endl;
+                std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
             }
             else
             {
                 std::cout << "Waiting for next WSPR transmission window." << std::endl;
                 if (!wait_every((wspr15) ? 15 : 2))
                 {
-                    // Break and reload if ini changes
+                    // Reload if ini changes
                     break;
-                };
+                }
             }
 
-            // Update crystal calibration information
+            // Update frequency correction (PPM) if enabled
             if (config.self_cal)
             {
                 update_ppm();
             }
 
-            // Create the DMA table for this center frequency
-            std::vector<double> dma_table_freq(1024, 0.0); // Ensure vector is properly sized
-            double center_freq_actual;
+            // Create DMA table for transmission
+            std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
+            double center_freq_actual = center_freq_desired;
+
             if (center_freq_desired)
             {
                 if (config.f_plld_clk <= 0)
@@ -1088,49 +1454,50 @@ void tx_wspr()
                     std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
                     config.f_plld_clk = 500000000.0;
                 }
-                setupDMATab(center_freq_desired, tone_spacing, config.f_plld_clk * (1 - config.ppm / 1e6), dma_table_freq, center_freq_actual, constPage);
-            }
-            else
-            {
-                center_freq_actual = center_freq_desired;
+
+                setupDMATab(center_freq_desired, tone_spacing,
+                            config.f_plld_clk * (1 - config.ppm / 1e6),
+                            dma_table_freq, center_freq_actual, constPage);
             }
 
-            // Send the message if freq != 0 and transmission is enabled
+            // Start transmission if conditions are met
             if (center_freq_actual && config.xmit_enabled)
             {
-                // Print a status message right before transmission begins.
                 struct timeval tvBegin, tvEnd, tvDiff;
                 gettimeofday(&tvBegin, NULL);
-                std::cout << "TX started at: ";
-                timeval_print(&tvBegin);
-                std::cout << "\n";
 
-                struct timeval sym_start;
-                struct timeval diff;
+                std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
+
+                struct timeval sym_start, diff;
                 int bufPtr = 0;
-                txon(config.useled);
-                for (int i = 0; i < SYMBOL_COUNT; i++)
+
+                // Enable transmission
+                txon();
+
+                // Transmit each symbol in the WSPR message
+                for (int i = 0; i < MSG_SIZE; i++)
                 {
                     gettimeofday(&sym_start, NULL);
                     timeval_subtract(&diff, &sym_start, &tvBegin);
                     double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
                     double sched_end = (i + 1) * wspr_symtime;
                     double this_sym = sched_end - elapsed;
-                    this_sym = (this_sym < .2) ? .2 : this_sym;
-                    this_sym = (this_sym > 2 * wspr_symtime) ? 2 * wspr_symtime : this_sym;
-                    txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing, sched_end - elapsed, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+                    this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
+
+                    txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
+                          this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
                 }
                 n_tx++;
 
-                // Turn transmitter off
-                txoff(config.useled);
+                // Disable transmission
+                txoff();
 
-                // Time Stamp
-                gettimeofday(&tvEnd, NULL);
-                std::cout << "TX ended at: ";
-                timeval_print(&tvEnd);
+                // Print transmission timestamp and duration on one line
+                gettimeofday(&tvEnd, nullptr);
                 timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                printf(" (%ld.%03ld s)\n", tvDiff.tv_sec, (tvDiff.tv_usec + 500) / 1000);
+                std::cout << "TX ended at: " << timeval_print(&tvEnd)
+                          << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
+                          << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
             }
             else
             {
@@ -1138,7 +1505,7 @@ void tx_wspr()
                 usleep(1000000);
             }
 
-            // Advance to next band
+            // Cycle through available bands
             band = (band + 1) % nbands;
             if ((band == 0) && !config.repeat)
             {
@@ -1149,5 +1516,5 @@ void tx_wspr()
                 return;
             }
         }
-    } // < Reload Loop
+    } // Reload Loop
 }
