@@ -14,20 +14,26 @@ VER := $(VER)$(PRE)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
 # Lower-case based executable name
-# EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
-EXE_NAME := dma_test
+EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
 # Output Items
 OUT := $(EXE_NAME)						# Normal release binary
 TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
-INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
+INSTALL_PATH := /usr/local				# Installation directory for the binary
+INI_PATH :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
+CALL_SIGN := AA0NT						# Callsign
+GRID_SQUARE := EM18						# Maidenhead Grid Square
+TX_POWER := 20							# Transmit Power in dBm
 TEST_FREQ := 7040100					# Frequency for test tone
-PREFIX := /usr/local					# Installation directory for the binary
 # Strip whitespace from comments
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))
+INSTALL_PATH := $(strip $(INSTALL_PATH))
+INI_PATH := $(strip $(INI_PATH))
+CALL_SIGN := $(strip $(CALL_SIGN))
+TX_POWER := $(strip $(TX_POWER))
+GRID_SQUARE := $(strip $(GRID_SQUARE))
 TEST_FREQ := $(strip $(TEST_FREQ))
-PREFIX := $(strip $(PREFIX))
 
 # Output directories
 OBJ_DIR_RELEASE = build/obj/release
@@ -44,7 +50,7 @@ CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
 # Linker Flags
 LDFLAGS := $(shell pkg-config --cflags --libs libgpiod) -lpthread
 LDFLAGS += $(shell pkg-config --libs libgpiodcxx)
-LDFLAGS += -lbcm_host
+# LDFLAGS += -lbcm_host
 # Collect dependency files
 DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
 # Include dependencies if they exist
@@ -75,7 +81,7 @@ CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 # CXXFLAGS += -I$(abspath ./MonitorFile/src)
 # CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 # CXXFLAGS += -I$(abspath ./Singleton/src)
-# CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
+CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
@@ -162,11 +168,48 @@ release: build/bin/$(OUT)
 debug: build/bin/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."
 
-# Test target
+# Test with INI target
 .PHONY: test
 test: debug
-	$(Q)echo "Running test with sudo privileges."
-	$(Q)sudo ./build/bin/$(TEST_OUT)
+	$(Q)echo "Running one-shot test with sudo privileges."
+	sudo ./build/bin/$(TEST_OUT) -x 1 $(CALL_SIGN) $(GRID_SQUARE) $(TX_POWER) $(TEST_FREQ)
+
+# Test with INI target
+.PHONY: ini-test
+ini-test: debug
+	$(Q)echo "Running INI test with sudo privileges."
+	sudo ./build/bin/$(TEST_OUT) -i $(INI_PATH)
+
+# Transmission Test target
+.PHONY: trans-test
+trans-test: debug
+	$(Q)echo "Running transmission test with sudo privileges."
+	sudo ./build/bin/$(TEST_OUT)
+
+# Tone Test target
+.PHONY: tone-test
+tone-test: debug
+	$(Q)echo "Running tone test with sudo privileges."
+	sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
+
+# Install target (install only the release binary)
+.PHONY: install
+install: $(OUT)
+	$(Q)echo "Installing $(OUT) to $(INSTALL_PATH)/bin."
+	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo install -d $(INSTALL_PATH)/bin
+	$(Q)sudo install -m 755 build/bin/$(OUT) $(INSTALL_PATH)/bin/$(OUT)
+	$(Q)sudo systemctl start $(OUT).service || true
+	$(Q)echo "Install complete."
+
+# Uninstall target
+.PHONY: uninstall
+uninstall:
+	$(Q)echo "Removing $(INSTALL_PATH)/bin/$(OUT)."
+	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo systemctl disable $(OUT).service || true
+	$(Q)sudo rm -f $(INSTALL_PATH)/bin/$(OUT)
+	$(Q)echo "Uninstall complete."
 
 # Show only user-defined macros
 .PHONY: macros
@@ -186,9 +229,14 @@ help:
 	$(Q)echo "Available targets:"
 	$(Q)echo "  all        Build the project (default: release)."
 	$(Q)echo "  clean      Remove build artifacts."
-	$(Q)echo "  test       Run the binary with the INI file."
+	$(Q)echo "  debug      Build with debugging symbols."
+	$(Q)echo "  test       Run a one-shot test with call/grid/power/freq."
+	$(Q)echo "  ini-test   Run the binary with -i $(INI_PATH)."
+	$(Q)echo "  tone-test  Run a tone test on $(TEST_FREQ)."
+	$(Q)echo "  trans-test Run the binary with the INI file."
+	$(Q)echo "  install    Install the binary to $(INSTALL_PATH)/bin."
+	$(Q)echo "  uninstall  Remove the installed binary."
 	$(Q)echo "  lint       Run static analysis."
 	$(Q)echo "  macros     Show defined project macros."
-	$(Q)echo "  debug      Build with debugging symbols."
 	$(Q)echo "  release    Build optimized for production."
 	$(Q)echo "  help       Show this help message."
