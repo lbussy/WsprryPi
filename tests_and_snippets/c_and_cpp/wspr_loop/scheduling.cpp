@@ -43,6 +43,7 @@
 #include "transmit.hpp"
 #include "logging.hpp"
 #include "gpio_handler.hpp"
+#include "ppm_manager.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -60,6 +61,8 @@
 #include <sys/resource.h>
 
 std::mutex shutdown_mtx; // Global mutex for thread safety.
+
+PPMManager ppmManager;
 
 /**
  * @brief Condition variable used for thread synchronization.
@@ -317,10 +320,33 @@ void set_scheduling_priority()
     }
 }
 
+bool ppm_init()
+{
+    // Initialize PPM Manager
+    PPMStatus status = ppmManager.initialize();
+
+    // Handle initialization errors
+    if (status == PPMStatus::ERROR_UNSYNCHRONIZED_TIME)
+    {
+        llog.logE(ERROR, "System time is not synchronized.");
+        return false;
+    }
+    else if (status == PPMStatus::ERROR_CHRONY_NOT_FOUND)
+    {
+        llog.logE(WARN, "Chrony not found. Using clock drift measurement.");
+    }
+
+    llog.logS(INFO, "Current PPM:", ppmManager.getCurrentPPM());
+
+    return true;
+}
+
 void wspr_loop()
 {
     // Register signal handlers for safe shutdown and terminal management.
     register_signal_handlers();
+
+    ppm_init();
 
     if (useini)
     {
@@ -341,6 +367,8 @@ void wspr_loop()
 
     // Restore normal terminal behavior
     restore_terminal_signals();
+    // Stop PPM MAnager
+    ppmManager.stop();
     // Signal shutdown.
     signal_shutdown.store(true);
     // Cleanup threads

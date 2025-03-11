@@ -38,12 +38,15 @@
 
 // Project headers
 #include "arg_parser.hpp"
+#include "ppm_manager.hpp"
 
 // Standard library headers
 #include <atomic>
 #include <condition_variable>
 #include <string>
 #include <thread>
+
+extern PPMManager ppmManager;
 
 /**
  * @brief Condition variable used for thread synchronization.
