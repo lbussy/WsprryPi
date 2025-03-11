@@ -198,6 +198,12 @@ test-tone: debug
 	$(Q)echo "Running test tone with sudo privileges."
 	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
 
+# Test one-shot target
+.PHONY: test-oneshot
+test-oneshot: debug
+	$(Q)echo "Running test tone with sudo privileges."
+	$(Q)sudo ./build/bin/$(TEST_OUT) -x 1 AA0NT EM18 20 40m
+
 # Install target (install only the release binary)
 .PHONY: install
 install: $(OUT)
@@ -231,14 +237,15 @@ lint:
 .PHONY: help
 help:
 	$(Q)echo "Available targets:"
-	$(Q)echo "  all        Build the project (default: release)."
-	$(Q)echo "  clean      Remove build artifacts."
-	$(Q)echo "  test       Run the binary with the INI file."
-	$(Q)echo "  test-tone  Run the binary with a test tone."
-	$(Q)echo "  install    Install the binary to $(PREFIX)/bin."
-	$(Q)echo "  uninstall  Remove the installed binary."
-	$(Q)echo "  lint       Run static analysis."
-	$(Q)echo "  macros     Show defined project macros."
-	$(Q)echo "  debug      Build with debugging symbols."
-	$(Q)echo "  release    Build optimized for production."
-	$(Q)echo "  help       Show this help message."
+	$(Q)echo "  all          Build the project (default: release)."
+	$(Q)echo "  clean        Remove build artifacts."
+	$(Q)echo "  test         Run the binary with the INI file."
+	$(Q)echo "  test-tone    Run the binary with a test tone."
+	$(Q)echo "  test-oneshot Run the binary with one iteration."
+	$(Q)echo "  install      Install the binary to $(PREFIX)/bin."
+	$(Q)echo "  uninstall    Remove the installed binary."
+	$(Q)echo "  lint         Run static analysis."
+	$(Q)echo "  macros       Show defined project macros."
+	$(Q)echo "  debug        Build with debugging symbols."
+	$(Q)echo "  release      Build optimized for production."
+	$(Q)echo "  help         Show this help message."

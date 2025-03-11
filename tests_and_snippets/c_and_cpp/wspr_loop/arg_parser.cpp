@@ -437,7 +437,7 @@ bool validate_config_data()
 
         // Log test tone frequency
         llog.logS(INFO, "A test tone will be generated at",
-            lookup.freq_display_string(test_tone), ".");
+                  lookup.freq_display_string(test_tone), ".");
 
         if (use_ntp)
         {
@@ -534,6 +534,21 @@ bool validate_config_data()
             if (message)
             {
                 llog.logS(DEBUG, "WSPR message initialized.");
+                // Build stream for WSPR symbols
+                std::ostringstream wspr_stream;
+                wspr_stream << "Generated WSPR symbols:\n";
+
+                for (int i = 0; i < WsprMessage::size; ++i)
+                {
+                    wspr_stream << static_cast<int>(message->symbols[i]);
+                    if (i < WsprMessage::size - 1)
+                    {
+                        wspr_stream << ","; // Append a comma except for the last element
+                    }
+                }
+
+                // Send the formatted string to logger
+                llog.logS(DEBUG, wspr_stream.str());
             }
             else
             {
@@ -596,22 +611,6 @@ bool validate_config_data()
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
         std::exit(EXIT_FAILURE);
     }
-
-    // Build stream for WSPR symbols
-    std::ostringstream wspr_stream;
-    wspr_stream << "Generated WSPR symbols:\n";
-
-    for (int i = 0; i < WsprMessage::size; ++i)
-    {
-        wspr_stream << static_cast<int>(message->symbols[i]);
-        if (i < WsprMessage::size - 1)
-        {
-            wspr_stream << ","; // Append a comma except for the last element
-        }
-    }
-
-    // Send the formatted string to logger
-    llog.logS(DEBUG, wspr_stream.str());
 
     return true;
 }

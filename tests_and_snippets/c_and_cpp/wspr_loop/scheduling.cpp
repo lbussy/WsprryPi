@@ -39,7 +39,6 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "constants.hpp"
-#include "ppm_ntp.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
 #include "logging.hpp"
@@ -323,18 +322,6 @@ void wspr_loop()
     // Register signal handlers for safe shutdown and terminal management.
     register_signal_handlers();
 
-    // Verify NTP and update PPM at startup.
-    if (!ensure_ntp_stable())
-    {
-        llog.logE(ERROR, "NTP synchronization failed. Exiting.");
-        std::exit(EXIT_FAILURE);
-    }
-    update_ppm();
-
-    // Start monitor threads.
-    ppm_ntp_thread = std::thread(ppm_ntp_monitor_thread);
-    llog.logS(INFO, "PPM/NTP monitor thread started.");
-
     if (useini)
     {
         ini_thread = std::thread(ini_monitor_thread);
@@ -369,18 +356,11 @@ void wspr_loop()
     // Identify any stuck threads
     if (button_thread.joinable())
         llog.logS(WARN, "Button thread still running.");
-    if (ppm_ntp_thread.joinable())
-        llog.logS(WARN, "PPM/NTP thead still running.");
     if (ini_thread.joinable())
         llog.logS(WARN, "INI Monitor still running.");
     if (transmit_thread.joinable())
         llog.logS(WARN, "Transmit thread still running.");
 
-    while (ppm_ntp_thread.joinable() || transmit_thread.joinable())
-    {
-        llog.logS(WARN, "Waiting for remaining threads to exit before main().");
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
     return;
 }
 
@@ -408,7 +388,6 @@ void shutdown_threads()
     safe_join(transmit_thread, "Transmit thread");
     safe_join(ini_thread, "INI monitor thread");
     safe_join(button_thread, "Button monitor thread");
-    safe_join(ppm_ntp_thread, "PPM/NTP monitor thread");
 
     llog.logS(INFO, "All threads shut down safely.");
 }
