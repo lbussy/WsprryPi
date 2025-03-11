@@ -67,7 +67,8 @@ CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
 C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
 # Linker Flags
-LDFLAGS := $(shell pkg-config --cflags --libs libgpiod) -lpthread
+LDFLAGS := -lpthread  -latomic
+LDFLAGS += $(shell pkg-config --cflags --libs libgpiod)
 LDFLAGS += $(shell pkg-config --libs libgpiodcxx)
 # Collect dependency files
 DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
@@ -100,6 +101,7 @@ CXXFLAGS += -I$(abspath ./MonitorFile/src)
 CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
+CXXFLAGS += -I$(abspath ./PPM-Manager/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags

@@ -44,3 +44,6 @@
 [submodule "tests_and_snippets/c_and_cpp/dma/WSPR-Message"]
 	path = tests_and_snippets/c_and_cpp/dma/WSPR-Message
 	url = https://github.com/lbussy/WSPR-Message.git
+[submodule "tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager"]
+	path = tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager
+	url = https://github.com/lbussy/PPM-Manager.git

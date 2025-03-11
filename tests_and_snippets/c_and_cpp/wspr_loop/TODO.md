@@ -34,5 +34,7 @@
       "libgpiod-dev"
     )
     ```
+
 - [ ] Aded chrony `sudo apt install chrony -y`
-- [ ]
+- [ ] Choose between "free-running" and NTP and static PPM
+- [ ] Periodically check PPM
