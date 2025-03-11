@@ -172,25 +172,25 @@ debug: build/bin/$(TEST_OUT)
 .PHONY: test
 test: debug
 	$(Q)echo "Running one-shot test with sudo privileges."
-	sudo ./build/bin/$(TEST_OUT) -x 1 $(CALL_SIGN) $(GRID_SQUARE) $(TX_POWER) $(TEST_FREQ)
+	$(Q)sudo ./build/bin/$(TEST_OUT) -x 1 $(CALL_SIGN) $(GRID_SQUARE) $(TX_POWER) $(TEST_FREQ)
 
 # Test with INI target
 .PHONY: ini-test
 ini-test: debug
 	$(Q)echo "Running INI test with sudo privileges."
-	sudo ./build/bin/$(TEST_OUT) -i $(INI_PATH)
+	$(Q)sudo ./build/bin/$(TEST_OUT) -i $(INI_PATH)
 
 # Transmission Test target
 .PHONY: trans-test
 trans-test: debug
 	$(Q)echo "Running transmission test with sudo privileges."
-	sudo ./build/bin/$(TEST_OUT)
+	$(Q)sudo ./build/bin/$(TEST_OUT)
 
 # Tone Test target
 .PHONY: tone-test
 tone-test: debug
 	$(Q)echo "Running tone test with sudo privileges."
-	sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
+	$(Q)sudo ./build/bin/$(TEST_OUT) --test-tone $(TEST_FREQ)
 
 # Install target (install only the release binary)
 .PHONY: install

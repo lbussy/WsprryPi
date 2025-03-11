@@ -14,4 +14,25 @@
 - [ ] Also change priority for transmissions
 - [ ] Add wp_server command processing
 - [ ] DMA notes at: `https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial`
-= [ ] Add sudo check
+- [ ] Add sudo check
+- [ ] May not need:
+  - jq
+  - libraspberrypi-dev
+  - raspberrypi-kernel-headers
+  - ntpd
+
+    ``` bash
+    readonly APT_PACKAGES=(
+      "jq"
+      "git"
+      "apache2"
+      "php"
+      "libraspberrypi-dev"
+      "raspberrypi-kernel-headers"
+      "ntp"
+      "gpiod"
+      "libgpiod-dev"
+    )
+    ```
+- [ ] Aded chrony `sudo apt install chrony -y`
+- [ ]
