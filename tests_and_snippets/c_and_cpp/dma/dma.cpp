@@ -129,6 +129,8 @@
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
+PPMManager ppmManager;
+
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
 // the peripherals. This address is mapped at runtime using mmap and /dev/mem.
@@ -948,80 +950,6 @@ bool wait_every(int minute)
 }
 
 /**
- * @brief Updates the parts-per-million (PPM) frequency correction based on NTP.
- * @details Queries the NTP subsystem for frequency offset, applies sanity checks,
- *          and updates the global configuration if the new PPM value is valid.
- *          Retries up to 5 times if `ntp_adjtime()` fails or returns an out-of-range value.
- */
-void update_ppm()
-{
-    struct timex ntx = {};
-    int status;
-    double ppm_new;
-    int retry_count = 0;
-
-    // Attempt to retrieve valid frequency correction value from NTP
-    while (retry_count < 5)
-    {
-        ntx.modes = 0; // Only read current time adjustment values
-        status = ntp_adjtime(&ntx);
-
-        if (status < 0)
-        {
-            std::cerr << "Error: ntp_adjtime() failed. Retrying in 2 seconds." << std::endl;
-            sleep(2);
-            retry_count++;
-            continue;
-        }
-
-        // Ensure frequency is within valid range (-500000 to 500000)
-        if (ntx.freq >= -500000 && ntx.freq <= 500000)
-        {
-            break; // Valid value, exit retry loop
-        }
-
-        std::cerr << "Warning: Invalid ntx.freq value. Retrying in 2 seconds." << std::endl;
-        sleep(2);
-        retry_count++;
-    }
-
-    // If the value remains out of range after retries, clamp it
-    if (ntx.freq < -500000 || ntx.freq > 500000)
-    {
-        std::cerr << "Error: ntx.freq remains out of range after retries. Clamping to valid range." << std::endl;
-        ntx.freq = std::clamp(ntx.freq, -500000L, 500000L);
-    }
-
-    // Convert frequency adjustment to PPM (parts per million)
-    ppm_new = static_cast<double>(ntx.freq) / static_cast<double>(1 << 16);
-
-    // Ignore extreme PPM values
-    if (std::abs(ppm_new) > 200)
-    {
-        std::cerr << "Warning: Absolute PPM value exceeds 200 and will be ignored." << std::endl;
-    }
-    else
-    {
-        // Log and update configuration if the new value differs
-        if (config.ppm != ppm_new)
-        {
-            std::cout << "Obtained new PPM value: " << ppm_new << std::endl;
-        }
-
-        // Validate and clamp PPM value
-        if (!std::isfinite(ppm_new) || ppm_new < -500 || ppm_new > 500)
-        {
-            std::cerr << "Warning: Invalid PPM value. Clamping to ±500." << std::endl;
-            config.ppm = std::clamp(ppm_new, -500.0, 500.0);
-        }
-        else
-        {
-            config.ppm = ppm_new;
-        }
-    }
-}
-
-/**
  * @brief Computes the difference between two time values.
  * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
  *          the function returns `1`, otherwise, it returns `0`.
@@ -1213,6 +1141,27 @@ void dma_cleanup()
     safe_remove(LOCAL_DEVICE_FILE_NAME);
 }
 
+bool ppm_init()
+{
+    // Initialize PPM Manager
+    PPMStatus status = ppmManager.initialize();
+
+    // Handle initialization errors
+    if (status == PPMStatus::ERROR_UNSYNCHRONIZED_TIME)
+    {
+        std::cerr << "System time is not synchronized." << std::endl;
+        return false;
+    }
+    else if (status == PPMStatus::ERROR_CHRONY_NOT_FOUND)
+    {
+        std::cerr << "Chrony not found. Using clock drift measurement." << std::endl;
+    }
+
+    std::cout << "Current PPM: " << ppmManager.getCurrentPPM() << std::endl;
+
+    return true;
+}
+
 /**
  * @brief Configures and initializes the DMA system for transmission.
  * @details Retrieves PLLD frequency, calibrates timing, sets scheduling priority,
@@ -1225,7 +1174,8 @@ void setup_dma()
     getPLLD();
 
     // Perform initial time/clock calibration
-    update_ppm();
+    ppm_init();
+    config.ppm = ppmManager.getCurrentPPM();
 
     // Set high scheduling priority to reduce kernel interruptions
     setSchedPriority(30);
@@ -1301,7 +1251,7 @@ void tx_tone()
         // Perform self-calibration if enabled
         if (config.self_cal)
         {
-            update_ppm();
+            config.ppm = ppmManager.getCurrentPPM();
         }
 
         // If PPM value has changed, update the DMA table
@@ -1440,7 +1390,7 @@ void tx_wspr()
             // Update frequency correction (PPM) if enabled
             if (config.self_cal)
             {
-                update_ppm();
+                config.ppm = ppmManager.getCurrentPPM();
             }
 
             // Create DMA table for transmission
