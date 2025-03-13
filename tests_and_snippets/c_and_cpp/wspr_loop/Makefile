@@ -43,11 +43,11 @@ VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
 # Output Items
-OUT := $(EXE_NAME)						# Normal release binary
-TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
-INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
-TEST_FREQ := 730000						# Frequency for test tone
-PREFIX := /usr/local					# Installation directory for the binary
+OUT := $(EXE_NAME)							# Normal release binary
+TEST_OUT :=	$(EXE_NAME)_test				# Debug/test binary
+INI_FILE :=	../../../config/wsprrypi.ini	# INI file for test target
+TEST_FREQ := 730000							# Frequency for test tone
+PREFIX := /usr/local						# Installation directory for the binary
 # Strip whitespace from comments
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))

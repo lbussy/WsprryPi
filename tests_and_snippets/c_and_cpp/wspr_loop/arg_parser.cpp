@@ -48,10 +48,12 @@
 // Standard library headers
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 // System headers
 #include <getopt.h>
@@ -153,60 +155,47 @@ std::atomic<int> wspr_interval(WSPR_2);
  */
 std::atomic<bool> ini_reload_pending(false);
 
-std::thread ini_thread;
-
 /**
- * @brief Monitors the INI configuration file for changes.
+ * @brief Callback for INI file change detection
  *
  * This function runs as a background thread, periodically checking
  * if the monitored INI file has been modified. When a change is detected:
  *
- * - If the system is not currently transmitting, it immediately reloads the configuration
- *   by calling `validate_config_data()`.
- * - If a transmission is active, it sets a deferred reload flag (`ini_reload_pending`)
- *   to apply the changes after the transmission completes.
- *
- * Additionally, if a reload was deferred and the system is no longer transmitting,
- * the configuration is reloaded immediately.
- *
- * @note This thread continues running until `exit_wspr_loop` is set to `true`.
- *       It checks for file changes every second.
+ * - It sets a deferred reload flag (`ini_reload_pending`) to apply the
+ *   changes after the transmission completes.
  */
-void ini_monitor_thread()
+void callback_ini_changed()
 {
-    while (!exit_wspr_loop.load())
+    // Log detection of change
+    ini_reload_pending.store(true);
+
+    if (in_transmission.load())
     {
-        // 1. Check if the INI file has changed
-        if (iniMonitor.changed())
-        {
-            // Log detection of change
-            llog.logS(INFO, "INI file changed.");
+        llog.logS(INFO, "INI file changed, reload after transmission.");
+    }
+    else
+    {
+        llog.logS(INFO, "INI file changed.");
+        apply_deferred_changes();
+    }
+}
 
-            // If not transmitting, reload configuration immediately
-            if (!in_transmission.load())
-            {
-                llog.logS(INFO, "Reloading configuration now.");
-                validate_config_data();
-            }
-            else
-            {
-                // Otherwise, defer reload until transmission completes
-                llog.logS(INFO, "Configuration reload deferred until transmission completes.");
-                ini_reload_pending.store(true);
-            }
-        }
-
-        // 2. Apply deferred reload if transmission has ended
-        if (ini_reload_pending.load() && !in_transmission.load())
-        {
-            // Clear the pending flag and reload configuration
-            ini_reload_pending.store(false);
-            llog.logS(INFO, "Applying deferred INI changes after transmission.");
-            validate_config_data();
-        }
-
-        // 3. Sleep briefly before the next check
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+/**
+ * @brief Monitors the INI configuration file for changes.
+ *
+ * This is called to check if the monitored INI file has been modified.
+ * When a change is detected it reloads the configuration by calling
+ * `validate_config_data()`.
+ */
+void apply_deferred_changes()
+{
+    // Apply deferred reload if transmission has ended
+    if (ini_reload_pending.load() && !in_transmission.load())
+    {
+        // Clear the pending flag and reload configuration
+        ini_reload_pending.store(false);
+        llog.logS(INFO, "Applying deferred INI changes.");
+        validate_config_data();
     }
 }
 
@@ -592,7 +581,7 @@ bool validate_config_data()
         // Set termination count (defaults to 1 if unset) if not in loop mode
         if (loop_tx)
         {
-            llog.logS(INFO, "Transmissions will continue until stopped with CTRL-C.");
+            llog.logS(INFO, "Transmissions will continue until it receives a singnal to stop.");
         }
         else
         {
@@ -630,45 +619,47 @@ bool validate_config_data()
  * @param argv The array of command-line argument strings.
  * @return true if parsing is successful, false if an error occurs.
  */
-bool parse_command_line(int argc, char *const argv[])
+bool parse_command_line(int argc, char *argv[])
 {
+    std::vector<char *> args(argv, argv + argc); // Copy arguments for modification
+
     // First pass: Look for "-i <file>" before processing other options
-    for (int i = 1; i < argc; ++i)
+    for (auto it = args.begin() + 1; it != args.end(); ++it)
     {
-        if ((std::string(argv[i]) == "-i" || std::string(argv[i]) == "--ini-file") && i + 1 < argc)
+        if ((std::string(*it) == "-i" || std::string(*it) == "--ini-file") && (it + 1) != args.end())
         {
-            inifile = argv[i + 1];
+            inifile = *(it + 1);
             useini = true;
+            loop_tx = true;
             ini.set_filename(inifile);
-            iniMonitor.filemon(inifile);
-            break;
+            iniMonitor.filemon(inifile, callback_ini_changed);
+
+            // Remove "-i <file>" from args
+            args.erase(it, it + 2);
+            break; // Exit loop after removing argument
         }
     }
 
+    // Update argc and argv pointers for getopt_long()
+    argc = args.size();
+    argv = args.data();
+
     static struct option long_options[] = {
-        // No arguments
         {"help", no_argument, nullptr, 'h'},
-        {"help", no_argument, nullptr, '?'},
         {"version", no_argument, nullptr, 'v'},
         {"use-ntp", no_argument, nullptr, 'n'},
         {"repeat", no_argument, nullptr, 'r'},
         {"offset", no_argument, nullptr, 'o'},
         {"led", no_argument, nullptr, 'l'},
         {"date-time-log", no_argument, nullptr, 'D'},
-        // Arguments required
         {"ppm", required_argument, nullptr, 'p'},
         {"terminate", required_argument, nullptr, 'x'},
         {"test-tone", required_argument, nullptr, 't'},
         {"led_pin", required_argument, nullptr, 'b'},
         {"power_level", required_argument, nullptr, 'd'},
         {"port", required_argument, nullptr, 'e'},
-
         {nullptr, 0, nullptr, 0}};
 
-    std::regex callsign_regex(R"(^([A-Za-z]{1,2}[0-9][A-Za-z0-9]{1,3}|[A-Za-z][0-9][A-Za-z]|[0-9][A-Za-z][0-9][A-Za-z0-9]{2,3})$)");
-    std::regex gridsquare_regex(R"(^[A-Za-z]{2}[0-9]{2}$)");
-
-    // Parse options
     while (true)
     {
         int option_index = 0;
@@ -679,39 +670,30 @@ bool parse_command_line(int argc, char *const argv[])
 
         switch (c)
         {
-        // No arguments
-        case 'h': // Print usage (help)
+        case 'h':
         case '?':
             print_usage();
             std::exit(EXIT_SUCCESS);
-
-        case 'v': // Print version
+        case 'v':
             std::cout << version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
-
         case 'n':
             ini.set_bool_value("Extended", "Use NTP", true);
             break;
-
         case 'r':
             loop_tx = true;
             break;
-
         case 'o':
             ini.set_bool_value("Extended", "Offset", true);
             break;
-
         case 'l':
             ini.set_bool_value("Extended", "Use LED", true);
             break;
-
         case 'D':
             date_time_log = true;
             llog.enableTimestamps(date_time_log);
             break;
-
-        // Options that require arguments
-        case 'p': // PPM Value
+        case 'p':
             try
             {
                 double ppm = std::stod(optarg);
@@ -723,8 +705,7 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-
-        case 'x': // Terminate after x iterations
+        case 'x':
             try
             {
                 tx_iterations = std::stoi(optarg);
@@ -737,28 +718,24 @@ bool parse_command_line(int argc, char *const argv[])
                 tx_iterations = 1;
             }
             break;
-
-        case 't': // Test-tone
+        case 't':
             try
             {
-                // Parse frequency(ies) to double without ham band validation
                 test_tone = lookup.parse_string_to_frequency(optarg, false);
                 mode = ModeType::TONE;
-
                 if (test_tone <= 0.0)
                 {
                     llog.logE(ERROR, "Invalid test tone frequency (<=0).");
                     return false;
                 }
             }
-            catch (const std::exception &e)
+            catch (const std::exception &)
             {
                 llog.logE(ERROR, "Invalid test tone frequency: ", optarg);
                 return false;
             }
             break;
-
-        case 'b': // LED Pin
+        case 'b':
             try
             {
                 int led_pin = std::stoi(optarg);
@@ -771,8 +748,7 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-
-        case 'd': // Power level on GPIO pin
+        case 'd':
             try
             {
                 int power = std::stoi(optarg);
@@ -785,8 +761,7 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-
-        case 'e': // Services port number
+        case 'e':
             try
             {
                 int port = std::stoi(optarg);
@@ -803,124 +778,11 @@ bool parse_command_line(int argc, char *const argv[])
                 return false;
             }
             break;
-
         default:
             llog.logE(ERROR, "Unknown argument: '", static_cast<char>(c), "'");
             return false;
         }
     }
 
-    // Capture and validate positional arguments if we are not using an INI file
-    if (!useini && mode == ModeType::WSPR)
-    {
-        if (optind >= argc)
-        {
-            throw std::runtime_error("Missing required argument: Call Sign.");
-        }
-
-        // Validate and store callsign
-        std::string callsign(argv[optind]);
-        if (!std::regex_match(callsign, callsign_regex))
-        {
-            throw std::invalid_argument("Invalid callsign format: " + callsign);
-        }
-        ini.set_string_value("Common", "Call Sign", callsign);
-        ++optind;
-
-        if (optind >= argc)
-        {
-            throw std::runtime_error("Missing required argument: Grid Square.");
-        }
-
-        // Validate and store grid square
-        std::string gridsquare(argv[optind]);
-        if (!std::regex_match(gridsquare, gridsquare_regex))
-        {
-            throw std::invalid_argument("Invalid grid square format: " + gridsquare);
-        }
-        ini.set_string_value("Common", "Grid Square", gridsquare);
-        ++optind;
-
-        if (optind >= argc)
-        {
-            throw std::runtime_error("Missing required argument: Transmit Power.");
-        }
-
-        // Validate and store transmit power
-        std::string tx_power_str(argv[optind]);
-        int tx_power;
-        try
-        {
-            tx_power = std::stoi(tx_power_str);
-            if (tx_power < -10 || tx_power > 62)
-            {
-                throw std::out_of_range("Transmit power out of range (-10-62): " + tx_power_str);
-            }
-        }
-        catch (const std::exception &)
-        {
-            throw std::invalid_argument("Invalid transmit power: " + tx_power_str);
-        }
-        ini.set_int_value("Common", "TX Power", tx_power);
-        ++optind;
-
-        // Parse frequencies
-        center_freq_set.clear();
-        while (optind < argc)
-        {
-            std::string_view freq_input = argv[optind]; // No unnecessary copies
-
-            try
-            {
-                double parsed_freq = lookup.parse_string_to_frequency(freq_input, true);
-                center_freq_set.push_back(parsed_freq);
-            }
-            catch (const std::invalid_argument &e)
-            {
-                throw std::invalid_argument("Ignoring invalid frequency: " + std::string(freq_input));
-            }
-
-            ++optind;
-        }
-
-        if (center_freq_set.empty())
-        {
-            throw std::runtime_error("No valid frequencies provided.");
-        }
-
-        // Debug print center_freq_set
-        std::ostringstream freq_stream;
-        freq_stream << "Frequencies in frequency set [";
-        freq_stream << center_freq_set.size() << "]: ";
-
-        for (const auto &freq : center_freq_set)
-        {
-            // Apply formatting explicitly for each number
-            freq_stream << std::fixed << std::setprecision(6) << (freq / 1e6) << " MHz, ";
-        }
-
-        // Remove trailing comma and space (if present)
-        std::string output = freq_stream.str();
-        if (!center_freq_set.empty())
-        {
-            output.pop_back(); // Remove last space
-            output.pop_back(); // Remove last comma
-        }
-        freq_stream << ".";
-        llog.logS(DEBUG, output);
-
-        return true;
-    }
-    else if (mode == ModeType::TONE)
-    {
-        return true;
-    }
-    else if (mode == ModeType::WSPR)
-    {
-        return true;
-    }
-
-    // Unknown conditions
-    throw std::runtime_error("Unknown argument set.");
-    return false;
+    return true;
 }

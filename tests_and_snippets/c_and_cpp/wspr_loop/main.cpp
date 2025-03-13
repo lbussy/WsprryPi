@@ -39,12 +39,13 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "scheduling.hpp"
+#include "signal_handler.hpp"
 #include "version.hpp"
 #include "logging.hpp"
 #include "singleton.hpp"
 
 // System headers
-#include <unistd.h> // For getpid()
+#include <unistd.h>
 
 constexpr const int SINGLETON_PORT = 1234;
 
@@ -65,13 +66,15 @@ constexpr const int SINGLETON_PORT = 1234;
  *       The log level is set to INFO by default, but can be changed
  *       via a macro or configuration option.
  */
-int main(const int argc, char *const argv[])
+int main(int argc, char *argv[])
 {
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
     // Parse command-line arguments and exit if invalid.
-    try {
+    try
+    {
+
         parse_command_line(argc, argv);
         try
         {
@@ -88,12 +91,14 @@ int main(const int argc, char *const argv[])
         }
         catch (const std::exception &e)
         {
+            // TODO: Move to logger?
             std::cerr << "Exception caught validating configuration: " << e.what() << std::endl;
             print_usage();
             std::exit(EXIT_FAILURE);
         }
-
-    } catch (const std::exception &e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cerr << "Exception caught processing arguments: " << e.what() << std::endl;
         print_usage();
         std::exit(EXIT_FAILURE);
@@ -113,6 +118,9 @@ int main(const int argc, char *const argv[])
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
+
+    // Register signal handlers for safe shutdown and terminal management.
+    register_signal_handlers();
 
     try
     {

@@ -64,7 +64,8 @@ void SignalHandler::wait_for_shutdown()
 
 void SignalHandler::set_callback(Callback callback)
 {
-    user_callback = callback;
+    std::lock_guard<std::mutex> lock(cv_mutex);
+    user_callback = std::move(callback);
 }
 
 std::string_view SignalHandler::signal_to_string(int signum)

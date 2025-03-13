@@ -325,40 +325,50 @@ bool ppm_init()
     // Initialize PPM Manager
     PPMStatus status = ppmManager.initialize();
 
-    // Handle initialization errors
-    if (status == PPMStatus::ERROR_UNSYNCHRONIZED_TIME)
+    switch (status)
     {
-        llog.logE(ERROR, "System time is not synchronized.");
+    case PPMStatus::SUCCESS:
+        llog.logS(DEBUG, "PPM Manager initialized sucessfully.");
+        break;
+
+    case PPMStatus::WARNING_HIGH_PPM:
+        llog.logS(ERROR, "Warning: Measured PPM exceeds safe threshold.");
         return false;
-    }
-    else if (status == PPMStatus::ERROR_CHRONY_NOT_FOUND)
-    {
-        llog.logE(WARN, "Chrony not found. Using clock drift measurement.");
+
+    case PPMStatus::ERROR_CHRONY_NOT_FOUND:
+        llog.logE(WARN, "Chrony not found. Falling back to clock drift measurement.");
+        break;
+
+    case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
+        llog.logE(ERROR, "System time is not synchronized. Unable to measure PPM accurately.");
+        return false;
+
+    default:
+        llog.logE(WARN, "Unknown PPM status.");
+        break;
     }
 
     llog.logS(INFO, "Current PPM:", ppmManager.getCurrentPPM());
-
     return true;
 }
 
 void wspr_loop()
 {
-    // Register signal handlers for safe shutdown and terminal management.
-    register_signal_handlers();
-
-    ppm_init();
-
-    if (useini)
+    // Begin tracking PPM clock variance
+    if (ini.get_bool_value("Extended", "Use NTP")) // TODO:  Create in-memory only ini.
     {
-        ini_thread = std::thread(ini_monitor_thread);
-        llog.logS(INFO, "INI monitor thread started.");
+        if (!ppm_init())
+        {
+            llog.logE(FATAL, "Unable to initialze NTP features.");
+            return;
+        }
     }
+
+    llog.logS(INFO, "WSPR loop running.");
 
     // Start the transmit thread.
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
-
-    llog.logS(INFO, "WSPR loop running.");
 
     // Wait for exit signal.
     std::unique_lock<std::mutex> lock(cv_mtx);
@@ -367,8 +377,10 @@ void wspr_loop()
 
     // Restore normal terminal behavior
     restore_terminal_signals();
-    // Stop PPM MAnager
+    // Stop PPM Manager
     ppmManager.stop();
+    // Stop INI Monitor
+    iniMonitor.stop();
     // Signal shutdown.
     signal_shutdown.store(true);
     // Cleanup threads
@@ -376,17 +388,15 @@ void wspr_loop()
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
-    if (led_handler)
+    if (led_handler)        // TODO: Update class
         toggle_led(false);
-    led_handler.reset();
+    led_handler.reset();    // TODO: Update class
     shutdown_handler.reset();
 
     // Identify any stuck threads
-    if (button_thread.joinable())
+    if (button_thread.joinable())   // TODO: Update class
         llog.logS(WARN, "Button thread still running.");
-    if (ini_thread.joinable())
-        llog.logS(WARN, "INI Monitor still running.");
-    if (transmit_thread.joinable())
+    if (transmit_thread.joinable()) // TODO: Create new class
         llog.logS(WARN, "Transmit thread still running.");
 
     return;
@@ -413,9 +423,8 @@ void shutdown_threads()
         }
     };
 
-    safe_join(transmit_thread, "Transmit thread");
-    safe_join(ini_thread, "INI monitor thread");
-    safe_join(button_thread, "Button monitor thread");
+    safe_join(transmit_thread, "Transmit thread");      // TODO: Create a class
+    safe_join(button_thread, "Button monitor thread");  // TODO: Change this class
 
     llog.logS(INFO, "All threads shut down safely.");
 }

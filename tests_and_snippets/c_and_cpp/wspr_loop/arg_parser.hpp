@@ -48,7 +48,6 @@
 #include <atomic>
 #include <thread>
 
-extern std::thread ini_thread;
 extern bool useini;
 extern bool date_time_log;
 
@@ -171,24 +170,24 @@ extern std::atomic<int> wspr_interval;
 extern std::atomic<bool> ini_reload_pending;
 
 /**
- * @brief Monitors the INI file for changes and handles configuration reload.
+ * @brief Callback for INI file change detection
  *
- * This function runs as a background thread, periodically checking for changes
- * in the INI configuration file. When a change is detected:
- * - If the system is not transmitting, it immediately reloads the configuration
- *   by calling `validate_config_data()`.
- * - If a transmission is ongoing, it sets the `ini_reload_pending` flag to defer
- *   the reload until the transmission completes.
+ * This function runs as a background thread, periodically checking
+ * if the monitored INI file has been modified. When a change is detected:
  *
- * The thread runs continuously until the `exit_wspr_loop` flag is set to true,
- * signaling shutdown.
- *
- * @note This function is intended to be executed as a separate thread and does
- *       not return until shutdown is requested.
- *
- * @see validate_config_data(), ini_reload_pending, exit_wspr_loop
+ * - It sets a deferred reload flag (`ini_reload_pending`) to apply the
+ *   changes after the transmission completes.
  */
-extern void ini_monitor_thread();
+void callback_ini_changed();
+
+/**
+ * @brief Monitors the INI configuration file for changes.
+ *
+ * This is called to check if the monitored INI file has been modified.
+ * When a change is detected it reloads the configuration by calling
+ * `validate_config_data()`.
+ */
+extern void apply_deferred_changes();
 
 /**
  * @brief Displays the usage information for the WsprryPi application.
@@ -248,6 +247,6 @@ extern bool validate_config_data();
  * @param argv The array of command-line argument strings.
  * @return true if parsing is successful, false if an error occurs.
  */
-bool parse_command_line(int argc, char *const argv[]);
+bool parse_command_line(int argc, char *argv[]);
 
 #endif // ARG_PARSER_HPP

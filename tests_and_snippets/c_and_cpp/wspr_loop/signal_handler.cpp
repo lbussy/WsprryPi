@@ -143,8 +143,15 @@ void block_signals()
 
     // List of signals to block.
     const int signals[] = {
-        SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS,
-        SIGFPE, SIGILL, SIGHUP, SIGABRT};
+        SIGINT,  // Interrupt signal (Ctrl+C) - Terminates the process gracefully.
+        SIGTERM, // Termination signal - Requests process termination (default kill signal).
+        SIGQUIT, // Quit signal (Ctrl+\) - Terminates the process and generates a core dump.
+        SIGSEGV, // Segmentation fault - Invalid memory access (e.g., dereferencing a null pointer).
+        SIGBUS,  // Bus error - Invalid memory access due to misaligned or illegal memory access.
+        SIGFPE,  // Floating-point exception - Division by zero or arithmetic overflow.
+        SIGILL,  // Illegal instruction - Executing an invalid CPU instruction.
+        SIGHUP   // Hang-up signal - Sent when a controlling terminal is closed or a daemon reloads configuration.
+    };
 
     // Add each signal to the set.
     for (int signum : signals)
@@ -189,7 +196,7 @@ std::string signal_to_string(int signum)
 
     // Find the signal in the map and return its string representation.
     auto it = signal_map.find(signum);
-    return (it != signal_map.end()) ? it->second : "UNKNOWN_SIGNAL";
+    return (it != signal_map.end()) ? it->second : "UNKNOWN";
 }
 
 /**
@@ -224,48 +231,51 @@ void cleanup_threads()
  */
 void signal_handler(int signum)
 {
-    llog.logS(DEBUG, "Signal caught:", signum);
     // Convert signal number to a human-readable string.
     std::string signal_name = signal_to_string(signum);
-    std::ostringstream oss;
-    oss << "Received " << signal_name << ". Shutting down.";
-    std::string log_message = oss.str();
-
-    // Handle the signal based on type.
-    switch (signum)
-    {
-    // Fatal signals that require immediate exit.
-    case SIGSEGV:
-    case SIGBUS:
-    case SIGFPE:
-    case SIGILL:
-    case SIGABRT:
-        llog.logE(FATAL, log_message);
-        std::quick_exit(signum); // Immediate exit without cleanup.
-        break;
-
-    // Graceful shutdown signals.
-    case SIGINT:
-    case SIGTERM:
-    case SIGQUIT:
-    case SIGHUP:
-        llog.logS(INFO, log_message);
-        // Set shutdown flag and notify waiting threads.
-        exit_wspr_loop.store(true); // Set exit flag
-        cv.notify_all();            // Wake up waiting threads
-        break;
-
-    // Unknown signals are treated as fatal.
-    default:
-        llog.logE(FATAL, "Unknown signal caught. Exiting.");
-        break;
-    }
 
     // If shutdown is already in progress, ignore additional signals.
     if (shutdown_in_progress.load())
     {
         llog.logE(WARN, "Shutdown already in progress. Ignoring signal:", signal_name);
         return;
+    }
+    else if (exit_wspr_loop.load())
+    {
+        llog.logE(WARN, "Wsprry Pi is already shutting down. Ignoring signal:", signal_name);
+        return;
+    }
+    else
+    {
+        llog.logS(DEBUG, "Signal caught:", signum);
+
+        // Handle the signal based on type.
+        switch (signum)
+        {
+        // Graceful shutdown signals.
+        case SIGINT:
+        case SIGTERM:
+        case SIGQUIT:
+        case SIGHUP:
+            llog.logS(INFO, "Received:", signal_name, ". Normal shutdown.");
+            // Set shutdown flag and notify waiting threads.
+            exit_wspr_loop.store(true); // Set exit flag
+            cv.notify_all();            // Wake up waiting threads
+            break;
+
+        // Fatal signals that require immediate exit.
+        case SIGSEGV:
+        case SIGBUS:
+        case SIGFPE:
+        case SIGILL:
+        case SIGABRT:
+        // Unknown signals are treated as fatal.
+        default:
+            llog.logE(FATAL, "Received:", signal_name, ". Fast shutdown.");
+            restore_terminal_signals
+            std::quick_exit(signum); // Immediate exit without cleanup.
+            break;
+        }
     }
 }
 
@@ -298,8 +308,16 @@ void register_signal_handlers()
         sigemptyset(&set);
 
         // Signals to handle
-        const int signals[] = {SIGINT, SIGTERM, SIGQUIT, SIGSEGV, SIGBUS,
-                               SIGFPE, SIGILL, SIGHUP};
+        const int signals[] = {
+            SIGINT,  // Interrupt signal (Ctrl+C) - Terminates the process gracefully.
+            SIGTERM, // Termination signal - Requests process termination (default kill signal).
+            SIGQUIT, // Quit signal (Ctrl+\) - Terminates the process and generates a core dump.
+            SIGSEGV, // Segmentation fault - Invalid memory access (e.g., dereferencing a null pointer).
+            SIGBUS,  // Bus error - Invalid memory access due to misaligned or illegal memory access.
+            SIGFPE,  // Floating-point exception - Division by zero or arithmetic overflow.
+            SIGILL,  // Illegal instruction - Executing an invalid CPU instruction.
+            SIGHUP   // Hang-up signal - Sent when a controlling terminal is closed or a daemon reloads configuration.
+        };
 
         // Add each signal to the set
         for (int signum : signals)
@@ -337,7 +355,8 @@ void enable_shutdown_pin(int pin)
     {
         shutdown_handler.reset();
 
-        if (button_thread.joinable()) {
+        if (button_thread.joinable())
+        {
             llog.logS(DEBUG, "Closing button monitor threads.");
             button_thread.join();
         }
@@ -360,7 +379,8 @@ void disable_shutdown_pin()
         llog.logS(INFO, "Releasing existing shutdown pin (GPIO", shutdown_pin_number, ")");
     }
 
-    if (button_thread.joinable()) {
+    if (button_thread.joinable())
+    {
         llog.logS(DEBUG, "Closing button monitor threads.");
         button_thread.join();
     }

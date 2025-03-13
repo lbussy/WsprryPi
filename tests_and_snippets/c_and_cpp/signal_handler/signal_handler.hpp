@@ -9,13 +9,14 @@
 #include <csignal>
 #include <atomic>
 #include <termios.h>
+#include <functional>
 
 class SignalHandler
 {
 public:
-    using Callback = void (*)(int, bool);
+    using Callback = std::function<void(int, bool)>;
 
-    explicit SignalHandler(Callback callback = nullptr);
+    explicit SignalHandler(Callback callback = {});
     ~SignalHandler();
 
     void request_shutdown();
@@ -27,7 +28,7 @@ public:
 
 private:
     static const std::unordered_map<int, std::pair<std::string_view, bool>> signal_map;
-    struct termios original_tty;  // ✅ Store original terminal settings
+    struct termios original_tty;
 
     std::atomic<bool> shutdown_in_progress;
     std::atomic<bool> tty_saved;
