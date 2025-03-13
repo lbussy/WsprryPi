@@ -10,7 +10,7 @@
 #include <atomic>
 #include <termios.h>
 #include <functional>
-
+#include <memory>
 class SignalHandler
 {
 public:
@@ -32,7 +32,8 @@ private:
 
     std::atomic<bool> shutdown_in_progress;
     std::atomic<bool> tty_saved;
-    Callback user_callback;
+    std::mutex callback_mutex;  // ✅ Mutex for thread-safe callback updates
+    Callback user_callback;     // ✅ Store callback safely
     std::thread signal_thread;
     std::mutex cv_mutex;
     std::condition_variable cv;
@@ -42,5 +43,7 @@ private:
     void restore_terminal_settings();
     void suppress_terminal_signals();
 };
+
+extern std::unique_ptr<SignalHandler> handler;
 
 #endif // SIGNAL_HANDLER_HPP

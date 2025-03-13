@@ -64,7 +64,8 @@ void SignalHandler::wait_for_shutdown()
 
 void SignalHandler::set_callback(Callback callback)
 {
-    user_callback = callback;
+    std::lock_guard<std::mutex> lock(callback_mutex);
+    user_callback = std::move(callback);
 }
 
 std::string_view SignalHandler::signal_to_string(int signum)
@@ -88,9 +89,16 @@ void SignalHandler::block_signals()
 
 void SignalHandler::signal_handler(int signum)
 {
-    if (user_callback)
+    Callback cb;
+    
     {
-        user_callback(signum, signal_map.at(signum).second);
+        std::lock_guard<std::mutex> lock(callback_mutex);
+        cb = user_callback;  // ✅ Read callback safely
+    }
+
+    if (cb)
+    {
+        cb(signum, signal_map.at(signum).second);
     }
     else
     {
@@ -101,8 +109,7 @@ void SignalHandler::signal_handler(int signum)
         }
         else
         {
-            shutdown_in_progress.store(true);
-            cv.notify_all();
+            request_shutdown();
         }
     }
 }

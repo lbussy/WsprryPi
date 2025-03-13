@@ -1,7 +1,7 @@
 #include "signal_handler.hpp"
 #include <iostream>
 
-SignalHandler *handler = nullptr;
+std::unique_ptr<SignalHandler> handler = nullptr;
 
 // Custom callback function
 void custom_signal_handler(int signum, bool is_critical)
@@ -18,7 +18,7 @@ void custom_signal_handler(int signum, bool is_critical)
     {
         std::cout << "[INFO] Intercepted signal: " << signal_name << ". Shutdown will proceed." << std::endl;
 
-        if (handler) // Ensure `handler` is valid
+        if (handler) // ✅ Ensure `handler` exists before requesting shutdown
         {
             handler->request_shutdown();
         }
@@ -31,17 +31,13 @@ void custom_signal_handler(int signum, bool is_critical)
 
 int main()
 {
-    handler = new SignalHandler();
-
+    handler = std::make_unique<SignalHandler>();
     handler->block_signals();
     handler->set_callback(custom_signal_handler);
 
-    std::cout << "Application running. Press Ctrl+C to exit." << std::endl;
     handler->wait_for_shutdown();
-
     handler->stop();
-    delete handler;
-    handler = nullptr;
+    handler.reset();
 
     return 0;
 }
