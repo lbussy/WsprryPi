@@ -64,8 +64,7 @@ void SignalHandler::wait_for_shutdown()
 
 void SignalHandler::set_callback(Callback callback)
 {
-    std::lock_guard<std::mutex> lock(cv_mutex);
-    user_callback = std::move(callback);
+    user_callback = callback;
 }
 
 std::string_view SignalHandler::signal_to_string(int signum)
@@ -113,7 +112,7 @@ void SignalHandler::signal_handler_thread()
     sigset_t set;
     sigemptyset(&set);
 
-    for (const auto &[signum, _] : signal_map)
+    for (const auto& [signum, _] : signal_map)
     {
         sigaddset(&set, signum);
     }
@@ -121,8 +120,15 @@ void SignalHandler::signal_handler_thread()
     int sig;
     while (!shutdown_in_progress.load())
     {
-        sigwait(&set, &sig);
-        signal_handler(sig);
+        int ret = sigwait(&set, &sig);
+        if (ret == 0)
+        {
+            if (shutdown_in_progress.load()) {
+                break;  // ✅ Prevents reprocessing after shutdown starts
+            }
+
+            signal_handler(sig);
+        }
     }
 }
 
