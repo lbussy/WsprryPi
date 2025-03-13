@@ -74,17 +74,32 @@ std::string_view SignalHandler::signal_to_string(int signum)
     return (it != signal_map.end()) ? it->second.first : "UNKNOWN";
 }
 
-void SignalHandler::block_signals()
+SignalHandlerStatus SignalHandler::block_signals()
 {
     sigset_t set;
     sigemptyset(&set);
 
-    for (const auto &[signum, _] : signal_map)
+    bool all_added = true;
+
+    for (const auto& [signum, _] : signal_map)
     {
-        sigaddset(&set, signum);
+        if (sigaddset(&set, signum) != 0)
+        {
+            all_added = false; // Mark failure if any signal fails to be added
+        }
     }
 
-    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+    if (!all_added)
+    {
+        return SignalHandlerStatus::PARTIALLY_BLOCKED;
+    }
+
+    if (pthread_sigmask(SIG_BLOCK, &set, nullptr) != 0)
+    {
+        return SignalHandlerStatus::FAILURE;
+    }
+
+    return SignalHandlerStatus::SUCCESS;
 }
 
 void SignalHandler::signal_handler(int signum)

@@ -11,6 +11,15 @@
 #include <termios.h>
 #include <functional>
 #include <memory>
+
+// ✅ Define this before using it in the class
+enum class SignalHandlerStatus
+{
+    SUCCESS,
+    FAILURE,
+    PARTIALLY_BLOCKED
+};
+
 class SignalHandler
 {
 public:
@@ -22,7 +31,7 @@ public:
     void request_shutdown();
     void wait_for_shutdown();
     void set_callback(Callback callback);
-    void block_signals();                                 // Move this to public
+    SignalHandlerStatus block_signals();                  // Move this to public
     void stop();                                          // Move this to public
     static std::string_view signal_to_string(int signum); // Move this to public
 
@@ -32,8 +41,8 @@ private:
 
     std::atomic<bool> shutdown_in_progress;
     std::atomic<bool> tty_saved;
-    std::mutex callback_mutex;  // ✅ Mutex for thread-safe callback updates
-    Callback user_callback;     // ✅ Store callback safely
+    std::mutex callback_mutex; // ✅ Mutex for thread-safe callback updates
+    Callback user_callback;    // ✅ Store callback safely
     std::thread signal_thread;
     std::mutex cv_mutex;
     std::condition_variable cv;
