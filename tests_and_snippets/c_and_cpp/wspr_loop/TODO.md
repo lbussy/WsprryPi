@@ -38,3 +38,7 @@
 - [ ] Aded chrony `sudo apt install chrony -y`
 - [ ] Choose between "free-running" and NTP and static PPM
 - [ ] Periodically check PPM
+- Add back in:
+  - [ ] led_handler
+  - [ ] shutdown_handler
+  - [ ] signal_handler

@@ -44,6 +44,8 @@
 #include "transmit.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
+#include "led_handler.hpp"
+#include "shutdown_handler.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -217,9 +219,9 @@ void apply_deferred_changes()
 void print_usage()
 {
     std::cerr << "\nUsage:\n"
-              << "  wsprrypi [options] callsign gridsquare transmit_power frequency <f2> <f3> ...\n"
+              << "  (sudo) wsprrypi [options] callsign gridsquare transmit_power frequency <f2> <f3> ...\n"
               << "    OR\n"
-              << "  wsprrypi [options] --test-tone {frequency}\n\n"
+              << "  (sudo) wsprrypi --test-tone {frequency}\n\n"
               << "Options:\n"
               << "  -h, --help\n"
               << "    Display this help message.\n"
@@ -784,5 +786,40 @@ bool parse_command_line(int argc, char *argv[])
         }
     }
 
+    return true;
+}
+
+bool load_config(int argc, char *argv[])
+{
+    // Parse command-line arguments and exit if invalid.
+    try
+    {
+        parse_command_line(argc, argv);
+        try
+        {
+            // Validate configuration and ensure all required settings are present.
+            if (!validate_config_data())
+            {
+                llog.logE(ERROR, "Configuration validation failed.");
+                return false;
+            }
+            // Display version, Raspberry Pi model, and process ID for context.
+            llog.logS(INFO, version_string());
+            llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+            llog.logS(INFO, "Process PID:", getpid());
+        }
+        catch (const std::exception &e)
+        {
+            llog.logE(ERROR, "Exception caught validating configuration:", e.what());
+            print_usage();
+            return false;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        llog.logE(ERROR, "Exception caught processing arguments:", e.what());
+        print_usage();
+        return false;
+    }
     return true;
 }

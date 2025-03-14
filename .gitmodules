@@ -47,3 +47,6 @@
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager"]
 	path = tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager
 	url = https://github.com/lbussy/PPM-Manager.git
+[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Signal-Handler"]
+	path = tests_and_snippets/c_and_cpp/wspr_loop/Signal-Handler
+	url = https://github.com/lbussy/Signal-Handler.git

@@ -9,6 +9,8 @@
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "arg_parser.hpp"
+#include "led_handler.hpp"
+#include "shutdown_handler.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -128,8 +130,8 @@ void transmit_loop()
         {
             std::unique_lock<std::mutex> lock(transmit_mtx);
 
-            if (cv.wait_until(lock, next_wakeup, []
-                              { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+            if (shutdown_cv.wait_until(lock, next_wakeup, []
+                                       { return exit_wspr_loop.load() || signal_shutdown.load(); }))
             {
                 llog.logS(DEBUG, "Transmit loop wake-up due to shutdown request.");
                 break;
@@ -178,7 +180,7 @@ void transmit_loop()
             {
                 llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
                 exit_wspr_loop.store(true); // Set exit flag
-                cv.notify_all();            // Wake up waiting threads
+                shutdown_cv.notify_all();   // Wake up waiting threads
                 break;
             }
         }

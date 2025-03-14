@@ -249,4 +249,6 @@ extern bool validate_config_data();
  */
 bool parse_command_line(int argc, char *argv[]);
 
+bool load_config(int argc, char *argv[]);
+
 #endif // ARG_PARSER_HPP
