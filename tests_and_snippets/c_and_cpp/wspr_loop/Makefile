@@ -43,11 +43,11 @@ VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
 # Output Items
-OUT := $(EXE_NAME)						# Normal release binary
-TEST_OUT :=	$(EXE_NAME)_test			# Debug/test binary
-INI_FILE :=	/usr/local/etc/wsprrypi.ini	# INI file for test target
-TEST_FREQ := 730000						# Frequency for test tone
-PREFIX := /usr/local					# Installation directory for the binary
+OUT := $(EXE_NAME)							# Normal release binary
+TEST_OUT :=	$(EXE_NAME)_test				# Debug/test binary
+INI_FILE :=	../../../config/wsprrypi.ini	# INI file for test target
+TEST_FREQ := 730000							# Frequency for test tone
+PREFIX := /usr/local						# Installation directory for the binary
 # Strip whitespace from comments
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))
@@ -102,6 +102,7 @@ CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
 CXXFLAGS += -I$(abspath ./PPM-Manager/src)
+CXXFLAGS += -I$(abspath ./Signal-Handler/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
@@ -203,7 +204,7 @@ test-tone: debug
 # Test one-shot target
 .PHONY: test-oneshot
 test-oneshot: debug
-	$(Q)echo "Running test tone with sudo privileges."
+	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)sudo ./build/bin/$(TEST_OUT) -x 1 AA0NT EM18 20 40m
 
 # Install target (install only the release binary)
