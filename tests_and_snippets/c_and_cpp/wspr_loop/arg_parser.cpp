@@ -238,7 +238,7 @@ void apply_deferred_changes()
  * print_usage("Custom exit", 5); // Prints error message, then exits with code 5.
  * @endcode
  */
-void print_usage(const std::string& message, int exit_code)
+void print_usage(const std::string &message, int exit_code)
 {
     if (!message.empty())
     {
@@ -261,17 +261,17 @@ void print_usage(const std::string& message, int exit_code)
     // Handle exit behavior
     switch (exit_code)
     {
-        case 0:
-            std::exit(EXIT_SUCCESS);
-            break;
-        case 1:
-            std::exit(EXIT_FAILURE);
-            break;
-        case 3:
-            return; // Simply return without exiting
-        default:
-            std::exit(exit_code);
-            break;
+    case 0:
+        std::exit(EXIT_SUCCESS);
+        break;
+    case 1:
+        std::exit(EXIT_FAILURE);
+        break;
+    case 3:
+        return; // Simply return without exiting
+    default:
+        std::exit(exit_code);
+        break;
     }
 }
 
@@ -342,20 +342,18 @@ void show_config_values(bool reload)
 }
 
 /**
- * @brief Validates and loads configuration data from the INI file.
+ * @brief Validates and loads configuration data from the INI class.
  *
- * This function extracts configuration values from the INI file, ensuring that
+ * This function extracts configuration values from the INI class, ensuring that
  * required parameters such as callsign, grid square, transmit power, and
  * frequency list are properly set. If any critical parameter is missing or invalid,
  * the function logs the error and exits the program.
- *
- * The function also processes the test tone mode, self-calibration settings,
- * and frequency offset configuration.
  *
  * @return true if the configuration is valid, false otherwise.
  */
 bool validate_config_data()
 {
+    // Safely reads a frequency list from the INI class, returns "" if it fails
     std::istringstream frequency_list(
         [&]() -> std::string
         {
@@ -368,8 +366,9 @@ bool validate_config_data()
                 return ""; // Default to empty if an error occurs
             }
         }());
-    std::string token;
 
+    // Parse frequency list to valid frequency, skips those that do not validate
+    std::string token;
     while (frequency_list >> token)
     {
         try
@@ -384,7 +383,7 @@ bool validate_config_data()
         }
     }
 
-    // Extract values from INI file, handling errors as needed
+    // Extract offset freq choice from INI class, default to false
     bool offset_enabled = false;
     try
     {
@@ -395,7 +394,8 @@ bool validate_config_data()
         offset_enabled = false; // Default: Assume no offset if an error occurs
     }
 
-    bool use_ntp = false;
+    // Extract NTP usage from INI class, default to true
+    bool use_ntp = true;
     try
     {
         use_ntp = ini.get_bool_value("Extended", "Use NTP");
@@ -405,6 +405,7 @@ bool validate_config_data()
         use_ntp = true; // Default: Assume we use NTP if error occurs
     }
 
+    // Extract PPM value from INI class, default to 0.0
     double ppm_value = [&]() -> double
     {
         try
@@ -413,79 +414,78 @@ bool validate_config_data()
         }
         catch (const std::exception &)
         {
-            return 0.0; // Default to 0.0 on failure
+            // Default: Assume we use NTP if error occurs
+            use_ntp = true;
+            return 0.0;
         }
     }();
 
-    // Turn on LED functionality
-    //
-    // Get LED use choice
+    // Get LED use choice from INI class
     bool use_led = false;
+    int new_led_pin_number = led_pin_number; // Default value
+    // Attempt to get the LED usage setting
     try
     {
         use_led = ini.get_bool_value("Extended", "Use LED");
-        // Get PIN number
-        int new_led_pin_number = led_pin_number; // Use default value
-        try
-        {
-            new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
-            // Enable LED only if valid and desired
-            if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27))
-            {
-                enable_led_pin(new_led_pin_number);
-            }
-            else
-            {
-                llog.logS(DEBUG, "Failure retrieving LED values, disabling LED.");
-                disable_led_pin();
-            }
-        }
-        catch (const std::exception &e)
-        {
-            llog.logS(DEBUG, "Failed to get LED Pin value, using default.");
-        }
     }
     catch (const std::exception &e)
-    { // Added exception type
-        llog.logS(DEBUG, "Failed to get LED use value, disabling LED.");
+    {
+        llog.logS(DEBUG, "Failed to get 'Use LED' value, defaulting to disabled.");
+    }
+    // Attempt to get the LED pin number
+    int new_led_pin_number = -1;
+    try
+    {
+        new_led_pin_number = ini.get_int_value("Extended", "LED Pin");
+    }
+    catch (const std::exception &e)
+    {
+        llog.logS(DEBUG, "Failed to get 'LED Pin' value.");
+    }
+    // Enable LED only if it's desired and the pin is valid
+    if (use_led && (new_led_pin_number >= 0 && new_led_pin_number <= 27))
+    {
+        enable_led_pin(new_led_pin_number);
+    }
+    else
+    {
+        llog.logS(DEBUG, "Invalid or disabled LED settings, turning off LED.");
         disable_led_pin();
     }
 
-    // Turn on shutdown pin functionality
-    //
-    // Get shutdown button use choice
+    // Get shutdown use choice from INI class
     bool use_shutdown = false;
+    int new_shutdown_pin_number = -1;
+    // Attempt to retrieve shutdown preference
     try
     {
-        use_shutdown = ini.get_bool_value("Server", "Use Shutdown") || false;
-        // Get PIN number
-        int new_shutdown_pin_number = shutdown_pin_number; // Use default value
-        try
-        {
-            new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
-
-            // Enable shutdown button only if valid and desired
-            if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
-            {
-                enable_shutdown_pin(new_shutdown_pin_number);
-            }
-            else
-            {
-                disable_shutdown_pin();
-            }
-        }
-        catch (const std::exception &e)
-        {
-            llog.logS(DEBUG, "Failed to get shutdown pin preferences, disabling functionality.");
-            disable_shutdown_pin();
-        }
+        use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
     }
     catch (const std::exception &e)
-    { // Added exception type
-        llog.logS(DEBUG, "Failed to get shutdown pin use value, disabling shutdown.");
+    {
+        llog.logS(DEBUG, "Failed to get 'Use Shutdown' value, defaulting to disabled.");
+    }
+    // Attempt to retrieve shutdown pin number
+    try
+    {
+        new_shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
+    }
+    catch (const std::exception &e)
+    {
+        llog.logS(DEBUG, "Failed to get 'Shutdown Button' value, defaulting to disabled.");
+    }
+    // Enable shutdown button only if it's desired and the pin is valid
+    if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
+    {
+        enable_shutdown_pin(new_shutdown_pin_number);
+    }
+    else
+    {
+        llog.logS(DEBUG, "Invalid or disabled shutdown settings, disabling functionality.");
         disable_shutdown_pin();
     }
 
+    // TODO:  Start here
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (mode == ModeType::TONE)
     {
@@ -721,17 +721,20 @@ bool parse_command_line(int argc, char *argv[])
     argv = args.data();
 
     static struct option long_options[] = {
+        // No arguments
         {"help", no_argument, nullptr, 'h'},
         {"version", no_argument, nullptr, 'v'},
         {"use-ntp", no_argument, nullptr, 'n'},
         {"repeat", no_argument, nullptr, 'r'},
         {"offset", no_argument, nullptr, 'o'},
-        {"led", no_argument, nullptr, 'l'},
         {"date-time-log", no_argument, nullptr, 'D'},
+        // Required arguments
         {"ppm", required_argument, nullptr, 'p'},
         {"terminate", required_argument, nullptr, 'x'},
         {"test-tone", required_argument, nullptr, 't'},
-        {"led_pin", required_argument, nullptr, 'b'},
+        {"transmit-pin", required_argument, nullptr, 'a'},
+        {"led_pin", required_argument, nullptr, 'l'},
+        {"shutdown_button", required_argument, nullptr, 's'},
         {"power_level", required_argument, nullptr, 'd'},
         {"port", required_argument, nullptr, 'e'},
         {nullptr, 0, nullptr, 0}};
@@ -739,91 +742,134 @@ bool parse_command_line(int argc, char *argv[])
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "h?vnrlDp:x:t:b:d:e:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:e:", long_options, &option_index);
 
         if (c == -1)
             break;
 
         switch (c)
         {
-        case 'h':
+        // No arguments
+        case 'h': // Help/Usage
         case '?':
             print_usage(EXIT_SUCCESS);
-        case 'v':
+        case 'v': // Version
             std::cout << version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
-        case 'n':
+        case 'n': // Use NTP
             ini.set_bool_value("Extended", "Use NTP", true);
             break;
-        case 'r':
+        case 'r': // Repeat
             loop_tx = true;
             break;
-        case 'o':
+        case 'o': // Use Offset
             ini.set_bool_value("Extended", "Offset", true);
             break;
-        case 'l':
-            ini.set_bool_value("Extended", "Use LED", true);
-            break;
-        case 'D':
+        case 'D': // Add date/time stamps to logging
             date_time_log = true;
             llog.enableTimestamps(date_time_log);
             break;
-        case 'p':
+        // Required arguments
+        case 'p': // Apply PPM
             try
             {
                 double ppm = std::stod(optarg);
-                ini.set_double_value("Extended", "PPM", ppm);
+                double clamped_ppm = std::clamp(ppm, -200.0, 200.0);
+                if (ppm != clamped_ppm)
+                {
+                    ini.set_double_value("Extended", "PPM", clamped_ppm);
+                    llog.logS(WARN, "PPM value clamped to", clamped_ppm);
+                }
+                else
+                {
+                    ini.set_double_value("Extended", "PPM", ppm);
+                }
+                ini.set_bool_value("Extended", "Use NTP", false);
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Invalid PPM value.");
+                llog.logE(ERROR, "Error parsing PPM value, defaulting to NTP.");
+                ini.set_bool_value("Extended", "Use NTP", true);
                 return false;
             }
             break;
-        case 'x':
+        case 'x':                  // Terminate after x iterations
+            int tx_iterations = 1; // Default value
             try
             {
                 tx_iterations = std::stoi(optarg);
-                if (tx_iterations.value() < 1)
-                    throw std::invalid_argument("Termination count must be >= 1");
             }
-            catch (const std::exception &)
+            catch (const std::invalid_argument &)
             {
-                llog.logE(WARN, "Invalid termination parameter, defaulting to 1.");
-                tx_iterations = 1;
+                llog.logE(ERROR, "Invalid number format for transmit iterations:", optarg, "- Using default (1).");
+            }
+            catch (const std::out_of_range &)
+            {
+                llog.logE(ERROR, "Number out of range for transmit iterations:", optarg, "- Using default (1).");
             }
             break;
-        case 't':
+        case 't': // Use test-tone
             try
             {
                 test_tone = lookup.parse_string_to_frequency(optarg, false);
                 mode = ModeType::TONE;
+
                 if (test_tone <= 0.0)
                 {
                     llog.logE(ERROR, "Invalid test tone frequency (<=0).");
                     return false;
                 }
             }
-            catch (const std::exception &)
+            catch (const std::invalid_argument &e)
             {
-                llog.logE(ERROR, "Invalid test tone frequency: ", optarg);
+                llog.logE(ERROR, "Invalid test tone frequency input: ", optarg, " Exception: ", e.what());
                 return false;
             }
             break;
-        case 'b':
+        case 'a': // Specify transmit pin
+            try
+            {
+                int transmit_pin = std::stoi(optarg);
+                transmit_pin = std::clamp(transmit_pin, 0, 27);
+                ini.set_int_value("Common", "Transmit Pin", transmit_pin);
+            }
+            catch (const std::exception &)
+            {
+                llog.logE(FATAL, "Invalid transmit pin.");
+                std::exit(EXIT_FAILURE);
+            }
+            break;
+        case 'l': // LED Pin
             try
             {
                 int led_pin = std::stoi(optarg);
                 led_pin = std::clamp(led_pin, 0, 27);
                 ini.set_int_value("Extended", "LED Pin", led_pin);
+                ini.set_bool_value("Extended", "Use LED", true);
             }
             catch (const std::exception &)
             {
                 llog.logE(ERROR, "Invalid LED pin.");
+                ini.set_bool_value("Extended", "Use LED", false);
                 return false;
             }
             break;
-        case 'd':
+        case 's': // Shutdown button/pin
+            try
+            {
+                int shutdown_button = std::stoi(optarg);
+                shutdown_button = std::clamp(shutdown_button, 0, 27);
+                ini.set_int_value("Server", "Shutdown Button", shutdown_button);
+                ini.set_bool_value("Server", "Use Shutdown", true);
+            }
+            catch (const std::exception &)
+            {
+                llog.logE(ERROR, "Invalid shutdown button.");
+                ini.set_bool_value("Server", "Use Shutdown", false);
+                return false;
+            }
+            break;
+        case 'd': // Power Level 0-7
             try
             {
                 int power = std::stoi(optarg);
@@ -832,11 +878,12 @@ bool parse_command_line(int argc, char *argv[])
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Invalid power level.");
+                llog.logE(ERROR, "Invalid power level, defaulting to 7.");
+                ini.set_int_value("Extended", "Power Level", 7);
                 return false;
             }
             break;
-        case 'e':
+        case 'e': // Set port number
             try
             {
                 int port = std::stoi(optarg);
@@ -855,7 +902,7 @@ bool parse_command_line(int argc, char *argv[])
             break;
         default:
             llog.logE(ERROR, "Unknown argument: '", static_cast<char>(c), "'");
-            return false;
+            break;
         }
     }
 
@@ -864,6 +911,7 @@ bool parse_command_line(int argc, char *argv[])
 
 bool load_config(int argc, char *argv[])
 {
+    bool retval = false;
     if (argc == 1) // No arguments or options provided
     {
         print_usage("No arguments provided.", EXIT_FAILURE);
@@ -872,19 +920,14 @@ bool load_config(int argc, char *argv[])
     // Parse command-line arguments and exit if invalid.
     try
     {
-        parse_command_line(argc, argv);
+        retval = parse_command_line(argc, argv);
         try
         {
             // Validate configuration and ensure all required settings are present.
             if (!validate_config_data())
             {
                 llog.logE(ERROR, "Configuration validation failed.");
-                return false;
             }
-            // Display version, Raspberry Pi model, and process ID for context.
-            llog.logS(INFO, version_string());
-            llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-            llog.logS(INFO, "Process PID:", getpid());
         }
         catch (const std::exception &e)
         {
@@ -897,5 +940,5 @@ bool load_config(int argc, char *argv[])
         std::string error_message = "Exception caught processsing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
     }
-    return true;
+    return retval;
 }

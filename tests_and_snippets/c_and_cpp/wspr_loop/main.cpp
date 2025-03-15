@@ -123,7 +123,12 @@ int main(int argc, char *argv[])
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
 
-    if (!load_config(argc, argv))
+    // Display version, Raspberry Pi model, and process ID for context.
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Process PID:", getpid());
+
+    if (!load_config(argc, argv)) // Does parse_command_line() then validate_config_data()
         print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
 
     SingletonProcess singleton(SINGLETON_PORT);
