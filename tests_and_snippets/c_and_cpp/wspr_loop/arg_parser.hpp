@@ -192,19 +192,64 @@ extern void apply_deferred_changes();
 /**
  * @brief Displays the usage information for the WsprryPi application.
  *
- * This function prints out a brief help message to `std::cerr`, outlining
- * the command-line syntax and key options available. It provides a minimal
- * reference for users and suggests consulting the documentation for more
- * details on all available options.
+ * This function prints a brief help message to `std::cerr`, outlining
+ * the command-line syntax and key options available. Optionally, an error
+ * message can be displayed before the usage information.
  *
- * @note This function does not return but simply prints to `std::cerr`.
+ * The function also determines whether the program exits or continues
+ * running based on the `exit_code` parameter.
+ *
+ * @note This function **always terminates the program**, unless `exit_code`
+ *       is `3`, in which case it simply returns.
+ *
+ * @param message An optional error message to display before the usage
+ *        information. If empty, only the usage message is shown.
+ * @param exit_code Determines the program's exit behavior:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
+ *
+ * @example
+ * **Returning (does not exit):**
+ * @code
+ * print_usage();               // Prints usage and returns (default: exit_code = 3).
+ * print_usage("Invalid args"); // Prints error message, then usage, returns.
+ * print_usage(3);              // Prints usage and returns.
+ * @endcode
+ *
+ * **Exiting the program:**
+ * @code
+ * print_usage(0);              // Prints usage and exits with EXIT_SUCCESS.
+ * print_usage(1);              // Prints usage and exits with EXIT_FAILURE.
+ * print_usage("Fatal error", 1); // Prints error message, then exits with EXIT_FAILURE.
+ * print_usage("Custom exit", 5); // Prints error message, then exits with code 5.
+ * @endcode
+ */
+void print_usage(const std::string& message = "", int exit_code = 3);
+
+/**
+ * @brief Displays usage information and exits or returns based on the exit code.
+ *
+ * This overload allows calling `print_usage()` with just an exit code.
+ * It redirects to the main `print_usage()` function with an empty message.
+ *
+ * @note This function follows the same exit behavior as the primary function:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
+ *
+ * @param exit_code The exit code to use for termination or return behavior.
  *
  * @example
  * @code
- * print_usage(); // Outputs the help message to standard error.
+ * print_usage(1); // Outputs usage and exits with EXIT_FAILURE.
+ * print_usage(3); // Outputs usage and returns.
+ * print_usage(0); // Outputs usage and exits with EXIT_SUCCESS.
  * @endcode
  */
-extern void print_usage();
+inline void print_usage(int exit_code);
 
 /**
  * @brief Displays the current configuration values from the INI file.

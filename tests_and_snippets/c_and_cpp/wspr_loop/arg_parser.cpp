@@ -204,20 +204,47 @@ void apply_deferred_changes()
 /**
  * @brief Displays the usage information for the WsprryPi application.
  *
- * This function prints out a brief help message to `std::cerr`, outlining
- * the command-line syntax and key options available. It provides a minimal
- * reference for users and suggests consulting the documentation for more
- * details on all available options.
+ * This function prints a brief help message to `std::cerr`, outlining
+ * the command-line syntax and key options available. Optionally, an error
+ * message can be displayed before the usage information.
  *
- * @note This function does not return but simply prints to `std::cerr`.
+ * The function also determines whether the program exits or continues
+ * running based on the `exit_code` parameter.
+ *
+ * @note This function **always terminates the program**, unless `exit_code`
+ *       is `3`, in which case it simply returns.
+ *
+ * @param message An optional error message to display before the usage
+ *        information. If empty, only the usage message is shown.
+ * @param exit_code Determines the program's exit behavior:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
  *
  * @example
+ * **Returning (does not exit):**
  * @code
- * print_usage(); // Outputs the help message to standard error.
+ * print_usage();               // Prints usage and returns (default: exit_code = 3).
+ * print_usage("Invalid args"); // Prints error message, then usage, returns.
+ * print_usage(3);              // Prints usage and returns.
+ * @endcode
+ *
+ * **Exiting the program:**
+ * @code
+ * print_usage(0);              // Prints usage and exits with EXIT_SUCCESS.
+ * print_usage(1);              // Prints usage and exits with EXIT_FAILURE.
+ * print_usage("Fatal error", 1); // Prints error message, then exits with EXIT_FAILURE.
+ * print_usage("Custom exit", 5); // Prints error message, then exits with code 5.
  * @endcode
  */
-void print_usage()
+void print_usage(const std::string& message, int exit_code)
 {
+    if (!message.empty())
+    {
+        std::cout << message << std::endl;
+    }
+
     std::cerr << "\nUsage:\n"
               << "  (sudo) wsprrypi [options] callsign gridsquare transmit_power frequency <f2> <f3> ...\n"
               << "    OR\n"
@@ -230,6 +257,48 @@ void print_usage()
               << "  -i, --ini-file <file>\n"
               << "    Load parameters from an INI file. Provide the path and filename.\n\n"
               << "See the documentation for a complete list of available options.\n\n";
+
+    // Handle exit behavior
+    switch (exit_code)
+    {
+        case 0:
+            std::exit(EXIT_SUCCESS);
+            break;
+        case 1:
+            std::exit(EXIT_FAILURE);
+            break;
+        case 3:
+            return; // Simply return without exiting
+        default:
+            std::exit(exit_code);
+            break;
+    }
+}
+
+/**
+ * @brief Displays usage information and exits or returns based on the exit code.
+ *
+ * This overload allows calling `print_usage()` with just an exit code.
+ * It redirects to the main `print_usage()` function with an empty message.
+ *
+ * @note This function follows the same exit behavior as the primary function:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
+ *
+ * @param exit_code The exit code to use for termination or return behavior.
+ *
+ * @example
+ * @code
+ * print_usage(1); // Outputs usage and exits with EXIT_FAILURE.
+ * print_usage(3); // Outputs usage and returns.
+ * print_usage(0); // Outputs usage and exits with EXIT_SUCCESS.
+ * @endcode
+ */
+inline void print_usage(int exit_code)
+{
+    print_usage("", exit_code);
 }
 
 /**
@@ -623,6 +692,11 @@ bool validate_config_data()
  */
 bool parse_command_line(int argc, char *argv[])
 {
+    if (argc == 1) // No arguments or options provided
+    {
+        return false;
+    }
+
     std::vector<char *> args(argv, argv + argc); // Copy arguments for modification
 
     // First pass: Look for "-i <file>" before processing other options
@@ -674,8 +748,7 @@ bool parse_command_line(int argc, char *argv[])
         {
         case 'h':
         case '?':
-            print_usage();
-            std::exit(EXIT_SUCCESS);
+            print_usage(EXIT_SUCCESS);
         case 'v':
             std::cout << version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
@@ -791,6 +864,11 @@ bool parse_command_line(int argc, char *argv[])
 
 bool load_config(int argc, char *argv[])
 {
+    if (argc == 1) // No arguments or options provided
+    {
+        print_usage("No arguments provided.", EXIT_FAILURE);
+    }
+
     // Parse command-line arguments and exit if invalid.
     try
     {
@@ -810,16 +888,14 @@ bool load_config(int argc, char *argv[])
         }
         catch (const std::exception &e)
         {
-            llog.logE(ERROR, "Exception caught validating configuration:", e.what());
-            print_usage();
-            return false;
+            std::string error_message = "Exception caught validating configuration: " + std::string(e.what());
+            print_usage(error_message, EXIT_FAILURE);
         }
     }
     catch (const std::exception &e)
     {
-        llog.logE(ERROR, "Exception caught processing arguments:", e.what());
-        print_usage();
-        return false;
+        std::string error_message = "Exception caught processsing arguments: " + std::string(e.what());
+        print_usage(error_message, EXIT_FAILURE);
     }
     return true;
 }

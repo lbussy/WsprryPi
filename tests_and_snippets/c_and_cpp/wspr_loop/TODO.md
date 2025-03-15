@@ -42,3 +42,5 @@
   - [ ] led_handler
   - [ ] shutdown_handler
   - [ ] signal_handler
+- [ ] Make threads run as background priority
+

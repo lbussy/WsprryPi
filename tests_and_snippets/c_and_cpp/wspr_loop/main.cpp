@@ -49,6 +49,28 @@
 
 constexpr const int SINGLETON_PORT = 1234;
 
+void main_shutdown()
+{
+    // Let wspr_loop know you're leaving
+    exit_wspr_loop.store(true); // Set exit flag
+    shutdown_cv.notify_all();   // Wake up any waiting threads
+    // Shutdown signal handler
+    if (handler) // Ensure handler is valid
+    {
+        SignalHandlerStatus status = handler->request_shutdown();
+
+        if (status == SignalHandlerStatus::ALREADY_STOPPED)
+        {
+            llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
+        }
+        llog.logS(DEBUG, "Shutdown requested.");
+    }
+    else
+    {
+        llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
+    }
+}
+
 /**
  * @brief Custom signal handling function.
  *
@@ -61,8 +83,6 @@ constexpr const int SINGLETON_PORT = 1234;
 void callback_signal_handler(int signum, bool is_critical)
 {
     std::string_view signal_name = SignalHandler::signal_to_string(signum);
-    llog.logS(DEBUG, "Callback executed for signal", signal_name);
-
     if (is_critical)
     {
         std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
@@ -71,24 +91,7 @@ void callback_signal_handler(int signum, bool is_critical)
     else
     {
         llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
-        // Let wspr_loop know you're leaving
-        exit_wspr_loop.store(true); // Set exit flag
-        shutdown_cv.notify_all();   // Wake up waiting threads
-        // Shutdown signal handler
-        if (handler) // Ensure handler is valid
-        {
-            SignalHandlerStatus status = handler->request_shutdown();
-
-            if (status == SignalHandlerStatus::ALREADY_STOPPED)
-            {
-                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
-            }
-            llog.logS(INFO, "Shutdown requested.");
-        }
-        else
-        {
-            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
-        }
+        main_shutdown();
     }
 }
 
@@ -117,13 +120,11 @@ int main(int argc, char *argv[])
     // Make sure we are running as root
     if (getuid() != 0)
     {
-        std::cerr << "Error: This program must be run as root or with sudo." << std::endl;
-        print_usage();
-        std::exit(EXIT_FAILURE);
+        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
 
     if (!load_config(argc, argv))
-        std::exit(EXIT_FAILURE);
+        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
 
     SingletonProcess singleton(SINGLETON_PORT);
 
@@ -141,21 +142,22 @@ int main(int argc, char *argv[])
     handler->block_signals();
     handler->set_callback(callback_signal_handler);
 
-    // Startup WSPR loop
-    try
-    {
-        wspr_loop();
-    }
-    catch (const std::exception &e)
-    {
-        llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
-    }
-    catch (...)
-    {
-        llog.logE(ERROR, "Unknown fatal error in main().");
-    }
+    // // Startup WSPR loop
+    // try
+    // {
+    //     wspr_loop();
+    // }
+    // catch (const std::exception &e)
+    // {
+    //     llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
+    // }
+    // catch (...)
+    // {
+    //     llog.logE(ERROR, "Unknown fatal error in main().");
+    // }
 
     llog.logS(INFO, project_name(), "exiting normally.");
+    main_shutdown();
 
     // Cleanup signal handler and pointer
     handler->wait_for_shutdown();
