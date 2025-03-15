@@ -402,6 +402,7 @@ bool validate_config_data()
     }
     catch (const std::exception &)
     {
+        llog.logE(WARN, "Invalid PPM value, defaulting to use NTP.");
         use_ntp = true; // Default: Assume we use NTP if error occurs
     }
 
@@ -415,6 +416,7 @@ bool validate_config_data()
         catch (const std::exception &)
         {
             // Default: Assume we use NTP if error occurs
+            llog.logE(WARN, "Invalid PPM value, defaulting to use NTP.");
             use_ntp = true;
             return 0.0;
         }
@@ -430,7 +432,7 @@ bool validate_config_data()
     }
     catch (const std::exception &e)
     {
-        llog.logS(DEBUG, "Failed to get 'Use LED' value, defaulting to disabled.");
+        llog.logS(DEBUG, "Failed to get 'Use LED' value.");
     }
     // Attempt to get the LED pin number
     int new_led_pin_number = -1;
@@ -463,7 +465,7 @@ bool validate_config_data()
     }
     catch (const std::exception &e)
     {
-        llog.logS(DEBUG, "Failed to get 'Use Shutdown' value, defaulting to disabled.");
+        llog.logS(DEBUG, "Failed to get 'Use Shutdown' value.");
     }
     // Attempt to retrieve shutdown pin number
     try
@@ -472,7 +474,7 @@ bool validate_config_data()
     }
     catch (const std::exception &e)
     {
-        llog.logS(DEBUG, "Failed to get 'Shutdown Button' value, defaulting to disabled.");
+        llog.logS(DEBUG, "Failed to get 'Shutdown Button' value.");
     }
     // Enable shutdown button only if it's desired and the pin is valid
     if (use_shutdown && (new_shutdown_pin_number >= 0 && new_shutdown_pin_number <= 27))
@@ -485,7 +487,6 @@ bool validate_config_data()
         disable_shutdown_pin();
     }
 
-    // TODO:  Start here
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (mode == ModeType::TONE)
     {
@@ -632,9 +633,7 @@ bool validate_config_data()
             }
             else
             {
-                std::ostringstream oss;
-                oss << std::fixed << std::setprecision(6) << (freq / 1e6); // Format the frequency
-                llog.logS(INFO, "- ", oss.str(), " MHz");
+                llog.logS(INFO, "- ", lookup.freq_display_string(freq));
             }
         }
 

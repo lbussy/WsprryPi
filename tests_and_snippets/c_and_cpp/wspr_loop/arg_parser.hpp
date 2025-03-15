@@ -84,6 +84,8 @@ struct ArgParserConfig
 // Extern declaration for global configuration object.
 extern ArgParserConfig config;
 
+extern WSPRBandLookup lookup;
+
 /**
  * @brief Global instance of the IniFile configuration handler.
  *

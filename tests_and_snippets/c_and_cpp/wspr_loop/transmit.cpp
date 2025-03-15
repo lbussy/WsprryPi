@@ -44,14 +44,14 @@ void perform_transmission(ModeType mode, double tx_freq)
             if (led_handler)
                 toggle_led(true);
             llog.logS(INFO, "Transmitting a test tone at",
-                      std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+                      lookup.freq_display_string(tx_freq));
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Sleep for 100ms
         }
     }
 
     std::string mode_name = (wspr_interval.load() == WSPR_2) ? "WSPR" : "WSPR-15";
     llog.logS(INFO, "Transmission started for", mode_name, "at",
-              std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+              lookup.freq_display_string(tx_freq));
     in_transmission.store(true);
 
     // Turn on LED
@@ -156,7 +156,7 @@ void transmit_loop()
         // ** TODO: PERFORM TRANSMISSION HERE**
         if (tx_freq != 0.0)
         {
-            llog.logS(INFO, "Transmitting on frequency:", std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+            llog.logS(INFO, "Transmitting on frequency:", lookup.freq_display_string(tx_freq));
             perform_transmission(mode, tx_freq);
         }
         else
