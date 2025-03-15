@@ -1,6 +1,10 @@
 #ifndef _WSPR_H
 #define _WSPR_H
 
+#include "ppm_manager.hpp"
+
+extern PPMManager ppmManager;
+
 #ifdef __cplusplus
 extern "C"
 {

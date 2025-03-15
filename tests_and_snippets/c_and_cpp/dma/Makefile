@@ -82,6 +82,7 @@ CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 CXXFLAGS += -I$(abspath ./WSPR-Message/src)
 # CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
+CXXFLAGS += -I$(abspath ./PPM-Manager/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
