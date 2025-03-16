@@ -42,22 +42,22 @@
 #include "monitorfile.hpp"
 #include "version.hpp"
 #include "wspr_message.hpp"
+#include "wspr_band_lookup.hpp"
+#include "transmit.hpp"
 
 // Standard library headers
 #include <optional>
 #include <atomic>
 #include <thread>
 
-extern bool useini;
-extern bool date_time_log;
-
 /**
  * @brief Global configuration instance for argument parsing.
  *
  * This global instance of `ArgParserConfig` holds the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is defined in `arg_parser.cpp` and declared
- * as `extern` in `arg_parser.hpp` so it can be accessed globally.
+ * command-line arguments and configuration settings which are
+ * not in the INI class, which are used throughout the application.
+ * It is defined in `arg_parser.cpp` and declared as `extern` in
+ * arg_parser.hpp` so it can be accessed globally.
  *
  * @note Ensure that `arg_parser.hpp` is included in any file that
  *       needs access to this configuration instance.
@@ -66,8 +66,15 @@ extern bool date_time_log;
  */
 struct ArgParserConfig
 {
-    double f_plld_clk; ///< Phase-Locked Loop D clock, default is 500 MHz
-    int mem_flag;      ///< TODO:  Define this - Placeholder for memory management flags.
+    ModeType mode;                       ///< Current operating mode.
+    bool useini;                         ///< Unse INI file
+    bool date_time_log;                  ///< Use Date/time prefix on output
+    bool loop_tx;                        ///< Loop until canceled
+    int tx_iterations;                   ///< How many frequency list iterations to loop through
+    double test_tone;                    ///< Freqwuency for test tone
+    std::vector<double> center_freq_set; ///< Vector of frequencies in Hz
+    double f_plld_clk;                   ///< Phase-Locked Loop D clock, default is 500 MHz
+    int mem_flag;                        ///< TODO:  Define this - Placeholder for memory management flags.
     /**
      * @brief Default constructor initializing all configuration parameters.
      *
@@ -75,7 +82,14 @@ struct ArgParserConfig
      * - `f_plld_clk = 0.0`
      * - `mem_flag = 0`
      */
-    ArgParserConfig() : f_plld_clk(0.0),
+    ArgParserConfig() : mode(ModeType::WSPR),
+                        useini(false),
+                        date_time_log(false),
+                        loop_tx(false),
+                        tx_iterations(0),
+                        test_tone(0.0),
+                        center_freq_set({}),
+                        f_plld_clk(0.0),
                         mem_flag(0)
     {
     }
@@ -228,7 +242,7 @@ extern void apply_deferred_changes();
  * print_usage("Custom exit", 5); // Prints error message, then exits with code 5.
  * @endcode
  */
-void print_usage(const std::string& message = "", int exit_code = 3);
+void print_usage(const std::string &message = "", int exit_code = 3);
 
 /**
  * @brief Displays usage information and exits or returns based on the exit code.

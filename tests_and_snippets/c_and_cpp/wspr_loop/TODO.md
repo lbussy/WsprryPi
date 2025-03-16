@@ -43,4 +43,4 @@
   - [ ] shutdown_handler
   - [ ] signal_handler
 - [ ] Make threads run as background priority
-
+- [ ] Review if we do or can do WSPR-15

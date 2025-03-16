@@ -123,13 +123,13 @@ int main(int argc, char *argv[])
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
 
+    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
+        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
+
     // Display version, Raspberry Pi model, and process ID for context.
     llog.logS(INFO, version_string());
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
     llog.logS(INFO, "Process PID:", getpid());
-
-    if (!load_config(argc, argv)) // Does parse_command_line() then validate_config_data()
-        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
 
     SingletonProcess singleton(SINGLETON_PORT);
 
@@ -147,19 +147,19 @@ int main(int argc, char *argv[])
     handler->block_signals();
     handler->set_callback(callback_signal_handler);
 
-    // // Startup WSPR loop
-    // try
-    // {
-    //     wspr_loop();
-    // }
-    // catch (const std::exception &e)
-    // {
-    //     llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
-    // }
-    // catch (...)
-    // {
-    //     llog.logE(ERROR, "Unknown fatal error in main().");
-    // }
+    // Startup WSPR loop
+    try
+    {
+        wspr_loop();
+    }
+    catch (const std::exception &e)
+    {
+        llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
+    }
+    catch (...)
+    {
+        llog.logE(ERROR, "Unknown fatal error in main().");
+    }
 
     llog.logS(INFO, project_name(), "exiting normally.");
     main_shutdown();

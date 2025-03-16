@@ -25,11 +25,6 @@
 std::atomic<bool> in_transmission(false);
 std::thread transmit_thread;
 std::mutex transmit_mtx;
-std::vector<double> center_freq_set = {}; ///< Vector of frequencies in Hz
-std::optional<int> tx_iterations;         ///< Number of transmissions before termination (if set)
-bool loop_tx = false;                     ///< Flag to enable repeated transmission cycles.
-float test_tone = 0.0;                    ///< Frequency for test tone mode.
-ModeType mode = ModeType::WSPR;           ///< Current operating mode.
 
 void perform_transmission(ModeType mode, double tx_freq)
 {
@@ -145,19 +140,19 @@ void transmit_loop()
         }
 
         // Select transmission frequency
-        if (center_freq_set.empty())
+        if (config.center_freq_set.empty())
         {
             llog.logE(ERROR, "No frequencies available. Exiting transmit loop.");
             break;
         }
 
-        double tx_freq = center_freq_set[freq_index];
+        double tx_freq = config.center_freq_set[freq_index];
 
         // ** TODO: PERFORM TRANSMISSION HERE**
         if (tx_freq != 0.0)
         {
             llog.logS(INFO, "Transmitting on frequency:", lookup.freq_display_string(tx_freq));
-            perform_transmission(mode, tx_freq);
+            perform_transmission(config.mode, tx_freq);
         }
         else
         {
@@ -168,15 +163,14 @@ void transmit_loop()
         apply_deferred_changes();
 
         // Skip to next freq in list.
-        freq_index = (freq_index + 1) % center_freq_set.size();
+        freq_index = (freq_index + 1) % config.center_freq_set.size();
 
         // Check if we've reached the transmission limit
-        if (!loop_tx)
+        if (!config.loop_tx)
         {
             total_iterations++;
-            size_t iterations = static_cast<size_t>(tx_iterations.value_or(1));
 
-            if (static_cast<size_t>(total_iterations) >= (iterations * center_freq_set.size()))
+            if (total_iterations >= (config.tx_iterations * static_cast<int>(config.center_freq_set.size())))
             {
                 llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
                 exit_wspr_loop.store(true); // Set exit flag
