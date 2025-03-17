@@ -34,4 +34,6 @@
 #ifndef _MAIN_HPP
 #define _MAIN_HPP
 
+void main_shutdown(bool from_main = false);
+
 #endif //_MAIN_HPP

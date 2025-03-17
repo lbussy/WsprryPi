@@ -25,11 +25,6 @@
 std::atomic<bool> in_transmission(false);
 std::thread transmit_thread;
 std::mutex transmit_mtx;
-std::vector<double> center_freq_set = {}; ///< Vector of frequencies in Hz
-std::optional<int> tx_iterations;         ///< Number of transmissions before termination (if set)
-bool loop_tx = false;                     ///< Flag to enable repeated transmission cycles.
-float test_tone = 0.0;                    ///< Frequency for test tone mode.
-ModeType mode = ModeType::WSPR;           ///< Current operating mode.
 
 void perform_transmission(ModeType mode, double tx_freq)
 {
@@ -44,14 +39,14 @@ void perform_transmission(ModeType mode, double tx_freq)
             if (led_handler)
                 toggle_led(true);
             llog.logS(INFO, "Transmitting a test tone at",
-                      std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+                      lookup.freq_display_string(tx_freq));
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Sleep for 100ms
         }
     }
 
     std::string mode_name = (wspr_interval.load() == WSPR_2) ? "WSPR" : "WSPR-15";
     llog.logS(INFO, "Transmission started for", mode_name, "at",
-              std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+              lookup.freq_display_string(tx_freq));
     in_transmission.store(true);
 
     // Turn on LED
@@ -145,19 +140,19 @@ void transmit_loop()
         }
 
         // Select transmission frequency
-        if (center_freq_set.empty())
+        if (config.center_freq_set.empty())
         {
             llog.logE(ERROR, "No frequencies available. Exiting transmit loop.");
             break;
         }
 
-        double tx_freq = center_freq_set[freq_index];
+        double tx_freq = config.center_freq_set[freq_index];
 
         // ** TODO: PERFORM TRANSMISSION HERE**
         if (tx_freq != 0.0)
         {
-            llog.logS(INFO, "Transmitting on frequency:", std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
-            perform_transmission(mode, tx_freq);
+            llog.logS(INFO, "Transmitting on frequency:", lookup.freq_display_string(tx_freq));
+            perform_transmission(config.mode, tx_freq);
         }
         else
         {
@@ -168,15 +163,14 @@ void transmit_loop()
         apply_deferred_changes();
 
         // Skip to next freq in list.
-        freq_index = (freq_index + 1) % center_freq_set.size();
+        freq_index = (freq_index + 1) % config.center_freq_set.size();
 
         // Check if we've reached the transmission limit
-        if (!loop_tx)
+        if (!config.loop_tx)
         {
             total_iterations++;
-            size_t iterations = static_cast<size_t>(tx_iterations.value_or(1));
 
-            if (static_cast<size_t>(total_iterations) >= (iterations * center_freq_set.size()))
+            if (total_iterations >= (config.tx_iterations * static_cast<int>(config.center_freq_set.size())))
             {
                 llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
                 exit_wspr_loop.store(true); // Set exit flag

@@ -52,8 +52,8 @@ std::thread button_thread;
 std::thread led_thread;
 
 // Default GPIO pins.
-int shutdown_pin_number = 19;
-int led_pin_number = 18;
+int shutdown_pin_number = -1;
+int led_pin_number = -1;
 
 /**
  * @brief Default constructor for GPIOHandler.

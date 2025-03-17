@@ -49,6 +49,58 @@
 
 constexpr const int SINGLETON_PORT = 1234;
 
+void main_shutdown(bool from_main)
+{
+    if (!from_main)
+    {                               
+        // Let wspr_loop know you're leaving
+        exit_wspr_loop.store(true); // Set exit flag
+        shutdown_cv.notify_all();   // Wake up any waiting threads
+    }
+    else
+    {
+        // Shutdown signal handler
+        if (handler) // Ensure handler is valid
+        {
+            SignalHandlerStatus status = handler->request_shutdown();
+
+            if (status == SignalHandlerStatus::ALREADY_STOPPED)
+            {
+                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
+            }
+            llog.logS(DEBUG, "Shutdown requested.");
+        }
+        else
+        {
+            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
+        }
+    }
+}
+
+/**
+ * @brief Custom signal handling function.
+ *
+ * This function is called when a signal is received. It logs the signal and,
+ * if critical, terminates immediately. Otherwise, it initiates a graceful shutdown.
+ *
+ * @param signum The signal number received.
+ * @param is_critical Indicates whether the signal is critical.
+ */
+void callback_signal_handler(int signum, bool is_critical)
+{
+    std::string_view signal_name = SignalHandler::signal_to_string(signum);
+    if (is_critical)
+    {
+        std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
+        std::quick_exit(signum);
+    }
+    else
+    {
+        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
+        main_shutdown();
+    }
+}
+
 /**
  * @brief Custom signal handling function.
  *
@@ -117,13 +169,16 @@ int main(int argc, char *argv[])
     // Make sure we are running as root
     if (getuid() != 0)
     {
-        std::cerr << "Error: This program must be run as root or with sudo." << std::endl;
-        print_usage();
-        std::exit(EXIT_FAILURE);
+        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
 
-    if (!load_config(argc, argv))
-        std::exit(EXIT_FAILURE);
+    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
+        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
+
+    // Display version, Raspberry Pi model, and process ID for context.
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Process PID:", getpid());
 
     SingletonProcess singleton(SINGLETON_PORT);
 
@@ -155,7 +210,8 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting normally.");
+    main_shutdown(true);
+    llog.logS(INFO, project_name(), "exiting.");
 
     // Cleanup signal handler and pointer
     handler->wait_for_shutdown();

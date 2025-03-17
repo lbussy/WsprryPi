@@ -127,7 +127,7 @@ bool ppm_init()
 void wspr_loop()
 {
     // Begin tracking PPM clock variance
-    if (ini.get_bool_value("Extended", "Use NTP")) // TODO:  Create in-memory only ini.
+    if (config.use_ntp)
     {
         if (!ppm_init())
         {
