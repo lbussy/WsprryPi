@@ -155,6 +155,9 @@ std::atomic<int> wspr_interval(WSPR_2);
  */
 std::atomic<bool> ini_reload_pending(false);
 
+// List of allowed WSPR power levels
+const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60};
+
 /**
  * @brief Callback for INI file change detection
  *
@@ -199,7 +202,7 @@ void apply_deferred_changes()
     }
 }
 
-bool is_valid_callsign(const std::string &callsign)
+bool is_valid_callsign(std::string &callsign)
 {
     // WSPR Type 1 callsign regex pattern
     static const std::regex callsign_pattern(
@@ -214,11 +217,15 @@ bool is_valid_callsign(const std::string &callsign)
     }
 
     // Validate using regex
-    return std::regex_match(callsign, callsign_pattern);
-}
+    if (std::regex_match(callsign, callsign_pattern))
+    {
+        // Convert to uppercase
+        std::transform(callsign.begin(), callsign.end(), callsign.begin(), ::toupper);
+        return true;
+    }
 
-// List of allowed WSPR power levels
-const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60};
+    return false;
+}
 
 int round_to_nearest_wspr_power(int power)
 {
@@ -240,6 +247,9 @@ int round_to_nearest_wspr_power(int power)
 bool validate_and_truncate_locator(std::string &locator)
 {
     static const std::regex locator_pattern(R"(^[A-Za-z]{2}[0-9]{2})");
+
+    // Convert to uppercase before validation
+    std::transform(locator.begin(), locator.end(), locator.begin(), ::toupper);
 
     if (locator.length() == 4 && std::regex_match(locator, locator_pattern))
     {
@@ -386,33 +396,36 @@ inline void print_usage(int exit_code)
  */
 void show_config_values(bool reload)
 {
-    // Attempt to load INI file if used
-    bool loaded = config.useini && ini.load();
+    // Attempt to load INI file if used and reload is called
+    if (reload && config.use_ini)
+    {
+        if (ini.load()) // Load INI and only proceed if successful
+        {
+            load_from_ini();
+        }
+    }
 
-    if (!loaded)
-        return;
-
-    // Print configuration details if successfully loaded
-    llog.logS(DEBUG, "Config", (reload ? "re-loaded" : "loaded"), "from:", inifile);
+    // Print overlayed configuration details
+    //
     // [Control]
-    llog.logS(DEBUG, "Transmit Enabled:", ini.get_bool_value("Control", "Transmit") ? "true" : "false");
+    llog.logS(DEBUG, "Transmit Enabled:", config.transmit ? "true" : "false");
     // [Common]
-    llog.logS(DEBUG, "Call Sign:", ini.get_string_value("Common", "Call Sign"));
-    llog.logS(DEBUG, "Grid Square:", ini.get_string_value("Common", "Grid Square"));
-    llog.logS(DEBUG, "Transmit Power:", ini.get_int_value("Common", "TX Power"));
-    llog.logS(DEBUG, "Frequencies:", ini.get_string_value("Common", "Frequency"));
-    llog.logS(DEBUG, "Transmit Pin:", ini.get_int_value("Common", "Transmit Pin"));
+    llog.logS(DEBUG, "Call Sign:", config.callsign);
+    llog.logS(DEBUG, "Grid Square:", config.grid_square);
+    llog.logS(DEBUG, "Transmit Power:", config.power_dbm);
+    llog.logS(DEBUG, "Frequencies:", config.frequencies);
+    llog.logS(DEBUG, "Transmit Pin:", config.tx_pin);
     // [Extended]
-    llog.logS(DEBUG, "PPM Offset:", ini.get_double_value("Extended", "PPM"));
-    llog.logS(DEBUG, "Check NTP Each Run:", ini.get_bool_value("Extended", "Use NTP") ? "true" : "false");
-    llog.logS(DEBUG, "Use Frequency Randomization:", ini.get_bool_value("Extended", "Offset") ? "true" : "false");
-    llog.logS(DEBUG, "Power Level:", ini.get_int_value("Extended", "Power Level"));
-    llog.logS(DEBUG, "Use LED:", ini.get_bool_value("Extended", "Use LED") ? "true" : "false");
-    llog.logS(DEBUG, "LED on GPIO", ini.get_int_value("Extended", "LED Pin"));
+    llog.logS(DEBUG, "PPM Offset:", config.ppm);
+    llog.logS(DEBUG, "Check NTP Each Run:", config.use_ntp ? "true" : "false");
+    llog.logS(DEBUG, "Use Frequency Randomization:", config.use_offset ? "true" : "false");
+    llog.logS(DEBUG, "Power Level:", config.power_level);
+    llog.logS(DEBUG, "Use LED:", config.use_led ? "true" : "false");
+    llog.logS(DEBUG, "LED on GPIO", config.led_pin);
     // [Server]
-    llog.logS(DEBUG, "Server runs on port:", ini.get_int_value("Server", "Port"));
-    llog.logS(DEBUG, "Use shutdown buton:", ini.get_bool_value("Server", "Use Shutdown") ? "true" : "false");
-    llog.logS(DEBUG, "Shutdown button GPIO", ini.get_int_value("Server", "Shutdown Button"));
+    llog.logS(DEBUG, "Server runs on port:", config.server_port);
+    llog.logS(DEBUG, "Use shutdown buton:", config.use_shutdown ? "true" : "false");
+    llog.logS(DEBUG, "Shutdown button GPIO", config.shutdown_pin);
 }
 
 /**
@@ -427,13 +440,13 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    // Safely reads a frequency list from the INI class, returns "" if it fails
+    // Inline/lambda: Safely reads a frequency list from the config class
     std::istringstream frequency_list(
         [&]() -> std::string
         {
             try
             {
-                return ini.get_string_value("Common", "Frequency");
+                return config.frequencies;
             }
             catch (const std::exception &e)
             {
@@ -457,68 +470,15 @@ bool validate_config_data()
         }
     }
 
-    // Extract offset freq choice from INI class, default to false
-    bool offset_enabled = false;
-    try
+    // Extract PPM value from config class, default to 0.0
+    if (config.ppm == 0.0)
     {
-        offset_enabled = ini.get_bool_value("Extended", "Offset");
-    }
-    catch (const std::exception &)
-    {
-        offset_enabled = false; // Default: Assume no offset if an error occurs
+        llog.logS(DEBUG, "Invalid PPM value, defaulting to use NTP.");
+        config.use_ntp = true;
     }
 
-    // Extract NTP usage from INI class, default to true
-    bool use_ntp = true;
-    try
-    {
-        use_ntp = ini.get_bool_value("Extended", "Use NTP");
-    }
-    catch (const std::exception &)
-    {
-        llog.logS(DEBUG, "Invalid use NTP value, defaulting to use NTP.");
-        use_ntp = true; // Default: Assume we use NTP if error occurs
-    }
-
-    // Extract PPM value from INI class, default to 0.0
-    double ppm_value = [&]() -> double
-    {
-        try
-        {
-            return ini.get_double_value("Extended", "PPM");
-        }
-        catch (const std::exception &)
-        {
-            // Default: Assume we use NTP if error occurs
-            llog.logS(DEBUG, "Invalid PPM value, defaulting to use NTP.");
-            use_ntp = true;
-            return 0.0;
-        }
-    }();
-
-    // Get LED use choice from INI class
-    bool use_led = false;
-    // Attempt to get the LED usage setting
-    try
-    {
-        use_led = ini.get_bool_value("Extended", "Use LED");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get 'Use LED' value.");
-    }
-    // Attempt to get the LED pin number
-    led_pin_number = -1;
-    try
-    {
-        led_pin_number = ini.get_int_value("Extended", "LED Pin");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get 'LED Pin' value.");
-    }
-    // Enable LED only if it's desired and the pin is valid
-    if (use_led && (led_pin_number >= 0 && led_pin_number <= 27))
+    // Enable LED only if set and the pin is valid
+    if (config.use_led && (config.led_pin >= 0 && config.led_pin <= 27))
     {
         enable_led_pin(led_pin_number);
     }
@@ -528,29 +488,8 @@ bool validate_config_data()
         disable_led_pin();
     }
 
-    // Get shutdown use choice from INI class
-    bool use_shutdown = false;
-    shutdown_pin_number = -1;
-    // Attempt to retrieve shutdown preference
-    try
-    {
-        use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get 'Use Shutdown' value.");
-    }
-    // Attempt to retrieve shutdown pin number
-    try
-    {
-        shutdown_pin_number = ini.get_int_value("Server", "Shutdown Button");
-    }
-    catch (const std::exception &e)
-    {
-        llog.logS(DEBUG, "Failed to get 'Shutdown Button' value.");
-    }
     // Enable shutdown button only if it's desired and the pin is valid
-    if (use_shutdown && (shutdown_pin_number >= 0 && shutdown_pin_number <= 27))
+    if (config.use_shutdown && (config.shutdown_pin >= 0 && config.shutdown_pin <= 27))
     {
         enable_shutdown_pin(shutdown_pin_number);
     }
@@ -560,7 +499,7 @@ bool validate_config_data()
         disable_shutdown_pin();
     }
 
-    // Handle test tone config.mode (TONE config.mode does not require callsign, grid, etc.)
+    // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)
     {
         if (config.test_tone <= 0.0)
@@ -573,30 +512,24 @@ bool validate_config_data()
         llog.logS(INFO, "A test tone will be generated at",
                   lookup.freq_display_string(config.test_tone), ".");
 
-        if (use_ntp)
+        if (config.use_ntp)
         {
             llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
         }
-        else if (ppm_value != 0.0)
+        else if (config.ppm != 0.0)
         {
             llog.logS(INFO, "PPM value to be used for tone generation:",
-                      std::fixed, std::setprecision(2), ppm_value);
+                      std::fixed, std::setprecision(2), config.ppm);
         }
     }
     else if (config.mode == ModeType::WSPR)
     {
-        // PPM value is ignored when using NTP
-        if (ppm_value != 0.0 && use_ntp)
-        {
-            llog.logE(INFO, "PPM value is ignored when NTP is enabled.");
-        }
-
         // Extract and validate required parameters
         bool missing_call_sign = [&]() -> bool
         {
             try
             {
-                return ini.get_string_value("Common", "Call Sign").empty();
+                return config.callsign.empty();
             }
             catch (const std::exception &)
             {
@@ -608,7 +541,7 @@ bool validate_config_data()
         {
             try
             {
-                return ini.get_string_value("Common", "Grid Square").empty();
+                return config.grid_square.empty();
             }
             catch (const std::exception &)
             {
@@ -620,7 +553,7 @@ bool validate_config_data()
         {
             try
             {
-                return ini.get_int_value("Common", "TX Power") <= 0;
+                return config.power_dbm <= 0;
             }
             catch (const std::exception &)
             {
@@ -660,9 +593,9 @@ bool validate_config_data()
         {
             // Initialize global WSPR message
             message = new WsprMessage(
-                ini.get_string_value("Common", "Call Sign"),
-                ini.get_string_value("Common", "Grid Square"),
-                ini.get_int_value("Common", "TX Power"));
+                config.callsign,
+                config.grid_square,
+                config.power_dbm);
 
             // Validate message
             if (message)
@@ -692,9 +625,9 @@ bool validate_config_data()
 
         // Log WSPR packet details
         llog.logS(INFO, "WSPR packet payload:");
-        llog.logS(INFO, "- Callsign:", ini.get_string_value("Common", "Call Sign"));
-        llog.logS(INFO, "- Locator:", ini.get_string_value("Common", "Grid Square"));
-        llog.logS(INFO, "- Power:", ini.get_int_value("Common", "TX Power"), " dBm");
+        llog.logS(INFO, "- Callsign:", config.callsign);
+        llog.logS(INFO, "- Locator:", config.grid_square);
+        llog.logS(INFO, "- Power:", config.power_dbm, " dBm");
         llog.logS(INFO, "Requested TX frequencies:");
 
         // Concatenate frequency messages for logging
@@ -711,18 +644,18 @@ bool validate_config_data()
         }
 
         // Handle calibration and frequency adjustments
-        if (use_ntp)
+        if (config.use_ntp)
         {
             llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
         }
-        else if (ppm_value != 0.0)
+        else if (config.ppm != 0.0)
         {
             llog.logS(INFO, "PPM value for all transmissions:",
-                      std::fixed, std::setprecision(2), ppm_value);
+                      std::fixed, std::setprecision(2), config.ppm);
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode
-        if (!ini.get_bool_value("Control", "Transmit"))
+        if (!config.transmit)
         {
             if (config.loop_tx)
             {
@@ -735,7 +668,7 @@ bool validate_config_data()
         }
 
         // Handle frequency offset
-        if (offset_enabled)
+        if (config.use_offset)
         {
             llog.logS(INFO, "- A random offset will be added to all transmissions.");
         }
@@ -744,6 +677,129 @@ bool validate_config_data()
     {
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
         std::exit(EXIT_FAILURE);
+    }
+
+    return true;
+}
+
+bool load_from_ini()
+{
+    // Attempt to load INI file if used
+    bool loaded = config.use_ini && ini.load();
+
+    if (!loaded)
+    {
+        return false;
+    }
+
+    // Control
+    try
+    {
+        config.transmit = ini.get_bool_value("Control", "Transmit");
+    }
+    catch (...)
+    {
+    }
+    // Common
+    try
+    {
+        config.callsign = ini.get_string_value("Common", "Call Sign");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.grid_square = ini.get_string_value("Common", "Grid Square");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.power_dbm = ini.get_int_value("Common", "TX Power");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.frequencies = ini.get_string_value("Common", "Frequency");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.tx_pin = ini.get_int_value("Common", "Transmit Pin");
+    }
+    catch (...)
+    {
+    }
+    // Extended
+    try
+    {
+        config.ppm = ini.get_double_value("Extended", "PPM");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_ntp = ini.get_bool_value("Extended", "Use NTP");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_offset = ini.get_bool_value("Extended", "Offset");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.power_level = ini.get_int_value("Extended", "Power Level");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_led = ini.get_bool_value("Extended", "Use LED");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.led_pin = ini.get_int_value("Extended", "LED Pin");
+    }
+    catch (...)
+    {
+    }
+    // Server
+    try
+    {
+        config.server_port = ini.get_int_value("Server", "Port");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button");
+    }
+    catch (...)
+    {
     }
 
     return true;
@@ -774,10 +830,14 @@ bool parse_command_line(int argc, char *argv[])
         if ((std::string(*it) == "-i" || std::string(*it) == "--ini-file") && (it + 1) != args.end())
         {
             inifile = *(it + 1);
-            config.useini = true;
+            config.use_ini = true;
             config.loop_tx = true;
             ini.set_filename(inifile);
-            iniMonitor.filemon(inifile, callback_ini_changed);
+            if (!load_from_ini())
+            {
+                llog.logE(FATAL, "Unhandled error loading INI.");
+                std::exit(EXIT_FAILURE);
+            }
 
             // Remove "-i <file>" from args
             args.erase(it, it + 2);
@@ -830,7 +890,7 @@ bool parse_command_line(int argc, char *argv[])
         }
         case 'n': // Use NTP
         {
-            ini.set_bool_value("Extended", "Use NTP", true);
+            config.use_ntp = true;
             break;
         }
         case 'r': // Repeat
@@ -840,7 +900,7 @@ bool parse_command_line(int argc, char *argv[])
         }
         case 'o': // Use Offset
         {
-            ini.set_bool_value("Extended", "Offset", true);
+            config.use_offset = true;
             break;
         }
         case 'D': // Add date/time stamps to logging
@@ -856,27 +916,26 @@ bool parse_command_line(int argc, char *argv[])
             {
                 double ppm = std::stod(optarg);
                 double clamped_ppm = std::clamp(ppm, -200.0, 200.0);
+
                 if (ppm != clamped_ppm)
                 {
-                    ini.set_double_value("Extended", "PPM", clamped_ppm);
-                    llog.logS(WARN, "PPM value clamped to", clamped_ppm);
+                    llog.logE(ERROR, "PPM value is outside bounds (-200 to 200), applying clamped value:", clamped_ppm);
                 }
-                else
-                {
-                    ini.set_double_value("Extended", "PPM", ppm);
-                }
-                ini.set_bool_value("Extended", "Use NTP", false);
+
+                // Apply the clamped value
+                config.ppm = clamped_ppm;
+                config.use_ntp = false;
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Error parsing PPM value, defaulting to NTP.");
-                ini.set_bool_value("Extended", "Use NTP", true);
+                config.use_ntp = true;
+                llog.logE(ERROR, "Error parsing PPM value, defaulting to NTP:", optarg);
             }
             break;
         }
         case 'x': // Terminate after x iterations
         {
-            if (!config.useini)
+            if (!config.use_ini)
             {
                 try
                 {
@@ -892,12 +951,13 @@ bool parse_command_line(int argc, char *argv[])
                 }
                 // Set config.tx_iterations to at least 1
                 config.tx_iterations = (config.tx_iterations == 0) ? 1 : config.tx_iterations; // Equal to at least 1
+                config.loop_tx = false;
             }
             break;
         }
         case 't': // Use test-tone
         {
-            if (!config.useini)
+            if (!config.use_ini)
             {
                 try
                 {
@@ -917,6 +977,10 @@ bool parse_command_line(int argc, char *argv[])
                     print_usage(error_message, EXIT_FAILURE);
                 }
             }
+            else
+            {
+                print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
+            }
             break;
         }
         case 'a': // Specify transmit pin
@@ -924,8 +988,10 @@ bool parse_command_line(int argc, char *argv[])
             try
             {
                 int transmit_pin = std::stoi(optarg);
-                transmit_pin = std::clamp(transmit_pin, 0, 27);
-                ini.set_int_value("Common", "Transmit Pin", transmit_pin);
+                if (transmit_pin < 0 || transmit_pin > 27)
+                    print_usage("Invalid transmit pin.", EXIT_FAILURE);
+                else
+                    config.tx_pin = transmit_pin;
             }
             catch (const std::exception &)
             {
@@ -938,14 +1004,20 @@ bool parse_command_line(int argc, char *argv[])
             try
             {
                 int led_pin = std::stoi(optarg);
-                led_pin = std::clamp(led_pin, 0, 27);
-                ini.set_int_value("Extended", "LED Pin", led_pin);
-                ini.set_bool_value("Extended", "Use LED", true);
+                if (led_pin < 0 || led_pin > 27)
+                {
+                    print_usage("Invalid LED pin.", EXIT_FAILURE);
+                }
+
+                else
+                {
+                    config.led_pin = led_pin;
+                    config.use_led = true;
+                }
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Invalid LED pin.");
-                ini.set_bool_value("Extended", "Use LED", false);
+                print_usage("Invalid LED pin.", EXIT_FAILURE);
             }
             break;
         }
@@ -953,15 +1025,21 @@ bool parse_command_line(int argc, char *argv[])
         {
             try
             {
-                int shutdown_button = std::stoi(optarg);
-                shutdown_button = std::clamp(shutdown_button, 0, 27);
-                ini.set_int_value("Server", "Shutdown Button", shutdown_button);
-                ini.set_bool_value("Server", "Use Shutdown", true);
+                int shutdown_pin = std::stoi(optarg);
+                if (shutdown_pin < 0 || shutdown_pin > 27)
+                {
+                    print_usage("Invalid shutdown pin.", EXIT_FAILURE);
+                }
+
+                else
+                {
+                    config.shutdown_pin = shutdown_pin;
+                    config.use_shutdown = true;
+                }
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Invalid shutdown button.");
-                ini.set_bool_value("Server", "Use Shutdown", false);
+                print_usage("Invalid shutdown pin.", EXIT_FAILURE);
             }
             break;
         }
@@ -970,13 +1048,19 @@ bool parse_command_line(int argc, char *argv[])
             try
             {
                 int power = std::stoi(optarg);
-                power = std::clamp(power, 0, 7);
-                ini.set_int_value("Extended", "Power Level", power);
+                if (power < 0 or power > 7)
+                {
+                    config.power_level = 7;
+                }
+                else
+                {
+                    config.power_level = power;
+                }
             }
             catch (const std::exception &)
             {
-                llog.logE(ERROR, "Invalid power level, defaulting to 7.");
-                ini.set_int_value("Extended", "Power Level", 7);
+                llog.logE(WARN, "Invalid power level, defaulting to 7.");
+                config.power_level = 7;
             }
             break;
         }
@@ -988,14 +1072,17 @@ bool parse_command_line(int argc, char *argv[])
                 if (port < 49152 || port > 65535)
                 {
                     llog.logS(WARN, "Invalid port number. Using default: 31415.");
-                    port = 31415;
+                    config.server_port = 31415;
                 }
-                ini.set_int_value("Server", "Port", port);
+                else
+                {
+                    config.server_port = port;
+                }
             }
             catch (const std::exception &)
             {
-                ini.set_int_value("Server", "Port", 31415);
-                print_usage("Invalid port number, defaulting to 31415.", EXIT_FAILURE);
+                llog.logE(WARN, "Invalid server port, defaulting to 31415.");
+                config.server_port = 31415;
             }
             break;
         }
@@ -1009,7 +1096,7 @@ bool parse_command_line(int argc, char *argv[])
 
     if (config.mode == ModeType::WSPR)
     {
-        if (!config.useini)
+        if (!config.use_ini)
         {
             // Handle positional arguments after parsing options
             std::vector<std::string> positional_args;
@@ -1027,11 +1114,11 @@ bool parse_command_line(int argc, char *argv[])
             // Validate callsign with REGEX
             if (is_valid_callsign(positional_args[0]))
             {
-                ini.set_string_value("Common", "Call Sign", positional_args[0]);
+                config.callsign = positional_args[0];
             }
             else
             {
-                print_usage("Invalid call sign for type 1 WSPR message.", EXIT_FAILURE);
+                print_usage("Invalid call sign '" + positional_args[0] + "' for type 1 WSPR message.", EXIT_FAILURE);
             }
 
             // Validate and truncate gridsquare
@@ -1042,11 +1129,11 @@ bool parse_command_line(int argc, char *argv[])
                 {
                     llog.logS(DEBUG, "Grid square truncated to:", gridsquare);
                 }
-                ini.set_string_value("Common", "Grid Square", gridsquare);
+                config.grid_square = gridsquare;
             }
             else
             {
-                print_usage("Invalid maidenhead locator.", EXIT_FAILURE);
+                print_usage("Invalid maidenhead locator: " + gridsquare, EXIT_FAILURE);
             }
 
             // Validate power to standard values
@@ -1058,19 +1145,18 @@ bool parse_command_line(int argc, char *argv[])
                 {
                     llog.logS(DEBUG, "Power rounded to standard value:", rounded_power);
                 }
-                ini.set_int_value("Common", "TX Power", rounded_power);
+                config.power_dbm = rounded_power;
             }
             catch (...)
             {
                 print_usage("Invalid power value. Must be an integer.", EXIT_FAILURE);
             }
 
-            // Put frequencies in INI, validate later
+            // Put frequencies in string, validate later
             // Convert frequencies (positional_args[3] and beyond) into a space-separated string
             try
             {
-                std::string frequencies = join_frequencies(positional_args, 3);
-                ini.set_string_value("Common", "Grequency", frequencies);
+                config.frequencies = join_frequencies(positional_args, 3);
             }
             catch (const std::exception &e)
             {

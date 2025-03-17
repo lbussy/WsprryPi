@@ -49,25 +49,31 @@
 
 constexpr const int SINGLETON_PORT = 1234;
 
-void main_shutdown()
+void main_shutdown(bool from_main)
 {
-    // Let wspr_loop know you're leaving
-    exit_wspr_loop.store(true); // Set exit flag
-    shutdown_cv.notify_all();   // Wake up any waiting threads
-    // Shutdown signal handler
-    if (handler) // Ensure handler is valid
-    {
-        SignalHandlerStatus status = handler->request_shutdown();
-
-        if (status == SignalHandlerStatus::ALREADY_STOPPED)
-        {
-            llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
-        }
-        llog.logS(DEBUG, "Shutdown requested.");
+    if (!from_main)
+    {                               
+        // Let wspr_loop know you're leaving
+        exit_wspr_loop.store(true); // Set exit flag
+        shutdown_cv.notify_all();   // Wake up any waiting threads
     }
     else
     {
-        llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
+        // Shutdown signal handler
+        if (handler) // Ensure handler is valid
+        {
+            SignalHandlerStatus status = handler->request_shutdown();
+
+            if (status == SignalHandlerStatus::ALREADY_STOPPED)
+            {
+                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
+            }
+            llog.logS(DEBUG, "Shutdown requested.");
+        }
+        else
+        {
+            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
+        }
     }
 }
 
@@ -161,8 +167,8 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting normally.");
-    main_shutdown();
+    main_shutdown(true);
+    llog.logS(INFO, project_name(), "exiting.");
 
     // Cleanup signal handler and pointer
     handler->wait_for_shutdown();
