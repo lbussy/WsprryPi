@@ -102,49 +102,6 @@ void callback_signal_handler(int signum, bool is_critical)
 }
 
 /**
- * @brief Custom signal handling function.
- *
- * This function is called when a signal is received. It logs the signal and,
- * if critical, terminates immediately. Otherwise, it initiates a graceful shutdown.
- *
- * @param signum The signal number received.
- * @param is_critical Indicates whether the signal is critical.
- */
-void callback_signal_handler(int signum, bool is_critical)
-{
-    std::string_view signal_name = SignalHandler::signal_to_string(signum);
-    llog.logS(DEBUG, "Callback executed for signal", signal_name);
-
-    if (is_critical)
-    {
-        std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
-        std::quick_exit(signum);
-    }
-    else
-    {
-        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
-        // Let wspr_loop know you're leaving
-        exit_wspr_loop.store(true); // Set exit flag
-        shutdown_cv.notify_all();   // Wake up waiting threads
-        // Shutdown signal handler
-        if (handler) // Ensure handler is valid
-        {
-            SignalHandlerStatus status = handler->request_shutdown();
-
-            if (status == SignalHandlerStatus::ALREADY_STOPPED)
-            {
-                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
-            }
-            llog.logS(INFO, "Shutdown requested.");
-        }
-        else
-        {
-            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
-        }
-    }
-}
-
-/**
  * @brief Entry point for the WsprryPi application.
  *
  * This function initializes the application, parses command-line arguments,
