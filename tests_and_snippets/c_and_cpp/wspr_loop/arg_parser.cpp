@@ -848,8 +848,11 @@ bool parse_command_line(int argc, char *argv[])
     argc = args.size();
     argv = args.data();
 
+    // Update argc and argv pointers for getopt_long()
+    argc = args.size();
+    argv = args.data();
+
     static struct option long_options[] = {
-        // No arguments
         {"help", no_argument, nullptr, 'h'},
         {"version", no_argument, nullptr, 'v'},
         {"use-ntp", no_argument, nullptr, 'n'},       // Via: [Extended] Use NTP = True
