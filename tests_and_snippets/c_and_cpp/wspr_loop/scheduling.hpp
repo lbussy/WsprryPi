@@ -66,6 +66,8 @@ extern std::condition_variable shutdown_cv;
  */
 extern std::atomic<bool> exit_wspr_loop;
 
+extern void callback_shutdown_system();
+
 /**
  * @brief Manages the main WSPR transmission loop.
  *

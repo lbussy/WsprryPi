@@ -39,13 +39,12 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "constants.hpp"
+#include "gpio_input.hpp"
+#include "gpio_output.hpp"
+#include "logging.hpp"
+#include "ppm_manager.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
-#include "logging.hpp"
-#include "gpio_handler.hpp"
-#include "ppm_manager.hpp"
-#include "led_handler.hpp"
-#include "shutdown_handler.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -133,6 +132,14 @@ bool ppm_init()
     return true;
 }
 
+void callback_shutdown_system()
+{
+    llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
+    exit_wspr_loop.store(true); // Set exit flag
+    shutdown_cv.notify_all();   // Wake up any waiting threads
+    // TODO:  Toggle an actual system shutdown
+}
+
 void wspr_loop()
 {
     // Begin tracking PPM clock variance
@@ -166,21 +173,17 @@ void wspr_loop()
     ppmManager.stop();
     // Stop INI Monitor
     iniMonitor.stop();
-    // Signal shutdown.
-    signal_shutdown.store(true);
+    // Stop LED control
+    ledControl.stop();
+    // Stop shutdown monitor
+    shutdownMonitor.stop();
+
     // Cleanup threads
     shutdown_threads();
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
-    if (led_handler)
-        toggle_led(false);
-    led_handler.reset();
-    shutdown_handler.reset();
-
     // Identify any stuck threads
-    if (button_thread.joinable()) // TODO: Update class
-        llog.logS(WARN, "Button thread still running.");
     if (transmit_thread.joinable()) // TODO: Create new class
         llog.logS(WARN, "Transmit thread still running.");
 
@@ -192,7 +195,6 @@ void shutdown_threads()
     std::lock_guard<std::mutex> lock(shutdown_mtx);
 
     llog.logS(INFO, "Shutting down all active threads.");
-    signal_shutdown.store(true);
 
     auto safe_join = [](std::thread &t, const std::string &name)
     {
@@ -209,7 +211,6 @@ void shutdown_threads()
     };
 
     safe_join(transmit_thread, "Transmit thread");     // TODO: Create a class
-    safe_join(button_thread, "Button monitor thread"); // TODO: Change this class
 
     llog.logS(INFO, "All threads shut down safely.");
 }
