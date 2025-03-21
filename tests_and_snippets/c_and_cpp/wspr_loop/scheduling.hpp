@@ -46,6 +46,8 @@
 #include <string>
 #include <thread>
 
+extern std::atomic<bool> shutdown_flag;
+
 extern PPMManager ppmManager;
 
 /**

@@ -63,6 +63,7 @@
 
 std::mutex shutdown_mtx; // Global mutex for thread safety.
 std::atomic<bool> ppm_reload_pending(false);
+std::atomic<bool> shutdown_flag{false};
 
 PPMManager ppmManager;
 
@@ -135,9 +136,16 @@ bool ppm_init()
 void callback_shutdown_system()
 {
     llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
+    for (int i = 0; i < 3; ++i)
+    {
+        ledControl.toggle_gpio(true); // Set pin active (high)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        ledControl.toggle_gpio(false); // Set pin active (high)
+        if (i < 3) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     exit_wspr_loop.store(true); // Set exit flag
     shutdown_cv.notify_all();   // Wake up any waiting threads
-    // TODO:  Toggle an actual system shutdown
+    shutdown_flag.store(true);  // Set shutdown system flag
 }
 
 void wspr_loop()
@@ -210,7 +218,7 @@ void shutdown_threads()
         }
     };
 
-    safe_join(transmit_thread, "Transmit thread");     // TODO: Create a class
+    safe_join(transmit_thread, "Transmit thread"); // TODO: Create a class
 
     llog.logS(INFO, "All threads shut down safely.");
 }
