@@ -44,6 +44,9 @@
 #include "logging.hpp"
 #include "singleton.hpp"
 
+// Standard headers
+#include <atomic>
+
 // System headers
 #include <unistd.h>
 
@@ -174,6 +177,14 @@ int main(int argc, char *argv[])
     handler->wait_for_shutdown();
     handler->stop();
     handler.reset();
+
+    // Shutdown if set
+    if (shutdown_flag.load())
+    {
+        llog.logS(INFO, "Shutting down.");
+        sync();  // Flush file system buffers
+        std::system("shutdown -h now &");
+    }
 
     return EXIT_SUCCESS;
 }
