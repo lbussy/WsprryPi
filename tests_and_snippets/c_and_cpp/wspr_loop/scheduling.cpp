@@ -153,6 +153,7 @@ void wspr_loop()
     llog.logS(INFO, "WSPR loop running.");
 
     // Start the transmit thread.
+    // TODO: Thread this better
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
