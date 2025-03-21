@@ -63,6 +63,7 @@
 #include <sys/resource.h>
 
 std::mutex shutdown_mtx; // Global mutex for thread safety.
+std::atomic<bool> ppm_reload_pending(false);
 
 PPMManager ppmManager;
 
@@ -92,6 +93,14 @@ std::mutex cv_mtx;
  */
 std::atomic<bool> exit_wspr_loop(false);
 
+void ppm_callback(double new_ppm)
+{
+    // TODO: Handle resetting DMA
+    config.ppm = new_ppm;
+    ppm_reload_pending.store(true);
+    return;
+}
+
 bool ppm_init()
 {
     // Initialize PPM Manager
@@ -120,7 +129,7 @@ bool ppm_init()
         break;
     }
 
-    llog.logS(INFO, "Current PPM:", ppmManager.getCurrentPPM());
+    ppmManager.setPPMCallback(ppm_callback);
     return true;
 }
 
@@ -133,6 +142,11 @@ void wspr_loop()
         {
             llog.logE(FATAL, "Unable to initialze NTP features.");
             return;
+        }
+        else
+        {
+            config.ppm = ppmManager.getCurrentPPM();
+            llog.logS(INFO, "Current PPM:", config.ppm);
         }
     }
 
