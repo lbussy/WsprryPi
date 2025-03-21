@@ -67,13 +67,13 @@ ThreadPool::ThreadPool(size_t num_threads) : stop(false)
                     std::unique_lock<std::mutex> lock(queue_mutex);
                     condition.wait(lock, [this] { return stop || !tasks.empty(); });
                     if (stop && tasks.empty()) return;
-                    
+
                     while (!tasks.empty()) {
                         batch.push_back(std::move(tasks.front()));
                         tasks.pop();
                     }
                 }
-            
+
                 for (auto &task : batch) {
                     task();
                 }

@@ -12,10 +12,6 @@
 extern std::mutex transmit_mtx;
 extern std::atomic<bool> in_transmission;
 extern std::thread transmit_thread;
-extern std::vector<double> center_freq_set;
-extern std::optional<int> tx_iterations;
-extern bool loop_tx;
-extern float test_tone;
 
 /**
  * @enum ModeType

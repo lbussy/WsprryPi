@@ -9,6 +9,8 @@
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "arg_parser.hpp"
+#include "led_handler.hpp"
+#include "shutdown_handler.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -23,11 +25,6 @@
 std::atomic<bool> in_transmission(false);
 std::thread transmit_thread;
 std::mutex transmit_mtx;
-std::vector<double> center_freq_set = {}; ///< Vector of frequencies in Hz
-std::optional<int> tx_iterations;         ///< Number of transmissions before termination (if set)
-bool loop_tx = false;                     ///< Flag to enable repeated transmission cycles.
-float test_tone = 0.0;                    ///< Frequency for test tone mode.
-ModeType mode = ModeType::WSPR;           ///< Current operating mode.
 
 void perform_transmission(ModeType mode, double tx_freq)
 {
@@ -42,14 +39,14 @@ void perform_transmission(ModeType mode, double tx_freq)
             if (led_handler)
                 toggle_led(true);
             llog.logS(INFO, "Transmitting a test tone at",
-                      std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+                      lookup.freq_display_string(tx_freq));
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Sleep for 100ms
         }
     }
 
-    std::string mode_name = (wspr_interval.load()  == WSPR_2) ? "WSPR" : "WSPR-15";
+    std::string mode_name = (wspr_interval.load() == WSPR_2) ? "WSPR" : "WSPR-15";
     llog.logS(INFO, "Transmission started for", mode_name, "at",
-              std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
+              lookup.freq_display_string(tx_freq));
     in_transmission.store(true);
 
     // Turn on LED
@@ -109,7 +106,8 @@ void transmit_loop()
         {
             int current_minute = std::chrono::duration_cast<std::chrono::minutes>(
                                      now.time_since_epoch())
-                                     .count() % 60;
+                                     .count() %
+                                 60;
             int next_target = ((current_minute / 15) + 1) * 15 % 60;
             next_wakeup += std::chrono::minutes(next_target - current_minute);
             next_wakeup -= std::chrono::seconds(
@@ -127,7 +125,8 @@ void transmit_loop()
         {
             std::unique_lock<std::mutex> lock(transmit_mtx);
 
-            if (cv.wait_until(lock, next_wakeup, [] { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+            if (shutdown_cv.wait_until(lock, next_wakeup, []
+                                       { return exit_wspr_loop.load() || signal_shutdown.load(); }))
             {
                 llog.logS(DEBUG, "Transmit loop wake-up due to shutdown request.");
                 break;
@@ -141,38 +140,41 @@ void transmit_loop()
         }
 
         // Select transmission frequency
-        if (center_freq_set.empty())
+        if (config.center_freq_set.empty())
         {
             llog.logE(ERROR, "No frequencies available. Exiting transmit loop.");
             break;
         }
 
-        double tx_freq = center_freq_set[freq_index];
+        double tx_freq = config.center_freq_set[freq_index];
 
-        // **PERFORM TRANSMISSION HERE**
+        // ** TODO: PERFORM TRANSMISSION HERE**
         if (tx_freq != 0.0)
         {
-            llog.logS(INFO, "Transmitting on frequency:", std::fixed, std::setprecision(6), tx_freq / 1e6, "MHz.");
-            perform_transmission(mode, tx_freq);
+            llog.logS(INFO, "Transmitting on frequency:", lookup.freq_display_string(tx_freq));
+            perform_transmission(config.mode, tx_freq);
         }
         else
         {
             llog.logS(INFO, "Skipping transmission per 0.0 freq request in list.");
         }
 
-        freq_index = (freq_index + 1) % center_freq_set.size();
+        // Defered load if INI changes
+        apply_deferred_changes();
+
+        // Skip to next freq in list.
+        freq_index = (freq_index + 1) % config.center_freq_set.size();
 
         // Check if we've reached the transmission limit
-        if (!loop_tx)
+        if (!config.loop_tx)
         {
             total_iterations++;
-            size_t iterations = static_cast<size_t>(tx_iterations.value_or(1));
 
-            if (static_cast<size_t>(total_iterations) >= (iterations * center_freq_set.size()))
+            if (total_iterations >= (config.tx_iterations * static_cast<int>(config.center_freq_set.size())))
             {
                 llog.logS(INFO, "Completed all scheduled transmissions. Signaling shutdown.");
                 exit_wspr_loop.store(true); // Set exit flag
-                cv.notify_all();            // Wake up waiting threads
+                shutdown_cv.notify_all();   // Wake up waiting threads
                 break;
             }
         }

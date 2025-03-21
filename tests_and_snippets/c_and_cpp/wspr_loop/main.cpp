@@ -39,14 +39,67 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "scheduling.hpp"
+#include "signal_handler.hpp"
 #include "version.hpp"
 #include "logging.hpp"
 #include "singleton.hpp"
 
 // System headers
-#include <unistd.h> // For getpid()
+#include <unistd.h>
 
 constexpr const int SINGLETON_PORT = 1234;
+
+void main_shutdown(bool from_main)
+{
+    if (!from_main)
+    {                               
+        // Let wspr_loop know you're leaving
+        exit_wspr_loop.store(true); // Set exit flag
+        shutdown_cv.notify_all();   // Wake up any waiting threads
+    }
+    else
+    {
+        // Shutdown signal handler
+        if (handler) // Ensure handler is valid
+        {
+            SignalHandlerStatus status = handler->request_shutdown();
+
+            if (status == SignalHandlerStatus::ALREADY_STOPPED)
+            {
+                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
+            }
+            llog.logS(DEBUG, "Shutdown requested.");
+        }
+        else
+        {
+            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
+        }
+    }
+}
+
+/**
+ * @brief Custom signal handling function.
+ *
+ * This function is called when a signal is received. It logs the signal and,
+ * if critical, terminates immediately. Otherwise, it initiates a graceful shutdown.
+ *
+ * @param signum The signal number received.
+ * @param is_critical Indicates whether the signal is critical.
+ */
+void callback_signal_handler(int signum, bool is_critical)
+{
+    std::string_view signal_name = SignalHandler::signal_to_string(signum);
+    if (is_critical)
+    {
+        std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
+        std::quick_exit(signum);
+    }
+    else
+    {
+        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
+        main_shutdown();
+    }
+}
 
 /**
  * @brief Entry point for the WsprryPi application.
@@ -65,47 +118,28 @@ constexpr const int SINGLETON_PORT = 1234;
  *       The log level is set to INFO by default, but can be changed
  *       via a macro or configuration option.
  */
-int main(const int argc, char *const argv[])
+int main(int argc, char *argv[])
 {
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
-    // Parse command-line arguments and exit if invalid.
-    try {
-        parse_command_line(argc, argv);
-        try
-        {
-            // Validate configuration and ensure all required settings are present.
-            if (!validate_config_data())
-            {
-                llog.logE(ERROR, "Configuration validation failed.");
-                return EXIT_FAILURE;
-            }
-            // Display version, Raspberry Pi model, and process ID for context.
-            llog.logS(INFO, version_string());
-            llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-            llog.logS(INFO, "Process PID:", getpid());
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Exception caught validating configuration: " << e.what() << std::endl;
-            print_usage();
-            std::exit(EXIT_FAILURE);
-        }
-
-    } catch (const std::exception &e) {
-        std::cerr << "Exception caught processing arguments: " << e.what() << std::endl;
-        print_usage();
-        std::exit(EXIT_FAILURE);
+    // Make sure we are running as root
+    if (getuid() != 0)
+    {
+        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
+
+    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
+        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
+
+    // Display version, Raspberry Pi model, and process ID for context.
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Process PID:", getpid());
 
     SingletonProcess singleton(SINGLETON_PORT);
 
-    if (singleton())
-    {
-        llog.logS(DEBUG, "Singleton instance created successfully on port:", SINGLETON_PORT);
-    }
-    else
+    if (!singleton())
     {
         llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
         std::exit(EXIT_FAILURE);
@@ -114,6 +148,12 @@ int main(const int argc, char *const argv[])
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
 
+    // Register signal handlers for safe shutdown and terminal management.
+    handler = std::make_unique<SignalHandler>();
+    handler->block_signals();
+    handler->set_callback(callback_signal_handler);
+
+    // Startup WSPR loop
     try
     {
         wspr_loop();
@@ -127,6 +167,13 @@ int main(const int argc, char *const argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting normally.");
+    main_shutdown(true);
+    llog.logS(INFO, project_name(), "exiting.");
+
+    // Cleanup signal handler and pointer
+    handler->wait_for_shutdown();
+    handler->stop();
+    handler.reset();
+
     return EXIT_SUCCESS;
 }

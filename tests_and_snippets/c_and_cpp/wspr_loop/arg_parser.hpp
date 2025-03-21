@@ -42,23 +42,22 @@
 #include "monitorfile.hpp"
 #include "version.hpp"
 #include "wspr_message.hpp"
+#include "wspr_band_lookup.hpp"
+#include "transmit.hpp"
 
 // Standard library headers
 #include <optional>
 #include <atomic>
 #include <thread>
 
-extern std::thread ini_thread;
-extern bool useini;
-extern bool date_time_log;
-
 /**
  * @brief Global configuration instance for argument parsing.
  *
  * This global instance of `ArgParserConfig` holds the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is defined in `arg_parser.cpp` and declared
- * as `extern` in `arg_parser.hpp` so it can be accessed globally.
+ * command-line arguments and configuration settings which are
+ * not in the INI class, which are used throughout the application.
+ * It is defined in `arg_parser.cpp` and declared as `extern` in
+ * arg_parser.hpp` so it can be accessed globally.
  *
  * @note Ensure that `arg_parser.hpp` is included in any file that
  *       needs access to this configuration instance.
@@ -67,8 +66,36 @@ extern bool date_time_log;
  */
 struct ArgParserConfig
 {
-    double f_plld_clk; ///< Phase-Locked Loop D clock, default is 500 MHz
-    int mem_flag;      ///< TODO:  Define this - Placeholder for memory management flags.
+    ModeType mode;                       ///< Current operating mode.
+    bool use_ini;                        ///< Use INI file
+    // Contol
+    bool transmit;                       ///< Transmission enabled
+    // Common
+    std::string callsign;                ///< Callsign
+    std::string grid_square;             ///< Grid square
+    int power_dbm;                       ///< Transmit power dBm
+    std::string frequencies;             ///< Frequencies list
+    int tx_pin;                          ///< Pin to use for transmission signal
+    // Extended
+    double ppm;                          ///< PPM for frequency adjust
+    bool use_ntp;                        ///< Use NTP for frequency adjustments
+    bool use_offset;                     ///< Use a random offset when transmitting
+    int power_level;                     ///< Power level 0-7
+    bool use_led;                        ///< Use LED when transmitting
+    int led_pin;                         ///< Pin to use for TX indicator LED
+    // Server
+    int server_port;                     ///< Port for TCP server
+    bool use_shutdown;                   ///< Use shutdown pin
+    int shutdown_pin;                    ///< Pin to use for shutdown signal
+    // Command line only
+    bool date_time_log;                  ///< Use Date/time prefix on output
+    bool loop_tx;                        ///< Loop until canceled
+    int tx_iterations;                   ///< How many frequency list iterations to loop through
+    double test_tone;                    ///< Frequency for test tone
+    // Running variables
+    std::vector<double> center_freq_set; ///< Vector of frequencies in Hz
+    double f_plld_clk;                   ///< Phase-Locked Loop D clock, default is 500 MHz
+    int mem_flag;                        ///< TODO:  Define this - Placeholder for memory management flags.
     /**
      * @brief Default constructor initializing all configuration parameters.
      *
@@ -76,7 +103,35 @@ struct ArgParserConfig
      * - `f_plld_clk = 0.0`
      * - `mem_flag = 0`
      */
-    ArgParserConfig() : f_plld_clk(0.0),
+    ArgParserConfig() : mode(ModeType::WSPR),
+                        use_ini(false),
+                        // Control
+                        transmit(false),
+                        // Common
+                        callsign(""),
+                        grid_square(""),
+                        power_dbm(0),
+                        frequencies(""),
+                        tx_pin(-1),
+                        // Extended
+                        ppm(0.0),
+                        use_ntp(false),
+                        use_offset(false),
+                        power_level(7),
+                        use_led(false),
+                        led_pin(-1),
+                        // Server
+                        server_port(31415),
+                        use_shutdown(false),
+                        shutdown_pin(-1),
+                        // Command line only
+                        date_time_log(false),
+                        loop_tx(false),
+                        tx_iterations(0),
+                        test_tone(0.0),
+                        // Running variables
+                        center_freq_set({}),
+                        f_plld_clk(0.0),
                         mem_flag(0)
     {
     }
@@ -84,6 +139,8 @@ struct ArgParserConfig
 
 // Extern declaration for global configuration object.
 extern ArgParserConfig config;
+
+extern WSPRBandLookup lookup;
 
 /**
  * @brief Global instance of the IniFile configuration handler.
@@ -171,61 +228,86 @@ extern std::atomic<int> wspr_interval;
 extern std::atomic<bool> ini_reload_pending;
 
 /**
- * @brief Monitors the INI file for changes and handles configuration reload.
+ * @brief Callback for INI file change detection
  *
- * This function runs as a background thread, periodically checking for changes
- * in the INI configuration file. When a change is detected:
- * - If the system is not transmitting, it immediately reloads the configuration
- *   by calling `validate_config_data()`.
- * - If a transmission is ongoing, it sets the `ini_reload_pending` flag to defer
- *   the reload until the transmission completes.
+ * This function runs as a background thread, periodically checking
+ * if the monitored INI file has been modified. When a change is detected:
  *
- * The thread runs continuously until the `exit_wspr_loop` flag is set to true,
- * signaling shutdown.
- *
- * @note This function is intended to be executed as a separate thread and does
- *       not return until shutdown is requested.
- *
- * @see validate_config_data(), ini_reload_pending, exit_wspr_loop
+ * - It sets a deferred reload flag (`ini_reload_pending`) to apply the
+ *   changes after the transmission completes.
  */
-extern void ini_monitor_thread();
+void callback_ini_changed();
 
 /**
- * @brief Converts a string to uppercase.
+ * @brief Monitors the INI configuration file for changes.
  *
- * This function takes an input string and returns a new string where all
- * characters have been converted to uppercase. It ensures proper handling
- * of character conversion by using `std::toupper` with an explicit cast to `unsigned char`.
- *
- * @param str The input string to be converted.
- * @return A new string with all characters converted to uppercase.
- *
- * @example
- * @code
- * std::string result = to_uppercase("Hello");
- * // result = "HELLO"
- * @endcode
+ * This is called to check if the monitored INI file has been modified.
+ * When a change is detected it reloads the configuration by calling
+ * `validate_config_data()`.
  */
-extern std::string to_uppercase(const std::string &str);
-
-std::optional<double> string_to_frequency(std::string_view option);
+extern void apply_deferred_changes();
 
 /**
  * @brief Displays the usage information for the WsprryPi application.
  *
- * This function prints out a brief help message to `std::cerr`, outlining
- * the command-line syntax and key options available. It provides a minimal
- * reference for users and suggests consulting the documentation for more
- * details on all available options.
+ * This function prints a brief help message to `std::cerr`, outlining
+ * the command-line syntax and key options available. Optionally, an error
+ * message can be displayed before the usage information.
  *
- * @note This function does not return but simply prints to `std::cerr`.
+ * The function also determines whether the program exits or continues
+ * running based on the `exit_code` parameter.
+ *
+ * @note This function **always terminates the program**, unless `exit_code`
+ *       is `3`, in which case it simply returns.
+ *
+ * @param message An optional error message to display before the usage
+ *        information. If empty, only the usage message is shown.
+ * @param exit_code Determines the program's exit behavior:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
+ *
+ * @example
+ * **Returning (does not exit):**
+ * @code
+ * print_usage();               // Prints usage and returns (default: exit_code = 3).
+ * print_usage("Invalid args"); // Prints error message, then usage, returns.
+ * print_usage(3);              // Prints usage and returns.
+ * @endcode
+ *
+ * **Exiting the program:**
+ * @code
+ * print_usage(0);              // Prints usage and exits with EXIT_SUCCESS.
+ * print_usage(1);              // Prints usage and exits with EXIT_FAILURE.
+ * print_usage("Fatal error", 1); // Prints error message, then exits with EXIT_FAILURE.
+ * print_usage("Custom exit", 5); // Prints error message, then exits with code 5.
+ * @endcode
+ */
+void print_usage(const std::string &message = "", int exit_code = 3);
+
+/**
+ * @brief Displays usage information and exits or returns based on the exit code.
+ *
+ * This overload allows calling `print_usage()` with just an exit code.
+ * It redirects to the main `print_usage()` function with an empty message.
+ *
+ * @note This function follows the same exit behavior as the primary function:
+ *        - `0` → Exits with `EXIT_SUCCESS`.
+ *        - `1` → Exits with `EXIT_FAILURE`.
+ *        - `3` → Returns from the function without exiting.
+ *        - Any other value → Calls `std::exit(exit_code)`.
+ *
+ * @param exit_code The exit code to use for termination or return behavior.
  *
  * @example
  * @code
- * print_usage(); // Outputs the help message to standard error.
+ * print_usage(1); // Outputs usage and exits with EXIT_FAILURE.
+ * print_usage(3); // Outputs usage and returns.
+ * print_usage(0); // Outputs usage and exits with EXIT_SUCCESS.
  * @endcode
  */
-extern void print_usage();
+inline void print_usage(int exit_code);
 
 /**
  * @brief Displays the current configuration values from the INI file.
@@ -253,6 +335,8 @@ extern void show_config_values(bool reload = false);
  */
 extern bool validate_config_data();
 
+extern bool load_from_ini();
+
 /**
  * @brief Parses command-line arguments and configures the program settings.
  *
@@ -268,6 +352,8 @@ extern bool validate_config_data();
  * @param argv The array of command-line argument strings.
  * @return true if parsing is successful, false if an error occurs.
  */
-bool parse_command_line(int argc, char *const argv[]);
+bool parse_command_line(int argc, char *argv[]);
+
+bool load_config(int argc, char *argv[]);
 
 #endif // ARG_PARSER_HPP
