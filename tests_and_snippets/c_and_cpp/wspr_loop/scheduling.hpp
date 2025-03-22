@@ -46,6 +46,8 @@
 #include <string>
 #include <thread>
 
+extern std::atomic<bool> shutdown_flag;
+
 extern PPMManager ppmManager;
 
 /**
@@ -65,6 +67,8 @@ extern std::condition_variable shutdown_cv;
  * and associated threads.
  */
 extern std::atomic<bool> exit_wspr_loop;
+
+extern void callback_shutdown_system();
 
 /**
  * @brief Manages the main WSPR transmission loop.

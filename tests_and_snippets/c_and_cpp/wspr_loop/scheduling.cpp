@@ -39,13 +39,12 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "constants.hpp"
+#include "gpio_input.hpp"
+#include "gpio_output.hpp"
+#include "logging.hpp"
+#include "ppm_manager.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
-#include "logging.hpp"
-#include "gpio_handler.hpp"
-#include "ppm_manager.hpp"
-#include "led_handler.hpp"
-#include "shutdown_handler.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -64,6 +63,7 @@
 
 std::mutex shutdown_mtx; // Global mutex for thread safety.
 std::atomic<bool> ppm_reload_pending(false);
+std::atomic<bool> shutdown_flag{false};
 
 PPMManager ppmManager;
 
@@ -133,6 +133,21 @@ bool ppm_init()
     return true;
 }
 
+void callback_shutdown_system()
+{
+    llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
+    for (int i = 0; i < 3; ++i)
+    {
+        ledControl.toggle_gpio(true); // Set pin active (high)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        ledControl.toggle_gpio(false); // Set pin active (high)
+        if (i < 3) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    exit_wspr_loop.store(true); // Set exit flag
+    shutdown_cv.notify_all();   // Wake up any waiting threads
+    shutdown_flag.store(true);  // Set shutdown system flag
+}
+
 void wspr_loop()
 {
     // Begin tracking PPM clock variance
@@ -153,6 +168,7 @@ void wspr_loop()
     llog.logS(INFO, "WSPR loop running.");
 
     // Start the transmit thread.
+    // TODO: Thread this better
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
@@ -165,21 +181,17 @@ void wspr_loop()
     ppmManager.stop();
     // Stop INI Monitor
     iniMonitor.stop();
-    // Signal shutdown.
-    signal_shutdown.store(true);
+    // Stop LED control
+    ledControl.stop();
+    // Stop shutdown monitor
+    shutdownMonitor.stop();
+
     // Cleanup threads
     shutdown_threads();
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
-    if (led_handler)
-        toggle_led(false);
-    led_handler.reset();
-    shutdown_handler.reset();
-
     // Identify any stuck threads
-    if (button_thread.joinable()) // TODO: Update class
-        llog.logS(WARN, "Button thread still running.");
     if (transmit_thread.joinable()) // TODO: Create new class
         llog.logS(WARN, "Transmit thread still running.");
 
@@ -191,7 +203,6 @@ void shutdown_threads()
     std::lock_guard<std::mutex> lock(shutdown_mtx);
 
     llog.logS(INFO, "Shutting down all active threads.");
-    signal_shutdown.store(true);
 
     auto safe_join = [](std::thread &t, const std::string &name)
     {
@@ -207,8 +218,7 @@ void shutdown_threads()
         }
     };
 
-    safe_join(transmit_thread, "Transmit thread");     // TODO: Create a class
-    safe_join(button_thread, "Button monitor thread"); // TODO: Change this class
+    safe_join(transmit_thread, "Transmit thread"); // TODO: Create a class
 
     llog.logS(INFO, "All threads shut down safely.");
 }

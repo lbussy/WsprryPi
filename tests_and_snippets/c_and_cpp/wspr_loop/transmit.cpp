@@ -3,14 +3,12 @@
 // Primary header for this source file
 #include "transmit.hpp"
 
+#include "arg_parser.hpp"
 #include "constants.hpp"
-#include "gpio_handler.hpp"
+#include "gpio_output.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
-#include "arg_parser.hpp"
-#include "led_handler.hpp"
-#include "shutdown_handler.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -36,8 +34,7 @@ void perform_transmission(ModeType mode, double tx_freq)
         while (true)
         {
             // Turn on LED
-            if (led_handler)
-                toggle_led(true);
+            ledControl.toggle_gpio(true);
             llog.logS(INFO, "Transmitting a test tone at",
                       lookup.freq_display_string(tx_freq));
             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Sleep for 100ms
@@ -50,8 +47,7 @@ void perform_transmission(ModeType mode, double tx_freq)
     in_transmission.store(true);
 
     // Turn on LED
-    if (led_handler)
-        toggle_led(true);
+    ledControl.toggle_gpio(true);
 
     // TODO: This is a dummy value
     int duration = (wspr_interval.load() * 60) - (5 * wspr_interval.load());
@@ -62,7 +58,7 @@ void perform_transmission(ModeType mode, double tx_freq)
     while (std::chrono::steady_clock::now() < end_time)
     {
         // Monitor for shutdown while transmitting
-        if (exit_wspr_loop.load() || signal_shutdown.load())
+        if (exit_wspr_loop.load())
         {
             llog.logS(WARN, "Transmission aborted due to shutdown.");
             break;
@@ -72,8 +68,7 @@ void perform_transmission(ModeType mode, double tx_freq)
     }
 
     // Turn off LED
-    if (led_handler)
-        toggle_led(false);
+    ledControl.toggle_gpio(false);
 
     in_transmission.store(false);
     llog.logS(INFO, "Transmission ended.");
@@ -84,7 +79,7 @@ void transmit_loop()
     size_t freq_index = 0;
     int total_iterations = 0;
 
-    while (!exit_wspr_loop.load() && !signal_shutdown.load())
+    while (!exit_wspr_loop.load())
     {
         auto now = std::chrono::system_clock::now();
         auto next_wakeup = now;
@@ -126,7 +121,7 @@ void transmit_loop()
             std::unique_lock<std::mutex> lock(transmit_mtx);
 
             if (shutdown_cv.wait_until(lock, next_wakeup, []
-                                       { return exit_wspr_loop.load() || signal_shutdown.load(); }))
+                                       { return exit_wspr_loop.load(); }))
             {
                 llog.logS(DEBUG, "Transmit loop wake-up due to shutdown request.");
                 break;
@@ -134,7 +129,7 @@ void transmit_loop()
         }
 
         // Final shutdown check before transmission
-        if (exit_wspr_loop.load() || signal_shutdown.load())
+        if (exit_wspr_loop.load())
         {
             break;
         }

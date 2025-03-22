@@ -38,14 +38,14 @@
 
 // Project headers
 #include "constants.hpp"
+#include "gpio_input.hpp"
+#include "gpio_output.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "transmit.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
-#include "led_handler.hpp"
-#include "shutdown_handler.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -480,23 +480,23 @@ bool validate_config_data()
     // Enable LED only if set and the pin is valid
     if (config.use_led && (config.led_pin >= 0 && config.led_pin <= 27))
     {
-        enable_led_pin(led_pin_number);
+        ledControl.enable_gpio_pin(config.led_pin, true);
     }
     else
     {
         llog.logS(DEBUG, "Invalid or disabled LED settings, turning off LED.");
-        disable_led_pin();
+        ledControl.stop();
     }
 
     // Enable shutdown button only if it's desired and the pin is valid
     if (config.use_shutdown && (config.shutdown_pin >= 0 && config.shutdown_pin <= 27))
     {
-        enable_shutdown_pin(shutdown_pin_number);
+        shutdownMonitor.enable(config.shutdown_pin, false, GPIOInput::PullMode::PullUp, callback_shutdown_system);
     }
     else
     {
         llog.logS(DEBUG, "Invalid or disabled shutdown settings, disabling functionality.");
-        disable_shutdown_pin();
+        shutdownMonitor.stop();
     }
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)

@@ -44,38 +44,16 @@
 #include "logging.hpp"
 #include "singleton.hpp"
 
+// Standard headers
+#include <atomic>
+
 // System headers
 #include <unistd.h>
 
 constexpr const int SINGLETON_PORT = 1234;
 
-void main_shutdown(bool from_main)
-{
-    if (!from_main)
-    {                               
-        // Let wspr_loop know you're leaving
-        exit_wspr_loop.store(true); // Set exit flag
-        shutdown_cv.notify_all();   // Wake up any waiting threads
-    }
-    else
-    {
-        // Shutdown signal handler
-        if (handler) // Ensure handler is valid
-        {
-            SignalHandlerStatus status = handler->request_shutdown();
-
-            if (status == SignalHandlerStatus::ALREADY_STOPPED)
-            {
-                llog.logS(DEBUG, "Shutdown already in progress. Ignoring duplicate request.");
-            }
-            llog.logS(DEBUG, "Shutdown requested.");
-        }
-        else
-        {
-            llog.logE(ERROR, "Handler is null. Cannot request shutdown.");
-        }
-    }
-}
+// Global unique instance of SignalHandler.
+SignalHandler signalHandler;
 
 /**
  * @brief Custom signal handling function.
@@ -88,7 +66,7 @@ void main_shutdown(bool from_main)
  */
 void callback_signal_handler(int signum, bool is_critical)
 {
-    std::string_view signal_name = SignalHandler::signal_to_string(signum);
+    std::string_view signal_name = SignalHandler::signalToString(signum);
     if (is_critical)
     {
         std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
@@ -97,7 +75,9 @@ void callback_signal_handler(int signum, bool is_critical)
     else
     {
         llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
-        main_shutdown();
+        // Let wspr_loop know you're leaving
+        exit_wspr_loop.store(true); // Set exit flag
+        shutdown_cv.notify_all();   // Wake up any waiting threads
     }
 }
 
@@ -149,9 +129,10 @@ int main(int argc, char *argv[])
     show_config_values();
 
     // Register signal handlers for safe shutdown and terminal management.
-    handler = std::make_unique<SignalHandler>();
-    handler->block_signals();
-    handler->set_callback(callback_signal_handler);
+    block_signals();
+    signalHandler.setPriority(10);
+    signalHandler.setCallback(callback_signal_handler);
+    signalHandler.start();
 
     // Startup WSPR loop
     try
@@ -167,13 +148,18 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    main_shutdown(true);
     llog.logS(INFO, project_name(), "exiting.");
 
-    // Cleanup signal handler and pointer
-    handler->wait_for_shutdown();
-    handler->stop();
-    handler.reset();
+    // Stop the SignalHandler.
+    signalHandler.stop();
+
+    // Shutdown if set
+    if (shutdown_flag.load())
+    {
+        llog.logS(INFO, "Shutting down.");
+        sync(); // Flush file system buffers
+        std::system("shutdown -h now &");
+    }
 
     return EXIT_SUCCESS;
 }
