@@ -1,33 +1,34 @@
-
 /**
- * @class GPIOInput
- * @brief Monitors a GPIO pin using libgpiod with thread-based event handling.
+ * @file gpio_input.cpp
+ * @brief Handles shutdown button sensing.
  *
- * This class allows for edge-triggered monitoring of a GPIO pin using the
- * libgpiod C++ API. It supports edge detection (rising or falling), optional
- * internal pull-up or pull-down configuration, CPU priority control, debounce
- * management, and thread-safe lifecycle operations.
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a deriivative work.
  *
- * Designed for use on the Raspberry Pi platform with BCM GPIO numbering,
- * the class is thread-based and suitable for global instantiation.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
- * Example usage:
- * @code
- * GPIOInput monitor;
- * monitor.enable(19, false, GPIOInput::PullMode::PullUp, []() {
- *     std::cout << "Shutdown button pressed." << std::endl;
- * });
- * @endcode
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * The monitoring thread will invoke the callback only once per edge trigger
- * until resetTrigger() is called. The thread can be stopped, reconfigured,
- * and restarted as needed.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Dependencies:
- *  - libgpiod >= 1.6
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * Thread-safe: Yes
- * Reentrant: No
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #include "gpio_input.hpp"

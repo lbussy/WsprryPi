@@ -1,5 +1,3 @@
-// TODO:  Check Doxygen
-
 /**
  * @file scheduling.cpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
@@ -62,57 +60,127 @@
 #include <string.h>
 #include <sys/resource.h>
 
-std::mutex shutdown_mtx; // Global mutex for thread safety.
+/**
+ * @brief Global mutex for coordinating shutdown and thread safety.
+ *
+ * Used to protect shared data during shutdown, ensuring only one thread
+ * initiates and executes the shutdown procedure.
+ */
+std::mutex shutdown_mtx;
+
+/**
+ * @brief Atomic flag indicating that a new PPM value needs to be applied.
+ *
+ * Set to `true` when a new PPM value has been received, signaling that
+ * subsystems should reload or reconfigure based on the new frequency offset.
+ */
 std::atomic<bool> ppm_reload_pending(false);
+
+/**
+ * @brief Atomic flag indicating that a shutdown sequence has begun.
+ *
+ * Set by GPIO or system-triggered shutdown paths to initiate coordinated
+ * shutdown across all subsystems.
+ */
 std::atomic<bool> shutdown_flag{false};
 
+/**
+ * @brief Global instance of the PPMManager class.
+ *
+ * Responsible for measuring and managing frequency drift (PPM)
+ * using either NTP data or internal estimation methods.
+ */
 PPMManager ppmManager;
+
+/**
+ * @brief Global instance of the TCP server.
+ *
+ * Listens for incoming TCP connections and processes supported
+ * WSPR server commands (e.g., frequency, grid, power).
+ */
 TCP_Server server;
+
+/**
+ * @brief Global instance of the TCP command handler.
+ *
+ * Provides the interface for parsing and executing incoming TCP commands.
+ * Works in coordination with `TCP_Server`.
+ */
 TCP_Commands handler;
 
 /**
- * @brief Condition variable used for thread synchronization.
+ * @brief Condition variable used to wait for shutdown signals.
  *
- * This condition variable allows the scheduler thread to wait for
- * specific conditions, such as the exit signal or the next transmission
- * interval.
+ * Used primarily by the main `wspr_loop()` to block execution
+ * until an exit signal is triggered (e.g., via GPIO, CLI, or remote command).
  */
 std::condition_variable shutdown_cv;
 
 /**
- * @brief Mutex for protecting access to shared resources.
+ * @brief Mutex for protecting access to shared condition variables.
  *
- * This mutex is used to synchronize access to shared data between threads,
- * ensuring thread safety when accessing the condition variable.
+ * Ensures safe concurrent access when using `shutdown_cv` or other
+ * related state variables during wait/notify operations.
  */
 std::mutex cv_mtx;
 
 /**
- * @brief Atomic flag indicating when the WSPR loop should exit.
+ * @brief Atomic flag used to exit the main WSPR loop.
  *
- * This flag allows threads to gracefully exit by checking its value.
- * It is set to `true` when the program needs to terminate the loop
- * and associated threads.
+ * This is the central control flag for stopping the main transmission loop.
+ * Set to `true` when a shutdown is triggered to begin safe thread teardown.
  */
 std::atomic<bool> exit_wspr_loop(false);
 
+/**
+ * @brief Callback function to update the configured PPM (frequency offset).
+ *
+ * @details
+ * This function updates the global `config.ppm` value with a new PPM correction
+ * value. It also sets the `ppm_reload_pending` flag to notify other parts of
+ * the system that a reload or recalibration is necessary.
+ *
+ * This function may be triggered by user input, external calibration, or 
+ * another subsystem responsible for frequency adjustments.
+ *
+ * @param new_ppm The new PPM correction value to apply.
+ */
 void ppm_callback(double new_ppm)
 {
-    // TODO: Handle resetting DMA
+    // TODO: Handle resetting the DMA subsystem if required after PPM change.
     config.ppm = new_ppm;
     ppm_reload_pending.store(true);
     return;
 }
 
+/**
+ * @brief Initializes the PPM manager and registers a callback.
+ *
+ * @details
+ * This function attempts to initialize the `ppmManager`, which is responsible
+ * for calculating or retrieving the system's PPM (parts per million) drift
+ * for accurate frequency generation.
+ *
+ * The initialization result is evaluated, and appropriate logging is performed
+ * based on the returned `PPMStatus`. Critical failure conditions such as
+ * high PPM or lack of time synchronization cause the function to return `false`.
+ * If successful or recoverable, the PPM callback is registered.
+ *
+ * @return `true` if initialization succeeded or fallback is acceptable.  
+ * @return `false` if a critical error was detected (e.g., high PPM or unsynced time).
+ *
+ * @note
+ * The `ppm_callback()` will be triggered later to handle live updates to PPM.
+ */
 bool ppm_init()
 {
-    // Initialize PPM Manager
+    // Initialize the PPM Manager
     PPMStatus status = ppmManager.initialize();
 
     switch (status)
     {
     case PPMStatus::SUCCESS:
-        llog.logS(DEBUG, "PPM Manager initialized sucessfully.");
+        llog.logS(DEBUG, "PPM Manager initialized successfully.");
         break;
 
     case PPMStatus::WARNING_HIGH_PPM:
@@ -136,29 +204,78 @@ bool ppm_init()
     return true;
 }
 
+/**
+ * @brief Callback function triggered to perform a system shutdown sequence.
+ *
+ * @details
+ * This function is intended to be called when a shutdown GPIO event is triggered.
+ * It performs a visual blink pattern on the configured LED pin, sets the shutdown
+ * flags, and notifies all threads waiting on the shutdown condition variable.
+ *
+ * Specifically:
+ * - Logs that a shutdown was initiated from GPIO.
+ * - Toggles the LED 3 times with 100ms intervals.
+ * - Sets `exit_wspr_loop` to break out of the main transmission loop.
+ * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
+ *
+ * @note
+ * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware supports it.
+ */
 void callback_shutdown_system()
 {
     llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
+
     for (int i = 0; i < 3; ++i)
     {
-        ledControl.toggle_gpio(true); // Set pin active (high)
+        ledControl.toggle_gpio(true); // LED ON
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        ledControl.toggle_gpio(false); // Set pin active (high)
-        if (i < 3) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        ledControl.toggle_gpio(false); // LED OFF
+        if (i < 2)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
     }
-    exit_wspr_loop.store(true); // Set exit flag
-    shutdown_cv.notify_all();   // Wake up any waiting threads
-    shutdown_flag.store(true);  // Set shutdown system flag
+
+    exit_wspr_loop.store(true);  // Signal WSPR loop to exit
+    shutdown_cv.notify_all();    // Wake any threads blocked on shutdown
+    shutdown_flag.store(true);   // Indicate shutdown sequence active
 }
 
+/**
+ * @brief Main control loop for WSPR operation.
+ *
+ * @details
+ * This function initializes and coordinates all core components required for
+ * WSPR transmission. It sets up optional NTP-based PPM correction, launches
+ * the TCP server, spawns the transmission handler thread, and blocks until
+ * a shutdown signal is received.
+ *
+ * When signaled to exit, it cleanly shuts down all background services and
+ * threads in the correct order.
+ *
+ * Main responsibilities:
+ * - Initialize and apply NTP-based PPM correction (if enabled).
+ * - Start the TCP server and configure its thread priority.
+ * - Launch the transmission loop in a background thread.
+ * - Wait for shutdown signal via `shutdown_cv`.
+ * - Stop all subsystems and perform thread cleanup.
+ *
+ * @note This function blocks until `exit_wspr_loop` is set by another thread.
+ * @todo Consider encapsulating transmission thread in a proper class wrapper.
+ * @todo Improve lifecycle/thread management with unified control.
+ */
 void wspr_loop()
 {
-    // Begin tracking PPM clock variance
+    // -------------------------------------------------------------------------
+    // Optional: Start NTP-based PPM tracking
+    // -------------------------------------------------------------------------
     if (config.use_ntp)
     {
         if (!ppm_init())
         {
-            llog.logE(FATAL, "Unable to initialze NTP features.");
+            llog.logE(FATAL, "Unable to initialize NTP features.");
             return;
         }
         else
@@ -168,10 +285,12 @@ void wspr_loop()
         }
     }
 
-    // Start the TCP server with our callback.
-    if (! server.start(config.server_port, &handler))
+    // -------------------------------------------------------------------------
+    // Start TCP Server
+    // -------------------------------------------------------------------------
+    if (!server.start(config.server_port, &handler))
     {
-        llog.logE(FATAL, "Unable to initialze TCP server.");
+        llog.logE(FATAL, "Unable to initialize TCP server.");
         return;
     }
     else
@@ -180,49 +299,74 @@ void wspr_loop()
         llog.logS(INFO, "TCP server running on port:", config.server_port);
     }
 
-
     llog.logS(INFO, "WSPR loop running.");
 
-    // Start the transmit thread.
-    // TODO: Thread this better
+    // -------------------------------------------------------------------------
+    // Start transmission thread
+    // -------------------------------------------------------------------------
+    // TODO: Encapsulate transmit_thread into a dedicated class
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
-    // Wait for exit signal (shutdown_cv).
+    // -------------------------------------------------------------------------
+    // Block until shutdown is triggered
+    // -------------------------------------------------------------------------
     std::unique_lock<std::mutex> lock(cv_mtx);
     shutdown_cv.wait(lock, []
-                     { return exit_wspr_loop.load(); });
+    {
+        return exit_wspr_loop.load();
+    });
 
-    // Stop PPM Manager
-    ppmManager.stop();
-    // Stop the TCP server
-    server.stop();
-    // Stop INI Monitor
-    iniMonitor.stop();
-    // Stop LED control
-    ledControl.stop();
-    // Stop shutdown monitor
-    shutdownMonitor.stop();
+    // -------------------------------------------------------------------------
+    // Shutdown and cleanup
+    // -------------------------------------------------------------------------
+    ppmManager.stop();         // Stop PPM manager (if active)
+    server.stop();             // Stop TCP server
+    iniMonitor.stop();         // Stop config file monitor
+    ledControl.stop();         // Stop LED driver
+    shutdownMonitor.stop();    // Stop shutdown GPIO monitor
 
-    // Cleanup threads
-    shutdown_threads();
+    shutdown_threads();        // Join and cleanup all threads
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
-    // Identify any stuck threads
-    if (transmit_thread.joinable()) // TODO: Create new class
+    // -------------------------------------------------------------------------
+    // Final check: confirm all threads have exited
+    // -------------------------------------------------------------------------
+    if (transmit_thread.joinable()) // TODO: Wrap with class
+    {
         llog.logS(WARN, "Transmit thread still running.");
+    }
 
     return;
 }
 
+/**
+ * @brief Safely shuts down all active worker threads.
+ *
+ * @details
+ * This function ensures a clean shutdown by joining any running threads
+ * after acquiring a lock on `shutdown_mtx`. It uses a local `safe_join` lambda
+ * to check if a thread is joinable before attempting to join it, avoiding
+ * exceptions or undefined behavior.
+ *
+ * Currently, it handles:
+ * - `transmit_thread`: The main signal transmission loop.
+ *
+ * This pattern ensures that threads are safely joined before the program exits.
+ *
+ * @note
+ * If a thread is already joined or never started, it is skipped safely.
+ * Additional threads should be added here as the application grows.
+ */
 void shutdown_threads()
 {
     std::lock_guard<std::mutex> lock(shutdown_mtx);
 
     llog.logS(INFO, "Shutting down all active threads.");
 
-    auto safe_join = [](std::thread &t, const std::string &name)
+    // Helper lambda to safely join threads with logging
+    auto safe_join = [](std::thread& t, const std::string& name)
     {
         if (t.joinable())
         {

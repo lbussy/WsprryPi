@@ -1,5 +1,3 @@
-// TODO:  Check Doxygen
-
 /**
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
@@ -357,32 +355,6 @@ void print_usage(const std::string &message, int exit_code)
         std::exit(exit_code);
         break;
     }
-}
-
-/**
- * @brief Displays usage information and exits or returns based on the exit code.
- *
- * This overload allows calling `print_usage()` with just an exit code.
- * It redirects to the main `print_usage()` function with an empty message.
- *
- * @note This function follows the same exit behavior as the primary function:
- *        - `0` → Exits with `EXIT_SUCCESS`.
- *        - `1` → Exits with `EXIT_FAILURE`.
- *        - `3` → Returns from the function without exiting.
- *        - Any other value → Calls `std::exit(exit_code)`.
- *
- * @param exit_code The exit code to use for termination or return behavior.
- *
- * @example
- * @code
- * print_usage(1); // Outputs usage and exits with EXIT_FAILURE.
- * print_usage(3); // Outputs usage and returns.
- * print_usage(0); // Outputs usage and exits with EXIT_SUCCESS.
- * @endcode
- */
-inline void print_usage(int exit_code)
-{
-    print_usage("", exit_code);
 }
 
 /**

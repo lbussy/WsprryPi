@@ -1,5 +1,3 @@
-// TODO:  Check Doxygen
-
 /**
  * @file scheduling.hpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
@@ -46,48 +44,87 @@
 #include <string>
 #include <thread>
 
+/**
+ * @brief Flag indicating if a system shutdown is in progress.
+ *
+ * @details
+ * This atomic flag is used throughout the application to signal when a
+ * full system shutdown has been initiated. It is typically set during a
+ * GPIO-triggered shutdown or from a critical failure path.
+ *
+ * Other threads can poll or wait on this flag to terminate safely.
+ */
 extern std::atomic<bool> shutdown_flag;
 
+/**
+ * @brief Global instance of the PPM (parts-per-million) manager.
+ *
+ * @details
+ * Responsible for calculating and managing the system's frequency
+ * correction based on clock drift or NTP data. Provides runtime
+ * adjustments for frequency stability during WSPR transmission.
+ */
 extern PPMManager ppmManager;
 
 /**
- * @brief Condition variable used for thread synchronization.
+ * @brief Condition variable used for shutdown synchronization.
  *
- * This condition variable allows the scheduler thread to wait for
- * specific conditions, such as the exit signal or the next transmission
- * interval.
+ * @details
+ * Allows threads to block until a shutdown event occurs, such as a signal
+ * from a GPIO input or user request. Typically used in conjunction with
+ * `exit_wspr_loop`.
  */
 extern std::condition_variable shutdown_cv;
 
 /**
- * @brief Atomic flag indicating when the scheduler should exit.
+ * @brief Flag used to signal exit from the main WSPR loop.
  *
- * This flag allows threads to gracefully exit by checking its value.
- * It is set to `true` when the program needs to terminate the scheduler
- * and associated threads.
+ * @details
+ * This atomic boolean flag is set to `true` when the WSPR loop and
+ * associated subsystems should terminate. It is checked by the main
+ * `wspr_loop()` and other threads to trigger graceful shutdown.
  */
 extern std::atomic<bool> exit_wspr_loop;
 
+/**
+ * @brief Callback triggered by a shutdown GPIO event.
+ *
+ * @details
+ * This function is executed when a shutdown pin is activated.
+ * It performs visual signaling (e.g., LED blinks), sets shutdown flags,
+ * and notifies waiting threads to begin system shutdown procedures.
+ *
+ * @note This is usually registered with a GPIO monitor.
+ */
 extern void callback_shutdown_system();
 
 /**
- * @brief Manages the main WSPR transmission loop.
+ * @brief Runs the main WSPR scheduler and transmission loop.
  *
- * This function runs the primary WSPR transmission loop, coordinating the
- * INI monitor thread and the scheduler thread. It continuously:
- * - Starts the `ini_monitor_thread` to detect INI file changes.
- * - Spawns the `scheduler_thread` to manage transmission intervals.
- * - Waits for the scheduler to signal transmission readiness.
- * - Initiates a transmission when the interval is reached.
+ * @details
+ * Coordinates all core runtime components:
+ * - Initializes optional NTP/PPM drift correction.
+ * - Starts the TCP command server and sets its priority.
+ * - Launches the WSPR transmission thread.
+ * - Waits on the `shutdown_cv` condition variable for a shutdown signal.
+ * - Performs full cleanup and shutdown sequence before exiting.
  *
- * The loop exits when the `exit_wspr_loop` atomic flag is set.
- *
- * @note This function runs until externally signaled to stop.
- *
- * @return void
+ * @note This function blocks and runs until `exit_wspr_loop` is set to `true`.
  */
 extern void wspr_loop();
 
+/**
+ * @brief Joins and terminates all active application threads.
+ *
+ * @details
+ * Acquires the thread shutdown mutex and attempts to join any remaining
+ * worker threads, ensuring all subsystems are stopped cleanly before
+ * final shutdown.
+ *
+ * @note This should be called at the end of `wspr_loop()` or any forced exit.
+ *
+ * @todo Consider encapsulating threads in a management class.
+ */
 void shutdown_threads();
 
 #endif // _SCHEDULING_HPP

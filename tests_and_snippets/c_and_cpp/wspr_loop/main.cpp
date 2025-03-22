@@ -1,5 +1,3 @@
-// TODO:  Check Doxygen
-
 /**
  * @file main.cpp
  * @brief Entry point for the Wsprry Pi application.
