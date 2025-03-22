@@ -130,9 +130,9 @@ int main(int argc, char *argv[])
 
     // Register signal handlers for safe shutdown and terminal management.
     block_signals();
-    signalHandler.setPriority(10);
     signalHandler.setCallback(callback_signal_handler);
     signalHandler.start();
+    signalHandler.setPriority(SCHED_RR, 10);
 
     // Startup WSPR loop
     try

@@ -97,12 +97,27 @@ public:
     void resetTrigger();
 
     /**
-     * @brief Set the CPU priority for the monitoring thread.
+     * @brief Sets the scheduling policy and priority of the signal handling thread.
      *
-     * @param priority Desired CPU priority (e.g., in the SCHED_FIFO range).
-     * @return true if the priority was set successfully.
+     * @details
+     * Uses `pthread_setschedparam()` to adjust the real-time scheduling policy and
+     * priority of the signal handling worker thread.
+     *
+     * This function is useful for raising the importance of the signal handling
+     * thread under high system load, especially when using `SCHED_FIFO` or
+     * `SCHED_RR`.
+     *
+     * @param schedPolicy The scheduling policy (e.g., `SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`).
+     * @param priority The thread priority value to assign (depends on policy).
+     *
+     * @return `true` if the scheduling parameters were successfully applied,
+     *         `false` otherwise (e.g., thread not running or `pthread_setschedparam()` failed).
+     *
+     * @note
+     * The caller may require elevated privileges (e.g., CAP_SYS_NICE) to apply real-time priorities.
+     * It is the caller's responsibility to ensure the priority value is valid for the given policy.
      */
-    bool setCPUPriority(int priority);
+    bool setPriority(int schedPolicy, int priority);
 
     /**
      * @brief Retrieve the current status.

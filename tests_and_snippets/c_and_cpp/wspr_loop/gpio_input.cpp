@@ -1,3 +1,4 @@
+
 /**
  * @class GPIOInput
  * @brief Monitors a GPIO pin using libgpiod with thread-based event handling.
@@ -183,25 +184,42 @@ void GPIOInput::resetTrigger()
 }
 
 /**
- * @brief Set the CPU priority for the monitoring thread.
+ * @brief Sets the scheduling policy and priority of the signal handling thread.
  *
- * @param priority Desired CPU priority (e.g., in the SCHED_FIFO range).
- * @return true if the priority was set successfully.
+ * @details
+ * Uses `pthread_setschedparam()` to adjust the real-time scheduling policy and
+ * priority of the signal handling worker thread.
+ *
+ * This function is useful for raising the importance of the signal handling
+ * thread under high system load, especially when using `SCHED_FIFO` or
+ * `SCHED_RR`.
+ *
+ * @param schedPolicy The scheduling policy (e.g., `SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`).
+ * @param priority The thread priority value to assign (depends on policy).
+ *
+ * @return `true` if the scheduling parameters were successfully applied,
+ *         `false` otherwise (e.g., thread not running or `pthread_setschedparam()` failed).
+ *
+ * @note
+ * The caller may require elevated privileges (e.g., CAP_SYS_NICE) to apply real-time priorities.
+ * It is the caller's responsibility to ensure the priority value is valid for the given policy.
  */
-bool GPIOInput::setCPUPriority(int priority)
+bool GPIOInput::setPriority(int schedPolicy, int priority)
 {
-    if (!running_)
+    // Ensure that the worker thread is active and joinable
+    if (!monitor_thread_.joinable())
     {
         return false;
     }
-    pthread_t handle = monitor_thread_.native_handle();
+
+    // Set up the scheduling parameters
     sched_param sch_params;
     sch_params.sched_priority = priority;
-    if (pthread_setschedparam(handle, SCHED_FIFO, &sch_params))
-    {
-        return false;
-    }
-    return true;
+
+    // Attempt to apply the scheduling policy and priority
+    int ret = pthread_setschedparam(monitor_thread_.native_handle(), schedPolicy, &sch_params);
+
+    return (ret == 0);
 }
 
 /**

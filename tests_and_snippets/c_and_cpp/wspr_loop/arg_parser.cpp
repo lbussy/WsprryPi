@@ -492,6 +492,7 @@ bool validate_config_data()
     if (config.use_shutdown && (config.shutdown_pin >= 0 && config.shutdown_pin <= 27))
     {
         shutdownMonitor.enable(config.shutdown_pin, false, GPIOInput::PullMode::PullUp, callback_shutdown_system);
+        shutdownMonitor.setPriority(SCHED_RR, 10);
     }
     else
     {

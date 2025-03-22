@@ -176,8 +176,10 @@ void wspr_loop()
     }
     else
     {
+        server.setPriority(SCHED_RR, 10);
         llog.logS(INFO, "TCP server running on port:", config.server_port);
     }
+
 
     llog.logS(INFO, "WSPR loop running.");
 
