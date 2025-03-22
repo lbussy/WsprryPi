@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting.");
+    llog.logS(INFO, project_name(), "exiting."); // TODO: Getting a segmentation fault after this.
 
     // Stop the SignalHandler.
     signalHandler.stop();

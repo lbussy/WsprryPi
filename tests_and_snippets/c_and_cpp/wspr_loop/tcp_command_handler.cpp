@@ -1,11 +1,15 @@
 /**
  * @file tcp_command_handler.cpp
- * @brief Handles commands received by the TCP_Server and supplies feedback.
+ * @brief Implements command parsing and response for TCP_Server commands.
  *
- * @note This file is an override of the functional example in the TCP-Server
- *       library.
+ * @details
+ * This is an application-specific override of the functional example in the
+ * TCP-Server library. It maps incoming string commands to appropriate handler
+ * functions using lambdas and std::function, allowing the server to interpret
+ * and respond to client instructions.
+ *
  * @see https://github.com/lbussy/TCP-Server
- * 
+ *
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
@@ -36,64 +40,55 @@
  */
 
 #include "tcp_command_handler.hpp"
+#include "version.hpp"
+
+#include <optional>
+#include <string>
 
 /**
- * @brief Constructs the TCP_Commands.
- * @details Initializes the list of valid commands and maps them to handlers.
+ * @brief Constructs the TCP_Commands object.
+ *
+ * @details
+ * Initializes the set of valid commands and builds the mapping of command
+ * strings to their respective handler functions.
  */
-TCP_Commands::TCP_Commands()
-{
-    valid_commands = {
-        "transmit", "call", "grid", "power", "freq", "ppm", "selfcal",
-        "offset", "led", "port", "xmit", "version", "help"};
+TCP_Commands::TCP_Commands() {
+    // Create a vector of command/handler pairs.
+    command_pairs = {
+        {"transmit",   [this](const std::optional<std::string>& arg){ return handleTransmit(arg); }},
+        {"callsign",   [this](const std::optional<std::string>& arg){ return handleCall(arg); }},
+        {"gridsquare", [this](const std::optional<std::string>& arg){ return handleGrid(arg); }},
+        {"powerdbm",   [this](const std::optional<std::string>& arg){ return handleDBM(arg); }},
+        {"frequencies",[this](const std::optional<std::string>& arg){ return handleFreq(arg); }},
+        {"txpin",      [this](const std::optional<std::string>& arg){ return handleTxPin(arg); }},
+        {"ppm",        [this](const std::optional<std::string>& arg){ return handlePPM(arg); }},
+        {"ntp",        [this](const std::optional<std::string>& arg){ return handleUseNTP(arg); }},
+        {"offset",     [this](const std::optional<std::string>& arg){ return handleOffset(arg); }},
+        {"useled",     [this](const std::optional<std::string>& arg){ return handleUseLED(arg); }},
+        {"ledpin",     [this](const std::optional<std::string>& arg){ return handleLEDPin(arg); }},
+        {"xmitlevel",  [this](const std::optional<std::string>& arg){ return handleXmit(arg); }},
+        {"shutdown",   [this](const std::optional<std::string>& arg){ return handleShutdown(arg); }},
+        {"shutdownpin",[this](const std::optional<std::string>& arg){ return handleShutdownPin(arg); }},
+        {"version",    [this](const std::optional<std::string>& arg){ return handleVersion(arg); }},
+        {"help",       [this](const std::optional<std::string>& arg){ return handleHelp(arg); }}
+    };
 
-    // Initialize command handlers
-    initializeHandlers();
-}
-
-/**
- * @brief Initializes the mapping of commands to their corresponding handlers.
- */
-void TCP_Commands::initializeHandlers()
-{
-    // Handlers requiring an argument:
-    command_handlers["transmit"] = [this](const std::string &arg)
-    { return handleTransmit(arg); };
-    command_handlers["call"] = [this](const std::string &arg)
-    { return handleCall(arg); };
-    command_handlers["grid"] = [this](const std::string &arg)
-    { return handleGrid(arg); };
-    command_handlers["power"] = [this](const std::string &arg)
-    { return handlePower(arg); };
-    command_handlers["freq"] = [this](const std::string &arg)
-    { return handleFreq(arg); };
-    command_handlers["ppm"] = [this](const std::string &arg)
-    { return handlePPM(arg); };
-    command_handlers["selfcal"] = [this](const std::string &arg)
-    { return handleSelfCal(arg); };
-    command_handlers["offset"] = [this](const std::string &arg)
-    { return handleOffset(arg); };
-    command_handlers["led"] = [this](const std::string &arg)
-    { return handleLED(arg); };
-
-    // Handlers that do not require an argument:
-    command_handlers["port"] = [this](const std::string &)
-    { return handlePort(); };
-    command_handlers["xmit"] = [this](const std::string &)
-    { return handleXmit(); };
-    command_handlers["version"] = [this](const std::string &)
-    { return handleVersion(); };
-    command_handlers["help"] = [this](const std::string &)
-    { return handleHelp(); };
+    // Populate the vector of valid commands and the command handlers map.
+    for (const auto& [cmd, handler] : command_pairs) {
+        valid_commands.push_back(cmd);
+        command_handlers[cmd] = handler;
+    }
 }
 
 /**
  * @brief Processes a command by calling the appropriate handler function.
+ *
  * @param command The command name.
- * @param arg The argument passed with the command.
- * @return A response string based on the command.
+ * @param arg The optional argument passed with the command.
+ * @return A response string generated by the corresponding command handler.
  */
-std::string TCP_Commands::processCommand(const std::string &command, const std::string &arg)
+std::string TCP_Commands::processCommand(const std::string &command,
+                                         const std::optional<std::string> &arg)
 {
     auto it = command_handlers.find(command);
     if (it != command_handlers.end())
@@ -104,108 +99,175 @@ std::string TCP_Commands::processCommand(const std::string &command, const std::
 }
 
 /**
- * @brief Handles an incoming command.
- * @details Determines if the command is valid and routes it to the appropriate handler.
+ * @brief Routes an incoming command to processCommand.
+ *
  * @param command The command name.
- * @param arg The argument (if any).
- * @return Response string generated by the handler.
+ * @param arg The optional argument for the command.
+ * @return Response string from processing the command.
  */
-std::string TCP_Commands::handleCommand(const std::string &command, const std::string &arg)
+std::string TCP_Commands::handleCommand(const std::string &command,
+                                        const std::optional<std::string> &arg)
 {
     return processCommand(command, arg);
 }
 
-/**
- * @brief Retrieves the list of valid commands.
- * @return A set containing valid command strings.
- */
-const std::unordered_set<std::string> &TCP_Commands::getValidCommands() const
+//
+// Command Handler Member Functions
+//
+
+// [Control]
+std::string TCP_Commands::handleTransmit(const std::optional<std::string> &arg)
 {
-    return valid_commands;
+    return (!arg.has_value() || arg->empty())
+               ? "Transmit <example response>"
+               : "Transmit set to " + *arg;
+}
+
+// [Common]
+std::string TCP_Commands::handleCall(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Call <example response>"
+               : "Call set to " + *arg;
+}
+
+std::string TCP_Commands::handleGrid(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Grid <example response>"
+               : "Grid set to " + *arg;
+}
+
+std::string TCP_Commands::handleDBM(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Power <example response>"
+               : "Power set to " + *arg;
+}
+
+std::string TCP_Commands::handleFreq(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Frequencies <example response>"
+               : "Frequencies set to " + *arg;
+}
+
+std::string TCP_Commands::handleTxPin(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "TX Pin <example response>"
+               : "TX Pin set to " + *arg;
+}
+
+// [Extended]
+std::string TCP_Commands::handlePPM(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "PPM <example response>"
+               : "PPM set to " + *arg;
+}
+
+std::string TCP_Commands::handleUseNTP(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Use NTP <example response>"
+               : "Use NTP set to " + *arg;
+}
+
+std::string TCP_Commands::handleOffset(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Offset <example response>"
+               : "Offset set to " + *arg;
+}
+
+std::string TCP_Commands::handleUseLED(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Use LED <example response>"
+               : "Use LED set to " + *arg;
+}
+
+std::string TCP_Commands::handleLEDPin(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "LED Pin <example response>"
+               : "LED Pin set to " + *arg;
+}
+
+std::string TCP_Commands::handleXmit(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Xmit <example response>"
+               : "Xmit set to " + *arg;
+}
+
+// [Server]
+std::string TCP_Commands::handleShutdown(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Shutdown <example response>"
+               : "Shutdown set to " + *arg;
+}
+
+std::string TCP_Commands::handleShutdownPin(const std::optional<std::string> &arg)
+{
+    return (!arg.has_value() || arg->empty())
+               ? "Shutdown Pin <example response>"
+               : "Shutdown Pin set to " + *arg;
 }
 
 /**
- * @name Command Handlers
- * @brief Functions responsible for handling each command.
- * @details If an argument is provided, it parrots it back. Otherwise, it returns a default response.
+ * @brief Handles the "version" command.
+ *
+ * @details
+ * Returns the application version string by calling `version_string()`.
+ * This command does not take or require any arguments.
+ *
+ * @param arg Optional argument (ignored for this command).
+ * @return A string representing the current application version.
  */
-///@{
-
-/// @brief Handles the "transmit" command.
-std::string TCP_Commands::handleTransmit(const std::string &arg)
+std::string TCP_Commands::handleVersion(const std::optional<std::string> &arg)
 {
-    return arg.empty() ? "Transmit <example response>" : "Transmit set to " + arg;
+    (void)arg; // Explicitly ignore unused parameter
+    return version_string();
 }
 
-/// @brief Handles the "call" command.
-std::string TCP_Commands::handleCall(const std::string &arg)
+/**
+ * @brief Generates a help string listing all valid commands.
+ *
+ * @details
+ * Iterates over the list of registered commands stored in `command_pairs`
+ * and constructs a comma-separated string. This response is returned
+ * to the client when the "help" command is issued.
+ *
+ * @param arg Optional argument (ignored for this command).
+ * @return A formatted string listing all valid command names.
+ *
+ * @note
+ * You can optionally exclude certain commands (e.g., "help") by
+ * adding a conditional check in the loop.
+ */
+std::string TCP_Commands::handleHelp(const std::optional<std::string> &arg)
 {
-    return arg.empty() ? "Call <example response>" : "Call set to " + arg;
-}
+    (void)arg; // Explicitly mark argument as unused
 
-/// @brief Handles the "grid" command.
-std::string TCP_Commands::handleGrid(const std::string &arg)
-{
-    return arg.empty() ? "Grid <example response>" : "Grid set to " + arg;
-}
+    std::string response = "Valid commands: ";
+    bool first = true;
 
-/// @brief Handles the "power" command.
-std::string TCP_Commands::handlePower(const std::string &arg)
-{
-    return arg.empty() ? "Power <example response>" : "Power set to " + arg;
-}
+    for (const auto &pair : command_pairs)
+    {
+        // Optional: skip displaying the help command itself
+        // if (pair.first == "help") continue;
 
-/// @brief Handles the "freq" command.
-std::string TCP_Commands::handleFreq(const std::string &arg)
-{
-    return arg.empty() ? "Freq <example response>" : "Freq set to " + arg;
-}
+        if (!first)
+        {
+            response += ", ";
+        }
 
-/// @brief Handles the "ppm" command.
-std::string TCP_Commands::handlePPM(const std::string &arg)
-{
-    return arg.empty() ? "PPM <example response>" : "PPM set to " + arg;
-}
+        response += pair.first;
+        first = false;
+    }
 
-/// @brief Handles the "selfcal" command.
-std::string TCP_Commands::handleSelfCal(const std::string &arg)
-{
-    return arg.empty() ? "SelfCal <example response>" : "SelfCal set to " + arg;
+    return response;
 }
-
-/// @brief Handles the "offset" command.
-std::string TCP_Commands::handleOffset(const std::string &arg)
-{
-    return arg.empty() ? "Offset <example response>" : "Offset set to " + arg;
-}
-
-/// @brief Handles the "led" command.
-std::string TCP_Commands::handleLED(const std::string &arg)
-{
-    return arg.empty() ? "LED <example response>" : "LED set to " + arg;
-}
-
-/// @brief Handles the "port" command (no argument required).
-std::string TCP_Commands::handlePort()
-{
-    return "Port <example response>";
-}
-
-/// @brief Handles the "xmit" command (no argument required).
-std::string TCP_Commands::handleXmit()
-{
-    return "Xmit <example response>";
-}
-
-/// @brief Handles the "version" command (no argument required).
-std::string TCP_Commands::handleVersion()
-{
-    return "Version 1.0.0";
-}
-
-/// @brief Handles the "help" command (no argument required).
-std::string TCP_Commands::handleHelp()
-{
-    return "Available commands: transmit, call, grid, power, freq, ppm, selfcal, offset, led, port, xmit, version, help";
-}
-///@}

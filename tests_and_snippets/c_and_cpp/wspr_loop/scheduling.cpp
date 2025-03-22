@@ -140,7 +140,7 @@ std::atomic<bool> exit_wspr_loop(false);
  * value. It also sets the `ppm_reload_pending` flag to notify other parts of
  * the system that a reload or recalibration is necessary.
  *
- * This function may be triggered by user input, external calibration, or 
+ * This function may be triggered by user input, external calibration, or
  * another subsystem responsible for frequency adjustments.
  *
  * @param new_ppm The new PPM correction value to apply.
@@ -166,7 +166,7 @@ void ppm_callback(double new_ppm)
  * high PPM or lack of time synchronization cause the function to return `false`.
  * If successful or recoverable, the PPM callback is registered.
  *
- * @return `true` if initialization succeeded or fallback is acceptable.  
+ * @return `true` if initialization succeeded or fallback is acceptable.
  * @return `false` if a critical error was detected (e.g., high PPM or unsynced time).
  *
  * @note
