@@ -40,6 +40,7 @@
  */
 
 #include "tcp_command_handler.hpp"
+#include "arg_parser.hpp"
 #include "version.hpp"
 
 #include <optional>
@@ -66,7 +67,7 @@ TCP_Commands::TCP_Commands() {
         {"offset",     [this](const std::optional<std::string>& arg){ return handleOffset(arg); }},
         {"useled",     [this](const std::optional<std::string>& arg){ return handleUseLED(arg); }},
         {"ledpin",     [this](const std::optional<std::string>& arg){ return handleLEDPin(arg); }},
-        {"xmitlevel",  [this](const std::optional<std::string>& arg){ return handleXmit(arg); }},
+        {"xmitlevel",  [this](const std::optional<std::string>& arg){ return handleXmitVal(arg); }},
         {"shutdown",   [this](const std::optional<std::string>& arg){ return handleShutdown(arg); }},
         {"shutdownpin",[this](const std::optional<std::string>& arg){ return handleShutdownPin(arg); }},
         {"version",    [this](const std::optional<std::string>& arg){ return handleVersion(arg); }},
@@ -119,7 +120,7 @@ std::string TCP_Commands::handleCommand(const std::string &command,
 std::string TCP_Commands::handleTransmit(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Transmit <example response>"
+               ? (config.transmit ? "true" : "false")
                : "Transmit set to " + *arg;
 }
 
@@ -127,35 +128,35 @@ std::string TCP_Commands::handleTransmit(const std::optional<std::string> &arg)
 std::string TCP_Commands::handleCall(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Call <example response>"
+               ? config.callsign
                : "Call set to " + *arg;
 }
 
 std::string TCP_Commands::handleGrid(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Grid <example response>"
+               ? config.grid_square
                : "Grid set to " + *arg;
 }
 
 std::string TCP_Commands::handleDBM(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Power <example response>"
+               ? std::to_string(config.power_dbm)
                : "Power set to " + *arg;
 }
 
 std::string TCP_Commands::handleFreq(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Frequencies <example response>"
+               ? config.frequencies
                : "Frequencies set to " + *arg;
 }
 
 std::string TCP_Commands::handleTxPin(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "TX Pin <example response>"
+               ? std::to_string(config.tx_pin)
                : "TX Pin set to " + *arg;
 }
 
@@ -163,42 +164,42 @@ std::string TCP_Commands::handleTxPin(const std::optional<std::string> &arg)
 std::string TCP_Commands::handlePPM(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "PPM <example response>"
+               ? std::to_string(config.ppm)
                : "PPM set to " + *arg;
 }
 
 std::string TCP_Commands::handleUseNTP(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Use NTP <example response>"
+               ? (config.use_ntp ? "true" : "false")
                : "Use NTP set to " + *arg;
 }
 
 std::string TCP_Commands::handleOffset(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Offset <example response>"
+               ? (config.use_offset ? "true" : "false")
                : "Offset set to " + *arg;
 }
 
 std::string TCP_Commands::handleUseLED(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Use LED <example response>"
+               ? (config.use_led ? "true" : "false")
                : "Use LED set to " + *arg;
 }
 
 std::string TCP_Commands::handleLEDPin(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "LED Pin <example response>"
+               ? std::to_string(config.led_pin)
                : "LED Pin set to " + *arg;
 }
 
-std::string TCP_Commands::handleXmit(const std::optional<std::string> &arg)
+std::string TCP_Commands::handleXmitVal(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Xmit <example response>"
+               ? std::to_string(config.power_level)
                : "Xmit set to " + *arg;
 }
 
@@ -206,14 +207,14 @@ std::string TCP_Commands::handleXmit(const std::optional<std::string> &arg)
 std::string TCP_Commands::handleShutdown(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Shutdown <example response>"
+               ? (config.use_shutdown ? "true" : "false")
                : "Shutdown set to " + *arg;
 }
 
 std::string TCP_Commands::handleShutdownPin(const std::optional<std::string> &arg)
 {
     return (!arg.has_value() || arg->empty())
-               ? "Shutdown Pin <example response>"
+               ? std::to_string(config.shutdown_pin)
                : "Shutdown Pin set to " + *arg;
 }
 

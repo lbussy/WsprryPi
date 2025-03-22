@@ -149,7 +149,7 @@ private:
     std::string handleOffset([[maybe_unused]] const std::optional<std::string> &arg);
     std::string handleUseLED([[maybe_unused]] const std::optional<std::string> &arg);
     std::string handleLEDPin([[maybe_unused]] const std::optional<std::string> &arg);
-    std::string handleXmit([[maybe_unused]] const std::optional<std::string> &arg);
+    std::string handleXmitVal([[maybe_unused]] const std::optional<std::string> &arg);
 
     // [Server]
     std::string handleShutdown([[maybe_unused]] const std::optional<std::string> &arg);
