@@ -44,6 +44,7 @@
 #include "logging.hpp"
 #include "ppm_manager.hpp"
 #include "signal_handler.hpp"
+#include "tcp_server.hpp"
 #include "transmit.hpp"
 
 // Standard library headers
@@ -66,6 +67,8 @@ std::atomic<bool> ppm_reload_pending(false);
 std::atomic<bool> shutdown_flag{false};
 
 PPMManager ppmManager;
+TCP_Server server;
+TCP_Commands handler;
 
 /**
  * @brief Condition variable used for thread synchronization.
@@ -165,6 +168,17 @@ void wspr_loop()
         }
     }
 
+    // Start the TCP server with our callback.
+    if (! server.start(config.server_port, &handler))
+    {
+        llog.logE(FATAL, "Unable to initialze TCP server.");
+        return;
+    }
+    else
+    {
+        llog.logS(INFO, "TCP server running on port:", config.server_port);
+    }
+
     llog.logS(INFO, "WSPR loop running.");
 
     // Start the transmit thread.
@@ -179,6 +193,8 @@ void wspr_loop()
 
     // Stop PPM Manager
     ppmManager.stop();
+    // Stop the TCP server
+    server.stop();
     // Stop INI Monitor
     iniMonitor.stop();
     // Stop LED control
