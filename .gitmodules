@@ -53,6 +53,3 @@
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/TCP-Server"]
 	path = tests_and_snippets/c_and_cpp/wspr_loop/TCP-Server
 	url = https://github.com/lbussy/TCP-Server.git
-[submodule "tests_and_snippets/c_and_cpp/json_test/INI-Handler"]
-	path = tests_and_snippets/c_and_cpp/json_test/INI-Handler
-	url = https://github.com/lbussy/INI-Handler.git
