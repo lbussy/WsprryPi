@@ -134,7 +134,7 @@ struct ArgParserConfig
           power_level(7),
           use_led(false),
           led_pin(-1),
-          server_port(-1),
+          server_port(31415), // TODO: Should not need to set this
           use_shutdown(false),
           shutdown_pin(-1),
           date_time_log(false),

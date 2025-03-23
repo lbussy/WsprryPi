@@ -44,6 +44,7 @@
 
 // Project includes
 #include "tcp_command_interface.hpp"
+#include "json.hpp"
 
 // Standard includes
 #include <functional>
@@ -154,6 +155,9 @@ private:
     // [Server]
     std::string handleShutdown([[maybe_unused]] const std::optional<std::string> &arg);
     std::string handleShutdownPin([[maybe_unused]] const std::optional<std::string> &arg);
+
+    // [JSON Config]
+    std::string handleConfig([[maybe_unused]] const std::optional<std::string> &arg);
 
     // [Misc]
     std::string handleVersion([[maybe_unused]] const std::optional<std::string> &arg);

@@ -777,7 +777,7 @@ bool parse_command_line(int argc, char *argv[])
             break; // Exit loop after removing argument
         }
     }
-    
+
     // Create original JSON and Config struct, overlay INI contents
     if (config.use_ini)
     {
@@ -1013,7 +1013,7 @@ bool parse_command_line(int argc, char *argv[])
             try
             {
                 int port = std::stoi(optarg);
-                if (port < 49152 || port > 65535)
+                if (port < 1024 || port > 49151)
                 {
                     llog.logS(WARN, "Invalid port number. Using default: 31415.");
                     config.server_port = 31415;
