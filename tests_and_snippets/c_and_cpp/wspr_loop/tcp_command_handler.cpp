@@ -40,7 +40,9 @@
  */
 
 #include "tcp_command_handler.hpp"
+
 #include "arg_parser.hpp"
+#include "config_handler.hpp"
 #include "version.hpp"
 
 #include <optional>

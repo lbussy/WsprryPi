@@ -1,3 +1,5 @@
+// TODO:  Update doxygen
+
 /**
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
@@ -35,6 +37,7 @@
 #include "arg_parser.hpp"
 
 // Project headers
+#include "config_handler.hpp"
 #include "constants.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
@@ -57,46 +60,6 @@
 
 // System headers
 #include <getopt.h>
-
-std::string inifile = "";
-
-/**
- * @brief Global configuration instance for argument parsing.
- *
- * This global instance of `ArgParserConfig` holds the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is defined in `arg_parser.cpp` and declared
- * as `extern` in `arg_parser.hpp` so it can be accessed globally.
- *
- * @note Ensure that `arg_parser.hpp` is included in any file that
- *       needs access to this configuration instance.
- *
- * @see ArgParserConfig
- */
-ArgParserConfig config;
-
-/**
- * @brief Global instance of the IniFile configuration handler.
- *
- * The `ini` object provides an interface for reading, writing, and managing
- * INI-style configuration files. It supports key-value pair retrieval, type-safe
- * conversions, and file monitoring for changes.
- *
- * This instance is initialized globally to allow centralized configuration
- * management across all modules of the application.
- *
- * Example usage:
- * @code
- * std::string callsign = ini.get_string_value("Common", "Call Sign");
- * int power = ini.get_int_value("Common", "TX Power");
- * @endcode
- *
- * The `ini` object is commonly used alongside `iniMonitor` to detect and apply
- * configuration changes dynamically without restarting the application.
- *
- * @see https://github.com/lbussy/INI-Handler for detailed documentation and examples.
- */
-IniFile ini;
 
 /**
  * @brief Global instance of the MonitorFile for INI file change detection.
@@ -775,6 +738,9 @@ bool load_from_ini()
     {
     }
 
+    // Update global JSON from Config object
+    build_json_from_config();
+
     return true;
 }
 
@@ -802,21 +768,23 @@ bool parse_command_line(int argc, char *argv[])
     {
         if ((std::string(*it) == "-i" || std::string(*it) == "--ini-file") && (it + 1) != args.end())
         {
-            inifile = *(it + 1);
+            config.ini_filename = *(it + 1);
             config.use_ini = true;
             config.loop_tx = true;
-            ini.set_filename(inifile);
-            if (!load_from_ini())
-            {
-                llog.logE(FATAL, "Unhandled error loading INI.");
-                std::exit(EXIT_FAILURE);
-            }
 
             // Remove "-i <file>" from args
             args.erase(it, it + 2);
             break; // Exit loop after removing argument
         }
     }
+    
+    // Create original JSON and Config struct, overlay INI contents
+    if (config.use_ini)
+    {
+        ini.set_filename(config.ini_filename);
+        load_json(config.ini_filename);
+    }
+
     // Update argc and argv pointers for getopt_long()
     argc = args.size();
     argv = args.data();
@@ -1141,6 +1109,8 @@ bool parse_command_line(int argc, char *argv[])
         }
     }
 
+    // Save config to JSON and INI if used
+    save_json();
     return true;
 }
 

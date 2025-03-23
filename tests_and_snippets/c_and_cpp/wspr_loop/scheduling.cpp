@@ -36,6 +36,7 @@
 
 // Project headers
 #include "arg_parser.hpp"
+#include "config_handler.hpp"
 #include "constants.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
