@@ -64,10 +64,6 @@ BIN_DIR		 	= build/bin
 C_SOURCES   := $(shell find . -name "*.c")
 # Start with all .cpp files, excluding main.cpp
 CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
-# Filter out the submodule versions of tcp_command_handler.cpp
-CPP_SOURCES := $(filter-out ./TCP-Server/src/tcp_command_handler.cpp, $(CPP_SOURCES))
-# Override with the local tcp_command_handler.cpp
-CPP_SOURCES += ./tcp_command_handler.cpp
 # Collect object files
 C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
@@ -109,7 +105,6 @@ CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
 CXXFLAGS += -I$(abspath ./PPM-Manager/src)
 CXXFLAGS += -I$(abspath ./Signal-Handler/src)
-CXXFLAGS += -I$(abspath ./TCP-Server/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags

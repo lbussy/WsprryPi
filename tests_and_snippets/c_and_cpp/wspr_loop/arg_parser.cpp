@@ -358,7 +358,8 @@ void show_config_values(bool reload)
     llog.logS(DEBUG, "Use LED:", config.use_led ? "true" : "false");
     llog.logS(DEBUG, "LED on GPIO", config.led_pin);
     // [Server]
-    llog.logS(DEBUG, "Server runs on port:", config.server_port);
+    llog.logS(DEBUG, "Web aerver runs on port:", config.web_port);
+    llog.logS(DEBUG, "Socket aerver runs on port:", config.socket_port);
     llog.logS(DEBUG, "Use shutdown buton:", config.use_shutdown ? "true" : "false");
     llog.logS(DEBUG, "Shutdown button GPIO", config.shutdown_pin);
 }
@@ -715,10 +716,18 @@ bool load_from_ini()
     catch (...)
     {
     }
-    // Server
+    // Web Server
     try
     {
-        config.server_port = ini.get_int_value("Server", "Port");
+        config.web_port = ini.get_int_value("Server", "Web Port");
+    }
+    catch (...)
+    {
+    }
+    // Socket Server
+    try
+    {
+        config.socket_port = ini.get_int_value("Server", "Socket Port");
     }
     catch (...)
     {
@@ -739,7 +748,7 @@ bool load_from_ini()
     }
 
     // Update global JSON from Config object
-    build_json_from_config();
+    config_to_json();
 
     return true;
 }
@@ -761,6 +770,8 @@ bool load_from_ini()
  */
 bool parse_command_line(int argc, char *argv[])
 {
+    // Create original JSON
+    init_config_json();
     std::vector<char *> args(argv, argv + argc); // Copy arguments for modification
 
     // First pass: Look for "-i <file>" before processing other options
@@ -771,18 +782,16 @@ bool parse_command_line(int argc, char *argv[])
             config.ini_filename = *(it + 1);
             config.use_ini = true;
             config.loop_tx = true;
+            // Create original JSON and Config struct, overlay INI contents
+            ini.set_filename(config.ini_filename);
+            config_to_json();
+            ini_to_json(config.ini_filename);
+            json_to_config();
 
             // Remove "-i <file>" from args
             args.erase(it, it + 2);
             break; // Exit loop after removing argument
         }
-    }
-
-    // Create original JSON and Config struct, overlay INI contents
-    if (config.use_ini)
-    {
-        ini.set_filename(config.ini_filename);
-        load_json(config.ini_filename);
     }
 
     // Update argc and argv pointers for getopt_long()
@@ -808,13 +817,14 @@ bool parse_command_line(int argc, char *argv[])
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
         {"power_level", required_argument, nullptr, 'd'},     // Via: [Extended] Power Level = 7
-        {"port", required_argument, nullptr, 'e'},            // Via: [Server] Port = 31415
+        {"web-port", required_argument, nullptr, 'w'},        // Via: [Server] Port = 31415
+        {"socket-port", required_argument, nullptr, 'k'},        // Via: [Server] Port = 31415
         {nullptr, 0, nullptr, 0}};
 
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:e:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -1008,25 +1018,47 @@ bool parse_command_line(int argc, char *argv[])
             }
             break;
         }
-        case 'e': // Set port number
+        case 'w': // Set web port number
         {
             try
             {
                 int port = std::stoi(optarg);
                 if (port < 1024 || port > 49151)
                 {
-                    llog.logS(WARN, "Invalid port number. Using default: 31415.");
-                    config.server_port = 31415;
+                    llog.logS(WARN, "Invalid web number. Using default: 31415.");
+                    config.web_port = 31415;
                 }
                 else
                 {
-                    config.server_port = port;
+                    config.web_port = port;
                 }
             }
             catch (const std::exception &)
             {
-                llog.logE(WARN, "Invalid server port, defaulting to 31415.");
-                config.server_port = 31415;
+                llog.logE(WARN, "Invalid web port, defaulting to 31415.");
+                config.web_port = 31415;
+            }
+            break;
+        }
+        case 'k': // Set socket port number
+        {
+            try
+            {
+                int port = std::stoi(optarg);
+                if (port < 1024 || port > 49151)
+                {
+                    llog.logS(WARN, "Invalid socket port number. Using default: 31416.");
+                    config.web_port = 31416;
+                }
+                else
+                {
+                    config.web_port = port;
+                }
+            }
+            catch (const std::exception &)
+            {
+                llog.logE(WARN, "Invalid socket port, defaulting to 31416.");
+                config.web_port = 31415;
             }
             break;
         }
@@ -1037,6 +1069,8 @@ bool parse_command_line(int argc, char *argv[])
         }
         }
     }
+    // Re-save any config changes in the JSON
+    config_to_json();
 
     if (config.mode == ModeType::WSPR)
     {
@@ -1108,9 +1142,9 @@ bool parse_command_line(int argc, char *argv[])
             }
         }
     }
+    // Re-save any config changes in the JSON
+    config_to_json();
 
-    // Save config to JSON and INI if used
-    save_json();
     return true;
 }
 
@@ -1130,6 +1164,7 @@ bool load_config(int argc, char *argv[])
         try
         {
             // Validate configuration and ensure all required settings are present.
+            // TODO: Put version/type/PID before this.
             if (!validate_config_data())
             {
                 print_usage("Configuration validation failed.", EXIT_FAILURE);

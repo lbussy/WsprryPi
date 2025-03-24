@@ -35,6 +35,7 @@
 
 #include "ini_file.hpp"
 #include "json.hpp"
+#include "logging.hpp"
 
 #include <iostream>
 #include <string>
@@ -156,7 +157,8 @@ double parse_double(const nlohmann::json &j)
  *       "Power Level": 7
  *   },
  *   "Server": {
- *       "Port": 31415,
+ *       "Web Port": 31415,
+ *       "Web Port": 31416,
  *       "Use Shutdown": false,
  *       "Shutdown Button": 19
  *   }
@@ -207,7 +209,8 @@ void json_to_config()
     config.power_level = std::stoi(jConfig["Extended"]["Power Level"].get<std::string>());
 
     // Server
-    config.server_port = std::stoi(jConfig["Server"]["Port"].get<std::string>());
+    config.web_port = std::stoi(jConfig["Server"]["Web Port"].get<std::string>());
+    config.socket_port = std::stoi(jConfig["Server"]["Socket Port"].get<std::string>());
     config.use_shutdown = parse_bool(jConfig["Server"]["Use Shutdown"]);
     config.shutdown_pin = std::stoi(jConfig["Server"]["Shutdown Button"].get<std::string>());
 }
@@ -223,7 +226,7 @@ void json_to_config()
  *
  * @param config The configuration struct to overlay.
  */
-void build_json_from_config()
+void config_to_json()
 {
     // Meta
     jConfig["Meta"]["Mode"] = "WSPR";
@@ -258,7 +261,8 @@ void build_json_from_config()
     jConfig["Extended"]["Power Level"] = std::to_string(config.power_level);
 
     // Server
-    jConfig["Server"]["Port"] = std::to_string(config.server_port);
+    jConfig["Server"]["Web Port"] = std::to_string(config.web_port);
+    jConfig["Server"]["Socket Port"] = std::to_string(config.socket_port);
     jConfig["Server"]["Use Shutdown"] = config.use_shutdown ? "True" : "False";
     jConfig["Server"]["Shutdown Button"] = std::to_string(config.shutdown_pin);
 }
@@ -313,7 +317,8 @@ void init_config_json()
 
     // Server section: Settings for server communication
     jConfig["Server"] = {
-        {"Port", "31415"},
+        {"Web Port", "31415"},
+        {"Socket Port", "31416"},
         {"Shutdown Button", "19"},
         {"Use Shutdown", "False"}};
 }
@@ -333,7 +338,7 @@ void init_config_json()
  *
  * @param filename The name of the INI file to record in the JSON configuration.
  */
-void patch_ini_data(std::string filename)
+void ini_to_json(std::string filename)
 {
     nlohmann::json patch;
     std::map<std::string, std::unordered_map<std::string, std::string>> ini_data;
@@ -374,7 +379,7 @@ void patch_ini_data(std::string filename)
  * @details
  * If the configuration indicates that an INI file is being used (i.e. `config.use_ini`
  * is true), this function first updates the global JSON configuration by calling
- * `build_json_from_config()`. It then converts the JSON configuration (`jConfig`)
+ * `config_to_json()`. It then converts the JSON configuration (`jConfig`)
  * into an internal data structure (`newData`) suitable for the INI handler. Each
  * section in the JSON becomes a key in the map, with its value being an unordered map
  * of key/value pairs. If a JSON value is an array, it is converted to a string using
@@ -385,11 +390,8 @@ void patch_ini_data(std::string filename)
  *
  * @note This function assumes that all JSON values can be represented as strings.
  */
-void save_json()
+void json_to_ini()
 {
-    // Update global JSON configuration from current settings.
-    build_json_from_config();
-
     if (config.use_ini)
     {
         // Convert JSON back to INI data.
@@ -447,8 +449,53 @@ void load_json(std::string filename)
     init_config_json();
 
     // Merge the INI file configuration into the base JSON.
-    patch_ini_data(filename);
+    ini_to_json(filename);
 
     // Parse the updated JSON configuration into the global configuration struct.
     json_to_config();
+}
+
+/**
+ * @brief Prints a formatted JSON object to standard output.
+ *
+ * @details This function outputs the given JSON object to `std::cout` with
+ *          an indent of 4 spaces and ensures key names are sorted.
+ *          Useful for debugging or configuration output.
+ *
+ * @param j The JSON object to dump (will not be modified).
+ *
+ * @return void
+ */
+void dump_json(const nlohmann::json &j, std::string tag = "")
+{
+    llog.logS(DEBUG, tag, "JSON Dump:", j.dump());
+}
+
+/**
+ * @brief Applies a full patch update from incoming JSON.
+ * @details This function receives a JSON object (typically from the web server),
+ *          merges it into the current global JSON configuration (`jConfig`),
+ *          updates the INI file and global config structure accordingly, and
+ *          rebuilds the cleaned `jConfig` from the sanitized config values.
+ *
+ *          The flow is:
+ *            1. Patch the input into `jConfig`.
+ *            2. Update the INI file to reflect patched values.
+ *            3. Update the config struct from patched values.
+ *            4. Overwrite `jConfig` with sanitized config struct values.
+ *            5. Dump final JSON (for debugging).
+ *
+ * @param j The incoming JSON object to patch into global configuration.
+ *
+ * @throws May throw exceptions from internal calls (e.g., parsing or write errors).
+ */
+void patch_all_from_web(const nlohmann::json &j)
+{
+    dump_json(j, "Incoming");      ///< Debug: Show incoming JSON
+    jConfig.merge_patch(j);        ///< Patch new values into the global JSON config
+    dump_json(jConfig, "Patched"); ///< Debug: Show patched result
+    json_to_ini();                 ///< Write patched config to INI
+    json_to_config();              ///< Write patched config into global struct
+    config_to_json();              ///< Rebuild jConfig from sanitized struct
+    dump_json(jConfig, "Final");   ///< Debug: Show cleaned final JSON
 }

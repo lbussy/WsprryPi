@@ -43,8 +43,8 @@
 #include "logging.hpp"
 #include "ppm_manager.hpp"
 #include "signal_handler.hpp"
-#include "tcp_server.hpp"
 #include "transmit.hpp"
+#include "web_server.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -92,22 +92,6 @@ std::atomic<bool> shutdown_flag{false};
  * using either NTP data or internal estimation methods.
  */
 PPMManager ppmManager;
-
-/**
- * @brief Global instance of the TCP server.
- *
- * Listens for incoming TCP connections and processes supported
- * WSPR server commands (e.g., frequency, grid, power).
- */
-TCP_Server server;
-
-/**
- * @brief Global instance of the TCP command handler.
- *
- * Provides the interface for parsing and executing incoming TCP commands.
- * Works in coordination with `TCP_Server`.
- */
-TCP_Commands handler;
 
 /**
  * @brief Condition variable used to wait for shutdown signals.
@@ -239,9 +223,9 @@ void callback_shutdown_system()
         }
     }
 
-    exit_wspr_loop.store(true);  // Signal WSPR loop to exit
-    shutdown_cv.notify_all();    // Wake any threads blocked on shutdown
-    shutdown_flag.store(true);   // Indicate shutdown sequence active
+    exit_wspr_loop.store(true); // Signal WSPR loop to exit
+    shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+    shutdown_flag.store(true);  // Indicate shutdown sequence active
 }
 
 /**
@@ -287,47 +271,35 @@ void wspr_loop()
     }
 
     // -------------------------------------------------------------------------
-    // Start TCP Server
-    // -------------------------------------------------------------------------
-    if (!server.start(config.server_port, &handler))
-    {
-        llog.logE(FATAL, "Unable to initialize TCP server.");
-        return;
-    }
-    else
-    {
-        server.setPriority(SCHED_RR, 10);
-        llog.logS(INFO, "TCP server running on port:", config.server_port);
-    }
-
-    llog.logS(INFO, "WSPR loop running.");
-
-    // -------------------------------------------------------------------------
     // Start transmission thread
     // -------------------------------------------------------------------------
     // TODO: Encapsulate transmit_thread into a dedicated class
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
+    // Start web server
+    webServer.start(config.web_port);
+
+    // Wait for something to happen
+    llog.logS(INFO, "WSPR loop running.");
+
     // -------------------------------------------------------------------------
     // Block until shutdown is triggered
     // -------------------------------------------------------------------------
     std::unique_lock<std::mutex> lock(cv_mtx);
     shutdown_cv.wait(lock, []
-    {
-        return exit_wspr_loop.load();
-    });
+                     { return exit_wspr_loop.load(); });
 
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    ppmManager.stop();         // Stop PPM manager (if active)
-    server.stop();             // Stop TCP server
-    iniMonitor.stop();         // Stop config file monitor
-    ledControl.stop();         // Stop LED driver
-    shutdownMonitor.stop();    // Stop shutdown GPIO monitor
+    ppmManager.stop();      // Stop PPM manager (if active)
+    iniMonitor.stop();      // Stop config file monitor
+    ledControl.stop();      // Stop LED driver
+    shutdownMonitor.stop(); // Stop shutdown GPIO monitor
+    webServer.stop();       // Stop web server
 
-    shutdown_threads();        // Join and cleanup all threads
+    shutdown_threads(); // Join and cleanup all threads
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
@@ -367,7 +339,7 @@ void shutdown_threads()
     llog.logS(INFO, "Shutting down all active threads.");
 
     // Helper lambda to safely join threads with logging
-    auto safe_join = [](std::thread& t, const std::string& name)
+    auto safe_join = [](std::thread &t, const std::string &name)
     {
         if (t.joinable())
         {

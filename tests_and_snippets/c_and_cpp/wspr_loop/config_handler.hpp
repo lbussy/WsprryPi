@@ -100,7 +100,8 @@ struct ArgParserConfig
     int led_pin;     ///< GPIO pin for LED indicator.
 
     // Server
-    int server_port;   ///< TCP server port number.
+    int web_port;      ///< Web server port number.
+    int socket_port;   ///< Socket server port number.
     bool use_shutdown; ///< Enable GPIO-based shutdown feature.
     int shutdown_pin;  ///< GPIO pin used to signal shutdown.
 
@@ -134,7 +135,8 @@ struct ArgParserConfig
           power_level(7),
           use_led(false),
           led_pin(-1),
-          server_port(31415), // TODO: Should not need to set this
+          web_port(31415),    // TODO: Should not need to set this
+          socket_port(31416), // TODO: Should not need to set this
           use_shutdown(false),
           shutdown_pin(-1),
           date_time_log(false),
@@ -160,6 +162,85 @@ struct ArgParserConfig
 extern ArgParserConfig config;
 
 /**
+ * @brief Initializes the global configuration JSON object.
+ *
+ * @details
+ * This function sets up a default configuration structure in the global
+ * nlohmann::json object, `jConfig`. The JSON object is organized into several
+ * sections: "Meta", "Common", "Control", "Extended", and "Server". Each section
+ * contains key/value pairs that represent configuration parameters. In addition,
+ * the "Center Frequency Set" under "Meta" is explicitly initialized as an empty array.
+ *
+ * @note The JSON values are stored as strings. Adjust the types as needed if numeric
+ *       types are required in later processing.
+ */
+void init_config_json();
+
+/**
+ * @brief Patches the global JSON configuration with data from the INI file.
+ *
+ * @details
+ * This function retrieves INI configuration data from the global INI handler object `ini`
+ * and converts the data into a JSON object (named `patch`). Each INI section is converted
+ * into a JSON object containing key/value pairs. It then adds the filename to the "Meta"
+ * section under "INI Filename" and merges the resulting patch into the global JSON
+ * configuration object `jConfig` using `merge_patch()`.
+ *
+ * If any exception is thrown while retrieving the INI data, the function catches the exception
+ * and returns without modifying `jConfig`.
+ *
+ * @param filename The name of the INI file to record in the JSON configuration.
+ */
+void ini_to_json(std::string filename);
+
+/**
+ * @brief Parses configuration from a JSON object into an ArgParser struct.
+ *
+ * @param jConfig The JSON object containing configuration data.
+ *
+ * Expected JSON structure (example):
+ * @code
+ * {
+ *   "Meta": {
+ *       "Mode": "WSPR",
+ *       "Use INI": true,
+ *       "INI Filename": "",
+ *       "Date Time Log": false,
+ *       "Loop TX": true,
+ *       "TX Iterations": 5,
+ *       "Test Tone": 440.0,
+ *       "Center Frequency Set": [ 12.2, 123.7, 98754.323 ]
+ *   },
+ *   "Control": {
+ *       "Transmit": false
+ *   },
+ *   "Common": {
+ *       "Call Sign": "NXXX",
+ *       "Grid Square": "ZZ99",
+ *       "TX Power": 20,
+ *       "Frequency": "20m",
+ *       "Transmit Pin": 4
+ *   },
+ *   "Extended": {
+ *       "PPM": 0.0,
+ *       "Use NTP": true,
+ *       "Offset": true,
+ *       "Use LED": false,
+ *       "LED Pin": 18,
+ *       "Power Level": 7
+ *   },
+ *   "Server": {
+ *       "Web Port": 31415,
+ *       "Web Port": 31416,
+ *       "Use Shutdown": false,
+ *       "Shutdown Button": 19
+ *   }
+ * }
+ * @endcode
+ */
+void json_to_config();
+
+/**
  * @brief Creates a JSON object from the configuration struct.
  *
  * @details
@@ -170,7 +251,7 @@ extern ArgParserConfig config;
  *
  * @param config The configuration struct to overlay.
  */
-extern void build_json_from_config();
+extern void config_to_json();
 
 /**
  * @brief Saves the global JSON configuration back to the INI file.
@@ -178,7 +259,7 @@ extern void build_json_from_config();
  * @details
  * If the configuration indicates that an INI file is being used (i.e. `config.use_ini`
  * is true), this function first updates the global JSON configuration by calling
- * `build_json_from_config()`. It then converts the JSON configuration (`jConfig`)
+ * `config_to_json()`. It then converts the JSON configuration (`jConfig`)
  * into an internal data structure (`newData`) suitable for the INI handler. Each
  * section in the JSON becomes a key in the map, with its value being an unordered map
  * of key/value pairs. If a JSON value is an array, it is converted to a string using
@@ -189,7 +270,7 @@ extern void build_json_from_config();
  *
  * @note This function assumes that all JSON values can be represented as strings.
  */
-extern void save_json();
+extern void json_to_ini();
 
 /**
  * @brief Loads the global JSON configuration by merging default JSON and INI file data.
@@ -197,7 +278,7 @@ extern void save_json();
  * @details
  * This function performs a three-step process:
  *  1. Calls `init_config_json()` to create a base JSON configuration with default values.
- *  2. Calls `patch_ini_data(filename)` to overlay INI file data (from the given filename)
+ *  2. Calls `ini_to_json(filename)` to overlay INI file data (from the given filename)
  *     onto the base JSON configuration.
  *  3. Calls `json_to_config()` to parse the updated JSON configuration into the global
  *     configuration structure (of type `ArgParser`).
@@ -207,5 +288,38 @@ extern void save_json();
  * @param filename The path to the INI file whose data will be merged into the JSON configuration.
  */
 extern void load_json(std::string filename);
+
+/**
+ * @brief Prints a formatted JSON object to standard output.
+ *
+ * @details This function outputs the given JSON object to `std::cout` with
+ *          an indent of 4 spaces and ensures key names are sorted.
+ *          Useful for debugging or configuration output.
+ *
+ * @param j The JSON object to dump (will not be modified).
+ *
+ * @return void
+ */
+void dump_json(const nlohmann::json& j, std::string tag);
+
+/**
+ * @brief Applies a full patch update from incoming JSON.
+ * @details This function receives a JSON object (typically from the web server),
+ *          merges it into the current global JSON configuration (`jConfig`),
+ *          updates the INI file and global config structure accordingly, and
+ *          rebuilds the cleaned `jConfig` from the sanitized config values.
+ *
+ *          The flow is:
+ *            1. Patch the input into `jConfig`.
+ *            2. Update the INI file to reflect patched values.
+ *            3. Update the config struct from patched values.
+ *            4. Overwrite `jConfig` with sanitized config struct values.
+ *            5. Dump final JSON (for debugging).
+ *
+ * @param j The incoming JSON object to patch into global configuration.
+ *
+ * @throws May throw exceptions from internal calls (e.g., parsing or write errors).
+ */
+void patch_all_from_web(const nlohmann::json &j);
 
 #endif // _CONFIG_HANDLER_HPP
