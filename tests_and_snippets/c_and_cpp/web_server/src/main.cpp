@@ -13,7 +13,7 @@ int main()
         // Start the server on a chosen port.
         server.start(PORT);
 
-        std::cout << "Press Enter to stop the server...";
+        std::cout << "Press Enter to stop the server." << std::endl;
         std::cin.get();
 
         // Stop the server cleanly.

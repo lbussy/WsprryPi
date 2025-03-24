@@ -1,8 +1,8 @@
 #ifndef WEB_SERVER_HPP
 #define WEB_SERVER_HPP
 
-#include "httplib.h" // From cpp-httplib (https://github.com/yhirose/cpp-httplib)
-#include "json.hpp"  // From nlohmann/json (https://github.com/nlohmann/json)
+#include "httplib.hpp" // From cpp-httplib: https://github.com/yhirose/cpp-httplib
+#include "json.hpp"    // From nlohmann/json: https://github.com/nlohmann/json
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -10,30 +10,29 @@
 #include <iostream>
 #include <string>
 
-using json = nlohmann::json;
-
 /**
  * @class WebServer
  * @brief A simple web server that runs in a separate thread with CORS support.
  *
  * @details
- * This class creates a web server that does not start until start(port) is called.
- * It listens on the specified port (e.g., between 1024 and 65535) and handles:
- *  - GET requests by returning a JSON object.
- *  - PUT/PATCH requests by parsing the request body as JSON, debug printing it,
+ * The WebServer class creates an HTTP server that listens on a user-specified port.
+ * It will not start until the start() method is called with a valid port number (1024 to 65535).
+ * The server handles:
+ *  - GET requests by sending a JSON response.
+ *  - PUT and PATCH requests by parsing the request body as JSON, printing it for debugging,
  *    and returning a text response.
- *  - OPTIONS requests for CORS preflight, setting the appropriate headers.
+ *  - OPTIONS requests to support CORS preflight, setting the proper headers.
  *
- * The server runs in its own thread and exits cleanly when stop() is called,
- * using condition variables to coordinate startup and shutdown.
+ * The server runs in its own thread and can be stopped cleanly by calling stop(), which uses
+ * condition variables for synchronization.
  */
 class WebServer
 {
 public:
     /**
-     * @brief Default constructor.
+     * @brief Constructs a WebServer instance.
      *
-     * The server does not start automatically. Call start(port) to launch it.
+     * The server does not start automatically. Call start(port) to launch the server.
      */
     WebServer();
 
@@ -48,11 +47,11 @@ public:
      * @brief Starts the web server on the specified port.
      *
      * @details
-     * Validates the port (must be between 1024 and 65535 for non-root processes),
-     * launches the server in a separate thread, and waits until the server is running.
+     * Validates the port, launches the HTTP server in a separate thread, and waits until
+     * the server is running.
      *
-     * @param port The port number to listen on.
-     * @throws std::invalid_argument if the port is out of range.
+     * @param port The port number to listen on (must be between 1024 and 65535).
+     * @throws std::invalid_argument if the port is outside the allowed range.
      */
     void start(int port);
 
@@ -60,14 +59,14 @@ public:
      * @brief Stops the web server.
      *
      * @details
-     * Signals the server to stop and waits (using a condition variable) for the server thread
+     * Signals the server to stop and waits (using condition variables) for the server thread
      * to exit cleanly.
      */
     void stop();
 
 private:
     int port_;                         ///< Port on which the server listens.
-    httplib::Server svr;               ///< The underlying HTTP server from cpp-httplib.
+    httplib::Server svr;               ///< Underlying HTTP server from cpp-httplib.
     std::thread serverThread;          ///< Thread running the HTTP server.
     std::mutex mtx;                    ///< Mutex for synchronizing start/stop operations.
     std::condition_variable cvStarted; ///< Condition variable to signal when the server has started.

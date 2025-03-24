@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>WebSocket Test Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    #send-section {
+      margin-top: 10px;
+      display: none;
+    }
+
+    #output {
+      margin-top: 10px;
+      background: #f5f5f5;
+      padding: 10px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap;
+      height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>WebSocket Test Client</h1>
+  <div>
+    <label for="port">Port:</label>
+    <input type="text" id="port" value="31416">
+    <button id="connect">Connect</button>
+  </div>
+  <div id="connection-status"></div>
+  <div id="send-section">
+    <input type="text" id="message" placeholder="Enter message">
+    <button id="send">Send</button>
+  </div>
+  <pre id="output"></pre>
+
+  <script>
+    let socket = null;
+    const connectButton = document.getElementById('connect');
+    const sendButton = document.getElementById('send');
+    const portInput = document.getElementById('port');
+    const messageInput = document.getElementById('message');
+    const output = document.getElementById('output');
+    const connectionStatus = document.getElementById('connection-status');
+    const sendSection = document.getElementById('send-section');
+
+    connectButton.addEventListener('click', () => {
+      const port = portInput.value.trim();
+      if (!port) {
+        alert("Please enter a port number.");
+        return;
+      }
+      const url = "ws://localhost:" + port;
+      socket = new WebSocket(url);
+
+      socket.addEventListener('open', () => {
+        connectionStatus.textContent = "Connected";
+        sendSection.style.display = "block";
+      });
+
+      socket.addEventListener('message', (event) => {
+        output.textContent += "Received: " + event.data + "\n";
+      });
+
+      socket.addEventListener('close', () => {
+        connectionStatus.textContent = "Disconnected";
+        sendSection.style.display = "none";
+      });
+
+      socket.addEventListener('error', (e) => {
+        connectionStatus.textContent = "Error connecting";
+        sendSection.style.display = "none";
+      });
+    });
+
+    sendButton.addEventListener('click', () => {
+      const message = messageInput.value;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(message);
+        output.textContent += "Sent: " + message + "\n";
+        messageInput.value = "";
+      } else {
+        alert("WebSocket is not open.");
+      }
+    });
+  </script>
+</body>
+
+</html>
