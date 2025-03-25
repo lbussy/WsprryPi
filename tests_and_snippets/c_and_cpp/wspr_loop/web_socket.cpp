@@ -302,6 +302,7 @@ void WebSocketServer::handle_message(const std::string &raw_message)
 
     if (message == "tx_status")
     {
+        // TODO:  Create this
         llog.logS(DEBUG, "Received tx_status request.");
         send_to_client("Response: tx_status OK");
     }

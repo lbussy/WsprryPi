@@ -2094,7 +2094,7 @@ namespace httplib
                 }
 
                 if (case_ignore::equal(key, "Location") ||
-                    case_ignore::equal(key, "Referer"))
+                    case_ignore::equal(key, "Referrer"))
                 {
                     fn(key, val);
                 }

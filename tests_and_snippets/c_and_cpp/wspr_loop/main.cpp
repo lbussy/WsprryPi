@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
     }
 
     if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
-        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
+        print_usage("An unknown error occurred loading the configuration.", EXIT_FAILURE);
 
     // Display version, Raspberry Pi model, and process ID for context.
     llog.logS(INFO, version_string());

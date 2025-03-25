@@ -155,7 +155,7 @@ void transmit_loop()
             llog.logS(INFO, "Skipping transmission per 0.0 freq request in list.");
         }
 
-        // Defered load if INI changes
+        // Deferred load if INI changes
         apply_deferred_changes();
 
         // Skip to next freq in list.
