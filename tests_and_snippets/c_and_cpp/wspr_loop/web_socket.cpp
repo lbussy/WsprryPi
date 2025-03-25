@@ -5,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -50,6 +50,24 @@
 #include <unistd.h>
 
 // Connect with wscat -c ws://localhost:31416
+
+/**
+ * @brief Global instance of the WebSocket server.
+ *
+ * This declaration allows other translation units to access and control
+ * the WebSocketServer instance. It is typically defined in a `.cpp` file
+ * to coordinate startup, shutdown, and message routing.
+ */
+WebSocketServer socketServer;
+
+/**
+ * @brief Default keep-alive interval for WebSocket ping frames (in seconds).
+ *
+ * This constant defines how often the server will send a ping frame to the client
+ * to maintain the connection. It can be overridden by passing a custom value
+ * to `WebSocketServer::start()`.
+ */
+constexpr const uint32_t SOCKET_KEEPALIVE = 30;
 
 /**
  * @brief Constructs a new WebSocketServer instance.
@@ -148,7 +166,7 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
         keep_alive_thread_ = std::thread(&WebSocketServer::keep_alive_loop, this, keep_alive_secs_);
     }
 
-    llog.logS(INFO, "Sockets server started on port:", port);
+    llog.logS(INFO, "WebSocketServer started on port:", port);
     return true;
 }
 
@@ -165,10 +183,15 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
  */
 void WebSocketServer::stop()
 {
+    if (running_ == false)
+        return;
+
     running_ = false;
+    keep_alive_cv_.notify_all(); // Wake up keep-alive thread if it's sleeping
 
     if (listen_fd_ != -1)
     {
+        shutdown(listen_fd_, SHUT_RDWR);
         close(listen_fd_);
         listen_fd_ = -1;
     }
@@ -184,11 +207,10 @@ void WebSocketServer::stop()
 
     if (server_thread_.joinable())
         server_thread_.join();
-
     if (keep_alive_thread_.joinable())
         keep_alive_thread_.join();
 
-    llog.logS(INFO, "WebSocketServer stopped.");
+    llog.logS(INFO, "Socket server stopped.");
 }
 
 /**
@@ -280,7 +302,7 @@ void WebSocketServer::handle_message(const std::string &raw_message)
 
     if (message == "tx_status")
     {
-        llog.logS(DEBUG, "Received tx_status command.");
+        llog.logS(DEBUG, "Received tx_status request.");
         send_to_client("Response: tx_status OK");
     }
     else if (message == "shutdown")
@@ -475,7 +497,7 @@ void WebSocketServer::send_to_client(const std::string &message)
 
     if (client_sock_ == -1)
     {
-        llog.logS(DEBUG, "No client connected.");
+        llog.logE(WARN, "No client connected.");
         return;
     }
 
@@ -541,15 +563,15 @@ void WebSocketServer::server_loop()
             break;
         }
 
-//#ifdef LOCAL_ONLY
+#ifdef LOCAL_ONLY
         // Verify that the client is connecting from localhost.
         if (std::string(inet_ntoa(client_addr.sin_addr)) != "127.0.0.1")
         {
-            llog.logE(WARN, "Rejected connection from non-localhost:", inet_ntoa(client_addr.sin_addr));
+            llog.logE(WARN, "Rejected connection from non-localhost:", net_ntoa(client_addr.sin_addr));
             close(client);
             continue;
         }
-//#endif // LOCAL_ONLY
+#endif // LOCAL_ONLY
 
         llog.logS(DEBUG, "Client connected.");
 
@@ -622,16 +644,20 @@ void WebSocketServer::server_loop()
  */
 void WebSocketServer::keep_alive_loop(uint32_t interval)
 {
+    std::unique_lock<std::mutex> lock(keep_alive_mutex_);
     while (running_)
     {
-        std::this_thread::sleep_for(std::chrono::seconds(interval));
-        std::lock_guard<std::mutex> lock(client_mutex_);
-        if (client_sock_ != -1)
+        // Wait for the interval or until notified by stop()
+        if (keep_alive_cv_.wait_for(lock, std::chrono::seconds(interval)) == std::cv_status::timeout)
         {
-            // Send a ping frame: FIN set and opcode 0x9.
-            unsigned char ping[2] = {0x89, 0x00};
-            if (send(client_sock_, ping, 2, 0) < 0)
-                std::perror("send ping");
+            std::lock_guard<std::mutex> client_lock(client_mutex_);
+            if (client_sock_ != -1)
+            {
+                // Send a ping frame: FIN set and opcode 0x9.
+                unsigned char ping[2] = {0x89, 0x00};
+                if (send(client_sock_, ping, 2, 0) < 0)
+                    std::perror("send ping");
+            }
         }
     }
 }

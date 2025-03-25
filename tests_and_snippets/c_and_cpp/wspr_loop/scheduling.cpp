@@ -5,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -45,6 +45,7 @@
 #include "signal_handler.hpp"
 #include "transmit.hpp"
 #include "web_server.hpp"
+#include "web_socket.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -279,6 +280,8 @@ void wspr_loop()
 
     // Start web server
     webServer.start(config.web_port);
+    // Start socket server
+    socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
@@ -298,6 +301,7 @@ void wspr_loop()
     ledControl.stop();      // Stop LED driver
     shutdownMonitor.stop(); // Stop shutdown GPIO monitor
     webServer.stop();       // Stop web server
+    socketServer.stop();    // Stop the socket server
 
     shutdown_threads(); // Join and cleanup all threads
 

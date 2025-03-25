@@ -5,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -32,6 +32,9 @@
  */
 
 #include "gpio_input.hpp"
+
+#include "logging.hpp"
+
 #include <chrono>
 #include <stdexcept>
 #include <pthread.h>
@@ -131,7 +134,7 @@ bool GPIOInput::enable(int pin, bool trigger_high, PullMode pull_mode, std::func
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error in GPIO initialization: " << e.what() << std::endl;
+        llog.logE(ERROR, "Error in GPIO initialization:", e.what());
         status_ = Status::Error;
         return false;
     }
@@ -145,7 +148,7 @@ bool GPIOInput::enable(int pin, bool trigger_high, PullMode pull_mode, std::func
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error starting monitor thread: " << e.what() << std::endl;
+        llog.logS(ERROR, "Error starting monitor thread:", e.what());
         status_ = Status::Error;
         return false;
     }

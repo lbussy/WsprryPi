@@ -5,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -101,6 +101,14 @@ int main(int argc, char *argv[])
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
+    SingletonProcess singleton(SINGLETON_PORT);
+
+    if (!singleton())
+    {
+        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
+        std::exit(EXIT_FAILURE);
+    }
+
     // Make sure we are running as root
     if (getuid() != 0)
     {
@@ -114,14 +122,6 @@ int main(int argc, char *argv[])
     llog.logS(INFO, version_string());
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
     llog.logS(INFO, "Process PID:", getpid());
-
-    SingletonProcess singleton(SINGLETON_PORT);
-
-    if (!singleton())
-    {
-        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
-        std::exit(EXIT_FAILURE);
-    }
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
