@@ -32,3 +32,4 @@
 - [ ] Aded chrony `sudo apt install chrony -y`
 - [ ] Make threads run as background priority
 - [ ] Review if we do or can do WSPR-15
+- [ ] Check for thread priorities in classes/threads
