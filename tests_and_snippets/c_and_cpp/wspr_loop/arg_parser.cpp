@@ -1,4 +1,4 @@
-// TODO:  Check Doxygen
+// TODO:  Update doxygen
 
 /**
  * @file arg_parser.cpp
@@ -7,7 +7,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -37,6 +37,7 @@
 #include "arg_parser.hpp"
 
 // Project headers
+#include "config_handler.hpp"
 #include "constants.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
@@ -59,46 +60,6 @@
 
 // System headers
 #include <getopt.h>
-
-std::string inifile = "";
-
-/**
- * @brief Global configuration instance for argument parsing.
- *
- * This global instance of `ArgParserConfig` holds the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is defined in `arg_parser.cpp` and declared
- * as `extern` in `arg_parser.hpp` so it can be accessed globally.
- *
- * @note Ensure that `arg_parser.hpp` is included in any file that
- *       needs access to this configuration instance.
- *
- * @see ArgParserConfig
- */
-ArgParserConfig config;
-
-/**
- * @brief Global instance of the IniFile configuration handler.
- *
- * The `ini` object provides an interface for reading, writing, and managing
- * INI-style configuration files. It supports key-value pair retrieval, type-safe
- * conversions, and file monitoring for changes.
- *
- * This instance is initialized globally to allow centralized configuration
- * management across all modules of the application.
- *
- * Example usage:
- * @code
- * std::string callsign = ini.get_string_value("Common", "Call Sign");
- * int power = ini.get_int_value("Common", "TX Power");
- * @endcode
- *
- * The `ini` object is commonly used alongside `iniMonitor` to detect and apply
- * configuration changes dynamically without restarting the application.
- *
- * @see https://github.com/lbussy/INI-Handler for detailed documentation and examples.
- */
-IniFile ini;
 
 /**
  * @brief Global instance of the MonitorFile for INI file change detection.
@@ -360,32 +321,6 @@ void print_usage(const std::string &message, int exit_code)
 }
 
 /**
- * @brief Displays usage information and exits or returns based on the exit code.
- *
- * This overload allows calling `print_usage()` with just an exit code.
- * It redirects to the main `print_usage()` function with an empty message.
- *
- * @note This function follows the same exit behavior as the primary function:
- *        - `0` → Exits with `EXIT_SUCCESS`.
- *        - `1` → Exits with `EXIT_FAILURE`.
- *        - `3` → Returns from the function without exiting.
- *        - Any other value → Calls `std::exit(exit_code)`.
- *
- * @param exit_code The exit code to use for termination or return behavior.
- *
- * @example
- * @code
- * print_usage(1); // Outputs usage and exits with EXIT_FAILURE.
- * print_usage(3); // Outputs usage and returns.
- * print_usage(0); // Outputs usage and exits with EXIT_SUCCESS.
- * @endcode
- */
-inline void print_usage(int exit_code)
-{
-    print_usage("", exit_code);
-}
-
-/**
  * @brief Displays the current configuration values from the INI file.
  *
  * If an INI file is loaded, this function logs the current configuration
@@ -423,8 +358,9 @@ void show_config_values(bool reload)
     llog.logS(DEBUG, "Use LED:", config.use_led ? "true" : "false");
     llog.logS(DEBUG, "LED on GPIO", config.led_pin);
     // [Server]
-    llog.logS(DEBUG, "Server runs on port:", config.server_port);
-    llog.logS(DEBUG, "Use shutdown buton:", config.use_shutdown ? "true" : "false");
+    llog.logS(DEBUG, "Web server runs on port:", config.web_port);
+    llog.logS(DEBUG, "Socket server runs on port:", config.socket_port);
+    llog.logS(DEBUG, "Use shutdown button:", config.use_shutdown ? "true" : "false");
     llog.logS(DEBUG, "Shutdown button GPIO", config.shutdown_pin);
 }
 
@@ -492,6 +428,7 @@ bool validate_config_data()
     if (config.use_shutdown && (config.shutdown_pin >= 0 && config.shutdown_pin <= 27))
     {
         shutdownMonitor.enable(config.shutdown_pin, false, GPIOInput::PullMode::PullUp, callback_shutdown_system);
+        shutdownMonitor.setPriority(SCHED_RR, 10);
     }
     else
     {
@@ -659,7 +596,7 @@ bool validate_config_data()
         {
             if (config.loop_tx)
             {
-                llog.logS(INFO, "Transmissions will continue until it receives a singnal to stop.");
+                llog.logS(INFO, "Transmissions will continue until it receives a signal to stop.");
             }
             else
             {
@@ -779,10 +716,18 @@ bool load_from_ini()
     catch (...)
     {
     }
-    // Server
+    // Web Server
     try
     {
-        config.server_port = ini.get_int_value("Server", "Port");
+        config.web_port = ini.get_int_value("Server", "Web Port");
+    }
+    catch (...)
+    {
+    }
+    // Socket Server
+    try
+    {
+        config.socket_port = ini.get_int_value("Server", "Socket Port");
     }
     catch (...)
     {
@@ -801,6 +746,9 @@ bool load_from_ini()
     catch (...)
     {
     }
+
+    // Update global JSON from Config object
+    config_to_json();
 
     return true;
 }
@@ -822,6 +770,8 @@ bool load_from_ini()
  */
 bool parse_command_line(int argc, char *argv[])
 {
+    // Create original JSON
+    init_config_json();
     std::vector<char *> args(argv, argv + argc); // Copy arguments for modification
 
     // First pass: Look for "-i <file>" before processing other options
@@ -829,21 +779,21 @@ bool parse_command_line(int argc, char *argv[])
     {
         if ((std::string(*it) == "-i" || std::string(*it) == "--ini-file") && (it + 1) != args.end())
         {
-            inifile = *(it + 1);
+            config.ini_filename = *(it + 1);
             config.use_ini = true;
             config.loop_tx = true;
-            ini.set_filename(inifile);
-            if (!load_from_ini())
-            {
-                llog.logE(FATAL, "Unhandled error loading INI.");
-                std::exit(EXIT_FAILURE);
-            }
+            // Create original JSON and Config struct, overlay INI contents
+            ini.set_filename(config.ini_filename);
+            config_to_json();
+            ini_to_json(config.ini_filename);
+            json_to_config();
 
             // Remove "-i <file>" from args
             args.erase(it, it + 2);
             break; // Exit loop after removing argument
         }
     }
+
     // Update argc and argv pointers for getopt_long()
     argc = args.size();
     argv = args.data();
@@ -867,13 +817,14 @@ bool parse_command_line(int argc, char *argv[])
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
         {"power_level", required_argument, nullptr, 'd'},     // Via: [Extended] Power Level = 7
-        {"port", required_argument, nullptr, 'e'},            // Via: [Server] Port = 31415
+        {"web-port", required_argument, nullptr, 'w'},        // Via: [Server] Port = 31415
+        {"socket-port", required_argument, nullptr, 'k'},        // Via: [Server] Port = 31415
         {nullptr, 0, nullptr, 0}};
 
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:e:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -1067,25 +1018,47 @@ bool parse_command_line(int argc, char *argv[])
             }
             break;
         }
-        case 'e': // Set port number
+        case 'w': // Set web port number
         {
             try
             {
                 int port = std::stoi(optarg);
-                if (port < 49152 || port > 65535)
+                if (port < 1024 || port > 49151)
                 {
-                    llog.logS(WARN, "Invalid port number. Using default: 31415.");
-                    config.server_port = 31415;
+                    llog.logS(WARN, "Invalid web number. Using default: 31415.");
+                    config.web_port = 31415;
                 }
                 else
                 {
-                    config.server_port = port;
+                    config.web_port = port;
                 }
             }
             catch (const std::exception &)
             {
-                llog.logE(WARN, "Invalid server port, defaulting to 31415.");
-                config.server_port = 31415;
+                llog.logE(WARN, "Invalid web port, defaulting to 31415.");
+                config.web_port = 31415;
+            }
+            break;
+        }
+        case 'k': // Set socket port number
+        {
+            try
+            {
+                int port = std::stoi(optarg);
+                if (port < 1024 || port > 49151)
+                {
+                    llog.logS(WARN, "Invalid socket port number. Using default: 31416.");
+                    config.web_port = 31416;
+                }
+                else
+                {
+                    config.web_port = port;
+                }
+            }
+            catch (const std::exception &)
+            {
+                llog.logE(WARN, "Invalid socket port, defaulting to 31416.");
+                config.web_port = 31415;
             }
             break;
         }
@@ -1096,6 +1069,8 @@ bool parse_command_line(int argc, char *argv[])
         }
         }
     }
+    // Re-save any config changes in the JSON
+    config_to_json();
 
     if (config.mode == ModeType::WSPR)
     {
@@ -1167,6 +1142,8 @@ bool parse_command_line(int argc, char *argv[])
             }
         }
     }
+    // Re-save any config changes in the JSON
+    config_to_json();
 
     return true;
 }
@@ -1187,6 +1164,7 @@ bool load_config(int argc, char *argv[])
         try
         {
             // Validate configuration and ensure all required settings are present.
+            // TODO: Put version/type/PID before this.
             if (!validate_config_data())
             {
                 print_usage("Configuration validation failed.", EXIT_FAILURE);
@@ -1200,7 +1178,7 @@ bool load_config(int argc, char *argv[])
     }
     catch (const std::exception &e)
     {
-        std::string error_message = "Exception caught processsing arguments: " + std::string(e.what());
+        std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
     }
     return retval;

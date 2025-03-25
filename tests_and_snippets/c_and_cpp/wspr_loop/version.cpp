@@ -2,11 +2,13 @@
  * @file version.cpp
  * @brief Provides software and hardware version information.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a derivative work.
  *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
@@ -31,6 +33,8 @@
 
 // Primary header for this source file
 #include "version.hpp"
+
+#include "logging.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -238,7 +242,7 @@ int getProcessorTypeAsInt()
     // Check if the processor type is empty (indicating an error)
     if (processorType.empty())
     {
-        std::cerr << "Failed to get processor type." << std::endl;
+        llog.logE(ERROR, "Failed to get processor type.");
         return -1; ///< Return -1 to indicate an error
     }
 
@@ -252,7 +256,7 @@ int getProcessorTypeAsInt()
     }
 
     // If the type is not found, log a warning and return -1
-    std::cerr << "Unknown processor type: " << processorType << std::endl;
+    llog.logE(ERROR, "Unknown processor type:", processorType);
     return -1;
 }
 
@@ -283,7 +287,7 @@ std::string getProcessorType()
     std::ifstream dtCompatible("/sys/firmware/devicetree/base/compatible");
     if (!dtCompatible.is_open())
     {
-        std::cerr << "Failed to open /sys/firmware/devicetree/base/compatible file." << std::endl;
+        llog.logE(ERROR, "Failed to open /sys/firmware/devicetree/base/compatible.");
         return "Unknown CPU"; ///< Return a default value if the file cannot be opened
     }
 
@@ -345,7 +349,7 @@ std::string getRaspberryPiModel()
     // Check if the file opened successfully.
     if (!modelFile.is_open())
     {
-        std::cerr << "Failed to open /proc/device-tree/model file." << std::endl;
+        llog.logE(ERROR, "Failed to open /proc/device-tree/model.");
         return ""; // Return an empty string instead of nullptr.
     }
 

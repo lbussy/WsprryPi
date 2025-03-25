@@ -1,35 +1,40 @@
 /**
- * @class GPIOInput
- * @brief Monitors a GPIO pin using libgpiod with thread-based event handling.
+ * @file gpio_input.cpp
+ * @brief Handles shutdown button sensing.
  *
- * This class allows for edge-triggered monitoring of a GPIO pin using the
- * libgpiod C++ API. It supports edge detection (rising or falling), optional
- * internal pull-up or pull-down configuration, CPU priority control, debounce
- * management, and thread-safe lifecycle operations.
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a derivative work.
  *
- * Designed for use on the Raspberry Pi platform with BCM GPIO numbering,
- * the class is thread-based and suitable for global instantiation.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
- * Example usage:
- * @code
- * GPIOInput monitor;
- * monitor.enable(19, false, GPIOInput::PullMode::PullUp, []() {
- *     std::cout << "Shutdown button pressed." << std::endl;
- * });
- * @endcode
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * The monitoring thread will invoke the callback only once per edge trigger
- * until resetTrigger() is called. The thread can be stopped, reconfigured,
- * and restarted as needed.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Dependencies:
- *  - libgpiod >= 1.6
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * Thread-safe: Yes
- * Reentrant: No
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #include "gpio_input.hpp"
+
+#include "logging.hpp"
+
 #include <chrono>
 #include <stdexcept>
 #include <pthread.h>
@@ -129,7 +134,7 @@ bool GPIOInput::enable(int pin, bool trigger_high, PullMode pull_mode, std::func
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error in GPIO initialization: " << e.what() << std::endl;
+        llog.logE(ERROR, "Error in GPIO initialization:", e.what());
         status_ = Status::Error;
         return false;
     }
@@ -143,7 +148,7 @@ bool GPIOInput::enable(int pin, bool trigger_high, PullMode pull_mode, std::func
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error starting monitor thread: " << e.what() << std::endl;
+        llog.logS(ERROR, "Error starting monitor thread:", e.what());
         status_ = Status::Error;
         return false;
     }
@@ -183,25 +188,42 @@ void GPIOInput::resetTrigger()
 }
 
 /**
- * @brief Set the CPU priority for the monitoring thread.
+ * @brief Sets the scheduling policy and priority of the signal handling thread.
  *
- * @param priority Desired CPU priority (e.g., in the SCHED_FIFO range).
- * @return true if the priority was set successfully.
+ * @details
+ * Uses `pthread_setschedparam()` to adjust the real-time scheduling policy and
+ * priority of the signal handling worker thread.
+ *
+ * This function is useful for raising the importance of the signal handling
+ * thread under high system load, especially when using `SCHED_FIFO` or
+ * `SCHED_RR`.
+ *
+ * @param schedPolicy The scheduling policy (e.g., `SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`).
+ * @param priority The thread priority value to assign (depends on policy).
+ *
+ * @return `true` if the scheduling parameters were successfully applied,
+ *         `false` otherwise (e.g., thread not running or `pthread_setschedparam()` failed).
+ *
+ * @note
+ * The caller may require elevated privileges (e.g., CAP_SYS_NICE) to apply real-time priorities.
+ * It is the caller's responsibility to ensure the priority value is valid for the given policy.
  */
-bool GPIOInput::setCPUPriority(int priority)
+bool GPIOInput::setPriority(int schedPolicy, int priority)
 {
-    if (!running_)
+    // Ensure that the worker thread is active and joinable
+    if (!monitor_thread_.joinable())
     {
         return false;
     }
-    pthread_t handle = monitor_thread_.native_handle();
+
+    // Set up the scheduling parameters
     sched_param sch_params;
     sch_params.sched_priority = priority;
-    if (pthread_setschedparam(handle, SCHED_FIFO, &sch_params))
-    {
-        return false;
-    }
-    return true;
+
+    // Attempt to apply the scheduling policy and priority
+    int ret = pthread_setschedparam(monitor_thread_.native_handle(), schedPolicy, &sch_params);
+
+    return (ret == 0);
 }
 
 /**

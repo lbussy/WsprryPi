@@ -32,9 +32,6 @@
 [submodule "tests_and_snippets/c_and_cpp/wspr_loop/Singleton"]
 	path = tests_and_snippets/c_and_cpp/wspr_loop/Singleton
 	url = https://github.com/lbussy/Singleton.git
-[submodule "tests_and_snippets/c_and_cpp/wp_server/LCBLog"]
-	path = tests_and_snippets/c_and_cpp/tcp_server/LCBLog
-	url = https://github.com/lbussy/LCBLog.git
 [submodule "tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox"]
 	path = tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox
 	url = https://github.com/lbussy/Broadcom-Mailbox.git

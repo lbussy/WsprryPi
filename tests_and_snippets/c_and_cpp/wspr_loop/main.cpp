@@ -1,5 +1,3 @@
-// TODO:  Check Doxygen
-
 /**
  * @file main.cpp
  * @brief Entry point for the Wsprry Pi application.
@@ -7,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -103,20 +101,6 @@ int main(int argc, char *argv[])
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
-    // Make sure we are running as root
-    if (getuid() != 0)
-    {
-        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
-    }
-
-    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
-        print_usage("An unknown error occured loading the configuration.", EXIT_FAILURE);
-
-    // Display version, Raspberry Pi model, and process ID for context.
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
-    llog.logS(INFO, "Process PID:", getpid());
-
     SingletonProcess singleton(SINGLETON_PORT);
 
     if (!singleton())
@@ -125,14 +109,28 @@ int main(int argc, char *argv[])
         std::exit(EXIT_FAILURE);
     }
 
+    // Make sure we are running as root
+    if (getuid() != 0)
+    {
+        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
+    }
+
+    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
+        print_usage("An unknown error occurred loading the configuration.", EXIT_FAILURE);
+
+    // Display version, Raspberry Pi model, and process ID for context.
+    llog.logS(INFO, version_string());
+    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, "Process PID:", getpid());
+
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
 
     // Register signal handlers for safe shutdown and terminal management.
     block_signals();
-    signalHandler.setPriority(10);
     signalHandler.setCallback(callback_signal_handler);
     signalHandler.start();
+    signalHandler.setPriority(SCHED_RR, 10);
 
     // Startup WSPR loop
     try
@@ -148,7 +146,7 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting.");
+    llog.logS(INFO, project_name(), "exiting."); // TODO: Getting a segmentation fault after this.
 
     // Stop the SignalHandler.
     signalHandler.stop();
@@ -158,7 +156,14 @@ int main(int argc, char *argv[])
     {
         llog.logS(INFO, "Shutting down.");
         sync(); // Flush file system buffers
-        std::system("shutdown -h now &");
+        std::system("sleep 1 && shutdown -h now &");
+    }
+    // Reboot if set
+    if (reboot_flag.load())
+    {
+        llog.logS(INFO, "Rebooting.");
+        sync(); // Flush file system buffers
+        std::system("sleep 1 && reboot &");
     }
 
     return EXIT_SUCCESS;

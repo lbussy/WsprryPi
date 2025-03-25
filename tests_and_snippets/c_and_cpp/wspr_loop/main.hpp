@@ -5,7 +5,7 @@
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
- * a deriivative work.
+ * a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
@@ -34,6 +34,23 @@
 #ifndef _MAIN_HPP
 #define _MAIN_HPP
 
+/**
+ * @brief Entry point for the WsprryPi application.
+ *
+ * This function initializes the application, parses command-line arguments,
+ * loads the INI configuration, verifies NTP synchronization, and starts the
+ * main WSPR transmission loop. It also sets system performance modes and
+ * handles signal management for graceful shutdown.
+ *
+ * @param argc The number of command-line arguments.
+ * @param argv Array of C-style strings representing the arguments.
+ * @return int Exit status: 0 on success, non-zero on failure.
+ *
+ * @note Ensure that NTP synchronization is stable before proceeding.
+ *       If NTP verification fails, the program exits immediately.
+ *       The log level is set to INFO by default, but can be changed
+ *       via a macro or configuration option.
+ */
 void main_shutdown(bool from_main = false);
 
 #endif //_MAIN_HPP

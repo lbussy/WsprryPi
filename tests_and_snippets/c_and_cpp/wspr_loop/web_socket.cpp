@@ -1,0 +1,766 @@
+/**
+ * @file web_socket.cpp
+ * @brief A simple websocket server for Wsprry Pi server support.
+ *
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a derivative work.
+ *
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#include "web_socket.hpp"
+
+#include "logging.hpp"
+#include "sha1.hpp"
+#include "scheduling.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <thread>
+#include <vector>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
+
+// Connect with wscat -c ws://localhost:31416
+
+/**
+ * @brief Global instance of the WebSocket server.
+ *
+ * This declaration allows other translation units to access and control
+ * the WebSocketServer instance. It is typically defined in a `.cpp` file
+ * to coordinate startup, shutdown, and message routing.
+ */
+WebSocketServer socketServer;
+
+/**
+ * @brief Default keep-alive interval for WebSocket ping frames (in seconds).
+ *
+ * This constant defines how often the server will send a ping frame to the client
+ * to maintain the connection. It can be overridden by passing a custom value
+ * to `WebSocketServer::start()`.
+ */
+constexpr const uint32_t SOCKET_KEEPALIVE = 30;
+
+/**
+ * @brief Constructs a new WebSocketServer instance.
+ *
+ * Initializes all internal members:
+ * - Sets the listening socket and client socket to -1 (invalid).
+ * - Sets the running flag to false.
+ * - Sets the default keep-alive interval to 30 seconds.
+ */
+WebSocketServer::WebSocketServer()
+    : listen_fd_(-1), running_(false), client_sock_(-1), keep_alive_secs_(30) {}
+
+/**
+ * @brief Destroys the WebSocketServer instance.
+ *
+ * Calls stop() to ensure that the server is properly shut down and
+ * all resources (threads, sockets) are cleaned up.
+ */
+WebSocketServer::~WebSocketServer()
+{
+    stop();
+}
+
+/**
+ * @brief Starts the WebSocket server on a specified port.
+ *
+ * Creates an IPv6 socket configured to accept both IPv6 and IPv4 connections,
+ * binds to the specified port, and begins listening for client connections.
+ * Spawns the main server thread and, optionally, a keep-alive ping thread.
+ *
+ * @param port The TCP port to bind to (must be between 1024 and 49151).
+ * @param keep_alive_secs Interval in seconds between keep-alive pings.
+ *        Set to 0 to disable pinging.
+ *
+ * @return true if the server started successfully.
+ * @return false if socket creation, binding, or listening fails.
+ *
+ * @note Uses IPv6 dual-stack by setting IPV6_V6ONLY to 0, allowing both IPv4
+ *       and IPv6 clients to connect.
+ */
+bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
+{
+    if (port < 1024 || port > 49151)
+    {
+        llog.logE(ERROR, "Port must be between 1024 and 49151:", port);
+        return false;
+    }
+    keep_alive_secs_ = keep_alive_secs;
+
+    // Create an IPv6 socket.
+    listen_fd_ = socket(AF_INET6, SOCK_STREAM, 0);
+    if (listen_fd_ < 0)
+    {
+        std::perror("socket");
+        return false;
+    }
+
+    // Allow reuse of the address.
+    int opt = 1;
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        std::perror("setsockopt");
+        return false;
+    }
+
+    // Disable IPV6_V6ONLY to accept both IPv6 and IPv4 connections.
+    int off = 0;
+    if (setsockopt(listen_fd_, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off)) < 0)
+    {
+        std::perror("setsockopt IPV6_V6ONLY");
+        // Not a fatal error on some systems, so you may continue.
+    }
+
+    // Bind to the unspecified IPv6 address (this accepts all addresses)
+    struct sockaddr_in6 addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any; // Accept connections from any IPv6 (and IPv4 via mapped addresses)
+    addr.sin6_port = htons(port);
+    if (bind(listen_fd_, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
+    {
+        std::perror("bind");
+        return false;
+    }
+
+    if (listen(listen_fd_, 10) < 0)
+    {
+        std::perror("listen");
+        return false;
+    }
+
+    running_ = true;
+    server_thread_ = std::thread(&WebSocketServer::server_loop, this);
+    if (keep_alive_secs_ > 0)
+    {
+        keep_alive_thread_ = std::thread(&WebSocketServer::keep_alive_loop, this, keep_alive_secs_);
+    }
+
+    llog.logS(INFO, "WebSocketServer started on port:", port);
+    return true;
+}
+
+/**
+ * @brief Stops the WebSocket server and releases all resources.
+ *
+ * Gracefully shuts down the server by:
+ * - Marking the server as not running.
+ * - Waking the keep-alive thread (if active).
+ * - Closing the listening socket to break out of `accept()`.
+ * - Closing the client socket to break out of `recv()`.
+ * - Joining all threads to ensure clean shutdown.
+ *
+ * After this call, the server can be restarted by calling `start()` again.
+ */
+void WebSocketServer::stop()
+{
+    if (!running_)
+        return;
+
+    running_ = false;
+
+    // Notify condition variable to interrupt keep-alive sleep
+    keep_alive_cv_.notify_all();
+
+    // Shutdown and close the listening socket (unblocks accept)
+    if (listen_fd_ != -1)
+    {
+        shutdown(listen_fd_, SHUT_RDWR); // force accept() to return
+        close(listen_fd_);
+        listen_fd_ = -1;
+    }
+
+    // Shutdown and close client connection (unblocks recv)
+    {
+        std::lock_guard<std::mutex> lock(client_mutex_);
+        if (client_sock_ != -1)
+        {
+            shutdown(client_sock_, SHUT_RDWR); // force recv() to return
+            close(client_sock_);
+            client_sock_ = -1;
+        }
+    }
+
+    // Join the server thread
+    if (server_thread_.joinable())
+        server_thread_.join();
+
+    // Join the keep-alive thread
+    if (keep_alive_thread_.joinable())
+        keep_alive_thread_.join();
+
+    llog.logS(INFO, "Socket server stopped.");
+}
+
+/**
+ * @brief Trims whitespace from both ends of a string.
+ *
+ * This method removes all leading and trailing whitespace characters
+ * (spaces, tabs, newlines, carriage returns) from the input string.
+ *
+ * @param s The string to trim.
+ * @return A new string with whitespace removed from the beginning and end.
+ */
+std::string WebSocketServer::trim(const std::string &s)
+{
+    auto start = s.begin();
+    while (start != s.end() && std::isspace(static_cast<unsigned char>(*start)))
+    {
+        ++start;
+    }
+
+    auto end = s.end();
+    do
+    {
+        --end;
+    } while (std::distance(start, end) > 0 && std::isspace(static_cast<unsigned char>(*end)));
+
+    return std::string(start, end + 1);
+}
+
+/**
+ * @brief Converts all characters in a string to lowercase.
+ *
+ * This utility performs ASCII-only lowercase conversion by applying
+ * std::tolower to each character in the input string.
+ *
+ * @param s The string to convert.
+ * @return A lowercase version of the input string.
+ */
+std::string WebSocketServer::to_lower(const std::string &s)
+{
+    std::string result = s;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c)
+                   { return std::tolower(c); });
+    return result;
+}
+
+/**
+ * @brief Computes the Sec-WebSocket-Accept response key for a WebSocket handshake.
+ *
+ * This function implements the server-side handshake response logic defined
+ * by the WebSocket protocol (RFC 6455). It appends the fixed magic GUID to the
+ * client's Sec-WebSocket-Key, computes the SHA1 hash of the result, and then
+ * encodes that hash in Base64.
+ *
+ * @param client_key The value received in the client's Sec-WebSocket-Key header.
+ * @return A Base64-encoded SHA1 hash string suitable for the Sec-WebSocket-Accept header.
+ */
+std::string WebSocketServer::compute_websocket_accept(const std::string &client_key)
+{
+    const std::string magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    std::string concatenated = client_key + magic;
+    SHA1 sha;
+    sha.update(concatenated);
+    std::string sha1_result = sha.final(); // 20-byte binary hash
+    return base64_encode(reinterpret_cast<const unsigned char *>(sha1_result.data()), sha1_result.size());
+}
+
+/**
+ * @brief Handles and dispatches incoming client messages.
+ *
+ * This function trims and lowercases the incoming message to
+ * allow for case- and whitespace-insensitive command parsing.
+ * It recognizes specific command keywords and sends corresponding
+ * responses back to the client:
+ *
+ * - "tx_status" → Responds with transmission status acknowledgment.
+ * - "shutdown"  → Responds with shutdown acknowledgment.
+ * - "reboot"    → Responds with reboot acknowledgment.
+ * - "stop_tx"   → Responds with stop transmission acknowledgment.
+ *
+ * All other messages are echoed back with a generic reply.
+ *
+ * @param raw_message The raw text message received from the client.
+ */
+void WebSocketServer::handle_message(const std::string &raw_message)
+{
+    std::string trimmed = trim(raw_message);
+    std::string message = to_lower(trimmed);
+
+    if (message == "tx_status")
+    {
+        llog.logS(DEBUG, "Received tx_status request.");
+        send_to_client(std::string(in_transmission.load() ? "true" : "false"));
+    }
+    else if (message == "shutdown")
+    {
+        llog.logS(INFO, "Received websocket shutdown command.");
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+        shutdown_flag.store(true);  // Indicate shutdown sequence active
+        send_to_client("Response: shutdown command acknowledged");
+    }
+    else if (message == "reboot")
+    {
+        llog.logS(INFO, "Received websocket reboot command.");
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on reboot
+        reboot_flag.store(true);    // Indicate reboot sequence active
+        send_to_client("Response: reboot command acknowledged");
+    }
+    else if (message == "stop_tx")
+    {
+        // TODO:  Create this
+        llog.logS(INFO, "Received stop_tx command.");
+        send_to_client("Response: stop_tx command acknowledged");
+    }
+    else
+    {
+        llog.logS(DEBUG, "Received message:", message);
+        send_to_client("Response: I received '" + message + "'");
+    }
+}
+
+/**
+ * @brief Decodes a WebSocket frame from raw socket data.
+ *
+ * This function parses a WebSocket frame according to RFC 6455.
+ * It extracts the payload length, masking key (if present),
+ * opcode, and unmasked payload data. It handles both standard,
+ * extended 16-bit, and 64-bit payload lengths.
+ *
+ * @param data Pointer to the buffer containing raw frame bytes.
+ * @param data_len Number of bytes available in the buffer.
+ * @param frame_size Output parameter set to the total number of bytes consumed.
+ * @param opcode Output parameter set to the frame's opcode (e.g., 0x1 = text).
+ *
+ * @return A decoded and unmasked message string, or an empty string on failure/incomplete frame.
+ *
+ * @note This function assumes that frames are received in full. Partial frames
+ *       should be accumulated before calling this function.
+ */
+std::string WebSocketServer::decode_websocket_frame(const char *data, size_t data_len, size_t &frame_size, uint8_t &opcode)
+{
+    if (data_len < 2)
+    {
+        frame_size = 0;
+        return "";
+    }
+
+    uint8_t byte1 = static_cast<uint8_t>(data[0]);
+    opcode = byte1 & 0x0F;
+    // bool fin = byte1 & 0x80; // Currently unused
+    uint8_t byte2 = static_cast<uint8_t>(data[1]);
+    bool mask = byte2 & 0x80;
+    uint64_t payload_length = byte2 & 0x7F;
+
+    size_t pos = 2;
+
+    if (payload_length == 126)
+    {
+        if (data_len < pos + 2)
+        {
+            frame_size = 0;
+            return "";
+        }
+        payload_length = (static_cast<uint8_t>(data[pos]) << 8) |
+                         static_cast<uint8_t>(data[pos + 1]);
+        pos += 2;
+    }
+    else if (payload_length == 127)
+    {
+        if (data_len < pos + 8)
+        {
+            frame_size = 0;
+            return "";
+        }
+        payload_length = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            payload_length = (payload_length << 8) |
+                             static_cast<uint8_t>(data[pos + i]);
+        }
+        pos += 8;
+    }
+
+    if (mask)
+    {
+        if (data_len < pos + 4)
+        {
+            frame_size = 0;
+            return "";
+        }
+
+        uint8_t masking_key[4] = {
+            static_cast<uint8_t>(data[pos]),
+            static_cast<uint8_t>(data[pos + 1]),
+            static_cast<uint8_t>(data[pos + 2]),
+            static_cast<uint8_t>(data[pos + 3])};
+        pos += 4;
+
+        if (data_len < pos + payload_length)
+        {
+            frame_size = 0;
+            return "";
+        }
+
+        std::string message;
+        message.resize(payload_length);
+        for (uint64_t i = 0; i < payload_length; i++)
+        {
+            message[i] = data[pos + i] ^ masking_key[i % 4];
+        }
+
+        frame_size = pos + payload_length;
+        return message;
+    }
+    else
+    {
+        // Unmasked frame (should not happen from clients per RFC)
+        if (data_len < pos + payload_length)
+        {
+            frame_size = 0;
+            return "";
+        }
+
+        std::string message(data + pos, payload_length);
+        frame_size = pos + payload_length;
+        return message;
+    }
+}
+
+/**
+ * @brief Encodes binary data into a Base64-encoded string.
+ *
+ * This minimal Base64 encoder processes input bytes in 3-byte chunks,
+ * converting each to 4 ASCII characters from the standard Base64 alphabet.
+ * Padding (`=`) is added as necessary when the input is not a multiple of 3 bytes.
+ *
+ * @param data Pointer to the input byte buffer.
+ * @param len  Number of bytes to encode.
+ *
+ * @return A Base64-encoded string representation of the input data.
+ *
+ * @note This implementation does not insert line breaks or headers.
+ *       It is sufficient for WebSocket key encoding and similar purposes.
+ */
+std::string WebSocketServer::base64_encode(const unsigned char *data, size_t len)
+{
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    encoded.reserve(((len + 2) / 3) * 4);
+
+    for (size_t i = 0; i < len; i += 3)
+    {
+        int val = data[i] << 16;
+
+        if (i + 1 < len)
+        {
+            val |= data[i + 1] << 8;
+        }
+        if (i + 2 < len)
+        {
+            val |= data[i + 2];
+        }
+
+        encoded.push_back(table[(val >> 18) & 0x3F]);
+        encoded.push_back(table[(val >> 12) & 0x3F]);
+        encoded.push_back(i + 1 < len ? table[(val >> 6) & 0x3F] : '=');
+        encoded.push_back(i + 2 < len ? table[val & 0x3F] : '=');
+    }
+
+    return encoded;
+}
+
+/**
+ * @brief Sends a text message to the connected WebSocket client.
+ *
+ * Constructs a WebSocket text frame (RFC 6455) using the given message.
+ * The frame includes:
+ * - FIN bit and opcode 0x1 (text)
+ * - Payload length encoding (7-bit, 16-bit, or 64-bit depending on size)
+ * - Unmasked payload (server-to-client frames are not masked)
+ *
+ * If no client is currently connected, the function logs a warning and returns.
+ *
+ * @param message The UTF-8 encoded text message to send to the client.
+ */
+void WebSocketServer::send_to_client(const std::string &message)
+{
+    std::lock_guard<std::mutex> lock(client_mutex_);
+
+    if (client_sock_ == -1)
+    {
+        llog.logE(WARN, "No client connected.");
+        return;
+    }
+
+    std::string frame;
+    frame.push_back(static_cast<char>(0x81)); // FIN + opcode 0x1 (text)
+
+    size_t len = message.size();
+    if (len < 126)
+    {
+        frame.push_back(static_cast<char>(len));
+    }
+    else if (len < 65536)
+    {
+        frame.push_back(126);
+        frame.push_back((len >> 8) & 0xFF);
+        frame.push_back(len & 0xFF);
+    }
+    else
+    {
+        frame.push_back(127);
+        for (int i = 7; i >= 0; i--)
+        {
+            frame.push_back((len >> (8 * i)) & 0xFF);
+        }
+    }
+
+    frame.append(message);
+
+    ssize_t sent = send(client_sock_, frame.data(), frame.size(), 0);
+    if (sent < 0)
+        std::perror("send");
+}
+
+/**
+ * @brief Main server loop that accepts and manages client connections.
+ *
+ * This function runs in its own thread once the server is started.
+ * It continuously listens for new TCP client connections using `accept()`.
+ *
+ * If a connection is accepted:
+ * - Optionally verifies the connection is from localhost (if LOCAL_ONLY is defined).
+ * - Performs the WebSocket handshake.
+ * - Stores the client socket securely using a mutex.
+ * - Enters a read loop where incoming frames are decoded and handled.
+ *
+ * Only text frames (opcode 0x1) are passed to `handle_message()`. Other frame
+ * types are acknowledged but ignored.
+ *
+ * The loop terminates if the server is stopped or a client disconnects.
+ * Upon disconnect, the client socket is closed and reset to -1.
+ */
+void WebSocketServer::server_loop()
+{
+    while (running_)
+    {
+        sockaddr_in client_addr;
+        socklen_t addrlen = sizeof(client_addr);
+        int client = accept(listen_fd_, reinterpret_cast<sockaddr *>(&client_addr), &addrlen);
+        if (client < 0)
+        {
+            if (!running_)
+            {
+                llog.logS(DEBUG, "Accept exited due to shutdown.");
+                break;
+            }
+
+            std::perror("accept");
+            continue;
+        }
+
+#ifdef LOCAL_ONLY
+        // Verify that the client is connecting from localhost.
+        if (std::string(inet_ntoa(client_addr.sin_addr)) != "127.0.0.1")
+        {
+            llog.logE(WARN, "Rejected connection from non-localhost:", inet_ntoa(client_addr.sin_addr));
+            close(client);
+            continue;
+        }
+#endif // LOCAL_ONLY
+
+        llog.logS(DEBUG, "Client connected.");
+
+        if (!perform_handshake(client))
+        {
+            llog.logE(WARN, "Handshake failed.");
+            close(client);
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(client_mutex_);
+            client_sock_ = client;
+        }
+
+        // Read and decode client messages.
+        char buf[1024];
+        while (running_)
+        {
+            ssize_t bytes = recv(client, buf, sizeof(buf), 0);
+            if (bytes <= 0)
+            {
+                if (!running_)
+                    llog.logS(DEBUG, "recv() exited due to shutdown.");
+                break;
+            }
+
+            size_t pos = 0;
+            while (pos < static_cast<size_t>(bytes))
+            {
+                size_t frame_size = 0;
+                uint8_t opcode = 0;
+                std::string message = decode_websocket_frame(buf + pos, bytes - pos, frame_size, opcode);
+
+                if (frame_size == 0)
+                    break; // Incomplete frame
+
+                pos += frame_size;
+
+                if (opcode == 0x1)
+                {
+                    // Text frame
+                    handle_message(message);
+                }
+                else
+                {
+                    llog.logS(DEBUG, "Received non-text frame (opcode:", static_cast<int>(opcode), ")");
+                }
+            }
+        }
+
+        llog.logS(DEBUG, "Client disconnected.");
+
+        {
+            std::lock_guard<std::mutex> lock(client_mutex_);
+            close(client);
+            client_sock_ = -1;
+        }
+    }
+}
+
+/**
+ * @brief Background loop that sends periodic WebSocket ping frames.
+ *
+ * This function runs in a dedicated thread when keep-alive is enabled.
+ * It waits for the specified interval using a condition variable, which
+ * allows interruption when `stop()` is called. If a client is connected,
+ * it sends a WebSocket ping frame (opcode 0x9) with no payload.
+ *
+ * The ping frame format consists of:
+ * - 0x89: FIN bit set and opcode 0x9 (ping)
+ * - 0x00: Payload length of 0 bytes
+ *
+ * @param interval Number of seconds between keep-alive pings.
+ */
+void WebSocketServer::keep_alive_loop(uint32_t interval)
+{
+    std::unique_lock<std::mutex> lock(keep_alive_mutex_);
+    while (running_)
+    {
+        // Wait for the interval or until notified by stop()
+        if (keep_alive_cv_.wait_for(lock, std::chrono::seconds(interval)) == std::cv_status::timeout)
+        {
+            std::lock_guard<std::mutex> client_lock(client_mutex_);
+            if (client_sock_ != -1)
+            {
+                // Send a ping frame: FIN set and opcode 0x9.
+                unsigned char ping[2] = {0x89, 0x00};
+                if (send(client_sock_, ping, 2, 0) < 0)
+                    std::perror("send ping");
+            }
+        }
+    }
+}
+
+/**
+ * @brief Performs the WebSocket handshake with a newly connected client.
+ *
+ * This function reads the client's HTTP Upgrade request, extracts the
+ * `Sec-WebSocket-Key` header, and sends a proper HTTP 101 Switching Protocols
+ * response with the `Sec-WebSocket-Accept` field.
+ *
+ * The handshake follows the WebSocket protocol as defined in RFC 6455.
+ *
+ * @param client The socket file descriptor for the accepted client connection.
+ * @return true if the handshake succeeds and the client is upgraded to a WebSocket connection.
+ * @return false if the handshake fails (invalid request, no key, send failure).
+ *
+ * @note If the handshake fails, this method does not close the socket.
+ *       The caller is responsible for cleanup.
+ */
+bool WebSocketServer::perform_handshake(int client)
+{
+    const int buf_size = 4096;
+    char buf[buf_size];
+    std::string request;
+
+    // Read until the end of the HTTP headers.
+    while (request.find("\r\n\r\n") == std::string::npos)
+    {
+        ssize_t bytes = recv(client, buf, buf_size - 1, 0);
+        if (bytes <= 0)
+            return false;
+        buf[bytes] = '\0';
+        request.append(buf);
+        if (request.size() > 4096)
+            break;
+    }
+
+    std::istringstream stream(request);
+    std::string line;
+    std::string key;
+
+    while (std::getline(stream, line))
+    {
+        if (line.find("Sec-WebSocket-Key:") != std::string::npos)
+        {
+            size_t pos = line.find(":");
+            if (pos != std::string::npos)
+            {
+                key = line.substr(pos + 1);
+                key.erase(std::remove(key.begin(), key.end(), '\r'), key.end());
+                key.erase(0, key.find_first_not_of(" \t"));
+            }
+            break;
+        }
+    }
+
+    if (key.empty())
+    {
+        llog.logE(WARN, "Socket key not found in request.");
+        return false;
+    }
+
+    std::string accept_key = compute_websocket_accept(key);
+    std::ostringstream response;
+    response << "HTTP/1.1 101 Switching Protocols\r\n"
+             << "Upgrade: websocket\r\n"
+             << "Connection: Upgrade\r\n"
+             << "Sec-WebSocket-Accept: " << accept_key << "\r\n\r\n";
+    std::string response_str = response.str();
+
+    if (send(client, response_str.c_str(), response_str.size(), 0) < 0)
+    {
+        std::perror("send handshake");
+        return false;
+    }
+
+    return true;
+}

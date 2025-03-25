@@ -62,6 +62,7 @@ BIN_DIR		 	= build/bin
 
 # Collect source files
 C_SOURCES   := $(shell find . -name "*.c")
+# Start with all .cpp files, excluding main.cpp
 CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
 # Collect object files
 C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
@@ -95,6 +96,7 @@ C_RELEASE_FLAGS := $(CFLAGS) -O2			# Release optimized
 COMM_CXX_FLAGS := -Wno-psabi -lstdc++fs -std=c++17
 CXXFLAGS := $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 # Include paths for libraries
+CXXFLAGS += -I$(abspath .)
 CXXFLAGS += -I$(abspath ./INI-Handler/src)
 CXXFLAGS += -I$(abspath ./LCBLog/src)
 CXXFLAGS += -I$(abspath ./MonitorFile/src)

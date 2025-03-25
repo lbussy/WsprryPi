@@ -4,11 +4,13 @@
  *        and back to Hz, validate frequencies, and translate terms like
  *        "20m" to a valid WSPR frequency.
  *
- * This file is part of WsprryPi, a project originally forked from threeme3
- * / WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally created from @threeme3
+ * WsprryPi projet (no longer on GitHub). However, now the original code
+ * remains only as a memory and inspiration, and this project is no longer
+ * a derivative work.
  *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
