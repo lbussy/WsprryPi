@@ -45,6 +45,28 @@
 #include <thread>
 
 /**
+ * @brief Flag indicating if a system reboot is in progress.
+ *
+ * @details
+ * This atomic flag is used throughout the application to signal when a
+ * full system reboot has been initiated. It is typically set from one
+ * of the control points (REST or websockets).
+ *
+ * Other threads can poll or wait on this flag to terminate safely.
+ */
+extern std::atomic<bool> reboot_flag;
+
+/**
+ * @brief Condition variable used for shutdown synchronization.
+ *
+ * @details
+ * Allows threads to block until a shutdown event occurs, such as a signal
+ * from a GPIO input or user request. Typically used in conjunction with
+ * `exit_wspr_loop`.
+ */
+extern std::condition_variable shutdown_cv;
+
+/**
  * @brief Flag indicating if a system shutdown is in progress.
  *
  * @details
@@ -65,16 +87,6 @@ extern std::atomic<bool> shutdown_flag;
  * adjustments for frequency stability during WSPR transmission.
  */
 extern PPMManager ppmManager;
-
-/**
- * @brief Condition variable used for shutdown synchronization.
- *
- * @details
- * Allows threads to block until a shutdown event occurs, such as a signal
- * from a GPIO input or user request. Typically used in conjunction with
- * `exit_wspr_loop`.
- */
-extern std::condition_variable shutdown_cv;
 
 /**
  * @brief Flag used to signal exit from the main WSPR loop.

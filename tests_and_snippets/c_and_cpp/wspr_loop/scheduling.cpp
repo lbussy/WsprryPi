@@ -79,6 +79,18 @@ std::mutex shutdown_mtx;
 std::atomic<bool> ppm_reload_pending(false);
 
 /**
+ * @brief Flag indicating if a system reboot is in progress.
+ *
+ * @details
+ * This atomic flag is used throughout the application to signal when a
+ * full system reboot has been initiated. It is typically set from one
+ * of the control points (REST or websockets).
+ *
+ * Other threads can poll or wait on this flag to terminate safely.
+ */
+std::atomic<bool> reboot_flag{false};
+
+/**
  * @brief Atomic flag indicating that a shutdown sequence has begun.
  *
  * Set by GPIO or system-triggered shutdown paths to initiate coordinated

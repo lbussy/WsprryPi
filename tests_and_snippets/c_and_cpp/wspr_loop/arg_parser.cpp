@@ -358,9 +358,9 @@ void show_config_values(bool reload)
     llog.logS(DEBUG, "Use LED:", config.use_led ? "true" : "false");
     llog.logS(DEBUG, "LED on GPIO", config.led_pin);
     // [Server]
-    llog.logS(DEBUG, "Web aerver runs on port:", config.web_port);
-    llog.logS(DEBUG, "Socket aerver runs on port:", config.socket_port);
-    llog.logS(DEBUG, "Use shutdown buton:", config.use_shutdown ? "true" : "false");
+    llog.logS(DEBUG, "Web server runs on port:", config.web_port);
+    llog.logS(DEBUG, "Socket server runs on port:", config.socket_port);
+    llog.logS(DEBUG, "Use shutdown button:", config.use_shutdown ? "true" : "false");
     llog.logS(DEBUG, "Shutdown button GPIO", config.shutdown_pin);
 }
 
@@ -596,7 +596,7 @@ bool validate_config_data()
         {
             if (config.loop_tx)
             {
-                llog.logS(INFO, "Transmissions will continue until it receives a singnal to stop.");
+                llog.logS(INFO, "Transmissions will continue until it receives a signal to stop.");
             }
             else
             {
@@ -1178,7 +1178,7 @@ bool load_config(int argc, char *argv[])
     }
     catch (const std::exception &e)
     {
-        std::string error_message = "Exception caught processsing arguments: " + std::string(e.what());
+        std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
     }
     return retval;

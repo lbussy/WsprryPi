@@ -156,7 +156,14 @@ int main(int argc, char *argv[])
     {
         llog.logS(INFO, "Shutting down.");
         sync(); // Flush file system buffers
-        std::system("shutdown -h now &");
+        std::system("sleep 1 && shutdown -h now &");
+    }
+    // Reboot if set
+    if (reboot_flag.load())
+    {
+        llog.logS(INFO, "Rebooting.");
+        sync(); // Flush file system buffers
+        std::system("sleep 1 && reboot &");
     }
 
     return EXIT_SUCCESS;

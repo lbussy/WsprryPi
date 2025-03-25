@@ -35,6 +35,7 @@
 
 #include "logging.hpp"
 #include "sha1.hpp"
+#include "scheduling.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -175,38 +176,47 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
  *
  * Gracefully shuts down the server by:
  * - Marking the server as not running.
- * - Closing the listening socket if it's open.
- * - Closing the client connection (if any), using a thread-safe mutex.
- * - Joining the server and keep-alive threads if they were started.
+ * - Waking the keep-alive thread (if active).
+ * - Closing the listening socket to break out of `accept()`.
+ * - Closing the client socket to break out of `recv()`.
+ * - Joining all threads to ensure clean shutdown.
  *
- * After this call, the server can be restarted by calling start() again.
+ * After this call, the server can be restarted by calling `start()` again.
  */
 void WebSocketServer::stop()
 {
-    if (running_ == false)
+    if (!running_)
         return;
 
     running_ = false;
-    keep_alive_cv_.notify_all(); // Wake up keep-alive thread if it's sleeping
 
+    // Notify condition variable to interrupt keep-alive sleep
+    keep_alive_cv_.notify_all();
+
+    // Shutdown and close the listening socket (unblocks accept)
     if (listen_fd_ != -1)
     {
-        shutdown(listen_fd_, SHUT_RDWR);
+        shutdown(listen_fd_, SHUT_RDWR); // force accept() to return
         close(listen_fd_);
         listen_fd_ = -1;
     }
 
+    // Shutdown and close client connection (unblocks recv)
     {
         std::lock_guard<std::mutex> lock(client_mutex_);
         if (client_sock_ != -1)
         {
+            shutdown(client_sock_, SHUT_RDWR); // force recv() to return
             close(client_sock_);
             client_sock_ = -1;
         }
     }
 
+    // Join the server thread
     if (server_thread_.joinable())
         server_thread_.join();
+
+    // Join the keep-alive thread
     if (keep_alive_thread_.joinable())
         keep_alive_thread_.join();
 
@@ -302,22 +312,28 @@ void WebSocketServer::handle_message(const std::string &raw_message)
 
     if (message == "tx_status")
     {
-        // TODO:  Create this
         llog.logS(DEBUG, "Received tx_status request.");
-        send_to_client("Response: tx_status OK");
+        send_to_client(std::string(in_transmission.load() ? "true" : "false"));
     }
     else if (message == "shutdown")
     {
-        llog.logS(INFO, "Received shutdown command.");
+        llog.logS(INFO, "Received websocket shutdown command.");
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+        shutdown_flag.store(true);  // Indicate shutdown sequence active
         send_to_client("Response: shutdown command acknowledged");
     }
     else if (message == "reboot")
     {
-        llog.logS(INFO, "Received reboot command.");
+        llog.logS(INFO, "Received websocket reboot command.");
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on reboot
+        reboot_flag.store(true);    // Indicate reboot sequence active
         send_to_client("Response: reboot command acknowledged");
     }
     else if (message == "stop_tx")
     {
+        // TODO:  Create this
         llog.logS(INFO, "Received stop_tx command.");
         send_to_client("Response: stop_tx command acknowledged");
     }
@@ -559,16 +575,21 @@ void WebSocketServer::server_loop()
         int client = accept(listen_fd_, reinterpret_cast<sockaddr *>(&client_addr), &addrlen);
         if (client < 0)
         {
-            if (running_)
-                std::perror("accept");
-            break;
+            if (!running_)
+            {
+                llog.logS(DEBUG, "Accept exited due to shutdown.");
+                break;
+            }
+
+            std::perror("accept");
+            continue;
         }
 
 #ifdef LOCAL_ONLY
         // Verify that the client is connecting from localhost.
         if (std::string(inet_ntoa(client_addr.sin_addr)) != "127.0.0.1")
         {
-            llog.logE(WARN, "Rejected connection from non-localhost:", net_ntoa(client_addr.sin_addr));
+            llog.logE(WARN, "Rejected connection from non-localhost:", inet_ntoa(client_addr.sin_addr));
             close(client);
             continue;
         }
@@ -594,7 +615,11 @@ void WebSocketServer::server_loop()
         {
             ssize_t bytes = recv(client, buf, sizeof(buf), 0);
             if (bytes <= 0)
+            {
+                if (!running_)
+                    llog.logS(DEBUG, "recv() exited due to shutdown.");
                 break;
+            }
 
             size_t pos = 0;
             while (pos < static_cast<size_t>(bytes))
@@ -634,12 +659,13 @@ void WebSocketServer::server_loop()
  * @brief Background loop that sends periodic WebSocket ping frames.
  *
  * This function runs in a dedicated thread when keep-alive is enabled.
- * It sleeps for the specified interval, then sends a WebSocket ping frame
- * (opcode 0x9) to the connected client if one is active.
+ * It waits for the specified interval using a condition variable, which
+ * allows interruption when `stop()` is called. If a client is connected,
+ * it sends a WebSocket ping frame (opcode 0x9) with no payload.
  *
  * The ping frame format consists of:
  * - 0x89: FIN bit set and opcode 0x9 (ping)
- * - 0x00: Payload length of 0 bytes (no ping payload)
+ * - 0x00: Payload length of 0 bytes
  *
  * @param interval Number of seconds between keep-alive pings.
  */
