@@ -764,3 +764,42 @@ bool WebSocketServer::perform_handshake(int client)
 
     return true;
 }
+
+/**
+ * @brief Set scheduling policy and priority for internal threads.
+ *
+ * This applies the given scheduling policy and priority to both
+ * the server and keep-alive threads (if active and joinable).
+ *
+ * @param schedPolicy Scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+ * @param priority Thread priority (valid for the chosen policy).
+ * @return true if all applicable threads were updated successfully.
+ */
+bool WebSocketServer::set_thread_priority(int schedPolicy, int priority)
+{
+    bool success = true;
+    sched_param sch_params;
+    sch_params.sched_priority = priority;
+
+    if (server_thread_.joinable())
+    {
+        int ret = pthread_setschedparam(server_thread_.native_handle(), schedPolicy, &sch_params);
+        if (ret != 0)
+        {
+            std::perror("pthread_setschedparam (server_thread_)");
+            success = false;
+        }
+    }
+
+    if (keep_alive_thread_.joinable())
+    {
+        int ret = pthread_setschedparam(keep_alive_thread_.native_handle(), schedPolicy, &sch_params);
+        if (ret != 0)
+        {
+            std::perror("pthread_setschedparam (keep_alive_thread_)");
+            success = false;
+        }
+    }
+
+    return success;
+}

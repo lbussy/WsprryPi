@@ -222,3 +222,33 @@ void WebServer::stop()
 
     llog.logS(INFO, "Web server stopped.");
 }
+
+/**
+ * @brief Sets the priority for the server thread.
+ *
+ * @param schedPolicy The scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+ * @param priority The priority level.
+ * @return true if the priority was set successfully, false otherwise.
+ */
+bool WebServer::set_thread_priority(int schedPolicy, int priority)
+{
+    bool success = true;
+    sched_param sch_params;
+    sch_params.sched_priority = priority;
+
+    if (serverThread.joinable())
+    {
+        int ret = pthread_setschedparam(serverThread.native_handle(), schedPolicy, &sch_params);
+        if (ret != 0)
+        {
+            std::perror("pthread_setschedparam (serverThread)");
+            success = false;
+        }
+    }
+    else
+    {
+        llog.logE(ERROR, "Server thread is not joinable. Cannot set priority.");
+        success = false;
+    }
+    return success;
+}
