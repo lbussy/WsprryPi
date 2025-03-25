@@ -290,10 +290,12 @@ void wspr_loop()
     transmit_thread = std::thread(transmit_loop);
     llog.logS(INFO, "Transmission handler thread started.");
 
-    // Start web server
+    // Start web server and set priority
     webServer.start(config.web_port);
-    // Start socket server
+    webServer.set_thread_priority(SCHED_RR, 10);
+    // Start socket server and set priority
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
+    socketServer.set_thread_priority(SCHED_RR, 10);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");

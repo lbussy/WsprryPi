@@ -94,13 +94,16 @@ public:
     void stop();
 
     /**
-     * @brief Sends a text message to the connected client.
+     * @brief Set scheduling policy and priority for internal threads.
      *
-     * The message is encoded as a WebSocket text frame.
+     * This applies the given scheduling policy and priority to both
+     * the server and keep-alive threads (if active and joinable).
      *
-     * @param message The text string to send.
+     * @param schedPolicy Scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+     * @param priority Thread priority (valid for the chosen policy).
+     * @return true if all applicable threads were updated successfully.
      */
-    void send_to_client(const std::string &message);
+    bool set_thread_priority(int schedPolicy, int priority);
 
 private:
     int listen_fd_;                         ///< Socket file descriptor for listening.
@@ -164,6 +167,15 @@ private:
      * @param message The decoded and unmasked client message.
      */
     void handle_message(const std::string &message);
+
+    /**
+     * @brief Sends a text message to the connected client.
+     *
+     * The message is encoded as a WebSocket text frame.
+     *
+     * @param message The text string to send.
+     */
+    void send_to_client(const std::string &message);
 
     /**
      * @brief Encodes binary data as a Base64 string.

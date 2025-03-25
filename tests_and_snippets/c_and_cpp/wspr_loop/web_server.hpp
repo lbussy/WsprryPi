@@ -97,6 +97,15 @@ public:
      */
     void stop();
 
+    /**
+     * @brief Sets the priority for the server thread.
+     *
+     * @param schedPolicy The scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+     * @param priority The priority level.
+     * @return true if the priority was set successfully, false otherwise.
+     */
+    bool set_thread_priority(int schedPolicy, int priority);
+
 private:
     int port_;                         ///< Port on which the server listens.
     httplib::Server svr;               ///< Underlying HTTP server from cpp-httplib.
