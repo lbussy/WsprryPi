@@ -1,5 +1,3 @@
-// TODO:  Update doxygen
-
 /**
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
@@ -78,8 +76,28 @@
  */
 MonitorFile iniMonitor;
 
-WsprMessage *message = nullptr; // Initialize to null
+/**
+ * @brief Pointer to a WSPR message.
+ *
+ * This pointer is used to reference a WsprMessage object, which constructs a WSPR message
+ * from a callsign, grid location, and power level. It is initialized to nullptr until
+ * a valid WsprMessage instance is created.
+ *
+ * @note Remember to allocate memory for this pointer before use.
+ */
+WsprMessage *message = nullptr;
 
+/**
+ * @brief Instance of WSPRBandLookup.
+ *
+ * This instance of WSPRBandLookup is used to translate frequency representations:
+ * - Converts from a short-hand (Hx) to a higher order (e.g., MHz) and vice versa.
+ * - Validates frequency values.
+ * - Translates terms (e.g., "20m") into a valid WSPR frequency.
+ *
+ * Use this instance for any operations requiring frequency conversions and validation
+ * within the WSPR system.
+ */
 WSPRBandLookup lookup;
 
 /**
@@ -116,7 +134,16 @@ std::atomic<int> wspr_interval(WSPR_2);
  */
 std::atomic<bool> ini_reload_pending(false);
 
-// List of allowed WSPR power levels
+/**
+ * @brief List of allowed WSPR power levels.
+ *
+ * This constant vector stores the permitted power levels for WSPR transmissions.
+ * Each element in the vector represents a discrete power setting (in dBm) that can be used
+ * for a WSPR message. The defined levels ensure that only valid and recognized power levels
+ * are applied during transmissions.
+ *
+ * The allowed power levels are: 0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60.
+ */
 const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40, 43, 47, 50, 53, 57, 60};
 
 /**
@@ -163,24 +190,43 @@ void apply_deferred_changes()
     }
 }
 
+/**
+ * @brief Validates a WSPR callsign and normalizes it to uppercase.
+ *
+ * This function checks whether a given callsign meets the criteria for a valid WSPR Type 1
+ * callsign. Validation includes:
+ * - Ensuring the callsign length is between 3 and 6 characters.
+ * - Matching the callsign against a regular expression pattern that enforces the WSPR Type 1 format.
+ *
+ * The regex pattern used is:
+ * @verbatim
+ * ^(?:[A-Za-z0-9]?[A-Za-z0-9][0-9][A-Za-z]?[A-Za-z]?[A-Za-z]?|[A-Za-z][0-9][A-Za-z]|[A-Za-z0-9]{3}[0-9][A-Za-z]{2})$
+ * @endverbatim
+ * This pattern is evaluated in a case-insensitive manner.
+ *
+ * If the callsign is valid, the function converts it to uppercase.
+ *
+ * @param callsign A reference to the callsign string to validate. If valid, the string is modified in place to uppercase.
+ * @return true if the callsign is valid, false otherwise.
+ */
 bool is_valid_callsign(std::string &callsign)
 {
-    // WSPR Type 1 callsign regex pattern
+    // WSPR Type 1 callsign regex pattern (case-insensitive)
     static const std::regex callsign_pattern(
         R"(^(?:[A-Za-z0-9]?[A-Za-z0-9][0-9][A-Za-z]?[A-Za-z]?[A-Za-z]?|[A-Za-z][0-9][A-Za-z]|[A-Za-z0-9]{3}[0-9][A-Za-z]{2})$)",
-        std::regex::icase // Case-insensitive
+        std::regex::icase
     );
 
-    // Check length constraints (3-6 characters)
+    // Check that the callsign length is within the valid range (3-6 characters)
     if (callsign.length() < 3 || callsign.length() > 6)
     {
         return false;
     }
 
-    // Validate using regex
+    // Validate the callsign using the regex pattern
     if (std::regex_match(callsign, callsign_pattern))
     {
-        // Convert to uppercase
+        // Convert the valid callsign to uppercase
         std::transform(callsign.begin(), callsign.end(), callsign.begin(), ::toupper);
         return true;
     }
@@ -188,14 +234,27 @@ bool is_valid_callsign(std::string &callsign)
     return false;
 }
 
+/**
+ * @brief Rounds an input power level to the nearest valid WSPR power level.
+ *
+ * This function compares the given power level to the list of allowed WSPR power levels
+ * and returns the level with the smallest absolute difference. It ensures that the
+ * transmitted power level is one of the permitted values.
+ *
+ * @param power The input power level to round.
+ * @return The nearest valid WSPR power level.
+ */
 int round_to_nearest_wspr_power(int power)
 {
+    // Start by assuming the first allowed power level is the closest.
     int closest = wspr_power_levels[0];
     int min_diff = std::abs(power - closest);
 
+    // Iterate through the list of allowed power levels.
     for (int level : wspr_power_levels)
     {
         int diff = std::abs(power - level);
+        // Update closest if the current level has a smaller difference.
         if (diff < min_diff)
         {
             closest = level;
@@ -205,6 +264,20 @@ int round_to_nearest_wspr_power(int power)
     return closest;
 }
 
+/**
+ * @brief Validates and truncates a Maidenhead grid locator.
+ *
+ * This function validates the input grid locator by checking if it matches a valid 4-character
+ * format (two letters followed by two digits). The locator is first converted to uppercase.
+ * - If the locator is exactly 4 characters and valid, it is accepted as-is.
+ * - If the locator is 6 or 8 characters long and its first 4 characters are valid,
+ *   the locator is truncated to these 4 characters.
+ *
+ * @param locator A reference to the grid locator string. The string is modified in place
+ *                if it needs to be truncated.
+ * @return true if the locator is valid or has been successfully truncated to a valid format,
+ *         false otherwise.
+ */
 bool validate_and_truncate_locator(std::string &locator)
 {
     static const std::regex locator_pattern(R"(^[A-Za-z]{2}[0-9]{2})");
@@ -227,6 +300,17 @@ bool validate_and_truncate_locator(std::string &locator)
     return false; // Invalid locator
 }
 
+/**
+ * @brief Joins frequency strings from a specified starting index.
+ *
+ * This function concatenates elements from the provided vector of strings into a single string,
+ * starting from the specified index. Each element is separated by a space. If the starting index is
+ * equal to or greater than the number of elements in the vector, an empty string is returned.
+ *
+ * @param args A vector containing frequency strings.
+ * @param start_index The index from which to start joining the frequency strings.
+ * @return A string composed of the joined frequency values, or an empty string if no frequencies are available.
+ */
 std::string join_frequencies(const std::vector<std::string> &args, size_t start_index)
 {
     if (start_index >= args.size())
@@ -1148,11 +1232,29 @@ bool parse_command_line(int argc, char *argv[])
     return true;
 }
 
+/**
+ * @brief Loads and validates the configuration from command-line arguments.
+ *
+ * This function processes command-line arguments to load the application's configuration.
+ * It performs the following steps:
+ * - Checks whether any arguments are provided (beyond the program name).
+ * - Parses the command-line arguments.
+ * - Validates the configuration data to ensure that all required settings are present.
+ *
+ * If any of these steps fail (e.g., no arguments provided, parsing errors, or validation errors),
+ * the function calls @c print_usage with an appropriate error message and terminates the program.
+ *
+ * @param argc The count of command-line arguments.
+ * @param argv The array of command-line argument strings.
+ * @return true if the configuration was successfully loaded and validated; otherwise, the program exits.
+ */
 bool load_config(int argc, char *argv[])
 {
-    // First check to see we have SOME arguments
+    // Initialize return value to false.
     bool retval = false;
-    if (argc == 1) // No arguments or options provided
+    
+    // Check if any arguments (besides the program name) were provided.
+    if (argc == 1) // No arguments or options provided.
     {
         print_usage("No arguments provided.", EXIT_FAILURE);
     }
@@ -1164,7 +1266,7 @@ bool load_config(int argc, char *argv[])
         try
         {
             // Validate configuration and ensure all required settings are present.
-            // TODO: Put version/type/PID before this.
+            // TODO: Put version/type/PID validation before this.
             if (!validate_config_data())
             {
                 print_usage("Configuration validation failed.", EXIT_FAILURE);
@@ -1172,14 +1274,17 @@ bool load_config(int argc, char *argv[])
         }
         catch (const std::exception &e)
         {
+            // Handle any exceptions thrown during configuration validation.
             std::string error_message = "Exception caught validating configuration: " + std::string(e.what());
             print_usage(error_message, EXIT_FAILURE);
         }
     }
     catch (const std::exception &e)
     {
+        // Handle any exceptions thrown during command-line parsing.
         std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
     }
+    
     return retval;
 }

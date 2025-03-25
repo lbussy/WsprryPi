@@ -1,6 +1,6 @@
 /**
  * @file wspr_band_lookup.cpp
- * @brief A C++ class designed to translate Hx to a higher orer like Mhz,
+ * @brief A C++ class designed to translate Hx to a higher order like Mhz,
  *        and back to Hz, validate frequencies, and translate terms like
  *        "20m" to a valid WSPR frequency.
  *

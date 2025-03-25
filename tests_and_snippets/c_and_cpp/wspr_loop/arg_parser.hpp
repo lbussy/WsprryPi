@@ -1,5 +1,3 @@
-// TODO:  Update doxygen
-
 /**
  * @file arg_parser.hpp
  * @brief Command-line argument parser and configuration handler.
@@ -50,10 +48,79 @@
 #include <optional>
 #include <thread>
 
-extern MonitorFile iniMonitor;               ///< Watches INI file for changes.
-extern WSPRBandLookup lookup;                ///< Global band/frequency resolver.
-extern WsprMessage *message;                 ///< Global WSPR message builder.
-extern std::atomic<int> wspr_interval;       ///< WSPR transmission interval (2 or 15 minutes).
+/**
+ * @brief Global instance of the MonitorFile for INI file change detection.
+ *
+ * The `iniMonitor` object continuously monitors the specified INI file for changes.
+ * It provides real-time notifications when the file is modified, enabling the application
+ * to reload configuration settings dynamically without requiring a restart.
+ *
+ * This instance is typically used alongside the `ini` object to automatically re-validate
+ * and apply updated configuration settings.
+ *
+ * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
+ * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
+ *
+ * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
+ */
+extern MonitorFile iniMonitor;
+
+/**
+ * @brief Instance of WSPRBandLookup.
+ *
+ * This instance of WSPRBandLookup is used to translate frequency representations:
+ * - Converts from a short-hand (Hx) to a higher order (e.g., MHz) and vice versa.
+ * - Validates frequency values.
+ * - Translates terms (e.g., "20m") into a valid WSPR frequency.
+ *
+ * Use this instance for any operations requiring frequency conversions and validation
+ * within the WSPR system.
+ */
+extern WSPRBandLookup lookup;
+
+/**
+ * @brief Pointer to a WSPR message.
+ *
+ * This pointer is used to reference a WsprMessage object, which constructs a WSPR message
+ * from a callsign, grid location, and power level. It is initialized to nullptr until
+ * a valid WsprMessage instance is created.
+ *
+ * @note Remember to allocate memory for this pointer before use.
+ */
+extern WsprMessage *message;
+
+/**
+ * @brief Atomic variable representing the current WSPR transmission interval.
+ *
+ * This variable defines the transmission interval for WSPR signals.
+ * It can be set to one of the predefined constants:
+ * - `WSPR_2` for a 2-minute interval.
+ * - `WSPR_15` for a 15-minute interval.
+ *
+ * This value is updated dynamically based on the INI configuration
+ * and influences when the scheduler triggers the next transmission.
+ *
+ * @note Access to this variable is thread-safe due to its atomic nature.
+ */
+extern std::atomic<int> wspr_interval;
+
+/**
+ * @brief Semaphore indicating a pending INI file reload.
+ *
+ * The `ini_reload_pending` atomic flag acts as a semaphore to signal when an
+ * INI file change has been detected and a configuration reload is required.
+ * This ensures that the reload process does not conflict with an ongoing
+ * transmission.
+ *
+ * - `true` indicates that an INI reload is pending.
+ * - `false` indicates that no reload is currently required.
+ *
+ * This flag is typically set when the `iniMonitor` detects a file change and
+ * is checked periodically by the INI monitoring thread. If a transmission is
+ * in progress, the reload is deferred until the transmission completes.
+ *
+ * @note The atomic nature ensures thread-safe access across multiple threads.
+ */
 extern std::atomic<bool> ini_reload_pending; ///< Semaphore for deferred INI reload.
 
 /**
