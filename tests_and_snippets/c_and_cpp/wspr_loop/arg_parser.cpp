@@ -214,8 +214,7 @@ bool is_valid_callsign(std::string &callsign)
     // WSPR Type 1 callsign regex pattern (case-insensitive)
     static const std::regex callsign_pattern(
         R"(^(?:[A-Za-z0-9]?[A-Za-z0-9][0-9][A-Za-z]?[A-Za-z]?[A-Za-z]?|[A-Za-z][0-9][A-Za-z]|[A-Za-z0-9]{3}[0-9][A-Za-z]{2})$)",
-        std::regex::icase
-    );
+        std::regex::icase);
 
     // Check that the callsign length is within the valid range (3-6 characters)
     if (callsign.length() < 3 || callsign.length() > 6)
@@ -703,9 +702,31 @@ bool validate_config_data()
     return true;
 }
 
+/**
+ * @brief Loads configuration values from an INI file.
+ *
+ * This function attempts to load settings from an INI file using the global `ini` object
+ * and populates the global `config` structure with values retrieved from it.
+ *
+ * If `config.use_ini` is false or if the INI file fails to load, the function immediately
+ * returns false. Otherwise, it attempts to read values from various INI sections:
+ *
+ * - **[Control]**: Transmit flag.
+ * - **[Common]**: Callsign, Grid Square, TX Power, Frequency, Transmit Pin.
+ * - **[Extended]**: PPM, Use NTP, Offset, Power Level, Use LED, LED Pin.
+ * - **[Server]**: Web Port, Socket Port, Use Shutdown, Shutdown Button.
+ *
+ * Each key is read inside a `try` block to allow partial loading—if a key is missing or
+ * causes an exception, it is silently skipped, and loading continues.
+ *
+ * After successful loading, the global `jConfig` JSON object is updated to reflect the
+ * contents of the `config` structure.
+ *
+ * @return true if the INI file was used and loaded successfully, false otherwise.
+ */
 bool load_from_ini()
 {
-    // Attempt to load INI file if used
+    // Attempt to load INI file if enabled
     bool loaded = config.use_ini && ini.load();
 
     if (!loaded)
@@ -713,125 +734,31 @@ bool load_from_ini()
         return false;
     }
 
-    // Control
-    try
-    {
-        config.transmit = ini.get_bool_value("Control", "Transmit");
-    }
-    catch (...)
-    {
-    }
-    // Common
-    try
-    {
-        config.callsign = ini.get_string_value("Common", "Call Sign");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.grid_square = ini.get_string_value("Common", "Grid Square");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.power_dbm = ini.get_int_value("Common", "TX Power");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.frequencies = ini.get_string_value("Common", "Frequency");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.tx_pin = ini.get_int_value("Common", "Transmit Pin");
-    }
-    catch (...)
-    {
-    }
-    // Extended
-    try
-    {
-        config.ppm = ini.get_double_value("Extended", "PPM");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.use_ntp = ini.get_bool_value("Extended", "Use NTP");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.use_offset = ini.get_bool_value("Extended", "Offset");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.power_level = ini.get_int_value("Extended", "Power Level");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.use_led = ini.get_bool_value("Extended", "Use LED");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.led_pin = ini.get_int_value("Extended", "LED Pin");
-    }
-    catch (...)
-    {
-    }
-    // Web Server
-    try
-    {
-        config.web_port = ini.get_int_value("Server", "Web Port");
-    }
-    catch (...)
-    {
-    }
-    // Socket Server
-    try
-    {
-        config.socket_port = ini.get_int_value("Server", "Socket Port");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
-        config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button");
-    }
-    catch (...)
-    {
-    }
+    // Load Control section
+    try { config.transmit = ini.get_bool_value("Control", "Transmit"); } catch (...) {}
 
-    // Update global JSON from Config object
+    // Load Common section
+    try { config.callsign = ini.get_string_value("Common", "Call Sign"); } catch (...) {}
+    try { config.grid_square = ini.get_string_value("Common", "Grid Square"); } catch (...) {}
+    try { config.power_dbm = ini.get_int_value("Common", "TX Power"); } catch (...) {}
+    try { config.frequencies = ini.get_string_value("Common", "Frequency"); } catch (...) {}
+    try { config.tx_pin = ini.get_int_value("Common", "Transmit Pin"); } catch (...) {}
+
+    // Load Extended section
+    try { config.ppm = ini.get_double_value("Extended", "PPM"); } catch (...) {}
+    try { config.use_ntp = ini.get_bool_value("Extended", "Use NTP"); } catch (...) {}
+    try { config.use_offset = ini.get_bool_value("Extended", "Offset"); } catch (...) {}
+    try { config.power_level = ini.get_int_value("Extended", "Power Level"); } catch (...) {}
+    try { config.use_led = ini.get_bool_value("Extended", "Use LED"); } catch (...) {}
+    try { config.led_pin = ini.get_int_value("Extended", "LED Pin"); } catch (...) {}
+
+    // Load Server section
+    try { config.web_port = ini.get_int_value("Server", "Web Port"); } catch (...) {}
+    try { config.socket_port = ini.get_int_value("Server", "Socket Port"); } catch (...) {}
+    try { config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown"); } catch (...) {}
+    try { config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button"); } catch (...) {}
+
+    // Synchronize config with global JSON object
     config_to_json();
 
     return true;
@@ -902,7 +829,7 @@ bool parse_command_line(int argc, char *argv[])
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
         {"power_level", required_argument, nullptr, 'd'},     // Via: [Extended] Power Level = 7
         {"web-port", required_argument, nullptr, 'w'},        // Via: [Server] Port = 31415
-        {"socket-port", required_argument, nullptr, 'k'},        // Via: [Server] Port = 31415
+        {"socket-port", required_argument, nullptr, 'k'},     // Via: [Server] Port = 31415
         {nullptr, 0, nullptr, 0}};
 
     while (true)
@@ -1252,7 +1179,7 @@ bool load_config(int argc, char *argv[])
 {
     // Initialize return value to false.
     bool retval = false;
-    
+
     // Check if any arguments (besides the program name) were provided.
     if (argc == 1) // No arguments or options provided.
     {
@@ -1263,21 +1190,6 @@ bool load_config(int argc, char *argv[])
     try
     {
         retval = parse_command_line(argc, argv);
-        try
-        {
-            // Validate configuration and ensure all required settings are present.
-            // TODO: Put version/type/PID validation before this.
-            if (!validate_config_data())
-            {
-                print_usage("Configuration validation failed.", EXIT_FAILURE);
-            }
-        }
-        catch (const std::exception &e)
-        {
-            // Handle any exceptions thrown during configuration validation.
-            std::string error_message = "Exception caught validating configuration: " + std::string(e.what());
-            print_usage(error_message, EXIT_FAILURE);
-        }
     }
     catch (const std::exception &e)
     {
@@ -1285,6 +1197,6 @@ bool load_config(int argc, char *argv[])
         std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
     }
-    
+
     return retval;
 }

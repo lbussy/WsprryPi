@@ -123,6 +123,12 @@ int main(int argc, char *argv[])
     llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
     llog.logS(INFO, "Process PID:", getpid());
 
+    // Validate configuration and ensure all required settings are present.
+    if (!validate_config_data())
+    {
+        print_usage("Configuration validation failed.", EXIT_FAILURE);
+    }
+
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
 
@@ -146,7 +152,7 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
     }
 
-    llog.logS(INFO, project_name(), "exiting."); // TODO: Getting a segmentation fault after this.
+    llog.logS(INFO, project_name(), "exiting.");
 
     // Stop the SignalHandler.
     signalHandler.stop();
