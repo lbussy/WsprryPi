@@ -98,6 +98,7 @@ void callback_signal_handler(int signum, bool is_critical)
  */
 int main(int argc, char *argv[])
 {
+    int retval = EXIT_SUCCESS;
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
@@ -141,15 +142,20 @@ int main(int argc, char *argv[])
     // Startup WSPR loop
     try
     {
-        wspr_loop();
+        if (!wspr_loop())
+        {
+            retval = EXIT_FAILURE;
+        }
     }
     catch (const std::exception &e)
     {
         llog.logE(ERROR, "Unhandled exception in main(): ", e.what());
+        retval = EXIT_FAILURE;
     }
     catch (...)
     {
         llog.logE(ERROR, "Unknown fatal error in main().");
+        retval = EXIT_FAILURE;
     }
 
     llog.logS(INFO, project_name(), "exiting.");
@@ -172,5 +178,5 @@ int main(int argc, char *argv[])
         std::system("sleep 1 && reboot &");
     }
 
-    return EXIT_SUCCESS;
+    return retval;
 }

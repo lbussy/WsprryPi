@@ -123,20 +123,6 @@ extern void callback_shutdown_system();
  *
  * @note This function blocks and runs until `exit_wspr_loop` is set to `true`.
  */
-extern void wspr_loop();
-
-/**
- * @brief Joins and terminates all active application threads.
- *
- * @details
- * Acquires the thread shutdown mutex and attempts to join any remaining
- * worker threads, ensuring all subsystems are stopped cleanly before
- * final shutdown.
- *
- * @note This should be called at the end of `wspr_loop()` or any forced exit.
- *
- * @todo Consider encapsulating threads in a management class.
- */
-void shutdown_threads();
+extern bool wspr_loop();
 
 #endif // _SCHEDULING_HPP

@@ -37,6 +37,7 @@
 #include "logging.hpp"
 #include "sha1.hpp"
 #include "scheduling.hpp"
+#include "wspr_transmit.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -314,7 +315,7 @@ void WebSocketServer::handle_message(const std::string &raw_message)
     if (message == "tx_status")
     {
         llog.logS(DEBUG, "Received transmission status request.");
-        send_to_client(std::string(in_transmission.load() ? "true" : "false"));
+        send_to_client(std::string(wspr_transmit.isTransmitting() ? "true" : "false"));
     }
     else if (message == "shutdown")
     {
@@ -338,11 +339,11 @@ void WebSocketServer::handle_message(const std::string &raw_message)
         config.transmit = false;
         config.tx_iterations = false;
         config.loop_tx = false;
-        // Stop WSPR transmissions
-        // TODO:  Use CV to interrupt transmissions.
         // Save the config
         config_to_json();
         json_to_ini();
+        // Stop WSPR transmissions
+        wspr_transmit.stop();
         llog.logS(INFO, "Received stop_tx command.");
         send_to_client("Response: stop_tx command acknowledged");
     }

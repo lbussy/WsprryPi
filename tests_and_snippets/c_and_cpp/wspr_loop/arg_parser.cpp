@@ -42,9 +42,9 @@
 #include "logging.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
-#include "transmit.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
+#include "wspr_transmit.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -157,17 +157,18 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    // Log detection of change
-    ini_reload_pending.store(true);
-
-    if (in_transmission.load())
+    if (wspr_transmit.isTransmitting())
     {
+        // Log detection of change
+        ini_reload_pending.store(true);
         llog.logS(INFO, "INI file changed, reload after transmission.");
     }
     else
     {
-        llog.logS(INFO, "INI file changed.");
-        apply_deferred_changes();
+        llog.logS(INFO, "INI file changed, reloading.");
+        load_from_ini();
+        validate_config_data();
+        // TODO: Reset DMA/Symbols
     }
 }
 
@@ -181,11 +182,12 @@ void callback_ini_changed()
 void apply_deferred_changes()
 {
     // Apply deferred reload if transmission has ended
-    if (ini_reload_pending.load() && !in_transmission.load())
+    if (ini_reload_pending.load() && !wspr_transmit.isTransmitting())
     {
         // Clear the pending flag and reload configuration
         ini_reload_pending.store(false);
         llog.logS(INFO, "Applying deferred INI changes.");
+        load_from_ini();
         validate_config_data();
     }
 }
@@ -735,28 +737,124 @@ bool load_from_ini()
     }
 
     // Load Control section
-    try { config.transmit = ini.get_bool_value("Control", "Transmit"); } catch (...) {}
+    try
+    {
+        config.transmit = ini.get_bool_value("Control", "Transmit");
+    }
+    catch (...)
+    {
+    }
 
     // Load Common section
-    try { config.callsign = ini.get_string_value("Common", "Call Sign"); } catch (...) {}
-    try { config.grid_square = ini.get_string_value("Common", "Grid Square"); } catch (...) {}
-    try { config.power_dbm = ini.get_int_value("Common", "TX Power"); } catch (...) {}
-    try { config.frequencies = ini.get_string_value("Common", "Frequency"); } catch (...) {}
-    try { config.tx_pin = ini.get_int_value("Common", "Transmit Pin"); } catch (...) {}
+    try
+    {
+        config.callsign = ini.get_string_value("Common", "Call Sign");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.grid_square = ini.get_string_value("Common", "Grid Square");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.power_dbm = ini.get_int_value("Common", "TX Power");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.frequencies = ini.get_string_value("Common", "Frequency");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.tx_pin = ini.get_int_value("Common", "Transmit Pin");
+    }
+    catch (...)
+    {
+    }
 
     // Load Extended section
-    try { config.ppm = ini.get_double_value("Extended", "PPM"); } catch (...) {}
-    try { config.use_ntp = ini.get_bool_value("Extended", "Use NTP"); } catch (...) {}
-    try { config.use_offset = ini.get_bool_value("Extended", "Offset"); } catch (...) {}
-    try { config.power_level = ini.get_int_value("Extended", "Power Level"); } catch (...) {}
-    try { config.use_led = ini.get_bool_value("Extended", "Use LED"); } catch (...) {}
-    try { config.led_pin = ini.get_int_value("Extended", "LED Pin"); } catch (...) {}
+    try
+    {
+        config.ppm = ini.get_double_value("Extended", "PPM");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_ntp = ini.get_bool_value("Extended", "Use NTP");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_offset = ini.get_bool_value("Extended", "Offset");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.power_level = ini.get_int_value("Extended", "Power Level");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_led = ini.get_bool_value("Extended", "Use LED");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.led_pin = ini.get_int_value("Extended", "LED Pin");
+    }
+    catch (...)
+    {
+    }
 
     // Load Server section
-    try { config.web_port = ini.get_int_value("Server", "Web Port"); } catch (...) {}
-    try { config.socket_port = ini.get_int_value("Server", "Socket Port"); } catch (...) {}
-    try { config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown"); } catch (...) {}
-    try { config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button"); } catch (...) {}
+    try
+    {
+        config.web_port = ini.get_int_value("Server", "Web Port");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.socket_port = ini.get_int_value("Server", "Socket Port");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
+    }
+    catch (...)
+    {
+    }
+    try
+    {
+        config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button");
+    }
+    catch (...)
+    {
+    }
 
     // Synchronize config with global JSON object
     config_to_json();

@@ -38,7 +38,6 @@
 #include "ini_file.hpp"
 #include "lcblog.hpp"
 #include "monitorfile.hpp"
-#include "transmit.hpp"
 #include "version.hpp"
 #include "wspr_message.hpp"
 #include "wspr_band_lookup.hpp"

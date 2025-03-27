@@ -43,9 +43,9 @@
 #include "logging.hpp"
 #include "ppm_manager.hpp"
 #include "signal_handler.hpp"
-#include "transmit.hpp"
 #include "web_server.hpp"
 #include "web_socket.hpp"
+#include "wspr_transmit.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -131,6 +131,47 @@ std::mutex cv_mtx;
 std::atomic<bool> exit_wspr_loop(false);
 
 /**
+ * @brief Callback function for housekeeping tasks between transmissions.
+ *
+ * This function checks whether there are pending PPM or INI changes that need
+ * to be integrated. If a pending PPM change is detected, it logs the event and
+ * resets the flag. Similarly, if a pending INI change is detected, it applies the
+ * deferred changes, logs the integration, and resets the flag. If any changes were
+ * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ *
+ * @note The DMA/Symbol reconfiguration is not implemented in this function.
+ *       A TODO comment indicates where the reset should occur.
+ */
+void callback_transmission_complete()
+{
+    // Flag indicating whether DMA/Symbol reconfiguration is required.
+    bool do_reconfig_dma = false;
+
+    // Check for a pending PPM change.
+    if (ppm_reload_pending.load())
+    {
+        llog.logS(INFO, "Pending PPM change integrated.");
+        ppm_reload_pending.store(false);
+        do_reconfig_dma = true;
+    }
+
+    // Check for a pending INI change.
+    if (ini_reload_pending.load())
+    {
+        apply_deferred_changes();
+        llog.logS(INFO, "Pending INI change integrated.");
+        do_reconfig_dma = true;
+        // TODO: If transmit is disabled, stop wsprTransmit
+    }
+
+    // If either a PPM or INI change was integrated, perform DMA/Symbol reconfiguration.
+    if (do_reconfig_dma)
+    {
+        // TODO: Reset DMA/Symbols
+    }
+}
+
+/**
  * @brief Callback function to update the configured PPM (frequency offset).
  *
  * @details
@@ -145,7 +186,6 @@ std::atomic<bool> exit_wspr_loop(false);
  */
 void ppm_callback(double new_ppm)
 {
-    // TODO: Handle resetting the DMA subsystem if required after PPM change.
     config.ppm = new_ppm;
     ppm_reload_pending.store(true);
     return;
@@ -182,7 +222,7 @@ bool ppm_init()
         break;
 
     case PPMStatus::WARNING_HIGH_PPM:
-        llog.logS(ERROR, "Warning: Measured PPM exceeds safe threshold.");
+        llog.logS(ERROR, "Measured PPM exceeds safe threshold.");
         return false;
 
     case PPMStatus::ERROR_CHRONY_NOT_FOUND:
@@ -190,8 +230,12 @@ bool ppm_init()
         break;
 
     case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
-        llog.logE(ERROR, "System time is not synchronized. Unable to measure PPM accurately.");
-        return false;
+        llog.logE(ERROR,
+                  "System time is not synchronized. Unable to measure PPM accurately.\n"
+                  "Transmission timing or frequencies may be negatively impacted.");
+        config.use_ntp = false;
+        config_to_json();
+        break;
 
     default:
         llog.logE(WARN, "Unknown PPM status.");
@@ -264,7 +308,7 @@ void callback_shutdown_system()
  * @todo Consider encapsulating transmission thread in a proper class wrapper.
  * @todo Improve lifecycle/thread management with unified control.
  */
-void wspr_loop()
+bool wspr_loop()
 {
     // -------------------------------------------------------------------------
     // Optional: Start NTP-based PPM tracking
@@ -274,7 +318,7 @@ void wspr_loop()
         if (!ppm_init())
         {
             llog.logE(FATAL, "Unable to initialize NTP features.");
-            return;
+            return false;
         }
         else
         {
@@ -283,12 +327,12 @@ void wspr_loop()
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Start transmission thread
-    // -------------------------------------------------------------------------
-    // TODO: Encapsulate transmit_thread into a dedicated class
-    transmit_thread = std::thread(transmit_loop);
-    llog.logS(INFO, "Transmission handler thread started.");
+    if (config.use_ini)
+    {
+        // Start INI monitor
+        iniMonitor.filemon(config.ini_filename, callback_ini_changed);
+        iniMonitor.setPriority(SCHED_RR, 10);
+    }
 
     // Start web server and set priority
     webServer.start(config.web_port);
@@ -296,6 +340,10 @@ void wspr_loop()
     // Start socket server and set priority
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
     socketServer.set_thread_priority(SCHED_RR, 10);
+
+    // Set transmission thread and set priority
+    wspr_transmit.set_thread_priority(SCHED_FIFO, 10);
+    wspr_transmit.start(WSPR_Transmit::WSPR_2, callback_transmission_complete);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
@@ -316,62 +364,9 @@ void wspr_loop()
     shutdownMonitor.stop(); // Stop shutdown GPIO monitor
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
-
-    shutdown_threads(); // Join and cleanup all threads
+    wspr_transmit.stop();   // Stop the transmit server
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
-    // -------------------------------------------------------------------------
-    // Final check: confirm all threads have exited
-    // -------------------------------------------------------------------------
-    if (transmit_thread.joinable()) // TODO: Wrap with class
-    {
-        llog.logS(WARN, "Transmit thread still running.");
-    }
-
-    return;
-}
-
-/**
- * @brief Safely shuts down all active worker threads.
- *
- * @details
- * This function ensures a clean shutdown by joining any running threads
- * after acquiring a lock on `shutdown_mtx`. It uses a local `safe_join` lambda
- * to check if a thread is joinable before attempting to join it, avoiding
- * exceptions or undefined behavior.
- *
- * Currently, it handles:
- * - `transmit_thread`: The main signal transmission loop.
- *
- * This pattern ensures that threads are safely joined before the program exits.
- *
- * @note
- * If a thread is already joined or never started, it is skipped safely.
- * Additional threads should be added here as the application grows.
- */
-void shutdown_threads()
-{
-    std::lock_guard<std::mutex> lock(shutdown_mtx);
-
-    llog.logS(INFO, "Shutting down all active threads.");
-
-    // Helper lambda to safely join threads with logging
-    auto safe_join = [](std::thread &t, const std::string &name)
-    {
-        if (t.joinable())
-        {
-            llog.logS(DEBUG, "Joining:", name);
-            t.join();
-            llog.logS(DEBUG, name, "stopped.");
-        }
-        else
-        {
-            llog.logS(DEBUG, name, " already exited, skipping join.");
-        }
-    };
-
-    safe_join(transmit_thread, "Transmit thread"); // TODO: Create a class
-
-    llog.logS(INFO, "All threads shut down safely.");
+    return true;
 }
