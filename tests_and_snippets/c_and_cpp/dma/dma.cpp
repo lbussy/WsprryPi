@@ -34,6 +34,8 @@
 #include <string>
 #include <vector>
 
+ArgParserConfig config;
+
 // Note on accessing memory in RPi:
 //
 // There are 3 (yes three) address spaces in the Pi:
@@ -79,7 +81,7 @@
 //   those physical addresses. Finally, the DMA engine can be programmed. i.e.
 //   DMA engine access should use addresses starting with 0xC.
 //
-// The perhipherals in the Broadcom documentation are described using their bus
+// The peripherals in the Broadcom documentation are described using their bus
 // addresses and structures are created and calculations performed in this
 // program to figure out how to access them with virtual addresses.
 
@@ -89,7 +91,7 @@
 // compensated for in the main loop.
 #define F_PWM_CLK_INIT (31156186.6125761)
 
-// WSRP nominal symbol time
+// WSPR nominal symbol time
 #define WSPR_SYMTIME (8192.0 / 12000.0)
 // How much random frequency offset should be added to WSPR transmissions
 // if the --offset option has been turned on.
@@ -100,7 +102,7 @@
 // Not sure what the difference between a page and a block is in this
 // context.  Previously these were not used so I searched for "4096"
 // and guessed which one was which.
-// Only the mbox.mem_ref = mem_alloc() used both valies.
+// Only the mbox.mem_ref = mem_alloc() uses both values.
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
@@ -203,31 +205,6 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
-struct wConfig
-{
-    // Global configuration items from command line and ini file
-    bool useini = false;
-    std::string inifile = "";                  // Default to empty, meaning no INI file specified
-    bool xmit_enabled = true;                  // Transmission disabled by default
-    bool repeat = true;                        // No repeat transmission by default
-    std::string callsign = "AA0NT";            // Default to empty, requiring user input
-    std::string locator = "EM18";              // Default to empty, requiring user input
-    int tx_power = 20;                         // Default to 37 dBm (5W), a common WSPR power level
-    std::string frequency_string = "7040100."; // Default to empty
-    std::vector<double> center_freq_set = {};  // Empty vector, frequencies to be defined
-    double ppm = 0.0;                          // Default to zero, meaning no frequency correction applied
-    bool self_cal = true;                      // Self-calibration enabled by default
-    bool random_offset = true;                 // No random offset by default
-    double test_tone = 7040100;                // Default to NAN, meaning no test tone
-    bool no_delay = false;                     // Delay enabled by default
-    mode_type mode = WSPR;                     // Default mode is WSPR
-    int terminate = -1;                        // -1 to indicate no termination signal
-    bool useled = false;                       // No LED signaling by default
-    bool daemon_mode = false;                  // Not running as a daemon by default
-    double f_plld_clk = 125e6;                 // Default PLLD clock frequency: 125 MHz
-    int mem_flag = 0;                          // Default memory flag set to 0
-} config;
-
 struct PageInfo constPage;
 struct PageInfo instrPage;
 struct PageInfo instrs[1024];
@@ -250,7 +227,7 @@ constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
  * @param offset Byte offset in the file to read from.
  * @return The read value wrapped in std::optional, or std::nullopt on failure.
  */
-std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offset)
+std::optional<unsigned> get_devicetree_ranges(const std::string &filename, unsigned offset)
 {
     std::ifstream file(filename, std::ios::binary);
     if (!file)
@@ -284,11 +261,11 @@ std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offs
  */
 unsigned get_peripheral_address()
 {
-    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
+    if (auto addr = get_devicetree_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
     {
         return *addr;
     }
-    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 8); addr)
+    if (auto addr = get_devicetree_ranges("/proc/device-tree/soc/ranges", 8); addr)
     {
         return *addr;
     }
@@ -1188,7 +1165,7 @@ void setup_dma()
     try
     {
         // Convert frequency string to double and push to the set
-        temp_center_freq_desired = std::stod(config.frequency_string);
+        temp_center_freq_desired = std::stod(config.frequencies);
         config.center_freq_set.push_back(temp_center_freq_desired);
 
         // Ensure the frequency value is valid
@@ -1249,7 +1226,7 @@ void tx_tone()
     while (true)
     {
         // Perform self-calibration if enabled
-        if (config.self_cal)
+        if (config.use_ntp)
         {
             config.ppm = ppmManager.getCurrentPPM();
         }
@@ -1313,7 +1290,7 @@ void tx_wspr()
     while (true) // Reload Loop
     {
         // Generate a new WSPR message
-        WsprMessage message(config.callsign, config.locator, config.tx_power);
+        WsprMessage message(config.callsign, config.grid_square, config.power_dbm);
 
         // Print encoded packet
         std::cout << "WSPR codeblock: ";
@@ -1359,7 +1336,7 @@ void tx_wspr()
             double tone_spacing = 1.0 / wspr_symtime;
 
             // Apply random offset if enabled
-            if ((center_freq_desired != 0) && config.random_offset)
+            if ((center_freq_desired != 0) && config.use_offset)
             {
                 center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
                                        (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
@@ -1373,11 +1350,11 @@ void tx_wspr()
             std::cout << temp.str() << std::endl;
 
             // Wait for the next WSPR transmission window
-            if (config.no_delay)
-            {
-                std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
-            }
-            else
+            // if (config.nodelay)
+            // {
+            //     std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
+            // }
+            // else
             {
                 std::cout << "Waiting for next WSPR transmission window." << std::endl;
                 if (!wait_every((wspr15) ? 15 : 2))
@@ -1388,7 +1365,7 @@ void tx_wspr()
             }
 
             // Update frequency correction (PPM) if enabled
-            if (config.self_cal)
+            if (config.use_ntp)
             {
                 config.ppm = ppmManager.getCurrentPPM();
             }
@@ -1411,7 +1388,7 @@ void tx_wspr()
             }
 
             // Start transmission if conditions are met
-            if (center_freq_actual && config.xmit_enabled)
+            if (center_freq_actual && config.transmit)
             {
                 struct timeval tvBegin, tvEnd, tvDiff;
                 gettimeofday(&tvBegin, NULL);
@@ -1457,11 +1434,11 @@ void tx_wspr()
 
             // Cycle through available bands
             band = (band + 1) % nbands;
-            if ((band == 0) && !config.repeat)
+            if ((band == 0) && !config.loop_tx)
             {
                 return;
             }
-            if ((config.terminate > 0) && (n_tx >= config.terminate))
+            if ((config.tx_iterations > 0) && (n_tx >= config.tx_iterations))
             {
                 return;
             }
