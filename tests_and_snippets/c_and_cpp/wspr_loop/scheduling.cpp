@@ -3,7 +3,7 @@
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -37,7 +37,6 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "config_handler.hpp"
-#include "constants.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
 #include "logging.hpp"
@@ -45,7 +44,7 @@
 #include "signal_handler.hpp"
 #include "web_server.hpp"
 #include "web_socket.hpp"
-#include "wspr_transmit.hpp"
+#include "wspr_scheduler.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -342,8 +341,8 @@ bool wspr_loop()
     socketServer.set_thread_priority(SCHED_RR, 10);
 
     // Set transmission thread and set priority
-    wspr_transmit.set_thread_priority(SCHED_FIFO, 10);
-    wspr_transmit.start(WSPR_Transmit::WSPR_2, callback_transmission_complete);
+    wspr_scheduler.set_thread_priority(SCHED_FIFO, 10);
+    wspr_scheduler.start(WSPR_Scheduler::WSPR_2, callback_transmission_complete);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
@@ -364,7 +363,7 @@ bool wspr_loop()
     shutdownMonitor.stop(); // Stop shutdown GPIO monitor
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
-    wspr_transmit.stop();   // Stop the transmit server
+    wspr_scheduler.stop();   // Stop the transmit server
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 

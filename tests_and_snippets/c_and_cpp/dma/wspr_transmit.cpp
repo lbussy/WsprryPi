@@ -1,4 +1,4 @@
-#include "dma.hpp"
+#include "wspr_transmit.hpp"
 
 // Submodules
 #include "wspr_message.hpp"
@@ -34,7 +34,12 @@
 #include <string>
 #include <vector>
 
-ArgParserConfig config;
+#ifdef __cplusplus
+extern "C"
+{
+#include "mailbox.h"
+}
+#endif /* __cplusplus */
 
 // Note on accessing memory in RPi:
 //
@@ -102,7 +107,7 @@ ArgParserConfig config;
 // Not sure what the difference between a page and a block is in this
 // context.  Previously these were not used so I searched for "4096"
 // and guessed which one was which.
-// Only the mbox.mem_ref = mem_alloc() uses both values.
+// Only the mbox.mem_ref = mem_alloc() used both values.
 #define PAGE_SIZE (4 * 1024)
 #define BLOCK_SIZE (4 * 1024)
 
@@ -130,8 +135,6 @@ ArgParserConfig config;
 
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
-
-PPMManager ppmManager;
 
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
@@ -205,6 +208,31 @@ static struct
     unsigned pool_cnt;
 } mbox;
 
+struct wConfig
+{
+    // Global configuration items from command line and ini file
+    bool useini = false;
+    std::string inifile = "";                  // Default to empty, meaning no INI file specified
+    bool xmit_enabled = true;                  // Transmission disabled by default
+    bool repeat = false;                       // No repeat transmission by default
+    std::string callsign = "AA0NT";            // Default to empty, requiring user input
+    std::string locator = "EM18";              // Default to empty, requiring user input
+    int tx_power = 20;                         // Default to 37 dBm (5W), a common WSPR power level
+    std::string frequency_string = "7040100.0";// Default to empty
+    std::vector<double> center_freq_set = {};  // Empty vector, frequencies to be defined
+    double ppm = 12.880;                       // Default to zero, meaning no frequency correction applied
+    bool self_cal = true;                      // Self-calibration enabled by default
+    bool random_offset = true;                 // No random offset by default
+    double test_tone = 7040100.0;              // Default to NAN, meaning no test tone
+    bool no_delay = false;                     // Delay enabled by default
+    mode_type mode = WSPR;                     // Default mode is WSPR
+    int terminate = -1;                        // -1 to indicate no termination signal
+    bool useled = false;                       // No LED signaling by default
+    bool daemon_mode = false;                  // Not running as a daemon by default
+    double f_plld_clk = 125e6;                 // Default PLLD clock frequency: 125 MHz
+    int mem_flag = 0;                          // Default memory flag set to 0
+} config;
+
 struct PageInfo constPage;
 struct PageInfo instrPage;
 struct PageInfo instrs[1024];
@@ -227,7 +255,7 @@ constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
  * @param offset Byte offset in the file to read from.
  * @return The read value wrapped in std::optional, or std::nullopt on failure.
  */
-std::optional<unsigned> get_devicetree_ranges(const std::string &filename, unsigned offset)
+std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offset)
 {
     std::ifstream file(filename, std::ios::binary);
     if (!file)
@@ -261,11 +289,11 @@ std::optional<unsigned> get_devicetree_ranges(const std::string &filename, unsig
  */
 unsigned get_peripheral_address()
 {
-    if (auto addr = get_devicetree_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
+    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
     {
         return *addr;
     }
-    if (auto addr = get_devicetree_ranges("/proc/device-tree/soc/ranges", 8); addr)
+    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 8); addr)
     {
         return *addr;
     }
@@ -1118,27 +1146,6 @@ void dma_cleanup()
     safe_remove(LOCAL_DEVICE_FILE_NAME);
 }
 
-bool ppm_init()
-{
-    // Initialize PPM Manager
-    PPMStatus status = ppmManager.initialize();
-
-    // Handle initialization errors
-    if (status == PPMStatus::ERROR_UNSYNCHRONIZED_TIME)
-    {
-        std::cerr << "System time is not synchronized." << std::endl;
-        return false;
-    }
-    else if (status == PPMStatus::ERROR_CHRONY_NOT_FOUND)
-    {
-        std::cerr << "Chrony not found. Using clock drift measurement." << std::endl;
-    }
-
-    std::cout << "Current PPM: " << ppmManager.getCurrentPPM() << std::endl;
-
-    return true;
-}
-
 /**
  * @brief Configures and initializes the DMA system for transmission.
  * @details Retrieves PLLD frequency, calibrates timing, sets scheduling priority,
@@ -1149,10 +1156,6 @@ void setup_dma()
 {
     // Retrieve PLLD frequency
     getPLLD();
-
-    // Perform initial time/clock calibration
-    ppm_init();
-    config.ppm = ppmManager.getCurrentPPM();
 
     // Set high scheduling priority to reduce kernel interruptions
     setSchedPriority(30);
@@ -1165,7 +1168,7 @@ void setup_dma()
     try
     {
         // Convert frequency string to double and push to the set
-        temp_center_freq_desired = std::stod(config.frequencies);
+        temp_center_freq_desired = std::stod(config.frequency_string);
         config.center_freq_set.push_back(temp_center_freq_desired);
 
         // Ensure the frequency value is valid
@@ -1225,11 +1228,6 @@ void tx_tone()
     // Continuous transmission loop
     while (true)
     {
-        // Perform self-calibration if enabled
-        if (config.use_ntp)
-        {
-            config.ppm = ppmManager.getCurrentPPM();
-        }
 
         // If PPM value has changed, update the DMA table
         if (config.ppm != ppm_prev)
@@ -1290,7 +1288,7 @@ void tx_wspr()
     while (true) // Reload Loop
     {
         // Generate a new WSPR message
-        WsprMessage message(config.callsign, config.grid_square, config.power_dbm);
+        WsprMessage message(config.callsign, config.locator, config.tx_power);
 
         // Print encoded packet
         std::cout << "WSPR codeblock: ";
@@ -1336,7 +1334,7 @@ void tx_wspr()
             double tone_spacing = 1.0 / wspr_symtime;
 
             // Apply random offset if enabled
-            if ((center_freq_desired != 0) && config.use_offset)
+            if ((center_freq_desired != 0) && config.random_offset)
             {
                 center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
                                        (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
@@ -1350,11 +1348,11 @@ void tx_wspr()
             std::cout << temp.str() << std::endl;
 
             // Wait for the next WSPR transmission window
-            // if (config.nodelay)
-            // {
-            //     std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
-            // }
-            // else
+            if (config.no_delay)
+            {
+                std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
+            }
+            else
             {
                 std::cout << "Waiting for next WSPR transmission window." << std::endl;
                 if (!wait_every((wspr15) ? 15 : 2))
@@ -1362,12 +1360,6 @@ void tx_wspr()
                     // Reload if ini changes
                     break;
                 }
-            }
-
-            // Update frequency correction (PPM) if enabled
-            if (config.use_ntp)
-            {
-                config.ppm = ppmManager.getCurrentPPM();
             }
 
             // Create DMA table for transmission
@@ -1388,7 +1380,7 @@ void tx_wspr()
             }
 
             // Start transmission if conditions are met
-            if (center_freq_actual && config.transmit)
+            if (center_freq_actual && config.xmit_enabled)
             {
                 struct timeval tvBegin, tvEnd, tvDiff;
                 gettimeofday(&tvBegin, NULL);
@@ -1434,11 +1426,11 @@ void tx_wspr()
 
             // Cycle through available bands
             band = (band + 1) % nbands;
-            if ((band == 0) && !config.loop_tx)
+            if ((band == 0) && !config.repeat)
             {
                 return;
             }
-            if ((config.tx_iterations > 0) && (n_tx >= config.tx_iterations))
+            if ((config.terminate > 0) && (n_tx >= config.terminate))
             {
                 return;
             }

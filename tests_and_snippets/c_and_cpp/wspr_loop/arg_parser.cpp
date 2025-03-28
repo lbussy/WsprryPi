@@ -3,7 +3,7 @@
  * @brief Command-line argument parser and configuration handler.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -36,7 +36,6 @@
 
 // Project headers
 #include "config_handler.hpp"
-#include "constants.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
 #include "logging.hpp"
@@ -44,7 +43,7 @@
 #include "signal_handler.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
-#include "wspr_transmit.hpp"
+#include "wspr_scheduler.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -113,7 +112,7 @@ WSPRBandLookup lookup;
  *
  * @note Access to this variable is thread-safe due to its atomic nature.
  */
-std::atomic<int> wspr_interval(WSPR_2);
+std::atomic<int> wspr_interval(WSPR_Scheduler::WSPR_2);
 
 /**
  * @brief Semaphore indicating a pending INI file reload.
@@ -157,7 +156,7 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    if (wspr_transmit.isTransmitting())
+    if (wspr_scheduler.isTransmitting())
     {
         // Log detection of change
         ini_reload_pending.store(true);
@@ -182,7 +181,7 @@ void callback_ini_changed()
 void apply_deferred_changes()
 {
     // Apply deferred reload if transmission has ended
-    if (ini_reload_pending.load() && !wspr_transmit.isTransmitting())
+    if (ini_reload_pending.load() && !wspr_scheduler.isTransmitting())
     {
         // Clear the pending flag and reload configuration
         ini_reload_pending.store(false);
@@ -948,7 +947,7 @@ bool parse_command_line(int argc, char *argv[])
         }
         case 'v': // Version
         {
-            std::cout << version_string() << std::endl;
+            std::cout << get_version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
         }
         case 'n': // Use NTP

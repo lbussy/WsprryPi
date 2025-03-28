@@ -3,7 +3,7 @@
  * @brief Provides an interface to ArgParserConfig and JSON config
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -116,8 +116,6 @@ struct ArgParserConfig
     bool use_ini;                        ///< Load configuration from INI file.
     std::string ini_filename;            ///< INI file name and path.
     std::vector<double> center_freq_set; ///< Parsed list of center frequencies in Hz.
-    double f_plld_clk;                   ///< Clock speed (defaults to 500 MHz).
-    int mem_flag;                        ///< Reserved for future memory management flags.
 
     /**
      * @brief Default constructor initializing all configuration parameters.
@@ -146,9 +144,7 @@ struct ArgParserConfig
           mode(ModeType::WSPR),
           use_ini(false),
           ini_filename(""),
-          center_freq_set({}),
-          f_plld_clk(0.0),
-          mem_flag(0)
+          center_freq_set({})
     {
     }
 };

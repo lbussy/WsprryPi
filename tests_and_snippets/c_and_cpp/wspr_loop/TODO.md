@@ -28,3 +28,5 @@
 
 - [ ] Added chrony `sudo apt install chrony -y`
 - [ ] Review if we do or can do WSPR-15
+- [ ] Create new REST-based web page
+- [ ] Add websockets to web page

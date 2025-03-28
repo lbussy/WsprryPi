@@ -1,6 +1,6 @@
 /**
- * @file constants.hpp
- * @brief Project constants used within the program.
+ * @file wspr_constants.hpp
+ * @brief A set of constants used for the WSPR Transmit functionality.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
  * WsprryPi projet (no longer on GitHub). However, now the original code
@@ -31,23 +31,10 @@
  * SOFTWARE.
  */
 
-#ifndef CONSTANTS_HPP
-#define CONSTANTS_HPP
+#ifndef WSPR_CONSTANTS
+#define WSPR_CONSTANTS
 
-// Standard library headers
-#include <cstdint> // Required for uint32_t
-
-/**
- * @brief TCP port used for singleton instance checking.
- *
- * This constant defines the port number used for checking if a singleton
- * instance of the application is already running. It allows the program to
- * prevent multiple instances from running concurrently.
- *
- * @note This feature may become redundant with `tcp_server` running.
- * @see tcp_server
- */
-constexpr int SINGLETON_PORT = 1234;
+#include <cstdint>
 
 /**
  * @brief Random frequency offset for standard WSPR transmissions.
@@ -80,28 +67,6 @@ constexpr int WSPR_RAND_OFFSET = 80;
  * @see WSPR_RAND_OFFSET
  */
 constexpr int WSPR15_RAND_OFFSET = 8;
-
-/**
- * @brief WSPR transmission interval for 15-minute cycles.
- *
- * This constant defines the interval, in minutes, for WSPR transmissions
- * when operating in the 15-minute mode. It is used by the scheduler to
- * determine the next transmission window.
- *
- * @see WSPR_2, wspr_interval
- */
-constexpr int WSPR_15 = 15;
-
-/**
- * @brief WSPR transmission interval for 2-minute cycles.
- *
- * This constant defines the interval, in minutes, for WSPR transmissions
- * when operating in the 2-minute mode. It is commonly used for quick
- * transmission cycles, ensuring frequent beaconing.
- *
- * @see WSPR_15, wspr_interval
- */
-constexpr int WSPR_2 = 2;
 
 /**
  * @brief Nominal symbol duration for WSPR transmissions.
@@ -214,4 +179,32 @@ constexpr std::uint32_t BLOCK_SIZE = 4 * 1024;
  */
 constexpr std::uint32_t PWM_CLOCKS_PER_ITER_NOMINAL = 1000;
 
-#endif // CONSTANTS_HPP
+/**
+ * @brief Processor ID for the Broadcom BCM2835 chip.
+ *
+ * This constant identifies the BCM2835 processor, which is used in the original Raspberry Pi (RPi1).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0; // BCM2835 (RPi1)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2836 chip.
+ *
+ * This constant identifies the BCM2836 processor, which is used in the Raspberry Pi 2 (RPi2).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1; // BCM2836 (RPi2)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2837 chip.
+ *
+ * This constant identifies the BCM2837 processor, which is used in the Raspberry Pi 3 (RPi3).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2; // BCM2837 (RPi3)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2711 chip.
+ *
+ * This constant identifies the BCM2711 processor, which is used in the Raspberry Pi 4 (RPi4).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
+
+#endif // WSPR_CONSTANTS

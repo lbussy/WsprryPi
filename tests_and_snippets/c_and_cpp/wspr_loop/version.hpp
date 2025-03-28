@@ -3,7 +3,7 @@
  * @brief Provides software and hardware version information.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -37,36 +37,6 @@
 #include <string>
 
 /**
- * @brief Retrieves the executable version.
- *
- * This function returns the version of the executable as a string.
- * If the `MAKE_TAG` macro is not defined, it returns "unknown".
- *
- * @return A `std::string` representing the executable version.
- */
-extern std::string exe_version();
-
-/**
- * @brief Retrieves the current branch name.
- *
- * This function returns the name of the Git branch associated with the build.
- * If the `MAKE_BRH` macro is not defined, it returns "unknown".
- *
- * @return A `std::string` representing the branch name.
- */
-extern std::string branch();
-
-/**
- * @brief Retrieves the executable name.
- *
- * This function returns the name of the executable as defined by the build system.
- * If the `MAKE_EXE` macro is not defined, it returns "unknown".
- *
- * @return A `std::string` representing the executable name.
- */
-extern std::string exe_name();
-
-/**
  * @brief Retrieves the project name.
  *
  * This function returns the project name as defined by the build system.
@@ -74,7 +44,7 @@ extern std::string exe_name();
  *
  * @return A `std::string` representing the project name.
  */
-extern std::string project_name();
+extern std::string get_project_name();
 
 /**
  * @brief Retrieves the current debug state based on the build configuration.
@@ -97,50 +67,6 @@ extern std::string project_name();
 extern std::string get_debug_state();
 
 /**
- * @brief Retrieves the processor type as an integer value.
- *
- * This function determines the Raspberry Pi's processor type and returns an
- * associated integer value based on predefined mappings in the
- * `processorMappings` array. If the processor type cannot be identified or
- * is unknown, the function returns -1.
- *
- * @return int The integer value corresponding to the detected processor type,
- *             or -1 if the type is unknown or cannot be determined.
- *
- * @details The integer value returned corresponds to the generation or family
- *          of the Broadcom processor used in Raspberry Pi models. For example:
- *          - BCM2835 returns 0 (Raspberry Pi 1 and Zero)
- *          - BCM2836 returns 1 (Raspberry Pi 2)
- *          - BCM2837 returns 2 (Raspberry Pi 3)
- *          - BCM2711 returns 3 (Raspberry Pi 4 and Pi 400)
- *
- * @throws None This function does not throw exceptions but returns -1 if an
- *         error occurs.
- */
-extern int getProcessorTypeAsInt();
-
-/**
- * @brief Retrieves the processor type as a string.
- *
- * This function reads the `/sys/firmware/devicetree/base/compatible` file to
- * determine the processor type of the Raspberry Pi. It extracts the CPU model
- * (such as "BCM2835", "BCM2711") from the device tree and returns it as an
- * uppercase string.
- *
- * @return std::string The detected processor type, such as "BCM2835",
- *         "BCM2711", etc. If the processor type cannot be determined,
- *         it returns "Unknown CPU".
- *
- * @details The function reads the first line of the compatible file, searches
- *          for the "bcm" keyword, replaces commas with spaces for readability,
- *          and converts the result to uppercase for consistency.
- *
- * @throws None This function does not throw exceptions but returns an error
- *         message if the file cannot be read.
- */
-extern std::string getProcessorType();
-
-/**
  * @brief Retrieves the Raspberry Pi model as a string.
  *
  * This function reads the `/proc/device-tree/model` file to determine the
@@ -156,11 +82,11 @@ extern std::string getProcessorType();
  *
  * @example
  * ```cpp
- * std::string piModel = getRaspberryPiModel();
+ * std::string piModel = get_pi_model();
  * std::cout << "Raspberry Pi Model: " << piModel << std::endl;
  * ```
  */
-extern std::string getRaspberryPiModel();
+extern std::string get_pi_model();
 
 /**
  * @brief Constructs a formatted version string for the project.
@@ -172,26 +98,7 @@ extern std::string getRaspberryPiModel();
  * @return std::string A formatted string containing project version information.
  * @example Example output: "MyProject version 1.2.3 (main)."
  */
-extern std::string version_string();
-
-/**
- * @brief Retrieves a 32-bit address from the device tree.
- *
- * This function reads a 4-byte address from a specified offset within a file,
- * commonly used to query memory-mapped addresses from the device tree.
- *
- * @param filename The path to the device tree file to read from.
- * @param offset The offset (in bytes) within the file to read the address.
- * @return unsigned The 32-bit address read from the file, or `~0` (all bits set)
- *         if the read operation fails.
- *
- * @details
- * The function opens the specified file in binary mode, seeks to the given offset,
- * and reads 4 bytes representing an address in big-endian format. If the read
- * operation succeeds, the address is returned as an unsigned integer. If any
- * operation fails, the function returns `~0` (equivalent to `0xFFFFFFFF`).
- */
-extern unsigned get_dt_ranges(const char *filename, unsigned offset);
+extern std::string get_version_string();
 
 /**
  * @brief Retrieves the BCM host peripheral base address from the device tree.

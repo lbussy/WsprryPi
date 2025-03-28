@@ -3,7 +3,7 @@
  * @brief Entry point for the Wsprry Pi application.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -48,7 +48,17 @@
 // System headers
 #include <unistd.h>
 
-constexpr const int SINGLETON_PORT = 1234;
+/**
+ * @brief TCP port used for singleton instance checking.
+ *
+ * This constant defines the port number used for checking if a singleton
+ * instance of the application is already running. It allows the program to
+ * prevent multiple instances from running concurrently.
+ *
+ * @note This feature may become redundant with `tcp_server` running.
+ * @see tcp_server
+ */
+constexpr int SINGLETON_PORT = 1234;
 
 // Global unique instance of SignalHandler.
 SignalHandler signalHandler;
@@ -120,8 +130,8 @@ int main(int argc, char *argv[])
         print_usage("An unknown error occurred loading the configuration.", EXIT_FAILURE);
 
     // Display version, Raspberry Pi model, and process ID for context.
-    llog.logS(INFO, version_string());
-    llog.logS(INFO, "Running on:", getRaspberryPiModel(), ".");
+    llog.logS(INFO, get_version_string());
+    llog.logS(INFO, "Running on:", get_pi_model(), ".");
     llog.logS(INFO, "Process PID:", getpid());
 
     // Validate configuration and ensure all required settings are present.
@@ -158,7 +168,7 @@ int main(int argc, char *argv[])
         retval = EXIT_FAILURE;
     }
 
-    llog.logS(INFO, project_name(), "exiting.");
+    llog.logS(INFO, get_project_name(), "exiting.");
 
     // Stop the SignalHandler.
     signalHandler.stop();

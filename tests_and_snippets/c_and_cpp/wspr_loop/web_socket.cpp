@@ -3,7 +3,7 @@
  * @brief A simple websocket server for Wsprry Pi server support.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -37,7 +37,7 @@
 #include "logging.hpp"
 #include "sha1.hpp"
 #include "scheduling.hpp"
-#include "wspr_transmit.hpp"
+#include "wspr_scheduler.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -315,7 +315,7 @@ void WebSocketServer::handle_message(const std::string &raw_message)
     if (message == "tx_status")
     {
         llog.logS(DEBUG, "Received transmission status request.");
-        send_to_client(std::string(wspr_transmit.isTransmitting() ? "true" : "false"));
+        send_to_client(std::string(wspr_scheduler.isTransmitting() ? "true" : "false"));
     }
     else if (message == "shutdown")
     {
@@ -343,7 +343,7 @@ void WebSocketServer::handle_message(const std::string &raw_message)
         config_to_json();
         json_to_ini();
         // Stop WSPR transmissions
-        wspr_transmit.stop();
+        wspr_scheduler.stop();
         llog.logS(INFO, "Received stop_tx command.");
         send_to_client("Response: stop_tx command acknowledged");
     }

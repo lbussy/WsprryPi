@@ -3,7 +3,7 @@
  * @brief Provides software and hardware version information.
  *
  * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi projet (no longer on GitHub). However, now the original code
+ * WsprryPi project (no longer on GitHub). However, now the original code
  * remains only as a memory and inspiration, and this project is no longer
  * a derivative work.
  *
@@ -94,7 +94,7 @@ constexpr std::string_view SANITIZED_PRJ = to_string_view(MAKE_PRJ); ///< Saniti
  *
  * @return A `std::string` representing the executable version.
  */
-std::string exe_version()
+std::string get_exe_version()
 {
     return std::string(SANITIZED_TAG);
 }
@@ -107,7 +107,7 @@ std::string exe_version()
  *
  * @return A `std::string` representing the branch name.
  */
-std::string branch()
+std::string get_exe_branch()
 {
     return std::string(SANITIZED_BRH);
 }
@@ -120,7 +120,7 @@ std::string branch()
  *
  * @return A `std::string` representing the executable name.
  */
-std::string exe_name()
+std::string get_exe_name()
 {
     return std::string(SANITIZED_EXE);
 }
@@ -133,7 +133,7 @@ std::string exe_name()
  *
  * @return A `std::string` representing the project name.
  */
-std::string project_name()
+std::string get_project_name()
 {
     return std::string(SANITIZED_PRJ);
 }
@@ -214,53 +214,6 @@ const ProcessorMapping processorMappings[] = {
 };
 
 /**
- * @brief Retrieves the processor type as an integer value.
- *
- * This function determines the Raspberry Pi's processor type and returns an
- * associated integer value based on predefined mappings in the
- * `processorMappings` array. If the processor type cannot be identified or
- * is unknown, the function returns -1.
- *
- * @return int The integer value corresponding to the detected processor type,
- *             or -1 if the type is unknown or cannot be determined.
- *
- * @details The integer value returned corresponds to the generation or family
- *          of the Broadcom processor used in Raspberry Pi models. For example:
- *          - BCM2835 returns 0 (Raspberry Pi 1 and Zero)
- *          - BCM2836 returns 1 (Raspberry Pi 2)
- *          - BCM2837 returns 2 (Raspberry Pi 3)
- *          - BCM2711 returns 3 (Raspberry Pi 4 and Pi 400)
- *
- * @throws None This function does not throw exceptions but returns -1 if an
- *         error occurs.
- */
-int getProcessorTypeAsInt()
-{
-    // Retrieve the processor type as a string
-    std::string processorType = getProcessorType();
-
-    // Check if the processor type is empty (indicating an error)
-    if (processorType.empty())
-    {
-        llog.logE(ERROR, "Failed to get processor type.");
-        return -1; ///< Return -1 to indicate an error
-    }
-
-    // Search for the processor type in the known mappings
-    for (const auto &mapping : processorMappings)
-    {
-        if (processorType == mapping.type)
-        {
-            return mapping.value; ///< Return the associated integer value
-        }
-    }
-
-    // If the type is not found, log a warning and return -1
-    llog.logE(ERROR, "Unknown processor type:", processorType);
-    return -1;
-}
-
-/**
  * @brief Retrieves the processor type as a string.
  *
  * This function reads the `/sys/firmware/devicetree/base/compatible` file to
@@ -279,7 +232,7 @@ int getProcessorTypeAsInt()
  * @throws None This function does not throw exceptions but returns an error
  *         message if the file cannot be read.
  */
-std::string getProcessorType()
+std::string get_processor_string()
 {
     static std::string cpuModel; ///< Static variable to cache the result
 
@@ -322,6 +275,53 @@ std::string getProcessorType()
 }
 
 /**
+ * @brief Retrieves the processor type as an integer value.
+ *
+ * This function determines the Raspberry Pi's processor type and returns an
+ * associated integer value based on predefined mappings in the
+ * `processorMappings` array. If the processor type cannot be identified or
+ * is unknown, the function returns -1.
+ *
+ * @return int The integer value corresponding to the detected processor type,
+ *             or -1 if the type is unknown or cannot be determined.
+ *
+ * @details The integer value returned corresponds to the generation or family
+ *          of the Broadcom processor used in Raspberry Pi models. For example:
+ *          - BCM2835 returns 0 (Raspberry Pi 1 and Zero)
+ *          - BCM2836 returns 1 (Raspberry Pi 2)
+ *          - BCM2837 returns 2 (Raspberry Pi 3)
+ *          - BCM2711 returns 3 (Raspberry Pi 4 and Pi 400)
+ *
+ * @throws None This function does not throw exceptions but returns -1 if an
+ *         error occurs.
+ */
+int get_processor_type_int()
+{
+    // Retrieve the processor type as a string
+    std::string processorType = get_processor_string();
+
+    // Check if the processor type is empty (indicating an error)
+    if (processorType.empty())
+    {
+        llog.logE(ERROR, "Failed to get processor type.");
+        return -1; ///< Return -1 to indicate an error
+    }
+
+    // Search for the processor type in the known mappings
+    for (const auto &mapping : processorMappings)
+    {
+        if (processorType == mapping.type)
+        {
+            return mapping.value; ///< Return the associated integer value
+        }
+    }
+
+    // If the type is not found, log a warning and return -1
+    llog.logE(ERROR, "Unknown processor type:", processorType);
+    return -1;
+}
+
+/**
  * @brief Retrieves the Raspberry Pi model as a string.
  *
  * This function reads the `/proc/device-tree/model` file to determine the
@@ -337,11 +337,11 @@ std::string getProcessorType()
  *
  * @example
  * ```cpp
- * std::string piModel = getRaspberryPiModel();
+ * std::string piModel = get_pi_model();
  * std::cout << "Raspberry Pi Model: " << piModel << std::endl;
  * ```
  */
-std::string getRaspberryPiModel()
+std::string get_pi_model()
 {
     static std::string model; // Static variable to cache the model string.
     std::ifstream modelFile("/proc/device-tree/model");
@@ -371,87 +371,13 @@ std::string getRaspberryPiModel()
  * @return std::string A formatted string containing project version information.
  * @example Example output: "MyProject version 1.2.3 (main)."
  */
-std::string version_string()
+std::string get_version_string()
 {
     // Retrieve project details.
-    std::string proj = project_name(); ///< Project name.
-    std::string ver = exe_version();   ///< Executable version.
-    std::string br = branch();         ///< Git branch name.
+    std::string proj = get_project_name(); ///< Project name.
+    std::string ver = get_exe_version();   ///< Executable version.
+    std::string br = get_exe_branch();         ///< Git branch name.
 
     // Construct and return the formatted version string.
     return proj + " version " + ver + " (" + br + ").";
-}
-
-/**
- * @brief Retrieves a 32-bit address from the device tree.
- *
- * This function reads a 4-byte address from a specified offset within a file,
- * commonly used to query memory-mapped addresses from the device tree.
- *
- * @param filename The path to the device tree file to read from.
- * @param offset The offset (in bytes) within the file to read the address.
- * @return unsigned The 32-bit address read from the file, or `~0` (all bits set)
- *         if the read operation fails.
- *
- * @details
- * The function opens the specified file in binary mode, seeks to the given offset,
- * and reads 4 bytes representing an address in big-endian format. If the read
- * operation succeeds, the address is returned as an unsigned integer. If any
- * operation fails, the function returns `~0` (equivalent to `0xFFFFFFFF`).
- */
-unsigned get_dt_ranges(const char *filename, unsigned offset)
-{
-    unsigned address = ~0; ///< Default to an invalid address (all bits set).
-
-    // Open the specified file in binary read mode.
-    FILE *fp = fopen(filename, "rb");
-    if (fp)
-    {
-        unsigned char buf[4]; ///< Buffer to hold the 4-byte address.
-
-        // Seek to the specified offset within the file.
-        if (fseek(fp, offset, SEEK_SET) == 0)
-        {
-            // Read 4 bytes and construct the address if successful.
-            if (fread(buf, 1, sizeof(buf), fp) == sizeof(buf))
-            {
-                address = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-            }
-        }
-
-        // Close the file after reading.
-        fclose(fp);
-    }
-
-    return address;
-}
-
-/**
- * @brief Retrieves the BCM host peripheral base address from the device tree.
- *
- * This function queries the device tree to determine the base address of the
- * Broadcom (BCM) host peripherals, which is essential for low-level hardware
- * access on Raspberry Pi systems.
- *
- * @return unsigned The base address of the BCM host peripherals.
- *         Returns `0x20000000` if the address cannot be determined.
- *
- * @details
- * The function first attempts to read the address from the `/proc/device-tree/soc/ranges`
- * file at offset 4. If that fails (returns 0), it tries again at offset 8. If both attempts
- * fail, it falls back to the default base address `0x20000000` (common for older Raspberry Pi models).
- */
-unsigned get_peripheral_address(void)
-{
-    // Attempt to get the peripheral address from the device tree at offset 4.
-    unsigned address = get_dt_ranges("/proc/device-tree/soc/ranges", 4);
-
-    // If the address is zero, try again at offset 8.
-    if (address == 0)
-    {
-        address = get_dt_ranges("/proc/device-tree/soc/ranges", 8);
-    }
-
-    // If still invalid, return the default base address (0x20000000).
-    return (address == static_cast<unsigned>(~0)) ? 0x20000000 : address;
 }
