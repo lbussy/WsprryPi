@@ -212,25 +212,25 @@ struct wConfig
 {
     // Global configuration items from command line and ini file
     bool useini = false;
-    std::string inifile = "";                  // Default to empty, meaning no INI file specified
-    bool xmit_enabled = true;                  // Transmission disabled by default
-    bool repeat = false;                       // No repeat transmission by default
-    std::string callsign = "AA0NT";            // Default to empty, requiring user input
-    std::string locator = "EM18";              // Default to empty, requiring user input
-    int tx_power = 20;                         // Default to 37 dBm (5W), a common WSPR power level
-    std::string frequency_string = "7040100.0";// Default to empty
-    std::vector<double> center_freq_set = {};  // Empty vector, frequencies to be defined
-    double ppm = 12.880;                       // Default to zero, meaning no frequency correction applied
-    bool self_cal = true;                      // Self-calibration enabled by default
-    bool random_offset = true;                 // No random offset by default
-    double test_tone = 7040100.0;              // Default to NAN, meaning no test tone
-    bool no_delay = false;                     // Delay enabled by default
-    mode_type mode = WSPR;                     // Default mode is WSPR
-    int terminate = -1;                        // -1 to indicate no termination signal
-    bool useled = false;                       // No LED signaling by default
-    bool daemon_mode = false;                  // Not running as a daemon by default
-    double f_plld_clk = 125e6;                 // Default PLLD clock frequency: 125 MHz
-    int mem_flag = 0;                          // Default memory flag set to 0
+    std::string inifile = "";                   // Default to empty, meaning no INI file specified
+    bool xmit_enabled = true;                   // Transmission disabled by default
+    bool repeat = false;                        // No repeat transmission by default
+    std::string callsign = "AA0NT";             // Default to empty, requiring user input
+    std::string locator = "EM18";               // Default to empty, requiring user input
+    int tx_power = 20;                          // Default to 37 dBm (5W), a common WSPR power level
+    std::string frequency_string = "7040100.0"; // Default to empty
+    std::vector<double> center_freq_set = {};   // Empty vector, frequencies to be defined
+    double ppm = 12.880;                        // Default to zero, meaning no frequency correction applied
+    bool self_cal = true;                       // Self-calibration enabled by default
+    bool random_offset = true;                  // No random offset by default
+    double test_tone = 7040100.0;               // Default to NAN, meaning no test tone
+    bool no_delay = false;                      // Delay enabled by default
+    mode_type mode = WSPR;                      // Default mode is WSPR
+    int terminate = -1;                         // -1 to indicate no termination signal
+    bool useled = false;                        // No LED signaling by default
+    bool daemon_mode = false;                   // Not running as a daemon by default
+    double f_plld_clk = 125e6;                  // Default PLLD clock frequency: 125 MHz
+    int mem_flag = 0;                           // Default memory flag set to 0
 } config;
 
 struct PageInfo constPage;
@@ -421,12 +421,14 @@ void allocMemPool(unsigned numpages)
     // Initialize the count of used pages in the pool.
     mbox.pool_cnt = 0;
 
+#ifdef DEBUG_WSPR_TRANSMIT
     // Debug print: Displays memory allocation details in hexadecimal format.
     std::cout << "DEBUG: allocMemPool bus_addr=0x"
               << std::hex << mbox.bus_addr
               << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
               << " mem_ref=0x" << mbox.mem_ref
               << std::dec << std::endl;
+#endif
 }
 
 /**
@@ -453,11 +455,13 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
     *vAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.virt_addr) + offset);
     *bAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.bus_addr) + offset);
 
+#ifdef DEBUG_WSPR_TRANSMIT
     // Debug print: Displays allocated memory details.
     std::cout << "DEBUG: getRealMemPageFromPool bus_addr=0x"
               << std::hex << reinterpret_cast<uintptr_t>(*bAddr)
               << " virt_addr=0x" << reinterpret_cast<uintptr_t>(*vAddr)
               << std::dec << std::endl;
+#endif
 
     // Increment the count of allocated pages.
     mbox.pool_cnt++;
@@ -615,7 +619,11 @@ void txSym(
     // Compute frequency ratio for symbol transmission
     const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
 
+#ifdef DEBUG_WSPR_TRANSMIT
     std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
+#endif
+
+    // Ensure f0_ratio is between 0.0 and 1.0
     assert((f0_ratio >= 0) && (f0_ratio <= 1));
 
     // Compute total number of PWM clock cycles required for the symbol duration
@@ -625,9 +633,11 @@ void txSym(
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
 
+#ifdef DEBUG_WSPR_TRANSMIT
     std::cout << "DEBUG: <instrs[bufPtr] begin=0x"
               << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
               << ">" << std::dec << std::endl;
+#endif
 
     // Transmit the symbol using PWM clocks
     while (n_pwmclk_transmitted < n_pwmclk_per_sym)
@@ -685,10 +695,12 @@ void txSym(
         n_f0_transmitted += n_f0;
     }
 
+#ifdef DEBUG_WSPR_TRANSMIT
     std::cout << "DEBUG: <instrs[bufPtr]=0x"
               << std::hex << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
               << " 0x" << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
               << ">" << std::dec << std::endl;
+#endif
 }
 
 /**
@@ -1130,7 +1142,8 @@ void safe_remove(const char *filename)
 void dma_cleanup()
 {
     static bool cleanup_done = false;
-    if (cleanup_done) return; // Prevent duplicate cleanup
+    if (cleanup_done)
+        return; // Prevent duplicate cleanup
     cleanup_done = true;
 
     // Disable the clock to prevent unintended operation
@@ -1246,12 +1259,14 @@ void tx_tone()
             setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
                         dma_table_freq, center_freq_actual, constPage);
 
+#ifdef DEBUG_WSPR_TRANSMIT            
             // Debug output for DMA frequency table
             std::cout << std::setprecision(30)
                       << "DEBUG: dma_table_freq[0] = " << dma_table_freq[0] << "\n"
                       << "DEBUG: dma_table_freq[1] = " << dma_table_freq[1] << "\n"
                       << "DEBUG: dma_table_freq[2] = " << dma_table_freq[2] << "\n"
                       << "DEBUG: dma_table_freq[3] = " << dma_table_freq[3] << std::endl;
+#endif
 
             // Warn if the actual transmission frequency differs from the desired frequency
             if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
@@ -1290,17 +1305,20 @@ void tx_wspr()
         // Generate a new WSPR message
         WsprMessage message(config.callsign, config.locator, config.tx_power);
 
-        // Print encoded packet
-        std::cout << "WSPR codeblock: ";
-        for (int i = 0; i < MSG_SIZE; i++)
+#ifdef DEBUG_WSPR_TRANSMIT
+        // Iterate through the symbols and print them.
+        std::cout << "WSPR Block:" << std::endl;
+        for (int i = 0; i < WsprMessage::size; ++i)
         {
-            if (i > 0)
-            {
-                std::cout << ",";
-            }
-            std::cout << static_cast<int>(message.symbols[i]); // Ensure correct formatting
+            // Print each symbol as an integer.
+            std::cout << std::setw(3) << static_cast<int>(message.symbols[i]) << " ";
+
+            // Optionally, insert a newline every 16 symbols for readability.
+            if ((i + 1) % 16 == 0)
+                std::cout << std::endl;
         }
         std::cout << std::endl;
+#endif
 
         std::cout << "Ready to transmit (setup complete)." << std::endl;
 
