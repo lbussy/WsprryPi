@@ -3,6 +3,7 @@
 // Submodules
 #include "wspr_message.hpp"
 #include "wspr_structs.hpp"
+#include "wspr_constants.hpp"
 
 // C Standard Library Headers
 #include <assert.h>
@@ -42,30 +43,6 @@ extern "C"
 }
 #endif /* __cplusplus */
 
-
-// Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
-// 0.682s long. For some reason, despite the use of DMA, the load on the PI
-// affects the TX length of the symbols. However, the varying symbol length is
-// compensated for in the main loop.
-#define F_PWM_CLK_INIT (31156186.6125761)
-
-// WSPR nominal symbol time
-#define WSPR_SYMTIME (8192.0 / 12000.0)
-// How much random frequency offset should be added to WSPR transmissions
-// if the --offset option has been turned on.
-#define WSPR_RAND_OFFSET 80
-#define WSPR15_RAND_OFFSET 8
-
-// TODO:
-// Not sure what the difference between a page and a block is in this
-// context.  Previously these were not used so I searched for "4096"
-// and guessed which one was which.
-// Only the mbox.mem_ref = mem_alloc() used both values.
-#define PAGE_SIZE (4 * 1024)
-#define BLOCK_SIZE (4 * 1024)
-
-#define PWM_CLOCKS_PER_ITER_NOMINAL 1000
-
 // Given an address in the bus address space of the peripherals, this
 // macro calculates the appropriate virtual address to use to access
 // the requested bus address space. It does this by first subtracting
@@ -77,15 +54,6 @@ extern "C"
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
 
-// The following are all bus addresses.
-#define GPIO_BUS_BASE (0x7E200000)
-#define CM_GP0CTL_BUS (0x7e101070)
-#define CM_GP0DIV_BUS (0x7e101074)
-#define PADS_GPIO_0_27_BUS (0x7e10002c)
-#define CLK_BUS_BASE (0x7E101000)
-#define DMA_BUS_BASE (0x7E007000)
-#define PWM_BUS_BASE (0x7e20C000) /* PWM controller */
-
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
 
@@ -95,15 +63,6 @@ extern "C"
 // This must be declared global so that it can be called by the atexit
 // function.
 volatile unsigned *peri_base_virt = NULL;
-
-/// Invalid memory address marker
-constexpr unsigned INVALID_ADDRESS = ~0u;
-
-/// Processor IDs
-constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0; // BCM2835 (RPi1)
-constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1; // BCM2836 (RPi2)
-constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2; // BCM2837 (RPi3)
-constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
 
 /**
  * @brief Reads a 32-bit value from the device tree ranges.
