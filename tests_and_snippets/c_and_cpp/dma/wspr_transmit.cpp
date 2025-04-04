@@ -2,6 +2,7 @@
 
 // Submodules
 #include "wspr_message.hpp"
+#include "wspr_structs.hpp"
 
 // C Standard Library Headers
 #include <assert.h>
@@ -41,54 +42,6 @@ extern "C"
 }
 #endif /* __cplusplus */
 
-// Note on accessing memory in RPi:
-//
-// There are 3 (yes three) address spaces in the Pi:
-// Physical addresses
-//   These are the actual address locations of the RAM and are equivalent
-//   to offsets into /dev/mem.
-//   The peripherals (DMA engine, PWM, etc.) are located at physical
-//   address 0x2000000 for RPi1 and 0x3F000000 for RPi2/3.
-// Virtual addresses
-//   These are the addresses that a program sees and can read/write to.
-//   Addresses 0x00000000 through 0xBFFFFFFF are the addresses available
-//   to a program running in user space.
-//   Addresses 0xC0000000 and above are available only to the kernel.
-//   The peripherals start at address 0xF2000000 in virtual space but
-//   this range is only accessible by the kernel. The kernel could directly
-//   access peripherals from virtual addresses. It is not clear to me my
-//   a user space application running as 'root' does not have access to this
-//   memory range.
-// Bus addresses
-//   This is a different (virtual?) address space that also maps onto
-//   physical memory.
-//   The peripherals start at address 0x7E000000 of the bus address space.
-//   The DRAM is also available in bus address space in 4 different locations:
-//   0x00000000 "L1 and L2 cached alias"
-//   0x40000000 "L2 cache coherent (non allocating)"
-//   0x80000000 "L2 cache (only)"
-//   0xC0000000 "Direct, uncached access"
-//
-// Accessing peripherals from user space (virtual addresses):
-//   The technique used in this program is that mmap is used to map portions of
-//   /dev/mem to an arbitrary virtual address. For example, to access the
-//   GPIO's, the gpio range of addresses in /dev/mem (physical addresses) are
-//   mapped to a kernel chosen virtual address. After the mapping has been
-//   set up, writing to the kernel chosen virtual address will actually
-//   write to the GPIO addresses in physical memory.
-//
-// Accessing RAM from DMA engine
-//   The DMA engine is programmed by accessing the peripheral registers but
-//   must use bus addresses to access memory. Thus, to use the DMA engine to
-//   move memory from one virtual address to another virtual address, one needs
-//   to first find the physical addresses that corresponds to the virtual
-//   addresses. Then, one needs to find the bus addresses that corresponds to
-//   those physical addresses. Finally, the DMA engine can be programmed. i.e.
-//   DMA engine access should use addresses starting with 0xC.
-//
-// The peripherals in the Broadcom documentation are described using their bus
-// addresses and structures are created and calculations performed in this
-// program to figure out how to access them with virtual addresses.
 
 // Empirical value for F_PWM_CLK that produces WSPR symbols that are 'close' to
 // 0.682s long. For some reason, despite the use of DMA, the load on the PI
@@ -142,71 +95,6 @@ extern "C"
 // This must be declared global so that it can be called by the atexit
 // function.
 volatile unsigned *peri_base_virt = NULL;
-
-struct GPCTL
-{
-    // Structure used to control clock generator
-    char SRC : 4;
-    char ENAB : 1;
-    char KILL : 1;
-    char : 1;
-    char BUSY : 1;
-    char FLIP : 1;
-    char MASH : 2;
-    unsigned int : 13;
-    char PASSWD : 8;
-};
-
-struct CB
-{
-    // Structure used to tell the DMA engine what to do
-    volatile unsigned int TI;
-    volatile unsigned int SOURCE_AD;
-    volatile unsigned int DEST_AD;
-    volatile unsigned int TXFR_LEN;
-    volatile unsigned int STRIDE;
-    volatile unsigned int NEXTCONBK;
-    volatile unsigned int RES1;
-    volatile unsigned int RES2;
-};
-
-struct DMAregs
-{
-    // DMA engine status registers
-    volatile unsigned int CS;
-    volatile unsigned int CONBLK_AD;
-    volatile unsigned int TI;
-    volatile unsigned int SOURCE_AD;
-    volatile unsigned int DEST_AD;
-    volatile unsigned int TXFR_LEN;
-    volatile unsigned int STRIDE;
-    volatile unsigned int NEXTCONBK;
-    volatile unsigned int DEBUG;
-};
-
-struct PageInfo
-{
-    // Virtual and bus addresses of a page of physical memory.
-    void *b; // bus address
-    void *v; // virtual address
-};
-
-static struct
-{
-    // Must be global so that exit handlers can access this.
-    int handle;                                          /* From mbox_open() */
-    unsigned mem_ref = 0;                                /* From mem_alloc() */
-    unsigned bus_addr;                                   /* From mem_lock() */
-    unsigned char *virt_addr = NULL; /* From mapmem() */ // ha7ilm: originally uint8_t
-    unsigned pool_size;
-    unsigned pool_cnt;
-} mbox;
-
-struct wConfig config;
-
-struct PageInfo constPage;
-struct PageInfo instrPage;
-struct PageInfo instrs[1024];
 
 /// Invalid memory address marker
 constexpr unsigned INVALID_ADDRESS = ~0u;

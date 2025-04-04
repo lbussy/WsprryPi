@@ -38,6 +38,37 @@
 
 #include <vector>
 
+typedef enum
+{
+    WSPR,
+    TONE
+} mode_type;
+
+struct wConfig
+{
+    // Global configuration items from command line and ini file
+    bool useini = false;
+    std::string inifile = "";                   // Default to empty, meaning no INI file specified
+    bool xmit_enabled = true;                   // Transmission disabled by default
+    bool repeat = false;                        // No repeat transmission by default
+    std::string callsign = "AA0NT";             // Default to empty, requiring user input
+    std::string locator = "EM18";               // Default to empty, requiring user input
+    int tx_power = 20;                          // Default to 37 dBm (5W), a common WSPR power level
+    std::string frequency_string = "7040100.0"; // Default to empty
+    std::vector<double> center_freq_set = {};   // Empty vector, frequencies to be defined
+    double ppm = 12.708;                        // Default to zero, meaning no frequency correction applied
+    bool self_cal = true;                       // Self-calibration enabled by default
+    bool random_offset = true;                  // No random offset by default
+    double test_tone = 7040100.0;               // Default to NAN, meaning no test tone
+    bool no_delay = false;                      // Delay enabled by default
+    mode_type mode = WSPR;                      // Default mode is WSPR
+    int terminate = -1;                         // -1 to indicate no termination signal
+    bool useled = false;                        // No LED signaling by default
+    bool daemon_mode = false;                   // Not running as a daemon by default
+    double f_plld_clk = 125e6;                  // Default PLLD clock frequency: 125 MHz
+    int mem_flag = 0;                           // Default memory flag set to 0
+} config;
+
 struct DMAConfig
 {
     double plld_clock_frequency; ///< Clock speed (defaults to 500 MHz).
@@ -79,6 +110,19 @@ struct DMAConfig
  */
 DMAConfig dmaConfig;
 
+struct CB
+{
+    // Structure used to tell the DMA engine what to do
+    volatile unsigned int TI;
+    volatile unsigned int SOURCE_AD;
+    volatile unsigned int DEST_AD;
+    volatile unsigned int TXFR_LEN;
+    volatile unsigned int STRIDE;
+    volatile unsigned int NEXTCONBK;
+    volatile unsigned int RES1;
+    volatile unsigned int RES2;
+};
+
 /**
  * @brief Control structure for the clock generator.
  *
@@ -113,52 +157,6 @@ struct GPCTL
     char MASH : 2;     ///< MASH filter setting.
     unsigned int : 13; ///< Reserved bits.
     char PASSWD : 8;   ///< Password for register modifications.
-};
-
-/**
- * @brief DMA Control Block.
- *
- * This structure defines a DMA Control Block (CB) used to instruct the DMA engine on
- * how to perform a data transfer operation. It specifies the source and destination addresses,
- * the length of the transfer, and additional control parameters. The control block can be chained
- * with others to form a sequence of DMA operations, which is useful in high-speed data transfers,
- * such as those required for radio signal transmission by manipulating the PLLD and GPIO.
- *
- * @var CB::TI
- *      Transfer Information: Contains flags and settings that control the DMA operation,
- *      such as enabling DMA requests, selecting peripherals, and configuring wide mode.
- *
- * @var CB::SOURCE_AD
- *      The source address from where data is to be read for the DMA transfer.
- *
- * @var CB::DEST_AD
- *      The destination address where data is to be written during the DMA transfer.
- *
- * @var CB::TXFR_LEN
- *      The total number of bytes to transfer in this DMA operation.
- *
- * @var CB::STRIDE
- *      The stride value for address increment between transfers, if applicable.
- *
- * @var CB::NEXTCONBK
- *      The bus address of the next control block in the chain. This enables linking multiple DMA operations.
- *
- * @var CB::RES1
- *      Reserved for future use or to maintain proper structure alignment.
- *
- * @var CB::RES2
- *      Reserved for future use or to maintain proper structure alignment.
- */
-struct CB
-{
-    volatile unsigned int TI;        ///< Transfer Information (control flags).
-    volatile unsigned int SOURCE_AD; ///< Source address for the DMA transfer.
-    volatile unsigned int DEST_AD;   ///< Destination address for the DMA transfer.
-    volatile unsigned int TXFR_LEN;  ///< Length (in bytes) of the DMA transfer.
-    volatile unsigned int STRIDE;    ///< Address stride for consecutive transfers.
-    volatile unsigned int NEXTCONBK; ///< Bus address of the next DMA control block.
-    volatile unsigned int RES1;      ///< Reserved for future use.
-    volatile unsigned int RES2;      ///< Reserved for future use.
 };
 
 /**
