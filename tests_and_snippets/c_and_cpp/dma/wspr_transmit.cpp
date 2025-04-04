@@ -803,42 +803,6 @@ void setupDMA(
 }
 
 /**
- * @brief Waits until the system time reaches one second past a specified minute interval.
- * @details Continuously checks the system clock and waits until `tm_min % minute == 0`
- *          and `tm_sec == 0`. Once the condition is met, it waits an additional second
- *          before returning.
- *
- * @param[in] minute The minute interval at which to synchronize execution.
- * @return `true` when the time condition is met, allowing the program to proceed.
- */
-bool wait_every(int minute)
-{
-    time_t t;
-    struct tm *ptm;
-
-    // Loop until the system time reaches the desired minute and second
-    while (true)
-    {
-        time(&t);
-        ptm = gmtime(&t);
-
-        // Check if the current minute matches the interval and the second is 0
-        if ((ptm->tm_min % minute) == 0 && ptm->tm_sec == 0)
-        {
-            break;
-        }
-
-        // Sleep for 1 millisecond to avoid excessive CPU usage
-        usleep(1000);
-    }
-
-    // Ensure at least one full second has passed before proceeding
-    usleep(1000000);
-
-    return true; // OK to proceed
-}
-
-/**
  * @brief Computes the difference between two time values.
  * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
  *          the function returns `1`, otherwise, it returns `0`.
@@ -1191,85 +1155,72 @@ void tx_wspr()
 
     int band = 0;
 
-    while (true)
+    // Determine center frequency
+    double center_freq_desired = config.center_freq_set[band];
+
+    // Determine if using WSPR-15 mode (longer symbol time)
+    bool wspr15 =
+        (center_freq_desired > 137600 && center_freq_desired < 137625) ||
+        (center_freq_desired > 475800 && center_freq_desired < 475825) ||
+        (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+
+    double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+    double tone_spacing = 1.0 / wspr_symtime;
+
+    // Apply random offset if enabled
+    if ((center_freq_desired != 0) && config.random_offset)
     {
-        // Determine center frequency
-        double center_freq_desired = config.center_freq_set[band];
-
-        // Determine if using WSPR-15 mode (longer symbol time)
-        bool wspr15 =
-            (center_freq_desired > 137600 && center_freq_desired < 137625) ||
-            (center_freq_desired > 475800 && center_freq_desired < 475825) ||
-            (center_freq_desired > 1838200 && center_freq_desired < 1838225);
-
-        double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-        double tone_spacing = 1.0 / wspr_symtime;
-
-        // Apply random offset if enabled
-        if ((center_freq_desired != 0) && config.random_offset)
-        {
-            center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
-                                   (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
-        }
-
-        // Display transmission information
-        std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed
-             << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
-             << " transmission: " << center_freq_desired / 1e6 << " MHz.";
-        std::cout << temp.str() << std::endl;
-
-        // Wait for the next WSPR transmission window
-        std::cout << "Waiting for next WSPR transmission window." << std::endl;
-        if (!wait_every((wspr15) ? 15 : 2))
-        {
-            // Reload if ini changes
-            break;
-        }
-
-        // Create DMA table for transmission
-        std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
-        double center_freq_actual = center_freq_desired;
-
-        setupDMATab(center_freq_desired, tone_spacing,
-                    config.f_plld_clk * (1 - config.ppm / 1e6),
-                    dma_table_freq, center_freq_actual, constPage);
-
-        struct timeval tvBegin, tvEnd, tvDiff;
-        gettimeofday(&tvBegin, NULL);
-
-        std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
-
-        struct timeval sym_start, diff;
-        int bufPtr = 0;
-
-        // Enable transmission
-        txon();
-
-        // Transmit each symbol in the WSPR message
-        for (int i = 0; i < MSG_SIZE; i++)
-        {
-            gettimeofday(&sym_start, NULL);
-            timeval_subtract(&diff, &sym_start, &tvBegin);
-            double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-            double sched_end = (i + 1) * wspr_symtime;
-            double this_sym = sched_end - elapsed;
-            this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
-
-            txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
-                  this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
-        }
-
-        // Disable transmission
-        txoff();
-
-        // Print transmission timestamp and duration on one line
-        gettimeofday(&tvEnd, nullptr);
-        timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-        std::cout << "TX ended at: " << timeval_print(&tvEnd)
-                  << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
-                  << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
-
-        return; // Needed to return after transmission because of wait_for
+        center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
+                               (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
     }
+
+    // Display transmission information
+    std::stringstream temp;
+    temp << std::setprecision(6) << std::fixed
+         << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
+         << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+    std::cout << temp.str() << std::endl;
+
+    // Create DMA table for transmission
+    std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
+    double center_freq_actual = center_freq_desired;
+
+    setupDMATab(center_freq_desired, tone_spacing,
+                config.f_plld_clk * (1 - config.ppm / 1e6),
+                dma_table_freq, center_freq_actual, constPage);
+
+    struct timeval tvBegin, tvEnd, tvDiff;
+    gettimeofday(&tvBegin, NULL);
+
+    std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
+
+    struct timeval sym_start, diff;
+    int bufPtr = 0;
+
+    // Enable transmission
+    txon();
+
+    // Transmit each symbol in the WSPR message
+    for (int i = 0; i < MSG_SIZE; i++)
+    {
+        gettimeofday(&sym_start, NULL);
+        timeval_subtract(&diff, &sym_start, &tvBegin);
+        double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+        double sched_end = (i + 1) * wspr_symtime;
+        double this_sym = sched_end - elapsed;
+        this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
+
+        txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
+              this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+    }
+
+    // Disable transmission
+    txoff();
+
+    // Print transmission timestamp and duration on one line
+    gettimeofday(&tvEnd, nullptr);
+    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
+    std::cout << "TX ended at: " << timeval_print(&tvEnd)
+              << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
+              << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
 }
