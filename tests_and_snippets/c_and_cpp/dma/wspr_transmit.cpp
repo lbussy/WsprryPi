@@ -43,26 +43,80 @@ extern "C"
 }
 #endif /* __cplusplus */
 
-// Given an address in the bus address space of the peripherals, this
-// macro calculates the appropriate virtual address to use to access
-// the requested bus address space. It does this by first subtracting
-// 0x7e000000 from the supplied bus address to calculate the offset into
-// the peripheral address space. Then, this offset is added to peri_base_virt
-// Which is the base address of the peripherals, in virtual address space.
-#define ACCESS_BUS_ADDR(buss_addr) *(volatile int *)((long int)peri_base_virt + (buss_addr) - 0x7e000000)
-// Given a bus address in the peripheral address space, set or clear a bit.
-#define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
-#define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
-
-// Convert from a bus address to a physical address.
-#define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
-
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
 // the peripherals. This address is mapped at runtime using mmap and /dev/mem.
 // This must be declared global so that it can be called by the atexit
 // function.
 volatile unsigned *peri_base_virt = NULL;
+
+/**
+ * @brief Calculates the virtual address for a given bus address.
+ *
+ * This function calculates the appropriate virtual address for accessing the
+ * given bus address in the peripheral space. It does so by subtracting 0x7e000000
+ * from the supplied bus address to obtain the offset into the peripheral address space,
+ * then adds that offset to the virtual base address of the peripherals.
+ *
+ * @param bus_addr The bus address from which to calculate the corresponding virtual address.
+ * @return A reference to a volatile int located at the computed virtual address.
+ *
+ * @note The global pointer `peri_base_virt` must be defined elsewhere.
+ */
+inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
+{
+    // Calculate the offset into the peripheral space.
+    std::uintptr_t offset = bus_addr - 0x7e000000UL;
+    // Add the offset to the base virtual address, then reinterpret the resulting address.
+    return *reinterpret_cast<volatile int *>(
+        reinterpret_cast<std::uintptr_t>(peri_base_virt) + offset);
+}
+
+/**
+ * @brief Sets a specified bit at a bus address in the peripheral address space.
+ *
+ * This function accesses the virtual address corresponding to the given bus address using
+ * the `accessBusAddress()` function and sets the bit at the provided position.
+ *
+ * @param base The bus address in the peripheral address space.
+ * @param bit The bit number to set (0-indexed).
+ *
+ * @note This function depends on the global pointer `peri_base_virt` being defined elsewhere.
+ */
+inline void setBitBusAddress(std::uintptr_t base, unsigned int bit)
+{
+    accessBusAddress(base) |= 1 << bit;
+}
+
+/**
+ * @brief Clears a specified bit at a bus address in the peripheral address space.
+ *
+ * This function accesses the virtual address corresponding to the given bus address using
+ * the `accessBusAddress()` function and clears the bit at the provided position.
+ *
+ * @param base The bus address in the peripheral address space.
+ * @param bit The bit number to clear (0-indexed).
+ *
+ * @note This function depends on the global pointer `peri_base_virt` being defined elsewhere.
+ */
+inline void clearBitBusAddress(std::uintptr_t base, unsigned int bit)
+{
+    accessBusAddress(base) &= ~(1 << bit);
+}
+
+/**
+ * @brief Converts a bus address to a physical address.
+ *
+ * This function converts a given bus address into the corresponding physical address by
+ * masking out the upper bits (0xC0000000) that are not part of the physical address.
+ *
+ * @param x The bus address.
+ * @return The physical address obtained from the bus address.
+ */
+inline std::uintptr_t busToPhys(std::uintptr_t x)
+{
+    return x & ~0xC0000000UL;
+}
 
 /**
  * @brief Reads a 32-bit value from the device tree ranges.
@@ -231,7 +285,7 @@ void allocMemPool(unsigned numpages)
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
 
     // Convert the bus address to a physical address and map it to user space.
-    mbox.virt_addr = static_cast<unsigned char *>(mapmem(BUS_TO_PHYS(mbox.bus_addr), PAGE_SIZE * numpages));
+    mbox.virt_addr = static_cast<unsigned char *>(mapmem(busToPhys(mbox.bus_addr), PAGE_SIZE * numpages));
 
     // Store the total number of pages allocated in the pool (constant for its lifetime).
     mbox.pool_size = numpages;
@@ -326,15 +380,15 @@ void disable_clock()
     }
 
     // Read current clock settings from the clock control register.
-    auto settings = ACCESS_BUS_ADDR(CM_GP0CTL_BUS);
+    auto settings = accessBusAddress(CM_GP0CTL_BUS);
 
     // Disable the clock: clear the enable bit while preserving other settings.
     // Apply the required password (0x5A000000) to modify the register.
     settings = (settings & 0x7EF) | 0x5A000000;
-    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = static_cast<int>(settings);
+    accessBusAddress(CM_GP0CTL_BUS) = static_cast<int>(settings);
 
     // Wait until the clock is no longer busy.
-    while (ACCESS_BUS_ADDR(CM_GP0CTL_BUS) & (1 << 7))
+    while (accessBusAddress(CM_GP0CTL_BUS) & (1 << 7))
     {
         // Busy-wait loop to ensure clock disable is complete.
     }
@@ -351,22 +405,22 @@ void txon(bool led = false)
 {
     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
     // This setting follows Section 6.2 of the ARM Peripherals Manual.
-    SETBIT_BUS_ADDR(GPIO_BUS_BASE, 14); // Set bit 14
-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 13); // Clear bit 13
-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12); // Clear bit 12
+    setBitBusAddress(GPIO_BUS_BASE, 14);   // Set bit 14
+    clearBitBusAddress(GPIO_BUS_BASE, 13); // Clear bit 13
+    clearBitBusAddress(GPIO_BUS_BASE, 12); // Clear bit 12
 
     // Set GPIO drive strength to 16mA (+10.6dBm output power).
     // Values range from 2mA (-3.4dBm) to 16mA (+10.6dBm).
-    ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5A000018 + 7;
+    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5A000018 + 7;
     // TODO:
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
-    // ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
+    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
 
     // Ensure the clock is disabled before modifying settings.
     disable_clock();
@@ -380,7 +434,7 @@ void txon(bool led = false)
     std::memcpy(&temp, &setupword, sizeof(int));
 
     // Apply clock control settings.
-    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = temp;
+    accessBusAddress(CM_GP0CTL_BUS) = temp;
 }
 
 /**
@@ -478,7 +532,7 @@ void txSym(
 
         // Transmit frequency f0
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
         {
             usleep(100);
         }
@@ -486,7 +540,7 @@ void txSym(
 
         // Wait for f0 PWM clocks
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
         {
             usleep(100);
         }
@@ -494,7 +548,7 @@ void txSym(
 
         // Transmit frequency f1
         bufPtr++;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
         {
             usleep(100);
         }
@@ -502,7 +556,7 @@ void txSym(
 
         // Wait for f1 PWM clocks
         bufPtr = (bufPtr + 1) % 1024;
-        while (ACCESS_BUS_ADDR(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
         {
             usleep(100);
         }
@@ -535,7 +589,7 @@ void unSetupDMA()
     }
 
     // Obtain a pointer to the DMA control registers.
-    volatile DMAregs *DMA0 = reinterpret_cast<volatile DMAregs *>(&(ACCESS_BUS_ADDR(DMA_BUS_BASE)));
+    volatile DMAregs *DMA0 = reinterpret_cast<volatile DMAregs *>(&(accessBusAddress(DMA_BUS_BASE)));
 
     // Reset the DMA controller by setting the reset bit (bit 31) in the control/status register.
     DMA0->CS = 1 << 31;
@@ -719,22 +773,22 @@ void setupDMA(
     reinterpret_cast<struct CB *>(instrs[1023].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[0].b);
 
     // Configure the PWM clock (disable, set divisor, enable)
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4) = 0x5A000026; // Source = PLLD, disable
+    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000026; // Source = PLLD, disable
     usleep(1000);
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 41 * 4) = 0x5A002000; // Set PWM divider to 2 (250MHz)
-    ACCESS_BUS_ADDR(CLK_BUS_BASE + 40 * 4) = 0x5A000016; // Source = PLLD, enable
+    accessBusAddress(CLK_BUS_BASE + 41 * 4) = 0x5A002000; // Set PWM divider to 2 (250MHz)
+    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000016; // Source = PLLD, enable
     usleep(1000);
 
     // Configure PWM registers
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0) = 0; // Disable PWM
+    accessBusAddress(PWM_BUS_BASE + 0x0) = 0; // Disable PWM
     usleep(1000);
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x4) = -1; // Clear status errors
+    accessBusAddress(PWM_BUS_BASE + 0x4) = -1; // Clear status errors
     usleep(1000);
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x10) = 32; // Set default range
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x20) = 32;
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x0) = -1; // Enable FIFO mode, repeat, serializer, and channel
+    accessBusAddress(PWM_BUS_BASE + 0x10) = 32; // Set default range
+    accessBusAddress(PWM_BUS_BASE + 0x20) = 32;
+    accessBusAddress(PWM_BUS_BASE + 0x0) = -1; // Enable FIFO mode, repeat, serializer, and channel
     usleep(1000);
-    ACCESS_BUS_ADDR(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
+    accessBusAddress(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
 
     // Activate DMA
     // Obtain the base address as an integer pointer
@@ -1115,161 +1169,107 @@ void tx_tone()
  */
 void tx_wspr()
 {
-    // Retrieve the number of bands available for transmission
-    int nbands = config.center_freq_set.size();
-
-    while (true) // Reload Loop
-    {
-        // Generate a new WSPR message
-        WsprMessage message(config.callsign, config.locator, config.tx_power);
+    // Generate a new WSPR message
+    WsprMessage message(config.callsign, config.locator, config.tx_power);
 
 #ifdef DEBUG_WSPR_TRANSMIT
-        // Iterate through the symbols and print them.
-        std::cout << "WSPR Block:" << std::endl;
-        for (int i = 0; i < WsprMessage::size; ++i)
-        {
-            // Print each symbol as an integer.
-            std::cout << std::setw(3) << static_cast<int>(message.symbols[i]) << " ";
+    // Iterate through the symbols and print them.
+    std::cout << "WSPR Block:" << std::endl;
+    for (int i = 0; i < WsprMessage::size; ++i)
+    {
+        // Print each symbol as an integer.
+        std::cout << std::setw(3) << static_cast<int>(message.symbols[i]) << " ";
 
-            // Optionally, insert a newline every 16 symbols for readability.
-            if ((i + 1) % 16 == 0)
-                std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        // Optionally, insert a newline every 16 symbols for readability.
+        if ((i + 1) % 16 == 0)
+            std::cout << std::endl;
+    }
+    std::cout << std::endl;
 #endif
 
-        std::cout << "Ready to transmit (setup complete)." << std::endl;
+    std::cout << "Ready to transmit (setup complete)." << std::endl;
 
-        int band = 0;
-        int n_tx = 0;
+    int band = 0;
 
-        while (true)
+    while (true)
+    {
+        // Determine center frequency
+        double center_freq_desired = config.center_freq_set[band];
+
+        // Determine if using WSPR-15 mode (longer symbol time)
+        bool wspr15 =
+            (center_freq_desired > 137600 && center_freq_desired < 137625) ||
+            (center_freq_desired > 475800 && center_freq_desired < 475825) ||
+            (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+
+        double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+        double tone_spacing = 1.0 / wspr_symtime;
+
+        // Apply random offset if enabled
+        if ((center_freq_desired != 0) && config.random_offset)
         {
-            // Validate available bands
-            if (config.center_freq_set.empty())
-            {
-                std::cerr << "Error: center_freq_set is empty. Cannot access band [" << band << "]." << std::endl;
-                exit(1);
-            }
-            if (band < 0 || band >= static_cast<int>(config.center_freq_set.size()))
-            {
-                std::cerr << "Error: Band index out of range. band [" << band << "] size [" << config.center_freq_set.size() << "]." << std::endl;
-                exit(1);
-            }
-
-            // Determine center frequency
-            double center_freq_desired = config.center_freq_set[band];
-
-            // Determine if using WSPR-15 mode (longer symbol time)
-            bool wspr15 =
-                (center_freq_desired > 137600 && center_freq_desired < 137625) ||
-                (center_freq_desired > 475800 && center_freq_desired < 475825) ||
-                (center_freq_desired > 1838200 && center_freq_desired < 1838225);
-
-            double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-            double tone_spacing = 1.0 / wspr_symtime;
-
-            // Apply random offset if enabled
-            if ((center_freq_desired != 0) && config.random_offset)
-            {
-                center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
-                                       (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
-            }
-
-            // Display transmission information
-            std::stringstream temp;
-            temp << std::setprecision(6) << std::fixed
-                 << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
-                 << " transmission: " << center_freq_desired / 1e6 << " MHz.";
-            std::cout << temp.str() << std::endl;
-
-            // Wait for the next WSPR transmission window
-            if (config.no_delay)
-            {
-                std::cout << "Transmitting immediately (not waiting for WSPR window)." << std::endl;
-            }
-            else
-            {
-                std::cout << "Waiting for next WSPR transmission window." << std::endl;
-                if (!wait_every((wspr15) ? 15 : 2))
-                {
-                    // Reload if ini changes
-                    break;
-                }
-            }
-
-            // Create DMA table for transmission
-            std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
-            double center_freq_actual = center_freq_desired;
-
-            if (center_freq_desired)
-            {
-                if (config.f_plld_clk <= 0)
-                {
-                    std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
-                    config.f_plld_clk = 500000000.0;
-                }
-
-                setupDMATab(center_freq_desired, tone_spacing,
-                            config.f_plld_clk * (1 - config.ppm / 1e6),
-                            dma_table_freq, center_freq_actual, constPage);
-            }
-
-            // Start transmission if conditions are met
-            if (center_freq_actual && config.xmit_enabled)
-            {
-                struct timeval tvBegin, tvEnd, tvDiff;
-                gettimeofday(&tvBegin, NULL);
-
-                std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
-
-                struct timeval sym_start, diff;
-                int bufPtr = 0;
-
-                // Enable transmission
-                txon();
-
-                // Transmit each symbol in the WSPR message
-                for (int i = 0; i < MSG_SIZE; i++)
-                {
-                    gettimeofday(&sym_start, NULL);
-                    timeval_subtract(&diff, &sym_start, &tvBegin);
-                    double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-                    double sched_end = (i + 1) * wspr_symtime;
-                    double this_sym = sched_end - elapsed;
-                    this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
-
-                    txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
-                          this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
-                }
-                n_tx++;
-
-                // Disable transmission
-                txoff();
-
-                // Print transmission timestamp and duration on one line
-                gettimeofday(&tvEnd, nullptr);
-                timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-                std::cout << "TX ended at: " << timeval_print(&tvEnd)
-                          << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
-                          << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
-            }
-            else
-            {
-                std::cout << "Skipping transmission." << std::endl;
-                usleep(1000000);
-            }
-
-            // Cycle through available bands
-            band = (band + 1) % nbands;
-            if ((band == 0) && !config.repeat)
-            {
-                return;
-            }
-            if ((config.terminate > 0) && (n_tx >= config.terminate))
-            {
-                return;
-            }
+            center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
+                                   (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
         }
-    } // Reload Loop
+
+        // Display transmission information
+        std::stringstream temp;
+        temp << std::setprecision(6) << std::fixed
+             << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
+             << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+        std::cout << temp.str() << std::endl;
+
+        // Wait for the next WSPR transmission window
+        std::cout << "Waiting for next WSPR transmission window." << std::endl;
+        if (!wait_every((wspr15) ? 15 : 2))
+        {
+            // Reload if ini changes
+            break;
+        }
+
+        // Create DMA table for transmission
+        std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
+        double center_freq_actual = center_freq_desired;
+
+        setupDMATab(center_freq_desired, tone_spacing,
+                    config.f_plld_clk * (1 - config.ppm / 1e6),
+                    dma_table_freq, center_freq_actual, constPage);
+
+        struct timeval tvBegin, tvEnd, tvDiff;
+        gettimeofday(&tvBegin, NULL);
+
+        std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
+
+        struct timeval sym_start, diff;
+        int bufPtr = 0;
+
+        // Enable transmission
+        txon();
+
+        // Transmit each symbol in the WSPR message
+        for (int i = 0; i < MSG_SIZE; i++)
+        {
+            gettimeofday(&sym_start, NULL);
+            timeval_subtract(&diff, &sym_start, &tvBegin);
+            double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+            double sched_end = (i + 1) * wspr_symtime;
+            double this_sym = sched_end - elapsed;
+            this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
+
+            txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
+                  this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        }
+
+        // Disable transmission
+        txoff();
+
+        // Print transmission timestamp and duration on one line
+        gettimeofday(&tvEnd, nullptr);
+        timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
+        std::cout << "TX ended at: " << timeval_print(&tvEnd)
+                  << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
+                  << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
+
+        return; // Needed to return after transmission because of wait_for
+    }
 }

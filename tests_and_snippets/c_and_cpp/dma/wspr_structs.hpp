@@ -56,7 +56,8 @@ struct wConfig
     int tx_power = 20;                          // Default to 37 dBm (5W), a common WSPR power level
     std::string frequency_string = "7040100.0"; // Default to empty
     std::vector<double> center_freq_set = {};   // Empty vector, frequencies to be defined
-    double ppm = 12.708;                        // Default to zero, meaning no frequency correction applied
+    double ppm = 12.300
+    ;                        // Default to zero, meaning no frequency correction applied
     bool self_cal = true;                       // Self-calibration enabled by default
     bool random_offset = true;                  // No random offset by default
     double test_tone = 7040100.0;               // Default to NAN, meaning no test tone
