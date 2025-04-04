@@ -10,12 +10,6 @@
 #include <thread>
 #include <sys/select.h>
 
-constexpr const bool is_wspr = true;
-constexpr const bool is_timed = true;
-
-constexpr const double test_frequency = 7040100.0;
-constexpr const double ppm = 12.0;
-
 /**
  * @brief Reads a single character from standard input without waiting for Enter.
  *
