@@ -45,7 +45,7 @@ Whatever you do, you will need command line access to your Pi to proceed. Once y
 * At "Use OS Customizations," select "Edit Settings"
   * On the General Tab
     * Set the hostname to something unique on your network (like `wspr`)
-    * Set username and password (you must do this, or SSH will not work) 
+    * Set username and password (you must do this, or SSH will not work)
       * Only the username `pi` has been tested
       * Choose a password you can remember
     * Configure wireless LAN
@@ -94,7 +94,7 @@ Yes/no choices are not case-sensitive. However, passwords,
 system names, and install paths are. Be aware of this. There
 is generally no difference between 'y', 'yes,' 'YES,' and 'Yes.'
 
-Press any key when you are ready to proceed. 
+Press any key when you are ready to proceed.
 ```
 
 Take special note of default choices. `[Y/n] means that hitting `Enter` will default to "Yes. " If you want to select no, you should choose "N."

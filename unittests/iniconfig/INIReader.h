@@ -347,7 +347,7 @@ public:
     // default_value if not found or not a valid floating point value
     // according to strtof().
     float GetFloat(const std::string& section, const std::string& name, float default_value) const;
-  
+
     // Get a boolean value from INI file, returning default_value if not found or if
     // not a valid true/false value. Valid true values are "true", "yes", "on", "1",
     // and valid false values are "false", "no", "off", "0" (not case sensitive).

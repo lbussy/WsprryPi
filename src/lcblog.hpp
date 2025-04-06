@@ -2,6 +2,30 @@
 #define _LOGGING_HPP
 #pragma once
 
+// This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
+
+/*
+ * WsprryPi
+ * Updated and maintained by Lee C. Bussy
+ *
+ * Originally forked from threeme3/WsprryPi (no longer active), this
+ * project has been significantly updated, improved, and documented for
+ * ease of use.
+ *
+ * Inspired by a conversation with Bruce Raymond of TAPR, this fork has
+ * diverged substantially from its origins and operates as an independent
+ * project.
+ *
+ * Contributors:
+ *   - threeme3 (Original Author)
+ *   - Bruce Raymond (Inspiration and Guidance)
+ *   - Lee Bussy, aa0nt@arrl.net
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-e375721 [devel].
+ */
+
 #include <iostream>
 #include <string>
 #include <regex>
@@ -22,7 +46,7 @@ public:
         prtStd(t);
     }
 
-    template<typename T, typename... Args>
+    template <typename T, typename... Args>
     void logS(T t, Args... args)
     {
         if (isDaemon)
@@ -38,7 +62,7 @@ public:
         prtStd(t);
     }
 
-    template<typename T, typename... Args>
+    template <typename T, typename... Args>
     void logE(T t, Args... args)
     {
         if (isDaemon)
@@ -59,16 +83,18 @@ private:
         printline = printline + t;
         if (isDaemon)
             crush(printline);
-        std::cout << printline << std::endl << std::flush;
+        std::cout << printline << std::endl
+                  << std::flush;
         printline = "";
     }
-    void prtStd(const char * t)
+    void prtStd(const char *t)
     {
         // Char argument
         printline = printline + t;
         if (isDaemon)
             crush(printline);
-        std::cout << printline << std::endl << std::flush;
+        std::cout << printline << std::endl
+                  << std::flush;
         printline = "";
     }
     template <typename T>
@@ -78,7 +104,8 @@ private:
         printline = printline + std::to_string(t);
         if (isDaemon)
             crush(printline);
-        std::cout << printline << std::endl << std::flush;
+        std::cout << printline << std::endl
+                  << std::flush;
         printline = "";
     }
     //
@@ -91,7 +118,7 @@ private:
         prtStd(args...);
     }
     template <typename... Args>
-    void prtStd(const char * t, Args... args)
+    void prtStd(const char *t, Args... args)
     {
         // First argument is a char
         printline = printline + t;
@@ -114,16 +141,18 @@ private:
         printline = printline + t;
         if (isDaemon)
             crush(printline);
-        std::cerr << printline << std::endl << std::flush;
+        std::cerr << printline << std::endl
+                  << std::flush;
         printline = "";
     }
-    void prtErr(const char * t)
+    void prtErr(const char *t)
     {
         // Char argument
         printline = printline + t;
         if (isDaemon)
             crush(printline);
-        std::cerr << printline << std::endl << std::flush;
+        std::cerr << printline << std::endl
+                  << std::flush;
         printline = "";
     }
     template <typename T>
@@ -133,7 +162,8 @@ private:
         printline = printline + std::to_string(t);
         if (isDaemon)
             crush(printline);
-        std::cerr << printline << std::endl << std::flush;
+        std::cerr << printline << std::endl
+                  << std::flush;
         printline = "";
     }
     //
@@ -146,7 +176,7 @@ private:
         prtErr(args...);
     }
     template <typename... Args>
-    void prtErr(const char * t, Args... args)
+    void prtErr(const char *t, Args... args)
     {
         // First argument is a char
         printline = printline + t;
@@ -160,7 +190,7 @@ private:
         prtErr(args...);
     }
 
-    // Clean string of extraeneous whitespace 
+    // Clean string of extraeneous whitespace
     void crush(std::string &s)
     {
         // Remove multiple whitespace down to a single space

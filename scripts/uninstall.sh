@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi version 1.2.1 [main).
+# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
+# Created for WsprryPi project, version 1.2.2-e375721 [devel].
 
 ############
 ### Global Declarations
@@ -23,7 +23,7 @@ VERSION=1.2.1
 # Set this script
 THISSCRIPT="uninstall.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
@@ -213,19 +213,31 @@ die() {
 
 uninstall() {
     systemctl stop wspr.service 2>/dev/null
+    systemctl stop wsprrypi.service 2>/dev/null
     systemctl disable wspr.service 2>/dev/null
+    systemctl disable wsprrypi.service 2>/dev/null
     systemctl stop shutdown-button.service 2>/dev/null
+    systemctl stop shutdown_button.service 2>/dev/null
     systemctl stop shutdown-watch.service 2>/dev/null
+    systemctl stop shutdown_watch.service 2>/dev/null
     systemctl disable shutdown-button.service 2>/dev/null
+    systemctl disable shutdown_button.service 2>/dev/null
     systemctl disable shutdown-watch.service 2>/dev/null
+    systemctl disable shutdown_watch.service 2>/dev/null
     rm -f /etc/systemd/system/wspr.service 2>/dev/null
+    rm -f /etc/systemd/system/wsprrypi.service 2>/dev/null
     rm -f /usr/local/bin/wspr 2>/dev/null
+    rm -f /usr/local/bin/wsprrypi 2>/dev/null
     rm -f /usr/local/etc/wspr.ini 2>/dev/null
+    rm -f /usr/local/etc/wsprrypi.ini 2>/dev/null
     rm -f /etc/systemd/system/shutdown-button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown_button.service 2>/dev/null
     rm -f /etc/systemd/system/shutdown-watch.service 2>/dev/null
+    rm -f /etc/systemd/system/shutdown_watch.service 2>/dev/null
     rm -f /usr/local/bin/shutdown-button.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
     rm -f /usr/local/bin/shutdown-watch.py 2>/dev/null
+    rm -f /usr/local/bin/shutdown_watch.py 2>/dev/null
     rm -fr /var/www/html/wspr/ 2>/dev/null
     sed -i '/blacklist snd_bcm2835/d' /etc/modprobe.d/alsa-blacklist.conf
     rm -fr /var/log/wsprrypi 2>/dev/null

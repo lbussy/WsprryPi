@@ -2,6 +2,30 @@
 #define _CONFIG_H
 #pragma once
 
+// This file is released under the GPL v3 License, see <https://www.gnu.org/licenses/>.
+
+/*
+ * WsprryPi
+ * Updated and maintained by Lee C. Bussy
+ *
+ * Originally forked from threeme3/WsprryPi (no longer active), this
+ * project has been significantly updated, improved, and documented for
+ * ease of use.a
+ *
+ * Inspired by a conversation with Bruce Raymond of TAPR, this fork has
+ * diverged substantially from its origins and operates as an independent
+ * project.
+ *
+ * Contributors:
+ *   - threeme3 (Original Author)
+ *   - Bruce Raymond (Inspiration and Guidance)
+ *   - Lee Bussy, aa0nt@arrl.net
+ *
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-e375721 [devel].
+ */
+
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -11,7 +35,7 @@
 class WSPRConfig
 {
 public:
-    WSPRConfig(){}
+    WSPRConfig() {}
     bool initialize(const std::string &configFile)
     {
         valueHandler(configFile.c_str());

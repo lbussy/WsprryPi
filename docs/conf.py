@@ -21,7 +21,7 @@ import re
 # -- Project information -----------------------------------------------------
 
 project = u'Wsprry Pi'
-copyright = u'2023-2024, Lee C. Bussy (and others)'
+copyright = u'2023-2025, Lee C. Bussy (and others)'
 author = u'Lee C. Bussy (and others)'
 
 # The short X.Y version
@@ -77,7 +77,7 @@ language = 'en'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store', ".venv"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
