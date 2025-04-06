@@ -5,6 +5,7 @@ src/**/*.bak
 scripts/**/*.bak
 scripts/logs/
 scripts/bkp/
+build/
 
 ## OS ignores
 .DS_Store

@@ -21,11 +21,12 @@
  *   - Bruce Raymond (Inspiration and Guidance)
  *   - Lee Bussy, aa0nt@arrl.net
  *
- * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
-*/
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-babbc84 [current_dev].
+ */
 
+#include <cstring>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

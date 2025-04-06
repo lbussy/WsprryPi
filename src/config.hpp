@@ -10,7 +10,7 @@
  *
  * Originally forked from threeme3/WsprryPi (no longer active), this
  * project has been significantly updated, improved, and documented for
- * ease of use.
+ * ease of use.a
  *
  * Inspired by a conversation with Bruce Raymond of TAPR, this fork has
  * diverged substantially from its origins and operates as an independent
@@ -21,10 +21,10 @@
  *   - Bruce Raymond (Inspiration and Guidance)
  *   - Lee Bussy, aa0nt@arrl.net
  *
- * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
-*/
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-babbc84 [current_dev].
+ */
 
 #include <iostream>
 #include <fstream>
@@ -35,7 +35,7 @@
 class WSPRConfig
 {
 public:
-    WSPRConfig(){}
+    WSPRConfig() {}
     bool initialize(const std::string &configFile)
     {
         valueHandler(configFile.c_str());

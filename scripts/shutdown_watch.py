@@ -7,9 +7,9 @@ This script monitors a shutdown button (via GPIO pin) and initiates a system shu
 if the button is pressed or if a specific file (`STOP_FILE`) is created in the system.
 It also handles graceful shutdowns, logging, and debugging options.
 
-Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+Created for WsprryPi project, version 1.2.2-babbc84 [current_dev].
 """
 
 import sys
@@ -19,6 +19,10 @@ from time import sleep
 from os import system, getuid, path, remove
 import signal
 from gpiozero import Button
+
+
+STOP_PIN = 19
+STOP_FILE  = "/var/www/html/shutdown"
 
 
 def parse_args():
@@ -104,7 +108,7 @@ def main():
                     else:
                         logger.info(shutdown_msg)
                         system(f'wall {shutdown_msg}')
-                        system("shutdown -h now")
+                        # system("shutdown -h now")
             sleep(0.1)
 
     except KeyboardInterrupt:

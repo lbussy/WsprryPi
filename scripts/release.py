@@ -2,8 +2,8 @@
 """
 Project Header Update Script for WsprryPi project.
 
-This script automates the process of updating header information in project files, 
-including copyright and versioning. It processes supported files, handles version 
+This script automates the process of updating header information in project files,
+including copyright and versioning. It processes supported files, handles version
 and copyright updates, and ensures that certain sections (such as open-source license blocks)
 are excluded from the updates. The script also handles logging, file backups,
 and compilation if enabled in the configuration.
@@ -13,9 +13,9 @@ Usage:
 The script can be run as a standalone program to update project files and headers.
 Logging and file processing actions are controlled via the configuration settings.
 
-Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+Created for WsprryPi project, version 1.2.2-babbc84 [current_dev].
 """
 
 import os
@@ -413,7 +413,7 @@ def compile_project(project_directory):
 def copy_files(project_directory, files):
     """Copy executable files to the scripts directory."""
     for file in files:
-        src = project_directory / "src" / file
+        src = project_directory / "src/build/bin" / file
         dest = project_directory / "scripts" / file
         try:
             if not src.exists():

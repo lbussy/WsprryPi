@@ -21,7 +21,7 @@ import re
 # -- Project information -----------------------------------------------------
 
 project = u'Wsprry Pi'
-copyright = u'2023-2024, Lee C. Bussy (and others)'
+copyright = u'2023-2025, Lee C. Bussy (and others)'
 author = u'Lee C. Bussy (and others)'
 
 # The short X.Y version

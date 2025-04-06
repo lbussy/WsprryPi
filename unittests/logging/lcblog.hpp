@@ -160,7 +160,7 @@ private:
         prtErr(args...);
     }
 
-    // Clean string of extraeneous whitespace 
+    // Clean string of extraeneous whitespace
     void crush(std::string &s)
     {
         // Remove multiple whitespace down to a single space
