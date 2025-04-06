@@ -21,7 +21,7 @@ These are the extensions I use.  I have no idea if you need all of these; I stro
 ### Extensions installed on SSH: wspr.local
 
 ``` bash
-code --install-extension 
+code --install-extension
 code --install-extension ms-python.debugpy
 code --install-extension ms-python.python
 code --install-extension ms-python.vscode-pylance

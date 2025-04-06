@@ -453,7 +453,7 @@ copy_logd() {
     # Remove old version
     rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
     rm -f /etc/logrotate.d/wspr 2>/dev/null
-    
+
     if [ -f "$fullName" ]; then
         if file "$fullName" | grep -iv python | grep -q executable; then
             src=$(/usr/local/bin/wsprrypi -v | cut -d " " -f 5)
@@ -699,7 +699,7 @@ createini () {
     fi
     if [ "$retval" == "false" ]; then return; fi
     echo -e "Creating configuration file for $PACKAGENAME."
-    
+
     # Download file to etc directory
     curl -s "$curlFile" > "$fullName" || warn
 
