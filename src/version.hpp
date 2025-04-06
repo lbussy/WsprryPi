@@ -21,7 +21,7 @@
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-babbc84 [current_dev].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-cc70c92 [devel].
  */
 
 /**
@@ -124,7 +124,7 @@ std::string project_name()
  * identification purposes.
  *
  * @return std::string A formatted string containing project version information.
- * @example Example output: "MyProject version 1.2.2-babbc84 [current_dev] (main)."
+ * @example Example output: "MyProject version 1.2.1-cc70c92 [devel] (main)."
  */
 std::string version_string()
 {

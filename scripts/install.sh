@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.2-babbc84 [current_dev].
+# Created for WsprryPi project, version 1.2.1-cc70c92 [devel].
 
 ############
 ### Global Declarations
@@ -18,7 +18,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=current_dev
+BRANCH=devel
 VERSION=1.2.2
 # Set this script
 THISSCRIPT="install.sh"
@@ -1097,6 +1097,7 @@ main() {
         [Yy]* ) remove_old_stuff;;
         * ) ;;
     esac
+    printf "\n"
 
     remove_old_stuff # Cleanup old names
     do_unit "wsprrypi" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon

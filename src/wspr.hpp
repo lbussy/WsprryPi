@@ -23,7 +23,7 @@
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-babbc84 [current_dev].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-cc70c92 [devel].
  */
 
 #include <cstring>
