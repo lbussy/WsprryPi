@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
+# Created for WsprryPi project, version 1.2.2-babbc84 [current_dev].
 
 ############
 ### Global Declarations
@@ -18,7 +18,7 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=1.2.2_devel
+BRANCH=current_dev
 VERSION=1.2.2
 # Set this script
 THISSCRIPT="install.sh"

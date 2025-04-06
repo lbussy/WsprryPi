@@ -1,5 +1,5 @@
 # Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
+# Created for WsprryPi project, version 1.2.2-babbc84 [current_dev].
 
 /var/log/wsprrypi/wsprrypi.*.log {
     rotate 14

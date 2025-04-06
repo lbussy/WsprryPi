@@ -19,7 +19,7 @@
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-babbc84 [current_dev].
  */
 
 #include "wspr.hpp"
@@ -1110,7 +1110,7 @@ bool parse_commandline(const int &argc, char *const argv[])
             break;
         case 'v':
             // Version
-            llog.logS("Wsprry Pi (wspr) version ", exeversion(), " (", branch(), ").");
+            llog.logS(version_string());
             return false;
             break;
         case 'p':
@@ -1531,7 +1531,7 @@ int main(const int argc, char *const argv[])
 {
     if (!parse_commandline(argc, argv))
         return 1;
-    llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
+    llog.logS(version_string());
     llog.logS("Running on: ", RPiVersion(), ".");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
