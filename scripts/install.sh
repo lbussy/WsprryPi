@@ -1090,6 +1090,7 @@ main() {
     aptPackages # Install any apt packages needed
 
     # Cleanup old versions of filenames
+    printf "\n"
     read -rp "Cleanup old versions (names may have changed)? [y/N]: " yn  < /dev/tty
     yn="${yn%%*( )}"
     case "$yn" in

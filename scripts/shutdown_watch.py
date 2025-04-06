@@ -21,6 +21,10 @@ import signal
 from gpiozero import Button
 
 
+STOP_PIN = 19
+STOP_FILE  = "/var/www/html/shutdown"
+
+
 def parse_args():
     """
     Parse command-line arguments.
