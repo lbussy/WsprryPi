@@ -9,7 +9,7 @@
     notifempty
     sharedscripts
     postrotate
-        systemctl restart wspr
+        systemctl restart wsprrypi
     endscript
 }
 
