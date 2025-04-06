@@ -865,6 +865,206 @@ EOF
 }
 
 ############
+### Cleanup Old
+############
+
+# -----------------------------------------------------------------------------
+# @brief Removes specified files and directories from the system.
+#
+# @details This function attempts to remove files and directories listed in
+#          the predefined array or passed in as arguments. It checks whether
+#          each file or directory exists, and confirms with the user before
+#          removing items if unexpected dependencies or locations are detected.
+#          All errors are suppressed and warnings are printed to the terminal.
+#
+# @param files_and_dirs Array of files and directories to remove. If no
+#                       arguments are provided, default files and directories
+#                       will be used.
+#
+# @return 0 if all files and directories were successfully removed, 1 if any
+# failure occurred.
+#
+# -----------------------------------------------------------------------------
+remove_files_and_dirs() {
+    # Accept files and directories as arguments or use a default list if none provided
+    local files_and_dirs=("$@")
+    if [ ${#files_and_dirs[@]} -eq 0 ]; then
+        files_and_dirs=(
+            "/usr/local/bin/wspr"
+            "/usr/local/bin/wsprrypi"
+            "/usr/local/etc/wspr.ini"
+            "/usr/local/bin/shutdown-button.py"
+            "/usr/local/bin/shutdown-watch.py"
+            "/usr/local/bin/shutdown_watch.py"
+            "/usr/local/bin/wspr_watch.py"
+            "/var/www/html/wspr/"
+            "/var/www/html/wsprrypi/"
+            "/var/log/wspr/"
+            "/var/log/wsprrypi/"
+            "/var/log/WsprryPi/"
+            "/etc/logrotate.d/wspr/"
+            "/etc/logrotate.d/wsprrypi/"
+        )
+    fi
+
+    local retval=0  # Initialize return value
+
+    # Loop through each file or directory in the array
+    for item in "${files_and_dirs[@]}"; do
+        # Check if the item exists
+        if [ -e "$item" ]; then
+            printf "Removing: %s\n" "$item"
+
+            # Ask for confirmation if the item is a directory and it's not in the default list
+            if [ -d "$item" ]; then
+                read -rp "Do you want to continue and remove directory $item? (y/n): " confirm < /dev/tty || true
+                if [[ "$confirm" != "y" ]]; then
+                    printf "Skipping removal of directory: %s\n" "$item"
+                    continue
+                fi
+            fi
+
+            # Remove the item (file or directory)
+            if ! rm -rf "$item" 2>/dev/null; then
+                printf "Warning: Failed to remove %s. It may not exist or may not be removable.\n" "$item"
+                retval=1
+            fi
+        else
+            printf "Item '%s' does not exist or is not found.\n" "$item"
+        fi
+    done
+
+    # Return the status of the operation
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Removes specified services from systemd if they exist and are enabled.
+#
+# @details This function attempts to stop the service only if it is running,
+#          disable it if it is enabled, remove the service unit file (even if
+#          the service was never installed), and always resets the failed state
+#          for each service. The user will be asked for confirmation if any
+#          unexpected dependencies are found. After all services are processed,
+#          the systemd daemon is reloaded to apply the changes.
+#
+# @param services List of service names to remove. If no arguments are provided,
+#                 default services will be used.
+#
+# @return 0 if all services were successfully processed, 1 if any failure
+# occurred.
+#
+# -----------------------------------------------------------------------------
+remove_services() {
+    # Accept services as arguments or use a default list if none provided
+    local services=("$@")
+    if [ ${#services[@]} -eq 0 ]; then
+        services=(
+            "wspr"
+            "shutdown-button"
+            "shutdown-watch"
+            "shutdown_watch"
+            "wspr_watch"
+        )
+    fi
+
+    local retval=0  # Initialize return value
+
+    # Loop through each service name in the array
+    for service_name in "${services[@]}"; do
+        # Check if the service exists in systemd
+        if systemctl list-units --all | grep -q "$service_name.service"; then
+            printf "Removing service: '%s'\n" "$service_name"
+
+            # Check for dependencies using systemctl list-dependencies
+            dependencies=$(systemctl list-dependencies "$service_name.service" 2>/dev/null)
+
+            # Filter out self-references from the dependencies list
+            dependencies=$(echo "$dependencies" | grep -v "^  $service_name.service")
+
+            if [ -n "$dependencies" ]; then
+                printf "Warning: '%s.service' has dependencies. Please review before removing.\n" "$service_name"
+                read -rp "Do you want to continue and remove this service? (y/n): " confirm
+                if [[ "$confirm" != "y" ]]; then
+                    printf "Skipping removal of '%s.service' due to dependencies.\n" "$service_name"
+                    continue
+                fi
+            fi
+
+            # Stop the service only if it is running
+            if systemctl is-active --quiet "$service_name.service"; then
+                if ! systemctl stop "$service_name.service"; then
+                    printf "Error: Failed to stop '%s.service': %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
+                    retval=1
+                fi
+            fi
+
+            # Disable the service only if it is enabled
+            if systemctl is-enabled --quiet "$service_name.service"; then
+                if ! systemctl disable "$service_name.service"; then
+                    printf "Error: Failed to disable '%s.service': %s\n" "$service_name" "$(systemctl status "$service_name.service" 2>/dev/null)"
+                    retval=1
+                fi
+            fi
+        else
+            # If the service does not exist or is not loaded, skip it entirely
+            printf "Service '%s.service. does not exist or is not loaded. Skipping.\n" "$service_name"
+            continue  # Skip this service if it doesn't exist
+        fi
+    done
+
+    # Move service file deletion outside the loop to handle if the service was never installed
+    for service_name in "${services[@]}"; do
+        for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+            # Check if the service file exists
+            if [ -f "$dir/$service_name.service" ]; then
+                printf "Removing service file: %s\n" "$dir/$service_name.service"
+                if ! rm -f "$dir/$service_name.service"; then
+                    printf "Warning: Failed to remove '%s.service'. It may not exist.\n" "$service_name"
+                    retval=1
+                fi
+            fi
+        done
+    done
+
+    # Always run systemctl reset-failed, suppress errors if it fails
+    printf "Resetting failed states.\n"
+    for service_name in "${services[@]}"; do
+        systemctl reset-failed "$service_name.service" 2>/dev/null
+    done
+
+    # Reload systemd to apply changes
+    printf "Reloading systemd daemon.\n"
+    systemctl daemon-reload
+    printf "Systemd daemon reloaded.\n"
+
+    return "$retval"  # Return the status of the operation
+}
+
+remove_old_stuff() {
+    local retval=0  # Initialize the return value to 0 for successful execution.
+
+    printf "Beginning cleanup of older versions of Wsprry Pi.\n"
+
+    # Call remove_files_and_dirs and capture its return value
+    remove_files_and_dirs "$@"
+    local retval_files_and_dirs=$?  # Capture the return value of remove_files_and_dirs
+    retval=$((retval + retval_files_and_dirs))  # Accumulate the result
+
+    # Call remove_services and capture its return value
+    remove_services "$@"
+    local retval_services=$?  # Capture the return value of remove_services
+    retval=$((retval + retval_services))  # Accumulate the result
+
+    # Return the final status: 0 if all steps succeeded, non-zero if any failed
+    if [ "$retval" -gt 0 ]; then
+        return 1  # If any failure occurred, return non-zero status
+    else
+        return 0  # All succeeded
+    fi
+}
+
+############
 ### Main function
 ############
 
@@ -885,6 +1085,16 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     aptPackages # Install any apt packages needed
+
+    # Cleanup old versions of filenames
+    read -rp "Cleanup old versions (names may have changed)? [y/N]: " yn  < /dev/tty
+    yn="${yn%%*( )}"
+    case "$yn" in
+        [Yy]* ) remove_old_stuff;;
+        * ) ;;
+    esac
+
+    remove_old_stuff # Cleanup old names
     do_unit "wsprrypi" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
@@ -900,9 +1110,6 @@ main() {
     if [ "$no_tapr" == "true" ]; then
         sed -i 's/^doTAPR = True/doTAPR = False/' /usr/local/bin/shutdown_watch.py
     fi
-    # Remove old service if it exists
-    rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
-    rm -f /usr/local/bin/wspr 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
     disable_sound
