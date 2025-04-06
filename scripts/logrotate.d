@@ -1,5 +1,5 @@
 # Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.2-e375721 [devel].
+# Created for WsprryPi project, version 1.2.2-f4b0009 [main].
 
 /var/log/wsprrypi/wsprrypi.*.log {
 /var/log/wsprrypi/wsprrypi.*.log {
