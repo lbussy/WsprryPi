@@ -16,5 +16,5 @@ Please see [the documentation](https://wsprry-pi.readthedocs.io/en/latest/) for 
 If you want to get started and not read anything, here is how to install it:
 
 ```
-curl -L installwspr.aa0nt.net | sudo bash
+curl -fsSL installwspr.aa0nt.net | sudo bash
 ```
