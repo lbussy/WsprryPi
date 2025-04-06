@@ -1,8 +1,8 @@
 from pathlib import Path
 """
-Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+Created for WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
 """
 
 class Config:
@@ -106,7 +106,7 @@ class Config:
     The script will search for files in these directories and update their headers based on the configuration settings.
     """
 
-    PROJECT_EXES = ["wspr", "wspr.ini"]
+    PROJECT_EXES = ["wsprrypi", "wspr.ini"]
     """
     List of executables to copy after compilation.
 
@@ -146,7 +146,7 @@ class Config:
         r"Apache License",                # Apache License
         r"BSD License",                   # BSD License
         r"Mozilla Public License",        # Mozilla License
-        r"Creative Commons Attribution", # Creative Commons
+        r"Creative Commons Attribution",  # Creative Commons
         r"Public Domain",                 # Public Domain
     ]
     """

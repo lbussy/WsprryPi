@@ -17,10 +17,10 @@
  *   - Bruce Raymond (Inspiration and Guidance)
  *   - Lee Bussy, aa0nt@arrl.net
  *
- * Copyright (C) 2023-2024 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
- * This code is part of Lee Bussy's WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
-*/
+ * This code is part of Lee Bussy's WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
+ */
 
 #include "wspr.hpp"
 
@@ -28,6 +28,9 @@
 
 // TCP port to bind to check for Singleton
 #define SINGLETON_PORT 1234
+
+// Define LED
+#define LED_PIN 18
 
 // Logging library
 LCBLog llog;
@@ -105,7 +108,7 @@ LCBLog llog;
 // 0x7e000000 from the supplied bus address to calculate the offset into
 // the peripheral address space. Then, this offset is added to peri_base_virt
 // Which is the base address of the peripherals, in virtual address space.
-#define ACCESS_BUS_ADDR(buss_addr) *(volatile int *)((long int)peri_base_virt + (buss_addr)-0x7e000000)
+#define ACCESS_BUS_ADDR(buss_addr) *(volatile int *)((long int)peri_base_virt + (buss_addr) - 0x7e000000)
 // Given a bus address in the peripheral address space, set or clear a bit.
 #define SETBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) |= 1 << bit
 #define CLRBIT_BUS_ADDR(base, bit) ACCESS_BUS_ADDR(base) &= ~(1 << bit)
@@ -123,12 +126,14 @@ LCBLog llog;
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
 #define INP_GPIO(g) *(gpio + ((g) / 10)) &= ~(7 << (((g) % 10) * 3))
 #define OUT_GPIO(g) *(gpio + ((g) / 10)) |= (1 << (((g) % 10) * 3))
-#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3 : 2) << (((g) % 10) * 3))
-#define GPIO_SET *(gpio + 7)    // sets bits which are 1 ignores bits which are 0
-#define GPIO_CLR *(gpio + 10) // clears bits which are 1 ignores bits which are 0
+#define SET_GPIO_ALT(g, a) *(gpio + (((g) / 10))) |= (((a) <= 3 ? (a) + 4 : (a) == 4 ? 3  \
+                                                                                     : 2) \
+                                                      << (((g) % 10) * 3))
+#define GPIO_SET *(gpio + 7)                  // sets bits which are 1 ignores bits which are 0
+#define GPIO_CLR *(gpio + 10)                 // clears bits which are 1 ignores bits which are 0
 #define GET_GPIO(g) (*(gpio + 13) & (1 << g)) // 0 if LOW, (1<<g) if HIGH
-#define GPIO_PULL *(gpio + 37) // Pull up/pull down
-#define GPIO_PULLCLK0 *(gpio + 38) // Pull up/pull down clock
+#define GPIO_PULL *(gpio + 37)                // Pull up/pull down
+#define GPIO_PULLCLK0 *(gpio + 38)            // Pull up/pull down clock
 
 // Convert from a bus address to a physical address.
 #define BUS_TO_PHYS(x) ((x) & ~0xC0000000)
@@ -246,7 +251,8 @@ struct wConfig
 
 void setupGPIO(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     // Set up gpio pointer for direct register access
     int mem_fd;
     // Set up a memory regions to access GPIO
@@ -287,13 +293,15 @@ void setupGPIO(int pin = 0)
 
 void pinHigh(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     GPIO_SET = 1 << pin;
 }
 
 void pinLow(int pin = 0)
 {
-    if (pin == 0) return;
+    if (pin == 0)
+        return;
     GPIO_CLR = 1 << pin;
 }
 
@@ -408,7 +416,8 @@ void disable_clock()
 void txon(bool led = false, int power_level = 7)
 {
     // Turn on TX
-    if (led) pinHigh(LED_PIN);
+    if (led)
+        pinHigh(LED_PIN);
     // Set function select for GPIO4.
     // Fsel 000 => input
     // Fsel 001 => output
@@ -426,27 +435,28 @@ void txon(bool led = false, int power_level = 7)
     CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12);
 
     // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    switch (power_level)  {
+    switch (power_level)
+    {
     case 0:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0; // 2mA -3.4dBm
         break;
     case 1:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1; // 4mA +2.1dBm
         break;
     case 2:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2; // 6mA +4.9dBm
         break;
     case 3:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3; // 8mA +6.6dBm(default)
         break;
     case 4:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4; // 10mA +8.2dBm
         break;
     case 5:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5; // 12mA +9.2dBm
         break;
     case 6:
-        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
+        ACCESS_BUS_ADDR(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6; // 14mA +10.0dBm
         break;
     case 7:
     default:
@@ -461,7 +471,10 @@ void txon(bool led = false, int power_level = 7)
 
     // Enable clock.
     setupword = {6 /*SRC*/, 1, 0, 0, 0, 3, 0x5a};
-    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
+    int raw_word;
+    std::memcpy(&raw_word, &setupword, sizeof(int));
+    ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = raw_word;
+    // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int *)&setupword);
 }
 
 void txoff(bool led = false)
@@ -469,7 +482,8 @@ void txoff(bool led = false)
     // Turn transmitter on
     // struct GPCTL setupword = {6/*SRC*/, 0, 0, 0, 0, 1,0x5a};
     // ACCESS_BUS_ADDR(CM_GP0CTL_BUS) = *((int*)&setupword);
-    if (led) pinLow(LED_PIN);
+    if (led)
+        pinLow(LED_PIN);
     disable_clock();
 }
 
@@ -738,7 +752,7 @@ void wspr(
 
     // pack prefix in nadd, call in n1, grid, dbm in n2
     char *c, buf[16];
-    strncpy(buf, call, 16);
+    memcpy(buf, call, 16); // Copy 14 raw bytes with no termination
     c = buf;
     to_upper(c);
     unsigned long ng, nadd = 0;
@@ -789,8 +803,8 @@ void wspr(
         // Copy grid_square locally since it is declared const and we cannot modify
         // its contents in-place.
         char l[4];
-        strncpy(l, l_pre, 4);
-        to_upper(l); // grid square Maidenhead grid_square (uppercase)
+        memcpy(l, l_pre, 4); // Copy 4 raw bytes with no termination
+        to_upper(l);         // grid square Maidenhead grid_square (uppercase)
         ng = 180 * (179 - 10 * (l[0] - 'A') - (l[2] - '0')) + 10 * (l[1] - 'A') + (l[3] - '0');
     }
     int p = atoi(dbm); // EIRP in dBm={0,3,7,10,13,17,20,23,27,30,33,37,40,43,47,50,53,57,60}
@@ -854,7 +868,8 @@ void wspr(
         p = -1;
         for (k = 0; p != i; k++)
         {
-            for (j = 0; j != 8; j++) // j0:=bit_reverse(k)
+            j0 = 0; // Ensure j0 is initialized before bit reversal
+            for (j = 0; j != 8; j++)
                 j0 = ((k >> j) & 1) | (j0 << 1);
             if (j0 < 162)
                 p++;
@@ -937,10 +952,10 @@ bool getINIValues(bool reload = false)
         config.use_led = iniConfig.getUseLED();
         config.power_level = iniConfig.getPowerLevel();
 
-        if (! config.daemon_mode )
+        if (!config.daemon_mode)
             llog.logS("\n============================================");
         llog.logS("Config ", ((reload) ? "re" : ""), "loaded from: ", config.inifile);
-        if (! config.daemon_mode )
+        if (!config.daemon_mode)
             llog.logS("============================================");
         llog.logS("Transmit Enabled:\t\t", ((config.xmit_enabled) ? "true" : "false"));
         llog.logS("Call Sign:\t\t\t", config.callsign);
@@ -953,7 +968,7 @@ bool getINIValues(bool reload = false)
         llog.logS("Use Frequency Randomization:\t", ((config.random_offset) ? "true" : "false"));
         llog.logS("Power Level:\t\t\t", config.power_level);
         llog.logS("Use LED:\t\t\t", ((config.use_led) ? "true" : "false"));
-        if (! config.daemon_mode )
+        if (!config.daemon_mode)
             llog.logS("============================================\n");
         return true;
     }
@@ -961,10 +976,9 @@ bool getINIValues(bool reload = false)
     {
         return false;
     }
-
 }
 
-void convertToFreq(const char* &option, double &parsed_freq)
+void convertToFreq(const char *&option, double &parsed_freq)
 {
     if (!strcasecmp(option, "LF"))
     {
@@ -1168,25 +1182,28 @@ bool parse_commandline(const int &argc, char *const argv[])
             llog.setDaemon(config.daemon_mode);
             break;
         case 'd':
+        {
+            // Set power output 0-7
+            int _pwr = strtol(optarg, NULL, 10);
+            if (_pwr < 0 || _pwr > 7)
             {
-                // Set power output 0-7
-                int _pwr = strtol(optarg, NULL, 10);
-                if (_pwr < 0 || _pwr > 7 )
-                {
-                    config.power_level = 7;
-                }
-                else
-                {
-                    config.power_level = _pwr;
-                }
-                config.power_level = strtol(optarg, NULL, 10);
-                break;
+                config.power_level = 7;
             }
+            else
+            {
+                config.power_level = _pwr;
+            }
+            config.power_level = strtol(optarg, NULL, 10);
+            break;
+        }
         default:
             return false;
         }
     }
-    if (config.useini == false) { config.xmit_enabled = true; }
+    if (config.useini == false)
+    {
+        config.xmit_enabled = true;
+    }
     return true;
 }
 
@@ -1194,8 +1211,9 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
 {
     if (config.useini)
     {
-        if (! reparse) iniMonitor.filemon(config.inifile.c_str());
-        if ( !getINIValues(reparse) )
+        if (!reparse)
+            iniMonitor.filemon(config.inifile.c_str());
+        if (!getINIValues(reparse))
         {
             llog.logE("Error: Failed to reload the INI.");
             exit(-1);
@@ -1203,13 +1221,13 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         config.center_freq_set.clear();
 
         std::vector<std::string> freq_list;
-        std::istringstream s ( config.frequency_string );
+        std::istringstream s(config.frequency_string);
         freq_list.insert(freq_list.end(), std::istream_iterator<std::string>(s), std::istream_iterator<std::string>());
 
-        for (std::vector<std::string>::iterator f=freq_list.begin(); f!=freq_list.end(); ++f) 
+        for (std::vector<std::string>::iterator f = freq_list.begin(); f != freq_list.end(); ++f)
         {
-            std::string fString{ *f };
-            const char * fs = fString.c_str();
+            std::string fString{*f};
+            const char *fs = fString.c_str();
             double parsed_freq;
             convertToFreq(fs, parsed_freq);
             config.center_freq_set.push_back(parsed_freq);
@@ -1217,7 +1235,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
     }
     else
     {
-        if ( ! reparse)
+        if (!reparse)
         {
             unsigned int n_free_args = 0;
             while (optind < argc)
@@ -1244,7 +1262,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
                 // Must be a frequency
                 // First see if it is a string.
                 double parsed_freq;
-                const char * argument = argv[optind];
+                const char *argument = argv[optind];
                 convertToFreq(argument, parsed_freq);
                 optind++;
                 config.center_freq_set.push_back(parsed_freq);
@@ -1313,7 +1331,7 @@ bool parseConfigData(const int &argc, char *const argv[], bool reparse = false)
         {
             temp << "- TX will stop after " << config.terminate << " transmissions." << std::endl;
         }
-        else if (config.repeat && ! config.daemon_mode)
+        else if (config.repeat && !config.daemon_mode)
         {
             temp << "- Transmissions will continue forever until stopped with CTRL-C." << std::endl;
         }
@@ -1360,7 +1378,11 @@ bool wait_every(int minute)
         {
             // Delay and make sure the file is done changing
             usleep(500000);
-            while (iniMonitor.changed()) {;;}
+            while (iniMonitor.changed())
+            {
+                ;
+                ;
+            }
 
             llog.logS("Notice: INI file changed, reloading parameters.");
             parseConfigData(true);
@@ -1373,7 +1395,7 @@ bool wait_every(int minute)
         usleep(1000);
     }
     usleep(1000000); // Wait another second
-    return true; // OK to proceed
+    return true;     // OK to proceed
 }
 
 void update_ppm()
@@ -1507,13 +1529,15 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 
 int main(const int argc, char *const argv[])
 {
-    if ( ! parse_commandline(argc, argv) ) return 1;
+    if (!parse_commandline(argc, argv))
+        return 1;
     llog.logS("Wsprry Pi v", exeversion(), " (", branch(), ").");
     llog.logS("Running on: ", RPiVersion(), ".");
     getPLLD(); // Get PLLD Frequency
     setupGPIO(LED_PIN);
 
-    if ( ! parseConfigData(argc, argv) ) return 1;
+    if (!parseConfigData(argc, argv))
+        return 1;
 
     // Make sure we're the only one
     SingletonProcess singleton(SINGLETON_PORT);
@@ -1646,7 +1670,7 @@ int main(const int argc, char *const argv[])
                 else
                 {
                     llog.logS("Waiting for next WSPR transmission window.");
-                    if ( ! wait_every((wspr15) ? 15 : 2) )
+                    if (!wait_every((wspr15) ? 15 : 2))
                     {
                         // Break and reload if ini changes
                         break;
@@ -1713,7 +1737,7 @@ int main(const int argc, char *const argv[])
                     llog.logS("Skipping transmission.");
                     usleep(1000000);
                 }
-                
+
                 // Advance to next band
                 band = (band + 1) % nbands;
                 if ((band == 0) && !config.repeat)

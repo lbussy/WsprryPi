@@ -41,9 +41,9 @@ Requirements:
 - Python 3.x
 - `unittest` module (standard in Python 3.x)
 
-Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
+Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+Created for WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
 """
 
 import unittest
@@ -185,14 +185,14 @@ class TestReleaseFunctions(unittest.TestCase):
         Ensures that both the copyright and version lines are updated when applicable.
         """
         content = """# Copyright (C) 2020 @LBussy
-        version 1.2.1-9f78347 [new_release_proc]
+        version 1.2.2-0e626d8 [1.2.2_devel]
         Some other content here"""
         mock_open.return_value.read.return_value = content
         with patch("release.update_files") as mock_update:
             mock_update(Path("/mock/project"), "main", "v1.2.4", "abcd123")
 
         updated_content = mock_open.return_value.write.call_args[0][0]
-        self.assertIn("Copyright (C) 2020-2024 @LBussy", updated_content)
+        self.assertIn("Copyright (C) 2020-2025 @LBussy", updated_content)
         self.assertIn("version v1.2.4-abcd123 [main]", updated_content)
 
     @patch("builtins.open", new_callable=mock_open)
@@ -209,7 +209,7 @@ class TestReleaseFunctions(unittest.TestCase):
             mock_update(Path("/mock/project"), "main", "v1.2.4", "abcd123")
 
         updated_content = mock_open.return_value.write.call_args[0][0]
-        self.assertIn("Copyright (C) 2020-2024 @LBussy", updated_content)
+        self.assertIn("Copyright (C) 2020-2025 @LBussy", updated_content)
         self.assertNotIn("GNU General Public License", updated_content)  # Ensure GPL section is skipped
         self.assertIn("version v1.2.4-abcd123 [main]", updated_content)
 

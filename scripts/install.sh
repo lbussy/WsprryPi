@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)
-# Created for WsprryPi project, version 1.2.1-9f78347 [new_release_proc].
+# Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
+# Created for WsprryPi project, version 1.2.2-0e626d8 [1.2.2_devel].
 
 ############
 ### Global Declarations
@@ -18,12 +18,12 @@ declare BOLD SMSO RMSO FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST
 declare BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST DOT HHR LHR RESET
 
 # Set branch
-BRANCH=main
-VERSION=1.2.1
+BRANCH=1.2.2_devel
+VERSION=1.2.2
 # Set this script
 THISSCRIPT="install.sh"
 # Set Project
-COPYRIGHT="Copyright (C) 2023-2024 Lee C. Bussy (@LBussy)"
+COPYRIGHT="Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)"
 PACKAGE="WsprryPi"
 PACKAGENAME="Wsprry Pi"
 OWNER="lbussy"
@@ -885,7 +885,7 @@ main() {
     instructions # Show instructions
     settime # Set timezone
     aptPackages # Install any apt packages needed
-    do_unit "wspr" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
+    do_unit "wsprrypi" "exe" "-D -i /usr/local/etc/wspr.ini" # Install/upgrade wspr daemon
     createini # Create ini file
     # Choose to support shutdown button
     no_tapr=""
@@ -902,6 +902,7 @@ main() {
     fi
     # Remove old service if it exists
     rm -f /usr/local/bin/shutdown_button.py 2>/dev/null
+    rm -f /usr/local/bin/wspr 2>/dev/null
     copy_logd "$@" # Enable log rotation
     doWWW # Download website
     disable_sound
