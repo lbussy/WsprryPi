@@ -406,7 +406,7 @@ do_unit() {
     checkdaemon "$unit"
     retval="$?"
     if [[ "$retval" == 0 ]]; then
-        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wspr" "$(which "$executable")"
+        createdaemon "$unit$extension" "$path" "$arg" "$unit" "root" "wsprrypi" "$(which "$executable")"
     else
         eval "systemctl restart $unit"
     fi
@@ -446,16 +446,17 @@ copy_file() {
 copy_logd() {
     local scriptPath fullName curlFile retval
     scriptPath="/etc/logrotate.d"
-    fullName="$scriptPath/wspr"
+    fullName="$scriptPath/wsprrypi"
     curlFile="$GITRAW/$GITPROJ/$GITBRNCH/scripts/logrotate.d"
     retval="false"
 
     # Remove old version
     rm -f /etc/logrotate.d/wsprrypi 2>/dev/null
-
+    rm -f /etc/logrotate.d/wspr 2>/dev/null
+    
     if [ -f "$fullName" ]; then
         if file "$fullName" | grep -iv python | grep -q executable; then
-            src=$(/usr/local/bin/wspr -v | cut -d " " -f 5)
+            src=$(/usr/local/bin/wsprrypi -v | cut -d " " -f 5)
         else
             src=$(grep "^# Created for $PACKAGE version" "$fullName")
             src=${src##* }
@@ -512,7 +513,7 @@ checkscript() {
     scriptFile="/usr/local/bin/$scriptName"
     if [ -f "$scriptFile" ]; then
         if file "$scriptFile" | grep -iv python | grep -q executable; then
-            src=$(/usr/local/bin/wspr -v | cut -d " " -f 5)
+            src=$(/usr/local/bin/wsprrypi -v | cut -d " " -f 5)
         else
             src=$(grep "^# Created for $PACKAGE version" "$scriptFile")
             src=${src##* }
@@ -763,7 +764,7 @@ aptPackages() {
 
 doWWW() {
     local file dir inisource inilink
-    dir="/var/www/html/wspr"
+    dir="/var/www/html/wsprrypi"
     # Delete old files
     echo -e "\nDeleting any deprecated files."
     for file in $WWWREMOV; do
@@ -856,8 +857,8 @@ $DOT$BGBLK$FGYLW$sp49|_|$sp28
 $DOT$BGBLK$FGGRN$HHR$RESET
 
 The WSPR daemon has started.
- - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wspr
-                  -or- : http://$(hostname).local/wspr
+ - WSPR frontend URL   : http://$(hostname -I | awk '{print $1}')/wsprrypi
+                  -or- : http://$(hostname).local/wsprrypi
  - Release version     : $VERSION
 $rebootmessage
 Happy DXing!
@@ -961,7 +962,9 @@ remove_services() {
     if [ ${#services[@]} -eq 0 ]; then
         services=(
             "wspr"
+            "wsprrypi"
             "shutdown-button"
+            "shutdown_button"
             "shutdown-watch"
             "shutdown_watch"
             "wspr_watch"
