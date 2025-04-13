@@ -27,62 +27,62 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
    - Linux or Mac (one line):
 
-      ``` bash
-      [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
-      ```
+        ``` bash
+        [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
+        ```
 
-   - Windows PowerShell:
+    - Windows PowerShell:
 
-      ``` PowerShell
-      if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
+        ``` PowerShell
+        if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
             Write-Host "SSH keys already exist."
-      } else {
-         ssh-keygen
-      }
-      ```
-
-   - Windows Command Line:
-
-      ``` cmd
-      @echo off
-      if exist "%USERPROFILE%\\.ssh" (
-         if exist "%USERPROFILE%\.ssh\*.pub" (
-            echo SSH keys already exist.
-         ) else (
+        } else {
             ssh-keygen
-         )
-      ) else (
-         ssh-keygen
-      )
+        }
+        ```
+
+    - Windows Command Line:
+
+        ``` cmd
+        @echo off
+        if exist "%USERPROFILE%\\.ssh" (
+            if exist "%USERPROFILE%\.ssh\*.pub" (
+            echo SSH keys already exist.
+            ) else (
+            ssh-keygen
+            )
+        ) else (
+            ssh-keygen
+        )
       ```
 
 3. `ssh` to your `pi@{hostname}.local` with the target host password to ensure your `ssh` client and name resolution via zeroconf or mDNS. If you see:
 
-   ``` text
-   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-   @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
-   @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-   ```
+    ``` text
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    ```
 
-   - Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
-   - "Yes" to a prompt to continue connecting
-   - Exit back out
+    - Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
+    - "Yes" to a prompt to continue connecting
+    - Exit back out
 
 4. Copy keys to host with (enter target host password when asked):
 
-   ``` bash
-   ssh-copy-id pi@{hostname}.local
-   ```
+    ``` bash
+    ssh-copy-id pi@{hostname}.local
+    ```
 
 5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this - be sure to mind the indentation:
 
-   ``` bash
-   Host {hostname}.local
-      HostName {hostname}.local
-      User pi
-      Port 22
-      PreferredAuthentications publickey
-   ```
+    ``` bash
+    Host {hostname}.local
+        HostName {hostname}.local
+        User pi
+        Port 22
+        PreferredAuthentications publickey
+    ```
 
 6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwordless) logins.
 
@@ -114,91 +114,96 @@ If you are going to use VS Code from your workstation:
 
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
-   > [!IMPORTANT]
-   > You MUST clone the repo with `--recurse-submodules` to get all parts.
+    > [!IMPORTANT]
+    > You MUST clone the repo with `--recurse-submodules` to get all parts.
 
-   Either:
+    Either:
 
-   ``` bash
-   sudo apt install git -y
-   git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
-   cd ~/WsprryPi/
-   sudo ./scripts/install.sh -l
+    ``` bash
+    sudo apt install git -y
+    git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
+    cd ~/WsprryPi/
+    sudo ./scripts/install.sh -l
    ```
 
-   (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
+    (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
 
-   Or:
+    Or:
 
-   ``` bash
-   curl -L installwspr.aa0nt.net | sudo bash
-   git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
-   cd ~/WsprryPi/
-   ```
+    ``` bash
+    curl -L installwspr.aa0nt.net | sudo bash
+    git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
+    cd ~/WsprryPi/
+    ```
 
-   (This lets the installer install everything, but then you clone the repo after.)
+    (This lets the installer install everything, but then you clone the repo after.)
 
 6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
 
-   ``` bash
-   git config --global user.email "you@example.com"
-   git config --global user.name "Your Name"
-   ```
+    ``` bash
+    git config --global user.email "you@example.com"
+    git config --global user.name "Your Name"
+    ```
 
 7. These are the extensions I use. If you paste them all in at once it will seem to hang, even for minutes on a slower Pi, but it will work:
 
-   ``` bash
-   # Extensions installed on SSH: wsprrypi.local:
-   # Generated with:
-   # code --list-extensions | xargs -L 1 echo code --install-extension
-   code --install-extension bierner.github-markdown-preview
-   code --install-extension bierner.markdown-checkbox
-   code --install-extension bierner.markdown-emoji
-   code --install-extension bierner.markdown-footnotes
-   code --install-extension bierner.markdown-mermaid
-   code --install-extension bierner.markdown-preview-github-styles
-   code --install-extension bierner.markdown-yaml-preamble
-   code --install-extension bmalehorn.shell-syntax
-   code --install-extension bmewburn.vscode-intelephense-client
-   code --install-extension brapifra.phpserver
-   code --install-extension codezombiech.gitignore
-   code --install-extension cschlosser.doxdocgen
-   code --install-extension davidanson.vscode-markdownlint
-   code --install-extension donjayamanne.githistory
-   code --install-extension eamodio.gitlens
-   code --install-extension ecmel.vscode-html-css
-   code --install-extension feiskyer.chatgpt-copilot
-   code --install-extension felipecaputo.git-project-manager
-   code --install-extension github.vscode-github-actions
-   code --install-extension github.vscode-pull-request-github
-   code --install-extension mhutchie.git-graph
-   code --install-extension ms-python.black-formatter
-   code --install-extension ms-python.debugpy
-   code --install-extension ms-python.isort
-   code --install-extension ms-python.pylint
-   code --install-extension ms-python.python
-   code --install-extension ms-python.vscode-pylance
-   code --install-extension ms-vscode.cmake-tools
-   code --install-extension ms-vscode.cpptools
-   code --install-extension ms-vscode.cpptools-extension-pack
-   code --install-extension ms-vscode.cpptools-themes
-   code --install-extension ms-vscode.live-server
-   code --install-extension ms-vscode.makefile-tools
-   code --install-extension ms-vscode.vscode-serial-monitor
-   code --install-extension rifi2k.format-html-in-php
-   code --install-extension ritwickdey.liveserver
-   code --install-extension steoates.autoimport
-   code --install-extension symbolk.somanyconflicts
-   code --install-extension timonwong.shellcheck
-   code --install-extension twxs.cmake
-   code --install-extension waderyan.gitblame
-   code --install-extension xdebug.php-debug
-   code --install-extension yzhang.markdown-all-in-one
-   ```
+    ``` bash
+    # Extensions installed on SSH: wsprrypi.local:
+    # Generated with:
+    # code --list-extensions | xargs -L 1 echo code --install-extension
+    code --install-extension Extensions installed on SSH: wspr4:
+    code --install-extension bierner.github-markdown-preview
+    code --install-extension bierner.markdown-checkbox
+    code --install-extension bierner.markdown-emoji
+    code --install-extension bierner.markdown-footnotes
+    code --install-extension bierner.markdown-mermaid
+    code --install-extension bierner.markdown-preview-github-styles
+    code --install-extension bierner.markdown-yaml-preamble
+    code --install-extension bmalehorn.shell-syntax
+    code --install-extension bmewburn.vscode-intelephense-client
+    code --install-extension brapifra.phpserver
+    code --install-extension codezombiech.gitignore
+    code --install-extension cschlosser.doxdocgen
+    code --install-extension davidanson.vscode-markdownlint
+    code --install-extension donjayamanne.githistory
+    code --install-extension eamodio.gitlens
+    code --install-extension ecmel.vscode-html-css
+    code --install-extension edwinhuish.better-comments-next
+    code --install-extension esbenp.prettier-vscode
+    code --install-extension feiskyer.chatgpt-copilot
+    code --install-extension felipecaputo.git-project-manager
+    code --install-extension github.vscode-github-actions
+    code --install-extension github.vscode-pull-request-github
+    code --install-extension mhutchie.git-graph
+    code --install-extension ms-python.black-formatter
+    code --install-extension ms-python.debugpy
+    code --install-extension ms-python.isort
+    code --install-extension ms-python.pylint
+    code --install-extension ms-python.python
+    code --install-extension ms-python.vscode-pylance
+    code --install-extension ms-vscode.cmake-tools
+    code --install-extension ms-vscode.cpptools
+    code --install-extension ms-vscode.cpptools-extension-pack
+    code --install-extension ms-vscode.cpptools-themes
+    code --install-extension ms-vscode.live-server
+    code --install-extension ms-vscode.makefile-tools
+    code --install-extension ms-vscode.vscode-serial-monitor
+    code --install-extension rifi2k.format-html-in-php
+    code --install-extension ritwickdey.liveserver
+    code --install-extension steoates.autoimport
+    code --install-extension streetsidesoftware.code-spell-checker
+    code --install-extension symbolk.somanyconflicts
+    code --install-extension timonwong.shellcheck
+    code --install-extension twxs.cmake
+    code --install-extension waderyan.gitblame
+    code --install-extension xaver.clang-format
+    code --install-extension xdebug.php-debug
+    code --install-extension yzhang.markdown-all-in-one
+    ```
 
-8. Use the "Open Folder" button and select the root of your repo on the Pi.
+1. Use the "Open Folder" button and select the root of your repo on the Pi.
 
-9. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
+2. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
 Remember that the **Wsprry Pi** systemd daemon is running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 
@@ -217,14 +222,14 @@ apache2
 php
 libraspberrypi-dev
 raspberrypi-kernel-headers
-ntp
 gpiod
 libgpiod-dev
+chrony
 
 Install these with:
 
 ``` bash
-sudo apt install jq git apache2 php libraspberrypi-dev raspberrypi-kernel-headers ntp gpiod libgpiod-dev -y
+sudo apt install jq git apache2 php libraspberrypi-dev raspberrypi-kernel-headers chrony gpiod libgpiod-dev -y
 ```
 
 ## Submodules
