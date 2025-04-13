@@ -1,0 +1,126 @@
+diff --git a/tests_and_snippets/c_and_cpp/dma/wspr_constants.hpp b/tests_and_snippets/c_and_cpp/dma/wspr_constants.hpp
+index e0b2b15..661b1e7 100644
+--- a/tests_and_snippets/c_and_cpp/dma/wspr_constants.hpp
++++ b/tests_and_snippets/c_and_cpp/dma/wspr_constants.hpp
+@@ -104,7 +104,7 @@ constexpr double F_PWM_CLK_INIT = 31156186.6125761;
+  * The GPIO peripheral bus base address is used to access GPIO-related
+  * registers for pin configuration and control.
+  */
+-constexpr uint32_t GPIO_BUS_BASE = 0x7E200000;
++constexpr off_t GPIO_BASE_PHYSICAL = 0x7E200000;
+ 
+ /**
+  * @brief Bus address for the General-Purpose Clock 0 Control Register.
+diff --git a/tests_and_snippets/c_and_cpp/dma/wspr_transmit.cpp b/tests_and_snippets/c_and_cpp/dma/wspr_transmit.cpp
+index 8900ce9..fe55ef0 100644
+--- a/tests_and_snippets/c_and_cpp/dma/wspr_transmit.cpp
++++ b/tests_and_snippets/c_and_cpp/dma/wspr_transmit.cpp
+@@ -404,6 +404,70 @@ void disable_clock()
+     }
+ }
+ 
++/**
++ * @brief Sets the function select of a GPIO pin to its valid GPCLK mode
++ *
++ * Maps the GPIO peripheral memory via /dev/mem and sets the alternate
++ * function bits for supported GPIOs that can output a GPCLK.
++ *
++ * Supported mappings:
++ * - GPIO  4 → ALT0 (GPCLK0)
++ * - GPIO 20 → ALT5 (GPCLK0)
++ * - GPIO 32, 34, 42, 44 → ALT0 (GPCLK0, Compute Module only)
++ * See: https://datasheets.raspberrypi.com/bcm2711/bcm2711-peripherals.pdf Section 5.2
++ * 
++ * @param gpio_pin GPIO number to configure
++ * @throws std::runtime_error if the GPIO is not recognized for GPCLK output
++ */
++void set_gpio_for_gpclk(uint32_t gpio_pin) {
++    // Determine required ALT function
++    uint32_t alt;
++
++    if (gpio_pin == 4)
++        alt = 0;
++    else if (gpio_pin == 20)
++        alt = 5;
++    else if (gpio_pin == 32 || gpio_pin == 34 || gpio_pin == 42 || gpio_pin == 44)
++        alt = 0;
++    else {
++        throw std::runtime_error("Unsupported GPIO pin for GPCLK output: " + std::to_string(gpio_pin));
++    }
++
++    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
++    if (mem_fd < 0) {
++        throw std::runtime_error("Failed to open /dev/mem");
++    }
++
++    void* gpio_map = mmap(
++        nullptr,
++        BLOCK_SIZE,
++        PROT_READ | PROT_WRITE,
++        MAP_SHARED,
++        mem_fd,
++        GPIO_BASE_PHYSICAL
++    );
++
++    close(mem_fd);
++
++    if (gpio_map == MAP_FAILED) {
++        throw std::runtime_error("Failed to mmap GPIO base");
++    }
++
++    volatile uint32_t* gpio_regs = reinterpret_cast<volatile uint32_t*>(gpio_map);
++    uint32_t reg_index = gpio_pin / 10;
++    uint32_t bit = (gpio_pin % 10) * 3;
++
++    // ALT function encoding
++    uint32_t alt_map[6] = { 0b100, 0b101, 0b110, 0b111, 0b011, 0b010 };
++
++    uint32_t val = gpio_regs[reg_index];
++    val &= ~(0b111 << bit);              // Clear previous function
++    val |= (alt_map[alt] << bit);        // Set new ALT function
++    gpio_regs[reg_index] = val;
++
++    munmap(gpio_map, BLOCK_SIZE);
++}
++
+ /**
+  * @brief Enables TX by configuring GPIO4 and setting the clock source.
+  * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
+@@ -414,10 +478,7 @@ void disable_clock()
+ void txon(bool led = false)
+ {
+     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
+-    // This setting follows Section 6.2 of the ARM Peripherals Manual.
+-    setBitBusAddress(GPIO_BUS_BASE, 14);   // Set bit 14
+-    clearBitBusAddress(GPIO_BUS_BASE, 13); // Clear bit 13
+-    clearBitBusAddress(GPIO_BUS_BASE, 12); // Clear bit 12
++    set_gpio_for_gpclk(4);  // TODO: 4 or another valid GPIO
+ 
+     // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
+     // More info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
+diff --git a/tests_and_snippets/c_and_cpp/wspr_loop/wspr_transmit.cpp b/tests_and_snippets/c_and_cpp/wspr_loop/wspr_transmit.cpp
+index 402be95..c4cde50 100644
+--- a/tests_and_snippets/c_and_cpp/wspr_loop/wspr_transmit.cpp
++++ b/tests_and_snippets/c_and_cpp/wspr_loop/wspr_transmit.cpp
+@@ -160,7 +160,7 @@ constexpr double F_PWM_CLK_INIT = 31156186.6125761;
+  * The GPIO peripheral bus base address is used to access GPIO-related
+  * registers for pin configuration and control.
+  */
+-constexpr uint32_t GPIO_BUS_BASE = 0x7E200000;
++constexpr uint32_t GPIO_BASE_PHYSICAL = 0x7E200000;
+ 
+ /**
+  * @brief Bus address for the General-Purpose Clock 0 Control Register.
+@@ -562,9 +562,9 @@ void start_transmission()
+ {
+     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
+     // This setting follows Section 6.2 of the ARM Peripherals Manual.
+-    SETBIT_BUS_ADDR(GPIO_BUS_BASE, 14); // Set bit 14
+-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 13); // Clear bit 13
+-    CLRBIT_BUS_ADDR(GPIO_BUS_BASE, 12); // Clear bit 12
++    SETBIT_BUS_ADDR(GPIO_BASE_PHYSICAL, 14); // Set bit 14
++    CLRBIT_BUS_ADDR(GPIO_BASE_PHYSICAL, 13); // Clear bit 13
++    CLRBIT_BUS_ADDR(GPIO_BASE_PHYSICAL, 12); // Clear bit 12
+ 
+     // Set GPIO drive strength to 16mA (+10.6dBm output power).
+     // Values range from 2mA (-3.4dBm) to 16mA (+10.6dBm).
