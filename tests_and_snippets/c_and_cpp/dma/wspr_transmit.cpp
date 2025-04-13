@@ -53,13 +53,6 @@ extern "C"
 // Global stop flag.
 std::atomic<bool> g_stop{false};
 
-// peri_base_virt is the base virtual address that a userspace program (this
-// program) can use to read/write to the the physical addresses controlling
-// the peripherals. This address is mapped at runtime using mmap and /dev/mem.
-// This must be declared global so that it can be called by the atexit
-// function.
-volatile unsigned *peri_base_virt = NULL;
-
 /**
  * @brief Calculates the virtual address for a given bus address.
  *
@@ -70,8 +63,6 @@ volatile unsigned *peri_base_virt = NULL;
  *
  * @param bus_addr The bus address from which to calculate the corresponding virtual address.
  * @return A reference to a volatile int located at the computed virtual address.
- *
- * @note The global pointer `peri_base_virt` must be defined elsewhere.
  */
 inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
 {
@@ -79,7 +70,7 @@ inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
     std::uintptr_t offset = bus_addr - 0x7e000000UL;
     // Add the offset to the base virtual address, then reinterpret the resulting address.
     return *reinterpret_cast<volatile int *>(
-        reinterpret_cast<std::uintptr_t>(peri_base_virt) + offset);
+        reinterpret_cast<std::uintptr_t>(dmaConfig.peri_base_virt) + offset);
 }
 
 /**
@@ -90,8 +81,6 @@ inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
  *
  * @param base The bus address in the peripheral address space.
  * @param bit The bit number to set (0-indexed).
- *
- * @note This function depends on the global pointer `peri_base_virt` being defined elsewhere.
  */
 inline void setBitBusAddress(std::uintptr_t base, unsigned int bit)
 {
@@ -106,8 +95,6 @@ inline void setBitBusAddress(std::uintptr_t base, unsigned int bit)
  *
  * @param base The bus address in the peripheral address space.
  * @param bit The bit number to clear (0-indexed).
- *
- * @note This function depends on the global pointer `peri_base_virt` being defined elsewhere.
  */
 inline void clearBitBusAddress(std::uintptr_t base, unsigned int bit)
 {
@@ -253,17 +240,17 @@ void getPLLD()
     switch (processor_id)
     {
     case BCM_HOST_PROCESSOR_BCM2835: // Raspberry Pi 1
-        config.mem_flag = 0x0c;
-        config.f_plld_clk = 500000000.0 * (1 - 2.500e-6); // Apply 2.5 PPM correction
+        dmaConfig.mem_flag = 0x0c;
+        dmaConfig.plld_clock_frequency = 500000000.0 * (1 - 2.500e-6); // Apply 2.5 PPM correction
         break;
     case BCM_HOST_PROCESSOR_BCM2836: // Raspberry Pi 2
     case BCM_HOST_PROCESSOR_BCM2837: // Raspberry Pi 3
-        config.mem_flag = 0x04;
-        config.f_plld_clk = 500000000.0; // Standard 500 MHz clock
+        dmaConfig.mem_flag = 0x04;
+        dmaConfig.plld_clock_frequency = 500000000.0; // Standard 500 MHz clock
         break;
     case BCM_HOST_PROCESSOR_BCM2711: // Raspberry Pi 4
-        config.mem_flag = 0x04;
-        config.f_plld_clk = 750000000.0; // Higher 750 MHz clock
+        dmaConfig.mem_flag = 0x04;
+        dmaConfig.plld_clock_frequency = 750000000.0; // Higher 750 MHz clock
         break;
     default:
         std::cerr << "Error: Unknown chipset (" << processor_id << ")." << std::endl;
@@ -271,10 +258,10 @@ void getPLLD()
     }
 
     // Ensure a valid PLLD frequency
-    if (config.f_plld_clk <= 0)
+    if (dmaConfig.plld_clock_frequency <= 0)
     {
         std::cerr << "Error: Invalid PLL clock frequency. Using default 500 MHz." << std::endl;
-        config.f_plld_clk = 500000000.0;
+        dmaConfig.plld_clock_frequency = 500000000.0;
     }
 }
 
@@ -289,7 +276,7 @@ void getPLLD()
 void allocMemPool(unsigned numpages)
 {
     // Allocate a contiguous block of memory using the mailbox interface.
-    mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, config.mem_flag);
+    mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, dmaConfig.mem_flag);
 
     // Lock the allocated memory block and retrieve its bus address.
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
@@ -384,7 +371,7 @@ void deallocMemPool()
 void disable_clock()
 {
     // Ensure memory-mapped peripherals are initialized before proceeding.
-    if (peri_base_virt == nullptr)
+    if (dmaConfig.peri_base_virt == nullptr)
     {
         return;
     }
@@ -421,7 +408,7 @@ void txon(bool led = false)
 
     // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
     // More info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + dmaConfig.tx_power;
+    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + config.power_level;
 
     // Ensure the clock is disabled before modifying settings.
     disable_clock();
@@ -582,7 +569,7 @@ void txSym(
 void unSetupDMA()
 {
     // Ensure memory-mapped peripherals are initialized before proceeding.
-    if (peri_base_virt == nullptr)
+    if (dmaConfig.peri_base_virt == nullptr)
     {
         return;
     }
@@ -781,7 +768,7 @@ void setupDMA(
 
     // Activate DMA
     // Obtain the base address as an integer pointer
-    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)peri_base_virt + DMA_BUS_BASE - 0x7e000000);
+    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)dmaConfig.peri_base_virt + DMA_BUS_BASE - 0x7e000000);
     // Now cast to DMAregs pointer
     volatile struct DMAregs *DMA0 = reinterpret_cast<volatile struct DMAregs *>(dma_base);
     DMA0->CS = 1 << 31; // Reset DMA
@@ -1167,7 +1154,7 @@ void setup_dma()
     try
     {
         // Convert frequency string to double and push to the set
-        temp_center_freq_desired = std::stod(config.frequency_string);
+        temp_center_freq_desired = std::stod(config.frequencies);
         config.center_freq_set.push_back(temp_center_freq_desired);
 
         // Ensure the frequency value is valid
@@ -1183,7 +1170,7 @@ void setup_dma()
     }
 
     // Initialize peripheral memory mapping
-    setup_peri_base_virt(peri_base_virt);
+    setup_peri_base_virt(dmaConfig.peri_base_virt);
 
     // Set up DMA
     open_mbox();                            // Open mailbox for communication
@@ -1218,14 +1205,14 @@ void tx_tone()
     double center_freq_actual;
 
     // Validate PLLD clock frequency
-    if (config.f_plld_clk <= 0)
+    if (dmaConfig.plld_clock_frequency <= 0)
     {
         std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
-        config.f_plld_clk = 500000000.0;
+        dmaConfig.plld_clock_frequency = 500000000.0;
     }
 
     // Compute actual PLL-adjusted frequency
-    double adjusted_plld_freq = config.f_plld_clk * (1 - config.ppm / 1e6);
+    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 
     // Setup the DMA frequency table
     setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
@@ -1275,7 +1262,7 @@ void tx_tone()
 void tx_wspr()
 {
     // Generate a new WSPR message
-    WsprMessage message(config.callsign, config.locator, dmaConfig.tx_power);
+    WsprMessage message(config.callsign, config.grid_square, config.power_dbm);
 
 #ifdef DEBUG_WSPR_TRANSMIT
     // Iterate through the symbols and print them.
@@ -1309,7 +1296,7 @@ void tx_wspr()
     double tone_spacing = 1.0 / wspr_symtime;
 
     // Apply random offset if enabled
-    if ((center_freq_desired != 0) && config.random_offset)
+    if ((center_freq_desired != 0) && config.use_offset)
     {
         center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
                                (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
@@ -1328,7 +1315,7 @@ void tx_wspr()
     config.ppm = get_ppm_from_chronyc();
 
     setupDMATab(center_freq_desired, tone_spacing,
-                config.f_plld_clk * (1 - config.ppm / 1e6),
+                dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6),
                 center_freq_actual, constPage);
 
     std::cout << "Waiting for next transmission window." << std::endl;

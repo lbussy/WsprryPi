@@ -38,35 +38,106 @@
 
 #include <vector>
 
-typedef enum
+/**
+ * @enum ModeType
+ * @brief Specifies the mode of operation for the application.
+ *
+ * This enumeration defines the available modes for operation.
+ * - `WSPR`: Represents the WSPR (Weak Signal Propagation Reporter) transmission mode.
+ * - `TONE`: Represents a test tone generation mode.
+ */
+enum class ModeType // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
 {
-    WSPR,
-    TONE
-} mode_type;
+    WSPR, ///< WSPR transmission mode
+    TONE  ///< Test tone generation mode
+};
 
-struct wConfig
+/**
+ * @brief Global configuration instance for argument parsing and runtime settings.
+ *
+ * @details
+ * Holds all command-line and runtime configuration data not managed directly
+ * by the INI file system. Initialized globally and used throughout the application.
+ *
+ * @see ArgParserConfig, ini, iniMonitor
+ */
+struct ArgParserConfig
 {
-    // Global configuration items from command line and ini file
-    bool useini = false;
-    std::string inifile = "";                   // Default to empty, meaning no INI file specified
-    bool xmit_enabled = true;                   // Transmission disabled by default
-    bool repeat = false;                        // No repeat transmission by default
-    std::string callsign = "AA0NT";             // Default to empty, requiring user input
-    std::string locator = "EM18";               // Default to empty, requiring user input
-    std::string frequency_string = "7040100.0"; // Default to empty
-    std::vector<double> center_freq_set = {};   // Empty vector, frequencies to be defined
-    double ppm = 12.136;                        // Default to zero, meaning no frequency correction applied
-    bool self_cal = true;                       // Self-calibration enabled by default
-    bool random_offset = true;                  // No random offset by default
-    double test_tone = 7040100.0;               // Default to NAN, meaning no test tone
-    bool no_delay = false;                      // Delay enabled by default
-    mode_type mode = WSPR;                      // Default mode is WSPR
-    int terminate = -1;                         // -1 to indicate no termination signal
-    bool useled = false;                        // No LED signaling by default
-    bool daemon_mode = false;                   // Not running as a daemon by default
-    double f_plld_clk = 125e6;                  // Default PLLD clock frequency: 125 MHz
-    int mem_flag = 0;                           // Default memory flag set to 0
-} config;
+    // Control
+    bool transmit; ///< Transmission mode enabled.
+
+    // Common
+    std::string callsign;    ///< WSPR callsign.
+    std::string grid_square; ///< 4- or 6-character Maidenhead locator.
+    int power_dbm;           ///< Transmit power in dBm.
+    std::string frequencies; ///< Comma-separated frequency list.
+    int tx_pin;              ///< GPIO pin number for RF transmit control.
+
+    // Extended
+    double ppm;      ///< PPM frequency calibration.
+    bool use_ntp;    ///< Apply NTP-based frequency correction.
+    bool use_offset; ///< Enable random frequency offset.
+    int power_level; ///< Power level for RF hardware (0–7).
+    bool use_led;    ///< Enable TX LED indicator.
+    int led_pin;     ///< GPIO pin for LED indicator.
+
+    // Server
+    int web_port;      ///< Web server port number.
+    int socket_port;   ///< Socket server port number.
+    bool use_shutdown; ///< Enable GPIO-based shutdown feature.
+    int shutdown_pin;  ///< GPIO pin used to signal shutdown.
+
+    // Command line only
+    bool date_time_log; ///< Prefix logs with timestamp.
+    bool loop_tx;       ///< Repeat transmission cycle.
+    int tx_iterations;  ///< Number of transmission iterations (0 = infinite).
+    double test_tone;   ///< Enable continuous tone mode (in Hz).
+
+    // Runtime variables
+    ModeType mode;                       ///< Current operating mode.
+    bool use_ini;                        ///< Load configuration from INI file.
+    std::string ini_filename;            ///< INI file name and path.
+    std::vector<double> center_freq_set; ///< Parsed list of center frequencies in Hz.
+
+    /**
+     * @brief Default constructor initializing all configuration parameters.
+     */
+    ArgParserConfig() // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
+        : transmit(false),
+          callsign("AA0NT"),
+          grid_square("EM18"),
+          power_dbm(20),
+          frequencies("7040100.0"),
+          tx_pin(4),
+          ppm(0.0),
+          use_ntp(true),
+          use_offset(true),
+          power_level(0),
+          use_led(false),
+          led_pin(-1),
+          web_port(-1),
+          socket_port(-1),
+          use_shutdown(false),
+          shutdown_pin(-1),
+          date_time_log(false),
+          loop_tx(false),
+          tx_iterations(0),
+          test_tone(7040100.0),
+          mode(ModeType::WSPR),
+          use_ini(false),
+          ini_filename(""),
+          center_freq_set({})
+    {
+    }
+};
+
+/**
+ * @brief Global configuration object.
+ *
+ * This ArgParserConfig instance holds the application’s configuration settings,
+ * typically loaded from an INI file or a JSON configuration.
+ */
+ArgParserConfig config; // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
 
 struct DMAConfig
 {
@@ -80,24 +151,11 @@ struct DMAConfig
     function.
      */
     volatile unsigned *peri_base_virt;
-    /*
-    Drive strength for GPIO. The drive strength value is determined by the
-    following mapping:
-      - 0: 2mA (-3.4dBm)
-      - 1: 4mA (+2.1dBm)
-      - 2: 6mA (+4.9dBm)
-      - 3: 8mA (+6.6dBm) (Broadcom default)
-      - 4: 10mA (+8.2dBm)
-      - 5: 12mA (+9.2dBm)
-      - 6: 14mA (+10.0dBm) (Default for this project)
-      */
-    int tx_power;
 
     DMAConfig()
         : plld_clock_frequency(500000000.0 * (1 - 2.500e-6)), ///< Apply 2.5 PPM correction)
           mem_flag(0x0c),                                     ///< Memory flag used for DMA
-          peri_base_virt(),                                   ///< Peripherals base address
-          tx_power(0)                                         ///< Default GPIO power
+          peri_base_virt()                                    ///< Peripherals base address
     {
     }
 };
