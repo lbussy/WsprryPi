@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h> // For WIFEXITED, WEXITSTATUS, etc.
 
 // POSIX & System-Specific Headers
 #include <pthread.h>
@@ -20,9 +21,13 @@
 #include <sys/timex.h>
 
 // C++ Standard Library Headers
+#include <array>
 #include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <cerrno>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -36,12 +41,17 @@
 #include <string>
 #include <vector>
 
+#include <termios.h>
+
 #ifdef __cplusplus
 extern "C"
 {
 #include "mailbox.h"
 }
 #endif /* __cplusplus */
+
+// Global stop flag.
+std::atomic<bool> g_stop{false};
 
 // peri_base_virt is the base virtual address that a userspace program (this
 // program) can use to read/write to the the physical addresses controlling
@@ -409,18 +419,9 @@ void txon(bool led = false)
     clearBitBusAddress(GPIO_BUS_BASE, 13); // Clear bit 13
     clearBitBusAddress(GPIO_BUS_BASE, 12); // Clear bit 12
 
-    // Set GPIO drive strength to 16mA (+10.6dBm output power).
-    // Values range from 2mA (-3.4dBm) to 16mA (+10.6dBm).
-    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5A000018 + 7;
-    // TODO:
-    // Set GPIO drive strength, more info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 0;  //2mA -3.4dBm
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 1;  //4mA +2.1dBm
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 2;  //6mA +4.9dBm
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 3;  //8mA +6.6dBm(default)
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 4;  //10mA +8.2dBm
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 5;  //12mA +9.2dBm
-    // accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + 6;  //14mA +10.0dBm
+    // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
+    // More info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
+    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + dmaConfig.tx_power;
 
     // Ensure the clock is disabled before modifying settings.
     disable_clock();
@@ -457,7 +458,6 @@ void txoff()
  * @param[in] center_freq The center frequency in Hz.
  * @param[in] tone_spacing The frequency spacing between tones in Hz.
  * @param[in] tsym The duration (seconds) for which the symbol is transmitted.
- * @param[in] dma_table_freq The DMA frequency lookup table.
  * @param[in] f_pwm_clk The frequency of the PWM clock in Hz.
  * @param[in,out] instrs The DMA instruction page array.
  * @param[in] constPage The memory page containing constant data.
@@ -468,7 +468,6 @@ void txSym(
     const double &center_freq,
     const double &tone_spacing,
     const double &tsym,
-    const std::vector<double> &dma_table_freq,
     const double &f_pwm_clk,
     struct PageInfo instrs[],
     struct PageInfo &constPage,
@@ -479,8 +478,8 @@ void txSym(
     const int f1_idx = f0_idx + 1;
 
     // Retrieve frequency values from the DMA table
-    const double f0_freq = dma_table_freq[f0_idx];
-    const double f1_freq = dma_table_freq[f1_idx];
+    const double f0_freq = transParams.dma_table_freq[f0_idx];
+    const double f1_freq = transParams.dma_table_freq[f1_idx];
 
     // Calculate the expected tone frequency
     const double tone_freq = center_freq - 1.5 * tone_spacing + sym_num * tone_spacing;
@@ -623,7 +622,6 @@ double bit_trunc(const double &d, const int &lsb)
  * @param[in] center_freq_desired The desired center frequency in Hz.
  * @param[in] tone_spacing The spacing between frequency tones in Hz.
  * @param[in] plld_actual_freq The actual PLLD clock frequency in Hz.
- * @param[out] dma_table_freq The generated DMA table containing output frequencies.
  * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
  * @param[in,out] constPage The PageInfo structure for storing tuning words.
  */
@@ -631,17 +629,9 @@ void setupDMATab(
     const double &center_freq_desired,
     const double &tone_spacing,
     const double &plld_actual_freq,
-    std::vector<double> &dma_table_freq,
     double &center_freq_actual,
     struct PageInfo &constPage)
 {
-    // Ensure DMA frequency table has a minimum size of 1024.
-    if (dma_table_freq.size() < 1024)
-    {
-        std::cerr << "Error: DMA table frequency array not initialized properly." << std::endl;
-        dma_table_freq.resize(1024);
-    }
-
     // Set the actual center frequency initially to the desired frequency.
     center_freq_actual = center_freq_desired;
 
@@ -687,10 +677,9 @@ void setupDMATab(
     }
 
     // Program the DMA table.
-    dma_table_freq.resize(1024);
     for (int i = 0; i < 1024; i++)
     {
-        dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
+        transParams.dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
 
         // Store values in the memory-mapped page.
         reinterpret_cast<int *>(constPage.v)[i] = (0x5A << 24) + tuning_word[i];
@@ -996,6 +985,164 @@ void dma_cleanup()
 }
 
 /**
+ * @brief Waits until it is exactly one second past an even minute, until spacebar is pressed, or a stop is requested.
+ *
+ * This function sets the terminal to noncanonical mode so that a single spacebar press is immediately
+ * detected (without requiring Enter). It then periodically checks the system clock and uses select() with
+ * a timeout to wait until the next second boundary. If the spacebar is pressed, the function exits early.
+ *
+ * @note Due to system scheduling, the wake-up time might not be exactly at the second boundary.
+ */
+void waitForOneSecondPastEvenMinute()
+{
+    // Set terminal to noncanonical mode to capture key presses immediately.
+    struct termios oldAttr, newAttr;
+    tcgetattr(STDIN_FILENO, &oldAttr);
+    newAttr = oldAttr;
+    newAttr.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newAttr);
+
+    std::mutex m;
+    std::condition_variable cv;
+    std::unique_lock<std::mutex> lock(m);
+
+    while (!g_stop.load())
+    {
+        // Get the current system time.
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_now = *std::localtime(&now_time_t);
+
+        // Check if the minute is even and the seconds count is exactly 1.
+        if ((tm_now.tm_min % 2 == 0) && (tm_now.tm_sec == 1))
+        {
+            std::cout << "Condition met: One second past an even minute." << std::endl;
+            break;
+        }
+
+        // Calculate the next second boundary.
+        auto next_second = now + std::chrono::seconds(1);
+        auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(next_second - now);
+
+        // Prepare the timeout for select.
+        struct timeval tv;
+        tv.tv_sec = wait_duration.count() / 1000000;
+        tv.tv_usec = wait_duration.count() % 1000000;
+
+        // Set up file descriptor set for standard input.
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+
+        // Use select to wait until either input is available or the timeout expires.
+        int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
+        if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds))
+        {
+            // Input is available; read one character.
+            char c;
+            ssize_t n = read(STDIN_FILENO, &c, 1);
+            if (n > 0 && c == ' ')
+            {
+                std::cout << "Spacebar pressed. Exiting wait early." << std::endl;
+                break;
+            }
+        }
+        // If ret == 0, the timeout expired and the loop continues.
+    }
+
+    // Restore terminal settings.
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldAttr);
+}
+
+/**
+ * @brief Get the PPM (frequency) value from `chronyc tracking`
+ *
+ * Executes the `chronyc tracking` command and parses the "Frequency" line,
+ * which reflects the estimated drift rate in parts per million (PPM).
+ *
+ * @return The frequency in PPM as a double
+ * @throws std::runtime_error if the command fails or parsing fails
+ */
+double get_ppm_from_chronyc()
+{
+    const char *cmd = "chronyc tracking 2>&1";
+    std::array<char, 256> buffer{};
+    std::string result;
+
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+    {
+        throw std::runtime_error("Failed to run chronyc tracking.");
+    }
+
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    {
+        result += buffer.data();
+    }
+
+    int status = pclose(pipe);
+
+    if (status == -1)
+    {
+        if (errno == ECHILD)
+        {
+            // Treat as success
+            ;;
+        }
+        else
+        {
+            std::ostringstream err;
+            err << "pclose() failed while closing pipe to chronyc.\n";
+            err << "errno = " << errno << " (" << std::strerror(errno) << ")\n";
+            err << "Command output:\n"
+                << result;
+            throw std::runtime_error(err.str());
+        }
+    }
+    else if (WIFEXITED(status))
+    {
+        int exit_code = WEXITSTATUS(status);
+        if (exit_code != 0)
+        {
+            std::ostringstream err;
+            err << "chronyc tracking exited with status " << exit_code << ".\n";
+            err << "Command output:\n"
+                << result;
+            throw std::runtime_error(err.str());
+        }
+    }
+    else if (WIFSIGNALED(status))
+    {
+        int signal = WTERMSIG(status);
+        std::ostringstream err;
+        err << "chronyc tracking terminated by signal " << signal << ".\n";
+        err << "Command output:\n"
+            << result;
+        throw std::runtime_error(err.str());
+    }
+
+    // Parse "Frequency" line
+    std::istringstream iss(result);
+    std::string line;
+    while (std::getline(iss, line))
+    {
+        if (line.find("Frequency") != std::string::npos)
+        {
+            std::istringstream linestream(line);
+            std::string label, colon;
+            double ppm;
+            std::string units;
+
+            linestream >> label >> colon >> ppm >> units;
+            std::cout << "PPM set to: " << std::fixed << std::setprecision(3) << ppm << std::endl;
+            return ppm;
+        }
+    }
+
+    throw std::runtime_error("Frequency line not found in chronyc tracking output.");
+}
+
+/**
  * @brief Configures and initializes the DMA system for transmission.
  * @details Retrieves PLLD frequency, calibrates timing, sets scheduling priority,
  *          initializes random number generator, validates the frequency setting,
@@ -1003,6 +1150,9 @@ void dma_cleanup()
  */
 void setup_dma()
 {
+    // Get fresh PPM
+    config.ppm = get_ppm_from_chronyc();
+
     // Retrieve PLLD frequency
     getPLLD();
 
@@ -1061,67 +1211,58 @@ void tx_tone()
     std::cout << temp.str() << std::endl;
     std::cout << "Press CTRL-C to exit." << std::endl;
 
-    // Enable transmission mode
-    txon();
-
     // DMA buffer pointer
     int bufPtr = 0;
 
-    // DMA frequency table
-    std::vector<double> dma_table_freq;
-
     // Set to an arbitrary non-zero value to ensure `setupDMATab` is called at least once
-    double ppm_prev = 123456;
     double center_freq_actual;
+
+    // Validate PLLD clock frequency
+    if (config.f_plld_clk <= 0)
+    {
+        std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
+        config.f_plld_clk = 500000000.0;
+    }
+
+    // Compute actual PLL-adjusted frequency
+    double adjusted_plld_freq = config.f_plld_clk * (1 - config.ppm / 1e6);
+
+    // Setup the DMA frequency table
+    setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
+                center_freq_actual, constPage);
+
+#ifdef DEBUG_WSPR_TRANSMIT
+    // Debug output for DMA frequency table
+    std::cout << std::setprecision(30)
+              << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << "\n"
+              << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << "\n"
+              << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << "\n"
+              << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
+#endif
+
+    // Warn if the actual transmission frequency differs from the desired frequency
+    if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
+    {
+        std::stringstream temp;
+        temp << std::setprecision(6) << std::fixed
+             << "Warning: Test tone will be transmitted on "
+             << (center_freq_actual - 1.5 * tone_spacing) / 1e6
+             << " MHz due to hardware limitations.";
+        std::cerr << temp.str() << std::endl;
+    }
+
+    // Enable transmission mode
+    txon();
 
     // Continuous transmission loop
     while (true)
     {
-
-        // If PPM value has changed, update the DMA table
-        if (config.ppm != ppm_prev)
-        {
-            // Validate PLLD clock frequency
-            if (config.f_plld_clk <= 0)
-            {
-                std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
-                config.f_plld_clk = 500000000.0;
-            }
-
-            // Compute actual PLL-adjusted frequency
-            double adjusted_plld_freq = config.f_plld_clk * (1 - config.ppm / 1e6);
-
-            // Setup the DMA frequency table
-            setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
-                        dma_table_freq, center_freq_actual, constPage);
-
-#ifdef DEBUG_WSPR_TRANSMIT
-            // Debug output for DMA frequency table
-            std::cout << std::setprecision(30)
-                      << "DEBUG: dma_table_freq[0] = " << dma_table_freq[0] << "\n"
-                      << "DEBUG: dma_table_freq[1] = " << dma_table_freq[1] << "\n"
-                      << "DEBUG: dma_table_freq[2] = " << dma_table_freq[2] << "\n"
-                      << "DEBUG: dma_table_freq[3] = " << dma_table_freq[3] << std::endl;
-#endif
-
-            // Warn if the actual transmission frequency differs from the desired frequency
-            if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
-            {
-                std::stringstream temp;
-                temp << std::setprecision(6) << std::fixed
-                     << "Warning: Test tone will be transmitted on "
-                     << (center_freq_actual - 1.5 * tone_spacing) / 1e6
-                     << " MHz due to hardware limitations.";
-                std::cerr << temp.str() << std::endl;
-            }
-
-            // Update previous PPM value to avoid redundant updates
-            ppm_prev = config.ppm;
-        }
-
         // Transmit the test tone symbol
-        txSym(0, center_freq_actual, tone_spacing, 60, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        txSym(0, center_freq_actual, tone_spacing, 60, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
     }
+
+    // Disable transmission mode
+    txoff();
 }
 
 /**
@@ -1134,7 +1275,7 @@ void tx_tone()
 void tx_wspr()
 {
     // Generate a new WSPR message
-    WsprMessage message(config.callsign, config.locator, config.tx_power);
+    WsprMessage message(config.callsign, config.locator, dmaConfig.tx_power);
 
 #ifdef DEBUG_WSPR_TRANSMIT
     // Iterate through the symbols and print them.
@@ -1182,12 +1323,17 @@ void tx_wspr()
     std::cout << temp.str() << std::endl;
 
     // Create DMA table for transmission
-    std::vector<double> dma_table_freq(1024, 0.0); // Pre-allocate for efficiency
     double center_freq_actual = center_freq_desired;
+
+    config.ppm = get_ppm_from_chronyc();
 
     setupDMATab(center_freq_desired, tone_spacing,
                 config.f_plld_clk * (1 - config.ppm / 1e6),
-                dma_table_freq, center_freq_actual, constPage);
+                center_freq_actual, constPage);
+
+    std::cout << "Waiting for next transmission window." << std::endl;
+    std::cout << "Press <spacebar> to start immediately." << std::endl;
+    waitForOneSecondPastEvenMinute();
 
     struct timeval tvBegin, tvEnd, tvDiff;
     gettimeofday(&tvBegin, NULL);
@@ -1211,7 +1357,7 @@ void tx_wspr()
         this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
 
         txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
-              this_sym, dma_table_freq, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+              this_sym, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
     }
 
     // Disable transmission

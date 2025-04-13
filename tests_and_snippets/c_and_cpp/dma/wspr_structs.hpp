@@ -53,11 +53,9 @@ struct wConfig
     bool repeat = false;                        // No repeat transmission by default
     std::string callsign = "AA0NT";             // Default to empty, requiring user input
     std::string locator = "EM18";               // Default to empty, requiring user input
-    int tx_power = 20;                          // Default to 37 dBm (5W), a common WSPR power level
     std::string frequency_string = "7040100.0"; // Default to empty
     std::vector<double> center_freq_set = {};   // Empty vector, frequencies to be defined
-    double ppm = 12.300
-    ;                        // Default to zero, meaning no frequency correction applied
+    double ppm = 12.136;                        // Default to zero, meaning no frequency correction applied
     bool self_cal = true;                       // Self-calibration enabled by default
     bool random_offset = true;                  // No random offset by default
     double test_tone = 7040100.0;               // Default to NAN, meaning no test tone
@@ -96,10 +94,10 @@ struct DMAConfig
     int tx_power;
 
     DMAConfig()
-        : plld_clock_frequency(500000000.0 * (1 - 2.500e-6)), ///< Apply 2.5 PPM correction),
-          mem_flag(0x0c),                                     ///<  Memory flag used for DMA
-          peri_base_virt(),                                   ///<  Peripherals base address
-          tx_power(6)
+        : plld_clock_frequency(500000000.0 * (1 - 2.500e-6)), ///< Apply 2.5 PPM correction)
+          mem_flag(0x0c),                                     ///< Memory flag used for DMA
+          peri_base_virt(),                                   ///< Peripherals base address
+          tx_power(0)                                         ///< Default GPIO power
     {
     }
 };
@@ -291,7 +289,6 @@ struct WsprTransmissionParams
     double wspr_symtime;                ///< The WSPR symbol time (duration of each symbol) in seconds.
     double tone_spacing;                ///< The frequency spacing between adjacent tones in Hz.
     std::vector<double> dma_table_freq; ///< The DMA frequency lookup table used for transmission.
-    int tx_power;                       ///< Integer 0-6 for GPIO power level (see enable_clock_output())
 
     /**
      * @brief Default constructor for WsprTransmissionParams.
@@ -302,7 +299,7 @@ struct WsprTransmissionParams
      * - The DMA frequency lookup table is initialized as an empty vector.
      */
     WsprTransmissionParams()
-        : wspr_frequency(0.0), wspr_symtime(0.0), tone_spacing(0.0), dma_table_freq(), tx_power(0)
+        : wspr_frequency(0.0), wspr_symtime(0.0), tone_spacing(0.0), dma_table_freq(1024, 0.0)
     {
     }
 };
