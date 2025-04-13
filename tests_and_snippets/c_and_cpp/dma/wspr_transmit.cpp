@@ -54,6 +54,164 @@ extern "C"
 std::atomic<bool> g_stop{false};
 
 /**
+ * @brief Waits until it is exactly one second past an even minute, until spacebar is pressed, or a stop is requested.
+ *
+ * This function sets the terminal to noncanonical mode so that a single spacebar press is immediately
+ * detected (without requiring Enter). It then periodically checks the system clock and uses select() with
+ * a timeout to wait until the next second boundary. If the spacebar is pressed, the function exits early.
+ *
+ * @note Due to system scheduling, the wake-up time might not be exactly at the second boundary.
+ */
+void waitForOneSecondPastEvenMinute()
+{
+    // Set terminal to noncanonical mode to capture key presses immediately.
+    struct termios oldAttr, newAttr;
+    tcgetattr(STDIN_FILENO, &oldAttr);
+    newAttr = oldAttr;
+    newAttr.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newAttr);
+
+    std::mutex m;
+    std::condition_variable cv;
+    std::unique_lock<std::mutex> lock(m);
+
+    while (!g_stop.load())
+    {
+        // Get the current system time.
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_now = *std::localtime(&now_time_t);
+
+        // Check if the minute is even and the seconds count is exactly 1.
+        if ((tm_now.tm_min % 2 == 0) && (tm_now.tm_sec == 1))
+        {
+            std::cout << "Condition met: One second past an even minute." << std::endl;
+            break;
+        }
+
+        // Calculate the next second boundary.
+        auto next_second = now + std::chrono::seconds(1);
+        auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(next_second - now);
+
+        // Prepare the timeout for select.
+        struct timeval tv;
+        tv.tv_sec = wait_duration.count() / 1000000;
+        tv.tv_usec = wait_duration.count() % 1000000;
+
+        // Set up file descriptor set for standard input.
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+
+        // Use select to wait until either input is available or the timeout expires.
+        int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
+        if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds))
+        {
+            // Input is available; read one character.
+            char c;
+            ssize_t n = read(STDIN_FILENO, &c, 1);
+            if (n > 0 && c == ' ')
+            {
+                std::cout << "Spacebar pressed. Exiting wait early." << std::endl;
+                break;
+            }
+        }
+        // If ret == 0, the timeout expired and the loop continues.
+    }
+
+    // Restore terminal settings.
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldAttr);
+}
+
+/**
+ * @brief Get the PPM (frequency) value from `chronyc tracking`
+ *
+ * Executes the `chronyc tracking` command and parses the "Frequency" line,
+ * which reflects the estimated drift rate in parts per million (PPM).
+ *
+ * @return The frequency in PPM as a double
+ * @throws std::runtime_error if the command fails or parsing fails
+ */
+double get_ppm_from_chronyc()
+{
+    const char *cmd = "chronyc tracking 2>&1";
+    std::array<char, 256> buffer{};
+    std::string result;
+
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+    {
+        throw std::runtime_error("Failed to run chronyc tracking.");
+    }
+
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    {
+        result += buffer.data();
+    }
+
+    int status = pclose(pipe);
+
+    if (status == -1)
+    {
+        if (errno == ECHILD)
+        {
+            // Treat as success
+            ;;
+        }
+        else
+        {
+            std::ostringstream err;
+            err << "pclose() failed while closing pipe to chronyc.\n";
+            err << "errno = " << errno << " (" << std::strerror(errno) << ")\n";
+            err << "Command output:\n"
+                << result;
+            throw std::runtime_error(err.str());
+        }
+    }
+    else if (WIFEXITED(status))
+    {
+        int exit_code = WEXITSTATUS(status);
+        if (exit_code != 0)
+        {
+            std::ostringstream err;
+            err << "chronyc tracking exited with status " << exit_code << ".\n";
+            err << "Command output:\n"
+                << result;
+            throw std::runtime_error(err.str());
+        }
+    }
+    else if (WIFSIGNALED(status))
+    {
+        int signal = WTERMSIG(status);
+        std::ostringstream err;
+        err << "chronyc tracking terminated by signal " << signal << ".\n";
+        err << "Command output:\n"
+            << result;
+        throw std::runtime_error(err.str());
+    }
+
+    // Parse "Frequency" line
+    std::istringstream iss(result);
+    std::string line;
+    while (std::getline(iss, line))
+    {
+        if (line.find("Frequency") != std::string::npos)
+        {
+            std::istringstream linestream(line);
+            std::string label, colon;
+            double ppm;
+            std::string units;
+
+            linestream >> label >> colon >> ppm >> units;
+            std::cout << "PPM set to: " << std::fixed << std::setprecision(3) << ppm << std::endl;
+            return ppm;
+        }
+    }
+
+    throw std::runtime_error("Frequency line not found in chronyc tracking output.");
+}
+
+/**
  * @brief Calculates the virtual address for a given bus address.
  *
  * This function calculates the appropriate virtual address for accessing the
@@ -602,183 +760,6 @@ double bit_trunc(const double &d, const int &lsb)
 }
 
 /**
- * @brief Configures the DMA frequency table for signal generation.
- * @details Generates a tuning word table based on the desired center frequency
- *          and tone spacing, adjusting for hardware limitations if necessary.
- *
- * @param[in] center_freq_desired The desired center frequency in Hz.
- * @param[in] tone_spacing The spacing between frequency tones in Hz.
- * @param[in] plld_actual_freq The actual PLLD clock frequency in Hz.
- * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
- * @param[in,out] constPage The PageInfo structure for storing tuning words.
- */
-void setupDMATab(
-    const double &center_freq_desired,
-    const double &tone_spacing,
-    const double &plld_actual_freq,
-    double &center_freq_actual,
-    struct PageInfo &constPage)
-{
-    // Set the actual center frequency initially to the desired frequency.
-    center_freq_actual = center_freq_desired;
-
-    // Compute the divider values for the lowest and highest WSPR tones.
-    double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + std::pow(2.0, -12);
-    double div_hi = bit_trunc(plld_actual_freq / (center_freq_desired + 1.5 * tone_spacing), -12);
-
-    // If the integer portion of dividers differ, adjust the center frequency.
-    if (std::floor(div_lo) != std::floor(div_hi))
-    {
-        center_freq_actual = plld_actual_freq / std::floor(div_lo) - 1.6 * tone_spacing;
-        std::stringstream temp;
-        temp << std::fixed << std::setprecision(6)
-             << "Warning: center frequency has been changed to "
-             << center_freq_actual / 1e6 << " MHz";
-        std::cerr << temp.str() << " because of hardware limitations." << std::endl;
-    }
-
-    // Initialize tuning word table.
-    double tone0_freq = center_freq_actual - 1.5 * tone_spacing;
-    std::vector<long int> tuning_word(1024);
-
-    // Generate tuning words for WSPR tones.
-    for (int i = 0; i < 8; i++)
-    {
-        double tone_freq = tone0_freq + (i >> 1) * tone_spacing;
-        double div = bit_trunc(plld_actual_freq / tone_freq, -12);
-
-        // Apply rounding for even indices.
-        if (i % 2 == 0)
-        {
-            div += std::pow(2.0, -12);
-        }
-
-        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
-    }
-
-    // Fill the remaining table with default values.
-    for (int i = 8; i < 1024; i++)
-    {
-        double div = 500 + i;
-        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
-    }
-
-    // Program the DMA table.
-    for (int i = 0; i < 1024; i++)
-    {
-        transParams.dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
-
-        // Store values in the memory-mapped page.
-        reinterpret_cast<int *>(constPage.v)[i] = (0x5A << 24) + tuning_word[i];
-
-        // Ensure adjacent tuning words have the same integer portion for valid tone generation.
-        if ((i % 2 == 0) && (i < 8))
-        {
-            assert((tuning_word[i] & (~0xFFF)) == (tuning_word[i + 1] & (~0xFFF)));
-        }
-    }
-}
-
-/**
- * @brief Configures and initializes DMA for PWM signal generation.
- * @details Allocates memory pages, creates DMA control blocks, sets up a circular
- *          linked list of DMA instructions, and configures the PWM clock and registers.
- *
- * @param[out] constPage PageInfo structure for storing constant data.
- * @param[out] instrPage PageInfo structure for the initial DMA instruction page.
- * @param[out] instrs Array of PageInfo structures for DMA instructions.
- */
-void setupDMA(
-    struct PageInfo &constPage,
-    struct PageInfo &instrPage,
-    struct PageInfo instrs[])
-{
-    // Allocate memory pool for DMA operation
-    allocMemPool(1025);
-
-    // Allocate a memory page for storing constants
-    getRealMemPageFromPool(&constPage.v, &constPage.b);
-
-    // Initialize instruction counter
-    int instrCnt = 0;
-
-    // Allocate memory pages and create DMA instructions
-    while (instrCnt < 1024)
-    {
-        // Allocate a memory page for instructions
-        getRealMemPageFromPool(&instrPage.v, &instrPage.b);
-
-        // Create DMA control blocks (CBs)
-        struct CB *instr0 = reinterpret_cast<struct CB *>(instrPage.v);
-
-        for (int i = 0; i < static_cast<int>(PAGE_SIZE / sizeof(struct CB)); i++)
-        {
-            // Assign virtual and bus addresses for each instruction
-            instrs[instrCnt].v = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.v) + sizeof(struct CB) * i);
-            instrs[instrCnt].b = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.b) + sizeof(struct CB) * i);
-
-            // Configure DMA transfer: Source = constant memory page, Destination = PWM FIFO
-            instr0->SOURCE_AD = reinterpret_cast<unsigned long int>(constPage.b) + 2048;
-            instr0->DEST_AD = PWM_BUS_BASE + 0x18; // FIFO1
-            instr0->TXFR_LEN = 4;
-            instr0->STRIDE = 0;
-            instr0->TI = (1 << 6) | (5 << 16) | (1 << 26); // DREQ = 1, PWM = 5, No wide mode
-            instr0->RES1 = 0;
-            instr0->RES2 = 0;
-
-            // Odd instructions modify the GP0 clock divider instead of PWM FIFO
-            if (i % 2)
-            {
-                instr0->DEST_AD = CM_GP0DIV_BUS;
-                instr0->STRIDE = 4;
-                instr0->TI = (1 << 26); // No wide mode
-            }
-
-            // Link previous instruction to the next in the DMA sequence
-            if (instrCnt != 0)
-            {
-                reinterpret_cast<struct CB *>(instrs[instrCnt - 1].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[instrCnt].b);
-            }
-
-            instr0++;
-            instrCnt++;
-        }
-    }
-
-    // Create a circular linked list of DMA instructions
-    reinterpret_cast<struct CB *>(instrs[1023].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[0].b);
-
-    // Configure the PWM clock (disable, set divisor, enable)
-    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000026; // Source = PLLD, disable
-    usleep(1000);
-    accessBusAddress(CLK_BUS_BASE + 41 * 4) = 0x5A002000; // Set PWM divider to 2 (250MHz)
-    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000016; // Source = PLLD, enable
-    usleep(1000);
-
-    // Configure PWM registers
-    accessBusAddress(PWM_BUS_BASE + 0x0) = 0; // Disable PWM
-    usleep(1000);
-    accessBusAddress(PWM_BUS_BASE + 0x4) = -1; // Clear status errors
-    usleep(1000);
-    accessBusAddress(PWM_BUS_BASE + 0x10) = 32; // Set default range
-    accessBusAddress(PWM_BUS_BASE + 0x20) = 32;
-    accessBusAddress(PWM_BUS_BASE + 0x0) = -1; // Enable FIFO mode, repeat, serializer, and channel
-    usleep(1000);
-    accessBusAddress(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
-
-    // Activate DMA
-    // Obtain the base address as an integer pointer
-    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)dmaConfig.peri_base_virt + DMA_BUS_BASE - 0x7e000000);
-    // Now cast to DMAregs pointer
-    volatile struct DMAregs *DMA0 = reinterpret_cast<volatile struct DMAregs *>(dma_base);
-    DMA0->CS = 1 << 31; // Reset DMA
-    DMA0->CONBLK_AD = 0;
-    DMA0->TI = 0;
-    DMA0->CONBLK_AD = reinterpret_cast<unsigned long int>(instrPage.b);
-    DMA0->CS = (1 << 0) | (255 << 16); // Enable DMA, priority level 255
-}
-
-/**
  * @brief Computes the difference between two time values.
  * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
  *          the function returns `1`, otherwise, it returns `0`.
@@ -972,161 +953,102 @@ void dma_cleanup()
 }
 
 /**
- * @brief Waits until it is exactly one second past an even minute, until spacebar is pressed, or a stop is requested.
+ * @brief Configures and initializes DMA for PWM signal generation.
+ * @details Allocates memory pages, creates DMA control blocks, sets up a circular
+ *          linked list of DMA instructions, and configures the PWM clock and registers.
  *
- * This function sets the terminal to noncanonical mode so that a single spacebar press is immediately
- * detected (without requiring Enter). It then periodically checks the system clock and uses select() with
- * a timeout to wait until the next second boundary. If the spacebar is pressed, the function exits early.
- *
- * @note Due to system scheduling, the wake-up time might not be exactly at the second boundary.
+ * @param[out] constPage PageInfo structure for storing constant data.
+ * @param[out] instrPage PageInfo structure for the initial DMA instruction page.
+ * @param[out] instrs Array of PageInfo structures for DMA instructions.
  */
-void waitForOneSecondPastEvenMinute()
+void create_dma_pages(
+    struct PageInfo &constPage,
+    struct PageInfo &instrPage,
+    struct PageInfo instrs[])
 {
-    // Set terminal to noncanonical mode to capture key presses immediately.
-    struct termios oldAttr, newAttr;
-    tcgetattr(STDIN_FILENO, &oldAttr);
-    newAttr = oldAttr;
-    newAttr.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newAttr);
+    // Allocate memory pool for DMA operation
+    allocMemPool(1025);
 
-    std::mutex m;
-    std::condition_variable cv;
-    std::unique_lock<std::mutex> lock(m);
+    // Allocate a memory page for storing constants
+    getRealMemPageFromPool(&constPage.v, &constPage.b);
 
-    while (!g_stop.load())
+    // Initialize instruction counter
+    int instrCnt = 0;
+
+    // Allocate memory pages and create DMA instructions
+    while (instrCnt < 1024)
     {
-        // Get the current system time.
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm_now = *std::localtime(&now_time_t);
+        // Allocate a memory page for instructions
+        getRealMemPageFromPool(&instrPage.v, &instrPage.b);
 
-        // Check if the minute is even and the seconds count is exactly 1.
-        if ((tm_now.tm_min % 2 == 0) && (tm_now.tm_sec == 1))
+        // Create DMA control blocks (CBs)
+        struct CB *instr0 = reinterpret_cast<struct CB *>(instrPage.v);
+
+        for (int i = 0; i < static_cast<int>(PAGE_SIZE / sizeof(struct CB)); i++)
         {
-            std::cout << "Condition met: One second past an even minute." << std::endl;
-            break;
-        }
+            // Assign virtual and bus addresses for each instruction
+            instrs[instrCnt].v = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.v) + sizeof(struct CB) * i);
+            instrs[instrCnt].b = reinterpret_cast<void *>(reinterpret_cast<long int>(instrPage.b) + sizeof(struct CB) * i);
 
-        // Calculate the next second boundary.
-        auto next_second = now + std::chrono::seconds(1);
-        auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(next_second - now);
+            // Configure DMA transfer: Source = constant memory page, Destination = PWM FIFO
+            instr0->SOURCE_AD = reinterpret_cast<unsigned long int>(constPage.b) + 2048;
+            instr0->DEST_AD = PWM_BUS_BASE + 0x18; // FIFO1
+            instr0->TXFR_LEN = 4;
+            instr0->STRIDE = 0;
+            instr0->TI = (1 << 6) | (5 << 16) | (1 << 26); // DREQ = 1, PWM = 5, No wide mode
+            instr0->RES1 = 0;
+            instr0->RES2 = 0;
 
-        // Prepare the timeout for select.
-        struct timeval tv;
-        tv.tv_sec = wait_duration.count() / 1000000;
-        tv.tv_usec = wait_duration.count() % 1000000;
-
-        // Set up file descriptor set for standard input.
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(STDIN_FILENO, &readfds);
-
-        // Use select to wait until either input is available or the timeout expires.
-        int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
-        if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds))
-        {
-            // Input is available; read one character.
-            char c;
-            ssize_t n = read(STDIN_FILENO, &c, 1);
-            if (n > 0 && c == ' ')
+            // Odd instructions modify the GP0 clock divider instead of PWM FIFO
+            if (i % 2)
             {
-                std::cout << "Spacebar pressed. Exiting wait early." << std::endl;
-                break;
+                instr0->DEST_AD = CM_GP0DIV_BUS;
+                instr0->STRIDE = 4;
+                instr0->TI = (1 << 26); // No wide mode
             }
-        }
-        // If ret == 0, the timeout expired and the loop continues.
-    }
 
-    // Restore terminal settings.
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldAttr);
-}
+            // Link previous instruction to the next in the DMA sequence
+            if (instrCnt != 0)
+            {
+                reinterpret_cast<struct CB *>(instrs[instrCnt - 1].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[instrCnt].b);
+            }
 
-/**
- * @brief Get the PPM (frequency) value from `chronyc tracking`
- *
- * Executes the `chronyc tracking` command and parses the "Frequency" line,
- * which reflects the estimated drift rate in parts per million (PPM).
- *
- * @return The frequency in PPM as a double
- * @throws std::runtime_error if the command fails or parsing fails
- */
-double get_ppm_from_chronyc()
-{
-    const char *cmd = "chronyc tracking 2>&1";
-    std::array<char, 256> buffer{};
-    std::string result;
-
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe)
-    {
-        throw std::runtime_error("Failed to run chronyc tracking.");
-    }
-
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
-    {
-        result += buffer.data();
-    }
-
-    int status = pclose(pipe);
-
-    if (status == -1)
-    {
-        if (errno == ECHILD)
-        {
-            // Treat as success
-            ;;
-        }
-        else
-        {
-            std::ostringstream err;
-            err << "pclose() failed while closing pipe to chronyc.\n";
-            err << "errno = " << errno << " (" << std::strerror(errno) << ")\n";
-            err << "Command output:\n"
-                << result;
-            throw std::runtime_error(err.str());
-        }
-    }
-    else if (WIFEXITED(status))
-    {
-        int exit_code = WEXITSTATUS(status);
-        if (exit_code != 0)
-        {
-            std::ostringstream err;
-            err << "chronyc tracking exited with status " << exit_code << ".\n";
-            err << "Command output:\n"
-                << result;
-            throw std::runtime_error(err.str());
-        }
-    }
-    else if (WIFSIGNALED(status))
-    {
-        int signal = WTERMSIG(status);
-        std::ostringstream err;
-        err << "chronyc tracking terminated by signal " << signal << ".\n";
-        err << "Command output:\n"
-            << result;
-        throw std::runtime_error(err.str());
-    }
-
-    // Parse "Frequency" line
-    std::istringstream iss(result);
-    std::string line;
-    while (std::getline(iss, line))
-    {
-        if (line.find("Frequency") != std::string::npos)
-        {
-            std::istringstream linestream(line);
-            std::string label, colon;
-            double ppm;
-            std::string units;
-
-            linestream >> label >> colon >> ppm >> units;
-            std::cout << "PPM set to: " << std::fixed << std::setprecision(3) << ppm << std::endl;
-            return ppm;
+            instr0++;
+            instrCnt++;
         }
     }
 
-    throw std::runtime_error("Frequency line not found in chronyc tracking output.");
+    // Create a circular linked list of DMA instructions
+    reinterpret_cast<struct CB *>(instrs[1023].v)->NEXTCONBK = reinterpret_cast<long int>(instrs[0].b);
+
+    // Configure the PWM clock (disable, set divisor, enable)
+    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000026; // Source = PLLD, disable
+    usleep(1000);
+    accessBusAddress(CLK_BUS_BASE + 41 * 4) = 0x5A002000; // Set PWM divider to 2 (250MHz)
+    accessBusAddress(CLK_BUS_BASE + 40 * 4) = 0x5A000016; // Source = PLLD, enable
+    usleep(1000);
+
+    // Configure PWM registers
+    accessBusAddress(PWM_BUS_BASE + 0x0) = 0; // Disable PWM
+    usleep(1000);
+    accessBusAddress(PWM_BUS_BASE + 0x4) = -1; // Clear status errors
+    usleep(1000);
+    accessBusAddress(PWM_BUS_BASE + 0x10) = 32; // Set default range
+    accessBusAddress(PWM_BUS_BASE + 0x20) = 32;
+    accessBusAddress(PWM_BUS_BASE + 0x0) = -1; // Enable FIFO mode, repeat, serializer, and channel
+    usleep(1000);
+    accessBusAddress(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
+
+    // Activate DMA
+    // Obtain the base address as an integer pointer
+    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)dmaConfig.peri_base_virt + DMA_BUS_BASE - 0x7e000000);
+    // Now cast to DMAregs pointer
+    volatile struct DMAregs *DMA0 = reinterpret_cast<volatile struct DMAregs *>(dma_base);
+    DMA0->CS = 1 << 31; // Reset DMA
+    DMA0->CONBLK_AD = 0;
+    DMA0->TI = 0;
+    DMA0->CONBLK_AD = reinterpret_cast<unsigned long int>(instrPage.b);
+    DMA0->CS = (1 << 0) | (255 << 16); // Enable DMA, priority level 255
 }
 
 /**
@@ -1175,8 +1097,86 @@ void setup_dma()
     // Set up DMA
     open_mbox();                            // Open mailbox for communication
     txon();                                 // Enable transmission mode
-    setupDMA(constPage, instrPage, instrs); // Configure DMA for transmission
+    create_dma_pages(constPage, instrPage, instrs); // Configure DMA for transmission
     txoff();                                // Disable transmission mode
+}
+
+/**
+ * @brief Configures the DMA frequency table for signal generation.
+ * @details Generates a tuning word table based on the desired center frequency
+ *          and tone spacing, adjusting for hardware limitations if necessary.
+ *
+ * @param[in] center_freq_desired The desired center frequency in Hz.
+ * @param[in] tone_spacing The spacing between frequency tones in Hz.
+ * @param[in] plld_actual_freq The actual PLLD clock frequency in Hz.
+ * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
+ * @param[in,out] constPage The PageInfo structure for storing tuning words.
+ */
+void setupDMATab(
+    const double &center_freq_desired,
+    const double &tone_spacing,
+    const double &plld_actual_freq,
+    double &center_freq_actual,
+    struct PageInfo &constPage)
+{
+    // Set the actual center frequency initially to the desired frequency.
+    center_freq_actual = center_freq_desired;
+
+    // Compute the divider values for the lowest and highest WSPR tones.
+    double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + std::pow(2.0, -12);
+    double div_hi = bit_trunc(plld_actual_freq / (center_freq_desired + 1.5 * tone_spacing), -12);
+
+    // If the integer portion of dividers differ, adjust the center frequency.
+    if (std::floor(div_lo) != std::floor(div_hi))
+    {
+        center_freq_actual = plld_actual_freq / std::floor(div_lo) - 1.6 * tone_spacing;
+        std::stringstream temp;
+        temp << std::fixed << std::setprecision(6)
+             << "Warning: center frequency has been changed to "
+             << center_freq_actual / 1e6 << " MHz";
+        std::cerr << temp.str() << " because of hardware limitations." << std::endl;
+    }
+
+    // Initialize tuning word table.
+    double tone0_freq = center_freq_actual - 1.5 * tone_spacing;
+    std::vector<long int> tuning_word(1024);
+
+    // Generate tuning words for WSPR tones.
+    for (int i = 0; i < 8; i++)
+    {
+        double tone_freq = tone0_freq + (i >> 1) * tone_spacing;
+        double div = bit_trunc(plld_actual_freq / tone_freq, -12);
+
+        // Apply rounding for even indices.
+        if (i % 2 == 0)
+        {
+            div += std::pow(2.0, -12);
+        }
+
+        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
+    }
+
+    // Fill the remaining table with default values.
+    for (int i = 8; i < 1024; i++)
+    {
+        double div = 500 + i;
+        tuning_word[i] = static_cast<int>(div * std::pow(2.0, 12));
+    }
+
+    // Program the DMA table.
+    for (int i = 0; i < 1024; i++)
+    {
+        transParams.dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
+
+        // Store values in the memory-mapped page.
+        reinterpret_cast<int *>(constPage.v)[i] = (0x5A << 24) + tuning_word[i];
+
+        // Ensure adjacent tuning words have the same integer portion for valid tone generation.
+        if ((i % 2 == 0) && (i < 8))
+        {
+            assert((tuning_word[i] & (~0xFFF)) == (tuning_word[i + 1] & (~0xFFF)));
+        }
+    }
 }
 
 /**
@@ -1201,7 +1201,6 @@ void tx_tone()
     // DMA buffer pointer
     int bufPtr = 0;
 
-    // Set to an arbitrary non-zero value to ensure `setupDMATab` is called at least once
     double center_freq_actual;
 
     // Validate PLLD clock frequency
