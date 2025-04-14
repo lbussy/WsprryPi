@@ -401,11 +401,12 @@ void disable_clock()
  * @brief Enables TX by configuring GPIO4 and setting the clock source.
  * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
  *          strength, disables any active clock, and then enables the clock with PLLD.
- *
- * @param led (Optional) Unused parameter; defaults to false.
  */
-void txon(bool led = false)
+void txon()
 {
+    // Ensure the clock is disabled before modifying settings.
+    disable_clock();
+
     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
     // This setting follows Section 6.2 of the ARM Peripherals Manual.
     setBitBusAddress(GPIO_BUS_BASE, 14);   // Set bit 14
@@ -415,9 +416,6 @@ void txon(bool led = false)
     // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
     // More info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
     accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + config.power_level;
-
-    // Ensure the clock is disabled before modifying settings.
-    disable_clock();
 
     // Define clock control structure and set PLLD as the clock source.
     struct GPCTL setupword = {6 /*SRC*/, 0, 0, 0, 0, 3, 0x5A};
@@ -574,6 +572,9 @@ void txSym(
  */
 void unSetupDMA()
 {
+    // Turn off transmission.
+    txoff();
+
     // Ensure memory-mapped peripherals are initialized before proceeding.
     if (dmaConfig.peri_base_virt == nullptr)
     {
@@ -585,9 +586,6 @@ void unSetupDMA()
 
     // Reset the DMA controller by setting the reset bit (bit 31) in the control/status register.
     DMA0->CS = 1 << 31;
-
-    // Turn off transmission.
-    txoff();
 }
 
 /**
@@ -605,61 +603,6 @@ double bit_trunc(const double &d, const int &lsb)
 
     // Truncate the number by dividing, flooring, and multiplying back.
     return std::floor(d / factor) * factor;
-}
-
-/**
- * @brief Computes the difference between two time values.
- * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
- *          the function returns `1`, otherwise, it returns `0`.
- *
- * @param[out] result Pointer to `timeval` struct to store the difference.
- * @param[in] t2 Pointer to the later `timeval` structure.
- * @param[in] t1 Pointer to the earlier `timeval` structure.
- * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
- */
-int timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
-{
-    // Compute the time difference in microseconds
-    long int diff_usec = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-
-    // Compute seconds and microseconds for the result
-    result->tv_sec = diff_usec / 1000000;
-    result->tv_usec = diff_usec % 1000000;
-
-    // Return 1 if t2 < t1 (negative difference), otherwise 0
-    return (diff_usec < 0) ? 1 : 0;
-}
-
-/**
- * @brief Formats a timestamp from a `timeval` structure into a string.
- * @details Converts the given `timeval` structure into a formatted `YYYY-MM-DD HH:MM:SS.mmm UTC` string.
- *
- * @param[in] tv Pointer to `timeval` structure containing the timestamp.
- * @return A formatted string representation of the timestamp.
- */
-std::string timeval_print(const struct timeval *tv)
-{
-    if (!tv)
-    {
-        return "Invalid timeval";
-    }
-
-    char buffer[30];
-    time_t curtime = tv->tv_sec;
-    struct tm *timeinfo = gmtime(&curtime);
-
-    if (!timeinfo)
-    {
-        return "Invalid time";
-    }
-
-    // Format the timestamp
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d %T", timeinfo);
-
-    // Construct the final string with millisecond precision
-    std::ostringstream oss;
-    oss << buffer << "." << ((tv->tv_usec + 500) / 1000) << " UTC";
-    return oss.str();
 }
 
 /**
@@ -901,9 +844,9 @@ void setup_dma()
 
     // Set up DMA
     open_mbox();                                    // Open mailbox for communication
-    txon();                                         // Enable transmission mode
+    //txon();                                         // Enable transmission mode
     create_dma_pages(constPage, instrPage, instrs); // Configure DMA for transmission
-    txoff();                                        // Disable transmission mode
+    //txoff();                                        // Disable transmission mode
 }
 
 /**

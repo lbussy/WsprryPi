@@ -9,6 +9,7 @@
 #include <mutex>
 #include <sstream>
 
+#include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -171,4 +172,59 @@ double get_ppm_from_chronyc()
     }
 
     throw std::runtime_error("Frequency line not found in chronyc tracking output.");
+}
+
+/**
+ * @brief Computes the difference between two time values.
+ * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
+ *          the function returns `1`, otherwise, it returns `0`.
+ *
+ * @param[out] result Pointer to `timeval` struct to store the difference.
+ * @param[in] t2 Pointer to the later `timeval` structure.
+ * @param[in] t1 Pointer to the earlier `timeval` structure.
+ * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
+ */
+int timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
+{
+    // Compute the time difference in microseconds
+    long int diff_usec = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+
+    // Compute seconds and microseconds for the result
+    result->tv_sec = diff_usec / 1000000;
+    result->tv_usec = diff_usec % 1000000;
+
+    // Return 1 if t2 < t1 (negative difference), otherwise 0
+    return (diff_usec < 0) ? 1 : 0;
+}
+
+/**
+ * @brief Formats a timestamp from a `timeval` structure into a string.
+ * @details Converts the given `timeval` structure into a formatted `YYYY-MM-DD HH:MM:SS.mmm UTC` string.
+ *
+ * @param[in] tv Pointer to `timeval` structure containing the timestamp.
+ * @return A formatted string representation of the timestamp.
+ */
+std::string timeval_print(const struct timeval *tv)
+{
+    if (!tv)
+    {
+        return "Invalid timeval";
+    }
+
+    char buffer[30];
+    time_t curtime = tv->tv_sec;
+    struct tm *timeinfo = gmtime(&curtime);
+
+    if (!timeinfo)
+    {
+        return "Invalid time";
+    }
+
+    // Format the timestamp
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %T", timeinfo);
+
+    // Construct the final string with millisecond precision
+    std::ostringstream oss;
+    oss << buffer << "." << ((tv->tv_usec + 500) / 1000) << " UTC";
+    return oss.str();
 }
