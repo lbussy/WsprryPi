@@ -1,5 +1,7 @@
 #include "wspr_transmit.hpp"
 
+#include "utils.hpp"
+
 // Submodules
 #include "wspr_message.hpp"
 #include "wspr_structs.hpp"
@@ -49,167 +51,6 @@ extern "C"
 #include "mailbox.h"
 }
 #endif /* __cplusplus */
-
-// Global stop flag.
-std::atomic<bool> g_stop{false};
-
-/**
- * @brief Waits until it is exactly one second past an even minute, until spacebar is pressed, or a stop is requested.
- *
- * This function sets the terminal to noncanonical mode so that a single spacebar press is immediately
- * detected (without requiring Enter). It then periodically checks the system clock and uses select() with
- * a timeout to wait until the next second boundary. If the spacebar is pressed, the function exits early.
- *
- * @note Due to system scheduling, the wake-up time might not be exactly at the second boundary.
- */
-void waitForOneSecondPastEvenMinute()
-{
-    // Set terminal to noncanonical mode to capture key presses immediately.
-    struct termios oldAttr, newAttr;
-    tcgetattr(STDIN_FILENO, &oldAttr);
-    newAttr = oldAttr;
-    newAttr.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newAttr);
-
-    std::mutex m;
-    std::condition_variable cv;
-    std::unique_lock<std::mutex> lock(m);
-
-    while (!g_stop.load())
-    {
-        // Get the current system time.
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm_now = *std::localtime(&now_time_t);
-
-        // Check if the minute is even and the seconds count is exactly 1.
-        if ((tm_now.tm_min % 2 == 0) && (tm_now.tm_sec == 1))
-        {
-            std::cout << "Condition met: One second past an even minute." << std::endl;
-            break;
-        }
-
-        // Calculate the next second boundary.
-        auto next_second = now + std::chrono::seconds(1);
-        auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(next_second - now);
-
-        // Prepare the timeout for select.
-        struct timeval tv;
-        tv.tv_sec = wait_duration.count() / 1000000;
-        tv.tv_usec = wait_duration.count() % 1000000;
-
-        // Set up file descriptor set for standard input.
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(STDIN_FILENO, &readfds);
-
-        // Use select to wait until either input is available or the timeout expires.
-        int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
-        if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds))
-        {
-            // Input is available; read one character.
-            char c;
-            ssize_t n = read(STDIN_FILENO, &c, 1);
-            if (n > 0 && c == ' ')
-            {
-                std::cout << "Spacebar pressed. Exiting wait early." << std::endl;
-                break;
-            }
-        }
-        // If ret == 0, the timeout expired and the loop continues.
-    }
-
-    // Restore terminal settings.
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldAttr);
-}
-
-/**
- * @brief Get the PPM (frequency) value from `chronyc tracking`
- *
- * Executes the `chronyc tracking` command and parses the "Frequency" line,
- * which reflects the estimated drift rate in parts per million (PPM).
- *
- * @return The frequency in PPM as a double
- * @throws std::runtime_error if the command fails or parsing fails
- */
-double get_ppm_from_chronyc()
-{
-    const char *cmd = "chronyc tracking 2>&1";
-    std::array<char, 256> buffer{};
-    std::string result;
-
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe)
-    {
-        throw std::runtime_error("Failed to run chronyc tracking.");
-    }
-
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
-    {
-        result += buffer.data();
-    }
-
-    int status = pclose(pipe);
-
-    if (status == -1)
-    {
-        if (errno == ECHILD)
-        {
-            // Treat as success
-            ;;
-        }
-        else
-        {
-            std::ostringstream err;
-            err << "pclose() failed while closing pipe to chronyc.\n";
-            err << "errno = " << errno << " (" << std::strerror(errno) << ")\n";
-            err << "Command output:\n"
-                << result;
-            throw std::runtime_error(err.str());
-        }
-    }
-    else if (WIFEXITED(status))
-    {
-        int exit_code = WEXITSTATUS(status);
-        if (exit_code != 0)
-        {
-            std::ostringstream err;
-            err << "chronyc tracking exited with status " << exit_code << ".\n";
-            err << "Command output:\n"
-                << result;
-            throw std::runtime_error(err.str());
-        }
-    }
-    else if (WIFSIGNALED(status))
-    {
-        int signal = WTERMSIG(status);
-        std::ostringstream err;
-        err << "chronyc tracking terminated by signal " << signal << ".\n";
-        err << "Command output:\n"
-            << result;
-        throw std::runtime_error(err.str());
-    }
-
-    // Parse "Frequency" line
-    std::istringstream iss(result);
-    std::string line;
-    while (std::getline(iss, line))
-    {
-        if (line.find("Frequency") != std::string::npos)
-        {
-            std::istringstream linestream(line);
-            std::string label, colon;
-            double ppm;
-            std::string units;
-
-            linestream >> label >> colon >> ppm >> units;
-            std::cout << "PPM set to: " << std::fixed << std::setprecision(3) << ppm << std::endl;
-            return ppm;
-        }
-    }
-
-    throw std::runtime_error("Frequency line not found in chronyc tracking output.");
-}
 
 /**
  * @brief Calculates the virtual address for a given bus address.
@@ -274,153 +115,160 @@ inline std::uintptr_t busToPhys(std::uintptr_t x)
 }
 
 /**
- * @brief Reads a 32-bit value from the device tree ranges.
- * @details Reads an unsigned 32-bit integer from a specific offset
- *          within a device tree file.
+ * @brief Initializes DMA configuration for PLLD clock settings.
  *
- * @param filename Path to the device tree file.
- * @param offset Byte offset in the file to read from.
- * @return The read value wrapped in std::optional, or std::nullopt on failure.
- */
-std::optional<unsigned> get_dt_ranges(const std::string &filename, unsigned offset)
-{
-    std::ifstream file(filename, std::ios::binary);
-    if (!file)
-    {
-        return std::nullopt; // File could not be opened
-    }
-
-    file.seekg(offset);
-    if (!file.good())
-    {
-        return std::nullopt; // Invalid seek position
-    }
-
-    unsigned char buf[4] = {}; // Buffer to store read bytes
-    file.read(reinterpret_cast<char *>(buf), sizeof(buf));
-    if (file.gcount() != sizeof(buf))
-    {
-        return std::nullopt; // Read operation failed
-    }
-
-    // Convert the 4-byte buffer to an unsigned integer (big-endian format)
-    return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-}
-
-/**
- * @brief Retrieves the base address of the Raspberry Pi peripherals.
- * @details Reads from the `/proc/device-tree/soc/ranges` file to determine
- *          the peripheral base address.
+ * Determines the Raspberry Pi hardware revision by reading from
+ * `/proc/cpuinfo`, extracts the processor ID, and sets the appropriate
+ * DMA memory flag and PLLD clock frequency in `dmaConfig`.
  *
- * @return The peripheral base address. Defaults to `0x20000000` if not found.
- */
-unsigned get_peripheral_address()
-{
-    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
-    {
-        return *addr;
-    }
-    if (auto addr = get_dt_ranges("/proc/device-tree/soc/ranges", 8); addr)
-    {
-        return *addr;
-    }
-
-    return 0x20000000; // Default address fallback
-}
-
-/**
- * @brief Reads a formatted string value from a file.
- * @details Reads lines from a file and attempts to extract an unsigned integer
- *          based on the given format string.
+ * This function configures:
+ * - `dmaConfig.mem_flag` based on the board's memory allocation strategy
+ * - `dmaConfig.plld_clock_frequency` based on the processor's clock
  *
- * @param filename Path to the file to read.
- * @param format The format string expected in the file.
- * @return The extracted value wrapped in std::optional, or std::nullopt on failure.
+ * Supported processors:
+ * - BCM2835 (Raspberry Pi 1)
+ * - BCM2836 / BCM2837 (Raspberry Pi 2 / 3)
+ * - BCM2711 (Raspberry Pi 4)
+ *
+ * @note The board revision is cached after first read to avoid repeated
+ *       filesystem access.
+ *
+ * @throws Terminates the program with `std::exit(EXIT_FAILURE)` if the
+ *         processor ID is unrecognized.
+ *
+ * @warning If the PLLD frequency cannot be determined or is invalid, a
+ *          default of 500 MHz is used as a fallback.
  */
-std::optional<unsigned> read_string_from_file(const std::string &filename, const std::string &format)
+void get_plld_and_memflag()
 {
-    std::ifstream file(filename);
-    if (!file)
-    {
-        return std::nullopt; // File could not be opened
-    }
+    // Cache the revision to avoid reading the file multiple times
+    static std::optional<unsigned> cached_revision;
 
-    std::string line;
-    unsigned value = 0;
-    while (std::getline(file, line))
+    if (!cached_revision)
     {
-        if (sscanf(line.c_str(), format.c_str(), &value) == 1)
+        std::ifstream file("/proc/cpuinfo");
+        if (file)
         {
-            return value;
+            std::string line;
+            unsigned value = 0;
+            const std::string pattern = "Revision\t: %x";
+            while (std::getline(file, line))
+            {
+                if (sscanf(line.c_str(), pattern.c_str(), &value) == 1)
+                {
+                    cached_revision = value;
+                    break;
+                }
+            }
+        }
+
+        if (!cached_revision)
+        {
+            cached_revision = 0; // Default if reading/parsing failed
         }
     }
 
-    return std::nullopt; // No match found
-}
+    const unsigned rev = *cached_revision;
 
-/**
- * @brief Retrieves the Raspberry Pi board revision code.
- * @details Reads `/proc/cpuinfo` and extracts the board revision.
- *
- * @return The revision code, or 0 if retrieval fails.
- */
-unsigned get_revision_code()
-{
-    static std::optional<unsigned> cached_revision;
-    if (!cached_revision)
-    {
-        cached_revision = read_string_from_file("/proc/cpuinfo", "Revision : %x").value_or(0);
-    }
-    return *cached_revision;
-}
+    // Determine processor ID
+    const int processor_id = (rev & 0x800000) ? ((rev & 0xf000) >> 12) : BCM_HOST_PROCESSOR_BCM2835;
 
-/**
- * @brief Determines the processor ID from the revision code.
- * @details Uses the revision code to identify the specific Broadcom processor.
- *
- * @return The processor ID (BCM2835, BCM2836, BCM2837, or BCM2711).
- */
-int get_processor_id()
-{
-    unsigned rev = get_revision_code();
-    return (rev & 0x800000) ? ((rev & 0xf000) >> 12) : BCM_HOST_PROCESSOR_BCM2835;
-}
-
-/**
- * @brief Configures PLLD settings based on processor type.
- * @details Determines the correct PLLD frequency and memory flag values
- *          for different Raspberry Pi versions.
- */
-void getPLLD()
-{
-    int processor_id = get_processor_id(); // Store processor ID to avoid redundant calls
-
+    // Configure PLLD and mem_flag based on processor ID
     switch (processor_id)
     {
     case BCM_HOST_PROCESSOR_BCM2835: // Raspberry Pi 1
         dmaConfig.mem_flag = 0x0c;
-        dmaConfig.plld_clock_frequency = 500000000.0 * (1 - 2.500e-6); // Apply 2.5 PPM correction
+        dmaConfig.plld_clock_frequency = 500000000.0 * (1 - 2.500e-6); // 2.5 PPM correction
         break;
     case BCM_HOST_PROCESSOR_BCM2836: // Raspberry Pi 2
     case BCM_HOST_PROCESSOR_BCM2837: // Raspberry Pi 3
         dmaConfig.mem_flag = 0x04;
-        dmaConfig.plld_clock_frequency = 500000000.0; // Standard 500 MHz clock
+        dmaConfig.plld_clock_frequency = 500000000.0;
         break;
     case BCM_HOST_PROCESSOR_BCM2711: // Raspberry Pi 4
         dmaConfig.mem_flag = 0x04;
-        dmaConfig.plld_clock_frequency = 750000000.0; // Higher 750 MHz clock
+        dmaConfig.plld_clock_frequency = 750000000.0;
         break;
     default:
         std::cerr << "Error: Unknown chipset (" << processor_id << ")." << std::endl;
         std::exit(EXIT_FAILURE);
     }
 
-    // Ensure a valid PLLD frequency
     if (dmaConfig.plld_clock_frequency <= 0)
     {
         std::cerr << "Error: Invalid PLL clock frequency. Using default 500 MHz." << std::endl;
         dmaConfig.plld_clock_frequency = 500000000.0;
     }
+}
+
+/**
+ * @brief Maps peripheral base address to virtual memory.
+ *
+ * Reads the Raspberry Pi's device tree to determine the peripheral base
+ * address, then memory-maps that region for access via virtual memory.
+ *
+ * This is used for low-level register access to GPIO, clocks, DMA, etc.
+ *
+ * @param[out] peri_base_virt Reference to a pointer that will be set to the
+ *                            mapped virtual memory address.
+ *
+ * @throws Terminates the program if the peripheral base cannot be determined,
+ *         `/dev/mem` cannot be opened, or `mmap` fails.
+ */
+void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
+{
+    auto read_dt_range = [](const std::string &filename, unsigned offset) -> std::optional<unsigned>
+    {
+        std::ifstream file(filename, std::ios::binary);
+        if (!file)
+            return std::nullopt;
+
+        file.seekg(offset);
+        if (!file.good())
+            return std::nullopt;
+
+        unsigned char buf[4] = {};
+        file.read(reinterpret_cast<char *>(buf), sizeof(buf));
+        if (file.gcount() != sizeof(buf))
+            return std::nullopt;
+
+        // Big-endian to host-endian conversion
+        return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+    };
+
+    unsigned peripheral_base = 0x20000000; // Default fallback
+    if (auto addr = read_dt_range("/proc/device-tree/soc/ranges", 4); addr && *addr != 0)
+    {
+        peripheral_base = *addr;
+    }
+    else if (auto addr = read_dt_range("/proc/device-tree/soc/ranges", 8); addr)
+    {
+        peripheral_base = *addr;
+    }
+
+    int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (mem_fd < 0)
+    {
+        std::cerr << "Error: Cannot open /dev/mem." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+
+    peri_base_virt = static_cast<unsigned *>(mmap(
+        nullptr,
+        0x01000000,             // 16MB memory region
+        PROT_READ | PROT_WRITE, // Allow read and write
+        MAP_SHARED,
+        mem_fd,
+        peripheral_base // Physical address to map
+        ));
+
+    if (reinterpret_cast<long int>(peri_base_virt) == -1)
+    {
+        std::cerr << "Error: peri_base_virt mmap failed." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+
+    close(mem_fd);
 }
 
 /**
@@ -857,49 +705,6 @@ void setSchedPriority(int priority)
 }
 
 /**
- * @brief Maps peripheral base address to virtual memory.
- * @details Creates a memory-mapped region for accessing the peripheral range of physical memory.
- *          This function opens `/dev/mem` and maps the peripheral base address.
- *
- * @param[out] peri_base_virt Reference to a pointer that will store the mapped virtual memory address.
- */
-void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
-{
-    // File descriptor for accessing memory
-    int mem_fd;
-
-    // Retrieve the peripheral base address
-    unsigned gpio_base = get_peripheral_address();
-
-    // Open `/dev/mem` with read/write and synchronous access
-    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0)
-    {
-        std::cerr << "Error: Cannot open /dev/mem." << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-
-    // Map the peripheral base address into virtual memory
-    peri_base_virt = static_cast<unsigned *>(mmap(
-        nullptr,
-        0x01000000,             // Length of mapped memory region (16MB)
-        PROT_READ | PROT_WRITE, // Enable read and write access
-        MAP_SHARED,             // Shared memory mapping
-        mem_fd,
-        gpio_base // Peripheral base physical address
-        ));
-
-    // Check for mmap failure
-    if (reinterpret_cast<long int>(peri_base_virt) == -1)
-    {
-        std::cerr << "Error: peri_base_virt mmap failed." << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-
-    // Close the file descriptor as it is no longer needed after mmap
-    close(mem_fd);
-}
-
-/**
  * @brief Safely removes a file if it exists.
  * @details Checks whether the specified file exists before attempting to remove it.
  *          If the file exists but removal fails, a warning is displayed.
@@ -1063,7 +868,7 @@ void setup_dma()
     config.ppm = get_ppm_from_chronyc();
 
     // Retrieve PLLD frequency
-    getPLLD();
+    get_plld_and_memflag();
 
     // Set high scheduling priority to reduce kernel interruptions
     setSchedPriority(30);
@@ -1095,10 +900,10 @@ void setup_dma()
     setup_peri_base_virt(dmaConfig.peri_base_virt);
 
     // Set up DMA
-    open_mbox();                            // Open mailbox for communication
-    txon();                                 // Enable transmission mode
+    open_mbox();                                    // Open mailbox for communication
+    txon();                                         // Enable transmission mode
     create_dma_pages(constPage, instrPage, instrs); // Configure DMA for transmission
-    txoff();                                // Disable transmission mode
+    txoff();                                        // Disable transmission mode
 }
 
 /**
