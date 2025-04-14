@@ -126,7 +126,7 @@ struct ArgParserConfig
           mode(ModeType::WSPR),
           use_ini(false),
           ini_filename(""),
-          center_freq_set({})
+          center_freq_set({7040100.0})
     {
     }
 };
@@ -340,25 +340,77 @@ static struct
  * and execute a WSPR transmission, including the message, transmission frequency,
  * symbol time, tone spacing, and the DMA frequency lookup table.
  */
+#include <array>
+#include <vector>
+#include <cstdint>
+#include <iostream>
+#include <iomanip>
+
 struct WsprTransmissionParams
 {
-    unsigned char symbols[MSG_SIZE];
-    double wspr_frequency;              ///< The desired transmission frequency in Hz.
-    double wspr_symtime;                ///< The WSPR symbol time (duration of each symbol) in seconds.
-    double tone_spacing;                ///< The frequency spacing between adjacent tones in Hz.
-    std::vector<double> dma_table_freq; ///< The DMA frequency lookup table used for transmission.
+    static constexpr std::size_t symbol_count = MSG_SIZE;
+    std::array<uint8_t, symbol_count> symbols;
+
+    double frequency;                   ///< Transmission frequency in Hz.
+    double symtime;                     ///< Duration of each symbol in seconds.
+    double tone_spacing;                ///< Frequency spacing between adjacent tones in Hz.
+    std::vector<double> dma_table_freq; ///< DMA frequency lookup table.
+    bool use_offset;                    ///< Use random offset on transmissions
 
     /**
      * @brief Default constructor for WsprTransmissionParams.
      *
-     * Initializes the transmission parameters with default values:
-     * - The WSPR message is default-initialized.
-     * - The transmission frequency, symbol time, and tone spacing are set to 0.0.
-     * - The DMA frequency lookup table is initialized as an empty vector.
+     * Initializes the transmission parameters with default values.
      */
     WsprTransmissionParams()
-        : wspr_frequency(0.0), wspr_symtime(0.0), tone_spacing(0.0), dma_table_freq(1024, 0.0)
+        : symbols{},
+          frequency(0.0),
+          symtime(0.0),
+          tone_spacing(0.0),
+          dma_table_freq(1024, 0.0),
+          use_offset(false)
     {
+    }
+
+    /**
+     * @brief Clears all stored transmission parameters and symbols.
+     */
+    void clear()
+    {
+        symbols.fill(0);
+        frequency = 0.0;
+        symtime = 0.0;
+        tone_spacing = 0.0;
+        use_offset = false;
+        dma_table_freq.clear();
+    }
+
+    /**
+     * @brief Prints all transmission parameters and WSPR symbols to the console.
+     */
+    void print() const
+    {
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "WSPR Frequency:     " << frequency << " Hz" << std::endl;
+        std::cout << "WSPR Symbol Time:   " << symtime << " s" << std::endl;
+        std::cout << "WSPR Tone Spacing:  " << tone_spacing << " Hz" << std::endl;
+        std::cout << "DMA Table Size:     " << dma_table_freq.size() << std::endl;
+
+        // Iterate through the symbols and print them.
+        std::cout << "WSPR Symbols:" << std::endl;
+        int symbols_size = static_cast<int>(symbols.size());
+        for (int i = 0; i < symbols_size; ++i)
+        {
+            // Print each symbol as an integer.
+            std::cout << static_cast<int>(symbols[i]);
+            if (i < symbols_size - 1)
+                std::cout << " ";
+
+            // Optionally, insert a newline every 16 symbols for readability.
+            if ((i + 1) % 16 == 0)
+                std::cout << std::endl;
+        }
+        std::cout << std::endl;
     }
 };
 

@@ -3,9 +3,9 @@
 #include "utils.hpp"
 
 // Submodules
-#include "wspr_message.hpp"
-#include "wspr_structs.hpp"
 #include "wspr_constants.hpp"
+#include "wspr_structs.hpp"
+#include "wspr_message.hpp"
 
 // C Standard Library Headers
 #include <assert.h>
@@ -278,7 +278,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
  *
  * @param numpages Number of memory pages to allocate.
  */
-void allocMemPool(unsigned numpages)
+void allocate_memory_pool(unsigned numpages)
 {
     // Allocate a contiguous block of memory using the mailbox interface.
     mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, dmaConfig.mem_flag);
@@ -297,7 +297,7 @@ void allocMemPool(unsigned numpages)
 
 #ifdef DEBUG_WSPR_TRANSMIT
     // Debug print: Displays memory allocation details in hexadecimal format.
-    std::cout << "DEBUG: allocMemPool bus_addr=0x"
+    std::cout << "DEBUG: allocate_memory_pool bus_addr=0x"
               << std::hex << mbox.bus_addr
               << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
               << " mem_ref=0x" << mbox.mem_ref
@@ -313,7 +313,7 @@ void allocMemPool(unsigned numpages)
  * @param[out] vAddr Pointer to store the virtual address of the allocated page.
  * @param[out] bAddr Pointer to store the bus address of the allocated page.
  */
-void getRealMemPageFromPool(void **vAddr, void **bAddr)
+void get_real_mem_page_from_pool(void **vAddr, void **bAddr)
 {
     // Ensure that we do not exceed the allocated pool size.
     if (mbox.pool_cnt >= mbox.pool_size)
@@ -331,7 +331,7 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
 
 #ifdef DEBUG_WSPR_TRANSMIT
     // Debug print: Displays allocated memory details.
-    std::cout << "DEBUG: getRealMemPageFromPool bus_addr=0x"
+    std::cout << "DEBUG: get_real_mem_page_from_pool bus_addr=0x"
               << std::hex << reinterpret_cast<uintptr_t>(*bAddr)
               << " virt_addr=0x" << reinterpret_cast<uintptr_t>(*vAddr)
               << std::dec << std::endl;
@@ -346,7 +346,7 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
  * @details Releases the allocated memory by unmapping virtual memory,
  *          unlocking, and freeing the memory via the mailbox interface.
  */
-void deallocMemPool()
+void deallocate_memory_pool()
 {
     // Free virtual memory mapping if it was allocated.
     if (mbox.virt_addr != nullptr)
@@ -401,7 +401,7 @@ void disable_clock()
  * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
  *          strength, disables any active clock, and then enables the clock with PLLD.
  */
-void txon()
+void transmit_on()
 {
     // Ensure the clock is disabled before modifying settings.
     disable_clock();
@@ -432,7 +432,7 @@ void txon()
  * @brief Disables the transmitter.
  * @details Turns off the transmission by disabling the clock source.
  */
-void txoff()
+void transmit_off()
 {
     // Disable the clock, effectively turning off transmission.
     disable_clock();
@@ -453,7 +453,7 @@ void txoff()
  * @param[in] constPage The memory page containing constant data.
  * @param[in,out] bufPtr The buffer pointer index for DMA instruction handling.
  */
-void txSym(
+void transmit_symbol(
     const int &sym_num,
     const double &center_freq,
     const double &tone_spacing,
@@ -569,10 +569,10 @@ void txSym(
  * @details Ensures that the DMA controller is properly reset before exiting.
  *          If the peripheral memory mapping is not set up, the function returns early.
  */
-void unSetupDMA()
+void clear_dma_setup()
 {
     // Turn off transmission.
-    txoff();
+    transmit_off();
 
     // Ensure memory-mapped peripherals are initialized before proceeding.
     if (dmaConfig.peri_base_virt == nullptr)
@@ -666,10 +666,10 @@ void dma_cleanup()
     disable_clock();
 
     // Reset and clean up DMA-related settings
-    unSetupDMA();
+    clear_dma_setup();
 
     // Deallocate memory pool to free allocated resources
-    deallocMemPool();
+    deallocate_memory_pool();
 
     // Remove the local device file
     safe_remove(LOCAL_DEVICE_FILE_NAME);
@@ -690,10 +690,10 @@ void create_dma_pages(
     struct PageInfo instrs[])
 {
     // Allocate memory pool for DMA operation
-    allocMemPool(1025);
+    allocate_memory_pool(1025);
 
     // Allocate a memory page for storing constants
-    getRealMemPageFromPool(&constPage.v, &constPage.b);
+    get_real_mem_page_from_pool(&constPage.v, &constPage.b);
 
     // Initialize instruction counter
     int instrCnt = 0;
@@ -702,7 +702,7 @@ void create_dma_pages(
     while (instrCnt < 1024)
     {
         // Allocate a memory page for instructions
-        getRealMemPageFromPool(&instrPage.v, &instrPage.b);
+        get_real_mem_page_from_pool(&instrPage.v, &instrPage.b);
 
         // Create DMA control blocks (CBs)
         struct CB *instr0 = reinterpret_cast<struct CB *>(instrPage.v);
@@ -812,10 +812,10 @@ void setup_dma()
     setup_peri_base_virt(dmaConfig.peri_base_virt);
 
     // Set up DMA
-    open_mbox();                                    // Open mailbox for communication
-    //txon();                                         // Enable transmission mode
+    open_mbox(); // Open mailbox for communication
+    // transmit_on();                                         // Enable transmission mode
     create_dma_pages(constPage, instrPage, instrs); // Configure DMA for transmission
-    //txoff();                                        // Disable transmission mode
+    // transmit_off();                                        // Disable transmission mode
 }
 
 /**
@@ -829,7 +829,7 @@ void setup_dma()
  * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
  * @param[in,out] constPage The PageInfo structure for storing tuning words.
  */
-void setupDMATab(
+void setup_dma_freq_table(
     const double &center_freq_desired,
     const double &tone_spacing,
     const double &plld_actual_freq,
@@ -902,7 +902,7 @@ void setupDMATab(
  *          until the user exits with `CTRL-C`. The tone frequency is dynamically adjusted
  *          based on PPM calibration.
  */
-void tx_tone()
+void transmit_tone()
 {
     // Define WSPR symbol time and tone spacing
     const double wspr_symtime = WSPR_SYMTIME;
@@ -931,7 +931,7 @@ void tx_tone()
     double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 
     // Setup the DMA frequency table
-    setupDMATab(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
+    setup_dma_freq_table(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
                 center_freq_actual, constPage);
 
 #ifdef DEBUG_WSPR_TRANSMIT
@@ -955,17 +955,17 @@ void tx_tone()
     }
 
     // Enable transmission mode
-    txon();
+    transmit_on();
 
     // Continuous transmission loop
     while (true)
     {
         // Transmit the test tone symbol
-        txSym(0, center_freq_actual, tone_spacing, 60, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        transmit_symbol(0, center_freq_actual, tone_spacing, 60, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
     }
 
     // Disable transmission mode
-    txoff();
+    transmit_off();
 }
 
 /**
@@ -975,64 +975,53 @@ void tx_tone()
  *          The function dynamically adjusts transmission frequency based on
  *          PPM calibration and ensures accurate symbol timing.
  */
-void tx_wspr()
+void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm, double frequency, bool use_offset)
 {
-    // Generate a new WSPR message
-    WsprMessage message(config.callsign, config.grid_square, config.power_dbm);
+    transParams.frequency = frequency;
+
+    // Create a WSPR message instance
+    WsprMessage wMessage(callsign, grid_square, power_dbm);
+    std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
 
 #ifdef DEBUG_WSPR_TRANSMIT
-    // Iterate through the symbols and print them.
-    std::cout << "WSPR Block:" << std::endl;
-    for (int i = 0; i < WsprMessage::size; ++i)
-    {
-        // Print each symbol as an integer.
-        std::cout << std::setw(3) << static_cast<int>(message.symbols[i]) << " ";
-
-        // Optionally, insert a newline every 16 symbols for readability.
-        if ((i + 1) % 16 == 0)
-            std::cout << std::endl;
-    }
-    std::cout << std::endl;
+    transParams.print();
 #endif
+
+    setup_dma();
 
     std::cout << "Ready to transmit (setup complete)." << std::endl;
 
-    int band = 0;
-
-    // Determine center frequency
-    double center_freq_desired = config.center_freq_set[band];
-
     // Determine if using WSPR-15 mode (longer symbol time)
     bool wspr15 =
-        (center_freq_desired > 137600 && center_freq_desired < 137625) ||
-        (center_freq_desired > 475800 && center_freq_desired < 475825) ||
-        (center_freq_desired > 1838200 && center_freq_desired < 1838225);
+        (transParams.frequency > 137600 && transParams.frequency < 137625) ||
+        (transParams.frequency > 475800 && transParams.frequency < 475825) ||
+        (transParams.frequency > 1838200 && transParams.frequency < 1838225);
 
-    double wspr_symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
-    double tone_spacing = 1.0 / wspr_symtime;
+    transParams.symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+    transParams.tone_spacing = 1.0 / transParams.symtime;
 
     // Apply random offset if enabled
-    if ((center_freq_desired != 0) && config.use_offset)
+    if ((transParams.frequency != 0) && config.use_offset)
     {
-        center_freq_desired += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
-                               (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+        transParams.frequency += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
+                                      (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
     }
 
     // Display transmission information
     std::stringstream temp;
     temp << std::setprecision(6) << std::fixed
          << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
-         << " transmission: " << center_freq_desired / 1e6 << " MHz.";
+         << " transmission: " << transParams.frequency / 1e6 << " MHz.";
     std::cout << temp.str() << std::endl;
 
     // Create DMA table for transmission
-    double center_freq_actual = center_freq_desired;
-
+    double center_freq_actual = transParams.frequency;
     config.ppm = get_ppm_from_chronyc();
 
-    setupDMATab(center_freq_desired, tone_spacing,
+    setup_dma_freq_table(transParams.frequency, transParams.tone_spacing,
                 dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6),
                 center_freq_actual, constPage);
+    transParams.frequency = center_freq_actual;
 
     std::cout << "Waiting for next transmission window." << std::endl;
     std::cout << "Press <spacebar> to start immediately." << std::endl;
@@ -1047,24 +1036,31 @@ void tx_wspr()
     int bufPtr = 0;
 
     // Enable transmission
-    txon();
+    transmit_on();
 
     // Transmit each symbol in the WSPR message
-    for (int i = 0; i < MSG_SIZE; i++)
+    for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
     {
         gettimeofday(&sym_start, NULL);
         timeval_subtract(&diff, &sym_start, &tvBegin);
         double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-        double sched_end = (i + 1) * wspr_symtime;
+        double sched_end = (i + 1) * transParams.symtime;
         double this_sym = sched_end - elapsed;
-        this_sym = std::clamp(this_sym, 0.2, 2 * wspr_symtime);
+        this_sym = std::clamp(this_sym, 0.2, 2 * transParams.symtime);
 
-        txSym(static_cast<int>(message.symbols[i]), center_freq_actual, tone_spacing,
-              this_sym, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        transmit_symbol(
+            static_cast<int>(transParams.symbols[i]),
+            transParams.frequency,
+            transParams.tone_spacing,
+            this_sym,
+            F_PWM_CLK_INIT,
+            instrs,
+            constPage,
+            bufPtr);
     }
 
     // Disable transmission
-    txoff();
+    transmit_off();
 
     // Print transmission timestamp and duration on one line
     gettimeofday(&tvEnd, nullptr);

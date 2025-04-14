@@ -87,7 +87,7 @@ index 8900ce9..fe55ef0 100644
   * @brief Enables TX by configuring GPIO4 and setting the clock source.
   * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
 @@ -414,10 +478,7 @@ void disable_clock()
- void txon(bool led = false)
+ void transmit_on(bool led = false)
  {
      // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
 -    // This setting follows Section 6.2 of the ARM Peripherals Manual.

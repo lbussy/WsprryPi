@@ -1,7 +1,10 @@
+// Project Headers
+#include "utils.hpp"
 #include "wspr_transmit.hpp"
 
-#include "utils.hpp"
+// Submodule Headers
 
+// Standard C++ Headers
 #include <atomic>
 #include <array>
 #include <chrono>
@@ -104,21 +107,18 @@ int main()
     // Initialize random number generator for transmission timing
     srand(time(nullptr));
 
-    setup_dma();
-
     bool isWspr = select_wspr();
     std::cout << "Mode selected: " << (isWspr ? "WSPR" : "TONE") << std::endl;
 
     if (isWspr)
     {
-        tx_wspr();
-        dma_cleanup();
+        transmit_wspr("AA0NT", "EM18", 20, 7040100.0, true);
     }
     else
     {
-        tx_tone();
-        dma_cleanup();
+        transmit_tone();
     }
+    dma_cleanup();
 
     return 0;
 }
