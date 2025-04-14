@@ -228,3 +228,27 @@ std::string timeval_print(const struct timeval *tv)
     oss << buffer << "." << ((tv->tv_usec + 500) / 1000) << " UTC";
     return oss.str();
 }
+
+/**
+ * @brief Sets the scheduling priority of the current thread.
+ * @details Assigns the thread to the `SCHED_FIFO` real-time scheduling policy with
+ *          the specified priority. Requires superuser privileges.
+ *
+ * @param[in] priority The priority level to set (higher values indicate higher priority).
+ */
+void setSchedPriority(int priority)
+{
+    // Define scheduling parameters
+    struct sched_param sp;
+    sp.sched_priority = priority;
+
+    // Attempt to set thread scheduling parameters to SCHED_FIFO with the given priority
+    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+
+    // Handle potential failure
+    if (ret != 0)
+    {
+        std::cerr << "Warning: pthread_setschedparam (increase thread priority) failed with error code: "
+                  << ret << std::endl;
+    }
+}

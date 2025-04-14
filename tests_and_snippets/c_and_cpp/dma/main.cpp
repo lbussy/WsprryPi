@@ -1,5 +1,7 @@
 #include "wspr_transmit.hpp"
 
+#include "utils.hpp"
+
 #include <atomic>
 #include <array>
 #include <chrono>
@@ -95,6 +97,12 @@ int main()
         sigaction(sig, &sa, nullptr);
     }
     std::signal(SIGCHLD, SIG_IGN);
+
+    // Set high scheduling priority to reduce kernel interruptions
+    setSchedPriority(30);
+
+    // Initialize random number generator for transmission timing
+    srand(time(nullptr));
 
     setup_dma();
 

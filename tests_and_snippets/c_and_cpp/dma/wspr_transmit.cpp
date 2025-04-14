@@ -14,7 +14,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/wait.h> // For WIFEXITED, WEXITSTATUS, etc.
 
 // POSIX & System-Specific Headers
 #include <pthread.h>
@@ -624,30 +623,6 @@ void open_mbox()
 }
 
 /**
- * @brief Sets the scheduling priority of the current thread.
- * @details Assigns the thread to the `SCHED_FIFO` real-time scheduling policy with
- *          the specified priority. Requires superuser privileges.
- *
- * @param[in] priority The priority level to set (higher values indicate higher priority).
- */
-void setSchedPriority(int priority)
-{
-    // Define scheduling parameters
-    struct sched_param sp;
-    sp.sched_priority = priority;
-
-    // Attempt to set thread scheduling parameters to SCHED_FIFO with the given priority
-    int ret = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
-
-    // Handle potential failure
-    if (ret != 0)
-    {
-        std::cerr << "Warning: pthread_setschedparam (increase thread priority) failed with error code: "
-                  << ret << std::endl;
-    }
-}
-
-/**
  * @brief Safely removes a file if it exists.
  * @details Checks whether the specified file exists before attempting to remove it.
  *          If the file exists but removal fails, a warning is displayed.
@@ -812,12 +787,6 @@ void setup_dma()
 
     // Retrieve PLLD frequency
     get_plld_and_memflag();
-
-    // Set high scheduling priority to reduce kernel interruptions
-    setSchedPriority(30);
-
-    // Initialize random number generator for transmission timing
-    srand(time(nullptr));
 
     // Push a single hardcoded band to `center_freq_set`
     double temp_center_freq_desired;

@@ -12,5 +12,6 @@ double get_ppm_from_chronyc();
 void waitForOneSecondPastEvenMinute();
 int timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1);
 std::string timeval_print(const struct timeval *tv);
+void setSchedPriority(int priority);
 
 #endif // _UTILS_HPP
