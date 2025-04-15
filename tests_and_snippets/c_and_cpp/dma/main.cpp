@@ -113,9 +113,6 @@ int main()
     // Set high scheduling priority to reduce kernel interruptions
     setSchedPriority(30);
 
-    // Initialize random number generator for transmission timing
-    srand(time(nullptr));
-
     bool isWspr = select_wspr();
     std::cout << "Mode selected: " << (isWspr ? "WSPR" : "TONE") << std::endl;
 

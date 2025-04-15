@@ -985,7 +985,6 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
     // Apply random offset if enabled
     if (use_offset)
     {
-        // TODO: Test this.
         std::random_device rd;
         std::mt19937 gen(rd());  // Seed with a fixed value for repeatability
         std::uniform_real_distribution<> dis(-1.0, 1.0);
