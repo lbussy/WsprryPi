@@ -34,110 +34,12 @@
 #ifndef WSPR_STRUCTS
 #define WSPR_STRUCTS
 
+#include "config_handler.hpp"
 #include "wspr_message.hpp"
 
+#include <array>
+#include <iostream>
 #include <vector>
-
-/**
- * @enum ModeType
- * @brief Specifies the mode of operation for the application.
- *
- * This enumeration defines the available modes for operation.
- * - `WSPR`: Represents the WSPR (Weak Signal Propagation Reporter) transmission mode.
- * - `TONE`: Represents a test tone generation mode.
- */
-enum class ModeType // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
-{
-    WSPR, ///< WSPR transmission mode
-    TONE  ///< Test tone generation mode
-};
-
-/**
- * @brief Global configuration instance for argument parsing and runtime settings.
- *
- * @details
- * Holds all command-line and runtime configuration data not managed directly
- * by the INI file system. Initialized globally and used throughout the application.
- *
- * @see ArgParserConfig, ini, iniMonitor
- */
-struct ArgParserConfig
-{
-    // Control
-    bool transmit; ///< Transmission mode enabled.
-
-    // Common
-    std::string callsign;    ///< WSPR callsign.
-    std::string grid_square; ///< 4- or 6-character Maidenhead locator.
-    int power_dbm;           ///< Transmit power in dBm.
-    std::string frequencies; ///< Comma-separated frequency list.
-    int tx_pin;              ///< GPIO pin number for RF transmit control.
-
-    // Extended
-    double ppm;      ///< PPM frequency calibration.
-    bool use_ntp;    ///< Apply NTP-based frequency correction.
-    bool use_offset; ///< Enable random frequency offset.
-    int power_level; ///< Power level for RF hardware (0–7).
-    bool use_led;    ///< Enable TX LED indicator.
-    int led_pin;     ///< GPIO pin for LED indicator.
-
-    // Server
-    int web_port;      ///< Web server port number.
-    int socket_port;   ///< Socket server port number.
-    bool use_shutdown; ///< Enable GPIO-based shutdown feature.
-    int shutdown_pin;  ///< GPIO pin used to signal shutdown.
-
-    // Command line only
-    bool date_time_log; ///< Prefix logs with timestamp.
-    bool loop_tx;       ///< Repeat transmission cycle.
-    int tx_iterations;  ///< Number of transmission iterations (0 = infinite).
-    double test_tone;   ///< Enable continuous tone mode (in Hz).
-
-    // Runtime variables
-    ModeType mode;                       ///< Current operating mode.
-    bool use_ini;                        ///< Load configuration from INI file.
-    std::string ini_filename;            ///< INI file name and path.
-    std::vector<double> center_freq_set; ///< Parsed list of center frequencies in Hz.
-
-    /**
-     * @brief Default constructor initializing all configuration parameters.
-     */
-    ArgParserConfig() // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
-        : transmit(false),
-          callsign("AA0NT"),
-          grid_square("EM18"),
-          power_dbm(20),
-          frequencies("7040100.0"),
-          tx_pin(4),
-          ppm(0.0),
-          use_ntp(true),
-          use_offset(true),
-          power_level(0),
-          use_led(false),
-          led_pin(-1),
-          web_port(-1),
-          socket_port(-1),
-          use_shutdown(false),
-          shutdown_pin(-1),
-          date_time_log(false),
-          loop_tx(false),
-          tx_iterations(0),
-          test_tone(7040100.0),
-          mode(ModeType::WSPR),
-          use_ini(false),
-          ini_filename(""),
-          center_freq_set({7040100.0})
-    {
-    }
-};
-
-/**
- * @brief Global configuration object.
- *
- * This ArgParserConfig instance holds the application’s configuration settings,
- * typically loaded from an INI file or a JSON configuration.
- */
-ArgParserConfig config; // TODO: Remove when we merge into wspr_loop (part of config_handler.hpp)
 
 struct DMAConfig
 {
@@ -340,18 +242,13 @@ static struct
  * and execute a WSPR transmission, including the message, transmission frequency,
  * symbol time, tone spacing, and the DMA frequency lookup table.
  */
-#include <array>
-#include <vector>
-#include <cstdint>
-#include <iostream>
-#include <iomanip>
-
 struct WsprTransmissionParams
 {
     static constexpr std::size_t symbol_count = MSG_SIZE;
     std::array<uint8_t, symbol_count> symbols;
 
     double frequency;                   ///< Transmission frequency in Hz.
+    WsprMode wspr_mode;                 ///< WSPR mode for the frequency.
     double symtime;                     ///< Duration of each symbol in seconds.
     double tone_spacing;                ///< Frequency spacing between adjacent tones in Hz.
     std::vector<double> dma_table_freq; ///< DMA frequency lookup table.
@@ -365,6 +262,7 @@ struct WsprTransmissionParams
     WsprTransmissionParams()
         : symbols{},
           frequency(0.0),
+          wspr_mode(WsprMode::WSPR2),
           symtime(0.0),
           tone_spacing(0.0),
           dma_table_freq(1024, 0.0),
@@ -379,6 +277,7 @@ struct WsprTransmissionParams
     {
         symbols.fill(0);
         frequency = 0.0;
+        wspr_mode = WsprMode::WSPR2,
         symtime = 0.0;
         tone_spacing = 0.0;
         use_offset = false;
@@ -392,6 +291,7 @@ struct WsprTransmissionParams
     {
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "WSPR Frequency:     " << frequency << " Hz" << std::endl;
+        std::cout << "WSPR Mode           " << (wspr_mode == WsprMode::WSPR2 ? "WSPR-2" : "WSPR-15") << std::endl;
         std::cout << "WSPR Symbol Time:   " << symtime << " s" << std::endl;
         std::cout << "WSPR Tone Spacing:  " << tone_spacing << " Hz" << std::endl;
         std::cout << "DMA Table Size:     " << dma_table_freq.size() << std::endl;

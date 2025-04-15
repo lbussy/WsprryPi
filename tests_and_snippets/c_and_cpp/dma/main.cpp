@@ -1,4 +1,5 @@
 // Project Headers
+#include "config_handler.hpp"
 #include "utils.hpp"
 #include "wspr_transmit.hpp"
 
@@ -19,6 +20,14 @@
 #include <string.h>
 #include <termios.h>
 #include <sys/select.h>
+
+/**
+ * @brief Global configuration object.
+ *
+ * This ArgParserConfig instance holds the application’s configuration settings,
+ * typically loaded from an INI file or a JSON configuration.
+ */
+ArgParserConfig config;
 
 /**
  * @brief Reads a single character from standard input without waiting for Enter.

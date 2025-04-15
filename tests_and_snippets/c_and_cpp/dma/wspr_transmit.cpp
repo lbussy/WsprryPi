@@ -1,25 +1,14 @@
 #include "wspr_transmit.hpp"
 
+// Project Headers
+#include "config_handler.hpp"
 #include "utils.hpp"
+#include "wspr_transmit.hpp"
 
 // Submodules
 #include "wspr_constants.hpp"
 #include "wspr_structs.hpp"
 #include "wspr_message.hpp"
-
-// C Standard Library Headers
-#include <assert.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <string.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-// POSIX & System-Specific Headers
-#include <pthread.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/timex.h>
 
 // C++ Standard Library Headers
 #include <array>
@@ -37,12 +26,26 @@
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <termios.h>
 #include <vector>
 
-#include <termios.h>
+// C Standard Library Headers
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+// POSIX & System-Specific Headers
+#include <assert.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <pthread.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/timex.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -189,8 +192,7 @@ void get_plld_and_memflag()
         dmaConfig.plld_clock_frequency = 750000000.0;
         break;
     default:
-        std::cerr << "Error: Unknown chipset (" << processor_id << ")." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: Unknown chipset (" + std::to_string(processor_id) + ").");
     }
 
     if (dmaConfig.plld_clock_frequency <= 0)
@@ -248,8 +250,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
     int mem_fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (mem_fd < 0)
     {
-        std::cerr << "Error: Cannot open /dev/mem." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: Cannot open /dev/mem.");
     }
 
     peri_base_virt = static_cast<unsigned *>(mmap(
@@ -263,8 +264,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
 
     if (reinterpret_cast<long int>(peri_base_virt) == -1)
     {
-        std::cerr << "Error: peri_base_virt mmap failed." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: peri_base_virt mmap failed.");
     }
 
     close(mem_fd);
@@ -318,8 +318,7 @@ void get_real_mem_page_from_pool(void **vAddr, void **bAddr)
     // Ensure that we do not exceed the allocated pool size.
     if (mbox.pool_cnt >= mbox.pool_size)
     {
-        std::cerr << "Error: unable to allocate more pages." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: unable to allocate more pages.");
     }
 
     // Compute the offset for the next available page.
@@ -403,9 +402,6 @@ void disable_clock()
  */
 void transmit_on()
 {
-    // Ensure the clock is disabled before modifying settings.
-    disable_clock();
-
     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
     // This setting follows Section 6.2 of the ARM Peripherals Manual.
     setBitBusAddress(GPIO_BUS_BASE, 14);   // Set bit 14
@@ -413,7 +409,6 @@ void transmit_on()
     clearBitBusAddress(GPIO_BUS_BASE, 12); // Clear bit 12
 
     // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
-    // More info: http://www.scribd.com/doc/101830961/GPIO-Pads-Control2
     accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + config.power_level;
 
     // Define clock control structure and set PLLD as the clock source.
@@ -617,8 +612,7 @@ void open_mbox()
     // Check for failure and handle the error
     if (mbox.handle < 0)
     {
-        std::cerr << "Error: Failed to open mailbox." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: Failed to open mailbox.");
     }
 }
 
@@ -788,34 +782,14 @@ void setup_dma()
     // Retrieve PLLD frequency
     get_plld_and_memflag();
 
-    // Push a single hardcoded band to `center_freq_set`
-    double temp_center_freq_desired;
-    try
-    {
-        // Convert frequency string to double and push to the set
-        temp_center_freq_desired = std::stod(config.frequencies);
-        config.center_freq_set.push_back(temp_center_freq_desired);
-
-        // Ensure the frequency value is valid
-        if (!std::isfinite(temp_center_freq_desired))
-        {
-            throw std::runtime_error("Invalid floating-point value");
-        }
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error: Invalid frequency string. Using default 7040100 Hz." << std::endl;
-        config.center_freq_set.push_back(7040100.0);
-    }
-
     // Initialize peripheral memory mapping
     setup_peri_base_virt(dmaConfig.peri_base_virt);
 
-    // Set up DMA
-    open_mbox(); // Open mailbox for communication
-    // transmit_on();                                         // Enable transmission mode
-    create_dma_pages(constPage, instrPage, instrs); // Configure DMA for transmission
-    // transmit_off();                                        // Disable transmission mode
+    // Open mailbox for communication
+    open_mbox();
+
+    // Configure DMA for transmission
+    create_dma_pages(constPage, instrPage, instrs);
 }
 
 /**
@@ -932,7 +906,7 @@ void transmit_tone()
 
     // Setup the DMA frequency table
     setup_dma_freq_table(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
-                center_freq_actual, constPage);
+                         center_freq_actual, constPage);
 
 #ifdef DEBUG_WSPR_TRANSMIT
     // Debug output for DMA frequency table
@@ -983,45 +957,56 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
     WsprMessage wMessage(callsign, grid_square, power_dbm);
     std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    transParams.print();
-#endif
-
-    setup_dma();
-
-    std::cout << "Ready to transmit (setup complete)." << std::endl;
-
-    // Determine if using WSPR-15 mode (longer symbol time)
-    bool wspr15 =
+    // Determine WSPR mode
+    int offset_freq = 0;
+    if (
         (transParams.frequency > 137600 && transParams.frequency < 137625) ||
         (transParams.frequency > 475800 && transParams.frequency < 475825) ||
-        (transParams.frequency > 1838200 && transParams.frequency < 1838225);
-
-    transParams.symtime = (wspr15) ? 8.0 * WSPR_SYMTIME : WSPR_SYMTIME;
+        (transParams.frequency > 1838200 && transParams.frequency < 1838225))
+    {
+        transParams.wspr_mode = WsprMode::WSPR15;
+        transParams.symtime = 8.0 * WSPR_SYMTIME;
+        if (use_offset)
+        {
+            offset_freq = WSPR15_RAND_OFFSET;
+        }
+    }
+    else
+    {
+        transParams.wspr_mode = WsprMode::WSPR2;
+        transParams.symtime = WSPR_SYMTIME;
+        if (use_offset)
+        {
+            offset_freq = WSPR_RAND_OFFSET;
+        }
+    }
     transParams.tone_spacing = 1.0 / transParams.symtime;
 
     // Apply random offset if enabled
-    if ((transParams.frequency != 0) && config.use_offset)
+    if (use_offset)
     {
-        transParams.frequency += (2.0 * rand() / (static_cast<double>(RAND_MAX) + 1.0) - 1.0) *
-                                      (wspr15 ? WSPR15_RAND_OFFSET : WSPR_RAND_OFFSET);
+        // TODO: Test this.
+        std::random_device rd;
+        std::mt19937 gen(rd());  // Seed with a fixed value for repeatability
+        std::uniform_real_distribution<> dis(-1.0, 1.0);
+        transParams.frequency += dis(gen) * offset_freq;
     }
 
-    // Display transmission information
-    std::stringstream temp;
-    temp << std::setprecision(6) << std::fixed
-         << "Desired center frequency for " << (wspr15 ? "WSPR-15" : "WSPR")
-         << " transmission: " << transParams.frequency / 1e6 << " MHz.";
-    std::cout << temp.str() << std::endl;
+    setup_dma();
 
     // Create DMA table for transmission
     double center_freq_actual = transParams.frequency;
     config.ppm = get_ppm_from_chronyc();
 
     setup_dma_freq_table(transParams.frequency, transParams.tone_spacing,
-                dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6),
-                center_freq_actual, constPage);
+                         dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6),
+                         center_freq_actual, constPage);
     transParams.frequency = center_freq_actual;
+
+#ifdef DEBUG_WSPR_TRANSMIT
+    std::cout << "Ready to transmit (setup complete)." << std::endl;
+    transParams.print();
+#endif
 
     std::cout << "Waiting for next transmission window." << std::endl;
     std::cout << "Press <spacebar> to start immediately." << std::endl;
