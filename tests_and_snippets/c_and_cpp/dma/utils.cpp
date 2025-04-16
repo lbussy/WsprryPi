@@ -1,76 +1,88 @@
 #include "utils.hpp"
 
-#include <array>
-#include <atomic>
-#include <condition_variable>
-#include <cstring>
-#include <iomanip>
-#include <iostream>
-#include <mutex>
-#include <sstream>
+#include <array>              // std::array for buffer in get_ppm_from_chronyc
+#include <atomic>             // std::atomic for g_stop
+#include <chrono>             // std::chrono used in wait_for_trans_window
+#include <condition_variable> // std::condition_variable (used in earlier version, optional now)
+#include <csignal>            // WIFEXITED, WIFSIGNALED, etc.
+#include <cstring>            // std::strerror in get_ppm_from_chronyc()
+#include <ctime>              // std::time_t, std::tm, std::localtime, std::mktime
+#include <iomanip>            // std::setprecision in get_ppm_from_chronyc
+#include <iostream>           // std::cout, std::cerr
+#include <mutex>              // std::mutex (was used in prior versions)
+#include <sstream>            // std::ostringstream, std::istringstream
+#include <string>             // std::string (used widely)
 
-#include <sys/time.h>
-#include <termios.h>
-#include <unistd.h>
+#include <pthread.h>  // pthread_setschedparam
+#include <sys/time.h> // struct timeval, gettimeofday, select()
+#include <termios.h>  // terminal attribute handling
+#include <unistd.h>   // read(), STDIN_FILENO, pipe handling, tcsetattr
 
 // Global stop flag.
 std::atomic<bool> g_stop{false};
 
 /**
- * @brief Waits until it is exactly one second past an even minute, until spacebar is pressed, or a stop is requested.
+ * @brief Waits until exactly one second past an even minute, or until interrupted.
  *
- * This function sets the terminal to noncanonical mode so that a single spacebar press is immediately
- * detected (without requiring Enter). It then periodically checks the system clock and uses select() with
- * a timeout to wait until the next second boundary. If the spacebar is pressed, the function exits early.
+ * This function calculates the exact time point corresponding to one second past the
+ * next even minute and waits until that moment with microsecond-level precision. It
+ * uses select() with a timeout to both wait efficiently and allow early termination
+ * if the spacebar is pressed. The terminal is temporarily set to noncanonical mode
+ * to allow immediate character detection without requiring Enter.
  *
- * @note Due to system scheduling, the wake-up time might not be exactly at the second boundary.
+ * If the current minute is odd, the function targets the next even minute. If the
+ * current time is already past the target second, it waits for the subsequent
+ * even minute instead.
+ *
+ * The function also exits early if the global stop flag is set, or if the user
+ * presses the spacebar.
+ *
+ * @note The wait uses system_clock and may still be affected by scheduling jitter,
+ * but targets the exact wake-up time without polling.
  */
-void waitForOneSecondPastEvenMinute()
+void wait_for_trans_window()
 {
-    // Set terminal to noncanonical mode to capture key presses immediately.
+    // Save and set terminal to noncanonical mode
     struct termios oldAttr, newAttr;
     tcgetattr(STDIN_FILENO, &oldAttr);
     newAttr = oldAttr;
     newAttr.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newAttr);
 
-    std::mutex m;
-    std::condition_variable cv;
-    std::unique_lock<std::mutex> lock(m);
-
     while (!g_stop.load())
     {
-        // Get the current system time.
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm_now = *std::localtime(&now_time_t);
+        using namespace std::chrono;
 
-        // Check if the minute is even and the seconds count is exactly 1.
-        if ((tm_now.tm_min % 2 == 0) && (tm_now.tm_sec == 1))
-        {
-            std::cout << "Condition met: One second past an even minute." << std::endl;
-            break;
-        }
+        auto now = system_clock::now();
+        std::time_t now_tt = system_clock::to_time_t(now);
+        std::tm tm_now = *std::localtime(&now_tt);
 
-        // Calculate the next second boundary.
-        auto next_second = now + std::chrono::seconds(1);
-        auto wait_duration = std::chrono::duration_cast<std::chrono::microseconds>(next_second - now);
+        // Compute target time: next even minute + 1 second
+        if (tm_now.tm_min % 2 != 0)
+            ++tm_now.tm_min; // Skip to next even minute
 
-        // Prepare the timeout for select.
+        tm_now.tm_sec = 1;    // One second after the even minute
+        tm_now.tm_isdst = -1; // Let the system determine DST
+
+        auto target_time = system_clock::from_time_t(std::mktime(&tm_now));
+        if (target_time <= now)
+            target_time += minutes(2); // Skip to the following even minute + 1 second
+
+        // Compute sleep duration precisely
+        auto wait_duration = duration_cast<microseconds>(target_time - now);
+
+        // Use select with timeout and early exit on spacebar
         struct timeval tv;
         tv.tv_sec = wait_duration.count() / 1000000;
         tv.tv_usec = wait_duration.count() % 1000000;
 
-        // Set up file descriptor set for standard input.
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds);
 
-        // Use select to wait until either input is available or the timeout expires.
         int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv);
         if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds))
         {
-            // Input is available; read one character.
             char c;
             ssize_t n = read(STDIN_FILENO, &c, 1);
             if (n > 0 && c == ' ')
@@ -79,10 +91,15 @@ void waitForOneSecondPastEvenMinute()
                 break;
             }
         }
-        // If ret == 0, the timeout expired and the loop continues.
+        else
+        {
+            // Woke up at intended time
+            std::cout << "Condition met: One second past an even minute." << std::endl;
+            break;
+        }
     }
 
-    // Restore terminal settings.
+    // Restore terminal
     tcsetattr(STDIN_FILENO, TCSANOW, &oldAttr);
 }
 
@@ -119,7 +136,8 @@ double get_ppm_from_chronyc()
         if (errno == ECHILD)
         {
             // Treat as success
-            ;;
+            ;
+            ;
         }
         else
         {

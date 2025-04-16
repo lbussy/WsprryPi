@@ -137,7 +137,7 @@ int main()
     {
         std::cout << "Waiting for next transmission window." << std::endl;
         std::cout << "Press <spacebar> to start immediately." << std::endl;
-        waitForOneSecondPastEvenMinute();
+        wait_for_trans_window();
     }
     transmit();
 
