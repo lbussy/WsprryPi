@@ -118,11 +118,11 @@ int main()
 
     if (isWspr)
     {
-        transmit_wspr("AA0NT", "EM18", 20, 7040100.0, true);
+        transmit_wspr(7040100.0, "AA0NT", "EM18", 20, true);
     }
     else
     {
-        transmit_tone(7040100.0);
+        transmit_wspr(7040100.0);
     }
     dma_cleanup();
 

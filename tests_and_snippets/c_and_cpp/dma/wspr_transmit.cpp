@@ -53,12 +53,6 @@ constexpr const bool debug = true;
 constexpr const bool debug = false;
 #endif
 
-#ifdef DEBUG_WSPR_TRANSMIT
-constexpr const bool debug = true;
-#else
-constexpr const bool debug = false;
-#endif
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -883,14 +877,24 @@ void setup_dma_freq_table(
  *          The function dynamically adjusts transmission frequency based on
  *          PPM calibration and ensures accurate symbol timing.
  */
-void transmit_wspr(double frequency, std::string callsign, std::string grid_square, int power_dbm, bool use_offset)
+void transmit_wspr(
+    double frequency,
+    std::string callsign,
+    std::string grid_square,
+    int power_dbm,
+    bool use_offset)
 {
     // Set operating frequency
     transParams.frequency = frequency;
 
     // Create a WSPR message instance
-    WsprMessage wMessage(callsign, grid_square, power_dbm);
-    std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
+    bool is_tone = true;
+    if (!callsign.empty() && !grid_square.empty() && power_dbm != 0)
+    {
+        is_tone = false;
+        WsprMessage wMessage(callsign, grid_square, power_dbm);
+        std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
+    }
 
     // Define WSPR symbol time and tone spacing per WSPR mode (2 vs 15)
     int offset_freq = 0;
@@ -934,8 +938,6 @@ void transmit_wspr(double frequency, std::string callsign, std::string grid_squa
 
     // Get adjustments based on PPM
     config.ppm = get_ppm_from_chronyc();
-    // Compute actual PLL-adjusted frequency
-    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 
     // Compute actual PLL-adjusted frequency
     double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
@@ -943,12 +945,14 @@ void transmit_wspr(double frequency, std::string callsign, std::string grid_squa
     // Hold returned actual frequency
     double center_freq_actual = transParams.frequency;
 
+    // Setup the DMA frequency table
     setup_dma_freq_table(
         transParams.frequency,
         transParams.tone_spacing,
         adjusted_plld_freq,
         center_freq_actual,
         constPage);
+    // Reset frequency based on any hardware limitations
     transParams.frequency = center_freq_actual;
 
     if (debug)
@@ -962,10 +966,12 @@ void transmit_wspr(double frequency, std::string callsign, std::string grid_squa
         transParams.print();
     }
 
-    std::cout << "Ready to transmit (setup complete)." << std::endl;
-    std::cout << "Waiting for next transmission window." << std::endl;
-    std::cout << "Press <spacebar> to start immediately." << std::endl;
-    waitForOneSecondPastEvenMinute();
+    if (!is_tone)
+    {
+        std::cout << "Waiting for next transmission window." << std::endl;
+        std::cout << "Press <spacebar> to start immediately." << std::endl;
+        waitForOneSecondPastEvenMinute();
+    }
 
     // Time structs for computing transmission window
     struct timeval tvBegin, tvEnd, tvDiff;
@@ -981,28 +987,49 @@ void transmit_wspr(double frequency, std::string callsign, std::string grid_squa
     // Enable transmission
     transmit_on();
 
-    // Transmit each symbol in the WSPR message
-    for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
+    if (is_tone)
     {
-        // Symbol timing
-        gettimeofday(&sym_start, NULL);
-        timeval_subtract(&diff, &sym_start, &tvBegin);
-        double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-        double sched_end = (i + 1) * transParams.symtime;
-        double time_symbol = sched_end - elapsed;
-        time_symbol = std::clamp(time_symbol, 0.2, 2 * transParams.symtime);
-        int symbol = static_cast<int>(transParams.symbols[i]);
+        std::cout << "Press CTRL-C to end." << std::endl;
+        // Continuous transmission loop
+        while (true)
+        {
+            // Transmit the test tone symbol
+            transmit_symbol(
+                0,                        // The symbol number to transmit.
+                transParams.frequency,    // The center frequency in Hz.
+                transParams.tone_spacing, // The frequency spacing between tones in Hz.
+                60,                       // The duration (seconds) for which the symbol is transmitted.
+                F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
+                instrs,                   // The DMA instruction page array.
+                constPage,                // The memory page containing constant data.
+                bufPtr                    // The buffer pointer index for DMA instruction handling.
+            );
+        }
+    }
+    else
+    { // Transmit each symbol in the WSPR message
+        for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
+        {
+            // Symbol timing
+            gettimeofday(&sym_start, NULL);
+            timeval_subtract(&diff, &sym_start, &tvBegin);
+            double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+            double sched_end = (i + 1) * transParams.symtime;
+            double time_symbol = sched_end - elapsed;
+            time_symbol = std::clamp(time_symbol, 0.2, 2 * transParams.symtime);
+            int symbol = static_cast<int>(transParams.symbols[i]);
 
-        transmit_symbol(
-            symbol,                   // The symbol number to transmit.
-            transParams.frequency,    // The center frequency in Hz.
-            transParams.tone_spacing, // The frequency spacing between tones in Hz.
-            time_symbol,              // The duration (seconds) for which the symbol is transmitted.
-            F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
-            instrs,                   // The DMA instruction page array.
-            constPage,                // The memory page containing constant data.
-            bufPtr                    // The buffer pointer index for DMA instruction handling.
-        );
+            transmit_symbol(
+                symbol,                   // The symbol number to transmit.
+                transParams.frequency,    // The center frequency in Hz.
+                transParams.tone_spacing, // The frequency spacing between tones in Hz.
+                time_symbol,              // The duration (seconds) for which the symbol is transmitted.
+                F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
+                instrs,                   // The DMA instruction page array.
+                constPage,                // The memory page containing constant data.
+                bufPtr                    // The buffer pointer index for DMA instruction handling.
+            );
+        }
     }
 
     // Disable transmission
