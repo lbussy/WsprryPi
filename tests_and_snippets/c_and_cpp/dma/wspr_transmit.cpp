@@ -1,3 +1,11 @@
+// TODO:
+// * "Undo" DMA and mailbox setup
+// * Make GPIO adjustable?
+// * See if Utils are unique - move in if so
+// * Check if we need all headers
+// * allocate_memory_pool(1025) <- why 1025?
+// * Make into a class
+
 #include "wspr_transmit.hpp"
 
 // Project Headers
@@ -6,7 +14,6 @@
 #include "wspr_transmit.hpp"
 
 // Submodules
-#include "wspr_constants.hpp"
 #include "wspr_message.hpp"
 
 // C++ Standard Library Headers
@@ -58,6 +65,177 @@ extern "C"
 #include "mailbox.h"
 }
 #endif /* __cplusplus */
+
+/**
+ * @brief Random frequency offset for standard WSPR transmissions.
+ *
+ * This constant defines the range, in Hertz, for random frequency offsets
+ * applied to standard WSPR transmissions. The offset is applied symmetrically
+ * around the target frequency, resulting in a random variation of ±80 Hz.
+ *
+ * This helps distribute transmissions within the WSPR band, reducing the
+ * likelihood of overlapping signals.
+ *
+ * @note This offset is applicable for standard WSPR transmissions (2-minute cycles).
+ *
+ * @see WSPR15_RAND_OFFSET
+ */
+constexpr int WSPR_RAND_OFFSET = 80;
+
+/**
+ * @brief Random frequency offset for WSPR-15 transmissions.
+ *
+ * This constant defines the range, in Hertz, for random frequency offsets
+ * applied to WSPR-15 transmissions. The offset is applied symmetrically
+ * around the target frequency, resulting in a random variation of ±8 Hz.
+ *
+ * This ensures that WSPR-15 transmissions remain within the allocated band
+ * while introducing slight variations to minimize signal collisions.
+ *
+ * @note This offset is specific to WSPR-15 transmissions (15-minute cycles).
+ *
+ * @see WSPR_RAND_OFFSET
+ */
+constexpr int WSPR15_RAND_OFFSET = 8;
+
+/**
+ * @brief Nominal symbol duration for WSPR transmissions.
+ *
+ * This constant represents the nominal time duration of a WSPR symbol,
+ * calculated as 8192 samples divided by a sample rate of 12000 Hz.
+ *
+ * @details This duration is a key parameter in WSPR transmissions,
+ * ensuring the correct timing for symbol generation and encoding.
+ *
+ * @note Any deviation in sample rate or processing latency could affect
+ *       the actual symbol duration.
+ */
+constexpr double WSPR_SYMTIME = 8192.0 / 12000.0;
+
+/**
+ * @brief Initial empirical value for the PWM clock frequency used in WSPR
+ * transmissions.
+ *
+ * This constant represents an empirically determined value for `F_PWM_CLK`
+ * that produces WSPR symbols approximately 0.682 seconds long (WSPR_SYMTIME).
+ *
+ * @details Despite using DMA for transmission, system load on the Raspberry Pi
+ * affects the exact TX symbol length. However, the main loop compensates
+ * for these variations dynamically.
+ *
+ * @note If system performance changes, this value may require adjustment.
+ */
+constexpr double F_PWM_CLK_INIT = 31156186.6125761;
+
+/**
+ * @brief Base bus address for the General-Purpose Input/Output (GPIO)
+ * registers.
+ *
+ * The GPIO peripheral bus base address is used to access GPIO-related
+ * registers for pin configuration and control.
+ */
+constexpr uint32_t GPIO_BUS_BASE = 0x7E200000;
+
+/**
+ * @brief Bus address for the General-Purpose Clock 0 Control Register.
+ *
+ * This register controls the clock settings for General-Purpose Clock 0 (GP0).
+ */
+constexpr uint32_t CM_GP0CTL_BUS = 0x7E101070;
+
+/**
+ * @brief Bus address for the General-Purpose Clock 0 Divider Register.
+ *
+ * This register sets the frequency division for General-Purpose Clock 0.
+ */
+constexpr uint32_t CM_GP0DIV_BUS = 0x7E101074;
+
+/**
+ * @brief Bus address for the GPIO pads control register (GPIO 0-27).
+ *
+ * This register configures drive strength, pull-up, and pull-down settings
+ * for GPIO pins 0 through 27.
+ */
+constexpr uint32_t PADS_GPIO_0_27_BUS = 0x7E10002C;
+
+/**
+ * @brief Base bus address for the clock management registers.
+ *
+ * The clock management unit controls various clock sources and divisors
+ * for different peripherals on the Raspberry Pi.
+ */
+constexpr uint32_t CLK_BUS_BASE = 0x7E101000;
+
+/**
+ * @brief Base bus address for the Direct Memory Access (DMA) controller.
+ *
+ * The DMA controller allows high-speed data transfer between peripherals
+ * and memory without CPU intervention.
+ */
+constexpr uint32_t DMA_BUS_BASE = 0x7E007000;
+
+/**
+ * @brief Base bus address for the Pulse Width Modulation (PWM) controller.
+ *
+ * The PWM controller is responsible for generating PWM signals used in
+ * applications like audio output, LED dimming, and motor control.
+ */
+constexpr uint32_t PWM_BUS_BASE = 0x7E20C000;
+
+/**
+ * @brief The size of a memory page in bytes.
+ *
+ * Defines the standard memory page size used for memory-mapped I/O operations.
+ * This value is typically 4 KB (4096 bytes) on most systems, aligning with the
+ * memory management unit (MMU) requirements.
+ */
+constexpr std::uint32_t PAGE_SIZE = 4 * 1024;
+
+/**
+ * @brief The size of a memory block in bytes.
+ *
+ * Defines the standard block size for memory operations, used in memory-mapped
+ * peripheral access and buffer allocation. This value matches `PAGE_SIZE` to
+ * ensure proper memory alignment when mapping hardware registers.
+ */
+constexpr std::uint32_t BLOCK_SIZE = 4 * 1024;
+
+/**
+ * @brief The nominal number of PWM clock cycles per iteration.
+ *
+ * This constant defines the expected number of PWM clock cycles required for
+ * a single iteration of the waveform generation process. It serves as a reference
+ * value to maintain precise timing in signal generation.
+ */
+constexpr std::uint32_t PWM_CLOCKS_PER_ITER_NOMINAL = 1000;
+
+/**
+ * @brief Processor ID for the Broadcom BCM2835 chip.
+ *
+ * This constant identifies the BCM2835 processor, which is used in the original Raspberry Pi (RPi1).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0; // BCM2835 (RPi1)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2836 chip.
+ *
+ * This constant identifies the BCM2836 processor, which is used in the Raspberry Pi 2 (RPi2).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1; // BCM2836 (RPi2)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2837 chip.
+ *
+ * This constant identifies the BCM2837 processor, which is used in the Raspberry Pi 3 (RPi3).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2; // BCM2837 (RPi3)
+
+/**
+ * @brief Processor ID for the Broadcom BCM2711 chip.
+ *
+ * This constant identifies the BCM2711 processor, which is used in the Raspberry Pi 4 (RPi4).
+ */
+constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
 
 struct CB
 {
@@ -465,7 +643,7 @@ void setup_peri_base_virt()
  *
  * @param numpages Number of memory pages to allocate.
  */
-void allocate_memory_pool(unsigned numpages) // TODO:  Why 1025 here?
+void allocate_memory_pool(unsigned numpages)
 {
     // Allocate a contiguous block of memory using the mailbox interface.
     mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, dmaConfig.mem_flag);
@@ -629,22 +807,12 @@ void transmit_off()
  *          dynamically based on the desired tone spacing.
  *
  * @param[in] sym_num The symbol number to transmit.
- * @param[in] center_freq The center frequency in Hz.
- * @param[in] tone_spacing The frequency spacing between tones in Hz.
  * @param[in] tsym The duration (seconds) for which the symbol is transmitted.
- * @param[in] f_pwm_clk The frequency of the PWM clock in Hz.
- * @param[in,out] instrs The DMA instruction page array.
- * @param[in] constPage The memory page containing constant data.
  * @param[in,out] bufPtr The buffer pointer index for DMA instruction handling.
  */
 void transmit_symbol(
     const int &sym_num,
-    const double &center_freq,
-    const double &tone_spacing,
     const double &tsym,
-    const double &f_pwm_clk,
-    struct PageInfo instrs[],
-    struct PageInfo &constPage,
     int &bufPtr)
 {
     // Determine indices for DMA frequency table
@@ -656,7 +824,7 @@ void transmit_symbol(
     const double f1_freq = transParams.dma_table_freq[f1_idx];
 
     // Calculate the expected tone frequency
-    const double tone_freq = center_freq - 1.5 * tone_spacing + sym_num * tone_spacing;
+    const double tone_freq = transParams.frequency - 1.5 * transParams.tone_spacing + sym_num * transParams.tone_spacing;
 
     // Ensure the tone frequency is within bounds
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
@@ -671,7 +839,7 @@ void transmit_symbol(
     assert((f0_ratio >= 0) && (f0_ratio <= 1));
 
     // Compute total number of PWM clock cycles required for the symbol duration
-    const long int n_pwmclk_per_sym = std::round(f_pwm_clk * tsym);
+    const long int n_pwmclk_per_sym = std::round(F_PWM_CLK_INIT * tsym);
 
     // Counters for tracking transmitted PWM clocks and f0 occurrences
     long int n_pwmclk_transmitted = 0;
@@ -1158,14 +1326,9 @@ void transmit()
         {
             // Transmit the test tone symbol
             transmit_symbol(
-                0,                        // The symbol number to transmit.
-                transParams.frequency,    // The center frequency in Hz.
-                transParams.tone_spacing, // The frequency spacing between tones in Hz.
-                60,                       // The duration (seconds) for which the symbol is transmitted.
-                F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
-                instrs,                   // The DMA instruction page array.
-                constPage,                // The memory page containing constant data.
-                bufPtr                    // The buffer pointer index for DMA instruction handling.
+                0,     // The symbol number to transmit.
+                60,    // The duration (seconds) for which the symbol is transmitted.
+                bufPtr // The buffer pointer index for DMA instruction handling.
             );
         }
     }
@@ -1186,14 +1349,9 @@ void transmit()
             int symbol = static_cast<int>(transParams.symbols[i]);
 
             transmit_symbol(
-                symbol,                   // The symbol number to transmit.
-                transParams.frequency,    // The center frequency in Hz.
-                transParams.tone_spacing, // The frequency spacing between tones in Hz.
-                time_symbol,              // The duration (seconds) for which the symbol is transmitted.
-                F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
-                instrs,                   // The DMA instruction page array.
-                constPage,                // The memory page containing constant data.
-                bufPtr                    // The buffer pointer index for DMA instruction handling.
+                symbol,      // The symbol number to transmit.
+                time_symbol, // The duration (seconds) for which the symbol is transmitted.
+                bufPtr       // The buffer pointer index for DMA instruction handling.
             );
         }
     }
