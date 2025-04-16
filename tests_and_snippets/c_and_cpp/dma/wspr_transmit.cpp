@@ -47,6 +47,12 @@
 #include <sys/time.h>
 #include <sys/timex.h>
 
+#ifdef DEBUG_WSPR_TRANSMIT
+constexpr const bool debug = true;
+#else
+constexpr const bool debug = false;
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -278,7 +284,7 @@ void setup_peri_base_virt()
  *
  * @param numpages Number of memory pages to allocate.
  */
-void allocate_memory_pool(unsigned numpages)
+void allocate_memory_pool(unsigned numpages) // TODO:  Why 1025 here?
 {
     // Allocate a contiguous block of memory using the mailbox interface.
     mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, dmaConfig.mem_flag);
@@ -295,14 +301,15 @@ void allocate_memory_pool(unsigned numpages)
     // Initialize the count of used pages in the pool.
     mbox.pool_cnt = 0;
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    // Debug print: Displays memory allocation details in hexadecimal format.
-    std::cout << "DEBUG: allocate_memory_pool bus_addr=0x"
-              << std::hex << mbox.bus_addr
-              << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
-              << " mem_ref=0x" << mbox.mem_ref
-              << std::dec << std::endl;
-#endif
+    if (debug)
+    {
+        // Debug print: Displays memory allocation details in hexadecimal format.
+        std::cout << "DEBUG: allocate_memory_pool bus_addr=0x"
+                  << std::hex << mbox.bus_addr
+                  << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
+                  << " mem_ref=0x" << mbox.mem_ref
+                  << std::dec << std::endl;
+    }
 }
 
 /**
@@ -328,13 +335,14 @@ void get_real_mem_page_from_pool(void **vAddr, void **bAddr)
     *vAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.virt_addr) + offset);
     *bAddr = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(mbox.bus_addr) + offset);
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    // Debug print: Displays allocated memory details.
-    std::cout << "DEBUG: get_real_mem_page_from_pool bus_addr=0x"
-              << std::hex << reinterpret_cast<uintptr_t>(*bAddr)
-              << " virt_addr=0x" << reinterpret_cast<uintptr_t>(*vAddr)
-              << std::dec << std::endl;
-#endif
+    if (debug)
+    {
+        // Debug print: Displays allocated memory details.
+        std::cout << "DEBUG: get_real_mem_page_from_pool bus_addr=0x"
+                  << std::hex << reinterpret_cast<uintptr_t>(*bAddr)
+                  << " virt_addr=0x" << reinterpret_cast<uintptr_t>(*vAddr)
+                  << std::dec << std::endl;
+    }
 
     // Increment the count of allocated pages.
     mbox.pool_cnt++;
@@ -475,9 +483,8 @@ void transmit_symbol(
     // Compute frequency ratio for symbol transmission
     const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
-#endif
+    if (debug)
+        std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
 
     // Ensure f0_ratio is between 0.0 and 1.0
     assert((f0_ratio >= 0) && (f0_ratio <= 1));
@@ -489,11 +496,10 @@ void transmit_symbol(
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    std::cout << "DEBUG: <instrs[bufPtr] begin=0x"
-              << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
-              << ">" << std::dec << std::endl;
-#endif
+    if (debug)
+        std::cout << "DEBUG: <instrs[bufPtr] begin=0x"
+                  << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
+                  << ">" << std::dec << std::endl;
 
     // Transmit the symbol using PWM clocks
     while (n_pwmclk_transmitted < n_pwmclk_per_sym)
@@ -551,12 +557,11 @@ void transmit_symbol(
         n_f0_transmitted += n_f0;
     }
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    std::cout << "DEBUG: <instrs[bufPtr]=0x"
-              << std::hex << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
-              << " 0x" << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
-              << ">" << std::dec << std::endl;
-#endif
+    if (debug)
+        std::cout << "DEBUG: <instrs[bufPtr]=0x"
+                  << std::hex << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
+                  << " 0x" << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
+                  << ">" << std::dec << std::endl;
 }
 
 /**
@@ -876,57 +881,55 @@ void setup_dma_freq_table(
  *          until the user exits with `CTRL-C`. The tone frequency is dynamically adjusted
  *          based on PPM calibration.
  */
-void transmit_tone()
+void transmit_tone(double frequency)
 {
+    // Set operating frequency
+    transParams.frequency = frequency;
+
     // Define WSPR symbol time and tone spacing
-    const double wspr_symtime = WSPR_SYMTIME;
-    const double tone_spacing = 1.0 / wspr_symtime;
+    transParams.symtime = WSPR_SYMTIME;
+    transParams.tone_spacing = 1.0 / transParams.symtime;
 
-    // Display test tone transmission details
-    std::stringstream temp;
-    temp << std::setprecision(6) << std::fixed
-         << "Transmitting test tone on frequency " << config.test_tone / 1.0e6 << " MHz.";
-    std::cout << temp.str() << std::endl;
-    std::cout << "Press CTRL-C to exit." << std::endl;
+    setup_dma();
 
-    // DMA buffer pointer
-    int bufPtr = 0;
-
-    double center_freq_actual;
-
-    // Validate PLLD clock frequency
-    if (dmaConfig.plld_clock_frequency <= 0)
-    {
-        std::cerr << "Error: Invalid PLL clock frequency. Using default 500MHz." << std::endl;
-        dmaConfig.plld_clock_frequency = 500000000.0;
-    }
-
+    // Get adjustments based on PPM
+    config.ppm = get_ppm_from_chronyc();
     // Compute actual PLL-adjusted frequency
     double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 
+    // Hold returned actual frequency
+    double center_freq_actual = transParams.frequency;
+
     // Setup the DMA frequency table
-    setup_dma_freq_table(config.test_tone + 1.5 * tone_spacing, tone_spacing, adjusted_plld_freq,
-                         center_freq_actual, constPage);
+    setup_dma_freq_table(
+        transParams.frequency + 1.5 * transParams.tone_spacing,
+        transParams.tone_spacing,
+        adjusted_plld_freq,
+        center_freq_actual,
+        constPage);
+    transParams.frequency = center_freq_actual;
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    // Debug output for DMA frequency table
-    std::cout << std::setprecision(30)
-              << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << "\n"
-              << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << "\n"
-              << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << "\n"
-              << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
-#endif
-
-    // Warn if the actual transmission frequency differs from the desired frequency
-    if (center_freq_actual != config.test_tone + 1.5 * tone_spacing)
+    if (debug)
     {
-        std::stringstream temp;
-        temp << std::setprecision(6) << std::fixed
-             << "Warning: Test tone will be transmitted on "
-             << (center_freq_actual - 1.5 * tone_spacing) / 1e6
-             << " MHz due to hardware limitations.";
-        std::cerr << temp.str() << std::endl;
+        // Debug output for transmission
+        std::cout << std::setprecision(30)
+                  << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
+                  << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
+                  << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
+                  << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
+        transParams.print();
     }
+
+    std::cout << "Setup complete, transmitting." << std::endl;
+    std::cout << "Press CTRL-C to end." << std::endl;
+
+    // Time structs for computing transmission window
+    struct timeval tvBegin, tvEnd, tvDiff;
+    gettimeofday(&tvBegin, NULL);
+    std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
+
+    // DMA buffer pointer
+    int bufPtr = 0;
 
     // Enable transmission mode
     transmit_on();
@@ -935,11 +938,27 @@ void transmit_tone()
     while (true)
     {
         // Transmit the test tone symbol
-        transmit_symbol(0, center_freq_actual, tone_spacing, 60, F_PWM_CLK_INIT, instrs, constPage, bufPtr);
+        transmit_symbol(
+            0,                        // The symbol number to transmit.
+            transParams.frequency,    // The center frequency in Hz.
+            transParams.tone_spacing, // The frequency spacing between tones in Hz.
+            60,                       // The duration (seconds) for which the symbol is transmitted.
+            F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
+            instrs,                   // The DMA instruction page array.
+            constPage,                // The memory page containing constant data.
+            bufPtr                    // The buffer pointer index for DMA instruction handling.
+        );
     }
 
     // Disable transmission mode
     transmit_off();
+
+    // Print transmission timestamp and duration
+    gettimeofday(&tvEnd, nullptr);
+    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
+    std::cout << "TX ended at: " << timeval_print(&tvEnd)
+              << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
+              << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
 }
 
 /**
@@ -951,19 +970,21 @@ void transmit_tone()
  */
 void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm, double frequency, bool use_offset)
 {
+    // Set operating frequency
     transParams.frequency = frequency;
 
     // Create a WSPR message instance
     WsprMessage wMessage(callsign, grid_square, power_dbm);
     std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
 
-    // Determine WSPR mode
+    // Define WSPR symbol time and tone spacing per WSPR mode (2 vs 15)
     int offset_freq = 0;
     if (
         (transParams.frequency > 137600 && transParams.frequency < 137625) ||
         (transParams.frequency > 475800 && transParams.frequency < 475825) ||
         (transParams.frequency > 1838200 && transParams.frequency < 1838225))
     {
+        // For WSPR15
         transParams.wspr_mode = WsprMode::WSPR15;
         transParams.symtime = 8.0 * WSPR_SYMTIME;
         if (use_offset)
@@ -973,6 +994,7 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
     }
     else
     {
+        // For WSPR2
         transParams.wspr_mode = WsprMode::WSPR2;
         transParams.symtime = WSPR_SYMTIME;
         if (use_offset)
@@ -986,37 +1008,54 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
     if (use_offset)
     {
         std::random_device rd;
-        std::mt19937 gen(rd());  // Seed with a fixed value for repeatability
+        std::mt19937 gen(rd()); // Seed with a fixed value for repeatability
         std::uniform_real_distribution<> dis(-1.0, 1.0);
         transParams.frequency += dis(gen) * offset_freq;
     }
 
     setup_dma();
 
-    // Create DMA table for transmission
-    double center_freq_actual = transParams.frequency;
+    // Get adjustments based on PPM
     config.ppm = get_ppm_from_chronyc();
+    // Compute actual PLL-adjusted frequency
+    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 
-    setup_dma_freq_table(transParams.frequency, transParams.tone_spacing,
-                         dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6),
-                         center_freq_actual, constPage);
+    // Hold returned actual frequency
+    double center_freq_actual = transParams.frequency;
+
+    setup_dma_freq_table(
+        transParams.frequency,
+        transParams.tone_spacing,
+        adjusted_plld_freq,
+        center_freq_actual,
+        constPage);
     transParams.frequency = center_freq_actual;
 
-#ifdef DEBUG_WSPR_TRANSMIT
-    std::cout << "Ready to transmit (setup complete)." << std::endl;
-    transParams.print();
-#endif
+    if (debug)
+    {
+        // Debug output for transmission
+        std::cout << std::setprecision(30)
+                  << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
+                  << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
+                  << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
+                  << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
+        transParams.print();
+    }
 
+    std::cout << "Ready to transmit (setup complete)." << std::endl;
     std::cout << "Waiting for next transmission window." << std::endl;
     std::cout << "Press <spacebar> to start immediately." << std::endl;
     waitForOneSecondPastEvenMinute();
 
+    // Time structs for computing transmission window
     struct timeval tvBegin, tvEnd, tvDiff;
     gettimeofday(&tvBegin, NULL);
-
     std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
 
+    // Structures for symbol timing
     struct timeval sym_start, diff;
+
+    // DMA buffer pointer
     int bufPtr = 0;
 
     // Enable transmission
@@ -1025,28 +1064,31 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
     // Transmit each symbol in the WSPR message
     for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
     {
+        // Symbol timing
         gettimeofday(&sym_start, NULL);
         timeval_subtract(&diff, &sym_start, &tvBegin);
         double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
         double sched_end = (i + 1) * transParams.symtime;
-        double this_sym = sched_end - elapsed;
-        this_sym = std::clamp(this_sym, 0.2, 2 * transParams.symtime);
+        double time_symbol = sched_end - elapsed;
+        time_symbol = std::clamp(time_symbol, 0.2, 2 * transParams.symtime);
+        int symbol = static_cast<int>(transParams.symbols[i]);
 
         transmit_symbol(
-            static_cast<int>(transParams.symbols[i]),
-            transParams.frequency,
-            transParams.tone_spacing,
-            this_sym,
-            F_PWM_CLK_INIT,
-            instrs,
-            constPage,
-            bufPtr);
+            symbol,                   // The symbol number to transmit.
+            transParams.frequency,    // The center frequency in Hz.
+            transParams.tone_spacing, // The frequency spacing between tones in Hz.
+            time_symbol,              // The duration (seconds) for which the symbol is transmitted.
+            F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
+            instrs,                   // The DMA instruction page array.
+            constPage,                // The memory page containing constant data.
+            bufPtr                    // The buffer pointer index for DMA instruction handling.
+        );
     }
 
     // Disable transmission
     transmit_off();
 
-    // Print transmission timestamp and duration on one line
+    // Print transmission timestamp and duration
     gettimeofday(&tvEnd, nullptr);
     timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
     std::cout << "TX ended at: " << timeval_print(&tvEnd)

@@ -122,7 +122,7 @@ int main()
     }
     else
     {
-        transmit_tone();
+        transmit_tone(7040100.0);
     }
     dma_cleanup();
 
