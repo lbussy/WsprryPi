@@ -889,11 +889,11 @@ void transmit_wspr(
     // Set power level
     transParams.power = power;
 
-    bool is_tone = true;
+    transParams.is_tone = true;
     if (!callsign.empty() && !grid_square.empty() && power_dbm != 0)
     {
         // Create a WSPR message instance if not tone
-        is_tone = false;
+        transParams.is_tone = false;
         WsprMessage wMessage(callsign, grid_square, power_dbm);
         std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
     }
@@ -901,7 +901,7 @@ void transmit_wspr(
     // Define WSPR symbol time and tone spacing per WSPR mode (2 vs 15)
     int offset_freq = 0;
     if (
-        (!is_tone) &&
+        (!transParams.is_tone) &&
         ((transParams.frequency > 137600 && transParams.frequency < 137625) ||
          (transParams.frequency > 475800 && transParams.frequency < 475825) ||
          (transParams.frequency > 1838200 && transParams.frequency < 1838225)))
@@ -940,7 +940,7 @@ void transmit_wspr(
     setup_dma();
 
     // Compute actual PLL-adjusted frequency
-    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - ppm / 1e6);
+    dmaConfig.plld_clock_frequency = dmaConfig.plld_clock_frequency * (1 - ppm / 1e6);
 
     // Capture setup frequency
     double center_freq_actual = transParams.frequency;
@@ -949,7 +949,7 @@ void transmit_wspr(
     setup_dma_freq_table(
         transParams.frequency,
         transParams.tone_spacing,
-        adjusted_plld_freq,
+        dmaConfig.plld_clock_frequency,
         center_freq_actual,
         constPage);
 
@@ -958,7 +958,7 @@ void transmit_wspr(
 
     if (debug)
     {
-        std::cout << "Setup for " << (is_tone ? "tone" : "WSPR") <<  " complete." << std::endl;
+        std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") <<  " complete." << std::endl;
         // Debug output for transmission
         std::cout << std::setprecision(30)
                   << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
@@ -968,7 +968,7 @@ void transmit_wspr(
         transParams.print();
     }
 
-    if (!is_tone)
+    if (!transParams.is_tone)
     {
         std::cout << "Waiting for next transmission window." << std::endl;
         std::cout << "Press <spacebar> to start immediately." << std::endl;
@@ -989,7 +989,7 @@ void transmit_wspr(
     // Enable transmission
     transmit_on();
 
-    if (is_tone)
+    if (transParams.is_tone)
     {
         std::cout << "Press CTRL-C to end." << std::endl;
         // Continuous transmission loop

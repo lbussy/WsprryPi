@@ -248,6 +248,7 @@ struct WsprTransmissionParams
     std::array<uint8_t, symbol_count> symbols;
 
     double frequency;                   ///< Transmission frequency in Hz.
+    bool is_tone;                       ///< Is test tone
     int power;                          ///< GPIO power level 0-7
     WsprMode wspr_mode;                 ///< WSPR mode for the frequency.
     double symtime;                     ///< Duration of each symbol in seconds.
@@ -263,6 +264,7 @@ struct WsprTransmissionParams
     WsprTransmissionParams()
         : symbols{},
           frequency(0.0),
+          is_tone(false),
           power(0),
           wspr_mode(WsprMode::WSPR2),
           symtime(0.0),
@@ -279,6 +281,7 @@ struct WsprTransmissionParams
     {
         symbols.fill(0);
         frequency = 0.0;
+        is_tone = false;
         power = 0;
         wspr_mode = WsprMode::WSPR2,
         symtime = 0.0;
@@ -294,9 +297,10 @@ struct WsprTransmissionParams
     {
         std::cout << std::fixed << std::setprecision(6);
         // std::setprecision(6) << std::fixed << transParams.frequency / 1.0e6 << " MHz."
-        std::cout << "WSPR Frequency:     " << std::setprecision(6) << std::fixed << frequency / 1.0e6 << " MHz." << std::endl;
-        std::cout << "GPIO Power:         " << symtime << " (0-7)." << std::endl;
+        std::cout << "WSPR Frequency:     " << std::setprecision(6) << std::fixed << frequency / 1.0e6 << " MHz" << std::endl;
+        std::cout << "GPIO Power:         " << symtime << " (0-7)" << std::endl;
         std::cout << "WSPR Mode           " << (wspr_mode == WsprMode::WSPR2 ? "WSPR-2" : "WSPR-15") << std::endl;
+        std::cout << "Test Tone           " << (is_tone ? "True" : "False") << std::endl;
         std::cout << "WSPR Symbol Time:   " << symtime << " secs." << std::endl;
         std::cout << "WSPR Tone Spacing:  " << tone_spacing << " Hz" << std::endl;
         std::cout << "DMA Table Size:     " << dma_table_freq.size() << std::endl;
