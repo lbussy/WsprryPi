@@ -800,24 +800,16 @@ void setup_dma()
  * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
  * @param[in,out] constPage The PageInfo structure for storing tuning words.
  */
-void setup_dma_freq_table(
-    const double &center_freq_desired,
-    const double &tone_spacing,
-    const double &plld_actual_freq,
-    double &center_freq_actual,
-    struct PageInfo &constPage)
+void setup_dma_freq_table(double &center_freq_actual)
 {
-    // Set the actual center frequency initially to the desired frequency.
-    center_freq_actual = center_freq_desired;
-
     // Compute the divider values for the lowest and highest WSPR tones.
-    double div_lo = bit_trunc(plld_actual_freq / (center_freq_desired - 1.5 * tone_spacing), -12) + std::pow(2.0, -12);
-    double div_hi = bit_trunc(plld_actual_freq / (center_freq_desired + 1.5 * tone_spacing), -12);
+    double div_lo = bit_trunc(dmaConfig.plld_clock_frequency / (transParams.frequency - 1.5 * transParams.tone_spacing), -12) + std::pow(2.0, -12);
+    double div_hi = bit_trunc(dmaConfig.plld_clock_frequency / (transParams.frequency + 1.5 * transParams.tone_spacing), -12);
 
     // If the integer portion of dividers differ, adjust the center frequency.
     if (std::floor(div_lo) != std::floor(div_hi))
     {
-        center_freq_actual = plld_actual_freq / std::floor(div_lo) - 1.6 * tone_spacing;
+        center_freq_actual = dmaConfig.plld_clock_frequency / std::floor(div_lo) - 1.6 * transParams.tone_spacing;
         std::stringstream temp;
         temp << std::fixed << std::setprecision(6)
              << "Warning: center frequency has been changed to "
@@ -826,14 +818,14 @@ void setup_dma_freq_table(
     }
 
     // Initialize tuning word table.
-    double tone0_freq = center_freq_actual - 1.5 * tone_spacing;
+    double tone0_freq = center_freq_actual - 1.5 * transParams.tone_spacing;
     std::vector<long int> tuning_word(1024);
 
     // Generate tuning words for WSPR tones.
     for (int i = 0; i < 8; i++)
     {
-        double tone_freq = tone0_freq + (i >> 1) * tone_spacing;
-        double div = bit_trunc(plld_actual_freq / tone_freq, -12);
+        double tone_freq = tone0_freq + (i >> 1) * transParams.tone_spacing;
+        double div = bit_trunc(dmaConfig.plld_clock_frequency / tone_freq, -12);
 
         // Apply rounding for even indices.
         if (i % 2 == 0)
@@ -854,7 +846,7 @@ void setup_dma_freq_table(
     // Program the DMA table.
     for (int i = 0; i < 1024; i++)
     {
-        transParams.dma_table_freq[i] = plld_actual_freq / (tuning_word[i] / std::pow(2.0, 12));
+        transParams.dma_table_freq[i] = dmaConfig.plld_clock_frequency / (tuning_word[i] / std::pow(2.0, 12));
 
         // Store values in the memory-mapped page.
         reinterpret_cast<int *>(constPage.v)[i] = (0x5A << 24) + tuning_word[i];
@@ -946,19 +938,14 @@ void transmit_wspr(
     double center_freq_actual = transParams.frequency;
 
     // Setup the DMA frequency table
-    setup_dma_freq_table(
-        transParams.frequency,
-        transParams.tone_spacing,
-        dmaConfig.plld_clock_frequency,
-        center_freq_actual,
-        constPage);
+    setup_dma_freq_table(center_freq_actual);
 
     // Reset frequency based on any hardware limitations
     transParams.frequency = center_freq_actual;
 
     if (debug)
     {
-        std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") <<  " complete." << std::endl;
+        std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") << " complete." << std::endl;
         // Debug output for transmission
         std::cout << std::setprecision(30)
                   << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
@@ -979,9 +966,6 @@ void transmit_wspr(
     struct timeval tvBegin, tvEnd, tvDiff;
     gettimeofday(&tvBegin, NULL);
     std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
-
-    // Structures for symbol timing
-    struct timeval sym_start, diff;
 
     // DMA buffer pointer
     int bufPtr = 0;
@@ -1009,7 +993,10 @@ void transmit_wspr(
         }
     }
     else
-    { // Transmit each symbol in the WSPR message
+    {
+        // Structures for symbol timing
+        struct timeval sym_start, diff;
+        // Transmit each symbol in the WSPR message
         for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
         {
             // Symbol timing
