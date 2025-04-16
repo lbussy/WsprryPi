@@ -889,10 +889,10 @@ void transmit_wspr(
     // Set power level
     transParams.power = power;
 
-    // Create a WSPR message instance
     bool is_tone = true;
     if (!callsign.empty() && !grid_square.empty() && power_dbm != 0)
     {
+        // Create a WSPR message instance if not tone
         is_tone = false;
         WsprMessage wMessage(callsign, grid_square, power_dbm);
         std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
@@ -901,9 +901,10 @@ void transmit_wspr(
     // Define WSPR symbol time and tone spacing per WSPR mode (2 vs 15)
     int offset_freq = 0;
     if (
-        (transParams.frequency > 137600 && transParams.frequency < 137625) ||
-        (transParams.frequency > 475800 && transParams.frequency < 475825) ||
-        (transParams.frequency > 1838200 && transParams.frequency < 1838225))
+        (!is_tone) &&
+        ((transParams.frequency > 137600 && transParams.frequency < 137625) ||
+         (transParams.frequency > 475800 && transParams.frequency < 475825) ||
+         (transParams.frequency > 1838200 && transParams.frequency < 1838225)))
     {
         // For WSPR15
         transParams.wspr_mode = WsprMode::WSPR15;
@@ -941,7 +942,7 @@ void transmit_wspr(
     // Compute actual PLL-adjusted frequency
     double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - ppm / 1e6);
 
-    // Hold returned actual frequency
+    // Capture setup frequency
     double center_freq_actual = transParams.frequency;
 
     // Setup the DMA frequency table
@@ -951,11 +952,13 @@ void transmit_wspr(
         adjusted_plld_freq,
         center_freq_actual,
         constPage);
+
     // Reset frequency based on any hardware limitations
     transParams.frequency = center_freq_actual;
 
     if (debug)
     {
+        std::cout << "Setup for " << (is_tone ? "tone" : "WSPR") <<  " complete." << std::endl;
         // Debug output for transmission
         std::cout << std::setprecision(30)
                   << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
