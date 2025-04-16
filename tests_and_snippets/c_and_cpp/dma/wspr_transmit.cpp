@@ -53,6 +53,12 @@ constexpr const bool debug = true;
 constexpr const bool debug = false;
 #endif
 
+#ifdef DEBUG_WSPR_TRANSMIT
+constexpr const bool debug = true;
+#else
+constexpr const bool debug = false;
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -628,14 +634,9 @@ void open_mbox()
  *
  * @param[in] filename Pointer to a null-terminated string containing the file path.
  */
-void safe_remove(const char *filename)
+void safe_remove()
 {
-    if (!filename)
-    {
-        std::cerr << "Warning: Null filename provided to safe_remove()." << std::endl;
-        return;
-    }
-
+    const char *filename = LOCAL_DEVICE_FILE_NAME;
     struct stat buffer;
 
     // Check if the file exists before attempting to remove it
@@ -671,7 +672,7 @@ void dma_cleanup()
     deallocate_memory_pool();
 
     // Remove the local device file
-    safe_remove(LOCAL_DEVICE_FILE_NAME);
+    safe_remove();
 }
 
 /**
@@ -876,99 +877,13 @@ void setup_dma_freq_table(
 }
 
 /**
- * @brief Continuously transmits a test tone.
- * @details Generates a single test tone using the DMA setup, continuously transmitting it
- *          until the user exits with `CTRL-C`. The tone frequency is dynamically adjusted
- *          based on PPM calibration.
- */
-void transmit_tone(double frequency)
-{
-    // Set operating frequency
-    transParams.frequency = frequency;
-
-    // Define WSPR symbol time and tone spacing
-    transParams.symtime = WSPR_SYMTIME;
-    transParams.tone_spacing = 1.0 / transParams.symtime;
-
-    setup_dma();
-
-    // Get adjustments based on PPM
-    config.ppm = get_ppm_from_chronyc();
-    // Compute actual PLL-adjusted frequency
-    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
-
-    // Hold returned actual frequency
-    double center_freq_actual = transParams.frequency;
-
-    // Setup the DMA frequency table
-    setup_dma_freq_table(
-        transParams.frequency + 1.5 * transParams.tone_spacing,
-        transParams.tone_spacing,
-        adjusted_plld_freq,
-        center_freq_actual,
-        constPage);
-    transParams.frequency = center_freq_actual;
-
-    if (debug)
-    {
-        // Debug output for transmission
-        std::cout << std::setprecision(30)
-                  << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
-                  << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
-                  << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
-                  << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
-        transParams.print();
-    }
-
-    std::cout << "Setup complete, transmitting." << std::endl;
-    std::cout << "Press CTRL-C to end." << std::endl;
-
-    // Time structs for computing transmission window
-    struct timeval tvBegin, tvEnd, tvDiff;
-    gettimeofday(&tvBegin, NULL);
-    std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
-
-    // DMA buffer pointer
-    int bufPtr = 0;
-
-    // Enable transmission mode
-    transmit_on();
-
-    // Continuous transmission loop
-    while (true)
-    {
-        // Transmit the test tone symbol
-        transmit_symbol(
-            0,                        // The symbol number to transmit.
-            transParams.frequency,    // The center frequency in Hz.
-            transParams.tone_spacing, // The frequency spacing between tones in Hz.
-            60,                       // The duration (seconds) for which the symbol is transmitted.
-            F_PWM_CLK_INIT,           // The frequency of the PWM clock in Hz.
-            instrs,                   // The DMA instruction page array.
-            constPage,                // The memory page containing constant data.
-            bufPtr                    // The buffer pointer index for DMA instruction handling.
-        );
-    }
-
-    // Disable transmission mode
-    transmit_off();
-
-    // Print transmission timestamp and duration
-    gettimeofday(&tvEnd, nullptr);
-    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-    std::cout << "TX ended at: " << timeval_print(&tvEnd)
-              << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
-              << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
-}
-
-/**
  * @brief Transmits WSPR (Weak Signal Propagation Reporter) messages.
  * @details Continuously loops through available bands, waiting for WSPR transmission
  *          windows, generating WSPR symbols, and transmitting them.
  *          The function dynamically adjusts transmission frequency based on
  *          PPM calibration and ensures accurate symbol timing.
  */
-void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm, double frequency, bool use_offset)
+void transmit_wspr(double frequency, std::string callsign, std::string grid_square, int power_dbm, bool use_offset)
 {
     // Set operating frequency
     transParams.frequency = frequency;
@@ -1002,6 +917,7 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
             offset_freq = WSPR_RAND_OFFSET;
         }
     }
+    // Reset frequency based on any hardware limitations
     transParams.tone_spacing = 1.0 / transParams.symtime;
 
     // Apply random offset if enabled
@@ -1013,10 +929,14 @@ void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm,
         transParams.frequency += dis(gen) * offset_freq;
     }
 
+    // Configures and initializes the DMA system for transmission.
     setup_dma();
 
     // Get adjustments based on PPM
     config.ppm = get_ppm_from_chronyc();
+    // Compute actual PLL-adjusted frequency
+    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
+
     // Compute actual PLL-adjusted frequency
     double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
 

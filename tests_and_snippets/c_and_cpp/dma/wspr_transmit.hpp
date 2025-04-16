@@ -9,8 +9,6 @@
 extern std::atomic<bool> g_stop;
 
 void dma_cleanup();
-void setup_dma();
-void transmit_tone(double frequency);
-void transmit_wspr(std::string callsign, std::string grid_square, int power_dbm, double frequency, bool use_offset);
+void transmit_wspr(double frequency, std::string callsign = "", std::string grid_square = "", int power_dbm = 0, bool use_offset = false);
 
 #endif // _WSPR_H
