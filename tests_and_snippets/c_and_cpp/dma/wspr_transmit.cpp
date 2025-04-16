@@ -417,7 +417,7 @@ void transmit_on()
     clearBitBusAddress(GPIO_BUS_BASE, 12); // Clear bit 12
 
     // Set GPIO drive strength, values range from 2mA (-3.4dBm) to 16mA (+10.6dBm)
-    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + config.power_level;
+    accessBusAddress(PADS_GPIO_0_27_BUS) = 0x5a000018 + transParams.power;
 
     // Define clock control structure and set PLLD as the clock source.
     struct GPCTL setupword = {6 /*SRC*/, 0, 0, 0, 0, 3, 0x5A};
@@ -776,9 +776,6 @@ void create_dma_pages(
  */
 void setup_dma()
 {
-    // Get fresh PPM
-    config.ppm = get_ppm_from_chronyc();
-
     // Retrieve PLLD frequency
     get_plld_and_memflag();
 
@@ -879,6 +876,8 @@ void setup_dma_freq_table(
  */
 void transmit_wspr(
     double frequency,
+    int power,
+    double ppm,
     std::string callsign,
     std::string grid_square,
     int power_dbm,
@@ -886,6 +885,9 @@ void transmit_wspr(
 {
     // Set operating frequency
     transParams.frequency = frequency;
+
+    // Set power level
+    transParams.power = power;
 
     // Create a WSPR message instance
     bool is_tone = true;
@@ -936,11 +938,8 @@ void transmit_wspr(
     // Configures and initializes the DMA system for transmission.
     setup_dma();
 
-    // Get adjustments based on PPM
-    config.ppm = get_ppm_from_chronyc();
-
     // Compute actual PLL-adjusted frequency
-    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - config.ppm / 1e6);
+    double adjusted_plld_freq = dmaConfig.plld_clock_frequency * (1 - ppm / 1e6);
 
     // Hold returned actual frequency
     double center_freq_actual = transParams.frequency;

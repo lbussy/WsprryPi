@@ -12,6 +12,8 @@ void dma_cleanup();
 void setup_dma();
 void transmit_wspr(
     double frequency,
+    int power = 7,
+    double ppm = 0.0,
     std::string callsign = "",
     std::string grid_square = "",
     int power_dbm = 0,

@@ -116,9 +116,12 @@ int main()
     bool isWspr = select_wspr();
     std::cout << "Mode selected: " << (isWspr ? "WSPR" : "TONE") << std::endl;
 
+    // Get adjustments based on PPM
+    config.ppm = get_ppm_from_chronyc();
+
     if (isWspr)
     {
-        transmit_wspr(7040100.0, "AA0NT", "EM18", 20, true);
+        transmit_wspr(7040100.0, config.ppm, 0, "AA0NT", "EM18", 20, true);
     }
     else
     {
