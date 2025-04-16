@@ -305,10 +305,10 @@ struct WsprTransmissionParams
             // Print each symbol as an integer.
             std::cout << static_cast<int>(symbols[i]);
             if (i < symbols_size - 1)
-                std::cout << " ";
+                std::cout << ", ";
 
             // Optionally, insert a newline every 16 symbols for readability.
-            if ((i + 1) % 16 == 0)
+            if ((i + 1) % 18 == 0)
                 std::cout << std::endl;
         }
         std::cout << std::endl;
