@@ -121,12 +121,26 @@ int main()
 
     if (isWspr)
     {
-        transmit_wspr(7040100.0, config.ppm, 0, "AA0NT", "EM18", 20, true);
+        setup_transmission(7040100.0, config.ppm, 0, "AA0NT", "EM18", 20, true);
     }
     else
     {
-        transmit_wspr(7040100.0);
+        setup_transmission(7040100.0);
     }
+
+    std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") << " complete." << std::endl;
+    if (transParams.is_tone)
+    {
+        std::cout << "Press CTRL-C to end." << std::endl;
+    }
+    else
+    {
+        std::cout << "Waiting for next transmission window." << std::endl;
+        std::cout << "Press <spacebar> to start immediately." << std::endl;
+        waitForOneSecondPastEvenMinute();
+    }
+    transmit();
+
     dma_cleanup();
 
     return 0;
