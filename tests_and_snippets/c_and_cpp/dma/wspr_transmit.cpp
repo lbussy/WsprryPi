@@ -210,13 +210,13 @@ void get_plld_and_memflag()
  *
  * This is used for low-level register access to GPIO, clocks, DMA, etc.
  *
- * @param[out] peri_base_virt Reference to a pointer that will be set to the
- *                            mapped virtual memory address.
+ * @param[out] dmaConfig.peri_base_virt Reference to a pointer that will
+ *             be set to the mapped virtual memory address.
  *
  * @throws Terminates the program if the peripheral base cannot be determined,
  *         `/dev/mem` cannot be opened, or `mmap` fails.
  */
-void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
+void setup_peri_base_virt()
 {
     auto read_dt_range = [](const std::string &filename, unsigned offset) -> std::optional<unsigned>
     {
@@ -253,7 +253,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
         throw std::runtime_error("Error: Cannot open /dev/mem.");
     }
 
-    peri_base_virt = static_cast<unsigned *>(mmap(
+    dmaConfig.peri_base_virt = static_cast<unsigned *>(mmap(
         nullptr,
         0x01000000,             // 16MB memory region
         PROT_READ | PROT_WRITE, // Allow read and write
@@ -262,7 +262,7 @@ void setup_peri_base_virt(volatile unsigned *&peri_base_virt)
         peripheral_base // Physical address to map
         ));
 
-    if (reinterpret_cast<long int>(peri_base_virt) == -1)
+    if (reinterpret_cast<long int>(dmaConfig.peri_base_virt) == -1)
     {
         throw std::runtime_error("Error: peri_base_virt mmap failed.");
     }
@@ -783,7 +783,7 @@ void setup_dma()
     get_plld_and_memflag();
 
     // Initialize peripheral memory mapping
-    setup_peri_base_virt(dmaConfig.peri_base_virt);
+    setup_peri_base_virt();
 
     // Open mailbox for communication
     open_mbox();
