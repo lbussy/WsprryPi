@@ -8,25 +8,18 @@
 #include "wspr_transmit.hpp"        // Required: implements the functions declared here
 
 // Project Headers
-#include "config_handler.hpp"       // Required: pulls in config.ppm, etc.
 #include "utils.hpp"                // Required: timeval_print(), timeval_subtract(), other helpers
-// #include "wspr_transmit.hpp"        // **Duplicate** of the top include; can remove this second copy
 
 // Submodules
 #include "wspr_message.hpp"         // Required: defines WsprMessage
 
 // C++ Standard Library Headers
-// #include <array>                    // Not used directly → can remove
 #include <algorithm>                // Required: std::clamp
-// #include <atomic>                   // Probably used elsewhere in this TU (g_stop, etc.) → keep if you reference it
 #include <cassert>                  // Required: assert()
-// #include <cerrno>                   // Not used → can remove
 #include <cmath>                    // Required: std::pow, std::floor, std::round
-// #include <condition_variable>       // Not used here → can remove
 #include <cstdint>                  // Required: uint32_t, uintptr_t
 #include <cstdlib>                  // Required: std::rand
 #include <cstring>                  // Required: std::memcpy
-// #include <ctime>                    // Not used → can remove
 #include <fstream>                  // Required: std::ifstream
 #include <iomanip>                  // Required: std::setprecision, setw, setfill
 #include <iostream>                 // Required: std::cout, std::cerr
@@ -35,22 +28,17 @@
 #include <sstream>                  // Required: std::stringstream
 #include <stdexcept>                // Required: std::runtime_error
 #include <string>                   // Required: std::string
-// #include <termios.h>                // Not used in this TU → can remove unless utils needs it
 #include <vector>                   // Required: std::vector
 
 // C Standard Library Headers
-// #include <string.h>                 // Duplicate of <cstring> → can remove
 #include <sys/types.h>              // Required by sys/stat.h on some systems → keep
 #include <unistd.h>                 // Required: close(), unlink(), usleep()
 
 // POSIX & System-Specific Headers
-// #include <assert.h>                 // Duplicate of <cassert> → can remove
 #include <fcntl.h>                  // Required: open() flags
 #include <sys/mman.h>               // Required: mmap(), munmap()
-// #include <pthread.h>                // Not used → can remove
 #include <sys/stat.h>               // Required: struct stat, stat()
 #include <sys/time.h>               // Required: gettimeofday(), struct timeval
-// #include <sys/timex.h>              // Not used directly → can remove
 
 #ifdef DEBUG_WSPR_TRANSMIT
 constexpr const bool debug = true;

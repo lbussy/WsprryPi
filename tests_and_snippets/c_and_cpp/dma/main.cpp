@@ -121,16 +121,18 @@ int main()
 
     if (isWspr)
     {
-        setup_transmission(7040100.0, config.ppm, 0, "AA0NT", "EM18", 20, true);
+        setup_transmission(7040100.0, 0, config.ppm, "AA0NT", "EM18", 20, true);
     }
     else
     {
-        setup_transmission(7040100.0);
+        setup_transmission(7040100.0, 0, config.ppm);
     }
 
     std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") << " complete." << std::endl;
     if (transParams.is_tone)
     {
+        std::cout << "Press <spacebar> to begin transmission." << std::endl;
+        pause_for_space();
         std::cout << "Press CTRL-C to end." << std::endl;
     }
     else
