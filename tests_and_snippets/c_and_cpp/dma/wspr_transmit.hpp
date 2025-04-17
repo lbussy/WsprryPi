@@ -209,5 +209,6 @@ void setup_transmission(
     int power_dbm = 0,
     bool use_offset = false);
 void transmit();
+void update_dma_for_ppm(double ppm_new);
 
 #endif // _WSPR_H

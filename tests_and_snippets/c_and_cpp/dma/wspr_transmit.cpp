@@ -1,5 +1,3 @@
-// TODO: Make into a class
-
 #include "wspr_transmit.hpp" // Required: implements the functions declared here
 
 // Submodules

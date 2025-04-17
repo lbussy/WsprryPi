@@ -21,8 +21,6 @@
 #include <termios.h>
 #include <sys/select.h>
 
-std::atomic<bool> g_stop;
-
 /**
  * @brief Global configuration object.
  *
