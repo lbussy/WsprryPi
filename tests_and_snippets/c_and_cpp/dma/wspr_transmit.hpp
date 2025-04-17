@@ -11,9 +11,6 @@
 #include <string>
 #include <vector>
 
-// Global stop flag.
-extern std::atomic<bool> g_stop;
-
 /**
  * @brief Page information for the constant memory page.
  *
@@ -50,23 +47,49 @@ extern struct PageInfo instrs[1024];
  */
 extern struct WsprTransmissionParams transParams;
 
+/**
+ * @brief DMA configuration and saved state for transmission setup/cleanup.
+ *
+ * @details Stores both the nominal and (PPM‑corrected) PLLD clock frequencies,
+ *          mailbox memory flags, the virtual base address for peripheral access,
+ *          and the original register values that must be restored when
+ *          tearing down DMA/PWM configuration.
+ */
 struct DMAConfig
 {
-    double plld_clock_frequency; ///< Clock speed (defaults to 500 MHz).
-    int mem_flag;                ///< Memory management flags.
-    /*
-    peripheral_base_virtual is the base virtual address that a userspace program (this
-    program) can use to read/write to the the physical addresses controlling
-    the peripherals. This address is mapped at runtime using mmap and /dev/mem.
-    This must be declared global so that it can be called by the atexit
-    function.
-     */
-    void *peripheral_base_virtual;
+    double plld_nominal_freq;      ///< PLLD clock frequency in Hz before any PPM correction.
+    double plld_clock_frequency;   ///< PLLD clock frequency in Hz after PPM correction.
+    int mem_flag;                  ///< Mailbox memory allocation flags for DMA.
+    void *peripheral_base_virtual; ///< Virtual base pointer for /dev/mem mapping of peripherals.
+    uint32_t orig_gp0ctl;          ///< Saved GP0CTL register (clock control).
+    uint32_t orig_gp0div;          ///< Saved GP0DIV register (clock divider).
+    uint32_t orig_pwm_ctl;         ///< Saved PWM control register.
+    uint32_t orig_pwm_sta;         ///< Saved PWM status register.
+    uint32_t orig_pwm_rng1;        ///< Saved PWM range register 1.
+    uint32_t orig_pwm_rng2;        ///< Saved PWM range register 2.
+    uint32_t orig_pwm_fifocfg;     ///< Saved PWM FIFO configuration register.
 
+    /**
+     * @brief Construct a new DMAConfig with default (nominal) settings.
+     *
+     * @details Initializes:
+     *   - `plld_nominal_freq` to 500 MHz with the built‑in 2.5 ppm correction.
+     *   - `plld_clock_frequency` equal to `plld_nominal_freq`.
+     *   - `mem_flag` to the default mailbox flag.
+     *   - All pointers and saved‑register fields to zero or nullptr.
+     */
     DMAConfig()
-        : plld_clock_frequency(500000000.0 * (1 - 2.500e-6)), ///< Apply 2.5 PPM correction)
-          mem_flag(0x0c),                                     ///< Memory flag used for DMA
-          peripheral_base_virtual()                                    ///< Peripherals base address
+        : plld_nominal_freq(500000000.0 * (1 - 2.500e-6)),
+          plld_clock_frequency(plld_nominal_freq),
+          mem_flag(0x0c),
+          peripheral_base_virtual(nullptr),
+          orig_gp0ctl(0),
+          orig_gp0div(0),
+          orig_pwm_ctl(0),
+          orig_pwm_sta(0),
+          orig_pwm_rng1(0),
+          orig_pwm_rng2(0),
+          orig_pwm_fifocfg(0)
     {
     }
 };
@@ -181,8 +204,8 @@ void setup_transmission(
     double frequency,
     int power = 7,
     double ppm = 0.0,
-    std::string callsign = "",
-    std::string grid_square = "",
+    const std::string &callsign = "",
+    const std::string &grid_square = "",
     int power_dbm = 0,
     bool use_offset = false);
 void transmit();

@@ -1,14 +1,6 @@
-// TODO:
-// * "Undo" DMA and mailbox setup
-// * Make GPIO adjustable?
-// * See if Utils are unique - move in if so
-// * allocate_memory_pool(1025) <- why 1025?
-// * Make into a class
+// TODO: Make into a class
 
 #include "wspr_transmit.hpp" // Required: implements the functions declared here
-
-// Project Headers
-#include "utils.hpp" // Required: timeval_print(), timeval_subtract(), other helpers
 
 // Submodules
 #include "wspr_message.hpp" // Required: defines WsprMessage
@@ -473,35 +465,47 @@ inline std::uintptr_t busToPhys(std::uintptr_t x)
 }
 
 /**
- * @brief Initializes DMA configuration for PLLD clock settings.
+ * @brief Computes the difference between two time values.
+ * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
+ *          the function returns `1`, otherwise, it returns `0`.
  *
- * Determines the Raspberry Pi hardware revision by reading from
- * `/proc/cpuinfo`, extracts the processor ID, and sets the appropriate
- * DMA memory flag and PLLD clock frequency in `dmaConfig`.
+ * @param[out] result Pointer to `timeval` struct to store the difference.
+ * @param[in] t2 Pointer to the later `timeval` structure.
+ * @param[in] t1 Pointer to the earlier `timeval` structure.
+ * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
+ */
+int symbol_timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
+{
+    // Compute the time difference in microseconds
+    long int diff_usec = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+
+    // Compute seconds and microseconds for the result
+    result->tv_sec = diff_usec / 1000000;
+    result->tv_usec = diff_usec % 1000000;
+
+    // Return 1 if t2 < t1 (negative difference), otherwise 0
+    return (diff_usec < 0) ? 1 : 0;
+}
+
+/**
+ * @brief Initialize DMAConfig PLLD frequencies and mailbox memory flag.
  *
- * This function configures:
- * - `dmaConfig.mem_flag` based on the board's memory allocation strategy
- * - `dmaConfig.plld_clock_frequency` based on the processor's clock
+ * @details
+ *   1. Reads the Raspberry Pi hardware revision from `/proc/cpuinfo` (cached
+ *      after first read).
+ *   2. Determines the processor ID (BCM2835, BCM2836/37, or BCM2711).
+ *   3. Sets `dmaConfig.mem_flag` to the correct mailbox allocation flag.
+ *   4. Sets `dmaConfig.plld_nominal_freq` to the board’s true PLLD base
+ *      frequency (500 MHz for Pi 1/2/3, 750 MHz for Pi 4).
+ *   5. Initializes `dmaConfig.plld_clock_frequency` equal to
+ *      `plld_nominal_freq` (zero PPM correction).
  *
- * Supported processors:
- * - BCM2835 (Raspberry Pi 1)
- * - BCM2836 / BCM2837 (Raspberry Pi 2 / 3)
- * - BCM2711 (Raspberry Pi 4)
- *
- * @note The board revision is cached after first read to avoid repeated
- *       filesystem access.
- *
- * @throws Terminates the program with `std::exit(EXIT_FAILURE)` if the
- *         processor ID is unrecognized.
- *
- * @warning If the PLLD frequency cannot be determined or is invalid, a
- *          default of 500 MHz is used as a fallback.
+ * @throws std::runtime_error if the processor ID is unrecognized.
  */
 void get_plld_and_memflag()
 {
-    // Cache the revision to avoid reading the file multiple times
+    // Cache the revision to avoid repeated file I/O
     static std::optional<unsigned> cached_revision;
-
     if (!cached_revision)
     {
         std::ifstream file("/proc/cpuinfo");
@@ -519,42 +523,51 @@ void get_plld_and_memflag()
                 }
             }
         }
-
         if (!cached_revision)
         {
-            cached_revision = 0; // Default if reading/parsing failed
+            cached_revision = 0; // fallback if parsing fails
         }
     }
 
     const unsigned rev = *cached_revision;
 
-    // Determine processor ID
-    const int processor_id = (rev & 0x800000) ? ((rev & 0xf000) >> 12) : BCM_HOST_PROCESSOR_BCM2835;
+    // Extract processor ID (high‑bit indicates new format)
+    const int proc_id = (rev & 0x800000)
+                            ? ((rev & 0xF000) >> 12)
+                            : BCM_HOST_PROCESSOR_BCM2835;
 
-    // Configure PLLD and mem_flag based on processor ID
-    switch (processor_id)
+    // Determine base PLLD frequency and mailbox flag
+    double base_freq_hz = 500e6;
+    switch (proc_id)
     {
-    case BCM_HOST_PROCESSOR_BCM2835: // Raspberry Pi 1
-        dmaConfig.mem_flag = 0x0c;
-        dmaConfig.plld_clock_frequency = 500000000.0 * (1 - 2.500e-6); // 2.5 PPM correction
+    case BCM_HOST_PROCESSOR_BCM2835: // Pi 1
+        dmaConfig.mem_flag = 0x0C;
+        base_freq_hz = 500e6;
         break;
-    case BCM_HOST_PROCESSOR_BCM2836: // Raspberry Pi 2
-    case BCM_HOST_PROCESSOR_BCM2837: // Raspberry Pi 3
+    case BCM_HOST_PROCESSOR_BCM2836: // Pi 2
+    case BCM_HOST_PROCESSOR_BCM2837: // Pi 3
         dmaConfig.mem_flag = 0x04;
-        dmaConfig.plld_clock_frequency = 500000000.0;
+        base_freq_hz = 500e6;
         break;
-    case BCM_HOST_PROCESSOR_BCM2711: // Raspberry Pi 4
+    case BCM_HOST_PROCESSOR_BCM2711: // Pi 4
         dmaConfig.mem_flag = 0x04;
-        dmaConfig.plld_clock_frequency = 750000000.0;
+        base_freq_hz = 750e6;
         break;
     default:
-        throw std::runtime_error("Error: Unknown chipset (" + std::to_string(processor_id) + ").");
+        throw std::runtime_error(
+            "Error: Unknown chipset (" + std::to_string(proc_id) + ")");
     }
 
+    // Store nominal and initial (zero‑PPM) working frequency
+    dmaConfig.plld_nominal_freq = base_freq_hz;
+    dmaConfig.plld_clock_frequency = base_freq_hz;
+
+    // Sanity check
     if (dmaConfig.plld_clock_frequency <= 0)
     {
-        std::cerr << "Error: Invalid PLL clock frequency. Using default 500 MHz." << std::endl;
-        dmaConfig.plld_clock_frequency = 500000000.0;
+        std::cerr << "Error: Invalid PLLD frequency; defaulting to 500 MHz\n";
+        dmaConfig.plld_nominal_freq = 500e6;
+        dmaConfig.plld_clock_frequency = 500e6;
     }
 }
 
@@ -619,6 +632,9 @@ void setup_peripheral_base_virtual()
         peripheral_base);
     close(mem_fd);
 
+    if (!dmaConfig.peripheral_base_virtual)
+        throw std::runtime_error("peripheral_base_virtual not initialized");
+
     // Check against MAP_FAILED, not –1
     if (dmaConfig.peripheral_base_virtual == MAP_FAILED)
     {
@@ -627,33 +643,58 @@ void setup_peripheral_base_virtual()
 }
 
 /**
- * @brief Allocates a memory pool for DMA usage.
- * @details Uses the mailbox interface to allocate a contiguous block of memory.
- *          The memory is locked down, mapped to virtual user space, and its
- *          bus address is stored for further use.
+ * @brief Allocate a pool of DMA‑capable memory pages.
  *
- * @param numpages Number of memory pages to allocate.
+ * @details Uses the Broadcom mailbox interface to:
+ *   1. Allocate a contiguous block of physical pages.
+ *   2. Lock the block and retrieve its bus address.
+ *   3. Map the block into user space for CPU access.
+ *   4. Track the pool size and reset the per‑page allocation counter.
+ *
+ * When called with `numpages = 1025`, one page is reserved for constant data
+ * and 1024 pages are used for building the DMA instruction chain.
+ *
+ * @param numpages Total number of pages to allocate (1 constant + N instruction pages).
+ * @throws std::runtime_error if mailbox allocation, locking, or mapping fails.
  */
 void allocate_memory_pool(unsigned numpages)
 {
-    // Allocate a contiguous block of memory using the mailbox interface.
-    mbox.mem_ref = mem_alloc(mbox.handle, PAGE_SIZE * numpages, BLOCK_SIZE, dmaConfig.mem_flag);
+    // Allocate a contiguous block of physical pages
+    mbox.mem_ref = mem_alloc(
+        mbox.handle,
+        PAGE_SIZE * numpages,
+        BLOCK_SIZE,
+        dmaConfig.mem_flag);
+    if (mbox.mem_ref == 0)
+    {
+        throw std::runtime_error("Error: mem_alloc failed.");
+    }
 
-    // Lock the allocated memory block and retrieve its bus address.
+    // Lock the block to obtain its bus address
     mbox.bus_addr = mem_lock(mbox.handle, mbox.mem_ref);
+    if (mbox.bus_addr == 0)
+    {
+        mem_free(mbox.handle, mbox.mem_ref);
+        throw std::runtime_error("Error: mem_lock failed.");
+    }
 
-    // Convert the bus address to a physical address and map it to user space.
-    mbox.virt_addr = static_cast<unsigned char *>(mapmem(busToPhys(mbox.bus_addr), PAGE_SIZE * numpages));
+    // Map the locked pages into user‑space virtual memory
+    mbox.virt_addr = static_cast<unsigned char *>(
+        mapmem(busToPhys(mbox.bus_addr), PAGE_SIZE * numpages));
+    if (mbox.virt_addr == nullptr)
+    {
+        mem_unlock(mbox.handle, mbox.mem_ref);
+        mem_free(mbox.handle, mbox.mem_ref);
+        throw std::runtime_error("Error: mapmem failed.");
+    }
 
-    // Store the total number of pages allocated in the pool (constant for its lifetime).
-    mbox.pool_size = numpages;
-
-    // Initialize the count of used pages in the pool.
-    mbox.pool_cnt = 0;
+    // Record pool parameters
+    mbox.pool_size = numpages; // total pages available
+    mbox.pool_cnt = 0;         // pages allocated so far
 
     if (debug)
     {
-        // Debug print: Displays memory allocation details in hexadecimal format.
+        // Debug output: Show allocated bus & virtual addresses
         std::cout << "DEBUG: allocate_memory_pool bus_addr=0x"
                   << std::hex << mbox.bus_addr
                   << " virt_addr=0x" << reinterpret_cast<unsigned long>(mbox.virt_addr)
@@ -985,28 +1026,69 @@ void safe_remove()
 }
 
 /**
- * @brief Cleans up DMA resources.
- * @details Disables the clock, resets the DMA engine, deallocates memory,
- *          and removes the local device file if it exists.
+ * @brief Clean up DMA and mailbox resources.
+ *
+ * @details Performs teardown in the following order:
+ *   1. Prevent multiple invocations.
+ *   2. Stop any ongoing DMA transfers and disable the PWM clock.
+ *   3. Restore saved clock and PWM register values.
+ *   4. Reset the DMA controller.
+ *   5. Unmap the peripheral base address region.
+ *   6. Deallocate mailbox memory pages.
+ *   7. Close the mailbox handle.
+ *   8. Remove the local device file.
+ *   9. Reset all configuration data to defaults.
+ *
+ * @note This function is idempotent; subsequent calls are no‑ops.
  */
 void dma_cleanup()
 {
+    // Guard against multiple calls
     static bool cleanup_done = false;
     if (cleanup_done)
-        return; // Prevent duplicate cleanup
+    {
+        return;
+    }
     cleanup_done = true;
 
-    // Disable the clock to prevent unintended operation
-    disable_clock();
+    // Stop DMA transfers and disable PWM clock
+    transmit_off();
 
-    // Reset and clean up DMA-related settings
+    // Restore original clock and PWM registers
+    accessBusAddress(CM_GP0DIV_BUS) = dmaConfig.orig_gp0div;
+    accessBusAddress(CM_GP0CTL_BUS) = dmaConfig.orig_gp0ctl;
+    accessBusAddress(PWM_BUS_BASE + 0x00) = dmaConfig.orig_pwm_ctl;
+    accessBusAddress(PWM_BUS_BASE + 0x04) = dmaConfig.orig_pwm_sta;
+    accessBusAddress(PWM_BUS_BASE + 0x10) = dmaConfig.orig_pwm_rng1;
+    accessBusAddress(PWM_BUS_BASE + 0x20) = dmaConfig.orig_pwm_rng2;
+    accessBusAddress(PWM_BUS_BASE + 0x08) = dmaConfig.orig_pwm_fifocfg;
+
+    // Reset DMA controller registers
     clear_dma_setup();
 
-    // Deallocate memory pool to free allocated resources
+    // Unmap peripheral region if mapped
+    if (dmaConfig.peripheral_base_virtual)
+    {
+        munmap(dmaConfig.peripheral_base_virtual, 0x01000000);
+        dmaConfig.peripheral_base_virtual = nullptr;
+    }
+
+    // Deallocate mailbox-allocated memory pages
     deallocate_memory_pool();
 
-    // Remove the local device file
+    // Close mailbox handle if open
+    if (mbox.handle >= 0)
+    {
+        mbox_close(mbox.handle);
+        mbox.handle = -1;
+    }
+
+    // Remove the local device file if it exists
     safe_remove();
+
+    // Reset global configuration structures to defaults
+    dmaConfig = {};
+    mbox = {};
 }
 
 /**
@@ -1120,23 +1202,40 @@ void create_dma_pages(
 }
 
 /**
- * @brief Configures and initializes the DMA system for transmission.
- * @details Retrieves PLLD frequency, creates peripheral memory mapping,
- *          opens mailbox communication, and creates DMA code pages for
- *          constants, initial instructions and a page array of instructions.
+ * @brief Configure and initialize the DMA system for WSPR transmission.
+ *
+ * @details Performs the following steps in order:
+ *   1. Retrieve and configure the PLLD clock frequency and DMA memory flag.
+ *   2. Map the peripheral base address into user space.
+ *   3. Save the original clock and PWM register values for later restoration.
+ *   4. Open the Broadcom mailbox interface for DMA memory allocation.
+ *   5. Allocate and set up DMA control blocks for constants and instruction pages.
+ *
+ * @throws std::runtime_error if the PLLD clock cannot be determined.
+ * @throws std::runtime_error if peripheral memory mapping fails.
+ * @throws std::runtime_error if mailbox opening fails.
  */
 void setup_dma()
 {
-    // Retrieve PLLD frequency
+    // Retrieve PLLD frequency and DMA memory flag
     get_plld_and_memflag();
 
-    // Initialize peripheral memory mapping
+    // Map the peripheral base address into virtual memory
     setup_peripheral_base_virtual();
 
-    // Open mailbox for communication
+    // Save original register states for cleanup
+    dmaConfig.orig_gp0ctl = accessBusAddress(CM_GP0CTL_BUS);
+    dmaConfig.orig_gp0div = accessBusAddress(CM_GP0DIV_BUS);
+    dmaConfig.orig_pwm_ctl = accessBusAddress(PWM_BUS_BASE + 0x00);
+    dmaConfig.orig_pwm_sta = accessBusAddress(PWM_BUS_BASE + 0x04);
+    dmaConfig.orig_pwm_rng1 = accessBusAddress(PWM_BUS_BASE + 0x10);
+    dmaConfig.orig_pwm_rng2 = accessBusAddress(PWM_BUS_BASE + 0x20);
+    dmaConfig.orig_pwm_fifocfg = accessBusAddress(PWM_BUS_BASE + 0x08);
+
+    // Open the mailbox for DMA memory allocation
     open_mbox();
 
-    // Configure DMA for transmission
+    // Allocate memory pages and build DMA control blocks
     create_dma_pages(constPage, instrPage, instrs);
 }
 
@@ -1211,158 +1310,194 @@ void setup_dma_freq_table(double &center_freq_actual)
 }
 
 /**
- * @brief Transmits WSPR (Weak Signal Propagation Reporter) messages.
- * @details Continuously loops through available bands, waiting for WSPR transmission
- *          windows, generating WSPR symbols, and transmitting them.
- *          The function dynamically adjusts transmission frequency based on
- *          PPM calibration and ensures accurate symbol timing.
+ * @brief Rebuild the DMA tuning‐word table with a fresh PPM correction.
+ *
+ * @param ppm_new The new parts‑per‑million offset (e.g. +11.135).
+ * @throws std::runtime_error if peripherals aren’t mapped.
+ */
+void update_dma_for_ppm(double ppm_new)
+{
+    // Apply the PPM correction to your working PLLD clock.
+    dmaConfig.plld_clock_frequency =
+        dmaConfig.plld_nominal_freq * (1.0 - ppm_new / 1e6);
+
+    // Recompute the DMA frequency table in place.
+    // Pass in your current center frequency so it can adjust if needed.
+    double center_actual = transParams.frequency;
+    setup_dma_freq_table(center_actual);
+    transParams.frequency = center_actual;
+}
+
+/**
+ * @brief Configure and start a WSPR transmission.
+ *
+ * @details Performs the following sequence:
+ *   1. Set the desired RF frequency and power level.
+ *   2. Populate WSPR symbol data if transmitting a message.
+ *   3. Determine WSPR mode (2‑tone or 15‑tone) and symbol timing.
+ *   4. Optionally apply a random frequency offset to spread spectral load.
+ *   5. Initialize DMA and mailbox resources.
+ *   6. Apply the specified PPM calibration to the PLLD clock.
+ *   7. Rebuild the DMA frequency table with the new PPM‑corrected clock.
+ *   8. Update the actual center frequency after any hardware adjustments.
+ *
+ * @param[in] frequency    Target RF frequency in Hz.
+ * @param[in] power        Transmit power index (0‑n).
+ * @param[in] ppm          Parts‑per‑million correction to apply (e.g. +11.135).
+ * @param[in] callsign     Optional callsign for WSPR message.
+ * @param[in] grid_square  Optional Maidenhead grid locator.
+ * @param[in] power_dbm    dBm value for WSPR message (ignored if tone).
+ * @param[in] use_offset   True to apply a small random offset within band.
+ *
+ * @throws std::runtime_error if DMA setup or mailbox operations fail.
  */
 void setup_transmission(
     double frequency,
     int power,
     double ppm,
-    std::string callsign,
-    std::string grid_square,
+    const std::string &callsign,
+    const std::string &grid_square,
     int power_dbm,
     bool use_offset)
 {
-    // Set operating frequency
+    // Set RF frequency and power parameters
     transParams.frequency = frequency;
-
-    // Set power level
     transParams.power = power;
 
+    // Default to tone‑only; load WSPR message if provided
     transParams.is_tone = true;
     if (!callsign.empty() && !grid_square.empty() && power_dbm != 0)
     {
-        // Create a WSPR message instance if not tone
         transParams.is_tone = false;
-        WsprMessage wMessage(callsign, grid_square, power_dbm);
-        std::copy_n(wMessage.symbols, wMessage.size, transParams.symbols.begin());
+        WsprMessage msg(callsign, grid_square, power_dbm);
+        std::copy_n(msg.symbols, msg.size, transParams.symbols.begin());
     }
 
-    // Define WSPR symbol time and tone spacing per WSPR mode (2 vs 15)
+    // Choose WSPR mode and symbol timing
     int offset_freq = 0;
-    if (
-        (!transParams.is_tone) &&
-        ((transParams.frequency > 137600 && transParams.frequency < 137625) ||
-         (transParams.frequency > 475800 && transParams.frequency < 475825) ||
-         (transParams.frequency > 1838200 && transParams.frequency < 1838225)))
+    if (!transParams.is_tone &&
+        ((frequency > 137600 && frequency < 137625) ||
+         (frequency > 475800 && frequency < 475825) ||
+         (frequency > 1838200 && frequency < 1838225)))
     {
-        // For WSPR15
+        // WSPR‑15 mode
         transParams.wspr_mode = WsprMode::WSPR15;
         transParams.symtime = 8.0 * WSPR_SYMTIME;
         if (use_offset)
-        {
             offset_freq = WSPR15_RAND_OFFSET;
-        }
     }
     else
     {
-        // For WSPR2
+        // WSPR‑2 mode
         transParams.wspr_mode = WsprMode::WSPR2;
         transParams.symtime = WSPR_SYMTIME;
         if (use_offset)
-        {
             offset_freq = WSPR_RAND_OFFSET;
-        }
     }
-    // Reset frequency based on any hardware limitations
     transParams.tone_spacing = 1.0 / transParams.symtime;
 
-    // Apply random offset if enabled
+    // Apply random offset if requested
     if (use_offset)
     {
         std::random_device rd;
-        std::mt19937 gen(rd()); // Seed with a fixed value for repeatability
+        std::mt19937 gen(rd());
         std::uniform_real_distribution<> dis(-1.0, 1.0);
         transParams.frequency += dis(gen) * offset_freq;
     }
 
-    // Configures and initializes the DMA system for transmission.
+    // Initialize DMA, mapping, and control blocks
     setup_dma();
 
-    // Compute actual PLL-adjusted frequency
-    dmaConfig.plld_clock_frequency = dmaConfig.plld_clock_frequency * (1 - ppm / 1e6);
+    // Apply PPM correction to the PLLD clock
+    // (use a stored nominal base frequency for repeatable resets)
+    dmaConfig.plld_clock_frequency =
+        dmaConfig.plld_nominal_freq * (1 - ppm / 1e6);
 
-    // Capture setup frequency
-    double center_freq_actual = transParams.frequency;
+    // Build the DMA frequency lookup table with new clock
+    double center_actual = transParams.frequency;
+    setup_dma_freq_table(center_actual);
 
-    // Setup the DMA frequency table
-    setup_dma_freq_table(center_freq_actual);
+    // Update actual frequency after any hardware adjustments
+    transParams.frequency = center_actual;
 
-    // Reset frequency based on any hardware limitations
-    transParams.frequency = center_freq_actual;
-
+    // Optional debug output
     if (debug)
     {
-        // Debug output for transmission
         std::cout << std::setprecision(30)
                   << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
                   << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
                   << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
                   << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
+        // Debug output for transmission
         transParams.print();
     }
 }
 
+/**
+ * @brief Perform DMA-driven RF transmission.
+ *
+ * @details
+ *   1. Records the start time as a reference for symbol scheduling.
+ *   2. Enables the PWM clock and DMA engine for transmission.
+ *   3. If in tone mode, continuously transmits a fixed‑frequency test tone.
+ *   4. Otherwise, transmits each WSPR symbol in sequence, using gettimeofday()
+ *      and `timeval_subtract()` to schedule precise symbol timing.
+ *   5. Disables transmission when complete.
+ *
+ * @note In tone mode (`transParams.is_tone == true`), this function only
+ *       returns via SIGINT.
+ */
 void transmit()
 {
-    // Time structs for computing transmission window
-    struct timeval tvBegin, tvEnd, tvDiff;
-    gettimeofday(&tvBegin, NULL);
-    std::cout << "TX started at: " << timeval_print(&tvBegin) << std::endl;
+    // Record reference time for scheduling
+    struct timeval tv_begin{};
+    gettimeofday(&tv_begin, nullptr);
 
-    // DMA buffer pointer
+    // Initialize DMA buffer index
     int bufPtr = 0;
 
-    // Enable transmission
+    // Enable PWM clock and DMA transmission
     transmit_on();
 
     if (transParams.is_tone)
     {
-        // Continuous transmission loop
+        // Continuous tone loop (exit on SIGINT)
         while (true)
         {
-            // Transmit the test tone symbol
             transmit_symbol(
-                0,     // The symbol number to transmit.
-                60,    // The duration (seconds) for which the symbol is transmitted.
-                bufPtr // The buffer pointer index for DMA instruction handling.
+                0,     // symbol number
+                60.0,  // duration in seconds
+                bufPtr // DMA buffer index
             );
         }
     }
     else
     {
-        // Structures for symbol timing
-        struct timeval sym_start, diff;
         // Transmit each symbol in the WSPR message
-        for (int i = 0; i < static_cast<int>(transParams.symbols.size()); i++)
+        struct timeval sym_start{};
+        struct timeval diff{};
+        const int symbol_count = static_cast<int>(transParams.symbols.size());
+
+        for (int i = 0; i < symbol_count; ++i)
         {
-            // Symbol timing
-            gettimeofday(&sym_start, NULL);
-            timeval_subtract(&diff, &sym_start, &tvBegin);
+            // Compute elapsed time since tv_begin
+            gettimeofday(&sym_start, nullptr);
+            symbol_timeval_subtract(&diff, &sym_start, &tv_begin);
             double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
             double sched_end = (i + 1) * transParams.symtime;
             double time_symbol = sched_end - elapsed;
-            time_symbol = std::clamp(time_symbol, 0.2, 2 * transParams.symtime);
-            int symbol = static_cast<int>(transParams.symbols[i]);
+            time_symbol = std::clamp(time_symbol, 0.2, 2.0 * transParams.symtime);
 
+            // Transmit the current symbol
+            int symbol = static_cast<int>(transParams.symbols[i]);
             transmit_symbol(
-                symbol,      // The symbol number to transmit.
-                time_symbol, // The duration (seconds) for which the symbol is transmitted.
-                bufPtr       // The buffer pointer index for DMA instruction handling.
+                symbol,      // symbol index
+                time_symbol, // scheduled duration
+                bufPtr       // DMA buffer index
             );
         }
     }
 
-    // Disable transmission
+    // Disable PWM clock and stop transmission
     transmit_off();
-
-    // Print transmission timestamp and duration
-    gettimeofday(&tvEnd, nullptr);
-    timeval_subtract(&tvDiff, &tvEnd, &tvBegin);
-    std::cout << "TX ended at: " << timeval_print(&tvEnd)
-              << " (" << tvDiff.tv_sec << "." << std::setfill('0') << std::setw(3)
-              << (tvDiff.tv_usec + 500) / 1000 << " s)" << std::endl;
 }
