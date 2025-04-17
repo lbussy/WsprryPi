@@ -55,18 +55,18 @@ struct DMAConfig
     double plld_clock_frequency; ///< Clock speed (defaults to 500 MHz).
     int mem_flag;                ///< Memory management flags.
     /*
-    peri_base_virt is the base virtual address that a userspace program (this
+    peripheral_base_virtual is the base virtual address that a userspace program (this
     program) can use to read/write to the the physical addresses controlling
     the peripherals. This address is mapped at runtime using mmap and /dev/mem.
     This must be declared global so that it can be called by the atexit
     function.
      */
-    volatile unsigned *peri_base_virt;
+    void *peripheral_base_virtual;
 
     DMAConfig()
         : plld_clock_frequency(500000000.0 * (1 - 2.500e-6)), ///< Apply 2.5 PPM correction)
           mem_flag(0x0c),                                     ///< Memory flag used for DMA
-          peri_base_virt()                                    ///< Peripherals base address
+          peripheral_base_virtual()                                    ///< Peripherals base address
     {
     }
 };

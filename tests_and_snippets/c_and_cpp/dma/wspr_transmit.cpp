@@ -5,40 +5,40 @@
 // * allocate_memory_pool(1025) <- why 1025?
 // * Make into a class
 
-#include "wspr_transmit.hpp"        // Required: implements the functions declared here
+#include "wspr_transmit.hpp" // Required: implements the functions declared here
 
 // Project Headers
-#include "utils.hpp"                // Required: timeval_print(), timeval_subtract(), other helpers
+#include "utils.hpp" // Required: timeval_print(), timeval_subtract(), other helpers
 
 // Submodules
-#include "wspr_message.hpp"         // Required: defines WsprMessage
+#include "wspr_message.hpp" // Required: defines WsprMessage
 
 // C++ Standard Library Headers
-#include <algorithm>                // Required: std::clamp
-#include <cassert>                  // Required: assert()
-#include <cmath>                    // Required: std::pow, std::floor, std::round
-#include <cstdint>                  // Required: uint32_t, uintptr_t
-#include <cstdlib>                  // Required: std::rand
-#include <cstring>                  // Required: std::memcpy
-#include <fstream>                  // Required: std::ifstream
-#include <iomanip>                  // Required: std::setprecision, setw, setfill
-#include <iostream>                 // Required: std::cout, std::cerr
-#include <optional>                 // Required: std::optional
-#include <random>                   // Required: std::random_device, mt19937, uniform_real_distribution
-#include <sstream>                  // Required: std::stringstream
-#include <stdexcept>                // Required: std::runtime_error
-#include <string>                   // Required: std::string
-#include <vector>                   // Required: std::vector
+#include <algorithm> // Required: std::clamp
+#include <cassert>   // Required: assert()
+#include <cmath>     // Required: std::pow, std::floor, std::round
+#include <cstdint>   // Required: uint32_t, uintptr_t
+#include <cstdlib>   // Required: std::rand
+#include <cstring>   // Required: std::memcpy
+#include <fstream>   // Required: std::ifstream
+#include <iomanip>   // Required: std::setprecision, setw, setfill
+#include <iostream>  // Required: std::cout, std::cerr
+#include <optional>  // Required: std::optional
+#include <random>    // Required: std::random_device, mt19937, uniform_real_distribution
+#include <sstream>   // Required: std::stringstream
+#include <stdexcept> // Required: std::runtime_error
+#include <string>    // Required: std::string
+#include <vector>    // Required: std::vector
 
 // C Standard Library Headers
-#include <sys/types.h>              // Required by sys/stat.h on some systems → keep
-#include <unistd.h>                 // Required: close(), unlink(), usleep()
+#include <sys/types.h> // Required by sys/stat.h on some systems → keep
+#include <unistd.h>    // Required: close(), unlink(), usleep()
 
 // POSIX & System-Specific Headers
-#include <fcntl.h>                  // Required: open() flags
-#include <sys/mman.h>               // Required: mmap(), munmap()
-#include <sys/stat.h>               // Required: struct stat, stat()
-#include <sys/time.h>               // Required: gettimeofday(), struct timeval
+#include <fcntl.h>    // Required: open() flags
+#include <sys/mman.h> // Required: mmap(), munmap()
+#include <sys/stat.h> // Required: struct stat, stat()
+#include <sys/time.h> // Required: gettimeofday(), struct timeval
 
 #ifdef DEBUG_WSPR_TRANSMIT
 constexpr const bool debug = true;
@@ -419,11 +419,15 @@ struct WsprTransmissionParams transParams;
  */
 inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
 {
-    // Calculate the offset into the peripheral space.
-    std::uintptr_t offset = bus_addr - 0x7e000000UL;
-    // Add the offset to the base virtual address, then reinterpret the resulting address.
-    return *reinterpret_cast<volatile int *>(
-        reinterpret_cast<std::uintptr_t>(dmaConfig.peri_base_virt) + offset);
+    // Compute byte‐offset from the bus address
+    std::uintptr_t offset = bus_addr - 0x7E000000UL;
+
+    // Treat the void* as a char* (1‐byte pointer) so pointer arithmetic
+    // is in bytes.
+    auto base = static_cast<char *>(dmaConfig.peripheral_base_virtual);
+
+    // Add the offset, then cast to a volatile‐int pointer and dereference.
+    return *reinterpret_cast<volatile int *>(base + offset);
 }
 
 /**
@@ -562,13 +566,13 @@ void get_plld_and_memflag()
  *
  * This is used for low-level register access to GPIO, clocks, DMA, etc.
  *
- * @param[out] dmaConfig.peri_base_virt Reference to a pointer that will
+ * @param[out] dmaConfig.peripheral_base_virtual Reference to a pointer that will
  *             be set to the mapped virtual memory address.
  *
  * @throws Terminates the program if the peripheral base cannot be determined,
  *         `/dev/mem` cannot be opened, or `mmap` fails.
  */
-void setup_peri_base_virt()
+void setup_peripheral_base_virtual()
 {
     auto read_dt_range = [](const std::string &filename, unsigned offset) -> std::optional<unsigned>
     {
@@ -585,7 +589,7 @@ void setup_peri_base_virt()
         if (file.gcount() != sizeof(buf))
             return std::nullopt;
 
-        // Big-endian to host-endian conversion
+        // Big‑endian to host‑endian conversion
         return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
     };
 
@@ -605,21 +609,21 @@ void setup_peri_base_virt()
         throw std::runtime_error("Error: Cannot open /dev/mem.");
     }
 
-    dmaConfig.peri_base_virt = static_cast<unsigned *>(mmap(
+    // mmap returns void*, so assign directly
+    dmaConfig.peripheral_base_virtual = mmap(
         nullptr,
-        0x01000000,             // 16MB memory region
-        PROT_READ | PROT_WRITE, // Allow read and write
+        0x01000000,             // 16 MB
+        PROT_READ | PROT_WRITE, // read/write
         MAP_SHARED,
         mem_fd,
-        peripheral_base // Physical address to map
-        ));
-
-    if (reinterpret_cast<long int>(dmaConfig.peri_base_virt) == -1)
-    {
-        throw std::runtime_error("Error: peri_base_virt mmap failed.");
-    }
-
+        peripheral_base);
     close(mem_fd);
+
+    // Check against MAP_FAILED, not –1
+    if (dmaConfig.peripheral_base_virtual == MAP_FAILED)
+    {
+        throw std::runtime_error("Error: peripheral_base_virtual mmap failed.");
+    }
 }
 
 /**
@@ -729,7 +733,7 @@ void deallocate_memory_pool()
 void disable_clock()
 {
     // Ensure memory-mapped peripherals are initialized before proceeding.
-    if (dmaConfig.peri_base_virt == nullptr)
+    if (dmaConfig.peripheral_base_virtual == nullptr)
     {
         return;
     }
@@ -911,7 +915,7 @@ void clear_dma_setup()
     transmit_off();
 
     // Ensure memory-mapped peripherals are initialized before proceeding.
-    if (dmaConfig.peri_base_virt == nullptr)
+    if (dmaConfig.peripheral_base_virtual == nullptr)
     {
         return;
     }
@@ -1095,7 +1099,16 @@ void create_dma_pages(
     accessBusAddress(PWM_BUS_BASE + 0x8) = (1 << 31) | 0x0707; // Enable DMA
 
     // Obtain the base address as an integer pointer
-    volatile int *dma_base = reinterpret_cast<volatile int *>((uintptr_t)dmaConfig.peri_base_virt + DMA_BUS_BASE - 0x7e000000);
+    //
+    // Compute the byte‐offset from the bus base (0x7E000000) to your desired
+    // DMA register block (DMA_BUS_BASE).
+    std::uintptr_t delta = DMA_BUS_BASE - 0x7E000000UL;
+    //
+    // Treat your void* as a char* so arithmetic is in bytes
+    auto base = static_cast<char *>(dmaConfig.peripheral_base_virtual);
+    //
+    // Add the offset, then cast to your register pointer
+    volatile int *dma_base = reinterpret_cast<volatile int *>(base + delta);
 
     // Cast to DMAregs pointer to activate DMA
     volatile struct DMAregs *DMA0 = reinterpret_cast<volatile struct DMAregs *>(dma_base);
@@ -1118,7 +1131,7 @@ void setup_dma()
     get_plld_and_memflag();
 
     // Initialize peripheral memory mapping
-    setup_peri_base_virt();
+    setup_peripheral_base_virtual();
 
     // Open mailbox for communication
     open_mbox();
