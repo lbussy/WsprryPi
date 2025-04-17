@@ -21,6 +21,8 @@
 #include <termios.h>
 #include <sys/select.h>
 
+std::atomic<bool> g_stop;
+
 /**
  * @brief Global configuration object.
  *
@@ -141,7 +143,26 @@ int main()
         std::cout << "Press <spacebar> to start immediately." << std::endl;
         wait_for_trans_window();
     }
+
+    // Time structs for computing transmission window
+    struct timeval tv_begin, tv_end, tv_diff;
+    gettimeofday(&tv_begin, NULL);
+    std::cout << "TX started at: " << timeval_print(&tv_begin) << std::endl;
+
+    // Execute transmission
     transmit();
+
+    // Print transmission timestamp and duration
+    gettimeofday(&tv_end, nullptr);
+    timeval_subtract(&tv_diff, &tv_end, &tv_begin);
+    std::cout << "TX ended at: " << timeval_print(&tv_end)
+              << " (" << tv_diff.tv_sec << "." << std::setfill('0') << std::setw(3)
+              << (tv_diff.tv_usec + 500) / 1000 << " seconds)" << std::endl;
+
+    // Get adjustments based on PPM
+    // config.ppm = get_ppm_from_chronyc();
+    // Update with:
+    // update_dma_for_ppm(config.ppm);
 
     dma_cleanup();
 
