@@ -183,7 +183,17 @@ test: debug
     else \
         echo "Running test with user privileges."; \
     fi
-	$(Q)$(SUDO) ./build/bin/$(TEST_OUT)
+	$(Q)$(SUDO) ./build/bin/$(TEST_OUT) -i /usr/local/etc/wspr.ini
+
+# GDB target
+.PHONY: gdb
+gdb: debug
+	$(Q)if [ "$(SUDO)" = "sudo" ]; then \
+        echo "Running test with sudo privileges."; \
+    else \
+        echo "Running test with user privileges."; \
+    fi
+	$(Q)$(SUDO) sudo gdb --args ./build/bin/$(TEST_OUT) -i /usr/local/etc/wspr.ini
 
 # Show only user-defined macros
 .PHONY: macros
@@ -208,6 +218,7 @@ help:
 	$(Q)echo "  all          Build the project (default: release)."
 	$(Q)echo "  clean        Remove build artifacts."
 	$(Q)echo "  test         Run the binary with the INI file."
+	$(Q)echo "  gdb          Run the binary under GDB."
 	$(Q)echo "  lint         Run static analysis."
 	$(Q)echo "  macros       Show defined project macros."
 	$(Q)echo "  debug        Build with debugging symbols."
