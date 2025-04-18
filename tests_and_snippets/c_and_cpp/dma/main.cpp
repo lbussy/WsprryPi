@@ -94,7 +94,7 @@ void sig_handler(int sig = SIGTERM)
     // Called when exiting or when a signal is received.
     std::cout << "Caught signal: " << sig << " (" << strsignal(sig) << ").\n";
     g_stop.store(true);
-    dma_cleanup();
+    wsprTransmitter.dma_cleanup();
     std::cout << "Cleaning stuff up." << std::endl;
     exit(EXIT_SUCCESS);
 }
@@ -121,25 +121,28 @@ int main()
 
     if (isWspr)
     {
-        setup_transmission(7040100.0, 0, config.ppm, "AA0NT", "EM18", 20, true);
+        wsprTransmitter.setup_transmission(7040100.0, 0, config.ppm, "AA0NT", "EM18", 20, true);
     }
     else
     {
-        setup_transmission(7040100.0, 0, config.ppm);
+        wsprTransmitter.setup_transmission(7040100.0, 0, config.ppm);
     }
 
-    std::cout << "Setup for " << (transParams.is_tone ? "tone" : "WSPR") << " complete." << std::endl;
-    if (transParams.is_tone)
-    {
-        std::cout << "Press <spacebar> to begin transmission." << std::endl;
-        pause_for_space();
-        std::cout << "Press CTRL-C to end." << std::endl;
-    }
-    else
+    // Print transmission parameters
+    wsprTransmitter.print_parameters();
+
+    std::cout << "Setup for " << (isWspr ? "WSPR" : "tone") << " complete." << std::endl;
+    if (isWspr)
     {
         std::cout << "Waiting for next transmission window." << std::endl;
         std::cout << "Press <spacebar> to start immediately." << std::endl;
         wait_for_trans_window();
+    }
+    else
+    {
+        std::cout << "Press <spacebar> to begin transmission." << std::endl;
+        pause_for_space();
+        std::cout << "Press CTRL-C to end." << std::endl;
     }
 
     // Time structs for computing transmission window
@@ -148,7 +151,7 @@ int main()
     std::cout << "TX started at: " << timeval_print(&tv_begin) << std::endl;
 
     // Execute transmission
-    transmit();
+    wsprTransmitter.transmit();
 
     // Print transmission timestamp and duration
     gettimeofday(&tv_end, nullptr);
@@ -162,7 +165,7 @@ int main()
     // Update with:
     // update_dma_for_ppm(config.ppm);
 
-    dma_cleanup();
+    wsprTransmitter.dma_cleanup();
 
     return 0;
 }

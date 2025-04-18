@@ -20,15 +20,13 @@
 #include <string>    // Required: std::string
 #include <vector>    // Required: std::vector
 
-// C Standard Library Headers
+// POSIX & System-Specific Headers
+#include <fcntl.h>     // Required: open() flags
+#include <sys/mman.h>  // Required: mmap(), munmap()
+#include <sys/stat.h>  // Required: struct stat, stat()
+#include <sys/time.h>  // Required: gettimeofday(), struct timeval
 #include <sys/types.h> // Required by sys/stat.h on some systems → keep
 #include <unistd.h>    // Required: close(), unlink(), usleep()
-
-// POSIX & System-Specific Headers
-#include <fcntl.h>    // Required: open() flags
-#include <sys/mman.h> // Required: mmap(), munmap()
-#include <sys/stat.h> // Required: struct stat, stat()
-#include <sys/time.h> // Required: gettimeofday(), struct timeval
 
 #ifdef DEBUG_WSPR_TRANSMIT
 constexpr const bool debug = true;
@@ -44,357 +42,390 @@ extern "C"
 #endif /* __cplusplus */
 
 /**
- * @brief Random frequency offset for standard WSPR transmissions.
+ * @brief Global instance of the WSPR transmitter.
  *
- * This constant defines the range, in Hertz, for random frequency offsets
- * applied to standard WSPR transmissions. The offset is applied symmetrically
- * around the target frequency, resulting in a random variation of ±80 Hz.
- *
- * This helps distribute transmissions within the WSPR band, reducing the
- * likelihood of overlapping signals.
- *
- * @note This offset is applicable for standard WSPR transmissions (2-minute cycles).
- *
- * @see WSPR15_RAND_OFFSET
+ * @details This instance provides a globally accessible transmitter object
+ * for configuring and initiating WSPR transmissions. It is constructed at
+ * program startup and destructed automatically on exit.
  */
-constexpr int WSPR_RAND_OFFSET = 80;
+WsprTransmitter wsprTransmitter;
 
 /**
- * @brief Random frequency offset for WSPR-15 transmissions.
+ * @brief Constructs a WSPR transmitter with default settings.
  *
- * This constant defines the range, in Hertz, for random frequency offsets
- * applied to WSPR-15 transmissions. The offset is applied symmetrically
- * around the target frequency, resulting in a random variation of ±8 Hz.
- *
- * This ensures that WSPR-15 transmissions remain within the allocated band
- * while introducing slight variations to minimize signal collisions.
- *
- * @note This offset is specific to WSPR-15 transmissions (15-minute cycles).
- *
- * @see WSPR_RAND_OFFSET
+ * @details Initializes the WSPR transmitter object. Transmission parameters
+ * are configured later via setup_transmission(). This constructor does not
+ * allocate hardware resources or initiate any transmissions.
  */
-constexpr int WSPR15_RAND_OFFSET = 8;
-
-/**
- * @brief Nominal symbol duration for WSPR transmissions.
- *
- * This constant represents the nominal time duration of a WSPR symbol,
- * calculated as 8192 samples divided by a sample rate of 12000 Hz.
- *
- * @details This duration is a key parameter in WSPR transmissions,
- * ensuring the correct timing for symbol generation and encoding.
- *
- * @note Any deviation in sample rate or processing latency could affect
- *       the actual symbol duration.
- */
-constexpr double WSPR_SYMTIME = 8192.0 / 12000.0;
-
-/**
- * @brief Initial empirical value for the PWM clock frequency used in WSPR
- * transmissions.
- *
- * This constant represents an empirically determined value for `F_PWM_CLK`
- * that produces WSPR symbols approximately 0.682 seconds long (WSPR_SYMTIME).
- *
- * @details Despite using DMA for transmission, system load on the Raspberry Pi
- * affects the exact TX symbol length. However, the main loop compensates
- * for these variations dynamically.
- *
- * @note If system performance changes, this value may require adjustment.
- */
-constexpr double F_PWM_CLK_INIT = 31156186.6125761;
-
-/**
- * @brief Base bus address for the General-Purpose Input/Output (GPIO)
- * registers.
- *
- * The GPIO peripheral bus base address is used to access GPIO-related
- * registers for pin configuration and control.
- */
-constexpr uint32_t GPIO_BUS_BASE = 0x7E200000;
-
-/**
- * @brief Bus address for the General-Purpose Clock 0 Control Register.
- *
- * This register controls the clock settings for General-Purpose Clock 0 (GP0).
- */
-constexpr uint32_t CM_GP0CTL_BUS = 0x7E101070;
-
-/**
- * @brief Bus address for the General-Purpose Clock 0 Divider Register.
- *
- * This register sets the frequency division for General-Purpose Clock 0.
- */
-constexpr uint32_t CM_GP0DIV_BUS = 0x7E101074;
-
-/**
- * @brief Bus address for the GPIO pads control register (GPIO 0-27).
- *
- * This register configures drive strength, pull-up, and pull-down settings
- * for GPIO pins 0 through 27.
- */
-constexpr uint32_t PADS_GPIO_0_27_BUS = 0x7E10002C;
-
-/**
- * @brief Base bus address for the clock management registers.
- *
- * The clock management unit controls various clock sources and divisors
- * for different peripherals on the Raspberry Pi.
- */
-constexpr uint32_t CLK_BUS_BASE = 0x7E101000;
-
-/**
- * @brief Base bus address for the Direct Memory Access (DMA) controller.
- *
- * The DMA controller allows high-speed data transfer between peripherals
- * and memory without CPU intervention.
- */
-constexpr uint32_t DMA_BUS_BASE = 0x7E007000;
-
-/**
- * @brief Base bus address for the Pulse Width Modulation (PWM) controller.
- *
- * The PWM controller is responsible for generating PWM signals used in
- * applications like audio output, LED dimming, and motor control.
- */
-constexpr uint32_t PWM_BUS_BASE = 0x7E20C000;
-
-/**
- * @brief The size of a memory page in bytes.
- *
- * Defines the standard memory page size used for memory-mapped I/O operations.
- * This value is typically 4 KB (4096 bytes) on most systems, aligning with the
- * memory management unit (MMU) requirements.
- */
-constexpr std::uint32_t PAGE_SIZE = 4 * 1024;
-
-/**
- * @brief The size of a memory block in bytes.
- *
- * Defines the standard block size for memory operations, used in memory-mapped
- * peripheral access and buffer allocation. This value matches `PAGE_SIZE` to
- * ensure proper memory alignment when mapping hardware registers.
- */
-constexpr std::uint32_t BLOCK_SIZE = 4 * 1024;
-
-/**
- * @brief The nominal number of PWM clock cycles per iteration.
- *
- * This constant defines the expected number of PWM clock cycles required for
- * a single iteration of the waveform generation process. It serves as a reference
- * value to maintain precise timing in signal generation.
- */
-constexpr std::uint32_t PWM_CLOCKS_PER_ITER_NOMINAL = 1000;
-
-/**
- * @brief Processor ID for the Broadcom BCM2835 chip.
- *
- * This constant identifies the BCM2835 processor, which is used in the original Raspberry Pi (RPi1).
- */
-constexpr int BCM_HOST_PROCESSOR_BCM2835 = 0; // BCM2835 (RPi1)
-
-/**
- * @brief Processor ID for the Broadcom BCM2836 chip.
- *
- * This constant identifies the BCM2836 processor, which is used in the Raspberry Pi 2 (RPi2).
- */
-constexpr int BCM_HOST_PROCESSOR_BCM2836 = 1; // BCM2836 (RPi2)
-
-/**
- * @brief Processor ID for the Broadcom BCM2837 chip.
- *
- * This constant identifies the BCM2837 processor, which is used in the Raspberry Pi 3 (RPi3).
- */
-constexpr int BCM_HOST_PROCESSOR_BCM2837 = 2; // BCM2837 (RPi3)
-
-/**
- * @brief Processor ID for the Broadcom BCM2711 chip.
- *
- * This constant identifies the BCM2711 processor, which is used in the Raspberry Pi 4 (RPi4).
- */
-constexpr int BCM_HOST_PROCESSOR_BCM2711 = 3; // BCM2711 (RPi4)
-
-struct CB
+WsprTransmitter::WsprTransmitter()
 {
-    // Structure used to tell the DMA engine what to do
-    volatile unsigned int TI;
-    volatile unsigned int SOURCE_AD;
-    volatile unsigned int DEST_AD;
-    volatile unsigned int TXFR_LEN;
-    volatile unsigned int STRIDE;
-    volatile unsigned int NEXTCONBK;
-    volatile unsigned int RES1;
-    volatile unsigned int RES2;
-};
+}
 
 /**
- * @brief Control structure for the clock generator.
+ * @brief Destructor for the WSPR transmitter.
  *
- * This structure is used to configure the clock generator on the Raspberry Pi,
- * which is essential for transmitting radio signals by manipulating the PLLD clock
- * and routing the output to a GPIO pin.
- *
- * The bit-fields in this structure allow you to set the clock source, enable or disable
- * the clock, force the clock off (kill), check the busy status, flip the output phase,
- * set the MASH filter (which affects clock stability), and provide the required password
- * to modify the control registers.
- *
- * Bit-field breakdown:
- * - **SRC (4 bits):** Clock source selection.
- * - **ENAB (1 bit):** Enable bit. Set to 1 to enable the clock.
- * - **KILL (1 bit):** Kill bit. Set to 1 to force the clock off.
- * - **(1 bit reserved):** Unused.
- * - **BUSY (1 bit):** Busy status. Indicates if the clock generator is active.
- * - **FLIP (1 bit):** Flip bit. May be used for phase inversion.
- * - **MASH (2 bits):** MASH filter setting for noise shaping.
- * - **(13 bits reserved):** Unused/reserved.
- * - **PASSWD (8 bits):** Password field required to modify the clock control registers.
+ * @details Cleans up DMA, mailbox, and memory-mapped resources associated
+ * with the WSPR transmission process. Automatically called at program exit
+ * if wsprTransmitter is used as a global object.
  */
-struct GPCTL
+WsprTransmitter::~WsprTransmitter()
 {
-    char SRC : 4;      ///< Clock source selection.
-    char ENAB : 1;     ///< Enable bit: set to enable the clock.
-    char KILL : 1;     ///< Kill bit: set to force the clock off.
-    char : 1;          ///< Reserved bit.
-    char BUSY : 1;     ///< Busy status flag.
-    char FLIP : 1;     ///< Flip flag for phase inversion.
-    char MASH : 2;     ///< MASH filter setting.
-    unsigned int : 13; ///< Reserved bits.
-    char PASSWD : 8;   ///< Password for register modifications.
-};
+    // Cleanup all DMA setup and memory regions
+    dma_cleanup();
+}
 
 /**
- * @brief DMA Engine Status Registers.
+ * @brief Configure and start a WSPR transmission.
  *
- * This structure represents the status and control registers for the DMA engine.
- * It is used to monitor and control DMA operations such as data transfers between
- * memory and peripherals. These registers are critical when setting up and debugging
- * DMA transfers, such as those involved in transmitting radio signals by manipulating
- * the PLLD and routing output to GPIO.
+ * @details Performs the following sequence:
+ *   1. Set the desired RF frequency and power level.
+ *   2. Populate WSPR symbol data if transmitting a message.
+ *   3. Determine WSPR mode (2‑tone or 15‑tone) and symbol timing.
+ *   4. Optionally apply a random frequency offset to spread spectral load.
+ *   5. Initialize DMA and mailbox resources.
+ *   6. Apply the specified PPM calibration to the PLLD clock.
+ *   7. Rebuild the DMA frequency table with the new PPM‑corrected clock.
+ *   8. Update the actual center frequency after any hardware adjustments.
  *
- * @var DMAregs::CS
- *      Control/Status register: Holds flags for starting, resetting, and error states.
- * @var DMAregs::CONBLK_AD
- *      Current control block address: Points to the next DMA control block in the chain.
- * @var DMAregs::TI
- *      Transfer Information register: Contains configuration flags and settings for the current transfer.
- * @var DMAregs::SOURCE_AD
- *      Source Address register: Specifies the memory address to read data from.
- * @var DMAregs::DEST_AD
- *      Destination Address register: Specifies the memory address to write data to.
- * @var DMAregs::TXFR_LEN
- *      Transfer Length register: Indicates the number of bytes to transfer.
- * @var DMAregs::STRIDE
- *      Stride register: Determines the address increment between consecutive transfers.
- * @var DMAregs::NEXTCONBK
- *      Next Control Block register: Contains the address of the next control block, enabling chained transfers.
- * @var DMAregs::DEBUG
- *      Debug register: Provides information useful for debugging DMA operations.
+ * @param[in] frequency    Target RF frequency in Hz.
+ * @param[in] power        Transmit power index (0‑n).
+ * @param[in] ppm          Parts‑per‑million correction to apply (e.g. +11.135).
+ * @param[in] callsign     Optional callsign for WSPR message.
+ * @param[in] grid_square  Optional Maidenhead grid locator.
+ * @param[in] power_dbm    dBm value for WSPR message (ignored if tone).
+ * @param[in] use_offset   True to apply a small random offset within band.
+ *
+ * @throws std::runtime_error if DMA setup or mailbox operations fail.
  */
-struct DMAregs
+void WsprTransmitter::setup_transmission(
+    double frequency,
+    int power,
+    double ppm,
+    std::string call_sign,
+    std::string grid_square,
+    int power_dbm,
+    bool use_offset)
 {
-    volatile unsigned int CS;        ///< Control/Status register.
-    volatile unsigned int CONBLK_AD; ///< Address of the current control block.
-    volatile unsigned int TI;        ///< Transfer Information register.
-    volatile unsigned int SOURCE_AD; ///< Source address for data transfer.
-    volatile unsigned int DEST_AD;   ///< Destination address for data transfer.
-    volatile unsigned int TXFR_LEN;  ///< Transfer length (in bytes).
-    volatile unsigned int STRIDE;    ///< Stride for address increment.
-    volatile unsigned int NEXTCONBK; ///< Address of the next control block.
-    volatile unsigned int DEBUG;     ///< Debug register for diagnostics.
-};
+    // Set transmission parameters
+    transParams.call_sign = call_sign;
+    transParams.grid_square = grid_square;
+    transParams.power_dbm = power_dbm;
+    transParams.frequency = frequency;
+    transParams.ppm = ppm;
+    transParams.power = power;
+    transParams.use_offset = use_offset;
+
+    // Default to tone‑only; load WSPR message if provided
+    transParams.is_tone = true;
+    if (!transParams.call_sign.empty() && !transParams.grid_square.empty() && transParams.power_dbm != 0)
+    {
+        transParams.is_tone = false;
+        WsprMessage msg(transParams.call_sign, transParams.grid_square, transParams.power_dbm);
+        std::copy_n(msg.symbols, msg.size, transParams.symbols.begin());
+    }
+
+    // Choose WSPR mode and symbol timing
+    int offset_freq = 0;
+    if (!transParams.is_tone &&
+        ((transParams.frequency > 137600 && transParams.frequency < 137625) ||
+         (transParams.frequency > 475800 && transParams.frequency < 475825) ||
+         (transParams.frequency > 1838200 && transParams.frequency < 1838225)))
+    {
+        // WSPR‑15 mode
+        transParams.wspr_mode = WsprMode::WSPR15;
+        transParams.symtime = 8.0 * WSPR_SYMTIME;
+        if (transParams.use_offset)
+            offset_freq = WSPR15_RAND_OFFSET;
+    }
+    else
+    {
+        // WSPR‑2 mode
+        transParams.wspr_mode = WsprMode::WSPR2;
+        transParams.symtime = WSPR_SYMTIME;
+        if (transParams.use_offset)
+            offset_freq = WSPR_RAND_OFFSET;
+    }
+    transParams.tone_spacing = 1.0 / transParams.symtime;
+
+    // Apply random offset if requested
+    if (transParams.use_offset)
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(-1.0, 1.0);
+        transParams.frequency += dis(gen) * offset_freq;
+    }
+
+    // Initialize DMA, mapping, and control blocks
+    setup_dma();
+
+    // Apply PPM correction to the PLLD clock
+    // (use a stored nominal base frequency for repeatable resets)
+    dmaConfig.plld_clock_frequency =
+        dmaConfig.plld_nominal_freq * (1 - ppm / 1e6);
+
+    // Build the DMA frequency lookup table with new clock
+    // Sets center_actual according to hardware limitations
+    double center_actual = transParams.frequency;
+    setup_dma_freq_table(center_actual);
+
+    // Update actual frequency after any hardware adjustments
+    transParams.frequency = center_actual;
+
+    // Optional debug output
+    if (debug)
+    {
+        std::cout << std::setprecision(30)
+                  << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
+                  << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
+                  << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
+                  << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
+    }
+}
 
 /**
- * @brief Holds the bus and virtual addresses for a physical memory page.
+ * @brief Perform DMA-driven RF transmission.
  *
- * This structure is used to store the mapping between the bus address (used for DMA
- * and peripheral accesses) and the virtual address (used by the application) of a single
- * page of physical memory.
+ * @details
+ *   1. Records the start time as a reference for symbol scheduling.
+ *   2. Enables the PWM clock and DMA engine for transmission.
+ *   3. If in tone mode, continuously transmits a fixed‑frequency test tone.
+ *   4. Otherwise, transmits each WSPR symbol in sequence, using gettimeofday()
+ *      and `timeval_subtract()` to schedule precise symbol timing.
+ *   5. Disables transmission when complete.
  *
- * @var PageInfo::b
- *      The bus address of the physical memory page.
- * @var PageInfo::v
- *      The virtual address mapped to the physical memory page.
+ * @note In tone mode (`transParams.is_tone == true`), this function only
+ *       returns via SIGINT.
  */
-struct PageInfo
+void WsprTransmitter::transmit()
 {
-    void *b; ///< Bus address.
-    void *v; ///< Virtual address.
-};
+    // Record reference time for scheduling
+    struct timeval tv_begin{};
+    gettimeofday(&tv_begin, nullptr);
+
+    // Initialize DMA buffer index
+    int bufPtr = 0;
+
+    // Enable PWM clock and DMA transmission
+    transmit_on();
+
+    if (transParams.is_tone)
+    {
+        // Continuous tone loop (exit on SIGINT)
+        while (true)
+        {
+            transmit_symbol(
+                0,     // symbol number
+                60.0,  // duration in seconds
+                bufPtr // DMA buffer index
+            );
+        }
+    }
+    else
+    {
+        // Transmit each symbol in the WSPR message
+        struct timeval sym_start{};
+        struct timeval diff{};
+        const int symbol_count = static_cast<int>(transParams.symbols.size());
+
+        for (int i = 0; i < symbol_count; ++i)
+        {
+            // Compute elapsed time since tv_begin
+            gettimeofday(&sym_start, nullptr);
+            symbol_timeval_subtract(&diff, &sym_start, &tv_begin);
+            double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
+            double sched_end = (i + 1) * transParams.symtime;
+            double time_symbol = sched_end - elapsed;
+            time_symbol = std::clamp(time_symbol, 0.2, 2.0 * transParams.symtime);
+
+            // Transmit the current symbol
+            int symbol = static_cast<int>(transParams.symbols[i]);
+            transmit_symbol(
+                symbol,      // symbol index
+                time_symbol, // scheduled duration
+                bufPtr       // DMA buffer index
+            );
+        }
+    }
+
+    // Disable PWM clock and stop transmission
+    transmit_off();
+}
 
 /**
- * @brief Global mailbox structure for Broadcom mailbox communication.
+ * @brief Rebuild the DMA tuning‐word table with a fresh PPM correction.
  *
- * This static structure stores information related to the Broadcom mailbox interface,
- * which is used for allocating, locking, and mapping physical memory for DMA operations.
- * It is declared as a file-scope static variable so that exit handlers and other parts
- * of the program can access its members.
- *
- * @var mbox::handle
- *      Mailbox handle obtained from mbox_open(), used for communication with the mailbox.
- * @var mbox::mem_ref
- *      Memory reference returned by mem_alloc(), identifying the allocated memory block.
- * @var mbox::bus_addr
- *      Bus address of the allocated memory, obtained from mem_lock().
- * @var mbox::virt_addr
- *      Virtual address mapped to the allocated physical memory via mapmem().
- * @var mbox::pool_size
- *      The total number of memory pages allocated in the pool.
- * @var mbox::pool_cnt
- *      The count of memory pages that have been allocated from the pool so far.
+ * @param ppm_new The new parts‑per‑million offset (e.g. +11.135).
+ * @throws std::runtime_error if peripherals aren’t mapped.
  */
-static struct
+void WsprTransmitter::update_dma_for_ppm(double ppm_new)
 {
-    int handle;                         ///< Mailbox handle from mbox_open().
-    unsigned mem_ref = 0;               ///< Memory reference from mem_alloc().
-    unsigned bus_addr;                  ///< Bus address from mem_lock().
-    unsigned char *virt_addr = nullptr; ///< Virtual address from mapmem().
-    unsigned pool_size;                 ///< Total number of pages in the memory pool.
-    unsigned pool_cnt;                  ///< Count of allocated pages from the pool.
-} mbox;
+    // Apply the PPM correction to your working PLLD clock.
+    dmaConfig.plld_clock_frequency =
+        dmaConfig.plld_nominal_freq * (1.0 - ppm_new / 1e6);
+
+    // Recompute the DMA frequency table in place.
+    // Pass in your current center frequency so it can adjust if needed.
+    double center_actual = transParams.frequency;
+    setup_dma_freq_table(center_actual);
+    transParams.frequency = center_actual;
+}
 
 /**
- * @brief Global configuration object.
+ * @brief Clean up DMA and mailbox resources.
  *
- * This DMAConfig instance holds the transmission functionality global objects.
+ * @details Performs teardown in the following order:
+ *   1. Prevent multiple invocations.
+ *   2. Stop any ongoing DMA transfers and disable the PWM clock.
+ *   3. Restore saved clock and PWM register values.
+ *   4. Reset the DMA controller.
+ *   5. Unmap the peripheral base address region.
+ *   6. Deallocate mailbox memory pages.
+ *   7. Close the mailbox handle.
+ *   8. Remove the local device file.
+ *   9. Reset all configuration data to defaults.
+ *
+ * @note This function is idempotent; subsequent calls are no‑ops.
  */
-struct DMAConfig dmaConfig;
+void WsprTransmitter::dma_cleanup()
+{
+    // Guard against multiple calls
+    static bool cleanup_done = false;
+    if (cleanup_done)
+    {
+        return;
+    }
+    cleanup_done = true;
+
+    // Stop DMA transfers and disable PWM clock
+    transmit_off();
+
+    // Restore original clock and PWM registers
+    accessBusAddress(CM_GP0DIV_BUS) = dmaConfig.orig_gp0div;
+    accessBusAddress(CM_GP0CTL_BUS) = dmaConfig.orig_gp0ctl;
+    accessBusAddress(PWM_BUS_BASE + 0x00) = dmaConfig.orig_pwm_ctl;
+    accessBusAddress(PWM_BUS_BASE + 0x04) = dmaConfig.orig_pwm_sta;
+    accessBusAddress(PWM_BUS_BASE + 0x10) = dmaConfig.orig_pwm_rng1;
+    accessBusAddress(PWM_BUS_BASE + 0x20) = dmaConfig.orig_pwm_rng2;
+    accessBusAddress(PWM_BUS_BASE + 0x08) = dmaConfig.orig_pwm_fifocfg;
+
+    // Reset DMA controller registers
+    clear_dma_setup();
+
+    // Unmap peripheral region if mapped
+    if (dmaConfig.peripheral_base_virtual)
+    {
+        munmap(dmaConfig.peripheral_base_virtual, 0x01000000);
+        dmaConfig.peripheral_base_virtual = nullptr;
+    }
+
+    // Deallocate mailbox-allocated memory pages
+    deallocate_memory_pool();
+
+    // Close mailbox handle if open
+    if (mbox.handle >= 0)
+    {
+        mbox_close(mbox.handle);
+        mbox.handle = -1;
+    }
+
+    // Remove the local device file if it exists
+    safe_remove();
+
+    // Reset global configuration structures to defaults
+    dmaConfig = {};
+    mbox = {};
+}
 
 /**
- * @brief Page information for the constant memory page.
+ * @brief Prints current transmission parameters and encoded WSPR symbols.
  *
- * This global variable holds the bus and virtual addresses of the constant memory page,
- * which is used to store fixed data required for DMA operations, such as the tuning words
- * for frequency generation.
+ * @details Displays the configured WSPR parameters including frequency,
+ * power, mode, tone/test settings, and symbol timing. If tone mode is
+ * enabled (`transParams.is_tone == true`), message-related fields like
+ * call sign and symbols are shown as "N/A".
+ *
+ * This function is useful for debugging and verifying that all transmission
+ * settings and symbol sequences are correctly populated before transmission.
  */
-struct PageInfo constPage;
+void WsprTransmitter::print_parameters()
+{
+    // General transmission metadata
+    std::cout << "Call Sign:         "
+              << (transParams.is_tone ? "N/A" : transParams.call_sign) << std::endl;
+
+    std::cout << "Grid Square:       "
+              << (transParams.is_tone ? "N/A" : transParams.grid_square) << std::endl;
+
+    std::cout << "WSPR Frequency:    "
+              << std::fixed << std::setprecision(6)
+              << (transParams.frequency / 1.0e6) << " MHz" << std::endl;
+
+    std::cout << "GPIO Power:        "
+              << std::fixed << std::setprecision(1)
+              << convert_mw_dbm(get_gpio_power_mw(transParams.power)) << " dBm" << std::endl;
+
+    std::cout << "WSPR Mode:         "
+              << (transParams.is_tone ? "N/A" : (transParams.wspr_mode == WsprMode::WSPR2 ? "WSPR-2" : "WSPR-15")) << std::endl;
+
+    std::cout << "Test Tone:         "
+              << (transParams.is_tone ? "True" : "False") << std::endl;
+
+    std::cout << "WSPR Symbol Time:  "
+              << (transParams.is_tone ? "N/A" : std::to_string(transParams.symtime) + " s") << std::endl;
+
+    std::cout << "WSPR Tone Spacing: "
+              << (transParams.is_tone ? "N/A" : std::to_string(transParams.tone_spacing) + " Hz") << std::endl;
+
+    std::cout << "DMA Table Size:    "
+              << transParams.dma_table_freq.size() << std::endl;
+
+    // Print symbols unless in tone mode
+    if (transParams.is_tone)
+    {
+        std::cout << "WSPR Symbols:      N/A" << std::endl;
+    }
+    else
+    {
+        std::cout << "WSPR Symbols:" << std::endl;
+        const int symbol_count = static_cast<int>(transParams.symbols.size());
+        for (int i = 0; i < symbol_count; ++i)
+        {
+            std::cout << static_cast<int>(transParams.symbols[i]);
+
+            if (i < symbol_count - 1)
+            {
+                std::cout << ", ";
+            }
+
+            // Insert newline every 18 symbols for readability
+            if ((i + 1) % 18 == 0 && i < symbol_count - 1)
+            {
+                std::cout << std::endl;
+            }
+        }
+        std::cout << std::endl;
+    }
+}
 
 /**
- * @brief Page information for the DMA instruction page.
+ * @brief Get the GPIO drive strength in milliamps.
  *
- * This global variable holds the bus and virtual addresses of the DMA instruction page,
- * where DMA control blocks (CBs) are stored. This page is used during the setup and
- * operation of DMA transfers.
- */
-struct PageInfo instrPage;
-
-/**
- * @brief Array of page information structures for DMA control blocks.
+ * Maps a drive strength level (0–7) to its corresponding current drive
+ * capability in milliamps (mA).
  *
- * This global array contains the bus and virtual addresses for each page used in the DMA
- * instruction chain. It holds 1024 entries, corresponding to the 1024 DMA control blocks used
- * for managing data transfers.
+ * @param level Drive strength level (0–7).
+ * @return int   Drive strength in mA.
+ * @throws std::out_of_range if level is outside the [0,7] range.
  */
-struct PageInfo instrs[1024];
-
-/**
- * @brief Global instance of transmission parameters for WSPR.
- *
- * This global variable holds the current settings used for a WSPR transmission,
- * including the WSPR message, transmission frequency, symbol time, tone spacing,
- * and the DMA frequency lookup table.
- */
-struct WsprTransmissionParams transParams;
+constexpr int WsprTransmitter::get_gpio_power_mw(int level)
+{
+    if (level < 0 || level >= static_cast<int>(DRIVE_STRENGTH_TABLE.size()))
+    {
+        throw std::out_of_range("Drive strength level must be between 0 and 7");
+    }
+    return DRIVE_STRENGTH_TABLE[level];
+}
 
 /**
  * @brief Calculates the virtual address for a given bus address.
@@ -407,7 +438,7 @@ struct WsprTransmissionParams transParams;
  * @param bus_addr The bus address from which to calculate the corresponding virtual address.
  * @return A reference to a volatile int located at the computed virtual address.
  */
-inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
+inline volatile int &WsprTransmitter::accessBusAddress(std::uintptr_t bus_addr)
 {
     // Compute byte‐offset from the bus address
     std::uintptr_t offset = bus_addr - 0x7E000000UL;
@@ -429,7 +460,7 @@ inline volatile int &accessBusAddress(std::uintptr_t bus_addr)
  * @param base The bus address in the peripheral address space.
  * @param bit The bit number to set (0-indexed).
  */
-inline void setBitBusAddress(std::uintptr_t base, unsigned int bit)
+inline void WsprTransmitter::setBitBusAddress(std::uintptr_t base, unsigned int bit)
 {
     accessBusAddress(base) |= 1 << bit;
 }
@@ -443,7 +474,7 @@ inline void setBitBusAddress(std::uintptr_t base, unsigned int bit)
  * @param base The bus address in the peripheral address space.
  * @param bit The bit number to clear (0-indexed).
  */
-inline void clearBitBusAddress(std::uintptr_t base, unsigned int bit)
+inline void WsprTransmitter::clearBitBusAddress(std::uintptr_t base, unsigned int bit)
 {
     accessBusAddress(base) &= ~(1 << bit);
 }
@@ -457,7 +488,7 @@ inline void clearBitBusAddress(std::uintptr_t base, unsigned int bit)
  * @param x The bus address.
  * @return The physical address obtained from the bus address.
  */
-inline std::uintptr_t busToPhys(std::uintptr_t x)
+inline std::uintptr_t WsprTransmitter::busToPhys(std::uintptr_t x)
 {
     return x & ~0xC0000000UL;
 }
@@ -472,7 +503,7 @@ inline std::uintptr_t busToPhys(std::uintptr_t x)
  * @param[in] t1 Pointer to the earlier `timeval` structure.
  * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
  */
-int symbol_timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
+int WsprTransmitter::symbol_timeval_subtract(struct timeval *result, const struct timeval *t2, const struct timeval *t1)
 {
     // Compute the time difference in microseconds
     long int diff_usec = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -500,7 +531,7 @@ int symbol_timeval_subtract(struct timeval *result, const struct timeval *t2, co
  *
  * @throws std::runtime_error if the processor ID is unrecognized.
  */
-void get_plld_and_memflag()
+void WsprTransmitter::get_plld_and_memflag()
 {
     // Cache the revision to avoid repeated file I/O
     static std::optional<unsigned> cached_revision;
@@ -583,7 +614,7 @@ void get_plld_and_memflag()
  * @throws Terminates the program if the peripheral base cannot be determined,
  *         `/dev/mem` cannot be opened, or `mmap` fails.
  */
-void setup_peripheral_base_virtual()
+void WsprTransmitter::setup_peripheral_base_virtual()
 {
     auto read_dt_range = [](const std::string &filename, unsigned offset) -> std::optional<unsigned>
     {
@@ -655,7 +686,7 @@ void setup_peripheral_base_virtual()
  * @param numpages Total number of pages to allocate (1 constant + N instruction pages).
  * @throws std::runtime_error if mailbox allocation, locking, or mapping fails.
  */
-void allocate_memory_pool(unsigned numpages)
+void WsprTransmitter::allocate_memory_pool(unsigned numpages)
 {
     // Allocate a contiguous block of physical pages
     mbox.mem_ref = mem_alloc(
@@ -709,7 +740,7 @@ void allocate_memory_pool(unsigned numpages)
  * @param[out] vAddr Pointer to store the virtual address of the allocated page.
  * @param[out] bAddr Pointer to store the bus address of the allocated page.
  */
-void get_real_mem_page_from_pool(void **vAddr, void **bAddr)
+void WsprTransmitter::get_real_mem_page_from_pool(void **vAddr, void **bAddr)
 {
     // Ensure that we do not exceed the allocated pool size.
     if (mbox.pool_cnt >= mbox.pool_size)
@@ -742,7 +773,7 @@ void get_real_mem_page_from_pool(void **vAddr, void **bAddr)
  * @details Releases the allocated memory by unmapping virtual memory,
  *          unlocking, and freeing the memory via the mailbox interface.
  */
-void deallocate_memory_pool()
+void WsprTransmitter::deallocate_memory_pool()
 {
     // Free virtual memory mapping if it was allocated.
     if (mbox.virt_addr != nullptr)
@@ -769,7 +800,7 @@ void deallocate_memory_pool()
  * @details Clears the enable bit in the clock control register and waits
  *          until the clock is no longer busy. Ensures proper synchronization.
  */
-void disable_clock()
+void WsprTransmitter::disable_clock()
 {
     // Ensure memory-mapped peripherals are initialized before proceeding.
     if (dmaConfig.peripheral_base_virtual == nullptr)
@@ -797,7 +828,7 @@ void disable_clock()
  * @details Configures GPIO4 to use alternate function 0 (GPCLK0), sets the drive
  *          strength, disables any active clock, and then enables the clock with PLLD.
  */
-void transmit_on()
+void WsprTransmitter::transmit_on()
 {
     // Configure GPIO4 function select (Fsel) to alternate function 0 (GPCLK0).
     // This setting follows Section 6.2 of the ARM Peripherals Manual.
@@ -824,7 +855,7 @@ void transmit_on()
  * @brief Disables the transmitter.
  * @details Turns off the transmission by disabling the clock source.
  */
-void transmit_off()
+void WsprTransmitter::transmit_off()
 {
     // Disable the clock, effectively turning off transmission.
     disable_clock();
@@ -840,7 +871,7 @@ void transmit_off()
  * @param[in] tsym The duration (seconds) for which the symbol is transmitted.
  * @param[in,out] bufPtr The buffer pointer index for DMA instruction handling.
  */
-void transmit_symbol(
+void WsprTransmitter::transmit_symbol(
     const int &sym_num,
     const double &tsym,
     int &bufPtr)
@@ -948,7 +979,7 @@ void transmit_symbol(
  * @details Ensures that the DMA controller is properly reset before exiting.
  *          If the peripheral memory mapping is not set up, the function returns early.
  */
-void clear_dma_setup()
+void WsprTransmitter::clear_dma_setup()
 {
     // Turn off transmission.
     transmit_off();
@@ -974,7 +1005,7 @@ void clear_dma_setup()
  * @param lsb The least significant bit position to retain.
  * @return The truncated value with lower bits set to zero.
  */
-double bit_trunc(const double &d, const int &lsb)
+double WsprTransmitter::bit_trunc(const double &d, const int &lsb)
 {
     // Compute the truncation factor as a power of 2.
     const double factor = std::pow(2.0, lsb);
@@ -988,7 +1019,7 @@ double bit_trunc(const double &d, const int &lsb)
  * @details Creates the mailbox special files and attempts to open the mailbox.
  *          If opening the mailbox fails, an error message is printed, and the program exits.
  */
-void open_mbox()
+void WsprTransmitter::open_mbox()
 {
     // Attempt to open the mailbox
     mbox.handle = mbox_open();
@@ -1007,7 +1038,7 @@ void open_mbox()
  *
  * @param[in] filename Pointer to a null-terminated string containing the file path.
  */
-void safe_remove()
+void WsprTransmitter::safe_remove()
 {
     const char *filename = LOCAL_DEVICE_FILE_NAME;
     struct stat buffer;
@@ -1024,72 +1055,6 @@ void safe_remove()
 }
 
 /**
- * @brief Clean up DMA and mailbox resources.
- *
- * @details Performs teardown in the following order:
- *   1. Prevent multiple invocations.
- *   2. Stop any ongoing DMA transfers and disable the PWM clock.
- *   3. Restore saved clock and PWM register values.
- *   4. Reset the DMA controller.
- *   5. Unmap the peripheral base address region.
- *   6. Deallocate mailbox memory pages.
- *   7. Close the mailbox handle.
- *   8. Remove the local device file.
- *   9. Reset all configuration data to defaults.
- *
- * @note This function is idempotent; subsequent calls are no‑ops.
- */
-void dma_cleanup()
-{
-    // Guard against multiple calls
-    static bool cleanup_done = false;
-    if (cleanup_done)
-    {
-        return;
-    }
-    cleanup_done = true;
-
-    // Stop DMA transfers and disable PWM clock
-    transmit_off();
-
-    // Restore original clock and PWM registers
-    accessBusAddress(CM_GP0DIV_BUS) = dmaConfig.orig_gp0div;
-    accessBusAddress(CM_GP0CTL_BUS) = dmaConfig.orig_gp0ctl;
-    accessBusAddress(PWM_BUS_BASE + 0x00) = dmaConfig.orig_pwm_ctl;
-    accessBusAddress(PWM_BUS_BASE + 0x04) = dmaConfig.orig_pwm_sta;
-    accessBusAddress(PWM_BUS_BASE + 0x10) = dmaConfig.orig_pwm_rng1;
-    accessBusAddress(PWM_BUS_BASE + 0x20) = dmaConfig.orig_pwm_rng2;
-    accessBusAddress(PWM_BUS_BASE + 0x08) = dmaConfig.orig_pwm_fifocfg;
-
-    // Reset DMA controller registers
-    clear_dma_setup();
-
-    // Unmap peripheral region if mapped
-    if (dmaConfig.peripheral_base_virtual)
-    {
-        munmap(dmaConfig.peripheral_base_virtual, 0x01000000);
-        dmaConfig.peripheral_base_virtual = nullptr;
-    }
-
-    // Deallocate mailbox-allocated memory pages
-    deallocate_memory_pool();
-
-    // Close mailbox handle if open
-    if (mbox.handle >= 0)
-    {
-        mbox_close(mbox.handle);
-        mbox.handle = -1;
-    }
-
-    // Remove the local device file if it exists
-    safe_remove();
-
-    // Reset global configuration structures to defaults
-    dmaConfig = {};
-    mbox = {};
-}
-
-/**
  * @brief Configures and initializes DMA for PWM signal generation.
  * @details Allocates memory pages, creates DMA control blocks, sets up a
  *          circular inked list of DMA instructions, and configures the
@@ -1100,7 +1065,7 @@ void dma_cleanup()
  *                       page.
  * @param[out] instrs Array of PageInfo structures for DMA instructions.
  */
-void create_dma_pages(
+void WsprTransmitter::create_dma_pages(
     struct PageInfo &constPage,
     struct PageInfo &instrPage,
     struct PageInfo instrs[])
@@ -1213,7 +1178,7 @@ void create_dma_pages(
  * @throws std::runtime_error if peripheral memory mapping fails.
  * @throws std::runtime_error if mailbox opening fails.
  */
-void setup_dma()
+void WsprTransmitter::setup_dma()
 {
     // Retrieve PLLD frequency and DMA memory flag
     get_plld_and_memflag();
@@ -1248,7 +1213,7 @@ void setup_dma()
  * @param[out] center_freq_actual The actual center frequency, which may be adjusted.
  * @param[in,out] constPage The PageInfo structure for storing tuning words.
  */
-void setup_dma_freq_table(double &center_freq_actual)
+void WsprTransmitter::setup_dma_freq_table(double &center_freq_actual)
 {
     // Compute the divider values for the lowest and highest WSPR tones.
     double div_lo = bit_trunc(dmaConfig.plld_clock_frequency / (transParams.frequency - 1.5 * transParams.tone_spacing), -12) + std::pow(2.0, -12);
@@ -1308,194 +1273,20 @@ void setup_dma_freq_table(double &center_freq_actual)
 }
 
 /**
- * @brief Rebuild the DMA tuning‐word table with a fresh PPM correction.
+ * @brief Convert power in milliwatts to decibels referenced to 1 mW (dBm).
  *
- * @param ppm_new The new parts‑per‑million offset (e.g. +11.135).
- * @throws std::runtime_error if peripherals aren’t mapped.
+ * Uses the formula:
+ * PdBm=10*LOG10(mW/1) where mW = power in milliwatts
+ *
+ * @param mw  Power in milliwatts. Must be greater than 0.
+ * @return    Power in dBm.
+ * @throws    std::domain_error if mw is not positive.
  */
-void update_dma_for_ppm(double ppm_new)
+inline double WsprTransmitter::convert_mw_dbm(double mw)
 {
-    // Apply the PPM correction to your working PLLD clock.
-    dmaConfig.plld_clock_frequency =
-        dmaConfig.plld_nominal_freq * (1.0 - ppm_new / 1e6);
-
-    // Recompute the DMA frequency table in place.
-    // Pass in your current center frequency so it can adjust if needed.
-    double center_actual = transParams.frequency;
-    setup_dma_freq_table(center_actual);
-    transParams.frequency = center_actual;
-}
-
-/**
- * @brief Configure and start a WSPR transmission.
- *
- * @details Performs the following sequence:
- *   1. Set the desired RF frequency and power level.
- *   2. Populate WSPR symbol data if transmitting a message.
- *   3. Determine WSPR mode (2‑tone or 15‑tone) and symbol timing.
- *   4. Optionally apply a random frequency offset to spread spectral load.
- *   5. Initialize DMA and mailbox resources.
- *   6. Apply the specified PPM calibration to the PLLD clock.
- *   7. Rebuild the DMA frequency table with the new PPM‑corrected clock.
- *   8. Update the actual center frequency after any hardware adjustments.
- *
- * @param[in] frequency    Target RF frequency in Hz.
- * @param[in] power        Transmit power index (0‑n).
- * @param[in] ppm          Parts‑per‑million correction to apply (e.g. +11.135).
- * @param[in] callsign     Optional callsign for WSPR message.
- * @param[in] grid_square  Optional Maidenhead grid locator.
- * @param[in] power_dbm    dBm value for WSPR message (ignored if tone).
- * @param[in] use_offset   True to apply a small random offset within band.
- *
- * @throws std::runtime_error if DMA setup or mailbox operations fail.
- */
-void setup_transmission(
-    double frequency,
-    int power,
-    double ppm,
-    const std::string &callsign,
-    const std::string &grid_square,
-    int power_dbm,
-    bool use_offset)
-{
-    // Set RF frequency and power parameters
-    transParams.frequency = frequency;
-    transParams.power = power;
-
-    // Default to tone‑only; load WSPR message if provided
-    transParams.is_tone = true;
-    if (!callsign.empty() && !grid_square.empty() && power_dbm != 0)
+    if (mw <= 0.0)
     {
-        transParams.is_tone = false;
-        WsprMessage msg(callsign, grid_square, power_dbm);
-        std::copy_n(msg.symbols, msg.size, transParams.symbols.begin());
+        throw std::domain_error("Input power (mW) must be > 0 to compute logarithm");
     }
-
-    // Choose WSPR mode and symbol timing
-    int offset_freq = 0;
-    if (!transParams.is_tone &&
-        ((frequency > 137600 && frequency < 137625) ||
-         (frequency > 475800 && frequency < 475825) ||
-         (frequency > 1838200 && frequency < 1838225)))
-    {
-        // WSPR‑15 mode
-        transParams.wspr_mode = WsprMode::WSPR15;
-        transParams.symtime = 8.0 * WSPR_SYMTIME;
-        if (use_offset)
-            offset_freq = WSPR15_RAND_OFFSET;
-    }
-    else
-    {
-        // WSPR‑2 mode
-        transParams.wspr_mode = WsprMode::WSPR2;
-        transParams.symtime = WSPR_SYMTIME;
-        if (use_offset)
-            offset_freq = WSPR_RAND_OFFSET;
-    }
-    transParams.tone_spacing = 1.0 / transParams.symtime;
-
-    // Apply random offset if requested
-    if (use_offset)
-    {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<> dis(-1.0, 1.0);
-        transParams.frequency += dis(gen) * offset_freq;
-    }
-
-    // Initialize DMA, mapping, and control blocks
-    setup_dma();
-
-    // Apply PPM correction to the PLLD clock
-    // (use a stored nominal base frequency for repeatable resets)
-    dmaConfig.plld_clock_frequency =
-        dmaConfig.plld_nominal_freq * (1 - ppm / 1e6);
-
-    // Build the DMA frequency lookup table with new clock
-    double center_actual = transParams.frequency;
-    setup_dma_freq_table(center_actual);
-
-    // Update actual frequency after any hardware adjustments
-    transParams.frequency = center_actual;
-
-    // Optional debug output
-    if (debug)
-    {
-        std::cout << std::setprecision(30)
-                  << "DEBUG: dma_table_freq[0] = " << transParams.dma_table_freq[0] << std::endl
-                  << "DEBUG: dma_table_freq[1] = " << transParams.dma_table_freq[1] << std::endl
-                  << "DEBUG: dma_table_freq[2] = " << transParams.dma_table_freq[2] << std::endl
-                  << "DEBUG: dma_table_freq[3] = " << transParams.dma_table_freq[3] << std::endl;
-        // Debug output for transmission
-        transParams.print();
-    }
-}
-
-/**
- * @brief Perform DMA-driven RF transmission.
- *
- * @details
- *   1. Records the start time as a reference for symbol scheduling.
- *   2. Enables the PWM clock and DMA engine for transmission.
- *   3. If in tone mode, continuously transmits a fixed‑frequency test tone.
- *   4. Otherwise, transmits each WSPR symbol in sequence, using gettimeofday()
- *      and `timeval_subtract()` to schedule precise symbol timing.
- *   5. Disables transmission when complete.
- *
- * @note In tone mode (`transParams.is_tone == true`), this function only
- *       returns via SIGINT.
- */
-void transmit()
-{
-    // Record reference time for scheduling
-    struct timeval tv_begin{};
-    gettimeofday(&tv_begin, nullptr);
-
-    // Initialize DMA buffer index
-    int bufPtr = 0;
-
-    // Enable PWM clock and DMA transmission
-    transmit_on();
-
-    if (transParams.is_tone)
-    {
-        // Continuous tone loop (exit on SIGINT)
-        while (true)
-        {
-            transmit_symbol(
-                0,     // symbol number
-                60.0,  // duration in seconds
-                bufPtr // DMA buffer index
-            );
-        }
-    }
-    else
-    {
-        // Transmit each symbol in the WSPR message
-        struct timeval sym_start{};
-        struct timeval diff{};
-        const int symbol_count = static_cast<int>(transParams.symbols.size());
-
-        for (int i = 0; i < symbol_count; ++i)
-        {
-            // Compute elapsed time since tv_begin
-            gettimeofday(&sym_start, nullptr);
-            symbol_timeval_subtract(&diff, &sym_start, &tv_begin);
-            double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
-            double sched_end = (i + 1) * transParams.symtime;
-            double time_symbol = sched_end - elapsed;
-            time_symbol = std::clamp(time_symbol, 0.2, 2.0 * transParams.symtime);
-
-            // Transmit the current symbol
-            int symbol = static_cast<int>(transParams.symbols[i]);
-            transmit_symbol(
-                symbol,      // symbol index
-                time_symbol, // scheduled duration
-                bufPtr       // DMA buffer index
-            );
-        }
-    }
-
-    // Disable PWM clock and stop transmission
-    transmit_off();
+    return 10.0 * std::log10(mw);
 }
