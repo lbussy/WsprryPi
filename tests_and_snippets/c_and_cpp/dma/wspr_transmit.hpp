@@ -1,15 +1,47 @@
-#ifndef _WSPR_H
-#define _WSPR_H
+/**
+ * @file wspr_transmit.cpp
+ * @brief A class to encapsulate configuration and DMA‑driven transmission of
+ *        WSPR signals.
+ *
+ * Copyright (C) 2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#ifndef _WSPR_TRANSMIT_HPP
+#define _WSPR_TRANSMIT_HPP
 
 #include "config_handler.hpp"
 #include "wspr_message.hpp"
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
+
+#include <sched.h>
+#include <pthread.h>
 
 /**
  * @class WsprTransmitter
@@ -50,6 +82,61 @@ public:
      * any running transmission threads.
      */
     ~WsprTransmitter();
+
+    /**
+     * @brief Starts the transmission in a dedicated thread.
+     *
+     * Configures the thread scheduling policy and priority, clears any previous
+     * stop request, and then launches the background thread which will run
+     * `thread_entry()` (and ultimately `transmit()`).
+     *
+     * @param[in] policy   The POSIX scheduling policy (e.g., SCHED_FIFO, SCHED_RR,
+     *                     or SCHED_OTHER).
+     * @param[in] priority The thread priority (1–99 for real‑time policies;
+     *                     ignored by SCHED_OTHER).
+     */
+    void start_threaded_transmission(int policy = SCHED_FIFO, int priority = 30);
+
+    /**
+     * @brief Request an in‑flight transmission to stop.
+     *
+     * @details Sets the internal stop flag so that ongoing loops in the transmit
+     *          thread will exit at the next interruption point. Notifies any
+     *          condition_variable waits to unblock the thread promptly.
+     */
+    void stop_transmission();
+
+    /**
+     * @brief Waits for the background transmission thread to finish.
+     *
+     * @details If the transmission thread was launched via
+     *          start_threaded_transmission(), this call will block until
+     *          that thread has completed and joined. After returning,
+     *          tx_thread_ is no longer joinable.
+     */
+    void join_transmission();
+
+    /**
+     * @brief Gracefully stops and waits for the transmission thread.
+     *
+     * @details Combines stop_transmission() to signal the worker thread to
+     *          exit, and join_transmission() to block until that thread has
+     *          fully terminated. After this call returns, no transmission
+     *          thread remains running.
+     */
+    void shutdown_transmitter();
+
+    /**
+     * @brief Check if a stop request has been issued.
+     *
+     * @details Returns true if stop_transmission() was called and the
+     *          internal stop flag is set. Use this to poll from external
+     *          loops or helper functions to determine if the transmitter
+     *          is in the process of shutting down.
+     *
+     * @return `true` if a stop has been requested, `false` otherwise.
+     */
+    bool is_stopping() const noexcept;
 
     /**
      * @brief Configure and start a WSPR transmission.
@@ -159,6 +246,50 @@ public:
     inline double convert_mw_dbm(double mw);
 
 private:
+    /**
+     * @brief Background thread for carrying out the transmission.
+     *
+     * Launched by start_threaded_transmission() and joined by
+     * join_transmission().
+     */
+    std::thread tx_thread_;
+
+    /**
+     * @brief POSIX scheduling policy for the transmission thread.
+     *
+     * One of SCHED_FIFO, SCHED_RR, or SCHED_OTHER.
+     */
+    int thread_policy_ = SCHED_OTHER;
+
+    /**
+     * @brief Scheduling priority for the transmission thread.
+     *
+     * Valid range is 1–99 for real‑time policies; ignored by
+     * SCHED_OTHER.
+     */
+    int thread_priority_ = 0;
+
+    /**
+     * @brief Flag indicating that a stop request has been issued.
+     *
+     * When true, loops in transmit() and transmit_symbol() will
+     * exit at the next interruption point.
+     */
+    std::atomic<bool> stop_requested_{false};
+
+    /**
+     * @brief Condition variable used to wake the transmission thread.
+     *
+     * stop_transmission() calls notify_all() on this to unblock
+     * any waits so the thread can observe stop_requested_.
+     */
+    std::condition_variable stop_cv_;
+
+    /**
+     * @brief Mutex accompanying stop_cv_ for coordinated waits.
+     */
+    std::mutex stop_mutex_;
+
     /**
      * @brief Holds the bus and virtual addresses for a physical memory page.
      *
@@ -881,8 +1012,28 @@ private:
      * @param[in,out] constPage The PageInfo structure for storing tuning words.
      */
     void setup_dma_freq_table(double &center_freq_actual);
+
+    /**
+     * @brief Entry point for the background transmission thread.
+     *
+     * @details Applies the configured POSIX scheduling policy and priority
+     *          (via set_thread_priority()), then invokes transmit() to carry
+     *          out the actual transmission work. This method runs inside the
+     *          new thread and returns only when transmit() completes or a
+     *          stop request is observed.
+     */
+    void thread_entry();
+
+    /**
+     * @brief Applies the configured scheduling policy and priority to this thread.
+     *
+     * @details Builds a sched_param struct using thread_priority_ and invokes
+     *          pthread_setschedparam() with thread_policy_ on the current thread.
+     *          If the call fails, writes a warning to stderr with the error message.
+     */
+    void set_thread_priority();
 };
 
 extern WsprTransmitter wsprTransmitter;
 
-#endif // _WSPR_H
+#endif // _WSPR_TRANSMIT_HPP

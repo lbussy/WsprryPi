@@ -54,14 +54,10 @@ int getch()
  */
 void pause_for_space()
 {
-    while (true)
-    {
-        int ch = getch();
-        if (ch == ' ')
-        {
-            break;
-        }
-    }
+    extern WsprTransmitter wsprTransmitter;
+
+    while (!wsprTransmitter.is_stopping() && getch() != ' ')
+        ; // spin until stop or spacebar
 }
 
 bool select_wspr()
@@ -92,10 +88,12 @@ bool select_wspr()
 void sig_handler(int sig = SIGTERM)
 {
     // Called when exiting or when a signal is received.
-    std::cout << "Caught signal: " << sig << " (" << strsignal(sig) << ").\n";
+    std::cout << "Caught signal: " << sig << " (" << strsignal(sig) << ")." << std::endl;
     g_stop.store(true);
+    std::cout << "Shutting down transmissions." << std::endl;
+    wsprTransmitter.shutdown_transmitter();
+    std::cout << "Reset DMA." << std::endl;
     wsprTransmitter.dma_cleanup();
-    std::cout << "Cleaning stuff up." << std::endl;
     exit(EXIT_SUCCESS);
 }
 
@@ -109,9 +107,6 @@ int main()
         sigaction(sig, &sa, nullptr);
     }
     std::signal(SIGCHLD, SIG_IGN);
-
-    // Set high scheduling priority to reduce kernel interruptions
-    setSchedPriority(30);
 
     bool isWspr = select_wspr();
     std::cout << "Mode selected: " << (isWspr ? "WSPR" : "TONE") << std::endl;
@@ -142,7 +137,6 @@ int main()
     {
         std::cout << "Press <spacebar> to begin transmission." << std::endl;
         pause_for_space();
-        std::cout << "Press CTRL-C to end." << std::endl;
     }
 
     // Time structs for computing transmission window
@@ -151,7 +145,19 @@ int main()
     std::cout << "TX started at: " << timeval_print(&tv_begin) << std::endl;
 
     // Execute transmission
-    wsprTransmitter.transmit();
+    wsprTransmitter.start_threaded_transmission(SCHED_FIFO, 30);
+
+    if (isWspr)
+    {
+        // Now wait for the transmit thread to exit:
+        wsprTransmitter.join_transmission();
+    }
+    else
+    {
+        std::cout << "Press <spacebar> to end." << std::endl;
+        pause_for_space(); // Or some other user action
+        std::cout << "Stopping." << std::endl;
+    }
 
     // Print transmission timestamp and duration
     gettimeofday(&tv_end, nullptr);
@@ -165,6 +171,7 @@ int main()
     // Update with:
     // update_dma_for_ppm(config.ppm);
 
+    wsprTransmitter.shutdown_transmitter();
     wsprTransmitter.dma_cleanup();
 
     return 0;

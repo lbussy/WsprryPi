@@ -1,49 +1,74 @@
-// TODO:
-// * Allow priority set
-// * Thread and allow interrupt
+/**
+ * @file wspr_transmit.cpp
+ * @brief A class to encapsulate configuration and DMA‑driven transmission of
+ *        WSPR signals.
+ *
+ * Copyright (C) 2025 Lee C. Bussy (@LBussy). All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
-#include "wspr_transmit.hpp" // Required: implements the functions declared here
+// Implement class
+#include "wspr_transmit.hpp"
 
 // Submodules
-#include "wspr_message.hpp" // Required: defines WsprMessage
+#include "wspr_message.hpp"
+#ifdef __cplusplus
+extern "C"
+{
+#include "mailbox.h"
+}
+#endif
 
 // C++ Standard Library Headers
-#include <algorithm> // Required: std::clamp
-#include <cassert>   // Required: assert()
-#include <cmath>     // Required: std::pow, std::floor, std::round
-#include <cstdint>   // Required: uint32_t, uintptr_t
-#include <cstdlib>   // Required: std::rand
-#include <cstring>   // Required: std::memcpy
-#include <fstream>   // Required: std::ifstream
-#include <iomanip>   // Required: std::setprecision, setw, setfill
-#include <iostream>  // Required: std::cout, std::cerr
-#include <optional>  // Required: std::optional
-#include <random>    // Required: std::random_device, mt19937, uniform_real_distribution
-#include <sstream>   // Required: std::stringstream
-#include <stdexcept> // Required: std::runtime_error
-#include <string>    // Required: std::string
-#include <vector>    // Required: std::vector
+#include <algorithm>
+#include <cassert>
+#include <cerrno>
+#include <cmath>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <mutex>
+#include <optional>
+#include <random>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 // POSIX & System-Specific Headers
-#include <fcntl.h>     // Required: open() flags
-#include <sys/mman.h>  // Required: mmap(), munmap()
-#include <sys/stat.h>  // Required: struct stat, stat()
-#include <sys/time.h>  // Required: gettimeofday(), struct timeval
-#include <sys/types.h> // Required by sys/stat.h on some systems → keep
-#include <unistd.h>    // Required: close(), unlink(), usleep()
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #ifdef DEBUG_WSPR_TRANSMIT
 constexpr const bool debug = true;
 #else
 constexpr const bool debug = false;
 #endif
-
-#ifdef __cplusplus
-extern "C"
-{
-#include "mailbox.h"
-}
-#endif /* __cplusplus */
 
 /**
  * @brief Global instance of the WSPR transmitter.
@@ -203,24 +228,35 @@ void WsprTransmitter::setup_transmission(
  */
 void WsprTransmitter::transmit()
 {
-    // Record reference time for scheduling
+    // 1) Early exit if a stop was already requested
+    if (stop_requested_.load())
+    {
+        if (debug)
+        {
+            std::cerr << "transmit() aborted before start." << std::endl;
+        }
+        return;
+    }
+
+    // 2) Record reference time for scheduling
     struct timeval tv_begin{};
     gettimeofday(&tv_begin, nullptr);
 
-    // Initialize DMA buffer index
+    // 3) Initialize DMA buffer index
     int bufPtr = 0;
 
-    // Enable PWM clock and DMA transmission
+    // 4) Enable PWM clock and DMA transmission
     transmit_on();
 
+    // 5) Choose tone vs WSPR
     if (transParams.is_tone)
     {
-        // Continuous tone loop (exit on SIGINT)
-        while (true)
+        // Continuous tone loop — exit as soon as stop_requested_ is true
+        while (!stop_requested_.load())
         {
             transmit_symbol(
                 0,     // symbol number
-                0.0,   // Signal this is a test-tone
+                0.0,   // test‐tone
                 bufPtr // DMA buffer index
             );
         }
@@ -228,19 +264,28 @@ void WsprTransmitter::transmit()
     else
     {
         // Transmit each symbol in the WSPR message
-        struct timeval sym_start{};
-        struct timeval diff{};
-        const int symbol_count = static_cast<int>(transParams.symbols.size());
+        const int symbol_count =
+            static_cast<int>(transParams.symbols.size());
+        struct timeval sym_start{}, diff{};
 
         for (int i = 0; i < symbol_count; ++i)
         {
+            // Check for stop between symbols
+            if (stop_requested_.load())
+            {
+                break;
+            }
+
             // Compute elapsed time since tv_begin
             gettimeofday(&sym_start, nullptr);
             symbol_timeval_subtract(&diff, &sym_start, &tv_begin);
             double elapsed = diff.tv_sec + diff.tv_usec / 1e6;
             double sched_end = (i + 1) * transParams.symtime;
             double time_symbol = sched_end - elapsed;
-            time_symbol = std::clamp(time_symbol, 0.2, 2.0 * transParams.symtime);
+            time_symbol = std::clamp(
+                time_symbol,
+                0.2,
+                2.0 * transParams.symtime);
 
             // Transmit the current symbol
             int symbol = static_cast<int>(transParams.symbols[i]);
@@ -254,6 +299,125 @@ void WsprTransmitter::transmit()
 
     // Disable PWM clock and stop transmission
     transmit_off();
+}
+
+/**
+ * @brief Starts the transmission in a dedicated thread.
+ *
+ * Configures the thread scheduling policy and priority, clears any previous
+ * stop request, and then launches the background thread which will run
+ * `thread_entry()` (and ultimately `transmit()`).
+ *
+ * @param[in] policy   The POSIX scheduling policy (e.g., SCHED_FIFO, SCHED_RR,
+ *                     or SCHED_OTHER).
+ * @param[in] priority The thread priority (1–99 for real‑time policies;
+ *                     ignored by SCHED_OTHER).
+ */
+void WsprTransmitter::start_threaded_transmission(int policy, int priority)
+{
+    thread_policy_ = policy;
+    thread_priority_ = priority;
+    stop_requested_.store(false);
+
+    // Launch the background thread:
+    tx_thread_ = std::thread(&WsprTransmitter::thread_entry, this);
+}
+
+/**
+ * @brief Request an in‑flight transmission to stop.
+ *
+ * @details Sets the internal stop flag so that ongoing loops in the transmit
+ *          thread will exit at the next interruption point. Notifies any
+ *          condition_variable waits to unblock the thread promptly.
+ */
+void WsprTransmitter::stop_transmission()
+{
+    // Tell the worker to stop
+    stop_requested_.store(true);
+    // Unblock any waits
+    stop_cv_.notify_all();
+}
+
+/**
+ * @brief Waits for the background transmission thread to finish.
+ *
+ * @details If the transmission thread was launched via
+ *          start_threaded_transmission(), this call will block until
+ *          that thread has completed and joined. After returning,
+ *          tx_thread_ is no longer joinable.
+ */
+void WsprTransmitter::join_transmission()
+{
+    if (tx_thread_.joinable())
+    {
+        tx_thread_.join();
+    }
+}
+
+/**
+ * @brief Gracefully stops and waits for the transmission thread.
+ *
+ * @details Combines stop_transmission() to signal the worker thread to
+ *          exit, and join_transmission() to block until that thread has
+ *          fully terminated. After this call returns, no transmission
+ *          thread remains running.
+ */
+void WsprTransmitter::shutdown_transmitter()
+{
+    stop_transmission();
+    join_transmission();
+}
+
+/**
+ * @brief Check if a stop request has been issued.
+ *
+ * @details Returns true if stop_transmission() was called and the
+ *          internal stop flag is set. Use this to poll from external
+ *          loops or helper functions to determine if the transmitter
+ *          is in the process of shutting down.
+ *
+ * @return `true` if a stop has been requested, `false` otherwise.
+ */
+bool WsprTransmitter::is_stopping() const noexcept
+{
+    return stop_requested_.load(std::memory_order_acquire);
+}
+
+/**
+ * @brief Entry point for the background transmission thread.
+ *
+ * @details Applies the configured POSIX scheduling policy and priority
+ *          (via set_thread_priority()), then invokes transmit() to carry
+ *          out the actual transmission work. This method runs inside the
+ *          new thread and returns only when transmit() completes or a
+ *          stop request is observed.
+ */
+void WsprTransmitter::thread_entry()
+{
+    // bump our own scheduling parameters first:
+    set_thread_priority();
+    // actually do the work (blocking until complete or stop_requested_)
+    transmit();
+}
+
+/**
+ * @brief Applies the configured scheduling policy and priority to this thread.
+ *
+ * @details Builds a sched_param struct using thread_priority_ and invokes
+ *          pthread_setschedparam() with thread_policy_ on the current thread.
+ *          If the call fails, writes a warning to stderr with the error message.
+ */
+void WsprTransmitter::set_thread_priority()
+{
+    // Only real‑time policies use priority > 0
+    sched_param sch{};
+    sch.sched_priority = thread_priority_;
+    int ret = pthread_setschedparam(pthread_self(), thread_policy_, &sch);
+    if (ret != 0)
+    {
+        std::cerr << "Warning: pthread_setschedparam failed: "
+                  << std::strerror(ret) << std::endl;
+    }
 }
 
 /**
@@ -880,148 +1044,167 @@ void WsprTransmitter::transmit_symbol(
     const double &tsym,
     int &bufPtr)
 {
-    // Check for 0-duration symbol (test-tone)
-    bool is_tone;
-    if (tsym == 0.0)
+    // Early‑exit if a stop was already requested
+    if (stop_requested_.load())
     {
-        is_tone = true;
-    }
-    else
-    {
-        is_tone = false;
+        if (debug)
+            std::cout << "DEBUG: transmit_symbol(" << sym_num
+                      << ") aborted before start.\n";
+        return;
     }
 
-    // Determine indices for DMA frequency table
+    // Tone vs WSPR symbol?
+    const bool is_tone = (tsym == 0.0);
+
+    // DMA table indices
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
 
-    // Retrieve frequency values from the DMA table
+    // Frequency bounds
     const double f0_freq = transParams.dma_table_freq[f0_idx];
     const double f1_freq = transParams.dma_table_freq[f1_idx];
 
-    // Calculate the expected tone frequency
-    const double tone_freq = transParams.frequency - 1.5 * transParams.tone_spacing + sym_num * transParams.tone_spacing;
-
-    // Ensure the tone frequency is within bounds
+    // Desired tone frequency
+    const double tone_freq =
+        transParams.frequency - 1.5 * transParams.tone_spacing + sym_num * transParams.tone_spacing;
     assert((tone_freq >= f0_freq) && (tone_freq <= f1_freq));
 
-    // Compute frequency ratio for symbol transmission
-    const double f0_ratio = 1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
-
+    // Interpolation ratio
+    const double f0_ratio =
+        1.0 - (tone_freq - f0_freq) / (f1_freq - f0_freq);
     if (debug)
         std::cout << "DEBUG: f0_ratio = " << f0_ratio << std::endl;
+    assert((f0_ratio >= 0.0) && (f0_ratio <= 1.0));
 
-    // Ensure f0_ratio is between 0.0 and 1.0
-    assert((f0_ratio >= 0) && (f0_ratio <= 1));
-
-    // Compute total number of PWM clock cycles required for the symbol duration
-    const long int n_pwmclk_per_sym = std::round(F_PWM_CLK_INIT * tsym);
-
-    // Counters for tracking transmitted PWM clocks and f0 occurrences
+    // Total PWM clocks for this symbol
+    const long int n_pwmclk_per_sym =
+        std::round(F_PWM_CLK_INIT * tsym);
     long int n_pwmclk_transmitted = 0;
     long int n_f0_transmitted = 0;
 
     if (debug)
         std::cout << "DEBUG: <instrs[bufPtr] begin=0x"
-                  << std::hex << reinterpret_cast<unsigned long>(&instrs[bufPtr])
-                  << ">" << std::dec << std::endl;
+                  << std::hex
+                  << reinterpret_cast<unsigned long>(&instrs[bufPtr])
+                  << std::dec << ">\n";
 
-    // Transmit the symbol using PWM clocks
+    // Transmit
     if (is_tone)
     {
-        // Indefinite tone loop
-        // TODO: Loop until something tells us to stop (SIGINT, flag, etc.)
-        while (true)
+        // Infinite tone until stopped
+        while (!stop_requested_.load())
         {
-            // How many PWM clocks we send each CB
-            const long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
+            const long int n_pwmclk =
+                PWM_CLOCKS_PER_ITER_NOMINAL;
 
-            // Advance to next CB for setting SOURCE_AD
-            bufPtr = (bufPtr + 1) & 0x3FF; // wrap at 1024
-            // wait until DMA has left this CB
-            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
-                   reinterpret_cast<long>(instrs[bufPtr].b))
-            {
-                usleep(100);
-            }
-            // Point the DMA at the tone’s waveform data
-            reinterpret_cast<CB *>(instrs[bufPtr].v)->SOURCE_AD =
-                reinterpret_cast<long>(constPage.b) + f0_idx * 4;
-
-            // Advance to next CB for setting TXFR_LEN
+            // Point DMA to waveform
             bufPtr = (bufPtr + 1) & 0x3FF;
             while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
                    reinterpret_cast<long>(instrs[bufPtr].b))
             {
+                if (stop_requested_.load())
+                    return;
                 usleep(100);
             }
-            // Tell DMA to output exactly n_pwmclk clocks of that tone
-            reinterpret_cast<CB *>(instrs[bufPtr].v)->TXFR_LEN = n_pwmclk;
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->SOURCE_AD =
+                reinterpret_cast<long>(constPage.b) + f0_idx * 4;
+
+            // Set transfer length
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
+            {
+                if (stop_requested_.load())
+                    return;
+                usleep(100);
+            }
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->TXFR_LEN =
+                n_pwmclk;
         }
     }
     else
     {
-        while (n_pwmclk_transmitted < n_pwmclk_per_sym)
+        // Finite symbol
+        while (n_pwmclk_transmitted < n_pwmclk_per_sym &&
+               !stop_requested_.load())
         {
-            // Set the nominal number of PWM clocks per iteration
-            long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
-
-            // Introduce slight randomization to spread spectral spurs
-            n_pwmclk += std::round((std::rand() / (static_cast<double>(RAND_MAX) + 1.0) - 0.5) * n_pwmclk);
-
-            // Ensure we do not exceed the required clock cycles for the symbol
-            if (n_pwmclk_transmitted + n_pwmclk > n_pwmclk_per_sym)
+            // Compute clocks
+            long int n_pwmclk =
+                PWM_CLOCKS_PER_ITER_NOMINAL;
+            n_pwmclk += std::round(
+                (std::rand() / (RAND_MAX + 1.0) - 0.5) * n_pwmclk);
+            if (n_pwmclk_transmitted + n_pwmclk >
+                n_pwmclk_per_sym)
             {
-                n_pwmclk = n_pwmclk_per_sym - n_pwmclk_transmitted;
+                n_pwmclk =
+                    n_pwmclk_per_sym - n_pwmclk_transmitted;
             }
-
-            // Compute the number of f0 and f1 cycles for this iteration
-            const long int n_f0 = std::round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
+            const long int n_f0 =
+                std::round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
             const long int n_f1 = n_pwmclk - n_f0;
 
-            // Transmit frequency f0
-            bufPtr++;
-            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            // f0 SOURCE_AD
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
             {
+                if (stop_requested_.load())
+                    return;
                 usleep(100);
             }
-            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f0_idx * 4;
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->SOURCE_AD =
+                reinterpret_cast<long>(constPage.b) + f0_idx * 4;
 
-            // Wait for f0 PWM clocks
-            bufPtr++;
-            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            // f0 TXFR_LEN
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
             {
+                if (stop_requested_.load())
+                    return;
                 usleep(100);
             }
-            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f0;
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->TXFR_LEN =
+                n_f0;
 
-            // Transmit frequency f1
-            bufPtr++;
-            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            // f1 SOURCE_AD
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
             {
+                if (stop_requested_.load())
+                    return;
                 usleep(100);
             }
-            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f1_idx * 4;
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->SOURCE_AD =
+                reinterpret_cast<long>(constPage.b) + f1_idx * 4;
 
-            // Wait for f1 PWM clocks
-            bufPtr = (bufPtr + 1) % 1024;
-            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            // f1 TXFR_LEN
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
             {
+                if (stop_requested_.load())
+                    return;
                 usleep(100);
             }
-            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f1;
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->TXFR_LEN =
+                n_f1;
 
-            // Update transmission counters
+            // Update counters
             n_pwmclk_transmitted += n_pwmclk;
             n_f0_transmitted += n_f0;
         }
     }
 
+    // Final debug
     if (debug)
         std::cout << "DEBUG: <instrs[bufPtr]=0x"
-                  << std::hex << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
-                  << " 0x" << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
-                  << ">" << std::dec << std::endl;
+                  << std::hex
+                  << reinterpret_cast<unsigned long>(instrs[bufPtr].v)
+                  << " 0x"
+                  << reinterpret_cast<unsigned long>(instrs[bufPtr].b)
+                  << std::dec << ">\n";
 }
 
 /**
