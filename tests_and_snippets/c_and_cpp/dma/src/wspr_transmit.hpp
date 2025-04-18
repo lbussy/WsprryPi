@@ -33,6 +33,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -82,6 +83,29 @@ public:
      * any running transmission threads.
      */
     ~WsprTransmitter();
+
+    /**
+     * @brief Callback signature for transmission completion notifications.
+     *
+     * @details Defines the function prototype for user‑provided callbacks that
+     *          are called when a WSPR transmission completes. The callback
+     *          takes no parameters and returns nothing.
+     */
+    using CompletionCallback = std::function<void()>;
+
+    /**
+     * @brief Set a callback to be invoked when a WSPR transmission completes.
+     *
+     * @details If the transmitter is in WSPR mode (not tone), then immediately
+     *          after the last symbol is sent (but before `transmit_off()`),
+     *          this callback will be called—on the transmit thread.
+     *
+     * @param cb  A callable with signature `void()`.  If empty, no callback.
+     */
+    void setWsprCompleteCallback(CompletionCallback cb) noexcept
+    {
+        on_wspr_complete_ = std::move(cb);
+    }
 
     /**
      * @brief Starts the transmission in a dedicated thread.
@@ -246,6 +270,16 @@ public:
     inline double convert_mw_dbm(double mw);
 
 private:
+    /**
+     * @brief Callback invoked upon completion of a WSPR transmission.
+     *
+     * @details If set via setWsprCompleteCallback(), this callable is executed
+     *          on the transmission thread immediately after the last WSPR symbol
+     *          has been sent and before the DMA/PWM is shut down. If no callback
+     *          is provided, this remains empty and no notification occurs.
+     */
+    CompletionCallback on_wspr_complete_{};
+
     /**
      * @brief Background thread for carrying out the transmission.
      *

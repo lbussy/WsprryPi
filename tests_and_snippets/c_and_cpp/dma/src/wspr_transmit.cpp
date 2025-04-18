@@ -295,6 +295,12 @@ void WsprTransmitter::transmit()
                 bufPtr       // DMA buffer index
             );
         }
+
+        // Invoke the completion callback if set
+        if (on_wspr_complete_)
+        {
+            on_wspr_complete_();
+        }
     }
 
     // Disable PWM clock and stop transmission
