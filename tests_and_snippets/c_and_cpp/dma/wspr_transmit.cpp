@@ -1,3 +1,7 @@
+// TODO:
+// * Allow priority set
+// * Thread and allow interrupt
+
 #include "wspr_transmit.hpp" // Required: implements the functions declared here
 
 // Submodules
@@ -216,7 +220,7 @@ void WsprTransmitter::transmit()
         {
             transmit_symbol(
                 0,     // symbol number
-                60.0,  // duration in seconds
+                0.0,   // Signal this is a test-tone
                 bufPtr // DMA buffer index
             );
         }
@@ -876,6 +880,17 @@ void WsprTransmitter::transmit_symbol(
     const double &tsym,
     int &bufPtr)
 {
+    // Check for 0-duration symbol (test-tone)
+    bool is_tone;
+    if (tsym == 0.0)
+    {
+        is_tone = true;
+    }
+    else
+    {
+        is_tone = false;
+    }
+
     // Determine indices for DMA frequency table
     const int f0_idx = sym_num * 2;
     const int f1_idx = f0_idx + 1;
@@ -912,59 +927,94 @@ void WsprTransmitter::transmit_symbol(
                   << ">" << std::dec << std::endl;
 
     // Transmit the symbol using PWM clocks
-    while (n_pwmclk_transmitted < n_pwmclk_per_sym)
+    if (is_tone)
     {
-        // Set the nominal number of PWM clocks per iteration
-        long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
-
-        // Introduce slight randomization to spread spectral spurs
-        n_pwmclk += std::round((std::rand() / (static_cast<double>(RAND_MAX) + 1.0) - 0.5) * n_pwmclk);
-
-        // Ensure we do not exceed the required clock cycles for the symbol
-        if (n_pwmclk_transmitted + n_pwmclk > n_pwmclk_per_sym)
+        // Indefinite tone loop
+        // TODO: Loop until something tells us to stop (SIGINT, flag, etc.)
+        while (true)
         {
-            n_pwmclk = n_pwmclk_per_sym - n_pwmclk_transmitted;
+            // How many PWM clocks we send each CB
+            const long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
+
+            // Advance to next CB for setting SOURCE_AD
+            bufPtr = (bufPtr + 1) & 0x3FF; // wrap at 1024
+            // wait until DMA has left this CB
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            // Point the DMA at the tone’s waveform data
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->SOURCE_AD =
+                reinterpret_cast<long>(constPage.b) + f0_idx * 4;
+
+            // Advance to next CB for setting TXFR_LEN
+            bufPtr = (bufPtr + 1) & 0x3FF;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04) ==
+                   reinterpret_cast<long>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            // Tell DMA to output exactly n_pwmclk clocks of that tone
+            reinterpret_cast<CB *>(instrs[bufPtr].v)->TXFR_LEN = n_pwmclk;
         }
-
-        // Compute the number of f0 and f1 cycles for this iteration
-        const long int n_f0 = std::round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
-        const long int n_f1 = n_pwmclk - n_f0;
-
-        // Transmit frequency f0
-        bufPtr++;
-        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+    }
+    else
+    {
+        while (n_pwmclk_transmitted < n_pwmclk_per_sym)
         {
-            usleep(100);
-        }
-        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f0_idx * 4;
+            // Set the nominal number of PWM clocks per iteration
+            long int n_pwmclk = PWM_CLOCKS_PER_ITER_NOMINAL;
 
-        // Wait for f0 PWM clocks
-        bufPtr++;
-        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
-        {
-            usleep(100);
-        }
-        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f0;
+            // Introduce slight randomization to spread spectral spurs
+            n_pwmclk += std::round((std::rand() / (static_cast<double>(RAND_MAX) + 1.0) - 0.5) * n_pwmclk);
 
-        // Transmit frequency f1
-        bufPtr++;
-        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
-        {
-            usleep(100);
-        }
-        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f1_idx * 4;
+            // Ensure we do not exceed the required clock cycles for the symbol
+            if (n_pwmclk_transmitted + n_pwmclk > n_pwmclk_per_sym)
+            {
+                n_pwmclk = n_pwmclk_per_sym - n_pwmclk_transmitted;
+            }
 
-        // Wait for f1 PWM clocks
-        bufPtr = (bufPtr + 1) % 1024;
-        while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
-        {
-            usleep(100);
-        }
-        reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f1;
+            // Compute the number of f0 and f1 cycles for this iteration
+            const long int n_f0 = std::round(f0_ratio * (n_pwmclk_transmitted + n_pwmclk)) - n_f0_transmitted;
+            const long int n_f1 = n_pwmclk - n_f0;
 
-        // Update transmission counters
-        n_pwmclk_transmitted += n_pwmclk;
-        n_f0_transmitted += n_f0;
+            // Transmit frequency f0
+            bufPtr++;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f0_idx * 4;
+
+            // Wait for f0 PWM clocks
+            bufPtr++;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f0;
+
+            // Transmit frequency f1
+            bufPtr++;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->SOURCE_AD = reinterpret_cast<long int>(constPage.b) + f1_idx * 4;
+
+            // Wait for f1 PWM clocks
+            bufPtr = (bufPtr + 1) % 1024;
+            while (accessBusAddress(DMA_BUS_BASE + 0x04 /* CurBlock */) == reinterpret_cast<long int>(instrs[bufPtr].b))
+            {
+                usleep(100);
+            }
+            reinterpret_cast<struct CB *>(instrs[bufPtr].v)->TXFR_LEN = n_f1;
+
+            // Update transmission counters
+            n_pwmclk_transmitted += n_pwmclk;
+            n_f0_transmitted += n_f0;
+        }
     }
 
     if (debug)
