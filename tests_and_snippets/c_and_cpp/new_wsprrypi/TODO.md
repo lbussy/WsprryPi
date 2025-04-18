@@ -4,7 +4,7 @@
 - [ ] Note in docs that they may see:
     `2025-02-20 23:10:00 UTC [INFO ] Transmission started.`
     ... this is a floating point rounding issue.
-- [ ] Figure out how to add in DMA stuff for transmission
+- [ ] Incorporate new WsprTransmitter class
 - [ ] DMA notes at: `https://github.com/fandahao17/Raspberry-Pi-DMA-Tutorial`
 - [ ] May not need:
   - jq
@@ -20,7 +20,7 @@
       "php"
       "libraspberrypi-dev"
       "raspberrypi-kernel-headers"
-      "ntp"
+      "chrony"
       "gpiod"
       "libgpiod-dev"
     )

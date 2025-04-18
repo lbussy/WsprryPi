@@ -105,6 +105,7 @@ CXXFLAGS += -I$(abspath ./Singleton/src)
 CXXFLAGS += -I$(abspath ./Broadcom-Mailbox/src)
 CXXFLAGS += -I$(abspath ./PPM-Manager/src)
 CXXFLAGS += -I$(abspath ./Signal-Handler/src)
+CXXFLAGS += -I$(abspath ./WsprTransmitter/src)
 # Define additional macros for the compiler
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 # Target flags
@@ -172,7 +173,7 @@ build/bin/$(OUT): $(C_OBJECTS) $(CPP_OBJECTS)
 # Make Targets
 ##
 
-# Force the fefault to be release (order matters in targets otherwise)
+# Force the default to be release (order matters in targets otherwise)
 .DEFAULT_GOAL := release
 
 # Clean dirs
