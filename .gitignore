@@ -1,11 +1,21 @@
 # GitIgnore for WsprryPi
 
-## Relase.py ignores:
+## Release.py ignores:
 src/**/*.bak
 scripts/**/*.bak
 scripts/logs/
 scripts/bkp/
 build/
+
+## 2.0 stuff to ignore
+WsprryPi-UI/
+executables/
+src/INI-Handler/
+src/LCBLog/
+src/MonitorFile/
+src/Singleton/
+src/WSPR-Message/
+tests_and_snippets/
 
 ## OS ignores
 .DS_Store
