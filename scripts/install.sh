@@ -62,7 +62,7 @@ IFS=$'\n\t'
 trap_error() {
     # Capture function name, line number, and script name
     local func="${FUNCNAME[1]:-main}" # Get the call function (default: "main")
-    local line="${1:-}"                # Line number where the error occurred
+    local line="${1:-}"               # Line number where the error occurred
     local script="${this_script:-$(basename "${BASH_SOURCE[0]:-$0}")}"
 
     # Use global THIS_SCRIPT if it exists and is not empty;
@@ -205,8 +205,8 @@ declare DRY_RUN="${DRY_RUN:-false}"
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"
 declare REPO_ORG="${REPO_ORG:-lbussy}"
-declare REPO_NAME="WsprryPi"        # Case Sensitive
-declare UI_REPO_DIR="WsprryPi-UI"   # Case Sensitive
+declare REPO_NAME="WsprryPi"      # Case Sensitive
+declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-timing_loop}"
 declare GIT_TAG="${GIT_TAG:-1.2.1}"
@@ -217,8 +217,8 @@ declare GIT_CLONE_BASE="https://github.com"
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
 # -----------------------------------------------------------------------------
-declare ARGUMENTS_LIST=()   # List of word arguments for command line parsing
-declare OPTIONS_LIST=()     # List of -f--fl arguemtns for command line parsing
+declare ARGUMENTS_LIST=() # List of word arguments for command line parsing
+declare OPTIONS_LIST=()   # List of -f--fl arguments for command line parsing
 
 # -----------------------------------------------------------------------------
 # @var GIT_DIRS
@@ -384,7 +384,7 @@ readonly MIN_OS="${MIN_OS:-11}"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly MAX_OS="${MAX_OS:-15}"  # (use -1 for no upper limit)
+readonly MAX_OS="${MAX_OS:-15}" # (use -1 for no upper limit)
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_BITNESS
@@ -425,7 +425,7 @@ readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
 #          This array is marked as `readonly` to ensure it remains immutable at
 #          runtime.
 #
-#          declare SUPPORTED_MODELS="all" at invocateion or in the environment
+#          declare SUPPORTED_MODELS="all" at invocation or in the environment
 #          to accept any models.
 #
 # @example
@@ -465,7 +465,7 @@ if [[ -z "${SUPPORTED_MODELS+x}" || ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
     )
 elif [[ ${SUPPORTED_MODELS[all]+_} ]]; then
     # If SUPPORTED_MODELS contains "all", set it as a special value
-    SUPPORTED_MODELS=( ["all"]="Supported" )
+    SUPPORTED_MODELS=(["all"]="Supported")
 fi
 
 # -----------------------------------------------------------------------------
@@ -503,7 +503,7 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-}"  # Use the provided LOG_FILE or default to blank.
+declare LOG_FILE="${LOG_FILE:-}" # Use the provided LOG_FILE or default to blank.
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
@@ -595,8 +595,8 @@ readonly DEPENDENCIES
 # done
 # -----------------------------------------------------------------------------
 declare -ar ENV_VARS_BASE=(
-    "HOME"       # Home directory of the current user
-    "COLUMNS"    # Terminal width for formatting, often dynamic in the OS
+    "HOME"    # Home directory of the current user
+    "COLUMNS" # Terminal width for formatting, often dynamic in the OS
 )
 
 # -----------------------------------------------------------------------------
@@ -663,8 +663,8 @@ COLUMNS="${COLUMNS:-80}"
 # done
 # -----------------------------------------------------------------------------
 declare -ar SYSTEM_READS=(
-    "/etc/os-release"               # OS identification file
-    "/proc/device-tree/compatible"  # Hardware compatibility file
+    "/etc/os-release"              # OS identification file
+    "/proc/device-tree/compatible" # Hardware compatibility file
 )
 readonly SYSTEM_READS
 
@@ -694,9 +694,7 @@ readonly APT_PACKAGES=(
     "git"
     "apache2"
     "php"
-    "libraspberrypi-dev"
-    "raspberrypi-kernel-headers"
-    "ntp"
+    "chrony"
     "gpiod"
     "libgpiod-dev"
 )
@@ -760,13 +758,13 @@ egress() {
 # -----------------------------------------------------------------------------
 debug_start() {
     local debug=""
-    local args=()  # Array to hold non-debug arguments
+    local args=() # Array to hold non-debug arguments
 
     # Look for the "debug" flag in the provided arguments
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
-            break  # Exit the loop as soon as we find "debug"
+            break # Exit the loop as soon as we find "debug"
         fi
     done
 
@@ -782,7 +780,7 @@ debug_start() {
     # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
         printf "[DEBUG]\t[%s:%s():%d] Starting function called by %s():%d.\n" \
-            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
+            "$this_script" "$func_name" "$current_line" "$caller_name" "$caller_line" >&2
     fi
 
     # Return the debug flag if present, or an empty string if not
@@ -804,7 +802,7 @@ debug_start() {
 # debug_filter "arg1" "debug" "arg2"  # Returns "arg1 arg2"
 # -----------------------------------------------------------------------------
 debug_filter() {
-    local args=()  # Array to hold non-debug arguments
+    local args=() # Array to hold non-debug arguments
 
     # Iterate over each argument and exclude "debug"
     for arg in "$@"; do
@@ -834,14 +832,14 @@ debug_filter() {
 # -----------------------------------------------------------------------------
 debug_print() {
     local debug=""
-    local args=()  # Array to hold non-debug arguments
+    local args=() # Array to hold non-debug arguments
 
     # Loop through all arguments to identify the "debug" flag
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
         else
-            args+=("$arg")  # Add non-debug arguments to the array
+            args+=("$arg") # Add non-debug arguments to the array
         fi
     done
 
@@ -861,7 +859,7 @@ debug_print() {
     # Print debug information if the debug flag is set
     if [[ "$debug" == "debug" ]]; then
         printf "[DEBUG]\t[%s:%s:%d] '%s'.\n" \
-               "$this_script" "$caller_name" "$caller_line" "$message" >&2
+            "$this_script" "$caller_name" "$caller_line" "$message" >&2
     fi
 }
 
@@ -882,13 +880,13 @@ debug_print() {
 # -----------------------------------------------------------------------------
 debug_end() {
     local debug=""
-    local args=()  # Array to hold non-debug arguments
+    local args=() # Array to hold non-debug arguments
 
     # Loop through all arguments and identify the "debug" flag
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
-            break  # Exit the loop as soon as we find "debug"
+            break # Exit the loop as soon as we find "debug"
         fi
     done
 
@@ -904,7 +902,7 @@ debug_end() {
     # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
         printf "[DEBUG]\t[%s:%s():%d] Exiting function returning to %s():%d.\n" \
-            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
+            "$this_script" "$func_name" "$current_line" "$caller_name" "$caller_line" >&2
     fi
 }
 
@@ -942,18 +940,18 @@ stack_trace() {
     COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
     COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
     local width
-    width=${COLUMNS:-80}                    # Max console width
+    width=${COLUMNS:-80} # Max console width
 
     # Check if $1 is a valid level, otherwise treat it as the message
     case "$level" in
-        DEBUG|INFO|WARN|WARNING|ERROR|CRIT|CRITICAL)
-            shift
-            ;;
-        *)
-            message="$level"
-            level="INFO"
-            shift
-            ;;
+    DEBUG | INFO | WARN | WARNING | ERROR | CRIT | CRITICAL)
+        shift
+        ;;
+    *)
+        message="$level"
+        level="INFO"
+        shift
+        ;;
     esac
 
     # Concatenate all remaining arguments into $message
@@ -999,7 +997,7 @@ stack_trace() {
 
         if should_skip "$func"; then
             continue
-        elif (( current_length > longest_length )); then
+        elif ((current_length > longest_length)); then
             longest_length=$current_length
         fi
 
@@ -1007,44 +1005,61 @@ stack_trace() {
     done
 
     # General text attributes
-    local reset="\033[0m"     # Reset text formatting
-    local bold="\033[1m"      # Bold text
+    local reset="\033[0m" # Reset text formatting
+    local bold="\033[1m"  # Bold text
 
     # Foreground colors
-    local fgred="\033[31m"    # Red text
-    local fggrn="\033[32m"    # Green text
-    local fgblu="\033[34m"    # Blue text
-    local fgmag="\033[35m"    # Magenta text
-    local fgcyn="\033[36m"    # Cyan text
-    local fggld="\033[38;5;220m"  # Gold text (ANSI 256 color)
+    local fgred="\033[31m"       # Red text
+    local fggrn="\033[32m"       # Green text
+    local fgblu="\033[34m"       # Blue text
+    local fgmag="\033[35m"       # Magenta text
+    local fgcyn="\033[36m"       # Cyan text
+    local fggld="\033[38;5;220m" # Gold text (ANSI 256 color)
 
     # Determine color and label based on level
     local color label
     case "$level" in
-        DEBUG) color=$fgcyn; label="[DEBUG]";;
-        INFO) color=$fggrn; label="[INFO ]";;
-        WARN|WARNING) color=$fggld; label="[WARN ]";;
-        ERROR) color=$fgmag; label="[ERROR]";;
-        CRIT|CRITICAL) color=$fgred; label="[CRIT ]";;
+    DEBUG)
+        color=$fgcyn
+        label="[DEBUG]"
+        ;;
+    INFO)
+        color=$fggrn
+        label="[INFO ]"
+        ;;
+    WARN | WARNING)
+        color=$fggld
+        label="[WARN ]"
+        ;;
+    ERROR)
+        color=$fgmag
+        label="[ERROR]"
+        ;;
+    CRIT | CRITICAL)
+        color=$fgred
+        label="[CRIT ]"
+        ;;
     esac
 
     # Create header and footer
-    local dash_count=$(( (width - ${#header_name} - 2) / 2 ))
+    local dash_count=$(((width - ${#header_name} - 2) / 2))
     local header_l header_r
     header_l="$(printf '%*s' "$dash_count" '' | tr ' ' "$char")"
     header_r="$header_l"
-    [[ $(( (width - ${#header_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
-    local header; header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
-        "$color" \
-        "$header_l" \
-        "$reset" \
-        "$color" \
-        "$bold" \
-        "$header_name" \
-        "$reset" \
-        "$color" \
-        "$header_r" \
-        "$reset" \
+    [[ $(((width - ${#header_name}) % 2)) -eq 1 ]] && header_r="${header_r}${char}"
+    local header
+    header=$(
+        printf "%b%s%b %b%b%s%b %b%s%b" \
+            "$color" \
+            "$header_l" \
+            "$reset" \
+            "$color" \
+            "$bold" \
+            "$header_name" \
+            "$reset" \
+            "$color" \
+            "$header_r" \
+            "$reset"
     )
 
     # Construct the footer
@@ -1074,13 +1089,13 @@ stack_trace() {
     fi
 
     # Print stack trace
-    local indent=$(( (width / 2) - ((longest_length + 28) / 2) ))
-    indent=$(( indent < 0 ? 0 : indent ))
+    local indent=$(((width / 2) - ((longest_length + 28) / 2)))
+    indent=$((indent < 0 ? 0 : indent))
     if [[ -z "${displayed_stack[*]}" ]]; then
         printf "%b[WARN ]%b Stack trace is empty.\n" "$fggld" "$reset" >&2
     else
         for ((i = ${#displayed_stack[@]} - 1, idx = 0; i >= 0; i--, idx++)); do
-            IFS='|' read -r func line <<< "${displayed_stack[i]}"
+            IFS='|' read -r func line <<<"${displayed_stack[i]}"
             printf "%b%*s [%d] Function: %-*s Line: %4s%b\n" \
                 "$color" "$indent" ">" "$idx" "$((longest_length + 2))" "$func" "$line" "$reset"
         done
@@ -1124,17 +1139,17 @@ stack_trace() {
 # -----------------------------------------------------------------------------
 warn() {
     # Initialize variables
-    local script="${FALLBACK_SCRIPT_NAME:-unknown}"  # This script's name
+    local script="${FALLBACK_SCRIPT_NAME:-unknown}" # This script's name
     local func_name="${FUNCNAME[1]:-main}"          # Calling function
     local caller_line=${BASH_LINENO[0]:-0}          # Calling line
 
     # Get valid error code
     local error_code
     if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
-        error_code=$((10#$1))  # Convert to numeric
+        error_code=$((10#$1)) # Convert to numeric
         shift
     else
-        error_code=1  # Default to 1 if not numeric
+        error_code=1 # Default to 1 if not numeric
     fi
 
     # Configurable delimiter
@@ -1142,25 +1157,25 @@ warn() {
 
     # Get the primary message
     local message
-    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "${1:-A warning was raised on this line}")
+    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<<"${1:-A warning was raised on this line}")
     [[ $# -gt 0 ]] && shift
 
     # Process details
     local details
-    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$*")
+    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<<"$*")
 
     # Recalculate terminal columns
     COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
     COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
     local width
-    width=${COLUMNS:-80}                    # Max console width
+    width=${COLUMNS:-80} # Max console width
 
     # Escape sequences for colors and attributes
-    local reset="\033[0m"           # Reset text
-    local bold="\033[1m"            # Bold text
-    local fggld="\033[38;5;220m"    # Gold text
-    local fgcyn="\033[36m"          # Cyan text
-    local fgblu="\033[34m"          # Blue text
+    local reset="\033[0m"        # Reset text
+    local bold="\033[1m"         # Bold text
+    local fggld="\033[38;5;220m" # Gold text
+    local fgcyn="\033[36m"       # Cyan text
+    local fgblu="\033[34m"       # Blue text
 
     # Format prefix
     format_prefix() {
@@ -1211,14 +1226,14 @@ warn() {
     if [[ -n "$overflow" ]]; then
         while IFS= read -r line; do
             printf "%s%s\n" "$extd_prefix" "$line" >&2
-        done <<< "$overflow"
+        done <<<"$overflow"
     fi
 
     # Print secondary details
     if [[ -n "$secondary" ]]; then
         while IFS= read -r line; do
             printf "%s%s\n" "$dets_prefix" "$line" >&2
-        done <<< "$secondary"
+        done <<<"$secondary"
     fi
 
     # Execute stack trace if WARN_STACK_TRACE is enabled
@@ -1258,16 +1273,16 @@ warn() {
 # -----------------------------------------------------------------------------
 die() {
     # Initialize variables
-    local script="${FALLBACK_SCRIPT_NAME:-unknown}"  # This script's name
+    local script="${FALLBACK_SCRIPT_NAME:-unknown}" # This script's name
     local func_name="${FUNCNAME[1]:-main}"          # Calling function
     local caller_line=${BASH_LINENO[0]:-0}          # Calling line
 
     # Get valid error code
     if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
-        error_code=$((10#$1))  # Convert to numeric
+        error_code=$((10#$1)) # Convert to numeric
         shift
     else
-        error_code=1  # Default to 1 if not numeric
+        error_code=1 # Default to 1 if not numeric
     fi
 
     # Configurable delimiter
@@ -1275,20 +1290,20 @@ die() {
 
     # Process the primary message
     local message
-    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "${1:-Critical error}")
+    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<<"${1:-Critical error}")
 
     # Only shift if there are remaining arguments
     [[ $# -gt 0 ]] && shift
 
     # Process details
     local details
-    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$*")
+    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<<"$*")
 
     # Recalculate terminal columns
     COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
     COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
     local width
-    width=${COLUMNS:-80}                    # Max console width
+    width=${COLUMNS:-80} # Max console width
 
     # Escape sequences as safe(r) alternatives to global tput values
     # General attributes
@@ -1348,14 +1363,14 @@ die() {
     if [[ -n "$overflow" ]]; then
         while IFS= read -r line; do
             printf "%s%s\n" "$extd_prefix" "$line" >&2
-        done <<< "$overflow"
+        done <<<"$overflow"
     fi
 
     # Print secondary details
     if [[ -n "$secondary" ]]; then
         while IFS= read -r line; do
             printf "%s%s\n" "$dets_prefix" "$line" >&2
-        done <<< "$secondary"
+        done <<<"$secondary"
     fi
 
     # Execute stack trace
@@ -1383,14 +1398,16 @@ die() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 add_dot() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input=${1:-}  # Input string to process
+    local input=${1:-} # Input string to process
 
     # Validate input
     if [[ -z "$input" ]]; then
         warn "Input to add_dot cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -1418,10 +1435,13 @@ add_dot() {
 # remove_dot ".hidden"  # Output: "hidden"
 # remove_dot "visible"  # Output: "visible"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_dot() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input=${1:-}  # Input string to process
+    local input=${1:-} # Input string to process
 
     # Validate input
     if [[ -z "$input" ]]; then
@@ -1456,9 +1476,11 @@ remove_dot() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 add_period() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input=${1:-}  # Input string to process
+    local input=${1:-} # Input string to process
 
     # Validate input
     if [[ -z "$input" ]]; then
@@ -1495,14 +1517,16 @@ add_period() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 remove_period() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input=${1:-}  # Input string to process
+    local input=${1:-} # Input string to process
 
     # Validate input
     if [[ -z "$input" ]]; then
         warn "ERROR" "Input to remove_period cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -1533,14 +1557,16 @@ remove_period() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 add_slash() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input="$1"  # Input string to process
+    local input="$1" # Input string to process
 
     # Validate input
     if [[ -z "${input:-}" ]]; then
         warn "ERROR" "Input to add_slash cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -1572,14 +1598,16 @@ add_slash() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 remove_slash() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local input="$1"  # Input string to process
+    local input="$1" # Input string to process
 
     # Validate input
     if [[ -z "${input:-}" ]]; then
         warn "ERROR" "Input to remove_slash cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -1617,7 +1645,9 @@ remove_slash() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 modify_comment_lines() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure all three arguments are provided
     if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
@@ -1644,27 +1674,35 @@ modify_comment_lines() {
     fi
 
     local temp_file
-    temp_file=$(mktemp) || { debug_print "Error: Failed to create temp file." "$debug"; debug_end "$debug"; return 1; }
+    temp_file=$(mktemp) || {
+        debug_print "Error: Failed to create temp file." "$debug"
+        debug_end "$debug"
+        return 1
+    }
 
     while IFS= read -r line; do
         if [[ "$line" =~ ${search_string}$ ]]; then
             if [[ "$action" == "comment" ]]; then
                 if [[ ! "$line" =~ ^# ]]; then
-                    echo "# $line" >> "$temp_file"
+                    echo "# $line" >>"$temp_file"
                     debug_print "Commenting: $line" "$debug"
                 else
-                    echo "$line" >> "$temp_file"
+                    echo "$line" >>"$temp_file"
                 fi
             elif [[ "$action" == "uncomment" ]]; then
-                echo "${line#"${line%%[!# ]*}"}" >> "$temp_file"
+                echo "${line#"${line%%[!# ]*}"}" >>"$temp_file"
                 debug_print "Uncommenting: $line" "$debug"
             fi
         else
-            echo "$line" >> "$temp_file"
+            echo "$line" >>"$temp_file"
         fi
-    done < "$filename"
+    done <"$filename"
 
-    mv "$temp_file" "$filename" || { debug_print "Error: Failed to update file." "$debug"; debug_end "$debug"; return 1; }
+    mv "$temp_file" "$filename" || {
+        debug_print "Error: Failed to update file." "$debug"
+        debug_end "$debug"
+        return 1
+    }
 
     debug_end "$debug"
 }
@@ -1691,7 +1729,9 @@ modify_comment_lines() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 replace_string_in_script() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local file_path="$1"
     local search_string="$2"
@@ -1724,7 +1764,7 @@ replace_string_in_script() {
 # shellcheck disable=SC2317
 pause() {
     printf "Press any key to continue.\n"
-    read -n 1 -sr key < /dev/tty || true
+    read -n 1 -sr key </dev/tty || true
     printf "\n"
     return 0
 }
@@ -1749,9 +1789,11 @@ pause() {
 # print_system debug
 # Outputs system information with debug logs enabled.
 # -----------------------------------------------------------------------------
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 print_system() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
     local system_name
@@ -1767,7 +1809,7 @@ print_system() {
         warn "System: Unknown (could not extract system information)."
         debug_print "System information could not be extracted." "$debug"
     else
-        logI "System: $system_name."  # Log the system information
+        logI "System: $system_name." # Log the system information
         debug_print "Logged system information: $system_name" "$debug"
     fi
 
@@ -1793,8 +1835,11 @@ print_system() {
 # @example
 # print_version debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 print_version() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Check the name of the calling function
     local caller="${FUNCNAME[1]}"
@@ -1839,23 +1884,27 @@ print_version() {
 #
 # @return Returns a context code (described above) indicating the script's
 #         execution context.
-# -----------------------------------------------------------------------------
+# # -----------------------------------------------------------------------------
 determine_execution_context() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local script_path   # Full path of the script
-    local current_dir   # Temporary variable to traverse directories
+    local script_path # Full path of the script
+    local current_dir # Temporary variable to traverse directories
 
     # Check if the script is executed via pipe
     if [[ "$0" == "bash" ]]; then
         if [[ -p /dev/stdin ]]; then
             debug_print "Execution context: Script executed via pipe." "$debug"
+            printf "0\n" # Execution via pipe
             debug_end "$debug"
-            printf "0\n" && return 0  # Execution via pipe
+            return 0
         else
             warn "Unusual bash execution detected."
+            printf "1\n" # Unusual bash execution
             debug_end "$debug"
-            printf "1\n" && return 0  # Unusual bash execution
+            return 0
         fi
     fi
 
@@ -1878,9 +1927,11 @@ determine_execution_context() {
     fi
 
     # Check if the current directory is inside a Git repository
-    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        debug_print "Script executed from inside a git repo." "$debug"
+        printf "3\n" # Unusual bash execution
         debug_end "$debug"
-        printf "3\n" && return 0  # Execution from a PATH location
+        return 0
     fi
 
     # Check if the script is executed from a PATH location
@@ -1888,8 +1939,9 @@ determine_execution_context() {
     resolved_path=$(command -v "$(basename "$0")" 2>/dev/null)
     if [[ "$resolved_path" == "$script_path" ]]; then
         debug_print "Script executed from a PATH location: $resolved_path." "$debug"
+        printf "4\n" # Executed from a PATH location
         debug_end "$debug"
-        printf "4\n" && return 0  # Execution from a PATH location
+        return 0
     fi
 
     # Default: Direct execution from the local filesystem
@@ -1914,7 +1966,9 @@ determine_execution_context() {
 # @return None
 # -----------------------------------------------------------------------------
 handle_execution_context() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Call determine_execution_context and capture its output
     local context
@@ -1928,35 +1982,35 @@ handle_execution_context() {
 
     # Initialize and set global variables based on the context
     case $context in
-        0)
-            THIS_SCRIPT="piped_script"
-            IS_REPO=false
-            debug_print "Execution context: Script was piped (e.g., 'curl url | sudo bash')." "$debug"
-            ;;
-        1)
-            THIS_SCRIPT="piped_script"
-            IS_REPO=false
-            warn "Execution context: Script run with 'bash' in an unusual way."
-            ;;
-        2)
-            THIS_SCRIPT=$(basename "$0")
-            IS_REPO=false
-            debug_print "Execution context: Script executed directly from $THIS_SCRIPT." "$debug"
-            ;;
-        3)
-            THIS_SCRIPT=$(basename "$0")
-            IS_REPO=true
-            debug_print "Execution context: Script is within a GitHub repository." "$debug"
-            ;;
-        4)
-            THIS_SCRIPT=$(basename "$0")
-            IS_REPO=false
-            debug_print "Execution context: Script executed from a PATH location ($(command -v "$THIS_SCRIPT"))" "$debug"
-            ;;
-        *)
-            debug_end "$debug"
-            die 99 "Unknown execution context."
-            ;;
+    0)
+        THIS_SCRIPT="piped_script"
+        IS_REPO=false
+        debug_print "Execution context: Script was piped (e.g., 'curl url | sudo bash')." "$debug"
+        ;;
+    1)
+        THIS_SCRIPT="piped_script"
+        IS_REPO=false
+        warn "Execution context: Script run with 'bash' in an unusual way."
+        ;;
+    2)
+        THIS_SCRIPT=$(basename "$0")
+        IS_REPO=false
+        debug_print "Execution context: Script executed directly from $THIS_SCRIPT." "$debug"
+        ;;
+    3)
+        THIS_SCRIPT=$(basename "$0")
+        IS_REPO=true
+        debug_print "Execution context: Script is within a GitHub repository." "$debug"
+        ;;
+    4)
+        THIS_SCRIPT=$(basename "$0")
+        IS_REPO=false
+        debug_print "Execution context: Script executed from a PATH location ($(command -v "$THIS_SCRIPT"))" "$debug"
+        ;;
+    *)
+        debug_end "$debug"
+        die 99 "Unknown execution context."
+        ;;
     esac
 
     debug_end "$debug"
@@ -1982,8 +2036,11 @@ handle_execution_context() {
 # @example
 # enforce_sudo debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 enforce_sudo() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     if [[ "$REQUIRE_SUDO" == true ]]; then
         if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
@@ -1992,15 +2049,15 @@ enforce_sudo() {
         elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
             debug_print "Script run from a root shell. Exiting." "$debug"
             die 1 "This script should not be run from a root shell." \
-                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+                "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         elif [[ "$EUID" -eq 0 ]]; then
             debug_print "Script run as root. Exiting." "$debug"
             die 1 "This script should not be run as the root user." \
-                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+                "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         else
             debug_print "Script not run with sudo. Exiting." "$debug"
             die 1 "This script requires 'sudo' privileges." \
-                  "Please re-run it using 'sudo $THIS_SCRIPT'."
+                "Please re-run it using 'sudo $THIS_SCRIPT'."
         fi
     fi
 
@@ -2031,12 +2088,15 @@ enforce_sudo() {
 # @example
 # validate_depends debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_depends() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
-    local missing=0  # Counter for missing dependencies
-    local dep        # Iterator for dependencies
+    local missing=0 # Counter for missing dependencies
+    local dep       # Iterator for dependencies
 
     # Iterate through dependencies
     for dep in "${DEPENDENCIES[@]}"; do
@@ -2051,7 +2111,7 @@ validate_depends() {
 
     # Handle missing dependencies
     if ((missing > 0)); then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Missing $missing dependencies. Install them and re-run the script."
     fi
 
@@ -2077,12 +2137,15 @@ validate_depends() {
 # @example
 # validate_sys_accs debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_sys_accs() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
-    local missing=0  # Counter for missing or unreadable files
-    local file       # Iterator for files
+    local missing=0 # Counter for missing or unreadable files
+    local file      # Iterator for files
 
     # Iterate through system files
     for file in "${SYSTEM_READS[@]}"; do
@@ -2097,7 +2160,7 @@ validate_sys_accs() {
 
     # Handle missing files
     if ((missing > 0)); then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Missing or unreadable $missing critical system files."
     fi
 
@@ -2123,12 +2186,15 @@ validate_sys_accs() {
 # @example
 # validate_env_vars debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_env_vars() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
-    local missing=0  # Counter for missing environment variables
-    local var        # Iterator for environment variables
+    local missing=0 # Counter for missing environment variables
+    local var       # Iterator for environment variables
 
     # Iterate through environment variables
     for var in "${ENV_VARS[@]}"; do
@@ -2144,7 +2210,7 @@ validate_env_vars() {
     # Handle missing variables
     if ((missing > 0)); then
         printf "ERROR: Missing %d required environment variables. Ensure all required environment variables are set and re-run the script.\n" "$missing" >&2
-            debug_end "$debug"
+        debug_end "$debug"
         exit 1
     fi
 
@@ -2169,12 +2235,15 @@ validate_env_vars() {
 # check_bash
 # check_bash debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_bash() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure the script is running in a Bash shell
     if [[ -z "${BASH_VERSION:-}" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "This script requires Bash. Please run it with Bash."
     fi
 
@@ -2203,8 +2272,11 @@ check_bash() {
 # check_sh_ver
 # check_sh_ver debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_sh_ver() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local required_version="${MIN_BASH_VERSION:-none}"
 
@@ -2223,9 +2295,9 @@ check_sh_ver() {
         debug_print "Current Bash version is ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}." "$debug"
 
         # Compare the current Bash version with the required version
-        if (( BASH_VERSINFO[0] < required_major ||
-              (BASH_VERSINFO[0] == required_major && BASH_VERSINFO[1] < required_minor) )); then
-                    debug_end "$debug"
+        if ((BASH_VERSINFO[0] < required_major || (\
+            BASH_VERSINFO[0] == required_major && BASH_VERSINFO[1] < required_minor))); then
+            debug_end "$debug"
             die 1 "This script requires Bash version $required_version or newer."
         fi
     fi
@@ -2251,10 +2323,13 @@ check_sh_ver() {
 # check_bitness
 # check_bitness debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_bitness() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local bitness  # Stores the detected bitness of the system.
+    local bitness # Stores the detected bitness of the system.
 
     # Detect the system bitness
     bitness=$(getconf LONG_BIT)
@@ -2263,28 +2338,28 @@ check_bitness() {
     debug_print "Detected system bitness: $bitness-bit." "$debug"
 
     case "$SUPPORTED_BITNESS" in
-        "32")
-            debug_print "Script supports only 32-bit systems." "$debug"
-            if [[ "$bitness" -ne 32 ]]; then
-                debug_end "$debug"
-                die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
-            fi
-            ;;
-        "64")
-            debug_print "Script supports only 64-bit systems." "$debug"
-            if [[ "$bitness" -ne 64 ]]; then
-                debug_end "$debug"
-                die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
-            fi
-            ;;
-        "both")
-            debug_print "Script supports both 32-bit and 64-bit systems." "$debug"
-            ;;
-        *)
-            debug_print "Invalid SUPPORTED_BITNESS configuration: '$SUPPORTED_BITNESS'." "$debug"
+    "32")
+        debug_print "Script supports only 32-bit systems." "$debug"
+        if [[ "$bitness" -ne 32 ]]; then
             debug_end "$debug"
-            die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
-            ;;
+            die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
+        fi
+        ;;
+    "64")
+        debug_print "Script supports only 64-bit systems." "$debug"
+        if [[ "$bitness" -ne 64 ]]; then
+            debug_end "$debug"
+            die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
+        fi
+        ;;
+    "both")
+        debug_print "Script supports both 32-bit and 64-bit systems." "$debug"
+        ;;
+    *)
+        debug_print "Invalid SUPPORTED_BITNESS configuration: '$SUPPORTED_BITNESS'." "$debug"
+        debug_end "$debug"
+        die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
+        ;;
     esac
 
     debug_end "$debug"
@@ -2310,10 +2385,13 @@ check_bitness() {
 # check_release
 # check_release debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_release() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local ver  # Holds the extracted version ID from /etc/os-release.
+    local ver # Holds the extracted version ID from /etc/os-release.
 
     # Ensure the file exists and is readable.
     if [[ ! -f /etc/os-release || ! -r /etc/os-release ]]; then
@@ -2331,19 +2409,19 @@ check_release() {
 
     # Ensure the extracted version is not empty.
     if [[ -z "${ver:-}" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "VERSION_ID is missing or empty in /etc/os-release."
     fi
 
     # Check if the version is older than the minimum supported version.
     if [[ "$ver" -lt "$MIN_OS" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Raspbian version $ver is older than the minimum supported version ($MIN_OS)."
     fi
 
     # Check if the version is newer than the maximum supported version, if applicable.
     if [[ "$MAX_OS" -ne -1 && "$ver" -gt "$MAX_OS" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Raspbian version $ver is newer than the maximum supported version ($MAX_OS)."
     fi
 
@@ -2374,8 +2452,11 @@ check_release() {
 # check_arch
 # check_arch debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_arch() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local detected_model key full_name model chip
     local is_supported=false
@@ -2389,7 +2470,7 @@ check_arch() {
     fi
 
     # Read and process the compatible string
-    if ! detected_model=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | sed -n 's/raspberrypi,//p'); then
+    if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null | sed -n 's/raspberrypi,//p'); then
         debug_end "$debug"
         die 1 "Failed to read or process /proc/device-tree/compatible. Ensure compatibility."
     fi
@@ -2403,7 +2484,7 @@ check_arch() {
 
     # Iterate through supported models to check compatibility
     for key in "${!SUPPORTED_MODELS[@]}"; do
-        IFS='|' read -r full_name model chip <<< "$key"
+        IFS='|' read -r full_name model chip <<<"$key"
         if [[ "$model" == "$detected_model" ]]; then
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 is_supported=true
@@ -2424,7 +2505,7 @@ check_arch() {
 
         # Group the models into supported and unsupported
         for key in "${!SUPPORTED_MODELS[@]}"; do
-            IFS='|' read -r full_name model chip <<< "$key"
+            IFS='|' read -r full_name model chip <<<"$key"
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 supported_models+=("$full_name ($chip)")
             else
@@ -2478,8 +2559,11 @@ check_arch() {
 # validate_proxy "http://myproxy.com:8080"
 # validate_proxy debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_proxy() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Check if proxy_url is passed
     local proxy_url=""
@@ -2487,7 +2571,7 @@ validate_proxy() {
     if [[ -n "$1" && "$1" =~ ^https?:// ]]; then
         # First argument is proxy_url
         proxy_url="$1"
-        shift  # Move to the next argument
+        shift # Move to the next argument
     fi
 
     # Default to global proxy settings if no proxy is provided
@@ -2496,7 +2580,7 @@ validate_proxy() {
     # Validate that a proxy is set
     if [[ -z "${proxy_url:-}" ]]; then
         warn "No proxy URL configured for validation."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -2506,12 +2590,12 @@ validate_proxy() {
     if check_url "$proxy_url" "curl" "--silent --head --max-time 10 --proxy $proxy_url" "$debug"; then
         logI "Proxy $proxy_url is functional."
         debug_print "Proxy $proxy_url is functional." "$debug"
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     else
         warn "Proxy $proxy_url is unreachable or misconfigured."
         debug_print "Proxy $proxy_url failed validation." "$debug"
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 }
@@ -2534,8 +2618,11 @@ validate_proxy() {
 # @example
 # check_url "http://example.com" "curl" "--silent --head" debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_url() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local url="$1"
     local tool="$2"
@@ -2544,14 +2631,14 @@ check_url() {
     # Validate inputs
     if [[ -z "${url:-}" ]]; then
         printf "ERROR: URL and tool parameters are required for check_url.\n" >&2
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Check tool availability
     if ! command -v "$tool" &>/dev/null; then
         printf "ERROR: Tool '%s' is not installed or unavailable.\n" "$tool" >&2
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -2588,8 +2675,11 @@ check_url() {
 # @example
 # check_internet debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 check_internet() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local primary_url="http://google.com"
     local secondary_url="http://1.1.1.1"
@@ -2598,7 +2688,7 @@ check_internet() {
     # Validate proxy settings
     if [[ -n "${http_proxy:-}" || -n "${https_proxy:-}" ]]; then
         debug_print "Proxy detected. Validating proxy configuration." "$debug"
-        if validate_proxy "$debug"; then  # Pass debug flag to validate_proxy
+        if validate_proxy "$debug"; then # Pass debug flag to validate_proxy
             proxy_valid=true
             debug_print "Proxy validation succeeded." "$debug"
         else
@@ -2614,14 +2704,14 @@ check_internet() {
         if $proxy_valid && curl --silent --head --max-time 10 --proxy "${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using curl with proxy."
             debug_print "curl successfully connected via proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
         # Check without proxy
         if curl --silent --head --max-time 10 "$primary_url" &>/dev/null; then
             debug_print "curl successfully connected without proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -2638,7 +2728,7 @@ check_internet() {
         if $proxy_valid && wget --spider --quiet --timeout=10 --proxy="${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using wget with proxy."
             debug_print "wget successfully connected via proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -2646,7 +2736,7 @@ check_internet() {
         if wget --spider --quiet --timeout=10 "$secondary_url" &>/dev/null; then
             logI "Internet is available using wget without proxy."
             debug_print "wget successfully connected without proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -2684,17 +2774,20 @@ check_internet() {
 # pad_with_spaces 42 6  # Output: "   42"
 # pad_with_spaces 123 5  # Output: "  123"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pad_with_spaces() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare locals
-    local number="${1:-0}"  # Input number (mandatory)
-    local width="${2:-4}"   # Optional width (default is 4)
+    local number="${1:-0}" # Input number (mandatory)
+    local width="${2:-4}"  # Optional width (default is 4)
 
     # If the second parameter is "debug", adjust the arguments
     if [[ "$width" == "debug" ]]; then
         debug="$width"
-        width=4  # Default width to 4 if "debug" was passed in place of width
+        width=4 # Default width to 4 if "debug" was passed in place of width
     fi
 
     # Validate input for the number
@@ -2708,7 +2801,7 @@ pad_with_spaces() {
     fi
 
     # Strip leading zeroes to prevent octal interpretation
-    number=$((10#$number))  # Forces the number to be interpreted as base-10
+    number=$((10#$number)) # Forces the number to be interpreted as base-10
 
     # Format the number with leading spaces and return it as a string
     printf "%${width}d\n" "$number"
@@ -2740,6 +2833,7 @@ pad_with_spaces() {
 # wrapped=$(wrap_messages "This is a long message" 50)
 # echo "$wrapped"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 wrap_messages() {
     local line_width=$1
     local primary=$2
@@ -2763,7 +2857,7 @@ wrap_messages() {
 
         while IFS= read -r line; do
             result+=("$line")
-        done <<< "$(printf "%s\n" "$message" | fold -s -w "$adjusted_width")"
+        done <<<"$(printf "%s\n" "$message" | fold -s -w "$adjusted_width")"
 
         for ((i = 0; i < ${#result[@]}; i++)); do
             result[i]=$(printf "%s" "${result[i]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -2823,8 +2917,11 @@ wrap_messages() {
 #
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 print_log_entry() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables at the start of the function
     local timestamp="$1"
@@ -2835,13 +2932,13 @@ print_log_entry() {
 
     # Skip logging if the message is empty
     if [[ -z "$message" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Log to file if required
     if [[ "$LOG_OUTPUT" == "file" || "$LOG_OUTPUT" == "both" ]]; then
-        printf "%s [%s] [%s:%d] %s\\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$message" >> "$LOG_FILE"
+        printf "%s [%s] [%s:%d] %s\\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$message" >>"$LOG_FILE"
     fi
 
     # Log to console if required and USE_CONSOLE is true
@@ -2868,8 +2965,11 @@ print_log_entry() {
 # @example
 # prepare_log_context "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 prepare_log_context() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local timestamp
     local lineno
@@ -2917,13 +3017,16 @@ prepare_log_context() {
 # log_message "INFO" "This is a message"
 # log_message "INFO" "This is a message" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 log_message() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure the calling function is log_message_with_severity()
     if [[ "${FUNCNAME[1]}" != "log_message_with_severity" ]]; then
         warn "log_message() can only be called from log_message_with_severity()."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -2935,28 +3038,28 @@ log_message() {
     # Get level if it exists (must be one of the predefined values)
     if [[ -n "$1" && "$1" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
         level="$1"
-        shift  # Move to the next argument
+        shift # Move to the next argument
     fi
 
     # Get message if it exists and is not "debug"
     if [[ -n "$1" ]]; then
         message="$1"
-        shift  # Move to the next argument
+        shift # Move to the next argument
     fi
 
     # Validate the log level and message if needed
     if [[ "$level" == "UNSET" || -z "${LOG_PROPERTIES[$level]:-}" || "$message" == "<no message>" ]]; then
         warn "Invalid log level '$level' or empty message."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Prepare log context (timestamp and line number)
-    context=$(prepare_log_context "$debug")  # Pass debug flag to sub-function
-    IFS="|" read -r timestamp lineno <<< "$context"
+    context=$(prepare_log_context "$debug") # Pass debug flag to sub-function
+    IFS="|" read -r timestamp lineno <<<"$context"
 
     # Extract log properties for the specified level
-    IFS="|" read -r custom_level color severity <<< "${LOG_PROPERTIES[$level]}"
+    IFS="|" read -r custom_level color severity <<<"${LOG_PROPERTIES[$level]}"
 
     # Check if all three values (custom_level, color, severity) were successfully parsed
     if [[ -z "$custom_level" || -z "$color" || -z "$severity" ]]; then
@@ -2967,18 +3070,18 @@ log_message() {
     fi
 
     # Extract severity threshold for the configured log level
-    IFS="|" read -r _ _ config_severity <<< "${LOG_PROPERTIES[$LOG_LEVEL]}"
+    IFS="|" read -r _ _ config_severity <<<"${LOG_PROPERTIES[$LOG_LEVEL]}"
 
     # Check for valid severity level
     if [[ -z "$config_severity" || ! "$config_severity" =~ ^[0-9]+$ ]]; then
         warn "Malformed severity value for level '$LOG_LEVEL'."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Skip logging if the message's severity is below the configured threshold
-    if (( severity < config_severity )); then
-            debug_end "$debug"
+    if ((severity < config_severity)); then
+        debug_end "$debug"
         return 0
     fi
 
@@ -3005,14 +3108,17 @@ log_message() {
 # log_message_with_severity "ERROR" /
 #   "This is an error message" "Additional details" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 log_message_with_severity() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Exit if the calling function is not one of the allowed ones.
     # shellcheck disable=2076
     if [[ ! "logD logI logW logE logC logX" =~ "${FUNCNAME[1]}" ]]; then
         warn "Invalid calling function: ${FUNCNAME[1]}"
-            debug_end "$debug"
+        debug_end "$debug"
         exit 1
     fi
 
@@ -3088,17 +3194,17 @@ log_message_with_severity() {
 #   logC "System is out of memory and must shut down."
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2317
+# shellcheck disable=SC2317
 logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
@@ -3122,10 +3228,13 @@ logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 # init_log "debug"  # Ensures log file is created and available for writing
 #                   # with debug output.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 init_log() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local scriptname="${THIS_SCRIPT%%.*}"  # Extract script name without extension
+    local scriptname="${THIS_SCRIPT%%.*}" # Extract script name without extension
     local homepath log_dir fallback_log
 
     # Get the home directory of the current user
@@ -3172,7 +3281,7 @@ init_log() {
 
     # Attempt to create the log file in the fallback location
     if ! touch "$LOG_FILE" &>/dev/null; then
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Unable to create log file even in fallback location: $LOG_FILE"
     fi
 
@@ -3198,10 +3307,13 @@ init_log() {
 #
 # @return The corresponding terminal value or an empty string if unsupported.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 default_color() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    tput "$@" 2>/dev/null || printf "\n"  # Fallback to an empty string on error
+    tput "$@" 2>/dev/null || printf "\n" # Fallback to an empty string on error
 
     debug_end "$debug"
     return 0
@@ -3221,8 +3333,11 @@ default_color() {
 # @example
 # init_colors "debug"  # Initializes terminal colors with debug output.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 init_colors() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # General text attributes
     BOLD=$(default_color bold)
@@ -3257,7 +3372,7 @@ init_colors() {
     BGGRN=$(default_color setab 2)
     BGYLW=$(default_color setab 3)
     BGGLD=$(default_color setab 220)
-    [[ -z "$BGGLD" ]] && BGGLD="$BGYLW"  # Fallback to yellow
+    [[ -z "$BGGLD" ]] && BGGLD="$BGYLW" # Fallback to yellow
     BGBLU=$(default_color setab 4)
     BGMAG=$(default_color setab 5)
     BGCYN=$(default_color setab 6)
@@ -3297,7 +3412,9 @@ init_colors() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 generate_separator() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Normalize separator type to lowercase
     local type="${1,,}"
@@ -3306,26 +3423,26 @@ generate_separator() {
     # Validate separator type
     if [[ "$type" != "heavy" && "$type" != "light" ]]; then
         warn "Invalid separator type: '$1'. Must be 'heavy' or 'light'."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Generate the separator based on type
     case "$type" in
-        heavy)
-            # Generate a heavy separator (═)
-            printf '═%.0s' $(seq 1 "$width")
-            ;;
-        light)
-            # Generate a light separator (─)
-            printf '─%.0s' $(seq 1 "$width")
-            ;;
-        *)
-            # Handle invalid separator type
-            warn "Invalid separator type: $type"
-                    debug_end "$debug"
-            return 1
-            ;;
+    heavy)
+        # Generate a heavy separator (═)
+        printf '═%.0s' $(seq 1 "$width")
+        ;;
+    light)
+        # Generate a light separator (─)
+        printf '─%.0s' $(seq 1 "$width")
+        ;;
+    *)
+        # Handle invalid separator type
+        warn "Invalid separator type: $type"
+        debug_end "$debug"
+        return 1
+        ;;
     esac
 
     debug_end "$debug"
@@ -3349,14 +3466,17 @@ generate_separator() {
 # validate_log_level "debug"  # Enables debug output
 # validate_log_level          # No debug output
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_log_level() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
     if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]:-}" ]]; then
         # Print error message if LOG_LEVEL is invalid
         warn "Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'."
-        LOG_LEVEL="INFO"  # Default to "INFO"
+        LOG_LEVEL="INFO" # Default to "INFO"
     fi
 
     debug_end "$debug"
@@ -3384,8 +3504,11 @@ validate_log_level() {
 #
 # @return void
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 setup_log() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Initialize terminal colors
     init_colors "$debug"
@@ -3409,7 +3532,7 @@ setup_log() {
 
         # Iterate through LOG_PROPERTIES to print each level with its color
         for level in DEBUG INFO WARNING ERROR CRITICAL EXTENDED; do
-            IFS="|" read -r custom_level color severity <<< "${LOG_PROPERTIES[$level]}"
+            IFS="|" read -r custom_level color severity <<<"${LOG_PROPERTIES[$level]}"
             printf "[DEBUG] %s: %b%s%b\n" "$level" "$color" "$custom_level" "$RESET" >&2
         done
     fi
@@ -3437,33 +3560,35 @@ setup_log() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 toggle_console_log() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
-    local state="${1,,}"      # Convert input to lowercase for consistency
+    local state="${1,,}" # Convert input to lowercase for consistency
 
     # Validate $state
     if [[ "$state" != "on" && "$state" != "off" ]]; then
         warn "Invalid state: '$state'. Must be 'on' or 'off'."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Process the desired state
     case "$state" in
-        on)
-            USE_CONSOLE="true"
-            debug_print "Console logging enabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
-            ;;
-        off)
-            USE_CONSOLE="false"
-            debug_print "Console logging disabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
-            ;;
-        *)
-            warn "Invalid argument for toggle_console_log: $state"
-                    debug_end "$debug"
-            return 1
-            ;;
+    on)
+        USE_CONSOLE="true"
+        debug_print "Console logging enabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+        ;;
+    off)
+        USE_CONSOLE="false"
+        debug_print "Console logging disabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+        ;;
+    *)
+        warn "Invalid argument for toggle_console_log: $state"
+        debug_end "$debug"
+        return 1
+        ;;
     esac
 
     debug_end "$debug"
@@ -3490,8 +3615,11 @@ toggle_console_log() {
 # @retval 1 Failure: prints an error message to standard error if the
 #           organization cannot be determined.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_repo_org() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local repo_org
     local url
@@ -3541,10 +3669,13 @@ get_repo_org() {
 # @retval 1 Failure: prints an error message to standard error if the
 #         repository name cannot be determined.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_repo_name() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local repo_name="${REPO_NAME:-}"  # Use existing $REPO_NAME if set
+    local repo_name="${REPO_NAME:-}" # Use existing $REPO_NAME if set
     local url
 
     # Attempt to retrieve repository name dynamically from Git
@@ -3588,15 +3719,17 @@ get_repo_name() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 repo_to_title_case() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local repo_name="${1:-}"  # Input repository name
-    local title_case  # Variable to hold the formatted name
+    local repo_name="${1:-}" # Input repository name
+    local title_case         # Variable to hold the formatted name
 
     # Validate input
     if [[ -z "${repo_name:-}" ]]; then
         warn "Repository name cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
     debug_print "Received repository name: $repo_name" "$debug"
@@ -3606,7 +3739,7 @@ repo_to_title_case() {
 
     local retval
     if [[ -n "${title_case:-}" ]]; then
-        debug_print "onverted repository name to title case: $title_case" "$debug"
+        debug_print "Converted repository name to title case: $title_case" "$debug"
         printf "%s\n" "$title_case"
         retval=0
     else
@@ -3635,10 +3768,13 @@ repo_to_title_case() {
 # @retval 1 Failure: prints an error message to standard error if the branch
 #         name cannot be determined.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_repo_branch() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
-    local branch="${REPO_BRANCH:-}"  # Use existing $REPO_BRANCH if set
+    local branch="${REPO_BRANCH:-}" # Use existing $REPO_BRANCH if set
     local detached_from
 
     # Attempt to retrieve branch name dynamically from Git
@@ -3686,8 +3822,11 @@ get_repo_branch() {
 # @return Prints the tag name if available, otherwise "0.0.1".
 # @retval 0 Success: the tag name is printed.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_last_tag() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local tag
 
@@ -3732,14 +3871,16 @@ get_last_tag() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 is_sem_ver() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local tag="${1:-}"
 
     # Validate input
     if [[ -z "${tag:-}" ]]; then
         warn "Tag cannot be empty."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -3769,15 +3910,18 @@ is_sem_ver() {
 #
 # @return The number of commits since the tag, or 0 if the tag does not exist.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_num_commits() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local tag="${1:-}"
 
     if [[ -z "$tag" || "$tag" == "0.0.1" ]]; then
         debug_print "No valid tag provided. Assuming 0 commits." "$debug"
         printf "0\n"
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -3802,8 +3946,11 @@ get_num_commits() {
 # @retval 1 Failure: prints an error message to standard error if unable to
 #         retrieve the hash.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_short_hash() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local short_hash
     short_hash=$(git rev-parse --short HEAD 2>/dev/null)
@@ -3832,8 +3979,11 @@ get_short_hash() {
 # @retval 1 Failure: prints an error message to standard error if unable to
 #         determine the repository state.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_dirty() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local changes
 
@@ -3871,8 +4021,11 @@ get_dirty() {
 # @retval 1 Failure: prints an error message to standard error if any required
 #         Git information cannot be determined.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_sem_ver() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local tag branch_name num_commits short_hash dirty version_string
 
@@ -3948,29 +4101,32 @@ get_sem_ver() {
 # @example
 # get_proj_params "$debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_proj_params() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     if [[ "$IS_REPO" == "true" ]]; then
         debug_print "Configuring local mode with GitHub repository context." "$debug"
 
         # Retrieve repository details
-        local retval=0  # Initialize return value
+        local retval=0 # Initialize return value
 
         REPO_ORG=$(get_repo_org "${debug}")
-        retval=$(( retval | $? ))
+        retval=$((retval | $?))
 
         REPO_NAME=$(get_repo_name "${debug}")
-        retval=$(( retval | $? ))
+        retval=$((retval | $?))
 
         REPO_BRANCH=$(get_repo_branch "${debug}")
-        retval=$(( retval | $? ))
+        retval=$((retval | $?))
 
         GIT_TAG=$(get_last_tag "${debug}")
-        retval=$(( retval | $? ))
+        retval=$((retval | $?))
 
         SEM_VER=$(get_sem_ver "${debug}")
-        retval=$(( retval | $? ))
+        retval=$((retval | $?))
 
         if [[ $retval -ne 0 ]]; then
             debug_end "$debug"
@@ -4092,7 +4248,9 @@ get_proj_params() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 download_file() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local file_path="$1"
     local dest_dir="$2"
 
@@ -4134,7 +4292,9 @@ download_file() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 git_clone() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local clone_command dest_root retval
     dest_root="$LOCAL_REPO_DIR"
     retval=0
@@ -4144,7 +4304,7 @@ git_clone() {
     if [[ -d "$dest_root" ]]; then
         warn "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
-        return 1
+        return 0
     fi
 
     exec_command "Cloning repository from '$GIT_CLONE' to '$dest_root'" "$clone_command" "$debug" || {
@@ -4176,7 +4336,9 @@ git_clone() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 fetch_tree() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local branch_sha
     branch_sha=$(curl -s "$GIT_API/git/ref/heads/$REPO_BRANCH" | jq -r '.object.sha')
 
@@ -4205,14 +4367,16 @@ fetch_tree() {
 #         fetched.
 #
 # @return Downloads files to the specified directory structure under
-#         $USER_HOME/apppop.
+#         $USER_HOME/{appname}.
 #
 # @example
 # download_files_in_directories
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 download_files_in_directories() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local dest_root="$LOCAL_REPO_DIR"
 
@@ -4223,7 +4387,8 @@ download_files_in_directories() {
     fi
 
     logI "Fetching repository tree."
-    local tree; tree=$( "$debug")
+    local tree
+    tree=$("$debug")
 
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
         die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
@@ -4276,8 +4441,11 @@ download_files_in_directories() {
 # @example
 # set_time debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 set_time() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
     local need_set=false
@@ -4298,7 +4466,7 @@ set_time() {
     # Check if the script is in terse mode
     if [[ "$TERSE" == "true" && "$need_set" == "true" ]]; then
         logW "Timezone detected as $tz, which may need to be updated."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     else
         logI "Timezone detected as $tz."
@@ -4309,19 +4477,19 @@ set_time() {
 
     # Prompt for confirmation or reconfiguration
     while true; do
-        read -rp "Is this correct? [y/N]: " yn < /dev/tty
+        read -rp "Is this correct? [y/N]: " yn </dev/tty
         case "$yn" in
-            [Yy]*)
-                logI "Timezone confirmed on $current_date"
-                debug_print "Timezone confirmed: $current_date" "$debug"
-                break
-                ;;
-            [Nn]* | *)
-                dpkg-reconfigure tzdata
-                logI "Timezone reconfigured on $current_date"
-                debug_print "Timezone reconfigured: $current_date" "$debug"
-                break
-                ;;
+        [Yy]*)
+            logI "Timezone confirmed on $current_date"
+            debug_print "Timezone confirmed: $current_date" "$debug"
+            break
+            ;;
+        [Nn]* | *)
+            dpkg-reconfigure tzdata
+            logI "Timezone reconfigured on $current_date"
+            debug_print "Timezone reconfigured: $current_date" "$debug"
+            break
+            ;;
         esac
     done
 
@@ -4351,7 +4519,9 @@ set_time() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 exec_new_shell() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local exec_name="${1:-Unnamed Operation}"
     local exec_process="${2:-true}"
@@ -4363,18 +4533,18 @@ exec_new_shell() {
     # Simulate command execution if DRY_RUN is enabled
     if [[ -n "$DRY_RUN" ]]; then
         printf "[✔] Simulating: '%s'.\n" "$exec_process"
-            debug_end "$debug"
+        debug_end "$debug"
         exit_script 0 "$debug"
     fi
 
     # Validate the command
     if [[ "$exec_process" == "true" || "$exec_process" == "" ]]; then
         printf "[✔] Running: '%s'.\n" "$exec_process"
-            debug_end "$debug"
+        debug_end "$debug"
         exec true
     elif ! command -v "${exec_process%% *}" >/dev/null 2>&1; then
         warn "'$exec_process' is not a valid command or executable."
-            debug_end "$debug"
+        debug_end "$debug"
         die 1 "Invalid command: '$exec_process'"
     else
         # Execute the actual command
@@ -4409,8 +4579,11 @@ exec_new_shell() {
 # @example
 # exec_command "Test Command" "echo Hello World" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exec_command() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     local exec_name="$1"
     local exec_process="$2"
@@ -4475,7 +4648,7 @@ exec_command() {
     fi
 
     debug_end "$debug"
-    return $status
+    return "$status"
 }
 
 # -----------------------------------------------------------------------------
@@ -4494,18 +4667,21 @@ exec_command() {
 # @example
 # handle_apt_packages debug
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 handle_apt_packages() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Check if APT_PACKAGES is empty
     if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
         logI "No packages specified in APT_PACKAGES. Skipping package handling."
         debug_print "APT_PACKAGES is empty, skipping execution." "$debug"
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     fi
 
-    local package error_count=0  # Counter for failed operations
+    local package error_count=0 # Counter for failed operations
 
     logI "Updating and managing required packages (this may take a few minutes)."
 
@@ -4544,7 +4720,7 @@ handle_apt_packages() {
     fi
 
     debug_end "$debug"
-    return $error_count
+    return "$error_count"
 }
 
 # -----------------------------------------------------------------------------
@@ -4566,22 +4742,25 @@ handle_apt_packages() {
 # exit_script 0 "Completed successfully"
 # exit_script 1 "An error occurred"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exit_script() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Local variables
-    local exit_status="${1:-}"              # First parameter as exit status
-    local message="${2:-Exiting script.}"   # Main error message wit default
-    local details                           # Additional details
-    local lineno="${BASH_LINENO[0]}"        # Line number of calling line
-    lineno=$(pad_with_spaces "$lineno")     # Pad line number with spaces
-    local caller_func="${FUNCNAME[1]}"      # Calling function name
+    local exit_status="${1:-}"            # First parameter as exit status
+    local message="${2:-Exiting script.}" # Main error message wit default
+    local details                         # Additional details
+    local lineno="${BASH_LINENO[0]}"      # Line number of calling line
+    lineno=$(pad_with_spaces "$lineno")   # Pad line number with spaces
+    local caller_func="${FUNCNAME[1]}"    # Calling function name
 
     # Determine exit status if not numeric
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
         exit_status=1
     else
-        shift  # Remove the exit_status from the arguments
+        shift # Remove the exit_status from the arguments
     fi
 
     # Remove trailing dot if needed
@@ -4590,7 +4769,7 @@ exit_script() {
     printf "[EXIT ] '%s' from %s:%d status (%d).\n" "$message" "$caller_func" "$lineno" "$exit_status"
 
     debug_end "$debug"
-    exit "$exit_status"  # Exit with the provided status
+    exit "$exit_status" # Exit with the provided status
 }
 
 ############
@@ -4651,20 +4830,23 @@ OPTIONS_LIST=(
 #
 # @return 0 on success, or the status code of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 process_args() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local retval=0
     local args=("$@")
     local invalid_argument=false
 
     # Loop through all the arguments passed to the function.
-    while (( ${#args[@]} > 0 )); do
+    while ((${#args[@]} > 0)); do
         local current_arg="${args[0]}"
         local processed_argument=false
 
         # Skip empty arguments.
         if [[ -z "${current_arg}" ]]; then
-            args=("${args[@]:1}")  # Remove the blank argument and continue
+            args=("${args[@]:1}") # Remove the blank argument and continue
             continue
         fi
 
@@ -4684,14 +4866,14 @@ process_args() {
                 exit_flag=$(echo "$entry" | awk '{print $NF}')
 
                 # Split flags and check if current_arg matches.
-                IFS='|' read -ra flag_parts <<< "$flag"  # Split the flag by "|"
+                IFS='|' read -ra flag_parts <<<"$flag" # Split the flag by "|"
                 for part in "${flag_parts[@]}"; do
-                    part=$(echo "$part" | xargs)  # Trim spaces
+                    part=$(echo "$part" | xargs) # Trim spaces
 
                     # Check if the current argument matches any of the flags
                     if [[ "$current_arg" == "$part" ]]; then
                         # If it's a complex flag, we expect a following argument
-                        if (( complex_flag == 1 )); then
+                        if ((complex_flag == 1)); then
                             local next_arg
                             if [[ ${#args[@]} -ge 2 ]]; then
                                 next_arg="${args[1]}"
@@ -4716,7 +4898,7 @@ process_args() {
                         fi
 
                         # Exit if exit_flag is set
-                        if (( exit_flag == 1 )); then
+                        if ((exit_flag == 1)); then
                             debug_end "$debug"
                             printf "\n"
                             exit
@@ -4744,7 +4926,7 @@ process_args() {
                     retval="$?"
 
                     # Exit if exit_flag is set
-                    if (( exit_flag == 1 )); then
+                    if ((exit_flag == 1)); then
                         debug_end "$debug"
                         exit_script "$retval"
                     fi
@@ -4792,17 +4974,20 @@ process_args() {
 #
 # @return 0 on success.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 usage() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local output_redirect="1"  # Default to stdout (1)
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+    local output_redirect="1" # Default to stdout (1)
     local args=()
 
     # Check for the "stderr" argument to redirect output to stderr.
     for arg in "$@"; do
         if [[ "$arg" == "stderr" ]]; then
-            output_redirect="2"  # Set to stderr (2)
+            output_redirect="2" # Set to stderr (2)
             shift
-            break  # Exit the loop as soon as we find "stderr"
+            break # Exit the loop as soon as we find "stderr"
         fi
     done
 
@@ -4815,48 +5000,55 @@ usage() {
     printf "Usage: %s [debug] <option1> [<option2> ...]\n\n" "$script_name" >&$output_redirect
 
     # Word Arguments section
-    printf "Available Options\n\n" >&$output_redirect
-    printf "Word Arguments:\n" >&$output_redirect
+    printf "Available Options\n\n" >&"$output_redirect"
+    printf "Word Arguments:\n" >&"$output_redirect"
 
     local max_word_len=0
     # First pass to calculate the maximum lengths of the word arguments
     for entry in "${ARGUMENTS_LIST[@]}"; do
-        local word; word=$(echo "$entry" | cut -d' ' -f1)
+        local word
+        word=$(echo "$entry" | cut -d' ' -f1)
         local word_len=${#word}
-        if (( word_len > max_word_len )); then
+        if ((word_len > max_word_len)); then
             max_word_len=$word_len
         fi
     done
 
     # Second pass to print with padded formatting
     for entry in "${ARGUMENTS_LIST[@]}"; do
-        local word; word=$(echo "$entry" | cut -d' ' -f1)
-        local description; description=$(echo "$entry" | cut -d' ' -f3- | rev | cut -d' ' -f2- | rev)
-        local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}')))  # Invert the value
+        local word
+        word=$(echo "$entry" | cut -d' ' -f1)
+        local description
+        description=$(echo "$entry" | cut -d' ' -f3- | rev | cut -d' ' -f2- | rev)
+        local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}'))) # Invert the value
 
-        printf "  %$((max_word_len))s: %s\n" "$word" "$description" >&$output_redirect
+        printf "  %$((max_word_len))s: %s\n" "$word" "$description" >&"$output_redirect"
     done
-    printf "\n" >&$output_redirect
+    printf "\n" >&"$output_redirect"
 
     # Flag Arguments section
-    printf "Flag Arguments:\n" >&$output_redirect
+    printf "Flag Arguments:\n" >&"$output_redirect"
     local max_flag_len=0
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
+        local flag
+        flag=$(echo "$entry" | cut -d' ' -f1)
         local flag_len=${#flag}
-        if (( flag_len > max_flag_len )); then
+        if ((flag_len > max_flag_len)); then
             max_flag_len=$flag_len
         fi
     done
 
     # Second pass to print with padded formatting for flag arguments
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
-        local complex_flag; complex_flag=$(echo "$entry" | cut -d' ' -f2)
-        local description; description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
-        local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}')))  # Invert the value
+        local flag
+        flag=$(echo "$entry" | cut -d' ' -f1)
+        local complex_flag
+        complex_flag=$(echo "$entry" | cut -d' ' -f2)
+        local description
+        description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
+        local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}'))) # Invert the value
 
-        printf "  %$((max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&$output_redirect
+        printf "  %$((max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&"$output_redirect"
     done
 
     debug_end "$debug"
@@ -4888,8 +5080,11 @@ usage() {
 # @example
 #   start_script "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 start_script() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Validate action
     if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
@@ -4922,25 +5117,25 @@ start_script() {
 
     # Read a single key with a 10-second timeout
     local key
-    if ! read -n 1 -sr -t 10 key < /dev/tty; then
-        key=""  # Assign a default value on timeout
+    if ! read -n 1 -sr -t 10 key </dev/tty; then
+        key="" # Assign a default value on timeout
     fi
     printf "\n"
 
     # Handle user input
     case "${key}" in
-        [Qq])  # Quit
-            debug_print "Quit key pressed. Ending $action_message." "$debug"
-            logI "$action_message canceled by user."
-            debug_end "$debug"
-            return 1
-            ;;
-        "")  # Timeout or Enter
-            debug_print "No key pressed, proceeding with $action_message." "$debug"
-            ;;
-        *)  # Any other key
-            debug_print "Key pressed: '$key'. Proceeding with $action_message." "$debug"
-            ;;
+    [Qq]) # Quit
+        debug_print "Quit key pressed. Ending $action_message." "$debug"
+        logI "$action_message canceled by user."
+        debug_end "$debug"
+        return 1
+        ;;
+    "") # Timeout or Enter
+        debug_print "No key pressed, proceeding with $action_message." "$debug"
+        ;;
+    *) # Any other key
+        debug_print "Key pressed: '$key'. Proceeding with $action_message." "$debug"
+        ;;
     esac
 
     debug_end "$debug"
@@ -4972,7 +5167,9 @@ start_script() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 manage_exe() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure the executable argument is provided
     if [[ -z "$1" ]]; then
@@ -4987,8 +5184,8 @@ manage_exe() {
 
     # Get from args or associative array
     executable="$1"
-    exe_name="${executable##*/}"      # Remove path
-    exe_name="${exe_name%.*}"         # Remove extension (if present)
+    exe_name="${executable##*/}" # Remove path
+    exe_name="${exe_name%.*}"    # Remove extension (if present)
     source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
     exe_path="/usr/local/bin/${executable}"
 
@@ -5085,7 +5282,9 @@ manage_exe() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 manage_config() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure the configuration arguments are provided
     if [[ -z "$1" || -z "$2" ]]; then
@@ -5097,14 +5296,14 @@ manage_config() {
 
     # Declare local variables
     local config_file config_name config_path source_path
-    local retval=0  # Initialize return value
+    local retval=0 # Initialize return value
 
     # Get from args or associative array
     config_file="$1"
     config_path="$2"
-    config_name="${config_file##*/}"                    # Remove path
-    config_name="${config_name%.*}"                     # Remove extension (if present)
-    source_path="${LOCAL_CONFIG_DIR}/${config_file}"    # Config files source
+    config_name="${config_file##*/}"                 # Remove path
+    config_name="${config_name%.*}"                  # Remove extension (if present)
+    source_path="${LOCAL_CONFIG_DIR}/${config_file}" # Config files source
     # If config file is logrotate then rename it to repo_name
     if [[ "${config_file}" != "logrotate.conf" ]]; then
         config_path="${config_path}/${config_file}"
@@ -5208,7 +5407,9 @@ manage_config() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 manage_service() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Ensure all three arguments are provided
     if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
@@ -5232,15 +5433,15 @@ manage_service() {
     local log_path
     local log_std_out
     local log_std_err
-    local retval=0  # Initialize return value
+    local retval=0 # Initialize return value
 
-    daemon_name="${daemon_exe##*/}"     # Remove path
-    daemon_name="${daemon_name%.*}"     # Remove extension (only if there is one)
+    daemon_name="${daemon_exe##*/}" # Remove path
+    daemon_name="${daemon_name%.*}" # Remove extension (only if there is one)
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
     service_path="/lib/systemd/system/${daemon_systemd_name}"
-    syslog_identifier="$daemon_name"    # Use stripped daemon_exe
-    log_path="/var/log/$REPO_NAME"      # Use repo name
+    syslog_identifier="$daemon_name" # Use stripped daemon_exe
+    log_path="/var/log/$REPO_NAME"   # Use repo name
     log_std_out="$log_path/${syslog_identifier}_log"
     log_std_err="$log_path/${syslog_identifier}_error"
 
@@ -5348,12 +5549,14 @@ manage_service() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 manage_web() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
     local source_path="$LOCAL_WWW_DIR"
     local target_path="/var/www/html/${REPO_NAME,,}"
-    local retval=0  # Initialize return value
+    local retval=0 # Initialize return value
 
     if [[ "$ACTION" == "install" ]]; then
         logI "Installing web files to '$target_path'."
@@ -5443,7 +5646,9 @@ manage_web() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 manage_sound() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
     local blacklist
@@ -5456,12 +5661,12 @@ manage_sound() {
     if [[ "$ACTION" == "install" ]]; then
         if [[ ! -f "$file" ]]; then
             # Create file and add the blacklist line
-            echo "$blacklist" > "$file"
+            echo "$blacklist" >"$file"
             REBOOT="true"
             debug_print "Created $file and disabled sound." "$debug"
         elif ! grep -Fxq "$blacklist" "$file"; then
             # Append blacklist line if it doesn't exist
-            echo "$blacklist" >> "$file"
+            echo "$blacklist" >>"$file"
             REBOOT="true"
             debug_print "Added blacklist entry to $file." "$debug"
         else
@@ -5471,7 +5676,7 @@ manage_sound() {
 
     elif [[ "$ACTION" == "uninstall" ]]; then
         if [[ -f "$file" ]] && grep -Fxq "$blacklist" "$file"; then
-            line_count=$(wc -l < "$file")
+            line_count=$(wc -l <"$file")
 
             if [[ "$line_count" -eq 1 ]]; then
                 # If it's the only line, delete the file
@@ -5506,7 +5711,7 @@ manage_sound() {
         fi
         printf "'sudo reboot'\n\n"
 
-        read -rp "Press any key to continue." < /dev/tty
+        read -rp "Press any key to continue." </dev/tty
         echo
     fi
 
@@ -5538,7 +5743,9 @@ manage_sound() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 cleanup_files_in_directories() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Declare local variables
     local dest_root
@@ -5601,10 +5808,12 @@ cleanup_files_in_directories() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 finish_script() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Capture overall status
-    local overall_status="${1:-1}"  # Default to 1 (failure) if empty
+    local overall_status="${1:-1}" # Default to 1 (failure) if empty
 
     # Validate action
     if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
@@ -5691,8 +5900,11 @@ finish_script() {
 # @example
 #   manage_wsprry_pi "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 manage_wsprry_pi() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
 
     # Define the group of functions to install/uninstall
     local install_group=(
@@ -5727,22 +5939,22 @@ manage_wsprry_pi() {
     # Select the execution order based on the action
     local group_to_execute=()
     case "$ACTION" in
-        install)
-            group_to_execute=("${install_group[@]}")
-            ;;
-        uninstall)
-            if command -v tac &>/dev/null; then
-                mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
-            else
-                # Manual reverse if `tac` is unavailable
-                for ((i=${#install_group[@]}-1; i>=0; i--)); do
-                    group_to_execute+=("${install_group[i]}")
-                done
-            fi
-            ;;
-        *)
-            die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
-            ;;
+    install)
+        group_to_execute=("${install_group[@]}")
+        ;;
+    uninstall)
+        if command -v tac &>/dev/null; then
+            mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
+        else
+            # Manual reverse if `tac` is unavailable
+            for ((i = ${#install_group[@]} - 1; i >= 0; i--)); do
+                group_to_execute+=("${install_group[i]}")
+            done
+        fi
+        ;;
+    *)
+        die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
+        ;;
     esac
 
     # Debug print the final group_to_execute list
@@ -5753,7 +5965,7 @@ manage_wsprry_pi() {
 
     # Execute functions while skipping those in skip_on_uninstall
     for func in "${group_to_execute[@]}"; do
-        local function_name="${func%% *}"  # Extract only function name
+        local function_name="${func%% *}" # Extract only function name
 
         # Skip functions listed in skip_on_uninstall
         if [[ " ${skip_on_uninstall[*]} " =~ $function_name ]]; then
@@ -5806,32 +6018,38 @@ manage_wsprry_pi() {
 #
 # @note Debug mode (`"$debug"`) is propagated throughout all function calls.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 _main() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    [[ "$debug" != "debug" ]] && printf "\n\n" # Just a visual when not in debug.
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+    [[ "$debug" != "debug" ]] && printf "\n" # Just a visual when not in debug.
 
     # Check and set up the environment
-    handle_execution_context "$debug"  # Get execution context and set environment variables
-    get_proj_params "$debug"           # Get project and git parameters
-    process_args "$@" "$debug"         # Parse command-line arguments
-    enforce_sudo "$debug"              # Ensure proper privileges for script execution
-    validate_depends "$debug"          # Ensure required dependencies are installed
-    validate_sys_accs "$debug"         # Verify critical system files are accessible
-    validate_env_vars "$debug"         # Check for required environment variables
-    setup_log "$debug"                 # Setup logging environment
-    check_bash "$debug"                # Ensure the script is executed in a Bash shell
-    check_sh_ver "$debug"              # Verify the Bash version meets minimum requirements
-    check_bitness "$debug"             # Validate system bitness compatibility
-    check_release "$debug"             # Check Raspbian OS version compatibility
-    check_arch "$debug"                # Validate Raspberry Pi model compatibility
-    check_internet "$debug"            # Verify internet connectivity if required
+    handle_execution_context "$debug" # Get execution context and set environment variables
+    process_args "$@" "$debug"        # Parse command-line arguments
+    enforce_sudo "$debug"             # Ensure proper privileges for script execution
+    setup_log "$debug"                # Setup logging environment
+
+    logI "Checking environment."      # Below takes a sec, show signs of life
+
+    validate_depends "$debug"         # Ensure required dependencies are installed
+    validate_sys_accs "$debug"        # Verify critical system files are accessible
+    validate_env_vars "$debug"        # Check for required environment variables
+    get_proj_params "$debug"          # Get project and git parameters
+    check_bash "$debug"               # Ensure the script is executed in a Bash shell
+    check_sh_ver "$debug"             # Verify the Bash version meets minimum requirements
+    check_bitness "$debug"            # Validate system bitness compatibility
+    check_release "$debug"            # Check Raspbian OS version compatibility
+    check_arch "$debug"               # Validate Raspberry Pi model compatibility
+    check_internet "$debug"           # Verify internet connectivity if required
+
+    # Print/display the environment
+    print_system "$debug"  # Log system information
+    print_version "$debug" # Log the script version
 
     # Install dependencies after system checks
     [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
-
-    # Print/display the environment
-    print_system "$debug"              # Log system information
-    print_version "$debug"              # Log the script version
 
     # Handle correcting timezone
     [[ "$ACTION" != "uninstall" ]] && set_time "$debug"
@@ -5853,7 +6071,11 @@ _main() {
 # @param "$@" Arguments to be passed to `_main`.
 # @return Returns the status code from `_main`.
 # -----------------------------------------------------------------------------
-main() { _main "$@"; return "$?"; }
+# shellcheck disable=SC2317
+main() {
+    _main "$@"
+    return "$?"
+}
 
 # -----------------------------------------------------------------------------
 # @brief Traps the `EXIT` signal to invoke the `egress` function.
@@ -5863,7 +6085,8 @@ main() { _main "$@"; return "$?"; }
 # -----------------------------------------------------------------------------
 trap egress EXIT
 
-debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+debug=$(debug_start "$@")
+eval set -- "$(debug_filter "$@")"
 main "$@" "$debug"
 retval="$?"
 debug_end "$debug"
