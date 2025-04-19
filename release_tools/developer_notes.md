@@ -233,7 +233,7 @@ sudo apt install jq git apache2 php chrony gpiod libgpiod-dev -y
 
 ## A Note About Submodules
 
-I have opted to use submodules to reuse common elements in my projects. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
+I have opted to use submodules to reuse common elements in my projects, as well as to clearly delineate licensing of historic code. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
 
 ``` bash
 git submodule foreach --recursive 'git clean -xfd'
