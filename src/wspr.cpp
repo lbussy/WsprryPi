@@ -755,7 +755,7 @@ void wspr(
     memcpy(buf, call, 16); // Copy 14 raw bytes with no termination
     c = buf;
     to_upper(c);
-    unsigned long ng, nadd = 0;
+    unsigned long ng = 0, nadd = 0;
 
     if (strchr(c, '/'))
     { // prefix-suffix
