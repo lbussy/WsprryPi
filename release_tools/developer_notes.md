@@ -13,7 +13,7 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 - [Optional Housekeeping](#optional-housekeeping)
 - [VS Code](#vs-code)
 - [Required Libs](#required-libs)
-- [Submodules](#submodules)
+- [A Note About Submodules](#a-note-about-submodules)
 - [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
 
@@ -25,7 +25,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 2. Check that you have an SSH key generated on your system:
 
-   - Linux or Mac (one line):
+    - Linux or Mac (one line):
 
         ``` bash
         [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
@@ -106,7 +106,7 @@ If you are going to use VS Code from your workstation:
 
 1. In VS Code, install the "Remote Development" extension.
 
-2. View -> Command Pallete -> >Remote-SSH:Connect Current Window to Host
+2. View -> Command Palette -> >Remote-SSH:Connect Current Window to Host
 
 3. Select or enter your {hostname}.local
 
@@ -172,6 +172,7 @@ If you are going to use VS Code from your workstation:
     code --install-extension esbenp.prettier-vscode
     code --install-extension feiskyer.chatgpt-copilot
     code --install-extension felipecaputo.git-project-manager
+    code --install-extension foxundermoon.shell-format
     code --install-extension github.vscode-github-actions
     code --install-extension github.vscode-pull-request-github
     code --install-extension mhutchie.git-graph
@@ -201,9 +202,9 @@ If you are going to use VS Code from your workstation:
     code --install-extension yzhang.markdown-all-in-one
     ```
 
-1. Use the "Open Folder" button and select the root of your repo on the Pi.
+8. Use the "Open Folder" button and select the root of your repo on the Pi.
 
-2. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
+9. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
 Remember that the **Wsprry Pi** systemd daemon is running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
 
@@ -216,23 +217,21 @@ sudo systemctl disable wsprrypi
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you would need some libs to compile the project:
 
-jq
-git
-apache2
-php
-libraspberrypi-dev
-raspberrypi-kernel-headers
-gpiod
-libgpiod-dev
-chrony
+- jq
+- git
+- apache2
+- php
+- gpiod
+- libgpiod-dev
+- chrony
 
 Install these with:
 
 ``` bash
-sudo apt install jq git apache2 php libraspberrypi-dev raspberrypi-kernel-headers chrony gpiod libgpiod-dev -y
+sudo apt install jq git apache2 php chrony gpiod libgpiod-dev -y
 ```
 
-## Submodules
+## A Note About Submodules
 
 I have opted to use submodules to reuse common elements in my projects. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
 
