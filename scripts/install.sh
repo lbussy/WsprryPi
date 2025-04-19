@@ -4302,7 +4302,7 @@ git_clone() {
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
-        warn "Destination directory already exists: '$dest_root'" "$debug"
+        logI "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
         return 0
     fi
