@@ -9,7 +9,7 @@ It also handles graceful shutdowns, logging, and debugging options.
 
 Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.2-f4b0009 [main]-69b4f76 [main].
+Created for WsprryPi project, version 1.2.3-c95920f [main]-69b4f76 [main].
 """
 
 import sys

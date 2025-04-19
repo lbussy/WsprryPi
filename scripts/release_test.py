@@ -43,7 +43,7 @@ Requirements:
 
 Copyright (C) 2023-2025 Lee C. Bussy (@LBussy)
 
-Created for WsprryPi project, version 1.2.2-f4b0009 [main].
+Created for WsprryPi project, version 1.2.3-c95920f [main].
 """
 
 import unittest
@@ -185,7 +185,7 @@ class TestReleaseFunctions(unittest.TestCase):
         Ensures that both the copyright and version lines are updated when applicable.
         """
         content = """# Copyright (C) 2020 @LBussy
-        version 1.2.2-f4b0009 [main]
+        version 1.2.3-c95920f [main]
         Some other content here"""
         mock_open.return_value.read.return_value = content
         with patch("release.update_files") as mock_update:
