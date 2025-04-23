@@ -45,6 +45,7 @@
 #include "web_server.hpp"
 #include "web_socket.hpp"
 #include "wspr_scheduler.hpp"
+#include "wspr_transmit.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -357,6 +358,7 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
+    wsprTransmitter.shutdown_transmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver
