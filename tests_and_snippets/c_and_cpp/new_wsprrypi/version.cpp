@@ -362,7 +362,7 @@ std::string get_pi_model()
 }
 
 /**
- * @brief Constructs a formatted version string for the project.
+ * @brief Constructs a formatted decorated version string for the project.
  *
  * This function combines the project name, executable version, and branch name
  * into a human-readable version string. It is useful for logging and version
@@ -380,4 +380,24 @@ std::string get_version_string()
 
     // Construct and return the formatted version string.
     return proj + " version " + ver + " (" + br + ").";
+}
+
+/**
+ * @brief Constructs a formatted plain version string for the project.
+ *
+ * This function combines the project name, executable version, and branch name
+ * into a version string without any other decorations.
+ *
+ * @return std::string A formatted string containing project version information.
+ * @example Example output: "1.2.3 (main)"
+ */
+std::string get_raw_version_string()
+{
+    // Retrieve project details.
+    std::string proj = get_project_name(); ///< Project name.
+    std::string ver = get_exe_version();   ///< Executable version.
+    std::string br = get_exe_branch();         ///< Git branch name.
+
+    // Construct and return the formatted version string.
+    return ver + " (" + br + ")";
 }

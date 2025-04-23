@@ -101,6 +101,17 @@ extern std::string get_pi_model();
 extern std::string get_version_string();
 
 /**
+ * @brief Constructs a formatted plain version string for the project.
+ *
+ * This function combines the project name, executable version, and branch name
+ * into a version string without any other decorations.
+ *
+ * @return std::string A formatted string containing project version information.
+ * @example Example output: "1.2.3 (main)"
+ */
+extern std::string get_raw_version_string();
+
+/**
  * @brief Retrieves the BCM host peripheral base address from the device tree.
  *
  * This function queries the device tree to determine the base address of the

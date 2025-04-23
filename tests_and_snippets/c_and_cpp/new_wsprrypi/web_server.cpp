@@ -35,6 +35,7 @@
 
 #include "config_handler.hpp"
 #include "logging.hpp"
+#include "version.hpp"
 
 /**
  * @brief Global instance of the WebServer class.
@@ -165,6 +166,19 @@ void WebServer::start(int port)
 
         svr.Put("/", handlePutPatch);
         svr.Patch("/", handlePutPatch);
+
+        // GET handler: Return version
+        svr.Get("/version", [this](const httplib::Request &req, httplib::Response &res)
+        {
+            setCORSHeaders(res);
+            // Retrieve the version
+            std::string version = get_raw_version_string();
+
+            // Build a JSON object
+            nlohmann::json j;
+            j["wspr_version"] = version;
+            res.set_content(j.dump(4), "application/json");
+        });
 
 #ifdef LOCAL_ONLY
         // Accept connections only from localhost.
