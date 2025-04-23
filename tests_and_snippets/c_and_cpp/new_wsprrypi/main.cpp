@@ -44,6 +44,7 @@
 
 // Standard headers
 #include <atomic>
+#include <string_view>
 
 // System headers
 #include <unistd.h>
