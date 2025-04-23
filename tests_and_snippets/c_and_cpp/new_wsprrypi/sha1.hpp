@@ -2,10 +2,10 @@
  * @file sha1.hpp
  * @brief Generates a SHA1 hash.
  *
- * This file is part of WsprryPi, a project originally created from @threeme3
- * WsprryPi project (no longer on GitHub). However, now the original code
- * remains only as a memory and inspiration, and this project is no longer
- * a derivative work.
+ * This file is part of WsprryPi, a project originally branched from
+ * @threeme3's WsprryPi project (no longer on GitHub). However, now the
+ * original code remains only as a memory and inspiration, and this project
+ * is no longer a derivative work.
  *
  * This project is is licensed under the MIT License. See LICENSE.MIT.md
  * for more information.
