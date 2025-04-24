@@ -41,7 +41,8 @@
  * @brief Global instance of the WebServer class.
  * @details This `declaration enables access to a shared instance of the
  *          WebServer throughout the application. Ensure that the instance is
- *          defined exactly once in a source file (e.g., `WebServer webServer;`).
+ *          defined exactly once in a source file (e.g., `WebServer
+ * webServer;`).
  */
 WebServer webServer;
 
@@ -49,7 +50,8 @@ WebServer webServer;
  * @brief Default constructor for the WebServer class.
  *
  * @details
- * Initializes the WebServer object by setting the listening port to 0 and the running flag to false.
+ * Initializes the WebServer object by setting the listening port to 0 and the
+ * running flag to false.
  */
 WebServer::WebServer() : port_(0), running(false) {}
 
@@ -57,39 +59,39 @@ WebServer::WebServer() : port_(0), running(false) {}
  * @brief Destructor for the WebServer class.
  *
  * @details
- * Ensures that the web server is stopped and any associated resources are released
- * before the object is destroyed.
+ * Ensures that the web server is stopped and any associated resources are
+ * released before the object is destroyed.
  */
-WebServer::~WebServer()
-{
-    stop();
-}
+WebServer::~WebServer() { stop(); }
 
 /**
- * @brief Sets the Cross-Origin Resource Sharing (CORS) headers on the HTTP response.
+ * @brief Sets the Cross-Origin Resource Sharing (CORS) headers on the HTTP
+ * response.
  *
  * @details
- * Configures the HTTP response with the appropriate headers to allow cross-origin
- * requests from any origin. The allowed methods include GET, PUT, PATCH, and OPTIONS,
- * and the "Content-Type" header is allowed.
+ * Configures the HTTP response with the appropriate headers to allow
+ * cross-origin requests from any origin. The allowed methods include GET, PUT,
+ * PATCH, and OPTIONS, and the "Content-Type" header is allowed.
  *
  * @param res The HTTP response object on which to set the CORS headers.
  */
 void WebServer::setCORSHeaders(httplib::Response &res)
 {
     res.set_header("Access-Control-Allow-Origin", "*");
-    res.set_header("Access-Control-Allow-Methods", "GET, PUT, PATCH, OPTIONS");
-    res.set_header("Access-Control-Allow-Headers", "Content-Type");
+    res.set_header("Access-Control-Allow-Methods",
+                   "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.set_header("Access-Control-Allow-Headers", "Content-Type, Accept");
 }
 
 /**
  * @brief Starts the web server on the specified port.
  *
  * @details
- * Validates the port number to ensure it falls within the allowed non-root range (1024–49151).
- * If the server is not already running, it launches the server on a new thread and sets up
- * HTTP handlers for GET, PUT, PATCH, and OPTIONS requests. Uses condition variables and
- * mutex locking to ensure safe startup and avoid race conditions.
+ * Validates the port number to ensure it falls within the allowed non-root
+ * range (1024–49151). If the server is not already running, it launches the
+ * server on a new thread and sets up HTTP handlers for GET, PUT, PATCH, and
+ * OPTIONS requests. Uses condition variables and mutex locking to ensure safe
+ * startup and avoid race conditions.
  *
  * The GET handler returns a simple JSON response.
  * The PUT and PATCH handlers parse incoming JSON and print it to stdout.
@@ -121,78 +123,81 @@ void WebServer::start(int port)
     // Launch the server in a separate thread.
     serverThread = std::thread([this]()
                                {
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        running = true;
+        cvStarted.notify_one();  // Notify main thread that startup has begun.
+    }
+
+    // PUT and PATCH handler: Accept and print JSON input.
+    auto handlePutPatch = [this](const httplib::Request &req,
+                                 httplib::Response &res) {
+        try
         {
-            std::lock_guard<std::mutex> lock(mtx);
-            running = true;
-            cvStarted.notify_one();  // Notify main thread that startup has begun.
+            nlohmann::json j = nlohmann::json::parse(req.body);
+            dump_json(j, "Received");
+
+            // Patch into the current running config
+            patch_all_from_web(j);
+
+            // Send CORS headers
+            setCORSHeaders(res);
+            res.set_content("Ok", "text/plain");
         }
-
-        // Set up OPTIONS handler for CORS preflight requests.
-        svr.Options("/", [this](const httplib::Request &req, httplib::Response &res)
+        catch (nlohmann::json::parse_error &e)
         {
-            setCORSHeaders(res);
-            res.set_content("", "text/plain");
-        });
+            llog.logE(WARN, "Error parsing JSON:", std::string(e.what()));
+            res.status = 400;
+            nlohmann::json err = {{"error", "invalid_json"}, {"message", e.what()}};
+            res.set_content(err.dump(4), "application/json");
+        }
+    };
 
-        // GET handler: Return a basic JSON response.
-        svr.Get("/", [this](const httplib::Request &req, httplib::Response &res)
-        {
-            setCORSHeaders(res);
-            res.set_content(jConfig.dump(4), "application/json");
-        });
+    // Set up OPTIONS handler for CORS preflight requests.
+    svr.Options(R"(/(.*))",
+                [this](const httplib::Request &req, httplib::Response &res) {
+                  setCORSHeaders(res);
+                  res.set_content("", "text/plain");
+                });
 
-        // PUT and PATCH handler: Accept and print JSON input.
-        auto handlePutPatch = [this](const httplib::Request &req, httplib::Response &res)
-        {
-            try
-            {
-                nlohmann::json j = nlohmann::json::parse(req.body);
-                llog.logS(INFO, "Received JSON:", j.dump());
+    // GET handler: Return a basic JSON response.
+    svr.Get("/",
+            [this](const httplib::Request &req, httplib::Response &res) {
+              setCORSHeaders(res);
+              res.set_content("Wsprry Pi webserver is running.", "text/plain");
+            });
 
-                // Patch into the current runnign config
-                patch_all_from_web(j);
+    // GET handler: Return a basic JSON response.
+    svr.Get("/config",
+            [this](const httplib::Request &req, httplib::Response &res) {
+              setCORSHeaders(res);
+              res.set_content(jConfig.dump(4), "application/json");
+            });
 
-                setCORSHeaders(res);
-                res.set_content("JSON received", "text/plain");
-            }
-            catch (const std::exception &ex)
-            {
-                llog.logE(WARN, "Error parsing JSON:", std::string(ex.what()));
-                res.status = 400;
-                setCORSHeaders(res);
-                res.set_content("Invalid JSON", "text/plain");
-            }
-        };
+    svr.Put("/config", handlePutPatch);
+    svr.Patch("/config", handlePutPatch);
 
-        svr.Put("/", handlePutPatch);
-        svr.Patch("/", handlePutPatch);
+    // GET handler: Return version
+    svr.Get("/version",
+            [this](const httplib::Request &req, httplib::Response &res) {
+              setCORSHeaders(res);
+              // Retrieve the version
+              std::string version = get_raw_version_string();
 
-        // GET handler: Return version
-        svr.Get("/version", [this](const httplib::Request &req, httplib::Response &res)
-        {
-            setCORSHeaders(res);
-            // Retrieve the version
-            std::string version = get_raw_version_string();
+              // Build a JSON object
+              nlohmann::json j;
+              j["wspr_version"] = version;
+              res.set_content(j.dump(4), "application/json");
+            });
 
-            // Build a JSON object
-            nlohmann::json j;
-            j["wspr_version"] = version;
-            res.set_content(j.dump(4), "application/json");
-        });
+    // Accept connections from any network interface.
+    svr.listen("0.0.0.0", port_);
 
-#ifdef LOCAL_ONLY
-        // Accept connections only from localhost.
-        svr.listen("127.0.0.1", port_);
-#else
-        // Accept connections from any network interface.
-        svr.listen("0.0.0.0", port_);
-#endif
-
-        // Reset running flag once the server stops.
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-            running = false;
-        } });
+    // Reset running flag once the server stops.
+    {
+      std::lock_guard<std::mutex> lock(mtx);
+      running = false;
+    } });
 
     // Wait until the server signals it has successfully started.
     {
@@ -252,7 +257,8 @@ bool WebServer::set_thread_priority(int schedPolicy, int priority)
 
     if (serverThread.joinable())
     {
-        int ret = pthread_setschedparam(serverThread.native_handle(), schedPolicy, &sch_params);
+        int ret = pthread_setschedparam(serverThread.native_handle(), schedPolicy,
+                                        &sch_params);
         if (ret != 0)
         {
             std::perror("pthread_setschedparam (serverThread)");

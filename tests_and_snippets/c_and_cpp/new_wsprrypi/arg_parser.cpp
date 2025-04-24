@@ -519,6 +519,7 @@ bool validate_config_data()
         llog.logS(DEBUG, "Invalid or disabled shutdown settings, disabling functionality.");
         shutdownMonitor.stop();
     }
+    llog.logS(DEBUG, "About to do config mode.");
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)

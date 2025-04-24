@@ -72,6 +72,9 @@ INI_FILE := /usr/local/etc/wsprrypi.ini	# INI file for system version
 # Strip whitespace from comments
 INI_FILE := $(strip $(INI_FILE))
 
+# Install Location
+PREFIX := /usr/local/bin
+
 # Test Frequency
 TEST_FREQ := 730000						# Frequency for test tone
 # Strip whitespace from comments
@@ -302,12 +305,13 @@ gdb: debug
 
 # Install target (install only the release binary)
 .PHONY: install
-install: $(OUT)
-	$(Q)echo "Installing $(OUT) to $(PREFIX)/bin."
+install: release
+	$(Q)echo "Installing $(OUT) to $(PREFIX)."
 	$(Q)sudo systemctl stop $(OUT).service || true
-	$(Q)sudo install -d $(PREFIX)/bin
-	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/bin/$(OUT)
+	$(Q)sudo install -d $(PREFIX)
+	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/$(OUT)
 	$(Q)sudo systemctl start $(OUT).service || true
+	$(Q)echo "Installation complete."
 
 # Uninstall target
 .PHONY: uninstall

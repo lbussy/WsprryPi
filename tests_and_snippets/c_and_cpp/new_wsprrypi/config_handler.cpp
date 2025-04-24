@@ -66,61 +66,6 @@ ArgParserConfig config;
 nlohmann::json jConfig;
 
 /**
- * @brief Parses a JSON value into a boolean.
- *
- * @details
- * This function checks if the given JSON value is a boolean or a string.
- * - If it is a boolean, it returns the boolean value directly.
- * - If it is a string, it converts it to lowercase and checks if it equals "true" or "1".
- * - If the JSON value is neither a boolean nor a string, the function returns false.
- *
- * @param j The JSON value to parse.
- * @return The boolean representation of the JSON value.
- */
-bool parse_bool(const nlohmann::json &j)
-{
-    if (j.is_boolean())
-        return j.get<bool>();
-
-    if (j.is_string())
-    {
-        std::string s = j.get<std::string>();
-        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-        return (s == "true" || s == "1");
-    }
-
-    return false;
-}
-
-/**
- * @brief Parses a JSON value into a double.
- *
- * @details
- * This function checks if the given JSON value is a number or a string.
- * - If it is a number, it returns the double value directly.
- * - If it is a string, it attempts to convert the string to a double using std::stod.
- * - If the value is neither a number nor a string, the function throws a std::runtime_error.
- *
- * @param j The JSON value to parse.
- * @return The double representation of the JSON value.
- * @throws std::runtime_error if the JSON value cannot be converted to a double.
- */
-double parse_double(const nlohmann::json &j)
-{
-    if (j.is_number())
-    {
-        return j.get<double>();
-    }
-
-    if (j.is_string())
-    {
-        return std::stod(j.get<std::string>());
-    }
-
-    throw std::runtime_error("Cannot convert JSON value to double.");
-}
-
-/**
  * @brief Parses configuration from a JSON object into an ArgParser struct.
  *
  * @param jConfig The JSON object containing configuration data.
@@ -182,37 +127,38 @@ void json_to_config()
         // Handle invalid mode values
         config.mode = ModeType::WSPR; // Default
     }
-    config.use_ini = parse_bool(jConfig["Meta"]["Use INI"]);
+
+    config.use_ini = jConfig["Meta"]["Use INI"].get<bool>();
     config.ini_filename = jConfig["Meta"]["INI Filename"].get<std::string>();
-    config.date_time_log = parse_bool(jConfig["Meta"]["Date Time Log"]);
-    config.loop_tx = parse_bool(jConfig["Meta"]["Loop TX"]);
-    config.tx_iterations = std::stoi(jConfig["Meta"]["TX Iterations"].get<std::string>());
-    config.test_tone = parse_double(jConfig["Meta"]["Test Tone"]);
+    config.date_time_log = jConfig["Meta"]["Date Time Log"].get<bool>();
+    config.loop_tx = jConfig["Meta"]["Loop TX"].get<bool>();
+    config.tx_iterations = jConfig["Meta"]["TX Iterations"].get<int>();
+    config.test_tone = jConfig["Meta"]["Test Tone"].get<double>();
     config.center_freq_set = jConfig["Meta"]["Center Frequency Set"].get<std::vector<double>>();
 
     // Control
-    config.transmit = parse_bool(jConfig["Control"]["Transmit"]);
+    config.transmit = jConfig["Control"]["Transmit"].get<bool>();
 
     // Common
     config.callsign = jConfig["Common"]["Call Sign"].get<std::string>();
     config.grid_square = jConfig["Common"]["Grid Square"].get<std::string>();
-    config.power_dbm = std::stoi(jConfig["Common"]["TX Power"].get<std::string>());
+    config.power_dbm = jConfig["Common"]["TX Power"].get<int>();
     config.frequencies = jConfig["Common"]["Frequency"].get<std::string>();
-    config.tx_pin = std::stoi(jConfig["Common"]["Transmit Pin"].get<std::string>());
+    config.tx_pin = jConfig["Common"]["Transmit Pin"].get<int>();
 
     // Extended
-    config.ppm = parse_double(jConfig["Extended"]["PPM"]);
-    config.use_ntp = parse_bool(jConfig["Extended"]["Use NTP"]);
-    config.use_offset = parse_bool(jConfig["Extended"]["Offset"]);
-    config.use_led = parse_bool(jConfig["Extended"]["Use LED"]);
-    config.led_pin = std::stoi(jConfig["Extended"]["LED Pin"].get<std::string>());
-    config.power_level = std::stoi(jConfig["Extended"]["Power Level"].get<std::string>());
+    config.ppm = jConfig["Extended"]["PPM"].get<double>();
+    config.use_ntp = jConfig["Extended"]["Use NTP"].get<bool>();
+    config.use_offset = jConfig["Extended"]["Offset"].get<bool>();
+    config.use_led = jConfig["Extended"]["Use LED"].get<bool>();
+    config.led_pin = jConfig["Extended"]["LED Pin"].get<int>();
+    config.power_level = jConfig["Extended"]["Power Level"].get<int>();
 
     // Server
-    config.web_port = std::stoi(jConfig["Server"]["Web Port"].get<std::string>());
-    config.socket_port = std::stoi(jConfig["Server"]["Socket Port"].get<std::string>());
-    config.use_shutdown = parse_bool(jConfig["Server"]["Use Shutdown"]);
-    config.shutdown_pin = std::stoi(jConfig["Server"]["Shutdown Button"].get<std::string>());
+    config.web_port = jConfig["Server"]["Web Port"].get<int>();
+    config.socket_port = jConfig["Server"]["Socket Port"].get<int>();
+    config.use_shutdown = jConfig["Server"]["Use Shutdown"].get<bool>();
+    config.shutdown_pin = jConfig["Server"]["Shutdown Button"].get<int>();
 }
 
 /**
@@ -234,37 +180,37 @@ void config_to_json()
     {
         jConfig["Meta"]["Mode"] = "TONE";
     }
-    jConfig["Meta"]["Use INI"] = config.use_ini ? "True" : "False";
+    jConfig["Meta"]["Use INI"] = config.use_ini;
     jConfig["Meta"]["INI Filename"] = config.ini_filename;
-    jConfig["Meta"]["Date Time Log"] = config.date_time_log ? "True" : "False";
-    jConfig["Meta"]["Loop TX"] = config.loop_tx ? "True" : "False";
-    jConfig["Meta"]["TX Iterations"] = std::to_string(config.tx_iterations);
-    jConfig["Meta"]["Test Tone"] = std::to_string(config.test_tone);
+    jConfig["Meta"]["Date Time Log"] = config.date_time_log;
+    jConfig["Meta"]["Loop TX"] = config.loop_tx;
+    jConfig["Meta"]["TX Iterations"] = config.tx_iterations;
+    jConfig["Meta"]["Test Tone"] = config.test_tone;
     jConfig["Meta"]["Center Frequency Set"] = config.center_freq_set;
 
     // Control
-    jConfig["Control"]["Transmit"] = config.transmit ? "True" : "False";
+    jConfig["Control"]["Transmit"] = config.transmit;
 
     // Common
     jConfig["Common"]["Call Sign"] = config.callsign;
     jConfig["Common"]["Grid Square"] = config.grid_square;
-    jConfig["Common"]["TX Power"] = std::to_string(config.power_dbm);
+    jConfig["Common"]["TX Power"] = config.power_dbm;
     jConfig["Common"]["Frequency"] = config.frequencies;
-    jConfig["Common"]["Transmit Pin"] = std::to_string(config.tx_pin);
+    jConfig["Common"]["Transmit Pin"] = config.tx_pin;
 
     // Extended
-    jConfig["Extended"]["PPM"] = std::to_string(config.ppm);
-    jConfig["Extended"]["Use NTP"] = config.use_ntp ? "True" : "False";
-    jConfig["Extended"]["Offset"] = config.use_offset ? "True" : "False";
-    jConfig["Extended"]["Use LED"] = config.use_led ? "True" : "False";
-    jConfig["Extended"]["LED Pin"] = std::to_string(config.led_pin);
-    jConfig["Extended"]["Power Level"] = std::to_string(config.power_level);
+    jConfig["Extended"]["PPM"] = config.ppm;
+    jConfig["Extended"]["Use NTP"] = config.use_ntp;
+    jConfig["Extended"]["Offset"] = config.use_offset;
+    jConfig["Extended"]["Use LED"] = config.use_led;
+    jConfig["Extended"]["LED Pin"] = config.led_pin;
+    jConfig["Extended"]["Power Level"] = config.power_level;
 
     // Server
-    jConfig["Server"]["Web Port"] = std::to_string(config.web_port);
-    jConfig["Server"]["Socket Port"] = std::to_string(config.socket_port);
-    jConfig["Server"]["Use Shutdown"] = config.use_shutdown ? "True" : "False";
-    jConfig["Server"]["Shutdown Button"] = std::to_string(config.shutdown_pin);
+    jConfig["Server"]["Web Port"] = config.web_port;
+    jConfig["Server"]["Socket Port"] = config.socket_port;
+    jConfig["Server"]["Use Shutdown"] = config.use_shutdown;
+    jConfig["Server"]["Shutdown Button"] = config.shutdown_pin;
 }
 
 /**
@@ -285,12 +231,12 @@ void init_config_json()
     // Meta section: General configuration settings
     jConfig["Meta"] = {
         {"Mode", "WSPR"},
-        {"Use INI", "False"},
+        {"Use INI", false},
         {"INI Filename", ""},
-        {"Date Time Log", "False"},
-        {"Loop TX", "False"},
-        {"TX Iterations", "0"},
-        {"Test Tone", "730000"}};
+        {"Date Time Log", false},
+        {"Loop TX", false},
+        {"TX Iterations", 0},
+        {"Test Tone", 730000.0}};
     // Initialize "Center Frequency Set" as an empty JSON array
     jConfig["Meta"]["Center Frequency Set"] = nlohmann::json::array();
 
@@ -299,28 +245,28 @@ void init_config_json()
         {"Call Sign", "NXXX"},
         {"Frequency", "20m"},
         {"Grid Square", "ZZ99"},
-        {"TX Power", "20"},
-        {"Transmit Pin", "4"}};
+        {"TX Power", 20},
+        {"Transmit Pin", 4}};
 
     // Control section: Enable/disable controls
     jConfig["Control"] = {
-        {"Transmit", "False"}};
+        {"Transmit", false}};
 
     // Extended section: Additional configuration options
     jConfig["Extended"] = {
-        {"LED Pin", "18"},
-        {"Offset", "True"},
-        {"PPM", "0.0"},
-        {"Power Level", "7"},
-        {"Use LED", "False"},
-        {"Use NTP", "True"}};
+        {"LED Pin", 18},
+        {"Offset", true},
+        {"PPM", 0.0},
+        {"Power Level", 7},
+        {"Use LED", false},
+        {"Use NTP", true}};
 
     // Server section: Settings for server communication
     jConfig["Server"] = {
-        {"Web Port", "31415"},
-        {"Socket Port", "31416"},
-        {"Shutdown Button", "19"},
-        {"Use Shutdown", "False"}};
+        {"Web Port", 31415},
+        {"Socket Port", 31416},
+        {"Shutdown Button", 19},
+        {"Use Shutdown", false}};
 }
 
 /**
@@ -341,36 +287,51 @@ void init_config_json()
 void ini_to_json(std::string filename)
 {
     nlohmann::json patch;
-    std::map<std::string, std::unordered_map<std::string, std::string>> ini_data;
-
-    try
+    auto ini_data = ini.getData();
+    
+    for (const auto& sectionPair : ini_data)
     {
-        // Retrieve INI data from the global INI handler.
-        ini_data = ini.getData();
-
-        // Convert the INI data into a JSON patch.
-        // Each section becomes a JSON object with key/value pairs.
-        for (const auto &sectionPair : ini_data)
+        const std::string& section = sectionPair.first;
+        const auto& keyValues = sectionPair.second;
+    
+        for (const auto& kv : keyValues)
         {
-            const std::string &section = sectionPair.first;
-            const auto &keyValues = sectionPair.second;
-            for (const auto &kv : keyValues)
+            const std::string& key = kv.first;
+            const std::string& raw_value = kv.second;
+    
+            std::string val = raw_value;
+            std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+    
+            if (val == "true" || val == "false")
             {
-                patch[section][kv.first] = kv.second;
+                patch[section][key] = (val == "true");
+            }
+            else
+            {
+                char* end = nullptr;
+                long lval = std::strtol(raw_value.c_str(), &end, 10);
+                if (*end == '\0')
+                {
+                    patch[section][key] = lval;
+                    continue;
+                }
+    
+                double dval = std::strtod(raw_value.c_str(), &end);
+                if (*end == '\0')
+                {
+                    patch[section][key] = dval;
+                    continue;
+                }
+    
+                patch[section][key] = raw_value;
             }
         }
     }
-    catch (const std::exception &ex)
-    {
-        // Optionally log the error: std::cerr << "Error: " << ex.what() << std::endl;
-        return;
-    }
-
-    // Add the INI filename to the "Meta" section.
+    
     patch["Meta"]["INI Filename"] = filename;
-
-    // Merge the patch into the global JSON configuration.
     jConfig.merge_patch(patch);
+
+    std::cout << "[DEBUG] Raw jConfig:\n" << jConfig.dump(4) << std::endl;
 }
 
 /**
@@ -399,26 +360,31 @@ void json_to_ini()
         for (auto &section : jConfig.items())
         {
             const std::string sectionName = section.key();
-            // Only process sections that are JSON objects.
+        
             if (section.value().is_object())
             {
                 for (auto &kv : section.value().items())
                 {
-                    if (kv.value().is_array())
+                    std::string out_val;
+        
+                    if (kv.value().is_array() || kv.value().is_object())
                     {
-                        // For arrays, dump the JSON array to a string representation.
-                        newData[sectionName][kv.key()] = kv.value().dump();
+                        // Keep full dump for complex types
+                        out_val = kv.value().dump();
+                    }
+                    else if (kv.value().is_string())
+                    {
+                        // Strip quotes from string
+                        out_val = kv.value().get<std::string>();
                     }
                     else
                     {
-                        // Otherwise, retrieve the value as a string.
-                        newData[sectionName][kv.key()] = kv.value().get<std::string>();
+                        // Dump everything else without quotes (numbers, bools)
+                        out_val = kv.value().dump();
                     }
+        
+                    newData[sectionName][kv.key()] = out_val;
                 }
-            }
-            else
-            {
-                // Optionally, handle non-object sections if needed.
             }
         }
 
