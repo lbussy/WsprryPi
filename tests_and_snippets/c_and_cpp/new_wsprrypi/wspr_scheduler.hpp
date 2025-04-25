@@ -133,6 +133,13 @@ public:
      */
     void set_enabled(bool enabled);
 
+    /**
+     * @brief Sets transmission active or inactive.
+     *
+     * @return True if a transmission is active, false otherwise.
+     */
+    void send_ws_message(std::string type, std::string state);
+
 private:
     /**
      * @brief Monitor thread function.

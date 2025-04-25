@@ -33,8 +33,13 @@
 
 #include "wspr_scheduler.hpp"
 
+#include "web_socket.hpp"
 #include "lcblog.hpp"
-#include "config_handler.hpp"
+#include "json.hpp"
+
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 WSPR_Scheduler wspr_scheduler; // Global instance
 
@@ -208,6 +213,7 @@ std::chrono::system_clock::time_point WSPR_Scheduler::compute_next_schedule(Tran
 
 void WSPR_Scheduler::transmit_wspr2()
 {
+    send_ws_message("transmit", "starting");
     llog.logS(INFO, "Starting a simulated WSPR_2 transmission.");
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(110);
@@ -218,10 +224,12 @@ void WSPR_Scheduler::transmit_wspr2()
     }
     llog.logS(INFO, "WSPR_2 transmission ending.");
     notify_complete();
+    send_ws_message("transmit", "finished");
 }
 
 void WSPR_Scheduler::transmit_wspr15()
 {
+    send_ws_message("transmit", "starting");
     llog.logS(INFO, "Starting a simulated WSPR_15 transmission.");
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(825);
@@ -232,6 +240,7 @@ void WSPR_Scheduler::transmit_wspr15()
     }
     llog.logS(INFO, "WSPR_15 transmission ending.");
     notify_complete();
+    send_ws_message("transmit", "finished");
 }
 
 void WSPR_Scheduler::apply_thread_priority(std::thread &t)
@@ -263,4 +272,25 @@ bool WSPR_Scheduler::isTransmitting() const
 void WSPR_Scheduler::set_enabled(bool enabled)
 {
     enabled_.store(enabled);
+}
+
+void WSPR_Scheduler::send_ws_message(std::string type, std::string state)
+{
+    // Build JSON
+    nlohmann::json j;
+    j["type"] = type;
+    j["state"] = state;
+
+    // Get current time as UTC and format as ISO-8601
+    auto now = std::chrono::system_clock::now();
+    auto now_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_utc;
+    gmtime_r(&now_t, &tm_utc);
+    std::ostringstream oss;
+    oss << std::put_time(&tm_utc, "%Y-%m-%dT%H:%M:%SZ");
+    j["timestamp"] = oss.str();
+
+    // Serialize and send
+    std::string message = j.dump();
+    socketServer.send_to_client(message);
 }

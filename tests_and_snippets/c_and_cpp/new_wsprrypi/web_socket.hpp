@@ -105,6 +105,15 @@ public:
      */
     bool set_thread_priority(int schedPolicy, int priority);
 
+    /**
+     * @brief Sends a text message to the connected client.
+     *
+     * The message is encoded as a WebSocket text frame.
+     *
+     * @param message The text string to send.
+     */
+    void send_to_client(const std::string &message);
+
 private:
     int listen_fd_;                         ///< Socket file descriptor for listening.
     std::atomic<bool> running_;             ///< Indicates whether the server is running.
@@ -167,15 +176,6 @@ private:
      * @param message The decoded and unmasked client message.
      */
     void handle_message(const std::string &message);
-
-    /**
-     * @brief Sends a text message to the connected client.
-     *
-     * The message is encoded as a WebSocket text frame.
-     *
-     * @param message The text string to send.
-     */
-    void send_to_client(const std::string &message);
 
     /**
      * @brief Encodes binary data as a Base64 string.

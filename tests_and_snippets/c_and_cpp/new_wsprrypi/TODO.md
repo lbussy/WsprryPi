@@ -1,6 +1,10 @@
 # TODO
 
 - [ ] [INFO ] WSPR loop running. <- then ->  [INFO ] INI file changed, reloading.
+- [ ] Make ws messages non-blocking
+- [ ] Add a "get status" ws message for setting state on web page open
+- [ ] Move reboot and shutdown to a websocket command
+- [ ] Make a multi-threaded websocket
 - [ ] Need to allow -v and such without sudo check
 - [ ] Invalid PPM value, defaulting to use NTP <-- shown when using NTP
 - [ ] After initial startup, a second "WSPR packet payload:" pops up with a duplicate frequency
