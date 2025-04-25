@@ -570,43 +570,39 @@ void WebSocketServer::send_to_client(const std::string &message)
  * - Stores the client socket securely using a mutex.
  * - Enters a read loop where incoming frames are decoded and handled.
  *
- * Only text frames (opcode 0x1) are passed to `handle_message()`. Other frame
- * types are acknowledged but ignored.
- *
- * The loop terminates if the server is stopped or a client disconnects.
- * Upon disconnect, the client socket is closed and reset to -1.
+ * Accepts new TCP connections, performs the WebSocket handshake,
+ * then reads frames in a per-client inner loop. Cleanly tears down
+ * each client and immediately returns to accept() for the next one.
  */
 void WebSocketServer::server_loop()
 {
-    while (running_)
+    while (running_)  // Server stays alive until stop() flips this
     {
-        sockaddr_in client_addr;
-        socklen_t addrlen = sizeof(client_addr);
-        int client = accept(listen_fd_, reinterpret_cast<sockaddr *>(&client_addr), &addrlen);
+        sockaddr_storage peer_addr;
+        socklen_t addrlen = sizeof(peer_addr);
+        int client = accept(listen_fd_,
+                            reinterpret_cast<sockaddr*>(&peer_addr),
+                            &addrlen);
         if (client < 0)
         {
-            if (!running_)
-            {
-                llog.logS(DEBUG, "Accept exited due to shutdown.");
-                break;
-            }
-
+            if (!running_) break;
             std::perror("accept");
             continue;
         }
 
 #ifdef LOCAL_ONLY
-        // Verify that the client is connecting from localhost.
+        // Optionally reject non-localhost
         if (std::string(inet_ntoa(client_addr.sin_addr)) != "127.0.0.1")
         {
-            llog.logE(WARN, "Rejected connection from non-localhost:", inet_ntoa(client_addr.sin_addr));
+            llog.logE(WARN,
+                      "Rejected connection from non-localhost:",
+                      inet_ntoa(client_addr.sin_addr));
             close(client);
             continue;
         }
-#endif // LOCAL_ONLY
+#endif
 
-        llog.logS(DEBUG, "Client connected.");
-
+        // Perform WebSocket handshake
         if (!perform_handshake(client))
         {
             llog.logE(WARN, "Handshake failed.");
@@ -614,56 +610,95 @@ void WebSocketServer::server_loop()
             continue;
         }
 
+        // Log the peer’s real IP
+        char ipstr[INET6_ADDRSTRLEN];
+        if (peer_addr.ss_family == AF_INET)
+        {
+            auto *s4 = reinterpret_cast<sockaddr_in*>(&peer_addr);
+            inet_ntop(AF_INET, &s4->sin_addr, ipstr, sizeof(ipstr));
+        }
+        else  // AF_INET6
+        {
+            auto *s6 = reinterpret_cast<sockaddr_in6*>(&peer_addr);
+            inet_ntop(AF_INET6, &s6->sin6_addr, ipstr, sizeof(ipstr));
+        }
+        llog.logS(DEBUG, "Client connected from:", ipstr);
+
+        // Track this client socket
         {
             std::lock_guard<std::mutex> lock(client_mutex_);
             client_sock_ = client;
         }
 
-        // Read and decode client messages.
+        bool connection_open = true;
         char buf[1024];
-        while (running_)
+
+        // Per-client read loop
+        while (running_ && connection_open)
         {
             ssize_t bytes = recv(client, buf, sizeof(buf), 0);
-            if (bytes <= 0)
-            {
-                if (!running_)
-                    llog.logS(DEBUG, "recv() exited due to shutdown.");
+            if (bytes <= 0)  // TCP FIN or error
                 break;
-            }
 
             size_t pos = 0;
             while (pos < static_cast<size_t>(bytes))
             {
                 size_t frame_size = 0;
                 uint8_t opcode = 0;
-                std::string message = decode_websocket_frame(buf + pos, bytes - pos, frame_size, opcode);
-
+                std::string message = decode_websocket_frame(
+                    buf + pos, bytes - pos, frame_size, opcode);
                 if (frame_size == 0)
-                    break; // Incomplete frame
-
+                    break;
                 pos += frame_size;
 
-                if (opcode == 0x1)
+                switch (opcode)
                 {
-                    // Text frame
-                    handle_message(message);
-                }
-                else
-                {
-                    llog.logS(DEBUG, "Received non-text frame (opcode:", static_cast<int>(opcode), ")");
+                    case 0x1:  // Text
+                        handle_message(message);
+                        break;
+
+                    case 0x8:  // Close
+                        llog.logS(INFO, "Received Close frame");
+                        {
+                            const char close_resp[] = {
+                                static_cast<char>(0x88), 0x00
+                            };
+                            send(client, close_resp, sizeof(close_resp), 0);
+                        }
+                        connection_open = false;
+                        break;
+
+                    case 0x9:  // Ping
+                        llog.logS(DEBUG, "Received Ping; sending Pong");
+                        {
+                            const unsigned char pong[2] = { 0x8A, 0x00 };
+                            send(client, pong, 2, 0);
+                        }
+                        break;
+
+                    case 0xA:  // Pong
+                        llog.logS(DEBUG, "Received Pong");
+                        break;
+
+                    default:
+                        llog.logS(WARN,
+                                  "Unhandled opcode:",
+                                  static_cast<int>(opcode));
                 }
             }
         }
 
-        llog.logS(DEBUG, "Client disconnected.");
-
+        // Clean up this client and loop back to accept()
+        llog.logS(DEBUG, "Client disconnected");
         {
             std::lock_guard<std::mutex> lock(client_mutex_);
-            close(client);
+            shutdown(client_sock_, SHUT_RDWR);
+            close(client_sock_);
             client_sock_ = -1;
         }
     }
 }
+
 
 /**
  * @brief Background loop that sends periodic WebSocket ping frames.
