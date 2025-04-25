@@ -34,6 +34,7 @@
 #include "wspr_scheduler.hpp"
 
 #include "lcblog.hpp"
+#include "config_handler.hpp"
 
 WSPR_Scheduler wspr_scheduler; // Global instance
 
@@ -138,16 +139,23 @@ void WSPR_Scheduler::monitor()
             transmission_running_ = true;
         }
 
-        // Start the appropriate transmission thread.
-        if (transmission_type_ == WSPR_2)
+        // Start the appropriate transmission thread if enabled.
+        if (enabled_.load())
         {
-            transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr2, this);
+            if (transmission_type_ == WSPR_2)
+            {
+                transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr2, this);
+            }
+            else
+            {
+                transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr15, this);
+            }
+            apply_thread_priority(transmission_thread_);
         }
         else
         {
-            transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr15, this);
+            llog.logS(DEBUG, "Skipping transmission.");
         }
-        apply_thread_priority(transmission_thread_);
 
         // Wait for the transmission thread to complete.
         if (transmission_thread_.joinable())
@@ -237,8 +245,22 @@ void WSPR_Scheduler::apply_thread_priority(std::thread &t)
     }
 }
 
-// Externally visible method that returns true if a transmission is active.
+/**
+ * @brief Provides informaiton that transmission is active
+ *
+ * @return True if a transmission is active, false otherwise.
+ */
 bool WSPR_Scheduler::isTransmitting() const
 {
     return transmission_running_.load();
+}
+
+/**
+ * @brief Sets transmission active or inactive.
+ *
+ * @return True if a transmission is active, false otherwise.
+ */
+void WSPR_Scheduler::set_enabled(bool enabled)
+{
+    enabled_.store(enabled);
 }

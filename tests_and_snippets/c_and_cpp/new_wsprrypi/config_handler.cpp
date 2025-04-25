@@ -288,20 +288,20 @@ void ini_to_json(std::string filename)
 {
     nlohmann::json patch;
     auto ini_data = ini.getData();
-    
+
     for (const auto& sectionPair : ini_data)
     {
         const std::string& section = sectionPair.first;
         const auto& keyValues = sectionPair.second;
-    
+
         for (const auto& kv : keyValues)
         {
             const std::string& key = kv.first;
             const std::string& raw_value = kv.second;
-    
+
             std::string val = raw_value;
             std::transform(val.begin(), val.end(), val.begin(), ::tolower);
-    
+
             if (val == "true" || val == "false")
             {
                 patch[section][key] = (val == "true");
@@ -315,19 +315,19 @@ void ini_to_json(std::string filename)
                     patch[section][key] = lval;
                     continue;
                 }
-    
+
                 double dval = std::strtod(raw_value.c_str(), &end);
                 if (*end == '\0')
                 {
                     patch[section][key] = dval;
                     continue;
                 }
-    
+
                 patch[section][key] = raw_value;
             }
         }
     }
-    
+
     patch["Meta"]["INI Filename"] = filename;
     jConfig.merge_patch(patch);
 
@@ -360,13 +360,13 @@ void json_to_ini()
         for (auto &section : jConfig.items())
         {
             const std::string sectionName = section.key();
-        
+
             if (section.value().is_object())
             {
                 for (auto &kv : section.value().items())
                 {
                     std::string out_val;
-        
+
                     if (kv.value().is_array() || kv.value().is_object())
                     {
                         // Keep full dump for complex types
@@ -382,7 +382,7 @@ void json_to_ini()
                         // Dump everything else without quotes (numbers, bools)
                         out_val = kv.value().dump();
                     }
-        
+
                     newData[sectionName][kv.key()] = out_val;
                 }
             }

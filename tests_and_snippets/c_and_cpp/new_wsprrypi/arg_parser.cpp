@@ -167,6 +167,7 @@ void callback_ini_changed()
         llog.logS(INFO, "INI file changed, reloading.");
         load_from_ini();
         validate_config_data();
+        wspr_scheduler.set_enabled(config.transmit);
         // TODO: Reset DMA/Symbols
     }
 }

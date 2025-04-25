@@ -126,6 +126,13 @@ public:
      */
     bool isTransmitting() const;
 
+    /**
+     * @brief Sets transmission active or inactive.
+     *
+     * @return True if a transmission is active, false otherwise.
+     */
+    void set_enabled(bool enabled);
+
 private:
     /**
      * @brief Monitor thread function.
@@ -168,6 +175,7 @@ private:
     void apply_thread_priority(std::thread &t);
 
     // Member variables
+    std::atomic<bool> enabled_;              ///< Set to enable or disable transmissions
     int thread_policy_;                      ///< The scheduling policy.
     int thread_priority_;                    ///< The thread priority.
     std::atomic<bool> stop_flag_;            ///< Flag to signal threads to stop.
