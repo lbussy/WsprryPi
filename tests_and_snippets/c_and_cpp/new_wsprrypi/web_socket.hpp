@@ -178,6 +178,22 @@ private:
     void handle_message(const std::string &message);
 
     /**
+     * @brief Serialize a given object to JSON and send it to the connected client.
+     *
+     * This function converts the provided object to a JSON string using
+     * nlohmann::json and transmits it over the active WebSocket connection.
+     * The object type T must be compatible with nlohmann::json.
+     *
+     * @tparam T Type that can be converted to nlohmann::json.
+     * @param obj The object to serialize and send to the client.
+     *
+     * @throws nlohmann::json::type_error If the object cannot be serialized.
+     * @throws std::runtime_error If sending the serialized data fails.
+     */
+    template<typename T>
+    void send_json(const T& obj);
+
+    /**
      * @brief Encodes binary data as a Base64 string.
      *
      * Used for computing the Sec-WebSocket-Accept header.

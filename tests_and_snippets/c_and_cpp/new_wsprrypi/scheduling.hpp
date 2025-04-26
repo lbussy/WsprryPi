@@ -111,6 +111,48 @@ extern std::atomic<bool> exit_wspr_loop;
 extern void callback_shutdown_system();
 
 /**
+ * @brief Perform a system shutdown sequence.
+ *
+ * @details
+ * This function is intended to be called when a shutdown event is triggered.
+ * It performs a visual blink pattern on the LED pin if configured, sets the
+ * shutdown flags, and notifies all threads waiting on the shutdown condition
+ * variable.
+ *
+ * Specifically:
+ * - Toggles the LED 3 times with 100ms intervals.
+ * - Sets `exit_wspr_loop` to break out of the main transmission loop.
+ * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
+ *
+ * @note
+ * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * supports it.
+ */
+void shutdown_system();
+
+/**
+ * @brief Perform a system reboot sequence.
+ *
+ * @details
+ * This function is intended to be called when a reboot event is triggered.
+ * It performs a visual blink pattern on the LED pin if configured, sets the
+ * reboot flags, and notifies all threads waiting on the reboot condition
+ * variable.
+ *
+ * Specifically:
+ * - Toggles the LED 2 times with 100ms intervals.
+ * - Sets `exit_wspr_loop` to break out of the main transmission loop.
+ * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `reboot_flag` to mark that a full system reboot is in progress.
+ *
+ * @note
+ * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * supports it.
+ */
+void reboot_system();
+
+/**
  * @brief Runs the main WSPR scheduler and transmission loop.
  *
  * @details
@@ -124,5 +166,23 @@ extern void callback_shutdown_system();
  * @note This function blocks and runs until `exit_wspr_loop` is set to `true`.
  */
 extern bool wspr_loop();
+
+/**
+ * @brief Synchronize disk and reboot the machine.
+ *
+ * This function calls sync() to flush filesystem buffers, then
+ * invokes the reboot(2) syscall directly. The process must have
+ * the CAP_SYS_BOOT capability (typically run as root).
+ */
+void reboot_machine();
+
+/**
+ * @brief Flush filesystems and power off the machine.
+ *
+ * Calls sync() to ensure all disk buffers are written, then invokes
+ * the reboot(2) syscall with the POWER_OFF command. Requires root or
+ * the CAP_SYS_BOOT capability.
+ */
+void shutdown_machine();
 
 #endif // _SCHEDULING_HPP

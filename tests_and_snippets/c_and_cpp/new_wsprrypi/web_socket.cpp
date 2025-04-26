@@ -307,51 +307,98 @@ std::string WebSocketServer::compute_websocket_accept(const std::string &client_
  *
  * @param raw_message The raw text message received from the client.
  */
-void WebSocketServer::handle_message(const std::string &raw_message)
+/**
+ * @brief Handle an incoming JSON‐formatted message from the WebSocket client.
+ *
+ * This function parses the raw text as JSON, extracts the "command" field,
+ * dispatches to the appropriate stubbed action (shutdown, reboot,
+ * get_tx_state, echo), and then sends a JSON reply via send_json().
+ *
+ * @param raw_message The raw text payload received over the WebSocket.
+ */
+void WebSocketServer::handle_message(const std::string& raw_message)
 {
-    std::string trimmed = trim(raw_message);
-    std::string message = to_lower(trimmed);
+    using json = nlohmann::json;
+    json reply;
 
-    if (message == "tx_status")
+    try
     {
-        llog.logS(DEBUG, "Received transmission status request.");
-        send_to_client(std::string(wspr_scheduler.isTransmitting() ? "true" : "false"));
+        // Parse incoming text as JSON
+        auto j = json::parse(raw_message);
+
+        // Extract "command" (defaults to empty string if missing), lowercase it
+        std::string cmd = j.value("command", "");
+        std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
+
+        if (cmd == "shutdown")
+        {
+            llog.logS(INFO, "Received websocket shutdown command.");
+            reply["command"] = "shutdown";
+            shutdown_system();
+        }
+        else if (cmd == "reboot")
+        {
+            llog.logS(INFO, "Received websocket reboot command.");
+            reply["command"] = "reboot";
+            reboot_system();
+        }
+        else if (cmd == "get_tx_state")
+        {
+            llog.logS(DEBUG, "Received JSON get_tx_state command.");
+            // Report current TX state
+            reply["tx_state"] = wspr_scheduler.isTransmitting();
+        }
+        else if (cmd == "echo")
+        {
+            llog.logS(INFO, "Received JSON echo command.");
+            if (j.contains("payload"))
+            {
+                // Echo back the provided payload verbatim
+                reply["payload"] = j["payload"];
+            }
+            else
+            {
+                reply["message"] = "missing payload";
+            }
+        }
+        else
+        {
+            llog.logS(WARN, "Unknown command received: " + cmd);
+            reply["status"]  = "error";
+            reply["message"] = "unknown command";
+            reply["command"] = cmd;
+        }
     }
-    else if (message == "shutdown")
+    catch (const json::parse_error& e)
     {
-        llog.logS(INFO, "Received websocket shutdown command.");
-        exit_wspr_loop.store(true); // Signal WSPR loop to exit
-        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
-        shutdown_flag.store(true);  // Indicate shutdown sequence active
-        send_to_client("Response: shutdown command acknowledged");
+        // JSON was invalid
+        llog.logE(ERROR, "JSON parse error in handle_message: " + std::string(e.what()));
+        reply["status"] = "error";
+        reply["error"]  = "invalid JSON";
     }
-    else if (message == "reboot")
-    {
-        llog.logS(INFO, "Received websocket reboot command.");
-        exit_wspr_loop.store(true); // Signal WSPR loop to exit
-        shutdown_cv.notify_all();   // Wake any threads blocked on reboot
-        reboot_flag.store(true);    // Indicate reboot sequence active
-        send_to_client("Response: reboot command acknowledged");
-    }
-    else if (message == "stop_tx")
-    {
-        // Set to no transmit
-        config.transmit = false;
-        config.tx_iterations = false;
-        config.loop_tx = false;
-        // Save the config
-        config_to_json();
-        json_to_ini();
-        // Stop WSPR transmissions
-        wspr_scheduler.stop();
-        llog.logS(INFO, "Received stop_tx command.");
-        send_to_client("Response: stop_tx command acknowledged");
-    }
-    else
-    {
-        llog.logS(DEBUG, "Received message:", message);
-        send_to_client("Response: I received '" + message + "'");
-    }
+
+    // Send the JSON‐formatted reply
+    send_json(reply);
+}
+
+/**
+ * @brief Serialize a given object to JSON and send it to the connected client.
+ *
+ * This function converts the provided object to a JSON string using
+ * nlohmann::json and transmits it over the active WebSocket connection.
+ * The object type T must be compatible with nlohmann::json.
+ *
+ * @tparam T Type that can be converted to nlohmann::json.
+ * @param obj The object to serialize and send to the client.
+ *
+ * @throws nlohmann::json::type_error If the object cannot be serialized.
+ * @throws std::runtime_error If sending the serialized data fails.
+ */
+template<typename T>
+void WebSocketServer::send_json(const T& obj)
+{
+    // T could be nlohmann::json or any structure you convert to it
+    send_to_client(obj.dump());
 }
 
 /**

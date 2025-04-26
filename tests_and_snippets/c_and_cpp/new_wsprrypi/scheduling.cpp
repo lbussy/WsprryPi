@@ -49,7 +49,9 @@
 
 // Standard library headers
 #include <atomic>
+#include <cerrno>
 #include <condition_variable>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -60,7 +62,11 @@
 
 // System headers
 #include <string.h>
+#include <sys/reboot.h>    // for reboot()
+#include <linux/reboot.h>  // for LINUX_REBOOT_CMD_* constants
 #include <sys/resource.h>
+#include <unistd.h>
+
 
 /**
  * @brief Global mutex for coordinating shutdown and thread safety.
@@ -251,38 +257,95 @@ bool ppm_init()
  *
  * @details
  * This function is intended to be called when a shutdown GPIO event is triggered.
- * It performs a visual blink pattern on the configured LED pin, sets the shutdown
- * flags, and notifies all threads waiting on the shutdown condition variable.
+ * It logs the event and calls shutdown_system().
+ */
+void callback_shutdown_system()
+{
+    llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
+    shutdown_system();
+}
+
+/**
+ * @brief Perform a system shutdown sequence.
+ *
+ * @details
+ * This function is intended to be called when a shutdown event is triggered.
+ * It performs a visual blink pattern on the LED pin if configured, sets the
+ * shutdown flags, and notifies all threads waiting on the shutdown condition
+ * variable.
  *
  * Specifically:
- * - Logs that a shutdown was initiated from GPIO.
- * - Toggles the LED 3 times with 100ms intervals.
+ * - Toggles the LED 3 times with 200ms intervals.
  * - Sets `exit_wspr_loop` to break out of the main transmission loop.
  * - Notifies `shutdown_cv` to unblock any waiting threads.
  * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
  *
  * @note
- * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware supports it.
+ * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * supports it.
  */
-void callback_shutdown_system()
+void shutdown_system()
 {
-    llog.logS(INFO, "Shutdown called by GPIO:", config.shutdown_pin);
-
-    for (int i = 0; i < 3; ++i)
+    if (config.use_led)
     {
-        ledControl.toggle_gpio(true); // LED ON
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        ledControl.toggle_gpio(false); // LED OFF
-        if (i < 2)
+        // Flash LED three times if we are using it
+        for (int i = 0; i < 3; ++i)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            ledControl.toggle_gpio(true); // LED ON
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    
+            ledControl.toggle_gpio(false); // LED OFF
+            if (i < 2)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
         }
     }
 
     exit_wspr_loop.store(true); // Signal WSPR loop to exit
     shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
     shutdown_flag.store(true);  // Indicate shutdown sequence active
+}
+
+/**
+ * @brief Perform a system reboot sequence.
+ *
+ * @details
+ * This function is intended to be called when a reboot event is triggered.
+ * It performs a visual blink pattern on the LED pin if configured, sets the
+ * reboot flags, and notifies all threads waiting on the reboot condition
+ * variable.
+ *
+ * Specifically:
+ * - Toggles the LED 2 times with 100ms intervals.
+ * - Sets `exit_wspr_loop` to break out of the main transmission loop.
+ * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `reboot_flag` to mark that a full system reboot is in progress.
+ *
+ * @note
+ * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware supports it.
+ */
+void reboot_system()
+{
+    if (config.use_led)
+    {
+        // Flash LED three times if we are using it
+        for (int i = 0; i < 3; ++i)
+        {
+            ledControl.toggle_gpio(true); // LED ON
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+            ledControl.toggle_gpio(false); // LED OFF
+            if (i < 2)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+    }
+
+    exit_wspr_loop.store(true); // Signal WSPR loop to exit
+    shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+    reboot_flag.store(true);    // Indicate shutdown sequence active
 }
 
 /**
@@ -370,5 +433,56 @@ bool wspr_loop()
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
+    if (reboot_flag.load())
+    {
+        llog.logS(INFO, "Rebooting.");
+        reboot_machine();
+    }
+    if (shutdown_flag.load())
+    {
+        llog.logS(INFO, "Shutting down.");
+        shutdown_machine();
+    }
+
     return true;
+}
+
+/**
+ * @brief Synchronize disk and reboot the machine.
+ *
+ * This function calls sync() to flush filesystem buffers, then
+ * invokes the reboot(2) syscall directly. The process must have
+ * the CAP_SYS_BOOT capability (typically run as root).
+ */
+void reboot_machine()
+{
+    // Flush all file system buffers to disk
+    sync();
+
+    // Attempt to reboot; LINUX_REBOOT_CMD_RESTART is the same as RB_AUTOBOOT
+    if (::reboot(LINUX_REBOOT_CMD_RESTART) < 0)
+    {
+        llog.logE(ERROR, "Reboot failed:", std::strerror(errno));
+    }
+}
+
+
+/**
+ * @brief Flush filesystems and power off the machine.
+ *
+ * Calls sync() to ensure all disk buffers are written, then invokes
+ * the reboot(2) syscall with the POWER_OFF command. Requires root or
+ * the CAP_SYS_BOOT capability.
+ */
+void shutdown_machine()
+{
+    // 1) Flush all pending disk writes
+    sync();
+
+    // Power off the system
+    // LINUX_REBOOT_CMD_POWER_OFF is equivalent to RB_POWER_OFF
+    if (::reboot(LINUX_REBOOT_CMD_POWER_OFF) < 0)
+    {
+        llog.logE(ERROR, "Shutdown failed:", std::strerror(errno));
+    }
 }
