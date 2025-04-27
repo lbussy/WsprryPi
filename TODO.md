@@ -3,7 +3,6 @@
 ## C++ Code
 
 - [ ] Integrate WSPR-Transmitter
-- [ ] Send config change to all sockets
 - [ ] "TX will stop after: 1 iteration(s) of the frequency list." when in ini mode
 - [ ] Clear frequency vector on reload
 
@@ -11,6 +10,7 @@
 
 - [ ] Show logs on web page (#27)
 - [ ] Implement freq_test
+- [ ] Reload config when we receive `{"state":"reload","timestamp":"2025-04-27T22:26:48Z","type":"configuration"}`
 
 ## Orchestration
 

@@ -85,15 +85,16 @@ void WSPR_Scheduler::start(TransmissionType type, std::function<void()> transmis
  */
 void WSPR_Scheduler::resetConfig()
 {
-    wsprTransmitter.setupTransmission(
-        config.center_freq_set[0],
-        config.power_level,
-        config.ppm,
-        config.callsign,
-        config.grid_square,
-        config.power_dbm,
-        config.use_offset
-    );
+    // TODO: Make this work without killing things
+    // wsprTransmitter.setupTransmission(
+    //     config.center_freq_set[0],
+    //     config.power_level,
+    //     config.ppm,
+    //     config.callsign,
+    //     config.grid_square,
+    //     config.power_dbm,
+    //     config.use_offset
+    // );
 }
 
 void WSPR_Scheduler::stop()

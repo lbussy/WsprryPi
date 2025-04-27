@@ -138,12 +138,12 @@ private:
     // std::mutex client_mutex_;       ///< Mutex to guard access to client socket.
 
     // Helper for per‐client work:
-    void client_loop(int client_fd);
+    void clientLoop(int client_fd);
 
     /**
      * @brief Main server loop that accepts and manages the client connection.
      */
-    void server_loop();
+    void serverLoop();
 
     /**
      * @brief Loop for periodically sending WebSocket ping frames.
@@ -152,7 +152,7 @@ private:
      *
      * @param interval Ping interval in seconds.
      */
-    void keep_alive_loop(uint32_t interval);
+    void keepAliveLoop(uint32_t interval);
 
     /**
      * @brief Performs the WebSocket handshake with the connected client.
@@ -162,7 +162,7 @@ private:
      * @param client Socket descriptor for the client.
      * @return true if handshake succeeded, false otherwise.
      */
-    bool perform_handshake(int client);
+    bool performHandshake(int client);
 
     /**
      * @brief Trims whitespace from both ends of a string.
@@ -180,7 +180,7 @@ private:
      * @param s Input string.
      * @return Lowercase version of the input string.
      */
-    std::string to_lower(const std::string &s);
+    std::string toLower(const std::string &s);
 
     /**
      * @brief Handles incoming messages from the client.
@@ -189,7 +189,7 @@ private:
      *
      * @param message The decoded and unmasked client message.
      */
-    void handle_message(const std::string &message);
+    void handleMessage(const std::string &message);
 
     /**
      * @brief Serialize a given object to JSON and send it to the connected client.
@@ -205,7 +205,7 @@ private:
      * @throws std::runtime_error If sending the serialized data fails.
      */
     template <typename T>
-    void send_json(const T &obj);
+    void sendJSON(const T &obj);
 
     /**
      * @brief Encodes binary data as a Base64 string.
@@ -216,7 +216,7 @@ private:
      * @param len Number of bytes to encode.
      * @return Base64-encoded string.
      */
-    std::string base64_encode(const unsigned char *data, size_t len);
+    std::string base64Encode(const unsigned char *data, size_t len);
 
     /**
      * @brief Computes the WebSocket accept key from the client-provided key.
@@ -226,7 +226,7 @@ private:
      * @param client_key The value from Sec-WebSocket-Key header.
      * @return The Sec-WebSocket-Accept value to send back to the client.
      */
-    std::string compute_websocket_accept(const std::string &client_key);
+    std::string computeWebSocketAccept(const std::string &client_key);
 
     /**
      * @brief Decodes a WebSocket frame from raw socket data.
@@ -239,7 +239,7 @@ private:
      * @param opcode Outputs the opcode of the WebSocket frame (e.g. 0x1 for text).
      * @return The unmasked payload string (text data if opcode is 0x1).
      */
-    std::string decode_websocket_frame(const char *data, size_t data_len, size_t &frame_size, uint8_t &opcode);
+    std::string decodeWebSocketFrame(const char *data, size_t data_len, size_t &frame_size, uint8_t &opcode);
 };
 
 /**

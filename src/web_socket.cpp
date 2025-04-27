@@ -160,10 +160,10 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
     }
 
     running_ = true;
-    server_thread_ = std::thread(&WebSocketServer::server_loop, this);
+    server_thread_ = std::thread(&WebSocketServer::serverLoop, this);
     if (keep_alive_secs_ > 0)
     {
-        keep_alive_thread_ = std::thread(&WebSocketServer::keep_alive_loop, this, keep_alive_secs_);
+        keep_alive_thread_ = std::thread(&WebSocketServer::keepAliveLoop, this, keep_alive_secs_);
     }
 
     llog.logS(INFO, "WebSocketServer started on port:", port);
@@ -267,7 +267,7 @@ std::string WebSocketServer::trim(const std::string &s)
  * @param s The string to convert.
  * @return A lowercase version of the input string.
  */
-std::string WebSocketServer::to_lower(const std::string &s)
+std::string WebSocketServer::toLower(const std::string &s)
 {
     std::string result = s;
     std::transform(result.begin(), result.end(), result.begin(),
@@ -287,14 +287,14 @@ std::string WebSocketServer::to_lower(const std::string &s)
  * @param client_key The value received in the client's Sec-WebSocket-Key header.
  * @return A Base64-encoded SHA1 hash string suitable for the Sec-WebSocket-Accept header.
  */
-std::string WebSocketServer::compute_websocket_accept(const std::string &client_key)
+std::string WebSocketServer::computeWebSocketAccept(const std::string &client_key)
 {
     const std::string magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     std::string concatenated = client_key + magic;
     SHA1 sha;
     sha.update(concatenated);
     std::string sha1_result = sha.final(); // 20-byte binary hash
-    return base64_encode(reinterpret_cast<const unsigned char *>(sha1_result.data()), sha1_result.size());
+    return base64Encode(reinterpret_cast<const unsigned char *>(sha1_result.data()), sha1_result.size());
 }
 
 /**
@@ -319,11 +319,11 @@ std::string WebSocketServer::compute_websocket_accept(const std::string &client_
  *
  * This function parses the raw text as JSON, extracts the "command" field,
  * dispatches to the appropriate stubbed action (shutdown, reboot,
- * get_tx_state, echo), and then sends a JSON reply via send_json().
+ * get_tx_state, echo), and then sends a JSON reply via sendJSON().
  *
  * @param raw_message The raw text payload received over the WebSocket.
  */
-void WebSocketServer::handle_message(const std::string &raw_message)
+void WebSocketServer::handleMessage(const std::string &raw_message)
 {
     using json = nlohmann::json;
     json reply;
@@ -379,13 +379,13 @@ void WebSocketServer::handle_message(const std::string &raw_message)
     catch (const json::parse_error &e)
     {
         // JSON was invalid
-        llog.logE(ERROR, "JSON parse error in handle_message: " + std::string(e.what()));
+        llog.logE(ERROR, "JSON parse error in handleMessage: " + std::string(e.what()));
         reply["status"] = "error";
         reply["error"] = "invalid JSON";
     }
 
     // Send the JSON‐formatted reply
-    send_json(reply);
+    sendJSON(reply);
 }
 
 /**
@@ -402,10 +402,10 @@ void WebSocketServer::handle_message(const std::string &raw_message)
  * @throws std::runtime_error If sending the serialized data fails.
  */
 template <typename T>
-void WebSocketServer::send_json(const T &obj)
+void WebSocketServer::sendJSON(const T &obj)
 {
     // T could be nlohmann::json or any structure you convert to it
-    sendToClient(obj.dump());
+    sendAllClients(obj.dump());
 }
 
 /**
@@ -426,7 +426,7 @@ void WebSocketServer::send_json(const T &obj)
  * @note This function assumes that frames are received in full. Partial frames
  *       should be accumulated before calling this function.
  */
-std::string WebSocketServer::decode_websocket_frame(const char *data, size_t data_len, size_t &frame_size, uint8_t &opcode)
+std::string WebSocketServer::decodeWebSocketFrame(const char *data, size_t data_len, size_t &frame_size, uint8_t &opcode)
 {
     if (data_len < 2)
     {
@@ -531,7 +531,7 @@ std::string WebSocketServer::decode_websocket_frame(const char *data, size_t dat
  * @note This implementation does not insert line breaks or headers.
  *       It is sufficient for WebSocket key encoding and similar purposes.
  */
-std::string WebSocketServer::base64_encode(const unsigned char *data, size_t len)
+std::string WebSocketServer::base64Encode(const unsigned char *data, size_t len)
 {
     static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string encoded;
@@ -660,9 +660,9 @@ void WebSocketServer::sendAllClients(const std::string &message)
  * For each accepted client it:
  *  1. Performs the WebSocket handshake.
  *  2. Logs the peer’s IP address.
- *  3. Spawns a dedicated thread (`client_loop`) to service that client.
+ *  3. Spawns a dedicated thread (`clientLoop`) to service that client.
  */
-void WebSocketServer::server_loop()
+void WebSocketServer::serverLoop()
 {
     while (running_)
     {
@@ -695,7 +695,7 @@ void WebSocketServer::server_loop()
 #endif
 
         // Perform WebSocket handshake
-        if (!perform_handshake(client))
+        if (!performHandshake(client))
         {
             llog.logE(WARN, "Handshake failed for new client");
             close(client);
@@ -721,7 +721,7 @@ void WebSocketServer::server_loop()
             std::lock_guard<std::mutex> lock(clients_mutex_);
             client_sockets_.push_back(client);
             client_threads_.emplace_back(
-                &WebSocketServer::client_loop,
+                &WebSocketServer::clientLoop,
                 this,
                 client);
         }
@@ -732,13 +732,13 @@ void WebSocketServer::server_loop()
  * @brief Per‐client service loop.
  *
  * Continuously reads WebSocket frames from a single client socket,
- * decodes them, dispatches text frames to handle_message(), and
+ * decodes them, dispatches text frames to handleMessage(), and
  * handles control frames (close, ping/pong). Cleans up the socket
  * and removes it from the active clients list on exit.
  *
  * @param client_fd File descriptor of the accepted client socket.
  */
-void WebSocketServer::client_loop(int client_fd)
+void WebSocketServer::clientLoop(int client_fd)
 {
     char buf[1024];
     bool connection_open = true;
@@ -757,7 +757,7 @@ void WebSocketServer::client_loop(int client_fd)
         {
             size_t frame_size = 0;
             uint8_t opcode = 0;
-            std::string message = decode_websocket_frame(
+            std::string message = decodeWebSocketFrame(
                 buf + pos, bytes - pos, frame_size, opcode);
             if (frame_size == 0)
             {
@@ -769,7 +769,7 @@ void WebSocketServer::client_loop(int client_fd)
             switch (opcode)
             {
             case 0x1: // Text frame
-                handle_message(message);
+                handleMessage(message);
                 break;
 
             case 0x8: // Close frame
@@ -827,7 +827,7 @@ void WebSocketServer::client_loop(int client_fd)
  *
  * @param interval Number of seconds between ping frames.
  */
-void WebSocketServer::keep_alive_loop(uint32_t interval)
+void WebSocketServer::keepAliveLoop(uint32_t interval)
 {
     std::unique_lock<std::mutex> lock(keep_alive_mutex_);
     while (running_)
@@ -866,7 +866,7 @@ void WebSocketServer::keep_alive_loop(uint32_t interval)
  * @note If the handshake fails, this method does not close the socket.
  *       The caller is responsible for cleanup.
  */
-bool WebSocketServer::perform_handshake(int client)
+bool WebSocketServer::performHandshake(int client)
 {
     const int buf_size = 4096;
     char buf[buf_size];
@@ -909,7 +909,7 @@ bool WebSocketServer::perform_handshake(int client)
         return false;
     }
 
-    std::string accept_key = compute_websocket_accept(key);
+    std::string accept_key = computeWebSocketAccept(key);
     std::ostringstream response;
     response << "HTTP/1.1 101 Switching Protocols\r\n"
              << "Upgrade: websocket\r\n"
