@@ -76,7 +76,9 @@ constexpr const uint32_t SOCKET_KEEPALIVE = 30;
  * - Sets the default keep-alive interval to 30 seconds.
  */
 WebSocketServer::WebSocketServer()
-    : listen_fd_(-1), running_(false), client_sock_(-1), keep_alive_secs_(30) {}
+    : listen_fd_(-1), running_(false), keep_alive_secs_(SOCKET_KEEPALIVE)
+{
+}
 
 /**
  * @brief Destroys the WebSocketServer instance.
@@ -172,52 +174,62 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
  * @brief Stops the WebSocket server and releases all resources.
  *
  * Gracefully shuts down the server by:
- * - Marking the server as not running.
- * - Waking the keep-alive thread (if active).
- * - Closing the listening socket to break out of `accept()`.
- * - Closing the client socket to break out of `recv()`.
- * - Joining all threads to ensure clean shutdown.
+ * - marking the server as not running
+ * - notifying the keep-alive thread to wake up
+ * - closing the listening socket to unblock accept()
+ * - shutting down and closing all active client sockets
+ * - joining all client handler threads
+ * - joining the main server and keep-alive threads
  *
- * After this call, the server can be restarted by calling `start()` again.
+ * After this call, the server may be restarted via start().
  */
 void WebSocketServer::stop()
 {
     if (!running_)
         return;
 
+    // 1. Disable the server loop
     running_ = false;
 
-    // Notify condition variable to interrupt keep-alive sleep
+    // 2. Wake keep-alive thread if sleeping
     keep_alive_cv_.notify_all();
 
-    // Shutdown and close the listening socket (unblocks accept)
+    // 3. Close listening socket to break out of accept()
     if (listen_fd_ != -1)
     {
-        shutdown(listen_fd_, SHUT_RDWR); // force accept() to return
+        shutdown(listen_fd_, SHUT_RDWR);
         close(listen_fd_);
         listen_fd_ = -1;
     }
 
-    // Shutdown and close client connection (unblocks recv)
+    // 4. Shut down and close every client socket
     {
-        std::lock_guard<std::mutex> lock(client_mutex_);
-        if (client_sock_ != -1)
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        for (int fd : client_sockets_)
         {
-            shutdown(client_sock_, SHUT_RDWR); // force recv() to return
-            close(client_sock_);
-            client_sock_ = -1;
+            shutdown(fd, SHUT_RDWR);
+            close(fd);
         }
     }
 
-    // Join the server thread
+    // 5. Join all client handler threads
+    for (auto &t : client_threads_)
+    {
+        if (t.joinable())
+            t.join();
+    }
+    client_threads_.clear();
+    client_sockets_.clear();
+
+    // 6. Join the main server thread
     if (server_thread_.joinable())
         server_thread_.join();
 
-    // Join the keep-alive thread
+    // 7. Join the keep-alive ping thread
     if (keep_alive_thread_.joinable())
         keep_alive_thread_.join();
 
-    llog.logS(INFO, "Socket server stopped.");
+    llog.logS(INFO, "WebSocketServer stopped.");
 }
 
 /**
@@ -311,7 +323,7 @@ std::string WebSocketServer::compute_websocket_accept(const std::string &client_
  *
  * @param raw_message The raw text payload received over the WebSocket.
  */
-void WebSocketServer::handle_message(const std::string& raw_message)
+void WebSocketServer::handle_message(const std::string &raw_message)
 {
     using json = nlohmann::json;
     json reply;
@@ -359,17 +371,17 @@ void WebSocketServer::handle_message(const std::string& raw_message)
         else
         {
             llog.logS(WARN, "Unknown command received: " + cmd);
-            reply["status"]  = "error";
+            reply["status"] = "error";
             reply["message"] = "unknown command";
             reply["command"] = cmd;
         }
     }
-    catch (const json::parse_error& e)
+    catch (const json::parse_error &e)
     {
         // JSON was invalid
         llog.logE(ERROR, "JSON parse error in handle_message: " + std::string(e.what()));
         reply["status"] = "error";
-        reply["error"]  = "invalid JSON";
+        reply["error"] = "invalid JSON";
     }
 
     // Send the JSON‐formatted reply
@@ -389,11 +401,11 @@ void WebSocketServer::handle_message(const std::string& raw_message)
  * @throws nlohmann::json::type_error If the object cannot be serialized.
  * @throws std::runtime_error If sending the serialized data fails.
  */
-template<typename T>
-void WebSocketServer::send_json(const T& obj)
+template <typename T>
+void WebSocketServer::send_json(const T &obj)
 {
     // T could be nlohmann::json or any structure you convert to it
-    send_to_client(obj.dump());
+    sendToClient(obj.dump());
 }
 
 /**
@@ -548,56 +560,96 @@ std::string WebSocketServer::base64_encode(const unsigned char *data, size_t len
 }
 
 /**
- * @brief Sends a text message to the connected WebSocket client.
+ * @brief Sends a text message to all connected WebSocket clients.
  *
- * Constructs a WebSocket text frame (RFC 6455) using the given message.
- * The frame includes:
- * - FIN bit and opcode 0x1 (text)
- * - Payload length encoding (7-bit, 16-bit, or 64-bit depending on size)
- * - Unmasked payload (server-to-client frames are not masked)
+ * Constructs a WebSocket text frame (RFC 6455) using the given message,
+ * then iterates over the active client sockets and transmits the frame.
+ * If no clients are connected, this is a no-op. Errors on individual
+ * sends are logged via perror().
  *
- * If no client is currently connected, the function logs a warning and returns.
- *
- * @param message The UTF-8 encoded text message to send to the client.
+ * @param message The UTF-8 encoded text message to send.
  */
-void WebSocketServer::send_to_client(const std::string &message)
+void WebSocketServer::sendToClient(const std::string &message)
 {
-    std::lock_guard<std::mutex> lock(client_mutex_);
+    // Lock the clients list while building and sending the frame
+    std::lock_guard<std::mutex> lock(clients_mutex_);
 
-    if (client_sock_ == -1)
-    {
-        llog.logE(WARN, "No client connected.");
-        return;
-    }
-
+    // Build the WebSocket text frame header
     std::string frame;
-    frame.push_back(static_cast<char>(0x81)); // FIN + opcode 0x1 (text)
+    frame.reserve(2 + message.size());
+    frame.push_back(static_cast<char>(0x81));  // FIN=1, opcode=0x1 (text)
 
     size_t len = message.size();
-    if (len < 126)
-    {
+    if (len < 126) {
         frame.push_back(static_cast<char>(len));
     }
-    else if (len < 65536)
-    {
+    else if (len < 65536) {
         frame.push_back(126);
-        frame.push_back((len >> 8) & 0xFF);
-        frame.push_back(len & 0xFF);
+        frame.push_back(static_cast<char>((len >> 8) & 0xFF));
+        frame.push_back(static_cast<char>(len & 0xFF));
     }
-    else
-    {
+    else {
         frame.push_back(127);
-        for (int i = 7; i >= 0; i--)
-        {
-            frame.push_back((len >> (8 * i)) & 0xFF);
+        for (int i = 7; i >= 0; --i) {
+            frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
         }
     }
 
+    // Append payload
     frame.append(message);
 
-    ssize_t sent = send(client_sock_, frame.data(), frame.size(), 0);
-    if (sent < 0)
-        std::perror("send");
+    // Broadcast to every connected client
+    for (int fd : client_sockets_) {
+        ssize_t sent = ::send(fd, frame.data(), frame.size(), 0);
+        if (sent < 0) {
+            std::perror("send");
+        }
+    }
+}
+
+/**
+ * @brief Broadcasts a text message to all connected WebSocket clients.
+ *
+ * Locks the clients mutex, constructs a WebSocket text frame for the
+ * given message, and sends it to each socket in client_sockets_. Logs
+ * any errors encountered during send().
+ *
+ * @param message The UTF-8 encoded text payload to broadcast.
+ */
+void WebSocketServer::sendAllClients(const std::string &message)
+{
+    std::lock_guard<std::mutex> lock(clients_mutex_);
+
+    // Build WebSocket text frame header
+    std::string frame;
+    frame.reserve(2 + message.size());
+    frame.push_back(static_cast<char>(0x81));  // FIN=1, opcode=0x1 (text)
+
+    size_t len = message.size();
+    if (len < 126) {
+        frame.push_back(static_cast<char>(len));
+    }
+    else if (len < 65536) {
+        frame.push_back(126);
+        frame.push_back(static_cast<char>((len >> 8) & 0xFF));
+        frame.push_back(static_cast<char>(len & 0xFF));
+    }
+    else {
+        frame.push_back(127);
+        for (int i = 7; i >= 0; --i) {
+            frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
+        }
+    }
+
+    // Append the payload
+    frame.append(message);
+
+    // Send to every connected client
+    for (int fd : client_sockets_) {
+        if (::send(fd, frame.data(), frame.size(), 0) < 0) {
+            std::perror("sendAllClients");
+        }
+    }
 }
 
 /**
@@ -605,49 +657,47 @@ void WebSocketServer::send_to_client(const std::string &message)
  *
  * This function runs in its own thread once the server is started.
  * It continuously listens for new TCP client connections using `accept()`.
- *
- * If a connection is accepted:
- * - Optionally verifies the connection is from localhost (if LOCAL_ONLY is defined).
- * - Performs the WebSocket handshake.
- * - Stores the client socket securely using a mutex.
- * - Enters a read loop where incoming frames are decoded and handled.
- *
- * Accepts new TCP connections, performs the WebSocket handshake,
- * then reads frames in a per-client inner loop. Cleanly tears down
- * each client and immediately returns to accept() for the next one.
+ * For each accepted client it:
+ *  1. Performs the WebSocket handshake.
+ *  2. Logs the peer’s IP address.
+ *  3. Spawns a dedicated thread (`client_loop`) to service that client.
  */
 void WebSocketServer::server_loop()
 {
-    while (running_)  // Server stays alive until stop() flips this
+    while (running_)
     {
         sockaddr_storage peer_addr;
         socklen_t addrlen = sizeof(peer_addr);
-        int client = accept(listen_fd_,
-                            reinterpret_cast<sockaddr*>(&peer_addr),
-                            &addrlen);
+        int client = accept(
+            listen_fd_,
+            reinterpret_cast<sockaddr *>(&peer_addr),
+            &addrlen);
         if (client < 0)
         {
-            if (!running_) break;
+            if (!running_)
+                break; // stop() was called
             std::perror("accept");
             continue;
         }
 
 #ifdef LOCAL_ONLY
-        // Optionally reject non-localhost
-        if (std::string(inet_ntoa(client_addr.sin_addr)) != "127.0.0.1")
+        // Optionally reject non-localhost connections
+        if (peer_addr.ss_family == AF_INET)
         {
-            llog.logE(WARN,
-                      "Rejected connection from non-localhost:",
-                      inet_ntoa(client_addr.sin_addr));
-            close(client);
-            continue;
+            auto *s4 = reinterpret_cast<sockaddr_in *>(&peer_addr);
+            if (std::string(inet_ntoa(s4->sin_addr)) != "127.0.0.1")
+            {
+                llog.logE(WARN, "Rejected non-localhost connection");
+                close(client);
+                continue;
+            }
         }
 #endif
 
         // Perform WebSocket handshake
         if (!perform_handshake(client))
         {
-            llog.logE(WARN, "Handshake failed.");
+            llog.logE(WARN, "Handshake failed for new client");
             close(client);
             continue;
         }
@@ -656,121 +706,145 @@ void WebSocketServer::server_loop()
         char ipstr[INET6_ADDRSTRLEN];
         if (peer_addr.ss_family == AF_INET)
         {
-            auto *s4 = reinterpret_cast<sockaddr_in*>(&peer_addr);
+            auto *s4 = reinterpret_cast<sockaddr_in *>(&peer_addr);
             inet_ntop(AF_INET, &s4->sin_addr, ipstr, sizeof(ipstr));
         }
-        else  // AF_INET6
+        else
         {
-            auto *s6 = reinterpret_cast<sockaddr_in6*>(&peer_addr);
+            auto *s6 = reinterpret_cast<sockaddr_in6 *>(&peer_addr);
             inet_ntop(AF_INET6, &s6->sin6_addr, ipstr, sizeof(ipstr));
         }
-        llog.logS(DEBUG, "Client connected from:", ipstr);
+        llog.logS(INFO, "Client connected from:", ipstr);
 
-        // Track this client socket
+        // Store and spawn handler thread
         {
-            std::lock_guard<std::mutex> lock(client_mutex_);
-            client_sock_ = client;
-        }
-
-        bool connection_open = true;
-        char buf[1024];
-
-        // Per-client read loop
-        while (running_ && connection_open)
-        {
-            ssize_t bytes = recv(client, buf, sizeof(buf), 0);
-            if (bytes <= 0)  // TCP FIN or error
-                break;
-
-            size_t pos = 0;
-            while (pos < static_cast<size_t>(bytes))
-            {
-                size_t frame_size = 0;
-                uint8_t opcode = 0;
-                std::string message = decode_websocket_frame(
-                    buf + pos, bytes - pos, frame_size, opcode);
-                if (frame_size == 0)
-                    break;
-                pos += frame_size;
-
-                switch (opcode)
-                {
-                    case 0x1:  // Text
-                        handle_message(message);
-                        break;
-
-                    case 0x8:  // Close
-                        llog.logS(INFO, "Received Close frame.");
-                        {
-                            const char close_resp[] = {
-                                static_cast<char>(0x88), 0x00
-                            };
-                            send(client, close_resp, sizeof(close_resp), 0);
-                        }
-                        connection_open = false;
-                        break;
-
-                    case 0x9:  // Ping
-                        llog.logS(DEBUG, "Received Ping; sending Pong.");
-                        {
-                            const unsigned char pong[2] = { 0x8A, 0x00 };
-                            send(client, pong, 2, 0);
-                        }
-                        break;
-
-                    case 0xA:  // Pong
-                        llog.logS(DEBUG, "Received Pong.");
-                        break;
-
-                    default:
-                        llog.logS(WARN,
-                                  "Unhandled opcode:",
-                                  static_cast<int>(opcode));
-                }
-            }
-        }
-
-        // Clean up this client and loop back to accept()
-        llog.logS(DEBUG, "Client disconnected.");
-        {
-            std::lock_guard<std::mutex> lock(client_mutex_);
-            shutdown(client_sock_, SHUT_RDWR);
-            close(client_sock_);
-            client_sock_ = -1;
+            std::lock_guard<std::mutex> lock(clients_mutex_);
+            client_sockets_.push_back(client);
+            client_threads_.emplace_back(
+                &WebSocketServer::client_loop,
+                this,
+                client);
         }
     }
 }
 
+/**
+ * @brief Per‐client service loop.
+ *
+ * Continuously reads WebSocket frames from a single client socket,
+ * decodes them, dispatches text frames to handle_message(), and
+ * handles control frames (close, ping/pong). Cleans up the socket
+ * and removes it from the active clients list on exit.
+ *
+ * @param client_fd File descriptor of the accepted client socket.
+ */
+void WebSocketServer::client_loop(int client_fd)
+{
+    char buf[1024];
+    bool connection_open = true;
+
+    while (running_ && connection_open)
+    {
+        ssize_t bytes = recv(client_fd, buf, sizeof(buf), 0);
+        if (bytes <= 0)
+        {
+            // TCP FIN or error
+            break;
+        }
+
+        size_t pos = 0;
+        while (pos < static_cast<size_t>(bytes))
+        {
+            size_t frame_size = 0;
+            uint8_t opcode = 0;
+            std::string message = decode_websocket_frame(
+                buf + pos, bytes - pos, frame_size, opcode);
+            if (frame_size == 0)
+            {
+                // Incomplete frame
+                break;
+            }
+            pos += frame_size;
+
+            switch (opcode)
+            {
+            case 0x1: // Text frame
+                handle_message(message);
+                break;
+
+            case 0x8: // Close frame
+            {
+                llog.logS(INFO, "Received Close frame from fd:",
+                          client_fd);
+                const char close_resp[] = {static_cast<char>(0x88), 0x00};
+                send(client_fd, close_resp, sizeof(close_resp), 0);
+                connection_open = false;
+            }
+            break;
+
+            case 0x9: // Ping frame
+            {
+                llog.logS(DEBUG, "Received Ping; sending Pong to fd:",
+                          client_fd);
+                const unsigned char pong[2] = {0x8A, 0x00};
+                send(client_fd, pong, sizeof(pong), 0);
+            }
+            break;
+
+            case 0xA: // Pong frame
+                llog.logS(DEBUG, "Received Pong from fd:", client_fd);
+                break;
+
+            default:
+                llog.logS(WARN, "Unhandled opcode", static_cast<int>(opcode),
+                          "from fd:", client_fd);
+            }
+        }
+    }
+
+    // Clean up this client
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        shutdown(client_fd, SHUT_RDWR);
+        close(client_fd);
+        client_sockets_.erase(
+            std::remove(client_sockets_.begin(),
+                        client_sockets_.end(),
+                        client_fd),
+            client_sockets_.end());
+    }
+
+    llog.logS(INFO, "Client handler thread exiting for fd:", client_fd);
+}
 
 /**
- * @brief Background loop that sends periodic WebSocket ping frames.
+ * @brief Background loop for sending periodic WebSocket ping frames.
  *
- * This function runs in a dedicated thread when keep-alive is enabled.
- * It waits for the specified interval using a condition variable, which
- * allows interruption when `stop()` is called. If a client is connected,
- * it sends a WebSocket ping frame (opcode 0x9) with no payload.
+ * Runs in a dedicated thread when keep-alive is enabled.
+ * Waits on a condition variable for the specified interval
+ * or until stop() notifies. On timeout, sends a WebSocket
+ * ping (opcode 0x9) to each connected client.
  *
- * The ping frame format consists of:
- * - 0x89: FIN bit set and opcode 0x9 (ping)
- * - 0x00: Payload length of 0 bytes
- *
- * @param interval Number of seconds between keep-alive pings.
+ * @param interval Number of seconds between ping frames.
  */
 void WebSocketServer::keep_alive_loop(uint32_t interval)
 {
     std::unique_lock<std::mutex> lock(keep_alive_mutex_);
     while (running_)
     {
-        // Wait for the interval or until notified by stop()
-        if (keep_alive_cv_.wait_for(lock, std::chrono::seconds(interval)) == std::cv_status::timeout)
+        auto status = keep_alive_cv_.wait_for(
+            lock, std::chrono::seconds(interval));
+        if (status == std::cv_status::timeout)
         {
-            std::lock_guard<std::mutex> client_lock(client_mutex_);
-            if (client_sock_ != -1)
+            std::lock_guard<std::mutex> clients_lock(
+                clients_mutex_);
+            for (int fd : client_sockets_)
             {
-                // Send a ping frame: FIN set and opcode 0x9.
-                unsigned char ping[2] = {0x89, 0x00};
-                if (send(client_sock_, ping, 2, 0) < 0)
+                unsigned char ping[2] = { 0x89, 0x00 };
+                if (::send(fd, ping, sizeof(ping), 0) < 0)
+                {
                     std::perror("send ping");
+                }
             }
         }
     }
@@ -862,7 +936,7 @@ bool WebSocketServer::perform_handshake(int client)
  * @param priority Thread priority (valid for the chosen policy).
  * @return true if all applicable threads were updated successfully.
  */
-bool WebSocketServer::set_thread_priority(int schedPolicy, int priority)
+bool WebSocketServer::setThreadPriority(int schedPolicy, int priority)
 {
     bool success = true;
     sched_param sch_params;

@@ -139,9 +139,6 @@ std::atomic<bool> exit_wspr_loop(false);
  * resets the flag. Similarly, if a pending INI change is detected, it applies the
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
- *
- * @note The DMA/Symbol reconfiguration is not implemented in this function.
- *       A TODO comment indicates where the reset should occur.
  */
 void callback_transmission_complete()
 {
@@ -393,14 +390,14 @@ bool wspr_loop()
 
     // Start web server and set priority
     webServer.start(config.web_port);
-    webServer.set_thread_priority(SCHED_RR, 10);
+    webServer.setThreadPriority(SCHED_RR, 10);
     // Start socket server and set priority
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
-    socketServer.set_thread_priority(SCHED_RR, 10);
+    socketServer.setThreadPriority(SCHED_RR, 10);
 
     // Set transmission thread and set priority
     wspr_scheduler.setEnabled(config.transmit);
-    wspr_scheduler.set_thread_priority(SCHED_FIFO, 10);
+    wspr_scheduler.setThreadPriority(SCHED_FIFO, 10);
     wspr_scheduler.start(WSPR_Scheduler::WSPR_2, callback_transmission_complete);
 
     // Wait for something to happen

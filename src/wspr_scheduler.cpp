@@ -54,7 +54,7 @@ WSPR_Scheduler::~WSPR_Scheduler()
     stop(); // Ensure threads are stopped before destruction.
 }
 
-void WSPR_Scheduler::set_thread_priority(int policy, int priority)
+void WSPR_Scheduler::setThreadPriority(int policy, int priority)
 {
     std::lock_guard<std::mutex> lock(mtx_);
     thread_policy_ = policy;
@@ -319,5 +319,5 @@ void WSPR_Scheduler::send_ws_message(std::string type, std::string state)
 
     // Serialize and send
     std::string message = j.dump();
-    socketServer.send_to_client(message);
+    socketServer.sendAllClients(message);
 }

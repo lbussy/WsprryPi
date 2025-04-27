@@ -99,7 +99,7 @@ public:
      * @param priority The priority level.
      * @return true if the priority was set successfully, false otherwise.
      */
-    bool set_thread_priority(int schedPolicy, int priority);
+    bool setThreadPriority(int schedPolicy, int priority);
 
 private:
     int port_;                         ///< Port on which the server listens.

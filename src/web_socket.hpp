@@ -35,6 +35,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 /**
  * @brief Default keep-alive interval for WebSocket ping frames (in seconds).
@@ -98,7 +99,7 @@ public:
      * @param priority Thread priority (valid for the chosen policy).
      * @return true if all applicable threads were updated successfully.
      */
-    bool set_thread_priority(int schedPolicy, int priority);
+    bool setThreadPriority(int schedPolicy, int priority);
 
     /**
      * @brief Sends a text message to the connected client.
@@ -107,19 +108,37 @@ public:
      *
      * @param message The text string to send.
      */
-    void send_to_client(const std::string &message);
+    void sendToClient(const std::string &message);
+
+    /**
+     * @brief Broadcasts a text message to all connected WebSocket clients.
+     *
+     * Locks the clients mutex, constructs a WebSocket text frame for the
+     * given message, and sends it to each socket in client_sockets_. Logs
+     * any errors encountered during send().
+     *
+     * @param message The UTF-8 encoded text payload to broadcast.
+     */
+    void sendAllClients(const std::string &message);
 
 private:
-    int listen_fd_;                         ///< Socket file descriptor for listening.
-    std::atomic<bool> running_;             ///< Indicates whether the server is running.
-    int client_sock_;                       ///< Socket for the active client connection.
-    uint32_t keep_alive_secs_;              ///< Interval for keep-alive pings.
+    int listen_fd_;             ///< Socket file descriptor for listening.
+    std::atomic<bool> running_; ///< Indicates whether the server is running.
+    uint32_t keep_alive_secs_;  ///< Interval for keep-alive pings.
+
+    // For each connection:
+    std::mutex clients_mutex_;
+    std::vector<int> client_sockets_;
+    std::vector<std::thread> client_threads_;
+
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop
     std::mutex keep_alive_mutex_;           ///< Mutex to control loop break
+    std::thread server_thread_;             ///< Thread running the main server loop.
+    std::thread keep_alive_thread_;         ///< Thread for sending periodic pings.
+    // std::mutex client_mutex_;       ///< Mutex to guard access to client socket.
 
-    std::thread server_thread_;     ///< Thread running the main server loop.
-    std::thread keep_alive_thread_; ///< Thread for sending periodic pings.
-    std::mutex client_mutex_;       ///< Mutex to guard access to client socket.
+    // Helper for per‐client work:
+    void client_loop(int client_fd);
 
     /**
      * @brief Main server loop that accepts and manages the client connection.
@@ -185,8 +204,8 @@ private:
      * @throws nlohmann::json::type_error If the object cannot be serialized.
      * @throws std::runtime_error If sending the serialized data fails.
      */
-    template<typename T>
-    void send_json(const T& obj);
+    template <typename T>
+    void send_json(const T &obj);
 
     /**
      * @brief Encodes binary data as a Base64 string.

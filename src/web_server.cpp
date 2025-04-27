@@ -244,7 +244,7 @@ void WebServer::stop()
  * @param priority The priority level.
  * @return true if the priority was set successfully, false otherwise.
  */
-bool WebServer::set_thread_priority(int schedPolicy, int priority)
+bool WebServer::setThreadPriority(int schedPolicy, int priority)
 {
     bool success = true;
     sched_param sch_params;

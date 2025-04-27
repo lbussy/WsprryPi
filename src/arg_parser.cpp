@@ -151,23 +151,31 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    load_from_ini();
-    if (!config.transmit || !wspr_scheduler.isTransmitting())
+    if (wspr_scheduler.isTransmitting())
     {
+        if (config.transmit)
+        {
+            // Transmit not changed, make pending change
+            llog.logS(INFO, "INI file changed, reload after transmission.");
+            ini_reload_pending.store(true);
+        }
+        else
+        {
+            // Kill the transmission
+            llog.logS(INFO, "Transmission disabled, stopping transmission.");
+            wspr_scheduler.stopTransmission();
+            wspr_scheduler.setEnabled(config.transmit);
+            wspr_scheduler.resetConfig();
+            ini_reload_pending.store(false);
+        }
+    }
+    else
+    {
+        // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
-        validate_config_data();
         wspr_scheduler.setEnabled(config.transmit);
         wspr_scheduler.resetConfig();
-    }
-    else if (!config.transmit && wspr_scheduler.isTransmitting())
-    {
-        llog.logS(INFO, "Transmission disabled, stopping transmission.");
-        wspr_scheduler.stopTransmission();
-    }
-    {
-        // Log detection of change
-        ini_reload_pending.store(true);
-        llog.logS(INFO, "INI file changed, reload after transmission.");
+        ini_reload_pending.store(false);
     }
 }
 
@@ -181,12 +189,13 @@ void callback_ini_changed()
 void apply_deferred_changes()
 {
     // Apply deferred reload if transmission has ended
-    if (ini_reload_pending.load() && !wspr_scheduler.isTransmitting())
+    if (!wspr_scheduler.isTransmitting())
     {
         // Clear the pending flag and reload configuration
-        ini_reload_pending.store(false);
         llog.logS(INFO, "Applying deferred INI changes.");
-        validate_config_data();
+        wspr_scheduler.setEnabled(config.transmit);
+        wspr_scheduler.resetConfig();
+        ini_reload_pending.store(false);
     }
 }
 

@@ -86,7 +86,7 @@ public:
      * @param policy The scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
      * @param priority The scheduling priority.
      */
-    void set_thread_priority(int policy, int priority);
+    void setThreadPriority(int policy, int priority);
 
     /**
      * @brief Start transmission with the specified transmission type.

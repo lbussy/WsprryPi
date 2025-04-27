@@ -2,9 +2,10 @@
 
 ## C++ Code
 
-- [ ] Make ws messages non-blocking
-- [ ] Make a multi-threaded websocket
 - [ ] Integrate WSPR-Transmitter
+- [ ] Send config change to all sockets
+- [ ] "TX will stop after: 1 iteration(s) of the frequency list." when in ini mode
+- [ ] Clear frequency vector on reload
 
 ## Web UI
 
@@ -17,6 +18,7 @@
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
+- [ ] Remove INI symlink from installer
 
 ## Documentation
 
