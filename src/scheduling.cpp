@@ -162,13 +162,12 @@ void callback_transmission_complete()
         apply_deferred_changes();
         llog.logS(INFO, "Pending INI change integrated.");
         do_reconfig_dma = true;
-        // TODO: If transmit is disabled, stop wsprTransmit
     }
 
     // If either a PPM or INI change was integrated, perform DMA/Symbol reconfiguration.
     if (do_reconfig_dma)
     {
-        // TODO: Reset DMA/Symbols
+        wspr_scheduler.resetConfig();
     }
 }
 
@@ -417,7 +416,7 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.shutdown_transmitter();
+    wsprTransmitter.shutdownTransmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver

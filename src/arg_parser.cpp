@@ -151,15 +151,18 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
+    load_from_ini();
     if (!config.transmit || !wspr_scheduler.isTransmitting())
     {
         llog.logS(INFO, "INI file changed, reloading.");
-        load_from_ini();
         validate_config_data();
         wspr_scheduler.setEnabled(config.transmit);
-        // TODO: Reset DMA/Symbols
+        wspr_scheduler.resetConfig();
     }
-    else
+    else if (!config.transmit)
+    {
+        wspr_scheduler.stopTransmission();
+    }
     {
         // Log detection of change
         ini_reload_pending.store(true);
@@ -182,7 +185,6 @@ void apply_deferred_changes()
         // Clear the pending flag and reload configuration
         ini_reload_pending.store(false);
         llog.logS(INFO, "Applying deferred INI changes.");
-        load_from_ini();
         validate_config_data();
     }
 }
@@ -849,7 +851,6 @@ bool load_from_ini()
     }
 
     // Synchronize config with global JSON object
-    // TODO:  Do we do this too much?
     config_to_json();
 
     return true;

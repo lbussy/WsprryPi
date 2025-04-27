@@ -112,6 +112,20 @@ public:
     void stop();
 
     /**
+     * @brief Resets DMA parameters
+     *
+     * This method will reset those parameters which govern the transmissions.
+     */
+    void resetConfig();
+
+    /**
+     * @brief Immediately stops transmissions.
+     *
+     * This method will cause all active transmissions to end immediately.
+     */
+    void stopTransmission();
+
+    /**
      * @brief Notify that the transmission is complete.
      *
      * Called by the transmission threads to mark the transmission as complete,

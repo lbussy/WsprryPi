@@ -34,6 +34,7 @@
 #include "wspr_scheduler.hpp"
 
 #include "web_socket.hpp"
+#include "wspr_transmit.hpp"
 #include "lcblog.hpp"
 #include "json.hpp"
 
@@ -82,6 +83,24 @@ void WSPR_Scheduler::start(TransmissionType type, std::function<void()> transmis
     apply_thread_priority(monitor_thread_);
 }
 
+/**
+ * @brief Resets DMA parameters
+ *
+ * This method will reset those parameters which govern the transmissions.
+ */
+void WSPR_Scheduler::resetConfig()
+{
+    wsprTransmitter.setupTransmission(
+        config.center_freq_set[0],
+        config.power_level,
+        config.ppm,
+        config.callsign,
+        config.grid_square,
+        config.power_dbm,
+        config.use_offset
+    );
+}
+
 void WSPR_Scheduler::stop()
 {
     {
@@ -97,6 +116,16 @@ void WSPR_Scheduler::stop()
     {
         transmission_thread_.join();
     }
+}
+
+/**
+ * @brief Immediately stops transmissions.
+ *
+ * This method will cause all active transmissions to end immediately.
+ */
+void WSPR_Scheduler::stopTransmission()
+{
+    wsprTransmitter.stopTransmission();
 }
 
 void WSPR_Scheduler::notify_complete()
