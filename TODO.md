@@ -1,7 +1,6 @@
 # TODO
 
 - [ ] Make ws messages non-blocking
-- [ ] "TX will stop after: 0 iteration(s) of the frequency list." ... shows up on INI and transmit disabled
 - [ ] Make a multi-threaded websocket
 - [ ] A duplicate frequency has shown up - maybe after saving?
 - [ ] Integrate WSPR-Transmitter

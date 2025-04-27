@@ -673,6 +673,10 @@ bool validate_config_data()
             }
             else
             {
+                if (config.tx_iterations <= 0)
+                {
+                    config.tx_iterations = 1;
+                }
                 llog.logS(INFO, "TX will stop after:", config.tx_iterations, "iteration(s) of the frequency list.");
             }
         }
