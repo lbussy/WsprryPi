@@ -1,6 +1,6 @@
 /**
- * @file main.hpp
- * @brief Entry point for the Wsprry Pi application.
+ * @file logging.hpp
+ * @brief Handles management of the LCBLog logging utility.
  *
  * This file is part of WsprryPi, a project originally branched from
  * @threeme3's WsprryPi project (no longer on GitHub). However, now the
@@ -31,7 +31,47 @@
  * SOFTWARE.
  */
 
-#ifndef _MAIN_HPP
-#define _MAIN_HPP
+#ifndef _LOGGING_HPP
+#define _LOGGING_HPP
 
-#endif //_MAIN_HPP
+#include "lcblog.hpp"
+
+/**
+ * @brief Global instance of the LCBLog logging utility.
+ *
+ * The `llog` object provides thread-safe logging functionality with support for
+ * multiple log levels, including DEBUG, INFO, WARN, ERROR, and FATAL.
+ * It is used throughout the application to log messages for debugging,
+ * monitoring, and error reporting.
+ *
+ * This instance is initialized globally to allow consistent logging across all
+ * modules. Log messages can include timestamps and are output to standard streams
+ * or log files depending on the configuration.
+ *
+ * Example usage:
+ * @code
+ * llog.logS(INFO, "Application started.");
+ * llog.logE(ERROR, "Failed to open configuration file.");
+ * @endcode
+ *
+ * @see https://github.com/lbussy/LCBLog for detailed documentation and examples.
+ */
+extern LCBLog llog;
+
+/**
+ * @brief Initializes the logger with the appropriate log level.
+ *
+ * This function sets the log level based on the current debug state. If the
+ * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
+ * Otherwise, it defaults to INFO.
+ *
+ * @note Ensure that the `get_debug_state()` function correctly reflects the
+ *       build configuration for accurate log level assignment.
+ *
+ * @example
+ * initialize_logger();
+ * // Sets llog to DEBUG or INFO depending on the build mode.
+ */
+extern void initialize_logger();
+
+#endif // _LOGGING_HPP

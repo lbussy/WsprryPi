@@ -2,11 +2,13 @@
  * @file version.cpp
  * @brief Provides software and hardware version information.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
+ * This file is part of WsprryPi, a project originally branched from
+ * @threeme3's WsprryPi project (no longer on GitHub). However, now the
+ * original code remains only as a memory and inspiration, and this project
+ * is no longer a derivative work.
  *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
@@ -31,6 +33,8 @@
 
 // Primary header for this source file
 #include "version.hpp"
+
+#include "logging.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -90,7 +94,7 @@ constexpr std::string_view SANITIZED_PRJ = to_string_view(MAKE_PRJ); ///< Saniti
  *
  * @return A `std::string` representing the executable version.
  */
-std::string exe_version()
+std::string get_exe_version()
 {
     return std::string(SANITIZED_TAG);
 }
@@ -103,7 +107,7 @@ std::string exe_version()
  *
  * @return A `std::string` representing the branch name.
  */
-std::string branch()
+std::string get_exe_branch()
 {
     return std::string(SANITIZED_BRH);
 }
@@ -116,7 +120,7 @@ std::string branch()
  *
  * @return A `std::string` representing the executable name.
  */
-std::string exe_name()
+std::string get_exe_name()
 {
     return std::string(SANITIZED_EXE);
 }
@@ -129,7 +133,7 @@ std::string exe_name()
  *
  * @return A `std::string` representing the project name.
  */
-std::string project_name()
+std::string get_project_name()
 {
     return std::string(SANITIZED_PRJ);
 }
@@ -154,7 +158,7 @@ std::string project_name()
  */
 std::string get_debug_state()
 {
-#ifdef DEBUG_BUILD
+#ifdef DEBUG_WSPR
     return "DEBUG"; // Debug mode enabled.
 #else
     return "INFO"; // Default to INFO for non-debug builds.
@@ -209,33 +213,65 @@ const ProcessorMapping processorMappings[] = {
     {"BCM2711", 3}  ///< Raspberry Pi 4 and Pi 400 series
 };
 
-std::string sanitizeString(const std::string &str)
+/**
+ * @brief Retrieves the processor type as a string.
+ *
+ * This function reads the `/sys/firmware/devicetree/base/compatible` file to
+ * determine the processor type of the Raspberry Pi. It extracts the CPU model
+ * (such as "BCM2835", "BCM2711") from the device tree and returns it as an
+ * uppercase string.
+ *
+ * @return std::string The detected processor type, such as "BCM2835",
+ *         "BCM2711", etc. If the processor type cannot be determined,
+ *         it returns "Unknown CPU".
+ *
+ * @details The function reads the first line of the compatible file, searches
+ *          for the "bcm" keyword, replaces commas with spaces for readability,
+ *          and converts the result to uppercase for consistency.
+ *
+ * @throws None This function does not throw exceptions but returns an error
+ *         message if the file cannot be read.
+ */
+std::string get_processor_string()
 {
-    std::string result;
-    size_t first = std::string::npos, last = std::string::npos;
+    static std::string cpuModel; ///< Static variable to cache the result
 
-    for (size_t i = 0; i < str.size(); ++i)
+    // Open the device tree compatible file
+    std::ifstream dtCompatible("/sys/firmware/devicetree/base/compatible");
+    if (!dtCompatible.is_open())
     {
-        if (str[i] != '\0') // Remove null characters
+        llog.logE(ERROR, "Failed to open /sys/firmware/devicetree/base/compatible.");
+        return "Unknown CPU"; ///< Return a default value if the file cannot be opened
+    }
+
+    // Read the first line from the file
+    std::getline(dtCompatible, cpuModel);
+    dtCompatible.close();
+
+    // Find the start of the "bcm" string in the line
+    size_t start = cpuModel.find("bcm");
+    if (start != std::string::npos)
+    {
+        // Extract the relevant portion of the string
+        cpuModel = cpuModel.substr(start);
+
+        // Replace commas with spaces for better readability
+        for (char &c : cpuModel)
         {
-            if (first == std::string::npos && str[i] != ' ' && str[i] != '\t' && str[i] != '\r' && str[i] != '\n')
-                first = i; // First non-whitespace character
-
-            if (str[i] != ' ' && str[i] != '\t' && str[i] != '\r' && str[i] != '\n')
-                last = i; // Last non-whitespace character
+            if (c == ',')
+            {
+                c = ' ';
+            }
         }
+
+        // Convert the result to uppercase for consistency
+        std::transform(cpuModel.begin(), cpuModel.end(), cpuModel.begin(), ::toupper);
+
+        return cpuModel; ///< Return the formatted CPU model
     }
 
-    if (first == std::string::npos || last == std::string::npos)
-        return ""; // String is all spaces or nulls
-
-    for (size_t i = first; i <= last; ++i)
-    {
-        if (str[i] != '\0') // Avoid null characters
-            result += str[i];
-    }
-
-    return result;
+    // If "bcm" was not found, return an unknown CPU message
+    return "Unknown CPU Model";
 }
 
 /**
@@ -259,15 +295,15 @@ std::string sanitizeString(const std::string &str)
  * @throws None This function does not throw exceptions but returns -1 if an
  *         error occurs.
  */
-int getProcessorTypeAsInt()
+int get_processor_type_int()
 {
     // Retrieve the processor type as a string
-    std::string processorType = getProcessorType();
+    std::string processorType = get_processor_string();
 
     // Check if the processor type is empty (indicating an error)
     if (processorType.empty())
     {
-        std::cerr << "Failed to get processor type." << std::endl;
+        llog.logE(ERROR, "Failed to get processor type.");
         return -1; ///< Return -1 to indicate an error
     }
 
@@ -281,61 +317,8 @@ int getProcessorTypeAsInt()
     }
 
     // If the type is not found, log a warning and return -1
-    std::cerr << "Unknown processor type: " << processorType << std::endl;
+    llog.logE(ERROR, "Unknown processor type:", processorType);
     return -1;
-}
-
-/**
- * @brief Retrieves the processor type as a string.
- *
- * This function reads the `/sys/firmware/devicetree/base/compatible` file to
- * determine the processor type of the Raspberry Pi. It extracts the CPU model
- * (such as "BCM2835", "BCM2711") from the device tree and returns it as an
- * uppercase string.
- *
- * @return std::string The detected processor type, such as "BCM2835",
- *         "BCM2711", etc. If the processor type cannot be determined,
- *         it returns "Unknown CPU".
- *
- * @details The function reads the first line of the compatible file, searches
- *          for the "bcm" keyword, replaces commas with spaces for readability,
- *          and converts the result to uppercase for consistency.
- *
- * @throws None This function does not throw exceptions but returns an error
- *         message if the file cannot be read.
- */
-std::string getProcessorType()
-{
-    static std::string cpuModel;
-
-    std::ifstream dtCompatible("/sys/firmware/devicetree/base/compatible");
-    if (!dtCompatible.is_open())
-    {
-        std::cerr << "Failed to open /sys/firmware/devicetree/base/compatible file." << std::endl;
-        return "UNKNOWN CPU";
-    }
-
-    std::getline(dtCompatible, cpuModel);
-    dtCompatible.close();
-
-    // Remove spaces, newlines and null characters
-    cpuModel = sanitizeString(cpuModel);
-
-    // Find "bcm" substring
-    size_t start = cpuModel.find("bcm");
-    if (start != std::string::npos)
-    {
-        cpuModel = cpuModel.substr(start);
-        std::replace(cpuModel.begin(), cpuModel.end(), ',', ' ');
-
-        std::transform(cpuModel.begin(), cpuModel.end(), cpuModel.begin(), ::toupper);
-    }
-    else
-    {
-        return "Unknown CPU";
-    }
-
-    return cpuModel;
 }
 
 /**
@@ -354,11 +337,11 @@ std::string getProcessorType()
  *
  * @example
  * ```cpp
- * std::string piModel = getRaspberryPiModel();
+ * std::string piModel = get_pi_model();
  * std::cout << "Raspberry Pi Model: " << piModel << std::endl;
  * ```
  */
-std::string getRaspberryPiModel()
+std::string get_pi_model()
 {
     static std::string model; // Static variable to cache the model string.
     std::ifstream modelFile("/proc/device-tree/model");
@@ -366,7 +349,7 @@ std::string getRaspberryPiModel()
     // Check if the file opened successfully.
     if (!modelFile.is_open())
     {
-        std::cerr << "Failed to open /proc/device-tree/model file." << std::endl;
+        llog.logE(ERROR, "Failed to open /proc/device-tree/model.");
         return ""; // Return an empty string instead of nullptr.
     }
 
@@ -379,7 +362,7 @@ std::string getRaspberryPiModel()
 }
 
 /**
- * @brief Constructs a formatted version string for the project.
+ * @brief Constructs a formatted decorated version string for the project.
  *
  * This function combines the project name, executable version, and branch name
  * into a human-readable version string. It is useful for logging and version
@@ -388,87 +371,33 @@ std::string getRaspberryPiModel()
  * @return std::string A formatted string containing project version information.
  * @example Example output: "MyProject version 1.2.3 (main)."
  */
-std::string version_string()
+std::string get_version_string()
 {
     // Retrieve project details.
-    std::string proj = project_name(); ///< Project name.
-    std::string ver = exe_version();   ///< Executable version.
-    std::string br = branch();         ///< Git branch name.
+    std::string proj = get_project_name(); ///< Project name.
+    std::string ver = get_exe_version();   ///< Executable version.
+    std::string br = get_exe_branch();         ///< Git branch name.
 
     // Construct and return the formatted version string.
     return proj + " version " + ver + " (" + br + ").";
 }
 
 /**
- * @brief Retrieves a 32-bit address from the device tree.
+ * @brief Constructs a formatted plain version string for the project.
  *
- * This function reads a 4-byte address from a specified offset within a file,
- * commonly used to query memory-mapped addresses from the device tree.
+ * This function combines the project name, executable version, and branch name
+ * into a version string without any other decorations.
  *
- * @param filename The path to the device tree file to read from.
- * @param offset The offset (in bytes) within the file to read the address.
- * @return unsigned The 32-bit address read from the file, or `~0` (all bits set)
- *         if the read operation fails.
- *
- * @details
- * The function opens the specified file in binary mode, seeks to the given offset,
- * and reads 4 bytes representing an address in big-endian format. If the read
- * operation succeeds, the address is returned as an unsigned integer. If any
- * operation fails, the function returns `~0` (equivalent to `0xFFFFFFFF`).
+ * @return std::string A formatted string containing project version information.
+ * @example Example output: "1.2.3 (main)"
  */
-unsigned get_dt_ranges(const char *filename, unsigned offset)
+std::string get_raw_version_string()
 {
-    unsigned address = ~0; ///< Default to an invalid address (all bits set).
+    // Retrieve project details.
+    std::string proj = get_project_name(); ///< Project name.
+    std::string ver = get_exe_version();   ///< Executable version.
+    std::string br = get_exe_branch();         ///< Git branch name.
 
-    // Open the specified file in binary read mode.
-    FILE *fp = fopen(filename, "rb");
-    if (fp)
-    {
-        unsigned char buf[4]; ///< Buffer to hold the 4-byte address.
-
-        // Seek to the specified offset within the file.
-        if (fseek(fp, offset, SEEK_SET) == 0)
-        {
-            // Read 4 bytes and construct the address if successful.
-            if (fread(buf, 1, sizeof(buf), fp) == sizeof(buf))
-            {
-                address = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
-            }
-        }
-
-        // Close the file after reading.
-        fclose(fp);
-    }
-
-    return address;
-}
-
-/**
- * @brief Retrieves the BCM host peripheral base address from the device tree.
- *
- * This function queries the device tree to determine the base address of the
- * Broadcom (BCM) host peripherals, which is essential for low-level hardware
- * access on Raspberry Pi systems.
- *
- * @return unsigned The base address of the BCM host peripherals.
- *         Returns `0x20000000` if the address cannot be determined.
- *
- * @details
- * The function first attempts to read the address from the `/proc/device-tree/soc/ranges`
- * file at offset 4. If that fails (returns 0), it tries again at offset 8. If both attempts
- * fail, it falls back to the default base address `0x20000000` (common for older Raspberry Pi models).
- */
-unsigned get_peripheral_address(void)
-{
-    // Attempt to get the peripheral address from the device tree at offset 4.
-    unsigned address = get_dt_ranges("/proc/device-tree/soc/ranges", 4);
-
-    // If the address is zero, try again at offset 8.
-    if (address == 0)
-    {
-        address = get_dt_ranges("/proc/device-tree/soc/ranges", 8);
-    }
-
-    // If still invalid, return the default base address (0x20000000).
-    return (address == static_cast<unsigned>(~0)) ? 0x20000000 : address;
+    // Construct and return the formatted version string.
+    return ver + " (" + br + ")";
 }

@@ -1,6 +1,6 @@
 /**
- * @file main.hpp
- * @brief Entry point for the Wsprry Pi application.
+ * @file logging.cpp
+ * @brief Handles management of the LCBLog logging utility.
  *
  * This file is part of WsprryPi, a project originally branched from
  * @threeme3's WsprryPi project (no longer on GitHub). However, now the
@@ -31,7 +31,37 @@
  * SOFTWARE.
  */
 
-#ifndef _MAIN_HPP
-#define _MAIN_HPP
+#include "logging.hpp"
 
-#endif //_MAIN_HPP
+#include "lcblog.hpp"
+#include "version.hpp"
+
+/**
+ * @brief Initializes the logger with the appropriate log level.
+ *
+ * This function sets the log level based on the current debug state. If the
+ * build is compiled with the DEBUG_BUILD macro, the log level is set to DEBUG.
+ * Otherwise, it defaults to INFO.
+ *
+ * @note Ensure that the `get_debug_state()` function correctly reflects the
+ *       build configuration for accurate log level assignment.
+ *
+ * @example
+ * initialize_logger();
+ * // Sets llog to DEBUG or INFO depending on the build mode.
+ */
+void initialize_logger()
+{
+    // Determine the log level based on the build mode.
+    const std::string debug_state = get_debug_state();
+
+    // Set the appropriate log level.
+    if (debug_state == "DEBUG")
+    {
+        llog.setLogLevel(DEBUG);  // Enable detailed debug logging.
+    }
+    else
+    {
+        llog.setLogLevel(INFO);   // Default to informational logging.
+    }
+}

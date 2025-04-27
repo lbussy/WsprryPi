@@ -1,18 +1,3 @@
-[submodule "src/LCBLog"]
-	path = src/LCBLog
-	url = https://github.com/lbussy/LCBLog.git
-[submodule "src/INI-Handler"]
-	path = src/INI-Handler
-	url = https://github.com/lbussy/INI-Handler.git
-[submodule "src/WSPR-Message"]
-	path = src/WSPR-Message
-	url = https://github.com/lbussy/WSPR-Message
-[submodule "src/MonitorFile"]
-	path = src/MonitorFile
-	url = https://github.com/lbussy/MonitorFile.git
-[submodule "src/Singleton"]
-	path = src/Singleton
-	url = https://github.com/lbussy/Singleton.git
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
 	url = https://github.com/lbussy/WsprryPi-UI.git
@@ -44,3 +29,30 @@
 [submodule "tests_and_snippets/c_and_cpp/new_wsprrypi/WSPR-Transmitter"]
 	path = tests_and_snippets/c_and_cpp/new_wsprrypi/WSPR-Transmitter
 	url = https://github.com/lbussy/WSPR-Transmitter
+[submodule "src/Broadcom-Mailbox"]
+	path = src/Broadcom-Mailbox
+	url = https://github.com/lbussy/Broadcom-Mailbox.git
+[submodule "src/INI-Handler"]
+	path = src/INI-Handler
+	url = https://github.com/lbussy/INI-Handler.git
+[submodule "src/LCBLog"]
+	path = src/LCBLog
+	url = https://github.com/lbussy/LCBLog.git
+[submodule "src/MonitorFile"]
+	path = src/MonitorFile
+	url = https://github.com/lbussy/MonitorFile.git
+[submodule "src/PPM-Manager"]
+	path = src/PPM-Manager
+	url = https://github.com/lbussy/PPM-Manager.git
+[submodule "src/Signal-Handler"]
+	path = src/Signal-Handler
+	url = https://github.com/lbussy/Signal-Handler.git
+[submodule "src/Singleton"]
+	path = src/Singleton
+	url = https://github.com/lbussy/Singleton.git
+[submodule "src/WSPR-Message"]
+	path = src/WSPR-Message
+	url = https://github.com/lbussy/WSPR-Message.git
+[submodule "src/WSPR-Transmitter"]
+	path = src/WSPR-Transmitter
+	url = https://github.com/lbussy/WSPR-Transmitter.git
