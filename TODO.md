@@ -3,8 +3,7 @@
 ## C++ Code
 
 - [ ] Integrate WSPR-Transmitter
-- [ ] "TX will stop after: 1 iteration(s) of the frequency list." when in ini mode
-- [ ] Clear frequency vector on reload
+- [ ] Clear frequency vector on reload (config.center_freq_set?)
 
 ## Web UI
 

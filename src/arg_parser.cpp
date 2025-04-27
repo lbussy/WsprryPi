@@ -679,7 +679,7 @@ bool validate_config_data()
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode
-        if (!config.transmit)
+        if (!config.transmit && !config.use_ini)
         {
             if (config.loop_tx)
             {
