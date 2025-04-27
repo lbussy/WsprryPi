@@ -8,11 +8,11 @@
 
 - [ ] Show logs on web page (#27)
 - [ ] Implement freq_test
-- [ ] Reload config when we receive `{"state":"reload","timestamp":"2025-04-27T22:26:48Z","type":"configuration"}`
 
 ## Orchestration
 
 - [ ] Inline the apache_tool into install.
+- [ ] Inline the ld version cleanup into install.
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
