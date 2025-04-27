@@ -14,4 +14,3 @@
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Make sure to skip transmission when not enabled
 - [ ] Stop transmission immediately when disabling
-- [ ] 

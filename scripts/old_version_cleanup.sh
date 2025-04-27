@@ -216,7 +216,7 @@ remove_services() {
 # -----------------------------------------------------------------------------
 # @brief Main execution function for the script.
 # @details This function orchestrates the uninstall process for legacy
-#          Wsprry Pi serbices, files, and folders.
+#          Wsprry Pi services, files, and folders.
 #
 # @param $@ Command-line arguments passed to the script.
 #

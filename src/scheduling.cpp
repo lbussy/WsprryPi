@@ -293,7 +293,7 @@ void shutdown_system()
         {
             ledControl.toggle_gpio(true); // LED ON
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    
+
             ledControl.toggle_gpio(false); // LED OFF
             if (i < 2)
             {
@@ -334,7 +334,7 @@ void reboot_system()
         {
             ledControl.toggle_gpio(true); // LED ON
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
+
             ledControl.toggle_gpio(false); // LED OFF
             if (i < 2)
             {

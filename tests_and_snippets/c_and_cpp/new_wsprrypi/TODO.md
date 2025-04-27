@@ -15,4 +15,4 @@
 - [ ] Change logging dir to wsprrypi from WsprryPi
 - [ ] Make sure to skip transmission when not enabled
 - [ ] Stop transmission immediately when disabling
-- [ ] 
+- [ ]
