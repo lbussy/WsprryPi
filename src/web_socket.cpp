@@ -188,13 +188,13 @@ void WebSocketServer::stop()
     if (!running_)
         return;
 
-    // 1. Disable the server loop
+    // Disable the server loop
     running_ = false;
 
-    // 2. Wake keep-alive thread if sleeping
+    // Wake keep-alive thread if sleeping
     keep_alive_cv_.notify_all();
 
-    // 3. Close listening socket to break out of accept()
+    // Close listening socket to break out of accept()
     if (listen_fd_ != -1)
     {
         shutdown(listen_fd_, SHUT_RDWR);
@@ -202,7 +202,7 @@ void WebSocketServer::stop()
         listen_fd_ = -1;
     }
 
-    // 4. Shut down and close every client socket
+    // Shut down and close every client socket
     {
         std::lock_guard<std::mutex> lock(clients_mutex_);
         for (int fd : client_sockets_)
@@ -212,7 +212,7 @@ void WebSocketServer::stop()
         }
     }
 
-    // 5. Join all client handler threads
+    // Join all client handler threads
     for (auto &t : client_threads_)
     {
         if (t.joinable())
@@ -221,11 +221,11 @@ void WebSocketServer::stop()
     client_threads_.clear();
     client_sockets_.clear();
 
-    // 6. Join the main server thread
+    // Join the main server thread
     if (server_thread_.joinable())
         server_thread_.join();
 
-    // 7. Join the keep-alive ping thread
+    // Join the keep-alive ping thread
     if (keep_alive_thread_.joinable())
         keep_alive_thread_.join();
 
@@ -714,7 +714,7 @@ void WebSocketServer::serverLoop()
             auto *s6 = reinterpret_cast<sockaddr_in6 *>(&peer_addr);
             inet_ntop(AF_INET6, &s6->sin6_addr, ipstr, sizeof(ipstr));
         }
-        llog.logS(INFO, "Client connected from:", ipstr);
+        llog.logS(DEBUG, "Client connected from:", ipstr);
 
         // Store and spawn handler thread
         {
@@ -774,7 +774,7 @@ void WebSocketServer::clientLoop(int client_fd)
 
             case 0x8: // Close frame
             {
-                llog.logS(INFO, "Received Close frame from fd:",
+                llog.logS(DEBUG, "Received Close frame from fd:",
                           client_fd);
                 const char close_resp[] = {static_cast<char>(0x88), 0x00};
                 send(client_fd, close_resp, sizeof(close_resp), 0);
@@ -814,7 +814,7 @@ void WebSocketServer::clientLoop(int client_fd)
             client_sockets_.end());
     }
 
-    llog.logS(INFO, "Client handler thread exiting for fd:", client_fd);
+    llog.logS(DEBUG, "Client handler thread exiting for fd:", client_fd);
 }
 
 /**

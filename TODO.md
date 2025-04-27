@@ -6,8 +6,11 @@
 
 ## Web UI
 
-- [ ] Show logs on web page (#27)
+- [ ] Incorporate view_logs.php on web page (#27)
 - [ ] Implement freq_test
+- [ ] Change these permissions:
+  - [ ] sudo usermod -aG root www-data // Make a different access method
+  - [ ] sudo chmod g+r /var/log/wsprrypi/wsprrypi_log /var/log/wsprrypi/wsprrypi_error
 
 ## Orchestration
 
