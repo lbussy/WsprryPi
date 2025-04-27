@@ -5440,8 +5440,8 @@ manage_service() {
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
     service_path="/lib/systemd/system/${daemon_systemd_name}"
-    syslog_identifier="$daemon_name" # Use stripped daemon_exe
-    log_path="/var/log/$REPO_NAME"   # Use repo name
+    syslog_identifier="$daemon_name"       # Use stripped daemon_exe
+    log_path="/var/log/$syslog_identifier" # Use exe name
     log_std_out="$log_path/${syslog_identifier}_log"
     log_std_err="$log_path/${syslog_identifier}_error"
 
@@ -6031,18 +6031,18 @@ _main() {
     enforce_sudo "$debug"             # Ensure proper privileges for script execution
     setup_log "$debug"                # Setup logging environment
 
-    logI "Checking environment."      # Below takes a sec, show signs of life
+    logI "Checking environment." # Below takes a sec, show signs of life
 
-    validate_depends "$debug"         # Ensure required dependencies are installed
-    validate_sys_accs "$debug"        # Verify critical system files are accessible
-    validate_env_vars "$debug"        # Check for required environment variables
-    get_proj_params "$debug"          # Get project and git parameters
-    check_bash "$debug"               # Ensure the script is executed in a Bash shell
-    check_sh_ver "$debug"             # Verify the Bash version meets minimum requirements
-    check_bitness "$debug"            # Validate system bitness compatibility
-    check_release "$debug"            # Check Raspbian OS version compatibility
-    check_arch "$debug"               # Validate Raspberry Pi model compatibility
-    check_internet "$debug"           # Verify internet connectivity if required
+    validate_depends "$debug"  # Ensure required dependencies are installed
+    validate_sys_accs "$debug" # Verify critical system files are accessible
+    validate_env_vars "$debug" # Check for required environment variables
+    get_proj_params "$debug"   # Get project and git parameters
+    check_bash "$debug"        # Ensure the script is executed in a Bash shell
+    check_sh_ver "$debug"      # Verify the Bash version meets minimum requirements
+    check_bitness "$debug"     # Validate system bitness compatibility
+    check_release "$debug"     # Check Raspbian OS version compatibility
+    check_arch "$debug"        # Validate Raspberry Pi model compatibility
+    check_internet "$debug"    # Verify internet connectivity if required
 
     # Print/display the environment
     print_system "$debug"  # Log system information
