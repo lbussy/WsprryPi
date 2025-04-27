@@ -159,8 +159,9 @@ void callback_ini_changed()
         wspr_scheduler.setEnabled(config.transmit);
         wspr_scheduler.resetConfig();
     }
-    else if (!config.transmit)
+    else if (!config.transmit && wspr_scheduler.isTransmitting())
     {
+        llog.logS(INFO, "Transmission disabled, stopping transmission.");
         wspr_scheduler.stopTransmission();
     }
     {
@@ -369,11 +370,13 @@ void print_usage(const std::string &message, int exit_code)
 {
     if (!message.empty())
     {
-        std::cout << "\n" << message << std::endl;
+        std::cout << "\n"
+                  << message << std::endl;
     }
     else
     {
-        std::cerr << "\n" << get_version_string() << std::endl;
+        std::cerr << "\n"
+                  << get_version_string() << std::endl;
     }
 
     std::cerr << "\nUsage:\n"
