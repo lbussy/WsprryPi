@@ -700,7 +700,7 @@ void WebSocketServer::server_loop()
                         break;
 
                     case 0x8:  // Close
-                        llog.logS(INFO, "Received Close frame");
+                        llog.logS(INFO, "Received Close frame.");
                         {
                             const char close_resp[] = {
                                 static_cast<char>(0x88), 0x00
@@ -711,7 +711,7 @@ void WebSocketServer::server_loop()
                         break;
 
                     case 0x9:  // Ping
-                        llog.logS(DEBUG, "Received Ping; sending Pong");
+                        llog.logS(DEBUG, "Received Ping; sending Pong.");
                         {
                             const unsigned char pong[2] = { 0x8A, 0x00 };
                             send(client, pong, 2, 0);
@@ -719,7 +719,7 @@ void WebSocketServer::server_loop()
                         break;
 
                     case 0xA:  // Pong
-                        llog.logS(DEBUG, "Received Pong");
+                        llog.logS(DEBUG, "Received Pong.");
                         break;
 
                     default:
@@ -731,7 +731,7 @@ void WebSocketServer::server_loop()
         }
 
         // Clean up this client and loop back to accept()
-        llog.logS(DEBUG, "Client disconnected");
+        llog.logS(DEBUG, "Client disconnected.");
         {
             std::lock_guard<std::mutex> lock(client_mutex_);
             shutdown(client_sock_, SHUT_RDWR);

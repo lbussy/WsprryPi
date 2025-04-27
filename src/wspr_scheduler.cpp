@@ -133,7 +133,7 @@ void WSPR_Scheduler::notify_complete()
     std::function<void()> callback;
     {
         std::lock_guard<std::mutex> lock(mtx_);
-        transmission_running_ = false;
+        transmission_running_.store(false);
         cv_.notify_all();
         // Copy the callback to invoke it outside the lock.
         callback = transmissionCompleteCallback_;
@@ -170,7 +170,6 @@ void WSPR_Scheduler::monitor()
                 // Skip starting a new transmission if one is still running.
                 continue;
             }
-            transmission_running_ = true;
         }
 
         // Start the appropriate transmission thread if enabled.
@@ -244,6 +243,7 @@ void WSPR_Scheduler::transmit_wspr2()
 {
     send_ws_message("transmit", "starting");
     llog.logS(INFO, "Starting a simulated WSPR_2 transmission.");
+    transmission_running_.store(true);
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(110);
     {
@@ -251,6 +251,7 @@ void WSPR_Scheduler::transmit_wspr2()
         std::unique_lock<std::mutex> lock(mtx_);
         cv_.wait_until(lock, start_time + duration, [this]() { return stop_flag_.load(); });
     }
+    transmission_running_.store(false);
     llog.logS(INFO, "WSPR_2 transmission ending.");
     notify_complete();
     send_ws_message("transmit", "finished");
@@ -260,6 +261,7 @@ void WSPR_Scheduler::transmit_wspr15()
 {
     send_ws_message("transmit", "starting");
     llog.logS(INFO, "Starting a simulated WSPR_15 transmission.");
+    transmission_running_.store(true);
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(825);
     {
@@ -267,6 +269,7 @@ void WSPR_Scheduler::transmit_wspr15()
         std::unique_lock<std::mutex> lock(mtx_);
         cv_.wait_until(lock, start_time + duration, [this]() { return stop_flag_.load(); });
     }
+    transmission_running_.store(false);
     llog.logS(INFO, "WSPR_15 transmission ending.");
     notify_complete();
     send_ws_message("transmit", "finished");
