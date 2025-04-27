@@ -324,6 +324,7 @@ void ini_to_json(std::string filename)
     }
 
     patch["Meta"]["INI Filename"] = filename;
+    patch["Meta"]["Use INI"] = config.use_ini;
     jConfig.merge_patch(patch);
 }
 
@@ -450,11 +451,8 @@ void dump_json(const nlohmann::json &j, std::string tag = "")
  */
 void patch_all_from_web(const nlohmann::json &j)
 {
-    dump_json(j, "Incoming");      ///< Debug: Show incoming JSON
     jConfig.merge_patch(j);        ///< Patch new values into the global JSON config
-    dump_json(jConfig, "Patched"); ///< Debug: Show patched result
     json_to_ini();                 ///< Write patched config to INI
     json_to_config();              ///< Write patched config into global struct
     config_to_json();              ///< Rebuild jConfig from sanitized struct
-    dump_json(jConfig, "Final");   ///< Debug: Show cleaned final JSON
 }

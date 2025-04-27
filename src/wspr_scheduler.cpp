@@ -269,7 +269,7 @@ bool WSPR_Scheduler::isTransmitting() const
  *
  * @return True if a transmission is active, false otherwise.
  */
-void WSPR_Scheduler::set_enabled(bool enabled)
+void WSPR_Scheduler::setEnabled(bool enabled)
 {
     enabled_.store(enabled);
 }

@@ -208,17 +208,4 @@ extern bool load_from_ini();
  */
 bool parse_command_line(int argc, char *argv[]);
 
-/**
- * @brief Wrapper for full configuration loading from all sources.
- *
- * @details
- * Loads the INI file (if enabled), then processes command-line arguments,
- * ensuring all values are validated and resolved into a final config.
- *
- * @param argc Argument count.
- * @param argv Argument values.
- * @return true if loading and validation succeed.
- */
-bool load_config(int argc, char *argv[]);
-
 #endif // ARG_PARSER_HPP

@@ -400,7 +400,7 @@ bool wspr_loop()
     socketServer.set_thread_priority(SCHED_RR, 10);
 
     // Set transmission thread and set priority
-    wspr_scheduler.set_enabled(config.transmit);
+    wspr_scheduler.setEnabled(config.transmit);
     wspr_scheduler.set_thread_priority(SCHED_FIFO, 10);
     wspr_scheduler.start(WSPR_Scheduler::WSPR_2, callback_transmission_complete);
 

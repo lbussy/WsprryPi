@@ -151,19 +151,19 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    if (wspr_scheduler.isTransmitting())
-    {
-        // Log detection of change
-        ini_reload_pending.store(true);
-        llog.logS(INFO, "INI file changed, reload after transmission.");
-    }
-    else
+    if (!config.transmit || !wspr_scheduler.isTransmitting())
     {
         llog.logS(INFO, "INI file changed, reloading.");
         load_from_ini();
         validate_config_data();
-        wspr_scheduler.set_enabled(config.transmit);
+        wspr_scheduler.setEnabled(config.transmit);
         // TODO: Reset DMA/Symbols
+    }
+    else
+    {
+        // Log detection of change
+        ini_reload_pending.store(true);
+        llog.logS(INFO, "INI file changed, reload after transmission.");
     }
 }
 
@@ -367,7 +367,11 @@ void print_usage(const std::string &message, int exit_code)
 {
     if (!message.empty())
     {
-        std::cout << message << std::endl;
+        std::cout << "\n" << message << std::endl;
+    }
+    else
+    {
+        std::cerr << "\n" << get_version_string() << std::endl;
     }
 
     std::cerr << "\nUsage:\n"
@@ -411,16 +415,7 @@ void print_usage(const std::string &message, int exit_code)
  */
 void show_config_values(bool reload)
 {
-    // Attempt to load INI file if used and reload is called
-    if (reload && config.use_ini)
-    {
-        if (ini.load()) // Load INI and only proceed if successful
-        {
-            load_from_ini();
-        }
-    }
-
-    // Print overlayed configuration details
+    // Print current configuration details
     //
     // [Control]
     llog.logS(DEBUG, "Transmit Enabled:", config.transmit ? "true" : "false");
@@ -486,11 +481,20 @@ bool validate_config_data()
         }
     }
 
-    // Extract PPM value from config class, default to 0.0
-    if (config.ppm == 0.0)
+    // Determine NTP functionality
+    if (config.use_ntp)
     {
-        llog.logS(DEBUG, "Invalid PPM value, defaulting to use NTP.");
-        config.use_ntp = true;
+        llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
+    }
+    else if (config.ppm != 0.0)
+    {
+        llog.logS(INFO, "PPM value to be used for tone generation:",
+                  std::fixed, std::setprecision(2), config.ppm);
+    }
+    else
+    {
+        config.ppm = 0.0;
+        llog.logE(WARN, "NTP disabled and PPM not set.");
     }
 
     // Enable LED only if set and the pin is valid
@@ -512,10 +516,9 @@ bool validate_config_data()
     }
     else
     {
-        llog.logS(DEBUG, "Invalid or disabled shutdown settings, disabling functionality.");
+        llog.logS(DEBUG, "Disabling shutdown pin functionality.");
         shutdownMonitor.stop();
     }
-    llog.logS(DEBUG, "About to do config mode.");
 
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)
@@ -529,16 +532,6 @@ bool validate_config_data()
         // Log test tone frequency
         llog.logS(INFO, "A test tone will be generated at",
                   lookup.freq_display_string(config.test_tone), ".");
-
-        if (config.use_ntp)
-        {
-            llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
-        }
-        else if (config.ppm != 0.0)
-        {
-            llog.logS(INFO, "PPM value to be used for tone generation:",
-                      std::fixed, std::setprecision(2), config.ppm);
-        }
     }
     else if (config.mode == ModeType::WSPR)
     {
@@ -618,7 +611,6 @@ bool validate_config_data()
             // Validate message
             if (message)
             {
-                llog.logS(DEBUG, "WSPR message initialized.");
                 // Build stream for WSPR symbols
                 std::ostringstream wspr_stream;
                 wspr_stream << "Generated WSPR symbols:\n";
@@ -853,6 +845,7 @@ bool load_from_ini()
     }
 
     // Synchronize config with global JSON object
+    // TODO:  Do we do this too much?
     config_to_json();
 
     return true;
@@ -875,6 +868,12 @@ bool load_from_ini()
  */
 bool parse_command_line(int argc, char *argv[])
 {
+    // Check if any arguments (besides the program name) were provided.
+    if (argc == 1) // No arguments or options provided.
+    {
+        print_usage("No arguments provided.", EXIT_FAILURE);
+    }
+
     // Create original JSON
     init_config_json();
     std::vector<char *> args(argv, argv + argc); // Copy arguments for modification
@@ -889,7 +888,6 @@ bool parse_command_line(int argc, char *argv[])
             config.loop_tx = true;
             // Create original JSON and Config struct, overlay INI contents
             ini.set_filename(config.ini_filename);
-            config_to_json();
             ini_to_json(config.ini_filename);
             json_to_config();
 
@@ -898,10 +896,6 @@ bool parse_command_line(int argc, char *argv[])
             break; // Exit loop after removing argument
         }
     }
-
-    // Update argc and argv pointers for getopt_long()
-    argc = args.size();
-    argv = args.data();
 
     // Update argc and argv pointers for getopt_long()
     argc = args.size();
@@ -1174,8 +1168,6 @@ bool parse_command_line(int argc, char *argv[])
         }
         }
     }
-    // Re-save any config changes in the JSON
-    config_to_json();
 
     if (config.mode == ModeType::WSPR)
     {
@@ -1251,46 +1243,4 @@ bool parse_command_line(int argc, char *argv[])
     config_to_json();
 
     return true;
-}
-
-/**
- * @brief Loads and validates the configuration from command-line arguments.
- *
- * This function processes command-line arguments to load the application's configuration.
- * It performs the following steps:
- * - Checks whether any arguments are provided (beyond the program name).
- * - Parses the command-line arguments.
- * - Validates the configuration data to ensure that all required settings are present.
- *
- * If any of these steps fail (e.g., no arguments provided, parsing errors, or validation errors),
- * the function calls @c print_usage with an appropriate error message and terminates the program.
- *
- * @param argc The count of command-line arguments.
- * @param argv The array of command-line argument strings.
- * @return true if the configuration was successfully loaded and validated; otherwise, the program exits.
- */
-bool load_config(int argc, char *argv[])
-{
-    // Initialize return value to false.
-    bool retval = false;
-
-    // Check if any arguments (besides the program name) were provided.
-    if (argc == 1) // No arguments or options provided.
-    {
-        print_usage("No arguments provided.", EXIT_FAILURE);
-    }
-
-    // Parse command-line arguments and exit if invalid.
-    try
-    {
-        retval = parse_command_line(argc, argv);
-    }
-    catch (const std::exception &e)
-    {
-        // Handle any exceptions thrown during command-line parsing.
-        std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
-        print_usage(error_message, EXIT_FAILURE);
-    }
-
-    return retval;
 }

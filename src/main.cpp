@@ -116,14 +116,23 @@ int main(int argc, char *argv[])
         std::exit(EXIT_FAILURE);
     }
 
+    // Parse command line first allowing calls for -h or -v
+    try
+    {
+        retval = parse_command_line(argc, argv);
+    }
+    catch (const std::exception &e)
+    {
+        // Handle any exceptions thrown during command-line parsing.
+        std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
+        print_usage(error_message, EXIT_FAILURE);
+    }
+
     // Make sure we are running as root
     if (getuid() != 0)
     {
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
-
-    if (!load_config(argc, argv)) // Calls: ->parse_command_line() -> validate_config_data()
-        print_usage("An unknown error occurred loading the configuration.", EXIT_FAILURE);
 
     // Display version, Raspberry Pi model, and process ID for context.
     llog.logS(INFO, get_version_string());

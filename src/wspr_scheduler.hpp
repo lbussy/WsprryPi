@@ -131,7 +131,7 @@ public:
      *
      * @return True if a transmission is active, false otherwise.
      */
-    void set_enabled(bool enabled);
+    void setEnabled(bool enabled);
 
     /**
      * @brief Sets transmission active or inactive.

@@ -129,8 +129,8 @@ void WebServer::start(int port)
                                  httplib::Response &res) {
         try
         {
+            // Parse data into JSON
             nlohmann::json j = nlohmann::json::parse(req.body);
-            dump_json(j, "Received");
 
             // Patch into the current running config
             patch_all_from_web(j);
