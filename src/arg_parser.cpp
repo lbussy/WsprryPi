@@ -479,6 +479,9 @@ bool validate_config_data()
             }
         }());
 
+    // Clear frequency vector
+    config.center_freq_set.clear();
+    config.center_freq_set.shrink_to_fit();
     // Parse frequency list to valid frequency, skips those that do not validate
     std::string token;
     while (frequency_list >> token)

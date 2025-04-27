@@ -3,7 +3,6 @@
 ## C++ Code
 
 - [ ] Integrate WSPR-Transmitter
-- [ ] Clear frequency vector on reload (config.center_freq_set?)
 
 ## Web UI
 
