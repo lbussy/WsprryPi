@@ -399,6 +399,7 @@ bool wspr_loop()
     wspr_scheduler.setEnabled(config.transmit);
     wspr_scheduler.setThreadPriority(SCHED_FIFO, 10);
     wspr_scheduler.start(WSPR_Scheduler::WSPR_2, callback_transmission_complete);
+    wspr_scheduler.resetConfig();
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");

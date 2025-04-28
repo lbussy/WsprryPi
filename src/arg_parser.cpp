@@ -174,7 +174,7 @@ void callback_ini_changed()
         // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
         wspr_scheduler.setEnabled(config.transmit);
-        wspr_scheduler.resetConfig();
+        //wspr_scheduler.resetConfig();
         ini_reload_pending.store(false);
     }
 }

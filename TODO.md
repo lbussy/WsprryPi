@@ -2,7 +2,7 @@
 
 ## C++ Code
 
-- [ ] Integrate WSPR-Transmitter
+
 
 ## Web UI
 

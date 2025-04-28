@@ -81,20 +81,19 @@ void WSPR_Scheduler::start(TransmissionType type, std::function<void()> transmis
 /**
  * @brief Resets DMA parameters
  *
- * This method will reset those parameters which govern the transmissions.
+ * This method will (re)set those parameters which govern the transmissions.
  */
 void WSPR_Scheduler::resetConfig()
 {
-    // TODO: Make this work without killing things
-    // wsprTransmitter.setupTransmission(
-    //     config.center_freq_set[0],
-    //     config.power_level,
-    //     config.ppm,
-    //     config.callsign,
-    //     config.grid_square,
-    //     config.power_dbm,
-    //     config.use_offset
-    // );
+    wsprTransmitter.setupTransmission(
+        config.center_freq_set[0],
+        config.power_level,
+        config.ppm,
+        config.callsign,
+        config.grid_square,
+        config.power_dbm,
+        config.use_offset
+    );
 }
 
 void WSPR_Scheduler::stop()
@@ -238,10 +237,11 @@ std::chrono::system_clock::time_point WSPR_Scheduler::compute_next_schedule(Tran
 void WSPR_Scheduler::transmit_wspr2()
 {
     send_ws_message("transmit", "starting");
-    llog.logS(INFO, "Starting a simulated WSPR_2 transmission.");
+    llog.logS(INFO, "Starting a WSPR_2 transmission.");
     transmission_running_.store(true);
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(110);
+    wsprTransmitter.transmit();
     {
         // Release the lock before calling notify_complete()
         std::unique_lock<std::mutex> lock(mtx_);
@@ -256,7 +256,7 @@ void WSPR_Scheduler::transmit_wspr2()
 void WSPR_Scheduler::transmit_wspr15()
 {
     send_ws_message("transmit", "starting");
-    llog.logS(INFO, "Starting a simulated WSPR_15 transmission.");
+    llog.logS(INFO, "Starting a WSPR_15 transmission.");
     transmission_running_.store(true);
     auto start_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::seconds(825);
