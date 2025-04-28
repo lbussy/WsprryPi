@@ -5342,17 +5342,9 @@ manage_config() {
         # Change ownership on the configuration
         debug_print "Changing ownership on configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            if [[ "$config_file" == "wsprrypi.ini" ]]; then
-                logD "Exec: sudo chown www-data:www-data $config_path"
-            else
-                logD "Exec: sudo chown root:root $config_path"
-            fi
+            logD "Exec: sudo chown root:root $config_path"
         else
-            if [[ "$config_file" == "wsprrypi.ini" ]]; then
-                exec_command "Change ownership on wsprrypi.ini" "sudo chown www-data:www-data $config_path" "$debug" || retval=1
-            else
-                exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
-            fi
+            exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
         fi
 
         # Change permissions on the configuration
@@ -5583,12 +5575,6 @@ manage_web() {
         else
             exec_command "Copy web files" "sudo cp -r $source_path/* $target_path/" "$debug" || retval=1
         fi
-
-        # Link INI File
-        logI "Fixing file permissions for data file."
-        inisource="/usr/local/etc/${WSPR_INI}"
-        inilink="$target_path/${WSPR_INI}"
-        ln -sf "$inisource" "$inilink"
 
         # Change ownership and permissions
         debug_print "Setting permissions for '$target_path'." "$debug"

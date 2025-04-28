@@ -15,7 +15,6 @@
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
-- [ ] Remove INI symlink from installer
 
 ## Documentation
 
