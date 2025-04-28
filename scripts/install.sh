@@ -5487,7 +5487,7 @@ manage_service() {
             exec_command "Change ownership on systemd file" "sudo chown root:root $service_path" "$debug" || retval=1
             exec_command "Change permissions on systemd file" "sudo chmod 644 $service_path" "$debug" || retval=1
             exec_command "Create log path" "sudo mkdir -p $log_path" "$debug" || retval=1
-            exec_command "Change ownership on log path" "sudo chown root:root $log_path" "$debug" || retval=1
+            exec_command "Change ownership on log path" "sudo chown root:www-data $log_path" "$debug" || retval=1
             exec_command "Change permissions on log path" "sudo chmod 755 $log_path" "$debug" || retval=1
             exec_command "Enable systemd service" "sudo systemctl enable $daemon_systemd_name" "$debug" || retval=1
             exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || retval=1
