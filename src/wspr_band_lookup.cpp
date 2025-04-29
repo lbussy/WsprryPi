@@ -34,6 +34,7 @@
 #include <iomanip>
 #include <cctype>
 #include <stdexcept>
+#include <string_view>
 #include <regex>
 
 /**
@@ -324,7 +325,12 @@ double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool va
         try
         {
             double raw_freq = std::stod(input_str);
-
+            // If it was exactly “0”, accept it without validating
+            // This is a skip transmit window designator
+            if (raw_freq == 0.0)
+            {
+                return 0.0;
+            }
             // Validate if requested
             if (validate)
             {

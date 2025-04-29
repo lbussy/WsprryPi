@@ -142,15 +142,12 @@ std::atomic<bool> exit_wspr_loop(false);
  */
 void callback_transmission_complete()
 {
-    // Flag indicating whether DMA/Symbol reconfiguration is required.
-    bool do_reconfig_dma = false;
-
     // Check for a pending PPM change.
     if (ppm_reload_pending.load())
     {
+        apply_deferred_changes();
         llog.logS(INFO, "Pending PPM change integrated.");
         ppm_reload_pending.store(false);
-        do_reconfig_dma = true;
     }
 
     // Check for a pending INI change.
@@ -158,13 +155,7 @@ void callback_transmission_complete()
     {
         apply_deferred_changes();
         llog.logS(INFO, "Pending INI change integrated.");
-        do_reconfig_dma = true;
-    }
-
-    // If either a PPM or INI change was integrated, perform DMA/Symbol reconfiguration.
-    if (do_reconfig_dma)
-    {
-        wspr_scheduler.resetConfig();
+        // This integrates a PPM update
     }
 }
 
@@ -398,8 +389,7 @@ bool wspr_loop()
     // Set transmission thread and set priority
     wspr_scheduler.setEnabled(config.transmit);
     wspr_scheduler.setThreadPriority(SCHED_FIFO, 10);
-    wspr_scheduler.start(WSPR_Scheduler::WSPR_2, callback_transmission_complete);
-    wspr_scheduler.resetConfig();
+    wspr_scheduler.start(callback_transmission_complete);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");

@@ -14,7 +14,6 @@ IFS=$'\n\t'
 # - Deploys the generated documentation to a specified directory.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-1.3.0_devel+13.a1eba8d
 # @date 2025-03-02
 # @copyright MIT License
 #

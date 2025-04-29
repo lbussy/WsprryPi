@@ -11,7 +11,6 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @version 1.2.1-1.3.0_devel+13.a1eba8d
 # @date 2025-03-02
 # @copyright MIT License
 #
@@ -41,7 +40,7 @@ IFS=$'\n\t'
 # @usage
 # sudo ./install.sh
 # sudo ./install.sh debug
-# sudo [ACTION=uninstall] ./install.sh
+# sudo ACTION=uninstall ./install.sh
 #
 # -----------------------------------------------------------------------------
 
@@ -208,7 +207,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-timing_loop}"
+declare REPO_BRANCH="${REPO_BRANCH:-dma_class}"
 declare GIT_TAG="${GIT_TAG:-1.2.1}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"

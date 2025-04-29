@@ -94,10 +94,9 @@ public:
      * This method schedules and starts a transmission routine. An optional callback may be provided
      * to be invoked once the transmission completes.
      *
-     * @param type The transmission type (WSPR_2 or WSPR_15).
      * @param transmissionCompleteCallback Optional callback function that is called when the transmission is complete.
      */
-    void start(TransmissionType type, std::function<void()> transmissionCompleteCallback = {});
+    void start(std::function<void()> transmissionCompleteCallback = {});
 
     /**
      * @brief Immediately stop all running threads.
@@ -109,9 +108,9 @@ public:
     /**
      * @brief Resets DMA parameters
      *
-     * This method will reset those parameters which govern the transmissions.
+     * This method will (re)set those parameters which govern the transmissions.
      */
-    void resetConfig();
+    void setConfig();
 
     /**
      * @brief Immediately stops transmissions.
@@ -133,7 +132,7 @@ public:
      *
      * @return True if a transmission is active, false otherwise.
      */
-    bool isTransmitting() const;
+    bool is_transmitting() const;
 
     /**
      * @brief Sets transmission active or inactive.
@@ -150,6 +149,15 @@ public:
     void send_ws_message(std::string type, std::string state);
 
 private:
+    /**
+     * @brief Resets DMA parameters
+     *
+     * This method will (re)set those parameters which govern the transmissions.
+     *
+     * @param freq_hz The frequency to use when configuring DMA.
+     */
+    void set_config(double freq_hz);
+
     /**
      * @brief Monitor thread function.
      *
@@ -190,13 +198,15 @@ private:
      */
     void apply_thread_priority(std::thread &t);
 
+    double next_frequency();
+
     // Member variables
     std::atomic<bool> enabled_;              ///< Set to enable or disable transmissions
     int thread_policy_;                      ///< The scheduling policy.
     int thread_priority_;                    ///< The thread priority.
     std::atomic<bool> stop_flag_;            ///< Flag to signal threads to stop.
     std::atomic<bool> transmission_running_; ///< Indicator that a transmission is active.
-    TransmissionType transmission_type_;     ///< The selected transmission type.
+    TransmissionType transmission_type_;     ///< The selected transmission type (WSPR2 ony supported)
     std::function<void()> transmissionCompleteCallback_; ///< Optional callback invoked when transmission completes.
 
     std::thread monitor_thread_;             ///< Thread for monitoring scheduled transmissions.
@@ -204,6 +214,9 @@ private:
 
     std::mutex mtx_;                         ///< Mutex for synchronizing access.
     std::condition_variable cv_;             ///< Condition variable for scheduling and interruption.
+
+    int freq_iterator_ = 0;                  ///< Track which frequency in the vector we are using
+    double current_frequency_ = 0.0;         ///< Track which frequency is active
 
     // Disallow copying.
     WSPR_Scheduler(const WSPR_Scheduler &) = delete;

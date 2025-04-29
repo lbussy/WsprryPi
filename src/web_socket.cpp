@@ -353,7 +353,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         {
             llog.logS(DEBUG, "Received JSON get_tx_state command.");
             // Report current TX state
-            reply["tx_state"] = wspr_scheduler.isTransmitting();
+            reply["tx_state"] = wspr_scheduler.is_transmitting();
         }
         else if (cmd == "echo")
         {

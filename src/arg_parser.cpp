@@ -151,7 +151,7 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    if (wspr_scheduler.isTransmitting())
+    if (wspr_scheduler.is_transmitting())
     {
         if (config.transmit)
         {
@@ -163,9 +163,10 @@ void callback_ini_changed()
         {
             // Kill the transmission
             llog.logS(INFO, "Transmission disabled, stopping transmission.");
+            set_frequencies();
             wspr_scheduler.stopTransmission();
             wspr_scheduler.setEnabled(config.transmit);
-            wspr_scheduler.resetConfig();
+            wspr_scheduler.setConfig();
             ini_reload_pending.store(false);
         }
     }
@@ -173,8 +174,9 @@ void callback_ini_changed()
     {
         // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
+        set_frequencies();
         wspr_scheduler.setEnabled(config.transmit);
-        //wspr_scheduler.resetConfig();
+        wspr_scheduler.setConfig();
         ini_reload_pending.store(false);
     }
 }
@@ -189,12 +191,13 @@ void callback_ini_changed()
 void apply_deferred_changes()
 {
     // Apply deferred reload if transmission has ended
-    if (!wspr_scheduler.isTransmitting())
+    if (!wspr_scheduler.is_transmitting())
     {
         // Clear the pending flag and reload configuration
         llog.logS(INFO, "Applying deferred INI changes.");
+        set_frequencies();
         wspr_scheduler.setEnabled(config.transmit);
-        wspr_scheduler.resetConfig();
+        wspr_scheduler.setConfig();
         ini_reload_pending.store(false);
     }
 }
@@ -465,38 +468,8 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
-    // Inline/lambda: Safely reads a frequency list from the config class
-    std::istringstream frequency_list(
-        [&]() -> std::string
-        {
-            try
-            {
-                return config.frequencies;
-            }
-            catch (const std::exception &e)
-            {
-                return ""; // Default to empty if an error occurs
-            }
-        }());
-
-    // Clear frequency vector
-    config.center_freq_set.clear();
-    config.center_freq_set.shrink_to_fit();
-    // Parse frequency list to valid frequency, skips those that do not validate
-    std::string token;
-    while (frequency_list >> token)
-    {
-        try
-        {
-            // Parse frequency(ies) to double with validation
-            double parsed_freq = lookup.parse_string_to_frequency(token, true);
-            config.center_freq_set.push_back(parsed_freq);
-        }
-        catch (const std::invalid_argument &e)
-        {
-            llog.logE(WARN, "Invalid frequency ignored:", token);
-        }
-    }
+    // Parse frequency string data
+    set_frequencies();
 
     // Determine NTP functionality
     if (config.use_ntp)
@@ -662,7 +635,7 @@ bool validate_config_data()
         {
             if (freq == 0.0)
             {
-                llog.logS(INFO, "- Skip");
+                llog.logS(INFO, "- Skip (0.0)");
             }
             else
             {
@@ -701,13 +674,66 @@ bool validate_config_data()
         // Handle frequency offset
         if (config.use_offset)
         {
-            llog.logS(INFO, "- A random offset will be added to all transmissions.");
+            llog.logS(INFO, "A random offset will be added to all transmissions.");
         }
     }
     else
     {
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
         std::exit(EXIT_FAILURE);
+    }
+
+    return true;
+}
+
+/**
+ * @brief Parse and validate the configured frequency list.
+ *
+ * Reads the whitespace-separated tokens from `config.frequencies`, converts
+ * each to a double (in Hz) using `lookup.parse_string_to_frequency()`,
+ * and appends valid entries to `config.center_freq_set` in the same order.
+ * Invalid tokens are logged and skipped. If no valid frequencies remain,
+ * transmission is disabled (`config.transmit = false`) and the function
+ * returns `false`.
+ *
+ * @return `true` if at least one valid frequency was parsed and stored;
+ *         `false` otherwise.
+ */
+bool set_frequencies()
+{
+    // Safely read the raw frequency string (accessor may throw).
+    std::string raw_list;
+    try {
+        raw_list = config.frequencies;
+    } catch (const std::exception &e) {
+        llog.logE(WARN, "Failed to read frequency list:", e.what());
+        raw_list.clear();
+    }
+
+    // Tokenize on whitespace.
+    std::istringstream iss(raw_list);
+
+    // Clear any existing frequencies.
+    config.center_freq_set.clear();
+
+    std::string token;
+    while (iss >> token) {
+        try {
+            // Parse each token to a double (Hz) and validate against known bands.
+            double freq = lookup.parse_string_to_frequency(token, /*validate=*/true);
+            config.center_freq_set.push_back(freq);
+        }
+        catch (const std::invalid_argument &e) {
+            // Log and skip invalid entries.
+            llog.logE(WARN, "Ignoring invalid frequency token:", token);
+        }
+    }
+
+    // Ensure we have at least one valid frequency.
+    if (config.center_freq_set.empty()) {
+        llog.logE(ERROR, "Empty or invalid frequency list; disabling transmission.");
+        config.transmit = false;
+        return false;
     }
 
     return true;

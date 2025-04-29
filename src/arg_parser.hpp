@@ -175,6 +175,8 @@ extern void show_config_values(bool reload = false);
  */
 extern bool validate_config_data();
 
+bool set_frequencies();
+
 /**
  * @brief Loads configuration values from an INI file.
  *
