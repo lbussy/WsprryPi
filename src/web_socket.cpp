@@ -32,7 +32,6 @@
 #include "logging.hpp"
 #include "sha1.hpp"
 #include "scheduling.hpp"
-#include "wspr_scheduler.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -784,15 +783,14 @@ void WebSocketServer::clientLoop(int client_fd)
 
             case 0x9: // Ping frame
             {
-                llog.logS(DEBUG, "Received Ping; sending Pong to fd:",
-                          client_fd);
+                //llog.logS(DEBUG, "Received Ping; sending Pong to fd:", client_fd);
                 const unsigned char pong[2] = {0x8A, 0x00};
                 send(client_fd, pong, sizeof(pong), 0);
             }
             break;
 
             case 0xA: // Pong frame
-                llog.logS(DEBUG, "Received Pong from fd:", client_fd);
+                //llog.logS(DEBUG, "Received Pong from fd:", client_fd);
                 break;
 
             default:

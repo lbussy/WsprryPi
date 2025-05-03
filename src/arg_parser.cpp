@@ -38,7 +38,6 @@
 #include "signal_handler.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
-#include "wspr_scheduler.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -701,6 +700,7 @@ bool validate_config_data()
  */
 bool set_frequencies()
 {
+    llog.logS(DEBUG, "Loading set_frequencies().");
     // Safely read the raw frequency string (accessor may throw).
     std::string raw_list;
     try {
@@ -709,6 +709,7 @@ bool set_frequencies()
         llog.logE(WARN, "Failed to read frequency list:", e.what());
         raw_list.clear();
     }
+    llog.logS(DEBUG, "Parsing raw:" , raw_list);
 
     // Tokenize on whitespace.
     std::istringstream iss(raw_list);
@@ -721,6 +722,7 @@ bool set_frequencies()
         try {
             // Parse each token to a double (Hz) and validate against known bands.
             double freq = lookup.parse_string_to_frequency(token, /*validate=*/true);
+            llog.logS(DEBUG, "Pushing back:", freq);
             config.center_freq_set.push_back(freq);
         }
         catch (const std::invalid_argument &e) {
@@ -735,6 +737,7 @@ bool set_frequencies()
         config.transmit = false;
         return false;
     }
+    llog.logS(DEBUG, "Frequency count:", config.center_freq_set.size());
 
     return true;
 }

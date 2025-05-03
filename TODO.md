@@ -3,7 +3,6 @@
 ## C++ Code
 
 - [ ] Right-size logging
-- [ ] Handle if things like call, gridsquare, etc., change
 
 ## Web UI
 

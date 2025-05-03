@@ -39,7 +39,6 @@
 #include "signal_handler.hpp"
 #include "web_server.hpp"
 #include "web_socket.hpp"
-#include "wspr_scheduler.hpp"
 #include "wspr_transmit.hpp"
 
 // Standard library headers
@@ -62,6 +61,8 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+int freq_iterator_ = 0;                  ///< Track which frequency in the vector we are using
+double current_frequency_ = 0.0;         ///< Track which frequency is active
 
 /**
  * @brief Global mutex for coordinating shutdown and thread safety.
@@ -140,8 +141,28 @@ std::atomic<bool> exit_wspr_loop(false);
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
+void callback_transmission_started()
+{
+    // Notify clients of start
+    send_ws_message("transmit", "starting");
+}
+
+/**
+ * @brief Callback function for housekeeping tasks between transmissions.
+ *
+ * This function checks whether there are pending PPM or INI changes that need
+ * to be integrated. If a pending PPM change is detected, it logs the event and
+ * resets the flag. Similarly, if a pending INI change is detected, it applies the
+ * deferred changes, logs the integration, and resets the flag. If any changes were
+ * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ */
 void callback_transmission_complete()
 {
+    llog.logS(DEBUG, "callback_transmission_complete().");
+
+    // Notify clients of completion
+    send_ws_message("transmit", "finished");
+
     // Check for a pending PPM change.
     if (ppm_reload_pending.load())
     {
@@ -385,11 +406,15 @@ bool wspr_loop()
     // Start socket server and set priority
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
     socketServer.setThreadPriority(SCHED_RR, 10);
-
     // Set transmission thread and set priority
-    wspr_scheduler.setEnabled(config.transmit);
-    wspr_scheduler.setThreadPriority(SCHED_FIFO, 10);
-    wspr_scheduler.start(callback_transmission_complete);
+    wsprTransmitter.setThreadScheduling(SCHED_FIFO, 30);
+    wsprTransmitter.setTransmissionCallbacks(start_cb, end_cb);
+    // wsprTransmitter.setupTransmission(7040100.0, 0, config.ppm, "AA0NT", "EM18", 20, /*use_offset=*/true);
+    // wsprTransmitter.setupTransmission(7040100.0, 0, config.ppm);
+    // wsprTransmitter.printParameters();
+    // std::cout << "Setup for " << (isWspr ? "WSPR" : "tone") << " complete.\n";
+    // wsprTransmitter.enableTransmission();
+
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
@@ -404,14 +429,13 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.shutdownTransmitter();
+    // wsprTransmitter.shutdownTransmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver
     shutdownMonitor.stop(); // Stop shutdown GPIO monitor
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
-    wspr_scheduler.stop();   // Stop the transmit server
 
     llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
 
@@ -467,4 +491,135 @@ void shutdown_machine()
     {
         llog.logE(ERROR, "Shutdown failed:", std::strerror(errno));
     }
+}
+
+/**
+ * @brief Broadcasts a JSON-formatted WebSocket message to all connected clients.
+ *
+ * Builds a JSON object containing a message type, state, and current UTC
+ * timestamp (ISO 8601), serializes it, and sends it over the WebSocket server.
+ *
+ * @param[in] type   The message category (e.g., "transmit", "status").
+ * @param[in] state  The message state or payload (e.g., "starting", "finished").
+ *
+ * @note Requires <nlohmann/json.hpp>, <chrono>, <ctime>, <iomanip>, and <sstream>.
+ */
+void send_ws_message(std::string type, std::string state)
+{
+    // Build JSON payload
+    nlohmann::json j;
+    j["type"] = type;
+    j["state"] = state;
+
+    // Capture current UTC time and format as ISO 8601 (YYYY-MM-DDThh:mm:ssZ)
+    auto now = std::chrono::system_clock::now();
+    auto now_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_utc{};
+    gmtime_r(&now_t, &tm_utc);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm_utc, "%Y-%m-%dT%H:%M:%SZ");
+    j["timestamp"] = oss.str();
+
+    // Serialize and send to all WebSocket clients
+    const std::string message = j.dump();
+    socketServer.sendAllClients(message);
+}
+
+/**
+ * @brief Reset and apply the initial transmission configuration.
+ *
+ * Resets the round-robin frequency iterator, fetches the first frequency
+ * from `config.center_freq_set`, and invokes the transmitter setup with
+ * that frequency.
+ *
+ * This should be called before starting the scheduler’s monitor loop,
+ * or whenever the frequency list has changed.
+ */
+ void setConfig()
+ {
+     // Start iteration from the beginning of the frequency list.
+     freq_iterator_ = 0;
+ 
+     // 2) Retrieve the first (or only) frequency.
+     current_frequency_ = next_frequency();
+ 
+     // Apply the configuration to the transmitter.
+     //    `set_config(double)` is expected to configure `wsprTransmitter`
+     //    (e.g., via setupTransmission) and any related parameters.
+     set_config(current_frequency_);
+ }
+
+/**
+ * @brief Retrieve the next center frequency, cycling through the configured list.
+ *
+ * This method returns the next frequency from `config.center_freq_set` in a
+ * round-robin fashion.  It uses `freq_iterator_` modulo the list size to
+ * index into the vector, then increments `freq_iterator_` for the subsequent call.
+ *
+ * @return double
+ *   - Next frequency in Hz from the list.
+ *   - Returns 0.0 if the list is empty.
+ *
+ * @note
+ *   - `freq_iterator_` should be initialized to 0.
+ *   - Wrapping is handled via the modulo operation.
+ */
+ double next_frequency()
+ {
+     const auto &freqs = config.center_freq_set;
+     if (freqs.empty())
+     {
+         return 0.0;
+     }
+ 
+     // Compute index in [0, freqs.size())
+     const size_t idx = freq_iterator_ % freqs.size();
+ 
+     // Fetch and advance iterator
+     double freq = freqs[idx];
+     ++freq_iterator_;
+ 
+     return freq;
+ }
+ 
+/**
+ * @brief Apply updated transmission parameters and reinitialize DMA.
+ *
+ * Retrieves the current PPM value if NTP calibration is enabled, captures
+ * the latest configuration settings, and reconfigures the WSPR transmitter
+ * with the specified frequency and parameters.
+ *
+ * @param freq_hz Center frequency for the upcoming transmission, in Hertz.
+ *
+ * @throws std::runtime_error if DMA setup or mailbox operations fail within
+ *         `setupTransmission()`.
+ */
+void set_config(double freq_hz)
+{
+    llog.logS(DEBUG, "Retrieving PPM.");
+    if (config.use_ntp)
+    {
+        config.ppm = ppmManager.getCurrentPPM();
+    }
+
+    // Copy current settings locally to avoid data races
+    double frequency = freq_hz;
+    int powerLevel = config.power_level;
+    double ppmValue = config.ppm;
+    std::string callSign = config.callsign;
+    std::string gridLoc = config.grid_square;
+    int powerDbm = config.power_dbm;
+    bool useOffset = config.use_offset;
+
+    llog.logS(DEBUG, "Setting DMA.");
+    wsprTransmitter.setupTransmission(
+        frequency,
+        powerLevel,
+        ppmValue,
+        std::move(callSign),
+        std::move(gridLoc),
+        powerDbm,
+        useOffset);
+    validate_config_data();
 }

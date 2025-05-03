@@ -31,7 +31,6 @@
 #include "ini_file.hpp"
 #include "json.hpp"
 #include "logging.hpp"
-#include "wspr_scheduler.hpp"
 
 #include <iostream>
 #include <string>
@@ -457,5 +456,5 @@ void patch_all_from_web(const nlohmann::json &j)
     json_to_config();              ///< Write patched config into global struct
     config_to_json();              ///< Rebuild jConfig from sanitized struct
     // Send all WebSocket clients notice that we have a new config
-    wspr_scheduler.send_ws_message("configuration", "reload");
+    send_ws_message("configuration", "reload");
 }

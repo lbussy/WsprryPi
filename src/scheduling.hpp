@@ -180,4 +180,60 @@ void reboot_machine();
  */
 void shutdown_machine();
 
+/**
+ * @brief Broadcasts a JSON-formatted WebSocket message to all connected clients.
+ *
+ * Builds a JSON object containing a message type, state, and current UTC
+ * timestamp (ISO 8601), serializes it, and sends it over the WebSocket server.
+ *
+ * @param[in] type   The message category (e.g., "transmit", "status").
+ * @param[in] state  The message state or payload (e.g., "starting", "finished").
+ *
+ * @note Requires <nlohmann/json.hpp>, <chrono>, <ctime>, <iomanip>, and <sstream>.
+ */
+void send_ws_message(std::string type, std::string state)
+
+/**
+ * @brief Reset and apply the initial transmission configuration.
+ *
+ * Resets the round-robin frequency iterator, fetches the first frequency
+ * from `config.center_freq_set`, and invokes the transmitter setup with
+ * that frequency.
+ *
+ * This should be called before starting the scheduler’s monitor loop,
+ * or whenever the frequency list has changed.
+ */
+void setConfig();
+
+/**
+ * @brief Retrieve the next center frequency, cycling through the configured list.
+ *
+ * This method returns the next frequency from `config.center_freq_set` in a
+ * round-robin fashion.  It uses `freq_iterator_` modulo the list size to
+ * index into the vector, then increments `freq_iterator_` for the subsequent call.
+ *
+ * @return double
+ *   - Next frequency in Hz from the list.
+ *   - Returns 0.0 if the list is empty.
+ *
+ * @note
+ *   - `freq_iterator_` should be initialized to 0.
+ *   - Wrapping is handled via the modulo operation.
+ */
+double next_frequency();
+
+/**
+ * @brief Apply updated transmission parameters and reinitialize DMA.
+ *
+ * Retrieves the current PPM value if NTP calibration is enabled, captures
+ * the latest configuration settings, and reconfigures the WSPR transmitter
+ * with the specified frequency and parameters.
+ *
+ * @param freq_hz Center frequency for the upcoming transmission, in Hertz.
+ *
+ * @throws std::runtime_error if DMA setup or mailbox operations fail within
+ *         `setupTransmission()`.
+ */
+void set_config(double freq_hz);
+
 #endif // _SCHEDULING_HPP
