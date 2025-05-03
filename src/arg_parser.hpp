@@ -115,7 +115,15 @@ extern std::atomic<int> wspr_interval;
  *
  * @note The atomic nature ensures thread-safe access across multiple threads.
  */
-extern std::atomic<bool> ini_reload_pending; ///< Semaphore for deferred INI reload.
+extern std::atomic<bool> ini_reload_pending;
+
+/**
+ * @brief Atomic flag indicating that a new PPM value needs to be applied.
+ *
+ * Set to `true` when a new PPM value has been received, signaling that
+ * subsystems should reload or reconfigure based on the new frequency offset.
+ */
+extern std::atomic<bool> ppm_reload_pending;
 
 /**
  * @brief Called when the INI file is modified.

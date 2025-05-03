@@ -154,6 +154,10 @@ void WSPR_Scheduler::start(std::function<void()> transmissionCompleteCallback)
 
     // Apply real-time scheduling policy if configured
     apply_thread_priority(monitor_thread_);
+
+    // Set callback for transmitter
+    wsprTransmitter.setWSPRCompleteCallback([this]()
+                                            { this->notify_complete(); });
 }
 
 /**
@@ -195,18 +199,19 @@ void WSPR_Scheduler::setConfig()
 void WSPR_Scheduler::set_config(double freq_hz)
 {
     llog.logS(DEBUG, "Retrieving PPM.");
-    if (config.use_ntp) {
+    if (config.use_ntp)
+    {
         config.ppm = ppmManager.getCurrentPPM();
     }
 
     // Copy current settings locally to avoid data races
-    double frequency    = freq_hz;
-    int    powerLevel   = config.power_level;
-    double ppmValue     = config.ppm;
+    double frequency = freq_hz;
+    int powerLevel = config.power_level;
+    double ppmValue = config.ppm;
     std::string callSign = config.callsign;
-    std::string gridLoc  = config.grid_square;
-    int    powerDbm     = config.power_dbm;
-    bool   useOffset    = config.use_offset;
+    std::string gridLoc = config.grid_square;
+    int powerDbm = config.power_dbm;
+    bool useOffset = config.use_offset;
 
     llog.logS(DEBUG, "Setting DMA.");
     wsprTransmitter.setupTransmission(
@@ -216,8 +221,8 @@ void WSPR_Scheduler::set_config(double freq_hz)
         std::move(callSign),
         std::move(gridLoc),
         powerDbm,
-        useOffset
-    );
+        useOffset);
+    validate_config_data();
 }
 /**
  * @brief Stop the scheduler and clean up threads.
@@ -278,7 +283,29 @@ void WSPR_Scheduler::stopTransmission()
  */
 void WSPR_Scheduler::notify_complete()
 {
+    llog.logS(DEBUG, "Entering WSPR Scheduler notify_complete() callback.");
     std::function<void()> callback;
+
+    // Mark the transmission as finished
+    transmission_running_.store(false);
+    llog.logS(INFO, "WSPR-2 transmission ending.");
+
+    // Calculate time against start_time_
+    std::chrono::system_clock::time_point finish_time_ = std::chrono::system_clock::now();
+
+    // Calculate and print duration
+    std::chrono::seconds sec;
+    std::chrono::microseconds usec;
+    int negative = timeval_subtract(sec, usec, finish_time_, start_time_);
+
+    llog.logS(INFO,
+              "Elapsed: ",
+              sec.count(), "s ",
+              usec.count(), "µs",
+              (negative ? " (end < start!)" : ""));
+
+    // Notify clients of end
+    send_ws_message("transmit", "finished");
 
     {
         std::lock_guard<std::mutex> guard(mtx_);
@@ -286,14 +313,13 @@ void WSPR_Scheduler::notify_complete()
         transmission_running_.store(false, std::memory_order_release);
         // Wake any waiting threads
         cv_.notify_all();
-        // Capture the callback for invocation outside the lock
-        callback = std::move(transmissionCompleteCallback_);
     }
 
-    // Invoke callback (if set) without holding the lock
-    if (callback)
+    // Invoke callback (if set)
+    if (transmissionCompleteCallback_)
     {
-        callback();
+        llog.logS(DEBUG, "Firing WSPR Scheduler callback.");
+        transmissionCompleteCallback_();
     }
 }
 
@@ -353,31 +379,45 @@ void WSPR_Scheduler::monitor()
         {
             // Wait without busy-waiting until the scheduled time or stop() is invoked.
             std::unique_lock<std::mutex> lock(mtx_);
-            if (cv_.wait_until(lock, next_schedule, [this] { return stop_flag_.load(); })) {
-                break;  // stop_flag_ was set during the wait
+            if (cv_.wait_until(lock, next_schedule, [this]
+                               { return stop_flag_.load(); }))
+            {
+                break; // stop_flag_ was set during the wait
             }
         }
 
         // If stop() was called after the wait, exit the loop.
-        if (stop_flag_.load()) {
+        if (stop_flag_.load())
+        {
             break;
         }
 
         // Retrieve the next frequency; if it differs, reconfigure the transmitter.
         double freq = next_frequency();
-        if (freq != current_frequency_) {
+        if (freq != current_frequency_)
+        {
             current_frequency_ = freq;
-            if (current_frequency_ > 0.0) {
+            if (current_frequency_ > 0.0)
+            {
                 set_config(current_frequency_);
             }
         }
 
         // Only start a transmission if enabled and a valid frequency is set.
-        if (enabled_.load() && current_frequency_ > 0.0) {
+        if (enabled_.load() && current_frequency_ > 0.0)
+        {
             // Launch the correct transmission routine in a dedicated thread.
-            if (transmission_type_ == WSPR_2) {
+
+            // Time structs for computing transmission window
+            start_time_ = std::chrono::system_clock::now();
+            llog.logS(INFO, "TX started at: ", timeval_print(start_time_));
+
+            if (transmission_type_ == WSPR_2)
+            {
                 transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr2, this);
-            } else {
+            }
+            else
+            {
                 transmission_thread_ = std::thread(&WSPR_Scheduler::transmit_wspr15, this);
             }
 
@@ -385,10 +425,13 @@ void WSPR_Scheduler::monitor()
             apply_thread_priority(transmission_thread_);
 
             // Block until the transmission finishes.
-            if (transmission_thread_.joinable()) {
+            if (transmission_thread_.joinable())
+            {
                 transmission_thread_.join();
             }
-        } else {
+        }
+        else
+        {
             // No valid frequency or disabled: skip this cycle.
             llog.logS(INFO, "Skipping transmission based on 0 in sequence.");
         }
@@ -494,32 +537,8 @@ void WSPR_Scheduler::transmit_wspr2()
     // Mark the transmission as active
     transmission_running_.store(true);
 
-    // Record start time and maximum duration (110 seconds ≈ 2 min – buffer)
-    const auto start_time = std::chrono::steady_clock::now();
-    const auto timeout = std::chrono::seconds{110};
-
-    // Begin the low-level transmit loop (returns after symbols sent)
+    // Begin the transmission, wait on callback
     wsprTransmitter.transmit();
-
-    // Wait until either the timeout elapses or stop_flag_ is raised
-    {
-        std::unique_lock<std::mutex> lock{mtx_};
-        cv_.wait_until(
-            lock,
-            start_time + timeout,
-            [this]() noexcept
-            { return stop_flag_.load(); });
-    }
-
-    // Mark the transmission as finished
-    transmission_running_.store(false);
-    llog.logS(INFO, "WSPR-2 transmission ending.");
-
-    // Invoke any completion callbacks
-    notify_complete();
-
-    // Notify clients of end
-    send_ws_message("transmit", "finished");
 }
 
 /**
@@ -550,28 +569,8 @@ void WSPR_Scheduler::transmit_wspr15()
     // 825 seconds ≈ 15 minutes + 15 s guard
     const auto timeout = std::chrono::seconds{825};
 
-    // Begin the low-level transmit loop (will return after symbols sent)
+    // Begin the transmit, wait on callback
     wsprTransmitter.transmit();
-
-    // Now wait until either the full period elapses or stop_flag_ is raised
-    {
-        std::unique_lock<std::mutex> lock{mtx_};
-        cv_.wait_until(
-            lock,
-            start_time + timeout,
-            [this]() noexcept
-            { return stop_flag_.load(); });
-    }
-
-    // Mark the transmission as finished
-    transmission_running_.store(false);
-    llog.logS(INFO, "WSPR-15 transmission ending.");
-
-    // Fire any completion callbacks
-    notify_complete();
-
-    // Notify clients of end
-    send_ws_message("transmit", "finished");
 }
 
 /**
@@ -666,4 +665,52 @@ void WSPR_Scheduler::send_ws_message(std::string type, std::string state)
     // Serialize and send to all WebSocket clients
     const std::string message = j.dump();
     socketServer.sendAllClients(message);
+}
+
+/**
+ * @brief Computes the difference between two time values.
+ * @details Calculates `t2 - t1` and stores the result in `result`. If `t2 < t1`,
+ *          the function returns `1`, otherwise, it returns `0`.
+ *
+ * @param[out] result Pointer to `timeval` struct to store the difference.
+ * @param[in] t2 Pointer to the later `timeval` structure.
+ * @param[in] t1 Pointer to the earlier `timeval` structure.
+ * @return Returns `1` if the difference is negative (t2 < t1), otherwise `0`.
+ */
+int WSPR_Scheduler::timeval_subtract(
+    std::chrono::seconds &out_sec,
+    std::chrono::microseconds &out_usec,
+    const std::chrono::system_clock::time_point &t2,
+    const std::chrono::system_clock::time_point &t1) noexcept
+{
+    using namespace std::chrono;
+    auto diff = t2 - t1;
+    bool negative = diff < system_clock::duration::zero();
+    auto abs_diff = negative ? -diff : diff;
+    auto total_us = duration_cast<microseconds>(abs_diff).count();
+
+    out_sec = seconds(total_us / 1'000'000);
+    out_usec = microseconds(total_us % 1'000'000);
+    return negative ? 1 : 0;
+}
+
+/**
+ * @brief Formats a timestamp from a `timeval` structure into a string.
+ * @details Converts the given `timeval` structure into a formatted `YYYY-MM-DD HH:MM:SS.mmm UTC` string.
+ *
+ * @param[in] tv Pointer to `timeval` structure containing the timestamp.
+ * @return A formatted string representation of the timestamp.
+ */
+std::string WSPR_Scheduler::timeval_print(std::chrono::system_clock::time_point tp)
+{
+    auto secs = std::chrono::system_clock::to_time_t(tp);
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                  tp.time_since_epoch())
+                  .count() %
+              1000000;
+
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&secs), "%Y-%m-%d %H:%M:%S")
+        << "." << (us + 500) / 1000 << " UTC";
+    return oss.str();
 }

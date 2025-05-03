@@ -31,6 +31,7 @@
 #include "ini_file.hpp"
 #include "json.hpp"
 #include "logging.hpp"
+#include "scheduling.hpp"
 
 #include <iostream>
 #include <string>

@@ -32,6 +32,7 @@
 #include "logging.hpp"
 #include "sha1.hpp"
 #include "scheduling.hpp"
+#include "wspr_transmit.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -352,7 +353,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         {
             llog.logS(DEBUG, "Received JSON get_tx_state command.");
             // Report current TX state
-            reply["tx_state"] = wspr_scheduler.is_transmitting();
+            reply["tx_state"] = wsprTransmitter.isTransmitting();
         }
         else if (cmd == "echo")
         {
@@ -576,20 +577,24 @@ void WebSocketServer::sendToClient(const std::string &message)
     // Build the WebSocket text frame header
     std::string frame;
     frame.reserve(2 + message.size());
-    frame.push_back(static_cast<char>(0x81));  // FIN=1, opcode=0x1 (text)
+    frame.push_back(static_cast<char>(0x81)); // FIN=1, opcode=0x1 (text)
 
     size_t len = message.size();
-    if (len < 126) {
+    if (len < 126)
+    {
         frame.push_back(static_cast<char>(len));
     }
-    else if (len < 65536) {
+    else if (len < 65536)
+    {
         frame.push_back(126);
         frame.push_back(static_cast<char>((len >> 8) & 0xFF));
         frame.push_back(static_cast<char>(len & 0xFF));
     }
-    else {
+    else
+    {
         frame.push_back(127);
-        for (int i = 7; i >= 0; --i) {
+        for (int i = 7; i >= 0; --i)
+        {
             frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
         }
     }
@@ -598,9 +603,11 @@ void WebSocketServer::sendToClient(const std::string &message)
     frame.append(message);
 
     // Broadcast to every connected client
-    for (int fd : client_sockets_) {
+    for (int fd : client_sockets_)
+    {
         ssize_t sent = ::send(fd, frame.data(), frame.size(), 0);
-        if (sent < 0) {
+        if (sent < 0)
+        {
             std::perror("send");
         }
     }
@@ -622,20 +629,24 @@ void WebSocketServer::sendAllClients(const std::string &message)
     // Build WebSocket text frame header
     std::string frame;
     frame.reserve(2 + message.size());
-    frame.push_back(static_cast<char>(0x81));  // FIN=1, opcode=0x1 (text)
+    frame.push_back(static_cast<char>(0x81)); // FIN=1, opcode=0x1 (text)
 
     size_t len = message.size();
-    if (len < 126) {
+    if (len < 126)
+    {
         frame.push_back(static_cast<char>(len));
     }
-    else if (len < 65536) {
+    else if (len < 65536)
+    {
         frame.push_back(126);
         frame.push_back(static_cast<char>((len >> 8) & 0xFF));
         frame.push_back(static_cast<char>(len & 0xFF));
     }
-    else {
+    else
+    {
         frame.push_back(127);
-        for (int i = 7; i >= 0; --i) {
+        for (int i = 7; i >= 0; --i)
+        {
             frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
         }
     }
@@ -644,8 +655,10 @@ void WebSocketServer::sendAllClients(const std::string &message)
     frame.append(message);
 
     // Send to every connected client
-    for (int fd : client_sockets_) {
-        if (::send(fd, frame.data(), frame.size(), 0) < 0) {
+    for (int fd : client_sockets_)
+    {
+        if (::send(fd, frame.data(), frame.size(), 0) < 0)
+        {
             std::perror("sendAllClients");
         }
     }
@@ -783,14 +796,14 @@ void WebSocketServer::clientLoop(int client_fd)
 
             case 0x9: // Ping frame
             {
-                //llog.logS(DEBUG, "Received Ping; sending Pong to fd:", client_fd);
+                // llog.logS(DEBUG, "Received Ping; sending Pong to fd:", client_fd);
                 const unsigned char pong[2] = {0x8A, 0x00};
                 send(client_fd, pong, sizeof(pong), 0);
             }
             break;
 
             case 0xA: // Pong frame
-                //llog.logS(DEBUG, "Received Pong from fd:", client_fd);
+                // llog.logS(DEBUG, "Received Pong from fd:", client_fd);
                 break;
 
             default:
@@ -838,7 +851,7 @@ void WebSocketServer::keepAliveLoop(uint32_t interval)
                 clients_mutex_);
             for (int fd : client_sockets_)
             {
-                unsigned char ping[2] = { 0x89, 0x00 };
+                unsigned char ping[2] = {0x89, 0x00};
                 if (::send(fd, ping, sizeof(ping), 0) < 0)
                 {
                     std::perror("send ping");

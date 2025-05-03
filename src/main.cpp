@@ -42,7 +42,21 @@
 #include <string_view>
 
 // System headers
-#include <unistd.h>
+#include <fcntl.h>   // fcntl()
+#include <unistd.h>  // pipe(), read(), write()
+
+/**
+ * @brief File‐scope self‐pipe descriptors for signal notifications.
+ *
+ * @details Implements the “self‐pipe trick” to safely wake up
+ *          select()/poll() or other I/O waits from within a signal handler.
+ *          - sig_pipe_fds[0]: read end of the pipe (for waiting threads)
+ *          - sig_pipe_fds[1]: write end of the pipe (to be written by handler)
+ *
+ *          Initialized to {-1, -1}; actual pipe() must be called in main()
+ *          before installing the signal handler.
+ */
+int sig_pipe_fds[2] = { -1, -1 };
 
 /**
  * @brief TCP port used for singleton instance checking.
@@ -80,8 +94,12 @@ void callback_signal_handler(int signum, bool is_critical)
     {
         llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
         // Let wspr_loop know you're leaving
-        exit_wspr_loop.store(true); // Set exit flag
-        shutdown_cv.notify_all();   // Wake up any waiting threads
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+        shutdown_flag.store(true);  // Indicate shutdown sequence active
+        // Wake up the select() below:
+        const char wake = 1;
+        ::write(sig_pipe_fds[1], &wake, 1);
     }
 }
 
@@ -104,6 +122,15 @@ void callback_signal_handler(int signum, bool is_critical)
  */
 int main(int argc, char *argv[])
 {
+    // Create the self‐pipe
+    if (pipe(sig_pipe_fds) < 0)
+    {
+        std::perror("pipe");
+        return EXIT_FAILURE;
+    }
+    // Make read‐end nonblocking so the select won’t block on a full pipe
+    fcntl(sig_pipe_fds[0], F_SETFL, O_NONBLOCK);
+
     int retval = EXIT_SUCCESS;
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
@@ -138,12 +165,6 @@ int main(int argc, char *argv[])
     llog.logS(INFO, get_version_string());
     llog.logS(INFO, "Running on:", get_pi_model(), ".");
     llog.logS(INFO, "Process PID:", getpid());
-
-    // Validate configuration and ensure all required settings are present.
-    if (!validate_config_data())
-    {
-        print_usage("Configuration validation failed.", EXIT_FAILURE);
-    }
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();

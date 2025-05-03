@@ -218,6 +218,16 @@ private:
     int freq_iterator_ = 0;                  ///< Track which frequency in the vector we are using
     double current_frequency_ = 0.0;         ///< Track which frequency is active
 
+    std::chrono::system_clock::time_point start_time_; // Hold start time of transmission
+
+    int WSPR_Scheduler::timeval_subtract(
+        std::chrono::seconds&      out_sec,
+        std::chrono::microseconds& out_usec,
+        const std::chrono::steady_clock::time_point& t2,
+        const std::chrono::steady_clock::time_point& t1) noexcept;
+
+    std::string timeval_print(std::chrono::system_clock::time_point tp);
+
     // Disallow copying.
     WSPR_Scheduler(const WSPR_Scheduler &) = delete;
     WSPR_Scheduler &operator=(const WSPR_Scheduler &) = delete;

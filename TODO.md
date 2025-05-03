@@ -3,6 +3,9 @@
 ## C++ Code
 
 - [ ] Right-size logging
+- [ ] Move patch_all_from_web() to ws-server (Search where we had to include scheduler)
+- [ ] Ctrl-C does not exit
+- [ ] Need to stop after one transmission from command line (make test)
 
 ## Web UI
 
@@ -18,7 +21,6 @@
 - [ ] Uninstall:
         [INFO ] Ensuring destination directory does not exist: '/home/pi/WsprryPi'
         [INFO ] Destination directory already exists: '/home/pi/WsprryPi'
-
 
 ## Documentation
 

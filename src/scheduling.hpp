@@ -94,6 +94,17 @@ extern PPMManager ppmManager;
 extern std::atomic<bool> exit_wspr_loop;
 
 /**
+ * @brief Mutex for protecting the shutdown condition variable.
+ *
+ * @details
+ * This mutex guards access to the `shutdown_cv` condition variable and
+ * any associated shared state used to coordinate orderly shutdown of
+ * the main WSPR loop. Threads must lock `cv_mtx` before waiting on or
+ * notifying `shutdown_cv` to ensure thread safety.
+ */
+extern std::mutex cv_mtx;
+
+/**
  * @brief Callback triggered by a shutdown GPIO event.
  *
  * @details
@@ -104,6 +115,28 @@ extern std::atomic<bool> exit_wspr_loop;
  * @note This is usually registered with a GPIO monitor.
  */
 extern void callback_shutdown_system();
+
+/**
+ * @brief Callback function for housekeeping tasks between transmissions.
+ *
+ * This function checks whether there are pending PPM or INI changes that need
+ * to be integrated. If a pending PPM change is detected, it logs the event and
+ * resets the flag. Similarly, if a pending INI change is detected, it applies the
+ * deferred changes, logs the integration, and resets the flag. If any changes were
+ * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ */
+void callback_transmission_started(const std::string &msg);
+
+/**
+ * @brief Callback function for housekeeping tasks between transmissions.
+ *
+ * This function checks whether there are pending PPM or INI changes that need
+ * to be integrated. If a pending PPM change is detected, it logs the event and
+ * resets the flag. Similarly, if a pending INI change is detected, it applies the
+ * deferred changes, logs the integration, and resets the flag. If any changes were
+ * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ */
+void callback_transmission_complete(const std::string &msg);
 
 /**
  * @brief Perform a system shutdown sequence.
@@ -191,19 +224,7 @@ void shutdown_machine();
  *
  * @note Requires <nlohmann/json.hpp>, <chrono>, <ctime>, <iomanip>, and <sstream>.
  */
-void send_ws_message(std::string type, std::string state)
-
-/**
- * @brief Reset and apply the initial transmission configuration.
- *
- * Resets the round-robin frequency iterator, fetches the first frequency
- * from `config.center_freq_set`, and invokes the transmitter setup with
- * that frequency.
- *
- * This should be called before starting the scheduler’s monitor loop,
- * or whenever the frequency list has changed.
- */
-void setConfig();
+void send_ws_message(std::string type, std::string state);
 
 /**
  * @brief Retrieve the next center frequency, cycling through the configured list.
@@ -234,6 +255,6 @@ double next_frequency();
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config(double freq_hz);
+void set_config();
 
 #endif // _SCHEDULING_HPP

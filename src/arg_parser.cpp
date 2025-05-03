@@ -38,6 +38,7 @@
 #include "signal_handler.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_message.hpp"
+#include "wspr_transmit.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -94,21 +95,6 @@ WsprMessage *message = nullptr;
 WSPRBandLookup lookup;
 
 /**
- * @brief Atomic variable representing the current WSPR transmission interval.
- *
- * This variable defines the transmission interval for WSPR signals.
- * It can be set to one of the predefined constants:
- * - `WSPR_2` for a 2-minute interval.
- * - `WSPR_15` for a 15-minute interval.
- *
- * This value is updated dynamically based on the INI configuration
- * and influences when the scheduler triggers the next transmission.
- *
- * @note Access to this variable is thread-safe due to its atomic nature.
- */
-std::atomic<int> wspr_interval(WSPR_Scheduler::WSPR_2);
-
-/**
  * @brief Semaphore indicating a pending INI file reload.
  *
  * The `ini_reload_pending` atomic flag acts as a semaphore to signal when an
@@ -126,6 +112,14 @@ std::atomic<int> wspr_interval(WSPR_Scheduler::WSPR_2);
  * @note The atomic nature ensures thread-safe access across multiple threads.
  */
 std::atomic<bool> ini_reload_pending(false);
+
+/**
+ * @brief Atomic flag indicating that a new PPM value needs to be applied.
+ *
+ * Set to `true` when a new PPM value has been received, signaling that
+ * subsystems should reload or reconfigure based on the new frequency offset.
+ */
+std::atomic<bool> ppm_reload_pending(false);
 
 /**
  * @brief List of allowed WSPR power levels.
@@ -150,7 +144,7 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    if (wspr_scheduler.is_transmitting())
+    if (wsprTransmitter.isTransmitting())
     {
         if (config.transmit)
         {
@@ -162,10 +156,7 @@ void callback_ini_changed()
         {
             // Kill the transmission
             llog.logS(INFO, "Transmission disabled, stopping transmission.");
-            set_frequencies();
-            wspr_scheduler.stopTransmission();
-            wspr_scheduler.setEnabled(config.transmit);
-            wspr_scheduler.setConfig();
+            set_config();
             ini_reload_pending.store(false);
         }
     }
@@ -173,9 +164,7 @@ void callback_ini_changed()
     {
         // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
-        set_frequencies();
-        wspr_scheduler.setEnabled(config.transmit);
-        wspr_scheduler.setConfig();
+        set_config();
         ini_reload_pending.store(false);
     }
 }
@@ -190,14 +179,23 @@ void callback_ini_changed()
 void apply_deferred_changes()
 {
     // Apply deferred reload if transmission has ended
-    if (!wspr_scheduler.is_transmitting())
+    if (!wsprTransmitter.isTransmitting())
     {
-        // Clear the pending flag and reload configuration
-        llog.logS(INFO, "Applying deferred INI changes.");
-        set_frequencies();
-        wspr_scheduler.setEnabled(config.transmit);
-        wspr_scheduler.setConfig();
-        ini_reload_pending.store(false);
+        // Check for a pending INI change.
+        if (ini_reload_pending.load())
+        {
+            // Clear the pending flag and reload configuration
+            llog.logS(INFO, "Applying deferred INI changes.");
+        }
+
+        // Check for a pending PPM change.
+        if (ppm_reload_pending.load())
+        {
+            // Clear the pending flag and reload configuration
+            llog.logS(INFO, "Applying PPM change.");
+        }
+
+        set_config();
     }
 }
 
@@ -588,38 +586,6 @@ bool validate_config_data()
             llog.logE(ERROR, "Try: wsprrypi --help");
             std::cerr << std::endl;
             std::exit(EXIT_FAILURE);
-        }
-        else
-        {
-            // Initialize global WSPR message
-            message = new WsprMessage(
-                config.callsign,
-                config.grid_square,
-                config.power_dbm);
-
-            // Validate message
-            if (message)
-            {
-                // Build stream for WSPR symbols
-                std::ostringstream wspr_stream;
-                wspr_stream << "Generated WSPR symbols:\n";
-
-                for (int i = 0; i < WsprMessage::size; ++i)
-                {
-                    wspr_stream << static_cast<int>(message->symbols[i]);
-                    if (i < WsprMessage::size - 1)
-                    {
-                        wspr_stream << ","; // Append a comma except for the last element
-                    }
-                }
-
-                // Send the formatted string to logger
-                llog.logS(DEBUG, wspr_stream.str());
-            }
-            else
-            {
-                return false;
-            }
         }
 
         // Log WSPR packet details

@@ -56,13 +56,44 @@
 
 // System headers
 #include <string.h>
-#include <sys/reboot.h>    // for reboot()
-#include <linux/reboot.h>  // for LINUX_REBOOT_CMD_* constants
+#include <sys/reboot.h>   // for reboot()
+#include <linux/reboot.h> // for LINUX_REBOOT_CMD_* constants
 #include <sys/resource.h>
 #include <unistd.h>
 
-int freq_iterator_ = 0;                  ///< Track which frequency in the vector we are using
-double current_frequency_ = 0.0;         ///< Track which frequency is active
+/**
+ * @brief Round‐robin index into the configured frequency list.
+ *
+ * Tracks which entry in the `config.center_freq_set` vector will be
+ * used for the next WSPR transmission.  Wraps via modulo on each use.
+ */
+int freq_iterator = 0;
+
+/**
+ * @brief Currently active transmit frequency (in Hz).
+ *
+ * Holds the last frequency value retrieved by `next_frequency()`.
+ * A zero value indicates that no frequency is configured or the list was empty.
+ */
+double current_frequency = 0.0;
+
+/**
+ * @brief Timestamp marking the start of the current transmission.
+ *
+ * Captured at the moment a transmission begins (inside the start callback),
+ * and later used to compute the elapsed duration when the transmission
+ * completes.
+ */
+static std::chrono::steady_clock::time_point g_start;
+
+/**
+ * @brief File-scope self-pipe descriptors for signal notifications.
+ *
+ * @details Declared `extern` here so that any TU (like scheduling.cpp)
+ *          can refer to the same pipe ends.  The *definition* (no `extern`)
+ *          remains in exactly one .cpp (main.cpp).
+ */
+extern int sig_pipe_fds[2];
 
 /**
  * @brief Global mutex for coordinating shutdown and thread safety.
@@ -71,14 +102,6 @@ double current_frequency_ = 0.0;         ///< Track which frequency is active
  * initiates and executes the shutdown procedure.
  */
 std::mutex shutdown_mtx;
-
-/**
- * @brief Atomic flag indicating that a new PPM value needs to be applied.
- *
- * Set to `true` when a new PPM value has been received, signaling that
- * subsystems should reload or reconfigure based on the new frequency offset.
- */
-std::atomic<bool> ppm_reload_pending(false);
 
 /**
  * @brief Flag indicating if a system reboot is in progress.
@@ -130,7 +153,7 @@ std::mutex cv_mtx;
  * This is the central control flag for stopping the main transmission loop.
  * Set to `true` when a shutdown is triggered to begin safe thread teardown.
  */
-std::atomic<bool> exit_wspr_loop(false);
+std::atomic<bool> exit_wspr_loop{false};
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
@@ -141,8 +164,10 @@ std::atomic<bool> exit_wspr_loop(false);
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
-void callback_transmission_started()
+void callback_transmission_started(const std::string &msg = {})
 {
+    // Record start time
+    g_start = std::chrono::steady_clock::now();
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
@@ -156,27 +181,49 @@ void callback_transmission_started()
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
-void callback_transmission_complete()
+void callback_transmission_complete(const std::string &msg = {})
 {
-    llog.logS(DEBUG, "callback_transmission_complete().");
+    if (!msg.empty())
+    {
+        // Make a lowercase copy
+        std::string lower = msg;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c)
+                       { return std::tolower(c); });
+
+        // Look for “skipping transmission”
+        if (lower.find("skipping transmission") != std::string::npos)
+        {
+            llog.logS(INFO, msg);
+        }
+        else
+        {
+            // Get end time
+            auto end = std::chrono::steady_clock::now();
+            // Calculate duration
+            double seconds = std::chrono::duration<double>(end - g_start).count();
+            // Create a string from the double to three decimal places
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(3) << seconds;
+            std::string elapsed_str = oss.str();
+
+            llog.logS(INFO, "Transmission complete (", elapsed_str, " secs).");
+        }
+    }
 
     // Notify clients of completion
     send_ws_message("transmit", "finished");
-
-    // Check for a pending PPM change.
-    if (ppm_reload_pending.load())
-    {
-        apply_deferred_changes();
-        llog.logS(INFO, "Pending PPM change integrated.");
-        ppm_reload_pending.store(false);
-    }
 
     // Check for a pending INI change.
     if (ini_reload_pending.load())
     {
         apply_deferred_changes();
-        llog.logS(INFO, "Pending INI change integrated.");
-        // This integrates a PPM update
+    }
+
+    // Check for a pending PPM change.
+    if (ppm_reload_pending.load())
+    {
+        apply_deferred_changes();
     }
 }
 
@@ -371,28 +418,9 @@ void reboot_system()
  * - Stop all subsystems and perform thread cleanup.
  *
  * @note This function blocks until `exit_wspr_loop` is set by another thread.
- * @todo Consider encapsulating transmission thread in a proper class wrapper.
- * @todo Improve lifecycle/thread management with unified control.
  */
 bool wspr_loop()
 {
-    // -------------------------------------------------------------------------
-    // Optional: Start NTP-based PPM tracking
-    // -------------------------------------------------------------------------
-    if (config.use_ntp)
-    {
-        if (!ppm_init())
-        {
-            llog.logE(FATAL, "Unable to initialize NTP features.");
-            return false;
-        }
-        else
-        {
-            config.ppm = ppmManager.getCurrentPPM();
-            llog.logS(INFO, "Current PPM:", config.ppm);
-        }
-    }
-
     if (config.use_ini)
     {
         // Start INI monitor
@@ -403,33 +431,59 @@ bool wspr_loop()
     // Start web server and set priority
     webServer.start(config.web_port);
     webServer.setThreadPriority(SCHED_RR, 10);
+
     // Start socket server and set priority
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
     socketServer.setThreadPriority(SCHED_RR, 10);
+
     // Set transmission thread and set priority
     wsprTransmitter.setThreadScheduling(SCHED_FIFO, 30);
-    wsprTransmitter.setTransmissionCallbacks(start_cb, end_cb);
-    // wsprTransmitter.setupTransmission(7040100.0, 0, config.ppm, "AA0NT", "EM18", 20, /*use_offset=*/true);
-    // wsprTransmitter.setupTransmission(7040100.0, 0, config.ppm);
-    // wsprTransmitter.printParameters();
-    // std::cout << "Setup for " << (isWspr ? "WSPR" : "tone") << " complete.\n";
-    // wsprTransmitter.enableTransmission();
-
+    using CB = WsprTransmitter::Callback;
+    wsprTransmitter.setTransmissionCallbacks(
+        CB{callback_transmission_started},
+        CB{callback_transmission_complete});
+    set_config(); // Handles get next (or only) frequency in list and PPM
+    wsprTransmitter.enableTransmission();
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
 
     // -------------------------------------------------------------------------
-    // Block until shutdown is triggered
+    // Block until shutdown is triggered (self‐pipe trick)
     // -------------------------------------------------------------------------
-    std::unique_lock<std::mutex> lock(cv_mtx);
-    shutdown_cv.wait(lock, []
-                     { return exit_wspr_loop.load(); });
+    while (!exit_wspr_loop.load(std::memory_order_acquire))
+    {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(sig_pipe_fds[0], &rfds);
+
+        int ret = select(sig_pipe_fds[0] + 1, &rfds, nullptr, nullptr, nullptr);
+        if (ret < 0)
+        {
+            if (errno == EINTR)
+            {
+                // interrupted by a signal, retry
+                continue;
+            }
+            throw std::runtime_error(std::string("select() failed: ") + std::strerror(errno));
+        }
+
+        if (FD_ISSET(sig_pipe_fds[0], &rfds))
+        {
+            // Drain any bytes in the pipe so it never fills up
+            char buf;
+            while (read(sig_pipe_fds[0], &buf, 1) > 0)
+            {
+            }
+            break;
+        }
+    }
+    llog.logS(DEBUG, "[DEBUG] Loop terminating.");
 
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    // wsprTransmitter.shutdownTransmitter();
+    wsprTransmitter.shutdownTransmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver
@@ -437,7 +491,7 @@ bool wspr_loop()
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
 
-    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop.");
+    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
 
     if (reboot_flag.load())
     {
@@ -471,7 +525,6 @@ void reboot_machine()
         llog.logE(ERROR, "Reboot failed:", std::strerror(errno));
     }
 }
-
 
 /**
  * @brief Flush filesystems and power off the machine.
@@ -527,62 +580,38 @@ void send_ws_message(std::string type, std::string state)
 }
 
 /**
- * @brief Reset and apply the initial transmission configuration.
- *
- * Resets the round-robin frequency iterator, fetches the first frequency
- * from `config.center_freq_set`, and invokes the transmitter setup with
- * that frequency.
- *
- * This should be called before starting the scheduler’s monitor loop,
- * or whenever the frequency list has changed.
- */
- void setConfig()
- {
-     // Start iteration from the beginning of the frequency list.
-     freq_iterator_ = 0;
- 
-     // 2) Retrieve the first (or only) frequency.
-     current_frequency_ = next_frequency();
- 
-     // Apply the configuration to the transmitter.
-     //    `set_config(double)` is expected to configure `wsprTransmitter`
-     //    (e.g., via setupTransmission) and any related parameters.
-     set_config(current_frequency_);
- }
-
-/**
  * @brief Retrieve the next center frequency, cycling through the configured list.
  *
  * This method returns the next frequency from `config.center_freq_set` in a
- * round-robin fashion.  It uses `freq_iterator_` modulo the list size to
- * index into the vector, then increments `freq_iterator_` for the subsequent call.
+ * round-robin fashion.  It uses `freq_iterator` modulo the list size to
+ * index into the vector, then increments `freq_iterator` for the subsequent call.
  *
  * @return double
  *   - Next frequency in Hz from the list.
  *   - Returns 0.0 if the list is empty.
  *
  * @note
- *   - `freq_iterator_` should be initialized to 0.
+ *   - `freq_iterator` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
- double next_frequency()
- {
-     const auto &freqs = config.center_freq_set;
-     if (freqs.empty())
-     {
-         return 0.0;
-     }
- 
-     // Compute index in [0, freqs.size())
-     const size_t idx = freq_iterator_ % freqs.size();
- 
-     // Fetch and advance iterator
-     double freq = freqs[idx];
-     ++freq_iterator_;
- 
-     return freq;
- }
- 
+double next_frequency()
+{
+    const auto &freqs = config.center_freq_set;
+    if (freqs.empty())
+    {
+        return 0.0;
+    }
+
+    // Compute index in [0, freqs.size())
+    const size_t idx = freq_iterator % freqs.size();
+
+    // Fetch and advance iterator
+    double freq = freqs[idx];
+    ++freq_iterator;
+
+    return freq;
+}
+
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
  *
@@ -590,12 +619,10 @@ void send_ws_message(std::string type, std::string state)
  * the latest configuration settings, and reconfigures the WSPR transmitter
  * with the specified frequency and parameters.
  *
- * @param freq_hz Center frequency for the upcoming transmission, in Hertz.
- *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config(double freq_hz)
+void set_config()
 {
     llog.logS(DEBUG, "Retrieving PPM.");
     if (config.use_ntp)
@@ -603,23 +630,35 @@ void set_config(double freq_hz)
         config.ppm = ppmManager.getCurrentPPM();
     }
 
-    // Copy current settings locally to avoid data races
-    double frequency = freq_hz;
-    int powerLevel = config.power_level;
-    double ppmValue = config.ppm;
-    std::string callSign = config.callsign;
-    std::string gridLoc = config.grid_square;
-    int powerDbm = config.power_dbm;
-    bool useOffset = config.use_offset;
+    wsprTransmitter.disableTransmission();
+
+    freq_iterator = 0;       // Rester iterator
+    current_frequency = 0.0; // Zero out freq
 
     llog.logS(DEBUG, "Setting DMA.");
     wsprTransmitter.setupTransmission(
-        frequency,
-        powerLevel,
-        ppmValue,
-        std::move(callSign),
-        std::move(gridLoc),
-        powerDbm,
-        useOffset);
-    validate_config_data();
+        next_frequency(),
+        config.power_level,
+        config.ppm,
+        config.callsign,
+        config.grid_square,
+        config.power_dbm,
+        config.use_offset);
+    // If config is enabled, (re)enable transmissions
+    config.transmit ? wsprTransmitter.enableTransmission() : wsprTransmitter.disableTransmission();
+
+    // Validate configuration and ensure all required settings are present.
+    if (!validate_config_data())
+    {
+        llog.logE(ERROR, "Configuration validation failed.");
+        exit_wspr_loop.store(true); // Signal WSPR loop to exit
+        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
+        shutdown_flag.store(true);  // Indicate shutdown sequence active
+        return;
+    }
+
+    // Clear pending config flags
+    ini_reload_pending.store(false);
+    ppm_reload_pending.store(false);
+    llog.logS(INFO, "Setup complete, waiting for next transmission window.");
 }
