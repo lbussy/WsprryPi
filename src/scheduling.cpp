@@ -437,13 +437,13 @@ bool wspr_loop()
     socketServer.setThreadPriority(SCHED_RR, 10);
 
     // Set transmission thread and set priority
-    wsprTransmitter.setThreadScheduling(SCHED_FIFO, 30);
-    using CB = WsprTransmitter::Callback;
-    wsprTransmitter.setTransmissionCallbacks(
-        CB{callback_transmission_started},
-        CB{callback_transmission_complete});
-    set_config(); // Handles get next (or only) frequency in list and PPM
-    wsprTransmitter.enableTransmission();
+    // wsprTransmitter.setThreadScheduling(SCHED_FIFO, 30);
+    // using CB = WsprTransmitter::Callback;
+    // wsprTransmitter.setTransmissionCallbacks(
+        // CB{callback_transmission_started},
+        // CB{callback_transmission_complete});
+    // set_config(); // Handles get next (or only) frequency in list and PPM
+    // wsprTransmitter.enableTransmission();
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
@@ -478,12 +478,12 @@ bool wspr_loop()
             break;
         }
     }
-    llog.logS(DEBUG, "[DEBUG] Loop terminating.");
+    llog.logS(DEBUG, "WSPR Loop terminating.");
 
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.shutdownTransmitter();
+    // wsprTransmitter.shutdownTransmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver

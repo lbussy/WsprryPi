@@ -146,7 +146,10 @@ int main(int argc, char *argv[])
     // Parse command line first allowing calls for -h or -v
     try
     {
-        retval = parse_command_line(argc, argv);
+        if (!parse_command_line(argc, argv))
+        {
+            print_usage("Failure parsing command line.", EXIT_FAILURE);
+        }
     }
     catch (const std::exception &e)
     {
@@ -173,7 +176,7 @@ int main(int argc, char *argv[])
     block_signals();
     signalHandler.setCallback(callback_signal_handler);
     signalHandler.start();
-    signalHandler.setPriority(SCHED_RR, 10);
+    signalHandler.setPriority(SCHED_OTHER, 0);
 
     // Startup WSPR loop
     try

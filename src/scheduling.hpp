@@ -181,6 +181,27 @@ void shutdown_system();
 void reboot_system();
 
 /**
+ * @brief Initializes the PPM manager and registers a callback.
+ *
+ * @details
+ * This function attempts to initialize the `ppmManager`, which is responsible
+ * for calculating or retrieving the system's PPM (parts per million) drift
+ * for accurate frequency generation.
+ *
+ * The initialization result is evaluated, and appropriate logging is performed
+ * based on the returned `PPMStatus`. Critical failure conditions such as
+ * high PPM or lack of time synchronization cause the function to return `false`.
+ * If successful or recoverable, the PPM callback is registered.
+ *
+ * @return `true` if initialization succeeded or fallback is acceptable.
+ * @return `false` if a critical error was detected (e.g., high PPM or unsynced time).
+ *
+ * @note
+ * The `ppm_callback()` will be triggered later to handle live updates to PPM.
+ */
+bool ppm_init();
+
+/**
  * @brief Runs the main WSPR scheduler and transmission loop.
  *
  * @details

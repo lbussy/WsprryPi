@@ -472,6 +472,8 @@ bool validate_config_data()
     if (config.use_ntp)
     {
         llog.logS(INFO, "NTP will be used to calibrate the tone frequency.");
+        // Initialize PPM Manager
+        ppm_init();
     }
     else if (config.ppm != 0.0)
     {
@@ -612,6 +614,8 @@ bool validate_config_data()
         if (config.use_ntp)
         {
             llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
+            // Initialize PPM Manager
+            ppm_init();
         }
         else if (config.ppm != 0.0)
         {
