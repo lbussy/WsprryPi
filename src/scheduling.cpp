@@ -220,6 +220,25 @@ void callback_transmission_complete(const std::string &msg)
         apply_deferred_changes();
     if (ppm_reload_pending.load())
         apply_deferred_changes();
+
+    // Atomically decrement and grab the new value:
+    int remaining = --config.tx_iterations; // uses atomic<int>::operator--
+
+    if (remaining <= 0)
+    {
+        llog.logS(DEBUG, "Reached 0 iterations, signalling shutdown.");
+
+        // Tell wspr_loop to break out:
+        {
+            std::lock_guard<std::mutex> lk(exitwspr_mtx);
+            exitwspr_ready = true;
+        }
+        exitwspr_cv.notify_one();
+    }
+    else
+    {
+        llog.logS(INFO, "WSPR transmissions remaining:", remaining);
+    }
 }
 
 /**
@@ -425,12 +444,26 @@ bool wspr_loop()
     }
 
     // Start web server and set priority
-    webServer.start(config.web_port);
-    webServer.setThreadPriority(SCHED_RR, 10);
+    if (config.web_port >= 1024 && config.web_port <= 49151)
+    {
+        webServer.start(config.web_port);
+        webServer.setThreadPriority(SCHED_RR, 10);
+    }
+    else
+    {
+        llog.logS(DEBUG, "Skipping web server.");
+    }
 
     // Start socket server and set priority
-    socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
-    socketServer.setThreadPriority(SCHED_RR, 10);
+    if (config.socket_port >= 1024 && config.socket_port <= 49151)
+    {
+        socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
+        socketServer.setThreadPriority(SCHED_RR, 10);
+    }
+    else
+    {
+        llog.logS(DEBUG, "Skipping socket server.");
+    }
 
     // Set transmission server and set priority
     wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
@@ -444,7 +477,7 @@ bool wspr_loop()
     llog.logS(INFO, "WSPR loop running.");
 
     // -------------------------------------------------------------------------
-    // Block until shutdown is triggered
+    // Loop (block wspr_loop only) until shutdown is triggered
     // -------------------------------------------------------------------------
     {
         std::unique_lock<std::mutex> lk(exitwspr_mtx);
@@ -598,9 +631,9 @@ double next_frequency()
  */
 void set_config()
 {
-    llog.logS(DEBUG, "Retrieving PPM.");
     if (config.use_ntp)
     {
+        llog.logS(DEBUG, "Retrieving PPM.");
         config.ppm = ppmManager.getCurrentPPM();
     }
 

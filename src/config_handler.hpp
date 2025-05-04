@@ -32,6 +32,7 @@
 #include "ini_file.hpp"
 #include "json.hpp"
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -101,10 +102,10 @@ struct ArgParserConfig
     int shutdown_pin;  ///< GPIO pin used to signal shutdown.
 
     // Command line only
-    bool date_time_log; ///< Prefix logs with timestamp.
-    bool loop_tx;       ///< Repeat transmission cycle.
-    int tx_iterations;  ///< Number of transmission iterations (0 = infinite).
-    double test_tone;   ///< Enable continuous tone mode (in Hz).
+    bool date_time_log;             ///< Prefix logs with timestamp.
+    bool loop_tx;                   ///< Repeat transmission cycle.
+    std::atomic<int> tx_iterations; ///< Number of transmission iterations (0 = infinite).
+    double test_tone;               ///< Enable continuous tone mode (in Hz).
 
     // Runtime variables
     ModeType mode;                       ///< Current operating mode.
@@ -116,7 +117,7 @@ struct ArgParserConfig
      * @brief Default constructor initializing all configuration parameters.
      */
     ArgParserConfig()
-        : transmit(false),
+        : transmit(true),
           callsign(""),
           grid_square(""),
           power_dbm(0),
@@ -291,7 +292,7 @@ extern void load_json(std::string filename);
  *
  * @return void
  */
-void dump_json(const nlohmann::json& j, std::string tag);
+void dump_json(const nlohmann::json &j, std::string tag);
 
 /**
  * @brief Applies a full patch update from incoming JSON.

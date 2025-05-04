@@ -128,7 +128,7 @@ void json_to_config()
     config.ini_filename = jConfig["Meta"]["INI Filename"].get<std::string>();
     config.date_time_log = jConfig["Meta"]["Date Time Log"].get<bool>();
     config.loop_tx = jConfig["Meta"]["Loop TX"].get<bool>();
-    config.tx_iterations = jConfig["Meta"]["TX Iterations"].get<int>();
+    config.tx_iterations.store(jConfig["Meta"]["TX Iterations"].get<int>());
     config.test_tone = jConfig["Meta"]["Test Tone"].get<double>();
     config.center_freq_set = jConfig["Meta"]["Center Frequency Set"].get<std::vector<double>>();
 
@@ -180,7 +180,7 @@ void config_to_json()
     jConfig["Meta"]["INI Filename"] = config.ini_filename;
     jConfig["Meta"]["Date Time Log"] = config.date_time_log;
     jConfig["Meta"]["Loop TX"] = config.loop_tx;
-    jConfig["Meta"]["TX Iterations"] = config.tx_iterations;
+    jConfig["Meta"]["TX Iterations"] = config.tx_iterations.load();
     jConfig["Meta"]["Test Tone"] = config.test_tone;
     jConfig["Meta"]["Center Frequency Set"] = config.center_freq_set;
 

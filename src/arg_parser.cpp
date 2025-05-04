@@ -624,7 +624,7 @@ bool validate_config_data()
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode
-        if (!config.transmit && !config.use_ini)
+        if (!config.use_ini)
         {
             if (config.loop_tx)
             {
@@ -632,11 +632,11 @@ bool validate_config_data()
             }
             else
             {
-                if (config.tx_iterations <= 0)
-                {
-                    config.tx_iterations = 1;
+                if (config.tx_iterations.load() <= 0) {
+                    config.tx_iterations.store(1);
+                    config.transmit = true;
                 }
-                llog.logS(INFO, "TX will stop after:", config.tx_iterations, "iteration(s) of the frequency list.");
+                llog.logS(INFO, "TX will stop after:", config.tx_iterations.load(), "iteration(s) of the frequency list.");
             }
         }
 
@@ -1011,7 +1011,7 @@ bool parse_command_line(int argc, char *argv[])
             {
                 try
                 {
-                    config.tx_iterations = std::stoi(optarg);
+                    config.tx_iterations.store( std::stoi(optarg) );
                 }
                 catch (const std::invalid_argument &)
                 {
@@ -1022,8 +1022,7 @@ bool parse_command_line(int argc, char *argv[])
                     llog.logE(ERROR, "Number out of range for transmit iterations:", optarg, "- Using default (1).");
                 }
                 // Set config.tx_iterations to at least 1
-                config.tx_iterations = (config.tx_iterations == 0) ? 1 : config.tx_iterations; // Equal to at least 1
-                config.loop_tx = false;
+                config.tx_iterations.store((config.tx_iterations.load() == 0) ? 1 : config.tx_iterations.load()); // Equal to at least 1
             }
             break;
         }

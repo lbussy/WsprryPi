@@ -3,7 +3,6 @@
 ## C++ Code
 
 - [ ] Right-size logging
-- [ ] Need to stop after one transmission from command line (make test)
 
 ## Web UI
 
