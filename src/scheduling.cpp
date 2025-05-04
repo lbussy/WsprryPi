@@ -62,6 +62,33 @@
 #include <unistd.h>
 
 /**
+ * @brief Mutex to protect access to the shutdown flag for the WSPR loop.
+ *
+ * This mutex must be locked before reading or writing \c exitwspr_ready
+ * to ensure thread-safe coordination between the signal handler callback
+ * and the WSPR loop.
+ */
+std::mutex exitwspr_mtx;
+
+/**
+ * @brief Condition variable used to signal the WSPR loop to exit.
+ *
+ * The signal handler callback will notify this condition variable after
+ * setting \c exitwspr_ready to \c true, causing the waiting WSPR loop
+ * to wake up and perform shutdown.
+ */
+std::condition_variable exitwspr_cv;
+
+/**
+ * @brief Flag indicating whether the WSPR loop should terminate.
+ *
+ * Set to \c true by the signal handler callback under protection of
+ * \c exitwspr_mtx, then \c exitwspr_cv is notified so that the WSPR
+ * loop can break out of its wait and begin shutdown.
+ */
+bool exitwspr_ready = false;
+
+/**
  * @brief Round‐robin index into the configured frequency list.
  *
  * Tracks which entry in the `config.center_freq_set` vector will be
@@ -130,30 +157,6 @@ std::atomic<bool> shutdown_flag{false};
  * using either NTP data or internal estimation methods.
  */
 PPMManager ppmManager;
-
-/**
- * @brief Condition variable used to wait for shutdown signals.
- *
- * Used primarily by the main `wspr_loop()` to block execution
- * until an exit signal is triggered (e.g., via GPIO, CLI, or remote command).
- */
-std::condition_variable shutdown_cv;
-
-/**
- * @brief Mutex for protecting access to shared condition variables.
- *
- * Ensures safe concurrent access when using `shutdown_cv` or other
- * related state variables during wait/notify operations.
- */
-std::mutex cv_mtx;
-
-/**
- * @brief Atomic flag used to exit the main WSPR loop.
- *
- * This is the central control flag for stopping the main transmission loop.
- * Set to `true` when a shutdown is triggered to begin safe thread teardown.
- */
-std::atomic<bool> exit_wspr_loop{false};
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
@@ -243,7 +246,7 @@ void callback_transmission_complete(const std::string &msg = {})
 void ppm_callback(double new_ppm)
 {
     config.ppm = new_ppm;
-    ppm_reload_pending.store(true);
+    ppm_reload_pending.store(true, std::memory_order_relaxed);
     return;
 }
 
@@ -326,8 +329,7 @@ void callback_shutdown_system()
  *
  * Specifically:
  * - Toggles the LED 3 times with 200ms intervals.
- * - Sets `exit_wspr_loop` to break out of the main transmission loop.
- * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `exitwspr_cv` to break out of the main transmission loop.
  * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
  *
  * @note
@@ -352,9 +354,14 @@ void shutdown_system()
         }
     }
 
-    exit_wspr_loop.store(true); // Signal WSPR loop to exit
-    shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
-    shutdown_flag.store(true);  // Indicate shutdown sequence active
+    // Let wspr_loop know to break out
+    {
+        std::lock_guard<std::mutex> lk(exitwspr_mtx);
+        exitwspr_ready = true;
+    }
+    exitwspr_cv.notify_one();
+    // Set shutdown flag
+    shutdown_flag.store(true, std::memory_order_relaxed);
 }
 
 /**
@@ -368,8 +375,7 @@ void shutdown_system()
  *
  * Specifically:
  * - Toggles the LED 2 times with 100ms intervals.
- * - Sets `exit_wspr_loop` to break out of the main transmission loop.
- * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `exitwspr_cv` to break out of the main transmission loop.
  * - Sets `reboot_flag` to mark that a full system reboot is in progress.
  *
  * @note
@@ -393,9 +399,14 @@ void reboot_system()
         }
     }
 
-    exit_wspr_loop.store(true); // Signal WSPR loop to exit
-    shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
-    reboot_flag.store(true);    // Indicate shutdown sequence active
+    // Let wspr_loop know to break out
+    {
+        std::lock_guard<std::mutex> lk(exitwspr_mtx);
+        exitwspr_ready = true;
+    }
+    exitwspr_cv.notify_one();
+    // Set reboot flag
+    reboot_flag.store(true, std::memory_order_relaxed);
 }
 
 /**
@@ -410,14 +421,7 @@ void reboot_system()
  * When signaled to exit, it cleanly shuts down all background services and
  * threads in the correct order.
  *
- * Main responsibilities:
- * - Initialize and apply NTP-based PPM correction (if enabled).
- * - Start the TCP server and configure its thread priority.
- * - Launch the transmission loop in a background thread.
- * - Wait for shutdown signal via `shutdown_cv`.
- * - Stop all subsystems and perform thread cleanup.
- *
- * @note This function blocks until `exit_wspr_loop` is set by another thread.
+ * @note This function blocks until `exitwspr_cv` is set by another thread.
  */
 bool wspr_loop()
 {
@@ -436,54 +440,32 @@ bool wspr_loop()
     socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
     socketServer.setThreadPriority(SCHED_RR, 10);
 
-    // Set transmission thread and set priority
-    // wsprTransmitter.setThreadScheduling(SCHED_FIFO, 30);
-    // using CB = WsprTransmitter::Callback;
-    // wsprTransmitter.setTransmissionCallbacks(
-        // CB{callback_transmission_started},
-        // CB{callback_transmission_complete});
-    // set_config(); // Handles get next (or only) frequency in list and PPM
-    // wsprTransmitter.enableTransmission();
+    // Set transmission server and set priority
+    wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
+    using CB = WsprTransmitter::Callback;
+    wsprTransmitter.setTransmissionCallbacks(
+        CB{callback_transmission_started},
+        CB{callback_transmission_complete});
+    set_config(); // Handles get next (or only) frequency, PPM, and setup
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
 
     // -------------------------------------------------------------------------
-    // Block until shutdown is triggered (self‐pipe trick)
+    // Block until shutdown is triggered
     // -------------------------------------------------------------------------
-    while (!exit_wspr_loop.load(std::memory_order_acquire))
     {
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(sig_pipe_fds[0], &rfds);
-
-        int ret = select(sig_pipe_fds[0] + 1, &rfds, nullptr, nullptr, nullptr);
-        if (ret < 0)
-        {
-            if (errno == EINTR)
-            {
-                // interrupted by a signal, retry
-                continue;
-            }
-            throw std::runtime_error(std::string("select() failed: ") + std::strerror(errno));
-        }
-
-        if (FD_ISSET(sig_pipe_fds[0], &rfds))
-        {
-            // Drain any bytes in the pipe so it never fills up
-            char buf;
-            while (read(sig_pipe_fds[0], &buf, 1) > 0)
-            {
-            }
-            break;
-        }
+        std::unique_lock<std::mutex> lk(exitwspr_mtx);
+        exitwspr_cv.wait(lk, []
+                         { return exitwspr_ready; });
     }
+
     llog.logS(DEBUG, "WSPR Loop terminating.");
 
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    // wsprTransmitter.shutdownTransmitter();
+    wsprTransmitter.shutdownTransmitter();
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver
@@ -651,14 +633,17 @@ void set_config()
     if (!validate_config_data())
     {
         llog.logE(ERROR, "Configuration validation failed.");
-        exit_wspr_loop.store(true); // Signal WSPR loop to exit
-        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
-        shutdown_flag.store(true);  // Indicate shutdown sequence active
+        // Let wspr_loop know to break out
+        {
+            std::lock_guard<std::mutex> lk(exitwspr_mtx);
+            exitwspr_ready = true;
+        }
+        exitwspr_cv.notify_one();
         return;
     }
 
     // Clear pending config flags
-    ini_reload_pending.store(false);
-    ppm_reload_pending.store(false);
+    ini_reload_pending.store(false, std::memory_order_relaxed);
+    ppm_reload_pending.store(false, std::memory_order_relaxed);
     llog.logS(INFO, "Setup complete, waiting for next transmission window.");
 }

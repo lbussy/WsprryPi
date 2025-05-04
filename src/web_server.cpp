@@ -240,7 +240,7 @@ void WebServer::stop()
 /**
  * @brief Sets the priority for the server thread.
  *
- * @param schedPolicy The scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+ * @param schedPolicy The scheduling policy (e.g., SCHED_RR, SCHED_FIFO).
  * @param priority The priority level.
  * @return true if the priority was set successfully, false otherwise.
  */

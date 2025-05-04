@@ -36,27 +36,15 @@
 #include "version.hpp"
 #include "logging.hpp"
 #include "singleton.hpp"
+#include "wspr_transmit.hpp"
 
 // Standard headers
 #include <atomic>
 #include <string_view>
 
 // System headers
-#include <fcntl.h>   // fcntl()
-#include <unistd.h>  // pipe(), read(), write()
-
-/**
- * @brief File‐scope self‐pipe descriptors for signal notifications.
- *
- * @details Implements the “self‐pipe trick” to safely wake up
- *          select()/poll() or other I/O waits from within a signal handler.
- *          - sig_pipe_fds[0]: read end of the pipe (for waiting threads)
- *          - sig_pipe_fds[1]: write end of the pipe (to be written by handler)
- *
- *          Initialized to {-1, -1}; actual pipe() must be called in main()
- *          before installing the signal handler.
- */
-int sig_pipe_fds[2] = { -1, -1 };
+#include <fcntl.h>  // fcntl()
+#include <unistd.h> // pipe(), read(), write()
 
 /**
  * @brief TCP port used for singleton instance checking.
@@ -85,22 +73,23 @@ SignalHandler signalHandler;
 void callback_signal_handler(int signum, bool is_critical)
 {
     std::string_view signal_name = SignalHandler::signalToString(signum);
-    if (is_critical)
+    if (!is_critical)
+    {
+        wsprTransmitter.shutdownTransmitter();
+        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
+        {
+            std::lock_guard<std::mutex> lk(exitwspr_mtx);
+            exitwspr_ready = true;
+        }
+        exitwspr_cv.notify_one();
+        llog.logS(DEBUG, "[DEBUG] Notified about shutdown.");
+    }
+    else
     {
         std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
         std::quick_exit(signum);
     }
-    else
-    {
-        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
-        // Let wspr_loop know you're leaving
-        exit_wspr_loop.store(true); // Signal WSPR loop to exit
-        shutdown_cv.notify_all();   // Wake any threads blocked on shutdown
-        shutdown_flag.store(true);  // Indicate shutdown sequence active
-        // Wake up the select() below:
-        const char wake = 1;
-        ::write(sig_pipe_fds[1], &wake, 1);
-    }
+    llog.logS(DEBUG, "[DEBUG] Leaving callback.");
 }
 
 /**
@@ -122,15 +111,6 @@ void callback_signal_handler(int signum, bool is_critical)
  */
 int main(int argc, char *argv[])
 {
-    // Create the self‐pipe
-    if (pipe(sig_pipe_fds) < 0)
-    {
-        std::perror("pipe");
-        return EXIT_FAILURE;
-    }
-    // Make read‐end nonblocking so the select won’t block on a full pipe
-    fcntl(sig_pipe_fds[0], F_SETFL, O_NONBLOCK);
-
     int retval = EXIT_SUCCESS;
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
@@ -176,7 +156,7 @@ int main(int argc, char *argv[])
     block_signals();
     signalHandler.setCallback(callback_signal_handler);
     signalHandler.start();
-    signalHandler.setPriority(SCHED_OTHER, 0);
+    signalHandler.setPriority(SCHED_RR, 40);
 
     // Startup WSPR loop
     try

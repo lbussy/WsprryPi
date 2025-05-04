@@ -943,7 +943,7 @@ bool WebSocketServer::performHandshake(int client)
  * This applies the given scheduling policy and priority to both
  * the server and keep-alive threads (if active and joinable).
  *
- * @param schedPolicy Scheduling policy (e.g., SCHED_FIFO, SCHED_RR).
+ * @param schedPolicy Scheduling policy (e.g., SCHED_RR, SCHED_FIFO).
  * @param priority Thread priority (valid for the chosen policy).
  * @return true if all applicable threads were updated successfully.
  */

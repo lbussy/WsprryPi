@@ -190,8 +190,8 @@ void GPIOInput::resetTrigger()
  * priority of the signal handling worker thread.
  *
  * This function is useful for raising the importance of the signal handling
- * thread under high system load, especially when using `SCHED_FIFO` or
- * `SCHED_RR`.
+ * thread under high system load, especially when using `SCHED_RR` or
+ * `SCHED_FIFO`.
  *
  * @param schedPolicy The scheduling policy (e.g., `SCHED_FIFO`, `SCHED_RR`, `SCHED_OTHER`).
  * @param priority The thread priority value to assign (depends on policy).

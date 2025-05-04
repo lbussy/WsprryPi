@@ -150,14 +150,14 @@ void callback_ini_changed()
         {
             // Transmit not changed, make pending change
             llog.logS(INFO, "INI file changed, reload after transmission.");
-            ini_reload_pending.store(true);
+            ini_reload_pending.store(true, std::memory_order_relaxed);
         }
         else
         {
             // Kill the transmission
             llog.logS(INFO, "Transmission disabled, stopping transmission.");
             set_config();
-            ini_reload_pending.store(false);
+            ini_reload_pending.store(false, std::memory_order_relaxed);
         }
     }
     else
@@ -165,7 +165,7 @@ void callback_ini_changed()
         // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
         set_config();
-        ini_reload_pending.store(false);
+        ini_reload_pending.store(false, std::memory_order_relaxed);
     }
 }
 

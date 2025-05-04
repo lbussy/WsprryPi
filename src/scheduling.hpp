@@ -40,26 +40,31 @@
 #include <thread>
 
 /**
- * @brief Flag indicating if a system reboot is in progress.
+ * @brief Mutex to protect access to the shutdown flag for the WSPR loop.
  *
- * @details
- * This atomic flag is used throughout the application to signal when a
- * full system reboot has been initiated. It is typically set from one
- * of the control points (REST or websockets).
- *
- * Other threads can poll or wait on this flag to terminate safely.
+ * This mutex must be locked before reading or writing \c exitwspr_ready
+ * to ensure thread-safe coordination between the signal handler callback
+ * and the WSPR loop.
  */
-extern std::atomic<bool> reboot_flag;
+extern std::mutex exitwspr_mtx;
 
 /**
- * @brief Condition variable used for shutdown synchronization.
+ * @brief Condition variable used to signal the WSPR loop to exit.
  *
- * @details
- * Allows threads to block until a shutdown event occurs, such as a signal
- * from a GPIO input or user request. Typically used in conjunction with
- * `exit_wspr_loop`.
+ * The signal handler callback will notify this condition variable after
+ * setting \c exitwspr_ready to \c true, causing the waiting WSPR loop
+ * to wake up and perform shutdown.
  */
-extern std::condition_variable shutdown_cv;
+extern std::condition_variable exitwspr_cv;
+
+/**
+ * @brief Flag indicating whether the WSPR loop should terminate.
+ *
+ * Set to \c true by the signal handler callback under protection of
+ * \c exitwspr_mtx, then \c exitwspr_cv is notified so that the WSPR
+ * loop can break out of its wait and begin shutdown.
+ */
+extern bool exitwspr_ready
 
 /**
  * @brief Flag indicating if a system shutdown is in progress.
@@ -82,27 +87,6 @@ extern std::atomic<bool> shutdown_flag;
  * adjustments for frequency stability during WSPR transmission.
  */
 extern PPMManager ppmManager;
-
-/**
- * @brief Flag used to signal exit from the main WSPR loop.
- *
- * @details
- * This atomic boolean flag is set to `true` when the WSPR loop and
- * associated subsystems should terminate. It is checked by the main
- * `wspr_loop()` and other threads to trigger graceful shutdown.
- */
-extern std::atomic<bool> exit_wspr_loop;
-
-/**
- * @brief Mutex for protecting the shutdown condition variable.
- *
- * @details
- * This mutex guards access to the `shutdown_cv` condition variable and
- * any associated shared state used to coordinate orderly shutdown of
- * the main WSPR loop. Threads must lock `cv_mtx` before waiting on or
- * notifying `shutdown_cv` to ensure thread safety.
- */
-extern std::mutex cv_mtx;
 
 /**
  * @brief Callback triggered by a shutdown GPIO event.
@@ -149,8 +133,7 @@ void callback_transmission_complete(const std::string &msg);
  *
  * Specifically:
  * - Toggles the LED 3 times with 100ms intervals.
- * - Sets `exit_wspr_loop` to break out of the main transmission loop.
- * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `exitwspr_cv` to break out of the main transmission loop.
  * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
  *
  * @note
@@ -170,8 +153,7 @@ void shutdown_system();
  *
  * Specifically:
  * - Toggles the LED 2 times with 100ms intervals.
- * - Sets `exit_wspr_loop` to break out of the main transmission loop.
- * - Notifies `shutdown_cv` to unblock any waiting threads.
+ * - Sets `exitwspr_cv` to break out of the main wspr_scheduler loop.
  * - Sets `reboot_flag` to mark that a full system reboot is in progress.
  *
  * @note
@@ -209,10 +191,9 @@ bool ppm_init();
  * - Initializes optional NTP/PPM drift correction.
  * - Starts the TCP command server and sets its priority.
  * - Launches the WSPR transmission thread.
- * - Waits on the `shutdown_cv` condition variable for a shutdown signal.
  * - Performs full cleanup and shutdown sequence before exiting.
  *
- * @note This function blocks and runs until `exit_wspr_loop` is set to `true`.
+ * @note This function blocks and runs until `exitwspr_cv` notifies.
  */
 extern bool wspr_loop();
 
