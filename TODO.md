@@ -15,7 +15,7 @@
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
-- [ ] Uninstall:
+- [ ] Uninstall message weirdness:
         [INFO ] Ensuring destination directory does not exist: '/home/pi/WsprryPi'
         [INFO ] Destination directory already exists: '/home/pi/WsprryPi'
 

@@ -62,19 +62,15 @@ remove_files_and_dirs() {
     if [ ${#files_and_dirs[@]} -eq 0 ]; then
         files_and_dirs=(
             "/usr/local/bin/wspr"
-            "/usr/local/bin/wsprrypi"
             "/usr/local/etc/wspr.ini"
             "/usr/local/bin/shutdown-button.py"
             "/usr/local/bin/shutdown-watch.py"
             "/usr/local/bin/shutdown_watch.py"
             "/usr/local/bin/wspr_watch.py"
             "/var/www/html/wspr/"
-            "/var/www/html/wsprrypi/"
             "/var/log/wspr/"
-            "/var/log/wsprrypi/"
             "/var/log/WsprryPi/"
-            "/etc/logrotate.d/wspr/"
-            "/etc/logrotate.d/wsprrypi/"
+            "/etc/logrotate.d/wspr"
         )
     fi
 

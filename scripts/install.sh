@@ -207,8 +207,8 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-dma_class}"
-declare GIT_TAG="${GIT_TAG:-1.2.1}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0_devel}"
+declare GIT_TAG="${GIT_TAG:-2.0_devel}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -5473,7 +5473,7 @@ manage_service() {
             replace_string_in_script "$service_path" "EXEC_START" "$exec_start" "$debug"
             replace_string_in_script "$service_path" "SYSLOG_IDENTIFIER" "$syslog_identifier" "$debug"
             replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
-            replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_err" "$debug"
+            replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_out" "$debug"
 
             exec_command "Change ownership on systemd file" "sudo chown root:root $service_path" "$debug" || retval=1
             exec_command "Change permissions on systemd file" "sudo chmod 644 $service_path" "$debug" || retval=1
