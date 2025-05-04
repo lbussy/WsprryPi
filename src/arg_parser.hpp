@@ -2,19 +2,16 @@
  * @file arg_parser.hpp
  * @brief Command-line argument parser and configuration handler.
  *
- * This file is part of WsprryPi, a project originally forked from
- * threeme3/WsprryPi (no longer active on GitHub).
- *
- * However, this new code added to the project is licensed under the
- * MIT License. See LICENSE.MIT.md for more information.
+ * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -32,225 +29,193 @@
 #ifndef ARG_PARSER_HPP
 #define ARG_PARSER_HPP
 
-#include "lcblog.hpp"
+// Project headers
 #include "ini_file.hpp"
+#include "lcblog.hpp"
 #include "monitorfile.hpp"
 #include "version.hpp"
+#include "wspr_message.hpp"
+#include "wspr_band_lookup.hpp"
 
-#include <algorithm>
-#include <stdexcept>
-#include <getopt.h>
-#include <string>
-#include <iostream>
+// Standard library headers
+#include <atomic>
 #include <optional>
-#include <unordered_map>
+#include <thread>
 
 /**
- * @enum ModeType
- * @brief Specifies the mode of operation for the application.
+ * @brief Global instance of the MonitorFile for INI file change detection.
  *
- * This enumeration defines the available modes for operation.
- * - `WSPR`: Represents the WSPR (Weak Signal Propagation Reporter) transmission mode.
- * - `TONE`: Represents a test tone generation mode.
- */
-enum class ModeType
-{
-    WSPR, ///< WSPR transmission mode
-    TONE  ///< Test tone generation mode
-};
-
-/**
- * @brief Configuration structure for WSPR and test tone transmissions.
+ * The `iniMonitor` object continuously monitors the specified INI file for changes.
+ * It provides real-time notifications when the file is modified, enabling the application
+ * to reload configuration settings dynamically without requiring a restart.
  *
- * This structure holds various configuration parameters related to
- * WSPR transmissions and test tone generation. It stores values
- * obtained from the command line and INI file, providing runtime
- * settings for the application.
- */
-struct ArgParserConfig
-{
-    bool useini;                         ///< Flag indicating if an INI file is used for configuration.
-    std::string inifile;                 ///< Path to the INI configuration file.
-    bool repeat;                         ///< Flag to enable repeated transmission cycles.
-    std::vector<double> center_freq_set; ///< List of transmission frequencies.
-    bool no_delay;                       ///< Flag to disable WSPR TX window synchronization.
-    std::optional<int> terminate;        ///< Number of transmissions before termination (if set).
-    bool daemon_mode;                    ///< Flag for enabling daemon (terse) mode.
-    double f_plld_clk;                   ///< TODO:  Define this - PLLD clock frequency (unused in current implementation).
-    int mem_flag;                        ///< TODO:  Define this - Placeholder for memory management flags.
-    float test_tone;                     ///< Frequency for test tone mode.
-    ModeType mode;                       ///< Current operating mode (WSPR or test tone).
-
-    /**
-     * @brief Default constructor initializing all configuration parameters.
-     *
-     * Initializes the structure with default values:
-     * - `useini = false`
-     * - `inifile = ""`
-     * - `repeat = false`
-     * - `center_freq_set = {}`
-     * - `no_delay = false`
-     * - `terminate = std::nullopt`
-     * - `daemon_mode = false`
-     * - `f_plld_clk = 0.0`
-     * - `mem_flag = 0`
-     * - `test_tone = 0.0f`
-     * - `mode = ModeType::WSPR`
-     */
-    ArgParserConfig() : useini(false),
-                        inifile(""),
-                        repeat(false),
-                        center_freq_set(),
-                        no_delay(false),
-                        daemon_mode(false),
-                        f_plld_clk(0.0),
-                        mem_flag(0),
-                        test_tone(0.0f),
-                        mode(ModeType::WSPR) {}
-};
-
-/**
- * @brief Global configuration instance for argument parsing.
+ * This instance is typically used alongside the `ini` object to automatically re-validate
+ * and apply updated configuration settings.
  *
- * This global instance of `ArgParserConfig` stores the parsed
- * command-line arguments and configuration settings used throughout
- * the application. It is populated via `parse_command_line()`
- * and accessed by various components to retrieve runtime parameters.
+ * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
+ * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
  *
- * @note This variable is defined in `arg_parser.cpp` and declared as
- *       `extern` in `arg_parser.hpp` to ensure a single definition
- *       across the application.
- */
-extern ArgParserConfig config;
-
-/**
- * @brief Global logging instance for application-wide logging.
- *
- * This external instance of `LCBLog` is used for logging messages, including
- * informational messages, warnings, and errors. It provides structured logging
- * for debugging and runtime diagnostics.
- */
-extern LCBLog llog;
-
-/**
- * @brief Global INI file handler for configuration management.
- *
- * This external instance of `IniFile` is responsible for loading, parsing,
- * and retrieving configuration values from an INI file. It allows the application
- * to store and manage user-defined settings persistently.
- */
-extern IniFile ini;
-
-/**
- * @brief Global instance for monitoring file changes.
- *
- * This external instance of `MonitorFile` is responsible for detecting
- * modifications to the INI configuration file. It allows the application
- * to respond dynamically to configuration updates without requiring a restart.
- *
- * @note This is particularly useful for live configuration updates.
+ * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
  */
 extern MonitorFile iniMonitor;
 
 /**
- * @brief Converts a string to uppercase.
+ * @brief Instance of WSPRBandLookup.
  *
- * This function takes an input string and returns a new string where all
- * characters have been converted to uppercase. It ensures proper handling
- * of character conversion by using `std::toupper` with an explicit cast to `unsigned char`.
+ * This instance of WSPRBandLookup is used to translate frequency representations:
+ * - Converts from a short-hand (Hx) to a higher order (e.g., MHz) and vice versa.
+ * - Validates frequency values.
+ * - Translates terms (e.g., "20m") into a valid WSPR frequency.
  *
- * @param str The input string to be converted.
- * @return A new string with all characters converted to uppercase.
- *
- * @example
- * @code
- * std::string result = to_uppercase("Hello");
- * // result = "HELLO"
- * @endcode
+ * Use this instance for any operations requiring frequency conversions and validation
+ * within the WSPR system.
  */
-std::string to_uppercase(const std::string &str);
+extern WSPRBandLookup lookup;
 
 /**
- * @brief Converts a frequency string to its corresponding numeric value.
+ * @brief Pointer to a WSPR message.
  *
- * This function takes a string representation of a frequency, which may be a predefined
- * band name (e.g., "20M"), an explicitly specified numeric frequency (e.g., "14097100.0"),
- * or an invalid input. The function attempts to match the string to a predefined set
- * of frequency mappings. If no match is found, it attempts to parse the input as a
- * numeric value. If parsing fails or the value is non-positive, an error is logged.
+ * This pointer is used to reference a WsprMessage object, which constructs a WSPR message
+ * from a callsign, grid location, and power level. It is initialized to nullptr until
+ * a valid WsprMessage instance is created.
  *
- * @param option The input frequency string, which can be a predefined band name
- *               or an explicit numeric frequency.
- * @return An `std::optional<double>` containing the parsed frequency in Hz if valid,
- *         or `std::nullopt` if the input is invalid.
- *
- * @example
- * @code
- * auto freq1 = string_to_frequency("20M");  // Returns 14097100.0
- * auto freq2 = string_to_frequency("14097100.0");  // Returns 14097100.0
- * auto freq3 = string_to_frequency("INVALID");  // Returns std::nullopt
- * @endcode
+ * @note Remember to allocate memory for this pointer before use.
  */
-std::optional<double> string_to_frequency(std::string option);
+extern WsprMessage *message;
 
 /**
- * @brief Displays the usage information for the WsprryPi application.
+ * @brief Atomic variable representing the current WSPR transmission interval.
  *
- * This function prints out a brief help message to `std::cerr`, outlining
- * the command-line syntax and key options available. It provides a minimal
- * reference for users and suggests consulting the documentation for more
- * details on all available options.
+ * This variable defines the transmission interval for WSPR signals.
+ * It can be set to one of the predefined constants:
+ * - `WSPR_2` for a 2-minute interval.
+ * - `WSPR_15` for a 15-minute interval.
  *
- * @note This function does not return but simply prints to `std::cerr`.
+ * This value is updated dynamically based on the INI configuration
+ * and influences when the scheduler triggers the next transmission.
  *
- * @example
- * @code
- * print_usage(); // Outputs the help message to standard error.
- * @endcode
+ * @note Access to this variable is thread-safe due to its atomic nature.
  */
-void print_usage();
+extern std::atomic<int> wspr_interval;
 
 /**
- * @brief Displays the current configuration values from the INI file.
+ * @brief Semaphore indicating a pending INI file reload.
  *
- * If an INI file is loaded, this function logs the current configuration
- * settings such as transmit settings, power levels, and additional options.
- * The output format is structured for readability.
+ * The `ini_reload_pending` atomic flag acts as a semaphore to signal when an
+ * INI file change has been detected and a configuration reload is required.
+ * This ensures that the reload process does not conflict with an ongoing
+ * transmission.
  *
- * @param reload If true, indicates that the configuration has been reloaded.
+ * - `true` indicates that an INI reload is pending.
+ * - `false` indicates that no reload is currently required.
+ *
+ * This flag is typically set when the `iniMonitor` detects a file change and
+ * is checked periodically by the INI monitoring thread. If a transmission is
+ * in progress, the reload is deferred until the transmission completes.
+ *
+ * @note The atomic nature ensures thread-safe access across multiple threads.
  */
-void show_config_values(bool reload = false);
+extern std::atomic<bool> ini_reload_pending;
 
 /**
- * @brief Validates and loads configuration data from the INI file.
+ * @brief Atomic flag indicating that a new PPM value needs to be applied.
  *
- * This function extracts configuration values from the INI file, ensuring that
- * required parameters such as callsign, grid square, transmit power, and
- * frequency list are properly set. If any critical parameter is missing or invalid,
- * the function logs the error and exits the program.
- *
- * The function also processes the test tone mode, self-calibration settings,
- * and frequency offset configuration.
- *
- * @return true if the configuration is valid, false otherwise.
+ * Set to `true` when a new PPM value has been received, signaling that
+ * subsystems should reload or reconfigure based on the new frequency offset.
  */
-bool validate_config_data();
+extern std::atomic<bool> ppm_reload_pending;
 
 /**
- * @brief Parses command-line arguments and configures the program settings.
+ * @brief Called when the INI file is modified.
  *
- * This function processes command-line options using `getopt_long()`, applying
- * values to the program configuration. It first checks for an INI file (`-i`)
- * before processing other options to ensure that command-line arguments can
- * override INI file settings.
- *
- * It validates required parameters and logs any errors, ensuring proper
- * configuration before execution.
- *
- * @param argc The number of command-line arguments.
- * @param argv The array of command-line argument strings.
- * @return true if parsing is successful, false if an error occurs.
+ * @details
+ * Executed by the `MonitorFile` watcher thread. Sets a deferred reload flag
+ * (`ini_reload_pending`) to apply changes after the current transmission finishes.
  */
-bool parse_command_line(const int &argc, char *const argv[]);
+void callback_ini_changed();
+
+/**
+ * @brief Applies configuration updates after transmission is complete.
+ *
+ * @details
+ * Checks the `ini_reload_pending` flag and, if true, calls
+ * `validate_config_data()` to re-apply configuration changes.
+ */
+extern void apply_deferred_changes();
+
+/**
+ * @brief Prints usage information to standard error.
+ *
+ * @details
+ * Shows supported command-line options and optionally displays an error message.
+ *
+ * @param message Optional error message (shown above usage output).
+ * @param exit_code Exit behavior:
+ *   - `0`: Exit with `EXIT_SUCCESS`
+ *   - `1`: Exit with `EXIT_FAILURE`
+ *   - `3`: Print help and return without exiting
+ *   - any other: Call `std::exit(exit_code)`
+ */
+void print_usage(const std::string &message = "", int exit_code = 3);
+
+/**
+ * @brief Overload for `print_usage()` that accepts only an exit code.
+ *
+ * @param exit_code Exit behavior (see above).
+ */
+inline void print_usage(int exit_code)
+{
+    print_usage("", exit_code);
+}
+
+/**
+ * @brief Prints the current INI configuration values.
+ *
+ * @param reload If true, includes "reload" context in the log.
+ */
+extern void show_config_values(bool reload = false);
+
+/**
+ * @brief Validates and applies configuration values from the INI file.
+ *
+ * @return true if configuration is valid and applied.
+ * @return false if validation fails (application exits).
+ */
+extern bool validate_config_data();
+
+bool set_frequencies();
+
+/**
+ * @brief Loads configuration values from an INI file.
+ *
+ * This function attempts to load settings from an INI file using the global `ini` object
+ * and populates the global `config` structure with values retrieved from it.
+ *
+ * If `config.use_ini` is false or if the INI file fails to load, the function immediately
+ * returns false. Otherwise, it attempts to read values from various INI sections:
+ *
+ * - **[Control]**: Transmit flag.
+ * - **[Common]**: Callsign, Grid Square, TX Power, Frequency, Transmit Pin.
+ * - **[Extended]**: PPM, Use NTP, Offset, Power Level, Use LED, LED Pin.
+ * - **[Server]**: Web Port, Socket Port, Use Shutdown, Shutdown Button.
+ *
+ * Each key is read inside a `try` block to allow partial loading—if a key is missing or
+ * causes an exception, it is silently skipped, and loading continues.
+ *
+ * After successful loading, the global `jConfig` JSON object is updated to reflect the
+ * contents of the `config` structure.
+ *
+ * @return true if the INI file was used and loaded successfully, false otherwise.
+ */
+extern bool load_from_ini();
+
+/**
+ * @brief Parses command-line arguments and applies overrides.
+ *
+ * @param argc Number of command-line arguments.
+ * @param argv Argument vector.
+ * @return true if parsing succeeds; false otherwise.
+ */
+bool parse_command_line(int argc, char *argv[]);
 
 #endif // ARG_PARSER_HPP
