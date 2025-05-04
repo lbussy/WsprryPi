@@ -171,6 +171,7 @@ void callback_transmission_started(const std::string &msg = {})
 {
     // Record start time
     g_start = std::chrono::steady_clock::now();
+    llog.logS(INFO, "Transmission started.");
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
@@ -184,50 +185,41 @@ void callback_transmission_started(const std::string &msg = {})
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
-void callback_transmission_complete(const std::string &msg = {})
+void callback_transmission_complete(const std::string &msg)
 {
     if (!msg.empty())
     {
-        // Make a lowercase copy
+        // “skipping transmission” or passed-in message
         std::string lower = msg;
         std::transform(lower.begin(), lower.end(), lower.begin(),
                        [](unsigned char c)
                        { return std::tolower(c); });
 
-        // Look for “skipping transmission”
         if (lower.find("skipping transmission") != std::string::npos)
         {
             llog.logS(INFO, msg);
         }
         else
         {
-            // Get end time
-            auto end = std::chrono::steady_clock::now();
-            // Calculate duration
-            double seconds = std::chrono::duration<double>(end - g_start).count();
-            // Create a string from the double to three decimal places
-            std::ostringstream oss;
-            oss << std::fixed << std::setprecision(3) << seconds;
-            std::string elapsed_str = oss.str();
-
-            llog.logS(INFO, "Transmission complete (", elapsed_str, " secs).");
+            // Some other non-skip message
+            llog.logS(INFO, msg);
         }
     }
+    else
+    {
+        // No message path ⇒ an actual WSPR window completion
+        auto end = std::chrono::steady_clock::now();
+        double secs = std::chrono::duration<double>(end - g_start).count();
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(3) << secs;
+        llog.logS(INFO, "Transmission complete (", oss.str(), " secs).");
+        send_ws_message("transmit", "finished");
+    }
 
-    // Notify clients of completion
-    send_ws_message("transmit", "finished");
-
-    // Check for a pending INI change.
     if (ini_reload_pending.load())
-    {
         apply_deferred_changes();
-    }
-
-    // Check for a pending PPM change.
     if (ppm_reload_pending.load())
-    {
         apply_deferred_changes();
-    }
 }
 
 /**
@@ -612,23 +604,6 @@ void set_config()
         config.ppm = ppmManager.getCurrentPPM();
     }
 
-    wsprTransmitter.disableTransmission();
-
-    freq_iterator = 0;       // Rester iterator
-    current_frequency = 0.0; // Zero out freq
-
-    llog.logS(DEBUG, "Setting DMA.");
-    wsprTransmitter.setupTransmission(
-        next_frequency(),
-        config.power_level,
-        config.ppm,
-        config.callsign,
-        config.grid_square,
-        config.power_dbm,
-        config.use_offset);
-    // If config is enabled, (re)enable transmissions
-    config.transmit ? wsprTransmitter.enableTransmission() : wsprTransmitter.disableTransmission();
-
     // Validate configuration and ensure all required settings are present.
     if (!validate_config_data())
     {
@@ -640,6 +615,33 @@ void set_config()
         }
         exitwspr_cv.notify_one();
         return;
+    }
+
+    // Disable before we (re)set config
+    wsprTransmitter.disableTransmission();
+
+    freq_iterator = 0;       // Reset iterator
+    current_frequency = 0.0; // Zero out freq
+
+    llog.logS(DEBUG, "Setting DMA.");
+    wsprTransmitter.setupTransmission(
+        next_frequency(),
+        config.power_level,
+        config.ppm,
+        config.callsign,
+        config.grid_square,
+        config.power_dbm,
+        config.use_offset);
+
+    // Enable/disable transmit if/as needed
+    static bool last_transmit = false;
+    if (config.transmit != last_transmit)
+    {
+        if (config.transmit)
+            wsprTransmitter.enableTransmission();
+        else
+            wsprTransmitter.disableTransmission();
+        last_transmit = config.transmit;
     }
 
     // Clear pending config flags

@@ -82,14 +82,12 @@ void callback_signal_handler(int signum, bool is_critical)
             exitwspr_ready = true;
         }
         exitwspr_cv.notify_one();
-        llog.logS(DEBUG, "[DEBUG] Notified about shutdown.");
     }
     else
     {
         std::cerr << "[FATAL] Critical signal received: " << signal_name << ". Performing immediate shutdown." << std::endl;
         std::quick_exit(signum);
     }
-    llog.logS(DEBUG, "[DEBUG] Leaving callback.");
 }
 
 /**

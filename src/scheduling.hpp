@@ -64,7 +64,7 @@ extern std::condition_variable exitwspr_cv;
  * \c exitwspr_mtx, then \c exitwspr_cv is notified so that the WSPR
  * loop can break out of its wait and begin shutdown.
  */
-extern bool exitwspr_ready
+extern bool exitwspr_ready;
 
 /**
  * @brief Flag indicating if a system shutdown is in progress.

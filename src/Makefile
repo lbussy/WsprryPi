@@ -26,6 +26,7 @@
 
 # Debug flag
 DEBUG := -DDEBUG_WSPR
+# DEBUG += -DDEBUG_WSPR_TRANSMIT
 # C++ Version
 CXXVER := 17
 # Prefix for executing tests, "sudo" if required
