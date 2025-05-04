@@ -1,5 +1,7 @@
 # Issue: Kernel PLL Frequency Stuck in WSPR Transmitter
 
+tl;dr here:  I removed NTP and began using [chrony](https://chrony-project.org/) with much more success.
+
 ## Problem Summary
 
 When running the WSPR transmitter, the frequency correction value (`ntx.freq`) retrieved from `ntp_adjtime()` remained stuck at `-662571`. This issue persisted even after rebooting the system, preventing accurate transmission timing.

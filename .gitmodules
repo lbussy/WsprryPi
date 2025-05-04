@@ -1,52 +1,31 @@
-[submodule "src/LCBLog"]
-	path = src/LCBLog
-	url = https://github.com/lbussy/LCBLog.git
-[submodule "src/INI-Handler"]
-	path = src/INI-Handler
-	url = https://github.com/lbussy/INI-Handler.git
-[submodule "src/WSPR-Message"]
-	path = src/WSPR-Message
-	url = https://github.com/lbussy/WSPR-Message
-[submodule "src/MonitorFile"]
-	path = src/MonitorFile
-	url = https://github.com/lbussy/MonitorFile.git
-[submodule "src/Singleton"]
-	path = src/Singleton
-	url = https://github.com/lbussy/Singleton.git
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
 	url = https://github.com/lbussy/WsprryPi-UI.git
 	branch = bootstrap_5
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/LCBLog"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/LCBLog
-	url = https://github.com/lbussy/LCBLog.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/INI-Handler"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/INI-Handler
+[submodule "src/Broadcom-Mailbox"]
+	path = src/Broadcom-Mailbox
+	url = https://github.com/lbussy/Broadcom-Mailbox.git
+[submodule "src/INI-Handler"]
+	path = src/INI-Handler
 	url = https://github.com/lbussy/INI-Handler.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/WSPR-Message"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/WSPR-Message
-	url = https://github.com/lbussy/WSPR-Message
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/MonitorFile"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/MonitorFile
+[submodule "src/LCBLog"]
+	path = src/LCBLog
+	url = https://github.com/lbussy/LCBLog.git
+[submodule "src/MonitorFile"]
+	path = src/MonitorFile
 	url = https://github.com/lbussy/MonitorFile.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Singleton"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/Singleton
-	url = https://github.com/lbussy/Singleton.git
-[submodule "tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox"]
-	path = tests_and_snippets/c_and_cpp/dma/Broadcom-Mailbox
-	url = https://github.com/lbussy/Broadcom-Mailbox.git
-[submodule "tests_and_snippets/c_and_cpp/dma/WSPR-Message"]
-	path = tests_and_snippets/c_and_cpp/dma/WSPR-Message
-	url = https://github.com/lbussy/WSPR-Message.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/PPM-Manager
+[submodule "src/PPM-Manager"]
+	path = src/PPM-Manager
 	url = https://github.com/lbussy/PPM-Manager.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Signal-Handler"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/Signal-Handler
+[submodule "src/Signal-Handler"]
+	path = src/Signal-Handler
 	url = https://github.com/lbussy/Signal-Handler.git
-[submodule "tests_and_snippets/c_and_cpp/dma/PPM-Manager"]
-	path = tests_and_snippets/c_and_cpp/dma/PPM-Manager
-	url = https://github.com/lbussy/PPM-Manager.git
-[submodule "tests_and_snippets/c_and_cpp/wspr_loop/Broadcom-Mailbox"]
-	path = tests_and_snippets/c_and_cpp/wspr_loop/Broadcom-Mailbox
-	url = https://github.com/lbussy/Broadcom-Mailbox.git
+[submodule "src/Singleton"]
+	path = src/Singleton
+	url = https://github.com/lbussy/Singleton.git
+[submodule "src/WSPR-Message"]
+	path = src/WSPR-Message
+	url = https://github.com/lbussy/WSPR-Message.git
+[submodule "src/WSPR-Transmitter"]
+	path = src/WSPR-Transmitter
+	url = https://github.com/lbussy/WSPR-Transmitter.git

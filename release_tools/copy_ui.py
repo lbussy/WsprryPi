@@ -72,6 +72,23 @@ def copy_files(src, dest):
     print(f"Error: Source directory {src} does not exist.")
     return False
 
+def link_ini(src, dest):
+    """
+    @brief Link configuration file
+    @param src The source directory.
+    @param dest The destination directory.
+    @return True on success, False otherwise.
+    """
+    if os.path.exists(src):
+        try:
+            subprocess.run(['sudo', 'ln', '-sf', src, dest], check=True)
+            return True
+        except subprocess.CalledProcessError:
+            print(f"Error: Failed to link config from {src} to {dest}.")
+            return False
+    print(f"Error: Source config file {src} does not exist.")
+    return False
+
 def set_permissions(dest):
     """
     @brief Set owner and permissions for copied files.
@@ -105,6 +122,7 @@ def main():
     submodule_name = "WsprryPi-UI"
     web_path = "/var/www/html/wsprrypi"
     submodule_data_path = os.path.join(git_root, submodule_name, "data")
+    print(submodule_data_path)
 
     # Check if WsprryPi-UI submodule is present
     if not submodule_exists(git_root, submodule_name):
@@ -117,6 +135,10 @@ def main():
 
     # Copy files
     if not copy_files(submodule_data_path, web_path):
+        sys.exit(1)
+
+    # Make link
+    if not link_ini("/usr/local/etc/wsprrypi.ini", web_path):
         sys.exit(1)
 
     # Set permissions
