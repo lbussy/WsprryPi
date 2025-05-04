@@ -221,23 +221,26 @@ void callback_transmission_complete(const std::string &msg)
     if (ppm_reload_pending.load())
         apply_deferred_changes();
 
-    // Atomically decrement and grab the new value:
-    int remaining = --config.tx_iterations; // uses atomic<int>::operator--
-
-    if (remaining <= 0)
+    if (!config.use_ini && !config.loop_tx)
     {
-        llog.logS(DEBUG, "Reached 0 iterations, signalling shutdown.");
+        // Atomically decrement and grab the new value:
+        int remaining = --config.tx_iterations; // uses atomic<int>::operator--
 
-        // Tell wspr_loop to break out:
+        if (remaining <= 0)
         {
-            std::lock_guard<std::mutex> lk(exitwspr_mtx);
-            exitwspr_ready = true;
+            llog.logS(DEBUG, "Reached 0 iterations, signalling shutdown.");
+
+            // Tell wspr_loop to break out:
+            {
+                std::lock_guard<std::mutex> lk(exitwspr_mtx);
+                exitwspr_ready = true;
+            }
+            exitwspr_cv.notify_one();
         }
-        exitwspr_cv.notify_one();
-    }
-    else
-    {
-        llog.logS(INFO, "WSPR transmissions remaining:", remaining);
+        else
+        {
+            llog.logS(INFO, "WSPR transmissions remaining:", remaining);
+        }
     }
 }
 
@@ -300,7 +303,7 @@ bool ppm_init()
         break;
 
     case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
-        llog.logE(ERROR,
+        llog.logE(WARN,
                   "System time is not synchronized. Unable to measure PPM accurately.\n"
                   "Transmission timing or frequencies may be negatively impacted.");
         config.use_ntp = false;

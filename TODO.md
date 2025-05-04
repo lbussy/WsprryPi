@@ -3,6 +3,7 @@
 ## C++ Code
 
 - [ ] Right-size logging
+- [ ] Calling validate_config() after a web merge (probably) and seeing it twice
 
 ## Web UI
 
