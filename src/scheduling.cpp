@@ -171,6 +171,9 @@ void callback_transmission_started(const std::string &msg = {})
 {
     // Record start time
     g_start = std::chrono::steady_clock::now();
+    // Turn on LED
+    ledControl.toggleGPIO(true);
+
     llog.logS(INFO, "Transmission started.");
     // Notify clients of start
     send_ws_message("transmit", "starting");
@@ -215,6 +218,9 @@ void callback_transmission_complete(const std::string &msg)
         llog.logS(INFO, "Transmission complete (", oss.str(), " secs).");
         send_ws_message("transmit", "finished");
     }
+    // Turn off LED
+    ledControl.toggleGPIO(false);
+
 
     if (ini_reload_pending.load())
         apply_deferred_changes();
@@ -347,7 +353,7 @@ void callback_shutdown_system()
  * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
  *
  * @note
- * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * The LED toggling uses `ledControl.toggleGPIO()` and assumes the hardware
  * supports it.
  */
 void shutdown_system()
@@ -357,10 +363,10 @@ void shutdown_system()
         // Flash LED three times if we are using it
         for (int i = 0; i < 3; ++i)
         {
-            ledControl.toggle_gpio(true); // LED ON
+            ledControl.toggleGPIO(true); // LED ON
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-            ledControl.toggle_gpio(false); // LED OFF
+            ledControl.toggleGPIO(false); // LED OFF
             if (i < 2)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -393,7 +399,7 @@ void shutdown_system()
  * - Sets `reboot_flag` to mark that a full system reboot is in progress.
  *
  * @note
- * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware supports it.
+ * The LED toggling uses `ledControl.toggleGPIO()` and assumes the hardware supports it.
  */
 void reboot_system()
 {
@@ -402,10 +408,10 @@ void reboot_system()
         // Flash LED three times if we are using it
         for (int i = 0; i < 3; ++i)
         {
-            ledControl.toggle_gpio(true); // LED ON
+            ledControl.toggleGPIO(true); // LED ON
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            ledControl.toggle_gpio(false); // LED OFF
+            ledControl.toggleGPIO(false); // LED OFF
             if (i < 2)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
