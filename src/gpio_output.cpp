@@ -40,7 +40,7 @@ GPIOOutput ledControl;
  *          - enabled_ is false (GPIO not yet configured)
  *          - chip_ and line_ are initialized to nullptr
  *
- * The object must be explicitly configured using enable_gpio_pin() before use.
+ * The object must be explicitly configured using enableGPIOPin() before use.
  */
 GPIOOutput::GPIOOutput() : pin_(-1),
                            active_high_(true),
@@ -75,7 +75,7 @@ GPIOOutput::~GPIOOutput()
  * @throws std::runtime_error if the GPIO line cannot be obtained or if an error occurs
  *         during configuration.
  */
-bool GPIOOutput::enable_gpio_pin(int pin, bool active_high)
+bool GPIOOutput::enableGPIOPin(int pin, bool active_high)
 {
     // If already enabled, disable first.
     if (enabled_)
@@ -117,7 +117,7 @@ bool GPIOOutput::enable_gpio_pin(int pin, bool active_high)
  * @brief Disables the currently active GPIO pin.
  * @details Releases the GPIO line if it was previously enabled and resets the
  *          internal chip and line handles. After calling this function, the
- *          pin must be re-enabled via enable_gpio_pin() before use.
+ *          pin must be re-enabled via enableGPIOPin() before use.
  *
  * This function is safe to call even if no pin is currently enabled.
  */
@@ -125,7 +125,7 @@ void GPIOOutput::stop()
 {
     if (enabled_ && line_)
     {
-        toggle_gpio(false);
+        toggleGPIO(false);
         // Release the line.
         line_->release();
         enabled_ = false;
@@ -148,7 +148,7 @@ void GPIOOutput::stop()
  * @return True if the state was successfully applied; false if the pin was not
  *         enabled or an error occurred during the write operation.
  */
-bool GPIOOutput::toggle_gpio(bool state)
+bool GPIOOutput::toggleGPIO(bool state)
 {
     if (!enabled_ || !line_)
     {

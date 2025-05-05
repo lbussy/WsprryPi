@@ -137,7 +137,7 @@ void callback_transmission_complete(const std::string &msg);
  * - Sets `shutdown_flag` to mark that a full system shutdown is in progress.
  *
  * @note
- * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * The LED toggling uses `ledControl.toggleGPIO()` and assumes the hardware
  * supports it.
  */
 void shutdown_system();
@@ -157,7 +157,7 @@ void shutdown_system();
  * - Sets `reboot_flag` to mark that a full system reboot is in progress.
  *
  * @note
- * The LED toggling uses `ledControl.toggle_gpio()` and assumes the hardware
+ * The LED toggling uses `ledControl.toggleGPIO()` and assumes the hardware
  * supports it.
  */
 void reboot_system();

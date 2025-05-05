@@ -44,8 +44,16 @@ SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 
 # Get project name from Git, revert to directory name
 #
-# Project name from remote origin URL (fallback to 'unknown' if not available)
-PRJ := $(shell git config --local remote.origin.url 2>/dev/null | sed -n 's#.*/\([^.]*\)\.git#\1#p' || echo "unknown")
+# Project Name
+PRJ_NAME := $(shell git config --get remote.origin.url | sed -n 's#.*/\([^/]*\)\(\.git\)\?$#\1#p')
+# Find the absolute path to the top of this repo
+REPO_ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null)
+# The directory name of the repo root (e.g. "WsprryPi")
+ROOT_NAME := $(shell basename $(REPO_ROOT))
+# Final project name: prefer PRJ_NAME, else ROOT_NAME
+PRJ := $(if $(PRJ_NAME),$(PRJ_NAME),$(ROOT_NAME))
+# Lower-case based executable name
+EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 # Current Git branch (sanitize non-alphanumeric characters to '-')
 BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed -E 's/[^a-zA-Z0-9]/-/g' || echo "unknown")
 # Latest Git tag (version) without leading 'v'
@@ -56,9 +64,8 @@ PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo 
 VER := $(VER)$(PRE)
 # Append commit hash if current commit is not an exact tag
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Get exact version tag
 VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
-# Lower-case based executable name
-EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 
 # Output Items
 OUT := $(EXE_NAME)						# Git Repo-Based Name

@@ -488,7 +488,7 @@ bool validate_config_data()
     // Enable LED only if set and the pin is valid
     if (config.use_led && (config.led_pin >= 0 && config.led_pin <= 27))
     {
-        ledControl.enable_gpio_pin(config.led_pin, true);
+        ledControl.enableGPIOPin(config.led_pin, true);
     }
     else
     {
