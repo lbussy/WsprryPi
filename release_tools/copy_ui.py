@@ -22,11 +22,20 @@ import sys
 
 def get_git_root():
     """
-    @brief Determine the Git repository root directory.
+    @brief Determine the Git repository root directory (using the script's location).
     @return The Git root directory as a string, or None if not in a Git repo.
     """
+    # Figure out where this script lives on disk
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+
     try:
-        return subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()
+        # Run git rev-parse from the script's folder, so you always
+        # climb up to the main repo rather than the submodule.
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--show-toplevel'],
+            cwd=script_dir,
+            text=True
+        ).strip()
     except subprocess.CalledProcessError:
         return None  # Not in a Git repository
 
