@@ -44,9 +44,9 @@
  * Example:
  * @code
  * GPIOOutput gpio;
- * gpio.enable_gpio_pin(17, true); // enable pin 17 as active high output
- * gpio.toggle_gpio(true);         // set pin high (active)
- * gpio.toggle_gpio(false);        // set pin low (inactive)
+ * gpio.enableGPIOPin(17, true); // enable pin 17 as active high output
+ * gpio.toggleGPIO(true);         // set pin high (active)
+ * gpio.toggleGPIO(false);        // set pin low (inactive)
  * gpio.stop_gpio_pin();        // release the pin
  * @endcode
  */
@@ -78,7 +78,7 @@ public:
      * @param active_high True for active-high operation (default), false for sink.
      * @return True if the pin was successfully configured; false otherwise.
      */
-    bool enable_gpio_pin(int pin, bool active_high = true);
+    bool enableGPIOPin(int pin, bool active_high = true);
 
     /**
      * @brief Disables the GPIO pin.
@@ -96,7 +96,7 @@ public:
      * @param state Desired logical state (true for active, false for inactive).
      * @return True if the state was successfully set; false otherwise.
      */
-    bool toggle_gpio(bool state);
+    bool toggleGPIO(bool state);
 
 private:
     int pin_;
