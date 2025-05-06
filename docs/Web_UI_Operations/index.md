@@ -37,7 +37,7 @@ To those of you with a impacted by a type of color-blindness that may make this 
 
 Yes, Virginia, there is a Santa Claus!  New Wsprry Pi now with DARK MODE!
 
-<!-- ![Light/Dark Mode](Mode_Change.png) Waiting for Christina -->
+![Light/Dark Mode](Split_Screen.png)
 
 ## Configuration Card
 

@@ -212,7 +212,7 @@ The documents are written in Markdown with Sphinx.  First, create a virtual envi
 cd docs
 sudo apt install python3-venv
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
