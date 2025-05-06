@@ -930,12 +930,12 @@ bool parse_command_line(int argc, char *argv[])
         {"ppm", required_argument, nullptr, 'p'},             // Via: [Extended] PPM = 0.0
         {"terminate", required_argument, nullptr, 'x'},       // Global: config.tx_iterations
         {"test-tone", required_argument, nullptr, 't'},       // Global: config.test_tone
-        {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
+        // Not yet imeplemented: {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
         {"power_level", required_argument, nullptr, 'd'},     // Via: [Extended] Power Level = 7
         {"web-port", required_argument, nullptr, 'w'},        // Via: [Server] Port = 31415
-        {"socket-port", required_argument, nullptr, 'k'},     // Via: [Server] Port = 31415
+        {"socket-port", required_argument, nullptr, 'k'},     // Via: [Server] Port = 31416
         {nullptr, 0, nullptr, 0}};
 
     while (true)

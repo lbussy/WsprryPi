@@ -151,55 +151,11 @@ If you are going to use VS Code from your workstation:
     # Extensions installed on SSH: wsprrypi.local:
     # Generated with:
     # code --list-extensions | xargs -L 1 echo code --install-extension
-    code --install-extension Extensions installed on SSH: wspr4:
-    code --install-extension bierner.github-markdown-preview
-    code --install-extension bierner.markdown-checkbox
-    code --install-extension bierner.markdown-emoji
-    code --install-extension bierner.markdown-footnotes
-    code --install-extension bierner.markdown-mermaid
-    code --install-extension bierner.markdown-preview-github-styles
-    code --install-extension bierner.markdown-yaml-preamble
-    code --install-extension bmalehorn.shell-syntax
     code --install-extension bmewburn.vscode-intelephense-client
-    code --install-extension brapifra.phpserver
-    code --install-extension codezombiech.gitignore
-    code --install-extension cschlosser.doxdocgen
-    code --install-extension davidanson.vscode-markdownlint
-    code --install-extension donjayamanne.githistory
-    code --install-extension eamodio.gitlens
-    code --install-extension ecmel.vscode-html-css
-    code --install-extension edwinhuish.better-comments-next
-    code --install-extension esbenp.prettier-vscode
-    code --install-extension feiskyer.chatgpt-copilot
-    code --install-extension felipecaputo.git-project-manager
-    code --install-extension foxundermoon.shell-format
-    code --install-extension github.vscode-github-actions
-    code --install-extension github.vscode-pull-request-github
-    code --install-extension mhutchie.git-graph
-    code --install-extension ms-python.black-formatter
     code --install-extension ms-python.debugpy
-    code --install-extension ms-python.isort
-    code --install-extension ms-python.pylint
     code --install-extension ms-python.python
     code --install-extension ms-python.vscode-pylance
-    code --install-extension ms-vscode.cmake-tools
-    code --install-extension ms-vscode.cpptools
-    code --install-extension ms-vscode.cpptools-extension-pack
-    code --install-extension ms-vscode.cpptools-themes
-    code --install-extension ms-vscode.live-server
-    code --install-extension ms-vscode.makefile-tools
-    code --install-extension ms-vscode.vscode-serial-monitor
     code --install-extension rifi2k.format-html-in-php
-    code --install-extension ritwickdey.liveserver
-    code --install-extension steoates.autoimport
-    code --install-extension streetsidesoftware.code-spell-checker
-    code --install-extension symbolk.somanyconflicts
-    code --install-extension timonwong.shellcheck
-    code --install-extension twxs.cmake
-    code --install-extension waderyan.gitblame
-    code --install-extension xaver.clang-format
-    code --install-extension xdebug.php-debug
-    code --install-extension yzhang.markdown-all-in-one
     ```
 
 8. Use the "Open Folder" button and select the root of your repo on the Pi.
@@ -247,3 +203,26 @@ The installer blacklists the onboard snd_bcm2835 device, as Wsprry Pi uses this 
 ## Working with the Project
 
 See [release.md](./scripts/release.md) for information about the project development tools.
+
+## Documentation
+
+The documents are written in Markdown with Sphinx.  First, create a virtual environment:
+
+``` bash
+cd docs
+sudo apt install python3-venv
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Now you have the requirements:
+
+- sphinx
+- sphinx_rtd_theme
+- myst-parser
+- esbonio
+
+From here you can `make html` to create the docs in `./build/html`.
+
+You can also use the release script `copy_docs.sh` to copy the documentation to your local webserver at `wsprrypi/docs`.

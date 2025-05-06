@@ -22,15 +22,15 @@
 # SOFTWARE.
 # -----------------------------------------------------------------------------
 
-# Makefile for building most C++ or C++ and C projects
-
-# Debug flag
+# Debug flags
 DEBUG := -DDEBUG_WSPR
 # DEBUG += -DDEBUG_WSPR_TRANSMIT
+
 # C++ Version
 CXXVER := 17
-# Prefix for executing tests, "sudo" if required
+# Prefix for executing tests, "sudo" if required (comment out "sudo" if not)
 SUDO := sudo
+
 # Add any required submodules by their src path
 SUBMODULE_SRCDIRS := $(wildcard ./Broadcom-Mailbox/src)
 SUBMODULE_SRCDIRS += $(wildcard ./INI-Handler/src)
@@ -42,22 +42,16 @@ SUBMODULE_SRCDIRS += $(wildcard ./Singleton/src)
 SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Message/src)
 SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 
-# Get project name from Git, revert to directory name
-#
-# Project Name
-PRJ_NAME := $(shell git config --get remote.origin.url | sed -n 's#.*/\([^/]*\)\(\.git\)\?$#\1#p')
-# Find the absolute path to the top of this repo
-REPO_ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null)
-# The directory name of the repo root (e.g. "WsprryPi")
-ROOT_NAME := $(shell basename $(REPO_ROOT))
-# Final project name: prefer PRJ_NAME, else ROOT_NAME
-PRJ := $(if $(PRJ_NAME),$(PRJ_NAME),$(ROOT_NAME))
+# Get project name from Git
+PRJ := $(notdir $(shell git rev-parse --show-toplevel))
 # Lower-case based executable name
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 # Current Git branch (sanitize non-alphanumeric characters to '-')
-BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed -E 's/[^a-zA-Z0-9]/-/g' || echo "unknown")
-# Latest Git tag (version) without leading 'v'
-VER := $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+)/\1/' || echo "0.0.0")
+BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | awk '{ gsub(/[^[:alnum:]]+/, "-"); sub(/-$$/, ""); print }' || echo unknown )
+# Ask git for the “raw” tag (or empty if it fails)
+RAW_TAG := $(strip $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null) )
+# Strip a leading “v” if present; if RAW_TAG is empty, VER becomes “0.0.0”
+VER := $(if $(RAW_TAG),$(patsubst v%,%,$(RAW_TAG)),0.0.0)
 # Append branch name if not on 'main' or 'master'
 PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "-$(BRH)"; fi)
 # Append branch name to version only if not already suffixed
