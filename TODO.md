@@ -8,7 +8,6 @@
 ## Orchestration
 
 - [ ] Inline the apache_tool into install.
-- [ ] Inline the old version cleanup into install.
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
