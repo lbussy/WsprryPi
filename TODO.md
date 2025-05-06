@@ -4,7 +4,6 @@
 
 - [ ] Implement freq_test
 - [ ] Think about separating header/footer/body pages
-- [ ] Maybe stack navbar links to a hamburger if the viewport is narrow
 
 ## Orchestration
 
