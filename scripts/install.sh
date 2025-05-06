@@ -207,7 +207,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0_Beta.2}"
+declare REPO_BRANCH="${REPO_BRANCH:-update_sudo_usage}"
 declare GIT_TAG="${GIT_TAG:-2.0_Beta.2}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
@@ -4297,6 +4297,7 @@ git_clone() {
     local clone_command dest_root retval
     dest_root="$LOCAL_REPO_DIR"
     retval=0
+    # We need to sudo here because it needs to be done as pi (or current real user)
     clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
@@ -4685,11 +4686,11 @@ handle_apt_packages() {
     logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    if ! exec_command "Update local package index" "sudo apt-get update -y" "$debug"; then
+    if ! exec_command "Update local package index" "apt-get update -y" "$debug"; then
         warn "Failed to update package list."
         ((error_count++))
     fi
-    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y" "$debug"; then
+    if ! exec_command "Fixing broken or incomplete package installations" "apt-get install -f -y" "$debug"; then
         warn "Failed to fix broken installs."
         ((error_count++))
     fi
@@ -4697,12 +4698,12 @@ handle_apt_packages() {
     # Install or upgrade each package in the list
     for package in "${APT_PACKAGES[@]}"; do
         if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package"; then
+            if ! exec_command "Upgrade $package" "apt-get install --only-upgrade -y $package"; then
                 warn "Failed to upgrade package: $package."
                 ((error_count++))
             fi
         else
-            if ! exec_command "Install $package" "sudo apt-get install -y $package"; then
+            if ! exec_command "Install $package" "apt-get install -y $package"; then
                 warn "Failed to install package: $package."
                 ((error_count++))
             fi
@@ -5070,11 +5071,13 @@ usage() {
 # @return None
 #
 # -----------------------------------------------------------------------------
-remove_files_and_dirs() {
+# shellcheck disable=SC2317
+remove_legacy_files_and_dirs() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
+    printf "%s\n" "Cleaning up older versions." >&"$output_redirect"
     local files_and_dirs
 
     # Cleanup List
@@ -5114,7 +5117,8 @@ remove_files_and_dirs() {
 # @return None
 #
 # -----------------------------------------------------------------------------
-remove_services() {
+# shellcheck disable=SC2317
+remove_legacy_services() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
@@ -5304,7 +5308,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "sudo cp -f $source_path $exe_path" "$debug" || {
+            exec_command "Install application" "cp -f $source_path $exe_path" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5314,9 +5318,9 @@ manage_exe() {
         # Change ownership on the application
         debug_print "Changing ownership on application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: sudo chown root:root $exe_path"
+            logD "Exec: chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "sudo chown root:root $exe_path" "$debug" || {
+            exec_command "Change ownership on application" "chown root:root $exe_path" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5328,7 +5332,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "sudo chmod 755 $exe_path" "$debug" || {
+            exec_command "Make app executable" "chmod 755 $exe_path" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5343,7 +5347,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "sudo rm -f $exe_path" "$debug" || {
+            exec_command "Remove application" "rm -f $exe_path" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
@@ -5433,7 +5437,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $config_path"
         else
-            exec_command "Install configuration" "sudo cp -f $source_path $config_path" "$debug" || retval=1
+            exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
         fi
 
         # Update version
@@ -5442,9 +5446,9 @@ manage_config() {
         # Change ownership on the configuration
         debug_print "Changing ownership on configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: sudo chown root:root $config_path"
+            logD "Exec: chown root:root $config_path"
         else
-            exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
+            exec_command "Change ownership on configuration" "chown root:root $config_path" "$debug" || retval=1
         fi
 
         # Change permissions on the configuration
@@ -5452,7 +5456,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 644 $config_path"
         else
-            exec_command "Set config permissions" "sudo chmod 644 $config_path" "$debug" || retval=1
+            exec_command "Set config permissions" "chmod 644 $config_path" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
@@ -5463,7 +5467,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $config_path"
         else
-            exec_command "Remove configuration" "sudo rm -f $config_path" "$debug" || retval=1
+            exec_command "Remove configuration" "rm -f $config_path" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5543,11 +5547,11 @@ manage_service() {
         else
             logI "Updating systemd service: $daemon_systemd_name." "$debug"
             if [[ "$DRY_RUN" != "true" ]]; then
-                exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
-                exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
 
                 if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
-                    exec_command "Unmask systemd service" "sudo systemctl unmask $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Unmask systemd service" "systemctl unmask $daemon_systemd_name" "$debug" || retval=1
                 fi
             fi
         fi
@@ -5556,7 +5560,7 @@ manage_service() {
             warn "$source_path not found."
             retval=1
         elif [[ "$DRY_RUN" != "true" ]]; then
-            exec_command "Copy systemd file" "sudo cp -f $source_path $service_path" "$debug" || retval=1
+            exec_command "Copy systemd file" "cp -f $source_path $service_path" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
 
             if [[ "$use_syslog" == "false" ]]; then
@@ -5576,14 +5580,14 @@ manage_service() {
             replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
             replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_out" "$debug"
 
-            exec_command "Change ownership on systemd file" "sudo chown root:root $service_path" "$debug" || retval=1
-            exec_command "Change permissions on systemd file" "sudo chmod 644 $service_path" "$debug" || retval=1
-            exec_command "Create log path" "sudo mkdir -p $log_path" "$debug" || retval=1
-            exec_command "Change ownership on log path" "sudo chown root:www-data $log_path" "$debug" || retval=1
-            exec_command "Change permissions on log path" "sudo chmod 755 $log_path" "$debug" || retval=1
-            exec_command "Enable systemd service" "sudo systemctl enable $daemon_systemd_name" "$debug" || retval=1
-            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || retval=1
-            exec_command "Start systemd service" "sudo systemctl restart $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Change ownership on systemd file" "chown root:root $service_path" "$debug" || retval=1
+            exec_command "Change permissions on systemd file" "chmod 644 $service_path" "$debug" || retval=1
+            exec_command "Create log path" "mkdir -p $log_path" "$debug" || retval=1
+            exec_command "Change ownership on log path" "chown root:www-data $log_path" "$debug" || retval=1
+            exec_command "Change permissions on log path" "chmod 755 $log_path" "$debug" || retval=1
+            exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
+            exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_name created."
@@ -5594,15 +5598,15 @@ manage_service() {
         if [[ -f "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
                 if systemctl is-active --quiet "$daemon_systemd_name"; then
-                    exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
                 fi
 
                 if systemctl is-enabled --quiet "$daemon_systemd_name"; then
-                    exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
                 fi
             fi
 
-            exec_command "Remove service file" "sudo rm -f $service_path" "$debug" || retval=1
+            exec_command "Remove service file" "rm -f $service_path" "$debug" || retval=1
         else
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
@@ -5665,7 +5669,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: mkdir -p $target_path"
         else
-            exec_command "Create target web directory" "sudo mkdir -p $target_path" "$debug" || retval=1
+            exec_command "Create target web directory" "mkdir -p $target_path" "$debug" || retval=1
         fi
 
         # Copy web files
@@ -5673,7 +5677,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -r $source_path* $target_path/"
         else
-            exec_command "Copy web files" "sudo cp -r $source_path/* $target_path/" "$debug" || retval=1
+            exec_command "Copy web files" "cp -r $source_path/* $target_path/" "$debug" || retval=1
         fi
 
         # Change ownership and permissions
@@ -5683,13 +5687,13 @@ manage_web() {
             logD "Exec: sudo chmod -R 755 $target_path"
         else
             # Set ownership for the entire directory
-            exec_command "Set ownership" "sudo chown -R www-data:www-data $target_path" "$debug" || retval=1
+            exec_command "Set ownership" "chown -R www-data:www-data $target_path" "$debug" || retval=1
 
             # Set correct permissions:
             # - Directories: `rwxr-xr-x` (755)
             # - Files: `rw-r--r--` (644)
-            exec_command "Set directory permissions" "sudo find $target_path -type d -exec chmod 755 {} +" "$debug" || retval=1
-            exec_command "Set file permissions" "sudo find $target_path -type f -exec chmod 644 {} +" "$debug" || retval=1
+            exec_command "Set directory permissions" "find $target_path -type d -exec chmod 755 {} +" "$debug" || retval=1
+            exec_command "Set file permissions" "find $target_path -type f -exec chmod 644 {} +" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
@@ -5700,7 +5704,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $target_path"
         else
-            exec_command "Remove web directory" "sudo rm -rf $target_path" "$debug" || retval=1
+            exec_command "Remove web directory" "rm -rf $target_path" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5858,7 +5862,7 @@ cleanup_files_in_directories() {
             return 0
         elif [[ -d "$dest_root" ]]; then
             # Delete the repository directory
-            exec_command "Delete local repository" "sudo rm -fr $dest_root" "$debug" || {
+            exec_command "Delete local repository" "rm -fr $dest_root" "$debug" || {
                 logE "Failed to delete local install files."
                 debug_end "$debug"
                 return 1
@@ -5995,6 +5999,8 @@ manage_wsprry_pi() {
     # Define the group of functions to install/uninstall
     local install_group=(
         "git_clone"
+        "remove_legacy_files_and_dirs"
+        "remove_legacy_services"
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
@@ -6028,8 +6034,6 @@ manage_wsprry_pi() {
     case "$ACTION" in
     install)
         debug_print "Cleaning up old versions." "$debug"
-        remove_files_and_dirs "$debug"
-        remove_services "$debug"
         debug_print "Final group_to_execute list (after processing):" "$debug"
         group_to_execute=("${install_group[@]}")
         ;;
