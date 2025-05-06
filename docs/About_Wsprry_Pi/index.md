@@ -14,12 +14,14 @@ This software is compatible with the original Raspberry Pi, the Raspberry Pi 2/3
 
 ## Attribution
 
-The original WsprryPi was written by [Dan Ankers](https://github.com/DanAnkers/) and released on [GitHub](https://github.com/DanAnkers/WsprryPi). This work was, in turn, based on Dan's [PiFmDma](https://github.com/DanAnkers/PiBits/blob/master/PiFmDma/) where Dan further expanded (with DMA) upon previous work. That earlier work was Oliver Mattos' [FM Improved](http://www.icrobotics.co.uk/wiki/index.php/Turning\_the\_Raspberry\_Pi\_Into\_an\_FM\_Transmitter).
+This idea likely traces its origins to an idea Oliver Mattos and Oskar Weigl presented at the PiFM project. While the website is no longer online, the Wayback Machine has [the last known good version]( http://web.archive.org/web/20131016184311/http://www.icrobotics.co.uk/wiki/index.php/Turning_the_Raspberry_Pi_Into_an_FM_Transmitter).
 
-If I need to correct any of this history, please let me know by [opening an issue](https://github.com/lbussy/WsprryPi/issues).
+The original PiFM code is still hosted by the icrobotics.co.uk website. However, I suspect the domain has fallen into disrepair and may be unsafe, and no direct links are provided here. You can use the url above to see the site; should the code disappear, I have [saved it here](https://github.com/lbussy/WsprryPi/raw/refs/heads/main/historical/pifm.tar.gz).
 
-[threeme3](https://github.com/threeme3/) adapted Dan's repo, and then I forked threeme3's work here. Bruce Raymond from [TAPR](https://tapr.org/) (who sell the [WPSR Without Tears](https://tapr.org/product/wsprrypi/) hat for the Raspberry Pi) incorporated a few things in some complete Pi images that TAPR makes available, and I wanted to incorporate those here as well. Of course, the Internet being what it is, the libraries Bruce used are no longer available, so I had to go in a different direction.
+After a conversation with Bruce Raymond of TAPR; I forked @threeme3's repo and provided some rudimentary installation capabilities and associated orchestration.  Version's 1.x of this project were a fork of threeme3/WsprryPi (no longer on GitHib), licensed under the GNU General Public License v3 (GPLv3). The original project is no longer maintained.
 
-Where do I come in? Well, Bruce was friendly enough to answer my email. I'm a new ham in 2022 (KF0LDK originally, now AA0NT), still trying to find my way, but I have some minor success in the Raspberry Pi ecosystem, so I decided to take on the gap which might exist between a ham and a new Pi owner. I want to be VERY clear. I am not your Elmer; I cannot help with ham radio. This project stops where WSPR executes on the Pi, and you are responsible for your actions, your hardware, and your level of understanding.
+In late 2024, George [K9TRV] of TAPR reached out to me about some questions related to using WsprryPi on the Pi 5.  While I have not yet made that jump, the conversation spurred me to discard the original code in favor of a more modern, extensible, and maintainable base.
+
+Version 2.0+ is re-written from scratch, is no longer a derivative work, and is released under the MIT license.
 
 My goal, and where success will be determined, is to allow you to execute one command on your Pi to install and run the Wsprry Pi software. If you are lucky and have been living right, a radio wave will hit the cosmos and be received [somewhere else](https://wsprnet.org).
