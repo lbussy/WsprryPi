@@ -5055,6 +5055,107 @@ usage() {
 }
 
 ############
+###  Wsprry Pi Cleanup Functions
+############
+
+# -----------------------------------------------------------------------------
+# @brief Removes specified files and directories from the system.
+#
+# @details This function attempts to remove files and directories listed in
+#          the predefined array or passed in as arguments. It checks whether
+#          each file or directory exists, and confirms with the user before
+#          removing items if unexpected dependencies or locations are detected.
+#          All errors are suppressed and warnings are printed to the terminal.
+#
+# @return None
+#
+# -----------------------------------------------------------------------------
+remove_files_and_dirs() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local files_and_dirs
+
+    # Cleanup List
+    files_and_dirs=(
+        "/usr/local/bin/wspr"
+        "/usr/local/etc/wspr.ini"
+        "/usr/local/bin/shutdown-button.py"
+        "/usr/local/bin/shutdown-watch.py"
+        "/usr/local/bin/shutdown_watch.py"
+        "/usr/local/bin/wspr_watch.py"
+        "/var/www/html/wspr/"
+        "/var/log/wspr/"
+        "/var/log/WsprryPi/"
+        "/etc/logrotate.d/wspr"
+    )
+
+    for item in "${files_and_dirs[@]}"; do
+        if [[ -e $item ]]; then
+            exec_command "Removing $item" "rm -rf -- \"$item\"" "$debug"
+        fi
+    done
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Removes specified services from systemd if they exist and are enabled.
+#
+# @details This function attempts to stop the service only if it is running,
+#          disable it if it is enabled, remove the service unit file (even if
+#          the service was never installed), and always resets the failed state
+#          for each service. The user will be asked for confirmation if any
+#          unexpected dependencies are found. After all services are processed,
+#          the systemd daemon is reloaded to apply the changes.
+#
+# @return None
+#
+# -----------------------------------------------------------------------------
+remove_services() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local services
+    services=(
+            wspr
+            shutdown-button
+            shutdown-watch
+            shutdown_watch
+            wspr_watch
+        )
+
+    for service_name in "${services[@]}"; do
+        # Only proceed if the unit really exists
+        if systemctl list-units --all --type=service | grep -q "^${service_name}\.service"; then
+            # Stop it
+            exec_command "Stopping ${service_name}.service" "systemctl stop ${service_name}.service" "$debug"
+
+            # Disable it
+            exec_command "Disabling ${service_name}.service" "systemctl disable ${service_name}.service" "$debug"
+
+            # Remove its unit file(s)
+            for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+                unit_file="$dir/${service_name}.service"
+                if [ -f "$unit_file" ]; then
+                    exec_command "Removing unit file ${unit_file}" "rm -f -- \"$unit_file\"" "$debug"
+                fi
+            done
+        fi
+    done
+
+    # Cleanup and reload
+    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
+    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+############
 ### Wsprry Pi Installer Functions
 ############
 
@@ -5905,6 +6006,7 @@ manage_wsprry_pi() {
 
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
+        "git clone"
         "download_files_in_directories"
         "cleanup_files_in_directories"
     )
@@ -5925,6 +6027,10 @@ manage_wsprry_pi() {
     local group_to_execute=()
     case "$ACTION" in
     install)
+        debug_print "Cleaning up old versions." "$debug"
+        remove_files_and_dirs "$debug"
+        remove_services "$debug"
+        debug_print "Final group_to_execute list (after processing):" "$debug"
         group_to_execute=("${install_group[@]}")
         ;;
     uninstall)
