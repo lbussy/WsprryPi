@@ -18,7 +18,7 @@ You will need the following:
 - An SD card for the OS image
 - A power supply for the Pi. Pay attention here to potentially noisy power supplies. You will benefit from a well-regulated supply with sufficient ripple suppression. You may see supply ripple as mixing products centered around the transmit carrier, typically at 100/120Hz.
 
-**NOTE: The Raspberry Pi 5 is not supported.**
+**NOTE: The Raspberry Pi 5 and any 64-bit OS is not (yet?) supported.**
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ This section may be the most challenging part of the whole installation.  *You m
 
 ![Raspberry Pi Imager](rpi_imager.png)
 
-**You MUST use a 32-bit version**, and I am only testing with the current version: Bookworm.
+**You MUST use a 32-bit version**, and I am only testing with the current `stable` and `oldstable` versions: Bookworm and Bullseye.
 
 You can use a full-featured desktop version with all the bells and whistles, or wsprrypi will run just fine on the Lite version on an SD card as small as 2 GB (although a minimum of 8 GB seems more comfortable these days.)  You can even run it headless without a keyboard, mouse, or monitor. If you enable SSH, you can use your command line from Windows 10/11, MacOS, or another Pi.
 
@@ -66,69 +66,107 @@ Whatever you do, you will need command line access to your Pi to proceed. Once y
 Aside from the obvious, installing Wsprry Pi, the install script will do the following:
 
 - **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers. The [Apache Software Foundation](https://www.apache.org/) maintains Apache. Apache is used to control wsprrypi from an easy-to-use web page.
+- **Install Chrony**, [a replacement for ntpd](https://chrony-project.org/).
 - **Install PHP**, a popular general-purpose scripting language especially suited to web development. The [PHO Group](https://www.php.net/) maintains PHP. I wrote the web pages in PHP.
-- **Install Raspberry Pi development libraries**, `libraspberrypi-dev` `raspberrypi-kernel-headers`.
-- Optionally install support for TAPR's shutdown button.
+- **Install Raspberry Pi development libraries and other Packages**, `libraspberrypi-dev` `raspberrypi-kernel-headers` `jq` `git` `gpiod` and `libgpiod-dev`.
 - Disable the Raspberry Pi's built-in sound card. Wsprry Pi uses the RPi PWM peripheral to time the frequency transitions of the output clock. The Pi's sound system also uses this peripheral; any sound events during a WSPR transmission will interfere with WSPR transmissions.
 
 ## Install WSPR
 
 You may use this command to install Wsprry Pi (one line):
 
-`curl -L installwspr.aa0nt.net | sudo bash`
+`curl -fsSL installwspr.aa0nt.net | sudo bash`
+
+If my DNS is broken for some reason, this longer form should work:
+
+`curl -fsSL https://raw.githubusercontent.com/lbussy/WsprryPi/refs/heads/main/scripts/install.sh | sudo bash`
 
 This install command is idempotent; running it additional times will not have any negative impact. If an update is released, re-run the installer to take advantage of the new release.
 
-The first screen will welcome you and give you instructions:
+This installer has been GREATLY simplified since versions 1.x.  Here is more or less what you will see:
 
-```text
-The script will present you with some choices during the installation.
-You will most frequently see a 'yes or no' choice, with the
-default choice capitalized as so: [y/N]. Default means if
-you hit <enter> without typing anything, you will make the
-capitalized choice, i.e., hitting <enter> when you see [Y/n]
-will default to 'yes.'
-
-Yes/no choices are not case-sensitive. However, passwords,
-system names, and install paths are. Be aware of this. There
-is generally no difference between 'y', 'yes,' 'YES,' and 'Yes.'
-
-Press any key when you are ready to proceed.
+```
+[INFO ] Checking environment.
+[INFO ] System: Raspbian GNU/Linux 11 (bullseye).
+[INFO ] Running Wsprry Pi's 'install.sh', version 2.0
+[INFO ] Updating and managing required packages (this may take a few minutes).
+[✔] Complete: Update local package index.
+[✔] Complete: Fixing broken or incomplete package installations.
+[✔] Complete: Upgrade jq.
+[✔] Complete: Upgrade git.
+[✔] Complete: Upgrade apache2.
+[✔] Complete: Upgrade php.
+[✔] Complete: Upgrade chrony.
+[✔] Complete: Upgrade gpiod.
+[✔] Complete: Upgrade libgpiod-dev.
+[INFO ] APT package handling completed successfully.
+[INFO ] Wsprry Pi installation beginning.
+[INFO ] Ensuring destination directory does not exist: '/home/pi/WsprryPi'
+[INFO ] Destination directory already exists: '/home/pi/WsprryPi'
+[INFO ] Installing wsprrypi.
+[✔] Complete: Install application.
+[✔] Complete: Change ownership on application.
+[✔] Complete: Make app executable.
+[INFO ] Installing 'wsprrypi' configuration.
+[✔] Complete: Install configuration.
+[✔] Complete: Change ownership on configuration.
+[✔] Complete: Set config permissions.
+[INFO ] Updating systemd service: wsprrypi.service.
+[✔] Complete: Disable systemd service.
+[✔] Complete: Stop systemd service.
+[✔] Complete: Copy systemd file.
+[✔] Complete: Change ownership on systemd file.
+[✔] Complete: Change permissions on systemd file.
+[✔] Complete: Create log path.
+[✔] Complete: Change ownership on log path.
+[✔] Complete: Change permissions on log path.
+[✔] Complete: Enable systemd service.
+[✔] Complete: Reload systemd.
+[✔] Complete: Start systemd service.
+[INFO ] Systemd service wsprrypi created.
+[INFO ] Installing 'logrotate' configuration.
+[✔] Complete: Install configuration.
+[✔] Complete: Change ownership on configuration.
+[✔] Complete: Set config permissions.
+[INFO ] Installing web files to '/var/www/html/wsprrypi'.
+[✔] Complete: Create target web directory.
+[✔] Complete: Copy web files.
+[✔] Complete: Set ownership.
+[✔] Complete: Set directory permissions.
+[✔] Complete: Set file permissions.
 ```
 
-Take special note of default choices. `[Y/n] means that hitting `Enter` will default to "Yes. " If you want to select no, you should choose "N."
+You may see:
 
-The first choice you make will be related to the system time zone and time if you did not set it before flashing the OS:
+```
+*Important Note:*
 
-```text
-The time is currently set to Sun 19 Feb 12:05:48 CST 2023.
-Is this correct? [Y/n]:
+Wsprry Pi uses the same hardware as the sound system to generate
+radio frequencies. This soundcard has been disabled. You must
+reboot the Pi with the following command after install for this
+to take effect:
+
+'sudo reboot'
+
+Press any key to continue.
 ```
 
-Please be sure this is correct. If you select "No," the script will provide you with the Raspbian configuration screens to set this correctly.
+The installation will finish with:
 
-The next choice you make will be whether or not to add support for the system shutdown button:
+```
+Installation successful: Wsprry Pi.
 
-```text
-Support system shutdown button (TAPR)? y/N]:
+To configure Wsprry Pi, open the following URL in your browser:
+
+  http://wspr4.local/wsprrypi
+  http://10.0.0.68/wsprrypi
+
+If the hostname URL does not work, try using the IP address.
+Ensure your device is on the same network and that mDNS is
+supported by your system.
 ```
 
-This button is included on the TAPR hat and allows one to press it to initiate a clean system shutdown. t is best to shut your Pi down correctly to avoid corrupting the SD card; the button allows that without logging in, typically shutting the Pi down in a few seconds.
-
-Following this choice, the script will install some packages.
-
-When complete, the script displays the final screen:
-
-```text
-The WSPR daemon has started.
- - WSPR frontend URL   : http://192.168.1.24/wsprrypi
- -or- : http://wsprrypi.local/wsprrypi
- - Release version     : 0.0.1
-
-Happy DXing!
-```
-
-At this point, Wsprry Pi is installed and running.
+If you were prompted to reboot, do that now.  At this point (and if you rebooted if you were prompted), Wsprry Pi is installed and running.
 
 Note the URL for the configuration UI listed as a `{name}.local` and IP address choice. You can access your system with the `{name}.local` names without remembering the IP address. The `{name}.local` is convenient for automatically assigned IP addresses in most home networks. The IP address of your Raspberry Pi may change over time, but the name will not.
 
@@ -138,6 +176,6 @@ Connect to your new web page from your favorite computer or cell phone with the 
 
 ## Additional Hardware
 
-While the TAPR Hat is optional, an antenna is not. Choosing an antenna is beyond the scope of this documentation, but you can use something as simple as a random wire connected to the GPIO4 (GPCLK0) pin, which is numbered 7 on the header.
+While the TAPR Hat is optional, an antenna is not. Choosing an antenna is beyond the scope of this documentation, but you can use something as simple as a random wire connected to the GPIO4 pin (GPCLK0), which is numbered 7 on the header.
 
 ![Raspberry Pi Pinout](pinout.png)

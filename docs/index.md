@@ -5,6 +5,7 @@ This project is for amateur (ham) radio enthusiasts, using an inexpensive single
 Wsprry Pi (whispery pie) was developed to enable ham enthusiasts to enter this realm with relatively low-cost equipment.
 
 ## Table of Contents
+
 ```{toctree}
 :glob: true
 :maxdepth: 2
@@ -14,6 +15,7 @@ About_WSPR/index
 About_Wsprry_Pi/index
 Install/index
 Web_UI_Operations/index
+Web_Log_Viewer/index
 Command_Line_Operations/index
 Advanced_Operations/index
 Internals/index

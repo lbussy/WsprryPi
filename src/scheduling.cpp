@@ -360,7 +360,7 @@ void shutdown_system()
 {
     if (config.use_led)
     {
-        // Flash LED three times if we are using it
+        // Flash LED three times if configured
         for (int i = 0; i < 3; ++i)
         {
             ledControl.toggleGPIO(true); // LED ON
@@ -405,8 +405,8 @@ void reboot_system()
 {
     if (config.use_led)
     {
-        // Flash LED three times if we are using it
-        for (int i = 0; i < 3; ++i)
+        // Flash LED two times if configured
+        for (int i = 0; i < 2; ++i)
         {
             ledControl.toggleGPIO(true); // LED ON
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
