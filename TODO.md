@@ -8,10 +8,7 @@
 ## Orchestration
 
 - [ ] Inline the apache_tool into install.
-- [ ] Update `make install` to call installer
-- [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
-- [ ] Allow copy_docs to work from a submodule
 
 ## Shit to Remember
 
