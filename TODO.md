@@ -11,9 +11,6 @@
 - [ ] Update `make install` to call installer
 - [ ] Update `make uninstall` to call uninstaller
 - [ ] Create release script orchestration
-- [ ] Uninstall message weirdness:
-        [INFO ] Ensuring destination directory does not exist: '/home/pi/WsprryPi'
-        [INFO ] Destination directory already exists: '/home/pi/WsprryPi'
 - [ ] Allow copy_docs to work from a submodule
 
 ## Shit to Remember
