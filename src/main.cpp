@@ -113,14 +113,6 @@ int main(int argc, char *argv[])
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
-    SingletonProcess singleton(SINGLETON_PORT);
-
-    if (!singleton())
-    {
-        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
-        std::exit(EXIT_FAILURE);
-    }
-
     // Parse command line first allowing calls for -h or -v
     try
     {
@@ -140,6 +132,14 @@ int main(int argc, char *argv[])
     if (getuid() != 0)
     {
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
+    }
+
+    // Enforce Singleton
+    SingletonProcess singleton(SINGLETON_PORT);
+    if (!singleton())
+    {
+        llog.logE(FATAL, "Another instance is running on port:", SINGLETON_PORT);
+        std::exit(EXIT_FAILURE);
     }
 
     // Display version, Raspberry Pi model, and process ID for context.
