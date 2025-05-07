@@ -79,16 +79,6 @@ extern bool exitwspr_ready;
 extern std::atomic<bool> shutdown_flag;
 
 /**
- * @brief Global instance of the PPM (parts-per-million) manager.
- *
- * @details
- * Responsible for calculating and managing the system's frequency
- * correction based on clock drift or NTP data. Provides runtime
- * adjustments for frequency stability during WSPR transmission.
- */
-extern PPMManager ppmManager;
-
-/**
  * @brief Callback triggered by a shutdown GPIO event.
  *
  * @details

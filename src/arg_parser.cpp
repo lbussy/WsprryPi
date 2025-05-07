@@ -438,17 +438,12 @@ bool validate_config_data()
     set_frequencies();
 
     // Determine NTP functionality
-    if (config.use_ntp)
-    {
-        // Initialize PPM Manager
-        ppm_init();
-    }
-    else if (config.ppm != 0.0)
+    if (!config.use_ntp && config.ppm != 0.0)
     {
         llog.logS(INFO, "PPM value to be used for tone generation:",
                   std::fixed, std::setprecision(2), config.ppm);
     }
-    else
+    else if (!config.use_ntp && config.ppm != 0.0)
     {
         config.ppm = 0.0;
         llog.logE(WARN, "NTP disabled and PPM not set.");
@@ -576,19 +571,6 @@ bool validate_config_data()
             {
                 llog.logS(INFO, "- ", lookup.freq_display_string(freq));
             }
-        }
-
-        // Handle calibration and frequency adjustments
-        if (config.use_ntp)
-        {
-            llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
-            // Initialize PPM Manager
-            ppm_init();
-        }
-        else if (config.ppm != 0.0)
-        {
-            llog.logS(INFO, "PPM value for all transmissions:",
-                      std::fixed, std::setprecision(2), config.ppm);
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode

@@ -151,14 +151,6 @@ std::atomic<bool> reboot_flag{false};
 std::atomic<bool> shutdown_flag{false};
 
 /**
- * @brief Global instance of the PPMManager class.
- *
- * Responsible for measuring and managing frequency drift (PPM)
- * using either NTP data or internal estimation methods.
- */
-PPMManager ppmManager;
-
-/**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
  * This function checks whether there are pending PPM or INI changes that need
@@ -174,7 +166,7 @@ void callback_transmission_started(const std::string &msg = {})
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started.");
+    llog.logS(INFO, "Transmission started (frequency =", current_frequency, ").");
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
@@ -265,6 +257,9 @@ void ppm_callback(double new_ppm)
  */
 bool ppm_init()
 {
+    // Set callbacks
+    ppmManager.setPPMCallback(ppm_callback);
+
     // Initialize the PPM Manager
     PPMStatus status = ppmManager.initialize();
 
@@ -295,7 +290,6 @@ bool ppm_init()
         break;
     }
 
-    ppmManager.setPPMCallback(ppm_callback);
     return true;
 }
 
@@ -419,6 +413,11 @@ void reboot_system()
  */
 bool wspr_loop()
 {
+    if (config.use_ntp)
+    {
+        ppm_init();
+    }
+
     if (config.use_ini)
     {
         // Start INI monitor
@@ -682,10 +681,10 @@ void set_config(bool initial)
 
     // Get next frequency and indicate if we are (re)setting the stack
     static double last_freq = 0.0;
-    double next_freq = next_frequency(initial);
-    if (next_freq != last_freq)
+    current_frequency = next_frequency(initial);
+    if (current_frequency != last_freq)
     {
-        last_freq = next_freq;
+        last_freq = current_frequency;
         do_config = true;
     }
 
@@ -695,22 +694,15 @@ void set_config(bool initial)
         // Disable before we (re)set config or PPM
         wsprTransmitter.disableTransmission();
 
-        if (next_freq == 0.0)
-        {
-            do_config = false;
-        }
-        else
-        {
-            // Do DMA configuration
-            wsprTransmitter.setupTransmission(
-                next_freq,
-                config.power_level,
-                config.ppm,
-                config.callsign,
-                config.grid_square,
-                config.power_dbm,
-                config.use_offset);
-        }
+        // Do DMA configuration
+        wsprTransmitter.setupTransmission(
+            current_frequency,
+            config.power_level,
+            config.ppm,
+            config.callsign,
+            config.grid_square,
+            config.power_dbm,
+            config.use_offset);
     }
     // Clear pending config flags
     ini_reload_pending.store(false, std::memory_order_relaxed);
