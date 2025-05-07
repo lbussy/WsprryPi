@@ -166,7 +166,7 @@ void callback_transmission_started(const std::string &msg = {})
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started (frequency =", current_frequency, ").");
+    llog.logS(INFO, "Transmission started (frequency =", lookup.freq_display_string(current_frequency), ").");
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
