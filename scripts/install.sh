@@ -41,6 +41,8 @@ IFS=$'\n\t'
 # sudo ./install.sh
 # sudo ./install.sh debug
 # sudo ACTION=uninstall ./install.sh
+# curl -fsSL {url} | sudo bash -s -- install debug
+# curl -fsSL {url} | sudo env ACTION=uninstall bash -s -- debug
 #
 # -----------------------------------------------------------------------------
 
