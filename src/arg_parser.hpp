@@ -135,15 +135,6 @@ extern std::atomic<bool> ppm_reload_pending;
 void callback_ini_changed();
 
 /**
- * @brief Applies configuration updates after transmission is complete.
- *
- * @details
- * Checks the `ini_reload_pending` flag and, if true, calls
- * `validate_config_data()` to re-apply configuration changes.
- */
-extern void apply_deferred_changes();
-
-/**
  * @brief Prints usage information to standard error.
  *
  * @details

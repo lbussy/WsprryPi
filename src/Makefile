@@ -25,6 +25,7 @@
 # Debug flags
 DEBUG := -DDEBUG_WSPR
 # DEBUG += -DDEBUG_WSPR_TRANSMIT
+# DEBUG += -DDEBUG_PPMMANAGER
 
 # C++ Version
 CXXVER := 17

@@ -254,7 +254,10 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "span": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
