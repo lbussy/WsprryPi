@@ -243,7 +243,7 @@ void send_ws_message(std::string type, std::string state);
  *   - `freq_iterator_` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency();
+double next_frequency(bool initial);
 
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
@@ -252,11 +252,11 @@ double next_frequency();
  * the latest configuration settings, and reconfigures the WSPR transmitter
  * with the specified frequency and parameters.
  *
- * @param freq_hz Center frequency for the upcoming transmission, in Hertz.
+ * @param initial Call with 'true' if this is the first run
  *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config();
+void set_config(bool initial = false);
 
 #endif // _SCHEDULING_HPP
