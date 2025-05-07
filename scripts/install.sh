@@ -5541,7 +5541,6 @@ manage_service() {
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
     log_path="/var/log/$syslog_identifier" # Use exe name
     log_std_out="$log_path/${syslog_identifier}_log"
-    log_std_err="$log_path/${syslog_identifier}_error"
 
     if [[ "$ACTION" == "install" ]]; then
         if ! systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
@@ -5613,8 +5612,11 @@ manage_service() {
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
 
-        logI "Systemd service $daemon_systemd_name removed."
+        if [[ -d "$log_path" ]]; then
+            exec_command "Remove log target" "rm -fr $log_path" "$debug" || retval=1
+        fi
 
+        logI "Systemd service $daemon_systemd_name removed."
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
