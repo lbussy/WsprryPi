@@ -502,7 +502,7 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
+declare LOG_FILE="${LOG_FILE:-${USER_HOME}/${WSPR_EXE}_install.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
