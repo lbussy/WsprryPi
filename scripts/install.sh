@@ -5060,51 +5060,6 @@ usage() {
 ############
 
 # -----------------------------------------------------------------------------
-# @brief Removes specified files and directories from the system.
-#
-# @details This function attempts to remove files and directories listed in
-#          the predefined array or passed in as arguments. It checks whether
-#          each file or directory exists, and confirms with the user before
-#          removing items if unexpected dependencies or locations are detected.
-#          All errors are suppressed and warnings are printed to the terminal.
-#
-# @return None
-#
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-remove_legacy_files_and_dirs() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    printf "%s\n" "Cleaning up older versions." >&"$output_redirect"
-    local files_and_dirs
-
-    # Cleanup List
-    files_and_dirs=(
-        "/usr/local/bin/wspr"
-        "/usr/local/etc/wspr.ini"
-        "/usr/local/bin/shutdown-button.py"
-        "/usr/local/bin/shutdown-watch.py"
-        "/usr/local/bin/shutdown_watch.py"
-        "/usr/local/bin/wspr_watch.py"
-        "/var/www/html/wspr/"
-        "/var/log/wspr/"
-        "/var/log/WsprryPi/"
-        "/etc/logrotate.d/wspr"
-    )
-
-    for item in "${files_and_dirs[@]}"; do
-        if [[ -e $item ]]; then
-            exec_command "Removing $item" "rm -rf -- \"$item\"" "$debug"
-        fi
-    done
-
-    debug_end "$debug"
-    return 0
-}
-
-# -----------------------------------------------------------------------------
 # @brief Removes specified services from systemd if they exist and are enabled.
 #
 # @details This function attempts to stop the service only if it is running,
@@ -5123,14 +5078,16 @@ remove_legacy_services() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
+    logI "Cleaning up older services."
+
     local services
     services=(
-            wspr
-            shutdown-button
-            shutdown-watch
-            shutdown_watch
-            wspr_watch
-        )
+        wspr
+        shutdown-button
+        shutdown-watch
+        shutdown_watch
+        wspr_watch
+    )
 
     for service_name in "${services[@]}"; do
         # Only proceed if the unit really exists
@@ -5154,6 +5111,51 @@ remove_legacy_services() {
     # Cleanup and reload
     exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
     exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Removes specified files and directories from the system.
+#
+# @details This function attempts to remove files and directories listed in
+#          the predefined array or passed in as arguments. It checks whether
+#          each file or directory exists, and confirms with the user before
+#          removing items if unexpected dependencies or locations are detected.
+#          All errors are suppressed and warnings are printed to the terminal.
+#
+# @return None
+#
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+remove_legacy_files_and_dirs() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local files_and_dirs
+
+    logI "Cleaning up older versions."
+    # Cleanup List
+    files_and_dirs=(
+        "/usr/local/bin/wspr"
+        "/usr/local/etc/wspr.ini"
+        "/usr/local/bin/shutdown-button.py"
+        "/usr/local/bin/shutdown-watch.py"
+        "/usr/local/bin/shutdown_watch.py"
+        "/usr/local/bin/wspr_watch.py"
+        "/var/www/html/wspr/"
+        "/var/log/wspr/"
+        "/var/log/WsprryPi/"
+        "/etc/logrotate.d/wspr"
+    )
+
+    for item in "${files_and_dirs[@]}"; do
+        if [[ -e $item ]]; then
+            exec_command "Removing $item" "rm -rf -- \"$item\"" "$debug"
+        fi
+    done
 
     debug_end "$debug"
     return 0
@@ -5999,8 +6001,8 @@ manage_wsprry_pi() {
     # Define the group of functions to install/uninstall
     local install_group=(
         "git_clone"
-        "remove_legacy_files_and_dirs"
         "remove_legacy_services"
+        "remove_legacy_files_and_dirs"
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
@@ -6012,8 +6014,9 @@ manage_wsprry_pi() {
 
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
-        "git clone"
-        "download_files_in_directories"
+        "git_clone"
+        "remove_legacy_services"
+        "remove_legacy_files_and_dirs"
         "cleanup_files_in_directories"
     )
 
@@ -6032,24 +6035,30 @@ manage_wsprry_pi() {
     # Select the execution order based on the action
     local group_to_execute=()
     case "$ACTION" in
-    install)
-        debug_print "Cleaning up old versions." "$debug"
-        debug_print "Final group_to_execute list (after processing):" "$debug"
-        group_to_execute=("${install_group[@]}")
-        ;;
-    uninstall)
-        if command -v tac &>/dev/null; then
-            mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
-        else
-            # Manual reverse if `tac` is unavailable
-            for ((i = ${#install_group[@]} - 1; i >= 0; i--)); do
-                group_to_execute+=("${install_group[i]}")
-            done
-        fi
-        ;;
-    *)
-        die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
-        ;;
+        install)
+            debug_print "(INSTALL) Creating group_to_execute list (after processing):" "$debug"
+            group_to_execute=("${install_group[@]}")
+            ;;
+        uninstall)
+            debug_print "(UNINSTALL) Reversing and filtering install_group…" "$debug"
+
+            # Build a regex like: git_clone|remove_legacy_services|remove_legacy_files_and_dirs|cleanup_files_in_directories
+            local skip_regex
+            skip_regex=$(printf "|%s" "${skip_on_uninstall[@]}")
+            skip_regex=${skip_regex:1}
+
+            # Reverse and drop any line that starts with a skip-name
+            mapfile -t group_to_execute < <(
+                printf '%s\n' "${install_group[@]}" |
+                  { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
+                  grep -v -E "^($skip_regex)( |$)"
+            )
+
+            debug_print "(UNINSTALL) Final group_to_execute list after filter:" "$debug"
+            ;;
+        *)
+            die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
+            ;;
     esac
 
     # Debug print the final group_to_execute list
