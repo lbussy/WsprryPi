@@ -6020,8 +6020,6 @@ manage_wsprry_pi() {
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
         "git_clone"
-        "remove_legacy_services"
-        "remove_legacy_files_and_dirs"
         "cleanup_files_in_directories"
     )
 
