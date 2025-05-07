@@ -495,17 +495,15 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # -----------------------------------------------------------------------------
 # @var LOG_FILE
 # @brief Specifies the path to the log file.
-# @details Defines the file path where log messages are written when logging
-#          to a file is enabled. If not explicitly set, this variable defaults
-#          to blank, meaning no log file will be used unless a specific path
-#          is assigned at runtime or through an external environment variable.
 #
-# @default ""
+# @details Uses the environment variable LOG_FILE if set; otherwise defaults
+#          to "$USER_HOME/$WSPR_EXE.log", where USER_HOME is the user's home
+#          directory and WSPR_EXE is the executable name.
 #
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-}" # Use the provided LOG_FILE or default to blank.
+declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
