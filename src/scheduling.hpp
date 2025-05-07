@@ -79,16 +79,6 @@ extern bool exitwspr_ready;
 extern std::atomic<bool> shutdown_flag;
 
 /**
- * @brief Global instance of the PPM (parts-per-million) manager.
- *
- * @details
- * Responsible for calculating and managing the system's frequency
- * correction based on clock drift or NTP data. Provides runtime
- * adjustments for frequency stability during WSPR transmission.
- */
-extern PPMManager ppmManager;
-
-/**
  * @brief Callback triggered by a shutdown GPIO event.
  *
  * @details
@@ -243,7 +233,7 @@ void send_ws_message(std::string type, std::string state);
  *   - `freq_iterator_` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency();
+double next_frequency(bool initial);
 
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
@@ -252,11 +242,11 @@ double next_frequency();
  * the latest configuration settings, and reconfigures the WSPR transmitter
  * with the specified frequency and parameters.
  *
- * @param freq_hz Center frequency for the upcoming transmission, in Hertz.
+ * @param initial Call with 'true' if this is the first run
  *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config();
+void set_config(bool initial = false);
 
 #endif // _SCHEDULING_HPP

@@ -144,58 +144,27 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
+    ini_reload_pending.store(true, std::memory_order_relaxed);
     if (wsprTransmitter.isTransmitting())
     {
         if (config.transmit)
         {
+            // TODO:  Make sure config.transmit is changed before we make this determination
             // Transmit not changed, make pending change
             llog.logS(INFO, "INI file changed, reload after transmission.");
-            ini_reload_pending.store(true, std::memory_order_relaxed);
         }
         else
         {
             // Kill the transmission
             llog.logS(INFO, "Transmission disabled, stopping transmission.");
-            set_config();
-            ini_reload_pending.store(false, std::memory_order_relaxed);
+            set_config(true);
         }
     }
     else
     {
         // We're not transmitting, jam it in
         llog.logS(INFO, "INI file changed, reloading.");
-        set_config();
-        ini_reload_pending.store(false, std::memory_order_relaxed);
-    }
-}
-
-/**
- * @brief Monitors the INI configuration file for changes.
- *
- * This is called to check if the monitored INI file has been modified.
- * When a change is detected it reloads the configuration by calling
- * `validate_config_data()`.
- */
-void apply_deferred_changes()
-{
-    // Apply deferred reload if transmission has ended
-    if (!wsprTransmitter.isTransmitting())
-    {
-        // Check for a pending INI change.
-        if (ini_reload_pending.load())
-        {
-            // Clear the pending flag and reload configuration
-            llog.logS(INFO, "Applying deferred INI changes.");
-        }
-
-        // Check for a pending PPM change.
-        if (ppm_reload_pending.load())
-        {
-            // Clear the pending flag and reload configuration
-            llog.logS(INFO, "Applying PPM change.");
-        }
-
-        set_config();
+        set_config(true);
     }
 }
 
@@ -469,17 +438,12 @@ bool validate_config_data()
     set_frequencies();
 
     // Determine NTP functionality
-    if (config.use_ntp)
-    {
-        // Initialize PPM Manager
-        ppm_init();
-    }
-    else if (config.ppm != 0.0)
+    if (!config.use_ntp && config.ppm != 0.0)
     {
         llog.logS(INFO, "PPM value to be used for tone generation:",
                   std::fixed, std::setprecision(2), config.ppm);
     }
-    else
+    else if (!config.use_ntp && config.ppm != 0.0)
     {
         config.ppm = 0.0;
         llog.logE(WARN, "NTP disabled and PPM not set.");
@@ -607,19 +571,6 @@ bool validate_config_data()
             {
                 llog.logS(INFO, "- ", lookup.freq_display_string(freq));
             }
-        }
-
-        // Handle calibration and frequency adjustments
-        if (config.use_ntp)
-        {
-            llog.logS(INFO, "Using NTP to calibrate transmission frequency.");
-            // Initialize PPM Manager
-            ppm_init();
-        }
-        else if (config.ppm != 0.0)
-        {
-            llog.logS(INFO, "PPM value for all transmissions:",
-                      std::fixed, std::setprecision(2), config.ppm);
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode

@@ -151,14 +151,6 @@ std::atomic<bool> reboot_flag{false};
 std::atomic<bool> shutdown_flag{false};
 
 /**
- * @brief Global instance of the PPMManager class.
- *
- * Responsible for measuring and managing frequency drift (PPM)
- * using either NTP data or internal estimation methods.
- */
-PPMManager ppmManager;
-
-/**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
  * This function checks whether there are pending PPM or INI changes that need
@@ -174,7 +166,7 @@ void callback_transmission_started(const std::string &msg = {})
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started.");
+    llog.logS(INFO, "Transmission started (frequency =", lookup.freq_display_string(current_frequency), ").");
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
@@ -221,33 +213,8 @@ void callback_transmission_complete(const std::string &msg)
     // Turn off LED
     ledControl.toggleGPIO(false);
 
-
-    if (ini_reload_pending.load())
-        apply_deferred_changes();
-    if (ppm_reload_pending.load())
-        apply_deferred_changes();
-
-    if (!config.use_ini && !config.loop_tx)
-    {
-        // Atomically decrement and grab the new value:
-        int remaining = --config.tx_iterations; // uses atomic<int>::operator--
-
-        if (remaining <= 0)
-        {
-            llog.logS(DEBUG, "Reached 0 iterations, signalling shutdown.");
-
-            // Tell wspr_loop to break out:
-            {
-                std::lock_guard<std::mutex> lk(exitwspr_mtx);
-                exitwspr_ready = true;
-            }
-            exitwspr_cv.notify_one();
-        }
-        else
-        {
-            llog.logS(INFO, "WSPR transmissions remaining:", remaining);
-        }
-    }
+    // Set Config will determine if we have work to do
+    set_config();
 }
 
 /**
@@ -265,7 +232,6 @@ void callback_transmission_complete(const std::string &msg)
  */
 void ppm_callback(double new_ppm)
 {
-    config.ppm = new_ppm;
     ppm_reload_pending.store(true, std::memory_order_relaxed);
     return;
 }
@@ -291,6 +257,9 @@ void ppm_callback(double new_ppm)
  */
 bool ppm_init()
 {
+    // Set callbacks
+    ppmManager.setPPMCallback(ppm_callback);
+
     // Initialize the PPM Manager
     PPMStatus status = ppmManager.initialize();
 
@@ -321,7 +290,6 @@ bool ppm_init()
         break;
     }
 
-    ppmManager.setPPMCallback(ppm_callback);
     return true;
 }
 
@@ -445,6 +413,11 @@ void reboot_system()
  */
 bool wspr_loop()
 {
+    if (config.use_ntp)
+    {
+        ppm_init();
+    }
+
     if (config.use_ini)
     {
         // Start INI monitor
@@ -476,14 +449,17 @@ bool wspr_loop()
 
     // Set transmission server and set priority
     wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
-    using CB = WsprTransmitter::Callback;
     wsprTransmitter.setTransmissionCallbacks(
-        CB{callback_transmission_started},
-        CB{callback_transmission_complete});
-    set_config(); // Handles get next (or only) frequency, PPM, and setup
+        callback_transmission_started,
+        callback_transmission_complete);
 
     // Wait for something to happen
     llog.logS(INFO, "WSPR loop running.");
+
+    // Set pending config flags and do initial config
+    ini_reload_pending.store(true, std::memory_order_relaxed);
+    ppm_reload_pending.store(true, std::memory_order_relaxed);
+    set_config(true); // Handles get next (or only) frequency, PPM, and setup
 
     // -------------------------------------------------------------------------
     // Loop (block wspr_loop only) until shutdown is triggered
@@ -610,7 +586,7 @@ void send_ws_message(std::string type, std::string state)
  *   - `freq_iterator` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency()
+double next_frequency(bool initial = false)
 {
     const auto &freqs = config.center_freq_set;
     if (freqs.empty())
@@ -621,8 +597,37 @@ double next_frequency()
     // Compute index in [0, freqs.size())
     const size_t idx = freq_iterator % freqs.size();
 
-    // Fetch and advance iterator
+    // True whenever we’ve wrapped back around to the “first” slot
+    if (idx == 0 && !initial)
+    {
+        // Check if we are doing transmission iterations
+        if (!config.use_ini && !config.loop_tx)
+        {
+            // Atomically decrement and grab the new value:
+            int remaining = --config.tx_iterations;
+
+            if (remaining <= 0)
+            {
+                llog.logS(INFO, "Completed last of TX iterations, signalling shutdown.");
+
+                // Tell wspr_loop to break out:
+                {
+                    std::lock_guard<std::mutex> lk(exitwspr_mtx);
+                    exitwspr_ready = true;
+                }
+                exitwspr_cv.notify_one();
+            }
+            else
+            {
+                llog.logS(INFO, "WSPR transmissions remaining:", remaining);
+            }
+        }
+    }
+
+    // Fetch frequency
     double freq = freqs[idx];
+
+    // Advance iterator
     ++freq_iterator;
 
     return freq;
@@ -638,56 +643,83 @@ double next_frequency()
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config()
+void set_config(bool initial)
 {
-    if (config.use_ntp)
+    bool do_config = false;
+    if (initial)
     {
-        llog.logS(DEBUG, "Retrieving PPM.");
+        do_config = true;
+        freq_iterator = 0;       // Reset iterator
+        current_frequency = 0.0; // Zero out freq
+    }
+
+    // Update PPM if a change was noted
+    if (config.use_ntp && ppm_reload_pending.load())
+    {
+        do_config = true;
         config.ppm = ppmManager.getCurrentPPM();
+        llog.logS(INFO, "PPM updated:", config.ppm);
     }
 
-    // Validate configuration and ensure all required settings are present.
-    if (!validate_config_data())
+    // If we are reloading from INI:
+    if (ini_reload_pending.load())
     {
-        llog.logE(ERROR, "Configuration validation failed.");
-        // Let wspr_loop know to break out
+        do_config = true;
+        // Validate configuration and ensure all required settings are present.
+        if (!validate_config_data())
         {
-            std::lock_guard<std::mutex> lk(exitwspr_mtx);
-            exitwspr_ready = true;
+            llog.logE(ERROR, "Configuration validation failed.");
+            // Let wspr_loop know to break out
+            {
+                std::lock_guard<std::mutex> lk(exitwspr_mtx);
+                exitwspr_ready = true;
+            }
+            exitwspr_cv.notify_one();
+            return;
         }
-        exitwspr_cv.notify_one();
-        return;
     }
 
-    // Disable before we (re)set config
-    wsprTransmitter.disableTransmission();
-
-    freq_iterator = 0;       // Reset iterator
-    current_frequency = 0.0; // Zero out freq
-
-    llog.logS(DEBUG, "Setting DMA.");
-    wsprTransmitter.setupTransmission(
-        next_frequency(),
-        config.power_level,
-        config.ppm,
-        config.callsign,
-        config.grid_square,
-        config.power_dbm,
-        config.use_offset);
-
-    // Enable/disable transmit if/as needed
-    static bool last_transmit = false;
-    if (config.transmit != last_transmit)
+    // Get next frequency and indicate if we are (re)setting the stack
+    static double last_freq = 0.0;
+    current_frequency = next_frequency(initial);
+    if (current_frequency != last_freq)
     {
-        if (config.transmit)
-            wsprTransmitter.enableTransmission();
-        else
-            wsprTransmitter.disableTransmission();
-        last_transmit = config.transmit;
+        last_freq = current_frequency;
+        do_config = true;
     }
 
+    // If we are going to transmit and we have a change, do setup
+    if (do_config && config.transmit)
+    {
+        // Disable before we (re)set config or PPM
+        wsprTransmitter.disableTransmission();
+
+        // Do DMA configuration
+        wsprTransmitter.setupTransmission(
+            current_frequency,
+            config.power_level,
+            config.ppm,
+            config.callsign,
+            config.grid_square,
+            config.power_dbm,
+            config.use_offset);
+    }
     // Clear pending config flags
     ini_reload_pending.store(false, std::memory_order_relaxed);
     ppm_reload_pending.store(false, std::memory_order_relaxed);
-    llog.logS(INFO, "Setup complete, waiting for next transmission window.");
+
+    // Enable/disable transmit if/as needed
+    static bool last_transmit = false;
+    if (config.transmit && do_config)
+    {
+        wsprTransmitter.enableTransmission();
+        last_transmit = true;
+        llog.logS(INFO, "DMA setup complete, waiting for next transmission window.");
+    }
+    else if (config.transmit != last_transmit)
+    {
+        wsprTransmitter.disableTransmission();
+        last_transmit = false;
+        llog.logS(INFO, "Transmissions disabled.");
+    }
 }
