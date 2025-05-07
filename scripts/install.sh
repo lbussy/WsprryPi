@@ -502,7 +502,7 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-${USER_HOME}/${WSPR_EXE}_install.log}"
+declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
@@ -5260,7 +5260,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "cp -f $source_path $exe_path" "$debug" || {
+            exec_command "Install application" "sudo cp -f $source_path $exe_path" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5272,7 +5272,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "chown root:root $exe_path" "$debug" || {
+            exec_command "Change ownership on application" "sudo chown root:root $exe_path" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5284,7 +5284,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "chmod 755 $exe_path" "$debug" || {
+            exec_command "Make app executable" "sudo chmod 755 $exe_path" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5299,7 +5299,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "rm -f $exe_path" "$debug" || {
+            exec_command "Remove application" "sudo rm -f $exe_path" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
