@@ -6070,15 +6070,9 @@ manage_wsprry_pi() {
         debug_print "  - $func" "$debug"
     done
 
-    # Execute functions while skipping those in skip_on_uninstall
+    # Execute functions
     for func in "${group_to_execute[@]}"; do
         local function_name="${func%% *}" # Extract only function name
-
-        # Skip functions listed in skip_on_uninstall
-        if [[ " ${skip_on_uninstall[*]} " =~ $function_name ]]; then
-            debug_print "Skipping $function_name during uninstall." "$debug"
-            continue
-        fi
 
         # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
