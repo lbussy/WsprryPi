@@ -41,7 +41,8 @@ IFS=$'\n\t'
 # sudo ./install.sh
 # sudo ./install.sh debug
 # sudo ACTION=uninstall ./install.sh
-# curl -fsSL {url} | sudo bash -s -- install debug
+# curl -fsSL {url} | sudo bash
+# curl -fsSL {url} | sudo bash -s -- debug
 # curl -fsSL {url} | sudo env ACTION=uninstall bash -s -- debug
 #
 # -----------------------------------------------------------------------------
@@ -4930,7 +4931,6 @@ remove_legacy_services() {
 
     services=(
         wspr
-        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
