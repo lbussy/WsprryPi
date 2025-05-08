@@ -16,6 +16,10 @@
 - [ ] Create release script orchestration
 - [ ] See if we can "upgrade" the INI
 - [ ] Make sure we need all libs
+- [ ] Update unstall.sh on release:
+    - declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
+    - declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
+    - declare SEM_VER="${SEM_VER:-2.0_Beta.3}"
 
 ## Shit to Remember
 
