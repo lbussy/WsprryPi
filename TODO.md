@@ -15,7 +15,6 @@
 - [ ] Inline the apache_tool into install.
 - [ ] Create release script orchestration
 - [ ] See if we can "upgrade" the INI
-- [ ] Make sure we need all libs
 - [ ] Update unstall.sh on release:
     - declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
     - declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
