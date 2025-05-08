@@ -6002,6 +6002,8 @@ manage_wsprry_pi() {
     local skip_on_uninstall=(
         "git_clone"
         "cleanup_files_in_directories"
+        "remove_legacy_services"
+        "remove_legacy_files_and_dirs"
     )
 
     # Start the script
