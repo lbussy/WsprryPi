@@ -5296,7 +5296,7 @@ manage_config() {
         fi
 
         # If we are doing the INI file, see if we can merge
-        if [[ "${config_file}" != "$WSPR_INI" ]]; then
+        if [[ "${config_file}" == "$WSPR_INI" ]]; then
             local old_path
             if [[ -f "/usr/local/etc/wspr.ini" ]]; then
                 old_path="/usr/local/etc/wspr.ini"
