@@ -4947,12 +4947,12 @@ remove_legacy_services() {
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
 
-            if systemctl is-active --quiet "$full"; then
+            if systemctl is-active --quiet "$full" 2>/dev/null; then
                 exec_command "Stopping ${full}" \
                              "systemctl stop ${full}"   "$debug"
             fi
 
-            if systemctl is-enabled --quiet "$full"; then
+            if systemctl is-enabled --quiet "$full" 2>/dev/null; then
                 exec_command "Disabling ${full}" \
                              "systemctl disable ${full}" "$debug"
             fi
@@ -5454,9 +5454,9 @@ upgrade_ini() {
         return 1
     fi
 
-    
-    exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
     logI "Merged $old_ini into new config."
+    pause
+    exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
 
     rm -f /tmp/upgrade_ini.err
     debug_end "$debug"
