@@ -4922,13 +4922,13 @@ usage() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 remove_legacy_services() {
-    local debug
+    local debug services service_name unit_dash unit_uscore name full dir unit_file
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
     logI "Cleaning up older services."
 
-    local services=(
+    services=(
         wspr
         wsprrypi
         shutdown-button
@@ -4936,47 +4936,40 @@ remove_legacy_services() {
         shutdown_watch
         wspr_watch
     )
-    local service_name unit_dash unit_uscore name full dir unit_file
 
     for service_name in "${services[@]}"; do
-        # derive dash- and underscore-variants
+        # derive both dash- and underscore-variants
         unit_dash="${service_name//_/-}"
         unit_uscore="${unit_dash//-/_}"
 
-        # for each variant, only stop/disable if that unit actually exists
+        # for each variant, stop if running, disable if enabled
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
-            if systemctl list-unit-files --type=service \
-               | grep -qE "^${name}\.service"; then
 
-                if systemctl is-active --quiet "$full"; then
-                    exec_command "Stopping $full" \
-                                 "systemctl stop $full" \
-                                 "$debug"
-                fi
+            if systemctl is-active --quiet "$full"; then
+                exec_command "Stopping ${full}" \
+                             "systemctl stop ${full}"   "$debug"
+            fi
 
-                if systemctl is-enabled --quiet "$full"; then
-                    exec_command "Disabling $full" \
-                                 "systemctl disable $full" \
-                                 "$debug"
-                fi
+            if systemctl is-enabled --quiet "$full"; then
+                exec_command "Disabling ${full}" \
+                             "systemctl disable ${full}" "$debug"
             fi
         done
 
-        # now remove any leftover unit files on disk (both names)
+        # now rip out any on-disk unit files (both forms)
         for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
             for name in "${unit_dash}" "${unit_uscore}"; do
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}" \
-                                 "$debug"
+                                 "rm -f -- ${unit_file}"       "$debug"
                 fi
             done
         done
     done
 
-    # final cleanup & daemon reload
+    # final cleanup
     exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
     exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
 
