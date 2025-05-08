@@ -5920,8 +5920,8 @@ finish_script() {
         printf "\n"
         printf "To configure %s, open the following URL in your browser:\n\n" "$REPO_TITLE"
 
-        printf "  %bhttp://%s.local/%s%b\n" "${FGBLU}" "${HOSTNAME}" "${repo_name}" "${RESET}"
-        printf "  %bhttp://%s/%s%b\n\n" "${FGBLU}" "${ip_address}" "${repo_name}" "${RESET}"
+        printf "  %bhttp://%s.local/%s/%b\n" "${FGBLU}" "${HOSTNAME}" "${repo_name}" "${RESET}"
+        printf "  %bhttp://%s/%s/%b\n\n" "${FGBLU}" "${ip_address}" "${repo_name}" "${RESET}"
 
         printf "If the hostname URL does not work, try using the IP address.\n"
         printf "Ensure your device is on the same network and that mDNS is\n"
