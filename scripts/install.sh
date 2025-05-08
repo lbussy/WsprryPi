@@ -5454,6 +5454,8 @@ upgrade_ini() {
         return 1
     fi
 
+    
+    exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
     logI "Merged $old_ini into new config."
 
     rm -f /tmp/upgrade_ini.err
