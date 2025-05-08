@@ -5316,11 +5316,11 @@ manage_config() {
         fi
 
         # Install the configuration
-        debug_print "Copying configuration from $config_src to $config_path." "$debug"
+        debug_print "Copying configuration from $source_path to $config_path." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $config_src $config_path"
+            logD "Exec: cp -f $source_path $config_path"
         else
-            exec_command "Install configuration" "cp -f $config_src $config_path" "$debug" || retval=1
+            exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
         fi
 
         # Update version
