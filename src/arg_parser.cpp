@@ -885,7 +885,7 @@ bool parse_command_line(int argc, char *argv[])
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnroDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
 
         if (c == -1)
             break;
