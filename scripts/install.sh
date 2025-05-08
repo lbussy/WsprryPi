@@ -252,6 +252,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # -----------------------------------------------------------------------------
 readonly WSPR_EXE="wsprrypi"
 readonly WSPR_INI="wsprrypi.ini"
+declare OLD_INI=""
 readonly LOG_ROTATE="logrotate.conf"
 
 # -----------------------------------------------------------------------------
@@ -4253,14 +4254,14 @@ git_clone() {
     # We need to runuser here because it needs to be done as pi (or current real user)
     clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
-    logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
+    debug_print "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
         logI "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
         return 0
     fi
 
-    exec_command "Cloning repository from '$GIT_CLONE' to '$dest_root'" "$clone_command" "$debug" || {
+    exec_command "Cloning repository '$GIT_CLONE'" "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
         return 1
@@ -4931,7 +4932,6 @@ remove_legacy_services() {
 
     services=(
         wspr
-        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
@@ -4947,12 +4947,12 @@ remove_legacy_services() {
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
 
-            if systemctl is-active --quiet "$full"; then
+            if systemctl is-active --quiet "$full" 2>/dev/null; then
                 exec_command "Stopping ${full}" \
                              "systemctl stop ${full}"   "$debug"
             fi
 
-            if systemctl is-enabled --quiet "$full"; then
+            if systemctl is-enabled --quiet "$full" 2>/dev/null; then
                 exec_command "Disabling ${full}" \
                              "systemctl disable ${full}" "$debug"
             fi
@@ -4998,11 +4998,10 @@ remove_legacy_files_and_dirs() {
 
     local files_and_dirs
 
-    logI "Cleaning up older versions."
+    logI "Cleaning up older files and directories."
     # Cleanup List
     files_and_dirs=(
         "/usr/local/bin/wspr"
-        "/usr/local/etc/wspr.ini"
         "/usr/local/bin/shutdown-button.py"
         "/usr/local/bin/shutdown-watch.py"
         "/usr/local/bin/shutdown_watch.py"
@@ -5296,8 +5295,28 @@ manage_config() {
             return 1
         fi
 
+        # If we are doing the INI file, see if we can merge
+        if [[ "${config_file}" == "$WSPR_INI" ]]; then
+            local old_path
+            if [[ -f "/usr/local/etc/wspr.ini" ]]; then
+                old_path="/usr/local/etc/wspr.ini"
+            elif [[ -f "/usr/local/etc/wsprrypi.ini" ]]; then
+                old_path="/usr/local/etc/wsprrypi.ini"
+            else
+                old_path=""
+            fi
+
+            if [[ -n "$old_path" ]]; then
+                local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
+                upgrade_ini "$old_path" "$source_path" "${merged_ini}" "$debug"
+                source_path="$merged_ini"
+            else
+                logI "No legacy INI found—skipping merge."
+            fi
+        fi
+
         # Install the configuration
-        debug_print "Copying configuration." "$debug"
+        debug_print "Copying configuration from $source_path to $config_path." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $config_path"
         else
@@ -5339,6 +5358,91 @@ manage_config() {
 
     debug_end "$debug"
     return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Migrate values from an old INI into a new INI file.
+# @details Reads values from an old INI file, ignores comments there, and merges
+#   those values into a new INI file, preserving the new file's formatting
+#   and inline comments. Only keys present in the new INI will have their
+#   values updated.
+#
+# @param $1 Path to the old INI file containing original values.
+# @param $2 Path to the new INI file to merge into.
+# @param $3 Path for the output merged INI file.
+#
+# @return Returns 0 on success, exits non-zero on failure.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+upgrade_ini() {
+    local debug old_ini new_ini merged_ini rc
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    old_ini="$1"
+    new_ini="$2"
+    merged_ini="$3"
+
+    debug_print "Merging $old_ini → $merged_ini." "$debug"
+
+    # run mawk and capture any stderr
+    rc=0
+    if ! mawk '
+    # Phase 1: read old.ini → overrides[key]=value
+    NR==FNR {
+      if ($0 ~ /^[[:space:]]*([;#]|$)/) next
+      l = $0; sub(/[;#].*$/, "", l)
+      key = l; sub(/=.*/, "", key)
+      val = l; sub(/^[^=]*=[ \t]*/, "", val)
+      sub(/[ \t]*$/, "", val)
+      gsub(/^[ \t]+|[ \t]+$/, "", key)
+      overrides[key] = val
+      next
+    }
+    # Phase 2: walk new.ini
+    {
+      if ($0 ~ /^[[:space:]]*([;#]|\[)/) { print; next }
+      line = $0; comment = ""
+      p = match(line, /;|#/)
+      if (p) {
+        comment = substr(line,p); line = substr(line,1,p-1)
+      }
+      eq = match(line,/=/)
+      if (eq) {
+        left = substr(line,1,eq-1)
+        orig=substr(line,eq+1)
+        keytrim=left; gsub(/^[ \t]+|[ \t]+$/, "",keytrim)
+        if (keytrim in overrides) {
+          # preserve whitespace
+          tmp=orig; gsub(/^[ \t]*/,"",tmp)
+          leadWS=substr(orig,1,length(orig)-length(tmp))
+          tmp2=tmp; gsub(/[ \t]*$/,"",tmp2)
+          trailerWS=substr(tmp,length(tmp2)+1)
+          printf("%s=%s%s%s%s\n", left, leadWS, overrides[keytrim], trailerWS, comment)
+          next
+        }
+      }
+      print
+    }
+    ' "$old_ini" "$new_ini" > "$merged_ini" 2> /tmp/upgrade_ini.err; then
+        rc=$?
+        # Capture the errors
+        local err_details
+        err_details=$(sed 's/^/  › /' /tmp/upgrade_ini.err)
+
+        # log summary + details
+        logE "INI merge failed (mawk exited $rc)." "$err_details"
+        rm -f /tmp/upgrade_ini.err
+        debug_end "$debug"
+        return 1
+    fi
+
+    logI "Merged $old_ini into new config."
+    exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
+
+    rm -f /tmp/upgrade_ini.err
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -5392,14 +5496,14 @@ manage_service() {
     local syslog_identifier
     local log_path
     local log_std_out
-    local log_std_err
     local retval=0 # Initialize return value
 
     daemon_name="${daemon_exe##*/}" # Remove path
     daemon_name="${daemon_name%.*}" # Remove extension (only if there is one)
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
-    service_path="/lib/systemd/system/${daemon_systemd_name}"
+    # Install under /etc so it overrides anything in /lib
+    service_path="/etc/systemd/system/${daemon_systemd_name}"
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
     log_path="/var/log/$syslog_identifier" # Use exe name
     log_std_out="$log_path/${syslog_identifier}_log"
@@ -5423,6 +5527,11 @@ manage_service() {
             warn "$source_path not found."
             retval=1
         elif [[ "$DRY_RUN" != "true" ]]; then
+            # Remove any existing override in /etc
+            if [[ -f "$service_path" ]]; then
+                exec_command "Removing old unit in /etc" "rm -f $service_path" "$debug" || retval=1
+            fi
+            # Now copy our fresh unit into /etc
             exec_command "Copy systemd file" "cp -f $source_path $service_path" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
 
@@ -5880,6 +5989,9 @@ manage_wsprry_pi() {
     local skip_on_uninstall=(
         "git_clone"
         "cleanup_files_in_directories"
+        "remove_legacy_services"
+        "remove_legacy_files_and_dirs"
+        "manage_sound"
     )
 
     # Start the script
@@ -5915,8 +6027,8 @@ manage_wsprry_pi() {
                   { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
                   grep -v -E "^($skip_regex)( |$)"
             )
-
-            debug_print "(UNINSTALL) Final group_to_execute list after filter:" "$debug"
+            # Re-add manage_sound at the very end
+            group_to_execute+=( "manage_sound" )
             ;;
         *)
             die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
