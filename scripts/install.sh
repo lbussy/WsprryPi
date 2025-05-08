@@ -4261,7 +4261,7 @@ git_clone() {
         return 0
     fi
 
-    exec_command "Cloning repository from '$GIT_CLONE' to '$dest_root'" "$clone_command" "$debug" || {
+    exec_command "Cloning repository '$GIT_CLONE'" "$clone_command" "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
         return 1
@@ -5326,10 +5326,10 @@ manage_config() {
         local config_src
         if [[ -f "$merged_ini" ]]; then
             config_src="$merged_ini"
-            logD "Using merged INI as source: $config_src"
+            debug_print "Using merged INI as source: $config_src" "$debug"
         else
             config_src="$source_path"
-            logD "Using original INI as source: $config_src"
+            debug_print "Using original INI as source: $config_src" "$debug"
         fi
 
         # Install the configuration
@@ -5400,7 +5400,7 @@ upgrade_ini() {
     new_ini="$2"
     merged_ini="$3"
 
-    logI "Merging $old_ini → $merged_ini."
+    debug_print "Merging $old_ini → $merged_ini." "$debug"
 
     # run mawk and capture any stderr
     rc=0
@@ -5454,7 +5454,7 @@ upgrade_ini() {
         return 1
     fi
 
-    logI "Merged $old_ini → $merged_ini."
+    logI "Merged $old_ini into new config."
 
     rm -f /tmp/upgrade_ini.err
     debug_end "$debug"
