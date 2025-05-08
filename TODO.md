@@ -17,6 +17,7 @@
     - declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
     - declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
     - declare SEM_VER="${SEM_VER:-2.0_Beta.3}"
+- [ ] Move sound enable to end of series on uninstall
 
 ## Shit to Remember
 
