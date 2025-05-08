@@ -4998,7 +4998,7 @@ remove_legacy_files_and_dirs() {
 
     local files_and_dirs
 
-    logI "Cleaning up older versions."
+    logI "Cleaning up older files and directories."
     # Cleanup List
     files_and_dirs=(
         "/usr/local/bin/wspr"
@@ -5522,6 +5522,7 @@ manage_service() {
                 fi
             fi
         fi
+        pause
 
         if [[ ! -f "$source_path" ]]; then
             warn "$source_path not found."
