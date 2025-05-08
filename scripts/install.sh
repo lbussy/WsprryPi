@@ -4298,8 +4298,8 @@ git_clone() {
     local clone_command dest_root retval
     dest_root="$LOCAL_REPO_DIR"
     retval=0
-    # We need to sudo here because it needs to be done as pi (or current real user)
-    clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    # We need to runuser here because it needs to be done as pi (or current real user)
+    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
@@ -5092,27 +5092,30 @@ remove_legacy_services() {
     )
 
     for service_name in "${services[@]}"; do
-        # Only proceed if the unit really exists
-        if systemctl list-units --all --type=service | grep -q "^${service_name}\.service"; then
-            # Stop it
-            exec_command "Stopping ${service_name}.service" "sudo systemctl stop ${service_name}.service" "$debug"
+        # normalize to dash form for systemctl
+        unit_dash="${service_name//_/-}"
 
-            # Disable it
-            exec_command "Disabling ${service_name}.service" "sudo systemctl disable ${service_name}.service" "$debug"
+        # stop & disable (will silently fail if it doesn't exist)
+        exec_command "Stopping ${unit_dash}.service"   \
+                     "systemctl stop ${unit_dash}.service"   "$debug"
+        exec_command "Disabling ${unit_dash}.service"  \
+                     "systemctl disable ${unit_dash}.service" "$debug"
 
-            # Remove its unit file(s)
-            for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
-                unit_file="$dir/${service_name}.service"
+        # remove on-disk files, both dash and underscore names
+        for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+            for name in "${unit_dash}" "${unit_dash//-/_}"; do
+                unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
-                    exec_command "Removing unit file ${unit_file}" "sudo rm -f -- $unit_file" "$debug"
+                    exec_command "Removing unit file ${unit_file}" \
+                                 "rm -f -- ${unit_file}"         "$debug"
                 fi
             done
-        fi
+        done
     done
 
     # Cleanup and reload
-    exec_command "Resetting failed systemd states" "sudo systemctl reset-failed" "$debug"
-    exec_command "Reloading systemd daemon" "sudo systemctl daemon-reload" "$debug"
+    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
+    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5160,7 +5163,7 @@ remove_legacy_files_and_dirs() {
 
     for item in "${files_and_dirs[@]}"; do
         if [[ -e $item ]]; then
-            exec_command "Removing $item" "sudo rm -rf -- $item" "$debug"
+            exec_command "Removing $item" "rm -rf -- $item" "$debug"
         fi
     done
 
@@ -5317,7 +5320,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "sudo cp -f $source_path $exe_path" "$debug" || {
+            exec_command "Install application" "cp -f $source_path $exe_path" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5329,7 +5332,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "sudo chown root:root $exe_path" "$debug" || {
+            exec_command "Change ownership on application" "chown root:root $exe_path" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5341,7 +5344,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "sudo chmod 755 $exe_path" "$debug" || {
+            exec_command "Make app executable" "chmod 755 $exe_path" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5356,7 +5359,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "sudo rm -f $exe_path" "$debug" || {
+            exec_command "Remove application" "rm -f $exe_path" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
@@ -5446,7 +5449,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $config_path"
         else
-            exec_command "Install configuration" "sudo cp -f $source_path $config_path" "$debug" || retval=1
+            exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
         fi
 
         # Update version
@@ -5457,7 +5460,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $config_path"
         else
-            exec_command "Change ownership on configuration" "sudo chown root:root $config_path" "$debug" || retval=1
+            exec_command "Change ownership on configuration" "chown root:root $config_path" "$debug" || retval=1
         fi
 
         # Change permissions on the configuration
@@ -5465,7 +5468,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 644 $config_path"
         else
-            exec_command "Set config permissions" "sudo chmod 644 $config_path" "$debug" || retval=1
+            exec_command "Set config permissions" "chmod 644 $config_path" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
@@ -5476,7 +5479,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $config_path"
         else
-            exec_command "Remove configuration" "sudo rm -f $config_path" "$debug" || retval=1
+            exec_command "Remove configuration" "rm -f $config_path" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5555,11 +5558,11 @@ manage_service() {
         else
             logI "Updating systemd service: $daemon_systemd_name." "$debug"
             if [[ "$DRY_RUN" != "true" ]]; then
-                exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
-                exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
 
                 if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
-                    exec_command "Unmask systemd service" "sudo systemctl unmask $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Unmask systemd service" "systemctl unmask $daemon_systemd_name" "$debug" || retval=1
                 fi
             fi
         fi
@@ -5588,14 +5591,14 @@ manage_service() {
             replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
             replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_out" "$debug"
 
-            exec_command "Change ownership on systemd file" "sudo chown root:root $service_path" "$debug" || retval=1
-            exec_command "Change permissions on systemd file" "sudo chmod 644 $service_path" "$debug" || retval=1
-            exec_command "Create log path" "sudo mkdir -p $log_path" "$debug" || retval=1
-            exec_command "Change ownership on log path" "sudo chown root:www-data $log_path" "$debug" || retval=1
-            exec_command "Change permissions on log path" "sudo chmod 755 $log_path" "$debug" || retval=1
-            exec_command "Enable systemd service" "sudo systemctl enable $daemon_systemd_name" "$debug" || retval=1
-            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || retval=1
-            exec_command "Start systemd service" "sudo systemctl restart $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Change ownership on systemd file" "chown root:root $service_path" "$debug" || retval=1
+            exec_command "Change permissions on systemd file" "chmod 644 $service_path" "$debug" || retval=1
+            exec_command "Create log path" "mkdir -p $log_path" "$debug" || retval=1
+            exec_command "Change ownership on log path" "chown root:www-data $log_path" "$debug" || retval=1
+            exec_command "Change permissions on log path" "chmod 755 $log_path" "$debug" || retval=1
+            exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
+            exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_name created."
@@ -5606,21 +5609,21 @@ manage_service() {
         if [[ -f "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
                 if systemctl is-active --quiet "$daemon_systemd_name"; then
-                    exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
                 fi
 
                 if systemctl is-enabled --quiet "$daemon_systemd_name"; then
-                    exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
                 fi
             fi
 
-            exec_command "Remove service file" "sudo rm -f $service_path" "$debug" || retval=1
+            exec_command "Remove service file" "rm -f $service_path" "$debug" || retval=1
         else
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
 
         if [[ -d "$log_path" ]]; then
-            exec_command "Remove log target" "sudo rm -fr $log_path" "$debug" || retval=1
+            exec_command "Remove log target" "rm -fr $log_path" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_systemd_name removed."
@@ -5680,7 +5683,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: mkdir -p $target_path"
         else
-            exec_command "Create target web directory" "sudo mkdir -p $target_path" "$debug" || retval=1
+            exec_command "Create target web directory" "mkdir -p $target_path" "$debug" || retval=1
         fi
 
         # Copy web files
@@ -5688,7 +5691,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -r $source_path* $target_path/"
         else
-            exec_command "Copy web files" "sudo cp -r $source_path/* $target_path/" "$debug" || retval=1
+            exec_command "Copy web files" "cp -r $source_path/* $target_path/" "$debug" || retval=1
         fi
 
         # Change ownership and permissions
@@ -5698,7 +5701,7 @@ manage_web() {
             logD "Exec: sudo chmod -R 755 $target_path"
         else
             # Set ownership for the entire directory
-            exec_command "Set ownership" "sudo chown -R www-data:www-data $target_path" "$debug" || retval=1
+            exec_command "Set ownership" "chown -R www-data:www-data $target_path" "$debug" || retval=1
 
             # Set correct permissions:
             # - Directories: `rwxr-xr-x` (755)
@@ -5715,7 +5718,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $target_path"
         else
-            exec_command "Remove web directory" "sudo rm -rf $target_path" "$debug" || retval=1
+            exec_command "Remove web directory" "rm -rf $target_path" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5873,7 +5876,7 @@ cleanup_files_in_directories() {
             return 0
         elif [[ -d "$dest_root" ]]; then
             # Delete the repository directory
-            exec_command "Delete local repository" "sudo rm -fr $dest_root" "$debug" || {
+            exec_command "Delete local repository" "rm -fr $dest_root" "$debug" || {
                 logE "Failed to delete local install files."
                 debug_end "$debug"
                 return 1
