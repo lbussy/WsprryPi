@@ -5555,7 +5555,7 @@ manage_service() {
         else
             logI "Updating systemd service: $daemon_systemd_name." "$debug"
             if [[ "$DRY_RUN" != "true" ]]; then
-                exec_command "Disable systemd service" "sud0 systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Disable systemd service" "sudo systemctl disable $daemon_systemd_name" "$debug" || retval=1
                 exec_command "Stop systemd service" "sudo systemctl stop $daemon_systemd_name" "$debug" || retval=1
 
                 if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
