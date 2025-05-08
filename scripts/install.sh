@@ -207,7 +207,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0_devel}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0_Beta}"
 declare GIT_TAG="${GIT_TAG:-2.0_Beta.6}"
 declare SEM_VER="${SEM_VER:-2.0_Beta.6}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -5037,20 +5037,12 @@ remove_legacy_services() {
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
 
-<<<<<<< HEAD
             if systemctl is-active --quiet "$full" 2>/dev/null; then
-=======
-            if systemctl is-active --quiet "$full"; then
->>>>>>> 37cef3e (Fix branch)
                 exec_command "Stopping ${full}" \
                              "systemctl stop ${full}"   "$debug"
             fi
 
-<<<<<<< HEAD
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
-=======
-            if systemctl is-enabled --quiet "$full"; then
->>>>>>> 37cef3e (Fix branch)
                 exec_command "Disabling ${full}" \
                              "systemctl disable ${full}" "$debug"
             fi
