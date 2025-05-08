@@ -252,6 +252,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # -----------------------------------------------------------------------------
 readonly WSPR_EXE="wsprrypi"
 readonly WSPR_INI="wsprrypi.ini"
+declare OLD_INI=""
 readonly LOG_ROTATE="logrotate.conf"
 
 # -----------------------------------------------------------------------------
@@ -5001,7 +5002,6 @@ remove_legacy_files_and_dirs() {
     # Cleanup List
     files_and_dirs=(
         "/usr/local/bin/wspr"
-        "/usr/local/etc/wspr.ini"
         "/usr/local/bin/shutdown-button.py"
         "/usr/local/bin/shutdown-watch.py"
         "/usr/local/bin/shutdown_watch.py"
@@ -5295,12 +5295,49 @@ manage_config() {
             return 1
         fi
 
+        if [[ -f "/usr/local/etc/wspr.ini" ]]; then
+            old_path="/usr/local/etc/wspr.ini"
+        elif [[ -f "/usr/local/etc/wsprrypi.ini" ]]; then
+            old_path="/usr/local/etc/wsprrypi.ini"
+        else
+            old_path=""
+        fi
+
+        if [[ -n "$old_path" ]]; then
+            upgrade_ini "$old_path" \
+                        "$source_path" \
+                        "${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini" \
+                        "$debug"
+        else
+            logI "No legacy INI found—skipping merge."
+        fi
+
         # Install the configuration
         debug_print "Copying configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $source_path $config_path"
+            logD "Exec: cp -f $source_path $source_path"
         else
             exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
+        fi
+
+        # Choose the right source: prefer merged ini if present
+        debug_print "Copying configuration." "$debug"
+        local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
+        local config_src
+        if [[ -f "$merged_ini" ]]; then
+            config_src="$merged_ini"
+            logD "Using merged INI as source: $config_src"
+        else
+            config_src="$source_path"
+            logD "Using original INI as source: $config_src"
+        fi
+
+        # Install the configuration
+        debug_print "Copying configuration from $config_src to $config_path." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: cp -f $config_src $config_path"
+        else
+            exec_command "Install configuration" "cp -f $config_src $config_path" "$debug" || retval=1
         fi
 
         # Update version
@@ -5338,6 +5375,90 @@ manage_config() {
 
     debug_end "$debug"
     return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Migrate values from an old INI into a new INI file.
+# @details Reads values from an old INI file, ignores comments there, and merges
+#   those values into a new INI file, preserving the new file's formatting
+#   and inline comments. Only keys present in the new INI will have their
+#   values updated.
+#
+# @param $1 Path to the old INI file containing original values.
+# @param $2 Path to the new INI file to merge into.
+# @param $3 Path for the output merged INI file.
+#
+# @return Returns 0 on success, exits non-zero on failure.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+upgrade_ini() {
+    local debug old_ini new_ini merged_ini rc
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    old_ini="$1"
+    new_ini="$2"
+    merged_ini="$3"
+
+    logI "Merging $old_ini → $merged_ini."
+
+    # run mawk and capture any stderr
+    rc=0
+    if ! mawk '
+    # Phase 1: read old.ini → overrides[key]=value
+    NR==FNR {
+      if ($0 ~ /^[[:space:]]*([;#]|$)/) next
+      l = $0; sub(/[;#].*$/, "", l)
+      key = l; sub(/=.*/, "", key)
+      val = l; sub(/^[^=]*=[ \t]*/, "", val)
+      sub(/[ \t]*$/, "", val)
+      gsub(/^[ \t]+|[ \t]+$/, "", key)
+      overrides[key] = val
+      next
+    }
+    # Phase 2: walk new.ini
+    {
+      if ($0 ~ /^[[:space:]]*([;#]|\[)/) { print; next }
+      line = $0; comment = ""
+      p = match(line, /;|#/)
+      if (p) {
+        comment = substr(line,p); line = substr(line,1,p-1)
+      }
+      eq = match(line,/=/)
+      if (eq) {
+        left = substr(line,1,eq-1)
+        orig=substr(line,eq+1)
+        keytrim=left; gsub(/^[ \t]+|[ \t]+$/, "",keytrim)
+        if (keytrim in overrides) {
+          # preserve whitespace
+          tmp=orig; gsub(/^[ \t]*/,"",tmp)
+          leadWS=substr(orig,1,length(orig)-length(tmp))
+          tmp2=tmp; gsub(/[ \t]*$/,"",tmp2)
+          trailerWS=substr(tmp,length(tmp2)+1)
+          printf("%s=%s%s%s%s\n", left, leadWS, overrides[keytrim], trailerWS, comment)
+          next
+        }
+      }
+      print
+    }
+    ' "$old_ini" "$new_ini" > "$merged_ini" 2> /tmp/upgrade_ini.err; then
+        rc=$?
+        # Capture the errors
+        local err_details
+        err_details=$(sed 's/^/  › /' /tmp/upgrade_ini.err)
+
+        # log summary + details
+        logE "INI merge failed (mawk exited $rc)." "$err_details"
+        rm -f /tmp/upgrade_ini.err
+        debug_end "$debug"
+        return 1
+    fi
+
+    logI "Merged $old_ini → $merged_ini."
+
+    rm -f /tmp/upgrade_ini.err
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
