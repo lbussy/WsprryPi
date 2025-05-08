@@ -567,7 +567,6 @@ declare -ar DEPENDENCIES=(
     "whoami"
     "touch"
     "dpkg"
-    "git"
     "dpkg-reconfigure"
     "curl"
     "wget"
@@ -690,7 +689,6 @@ readonly SYSTEM_READS
 # done
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
-    "jq"
     "git"
     "apache2"
     "php"
@@ -4227,52 +4225,6 @@ get_proj_params() {
 ############
 
 # -----------------------------------------------------------------------------
-# @brief Downloads a single file from a Git repository's raw URL.
-# @details Fetches a file from the raw content URL of the repository and saves
-#          it to the specified local directory. Ensures the destination
-#          directory exists before downloading.
-#
-# @param $1 The relative path of the file in the repository.
-# @param $2 The local destination directory where the file will be saved.
-#
-# @global GIT_RAW The base URL for raw content access in the Git repository.
-# @global REPO_BRANCH The branch name from which the file will be fetched.
-#
-# @throws Logs an error and returns non-zero if the file download fails.
-#
-# @return None. Downloads the file to the specified directory.
-#
-# @example
-# download_file "path/to/file.txt" "/local/dir"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-download_file() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-    local file_path="$1"
-    local dest_dir="$2"
-
-    mkdir -p "$dest_dir"
-
-    local file_name
-    file_name=$(basename "$file_path")
-    file_name="${file_name//\'/}"
-
-    logI "Downloading from: $GIT_RAW/$REPO_BRANCH/$file_path to $dest_dir/$file_name"
-
-    wget -q -O "$dest_dir/$file_name" "$GIT_RAW/$REPO_BRANCH/$file_path" || {
-        warn "Failed to download file: $file_path to $dest_dir/$file_name"
-        return 1
-    }
-
-    local dest_file="$dest_dir/$file_name"
-    mv "$dest_file" "${dest_file//\'/}"
-    debug_end "$debug"
-    return
-}
-
-# -----------------------------------------------------------------------------
 # @brief Clones a GitHub repository to the specified local destination.
 # @details This function clones the repository from the provided Git URL to the
 #          specified local destination directory.
@@ -4315,110 +4267,6 @@ git_clone() {
 
     debug_end "$debug"
     return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Fetches the Git tree of a specified branch from a repository.
-# @details Retrieves the SHA of the specified branch and then fetches the
-#          complete tree structure of the repository, allowing recursive access
-#          to all files and directories.
-#
-# @global GIT_API The base URL for the GitHub API, pointing to the repository.
-# @global REPO_BRANCH The branch name to fetch the tree from.
-#
-# @throws Prints an error message and exits if the branch SHA cannot be
-#         fetched.
-#
-# @return Outputs the JSON representation of the repository tree.
-#
-# @example
-# fetch_tree
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-fetch_tree() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-    local branch_sha
-    branch_sha=$(curl -s "$GIT_API/git/ref/heads/$REPO_BRANCH" | jq -r '.object.sha')
-
-    if [[ -z "$branch_sha" || "$branch_sha" == "null" ]]; then
-        warn "Failed to fetch branch SHA for branch: $REPO_BRANCH. Check repository details or API access."
-        return 1
-    fi
-
-    curl -s "$GIT_API/git/trees/$branch_sha?recursive=1"
-    debug_end "$debug"
-    return
-}
-
-# -----------------------------------------------------------------------------
-# @brief Downloads files from specified directories in a repository.
-# @details This function retrieves a repository tree, identifies files within
-#          specified directories, and downloads them to the local system.
-#
-# @param $1 The target directory to update.
-#
-# @global USER_HOME The home directory of the user, used as the base for
-#         storing files.
-# @global GIT_DIRS Array of directories in the repository to process.
-#
-# @throws Exits the script with an error if the repository tree cannot be
-#         fetched.
-#
-# @return Downloads files to the specified directory structure under
-#         $USER_HOME/{appname}.
-#
-# @example
-# download_files_in_directories
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-download_files_in_directories() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local dest_root="$LOCAL_REPO_DIR"
-
-    if [[ "$IS_REPO" == "true" || "$(realpath -m "$dest_root")" == "$(realpath -m "$LOCAL_REPO_DIR")" ]]; then
-        logI "Running from repo, skipping download."
-        debug_end "$debug"
-        return
-    fi
-
-    logI "Fetching repository tree."
-    local tree
-    tree=$("$debug")
-
-    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
-        die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
-    fi
-
-    for dir in "${GIT_DIRS[@]}"; do
-        logI "Processing directory: $dir"
-
-        local files
-        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
-            '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
-
-        if [[ -z "$files" ]]; then
-            logI "No files found in directory: $dir"
-            continue
-        fi
-
-        local dest_dir="$dest_root/$dir"
-        mkdir -p "$dest_dir"
-
-        printf "%s\n" "$files" | while read -r file; do
-            logI "Downloading: $file"
-            download_file "$file" "$dest_dir"
-        done
-
-        logI "Files from $dir downloaded to: $dest_dir"
-    done
-
-    debug_end "$debug"
-    logI "Files saved in: $dest_root"
 }
 
 ############
