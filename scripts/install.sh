@@ -695,8 +695,7 @@ readonly APT_PACKAGES=(
     "apache2"
     "php"
     "chrony"
-    "gpiod"
-    "libgpiod-dev"
+    "libgpiod2"
 )
 
 # -----------------------------------------------------------------------------
@@ -5081,7 +5080,7 @@ remove_legacy_services() {
 
     logI "Cleaning up older services."
 
-    local services=( 
+    local services=(
         wspr
         wsprrypi
         shutdown-button
@@ -5089,38 +5088,47 @@ remove_legacy_services() {
         shutdown_watch
         wspr_watch
     )
-    local service_name unit_dash unit_uscore dir name unit_file
+    local service_name unit_dash unit_uscore name full dir unit_file
 
     for service_name in "${services[@]}"; do
-        # normalize names
+        # derive dash- and underscore-variants
         unit_dash="${service_name//_/-}"
         unit_uscore="${unit_dash//-/_}"
 
-        # only stop if it's actually running
-        if systemctl is-active --quiet "${unit_dash}.service"; then
-            exec_command "Stopping ${unit_dash}.service" \
-                         "systemctl stop ${unit_dash}.service"  "$debug"
-        fi
+        # for each variant, only stop/disable if that unit actually exists
+        for name in "${unit_dash}" "${unit_uscore}"; do
+            full="${name}.service"
+            if systemctl list-unit-files --type=service \
+               | grep -qE "^${name}\.service"; then
 
-        # only disable if it's enabled
-        if systemctl is-enabled --quiet "${unit_dash}.service"; then
-            exec_command "Disabling ${unit_dash}.service" \
-                         "systemctl disable ${unit_dash}.service" "$debug"
-        fi
+                if systemctl is-active --quiet "$full"; then
+                    exec_command "Stopping $full" \
+                                 "systemctl stop $full" \
+                                 "$debug"
+                fi
 
-        # remove any on-disk unit files (both dash & underscore)
+                if systemctl is-enabled --quiet "$full"; then
+                    exec_command "Disabling $full" \
+                                 "systemctl disable $full" \
+                                 "$debug"
+                fi
+            fi
+        done
+
+        # now remove any leftover unit files on disk (both names)
         for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
             for name in "${unit_dash}" "${unit_uscore}"; do
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}"           "$debug"
+                                 "rm -f -- ${unit_file}" \
+                                 "$debug"
                 fi
             done
         done
     done
 
-    # final cleanup
+    # final cleanup & daemon reload
     exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
     exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
 
@@ -5152,20 +5160,15 @@ remove_legacy_files_and_dirs() {
     # Cleanup List
     files_and_dirs=(
         "/usr/local/bin/wspr"
-        "/usr/local/bin/wsprrypi"
         "/usr/local/etc/wspr.ini"
-        "/usr/local/etc/wsprrypi.ini"
         "/usr/local/bin/shutdown-button.py"
         "/usr/local/bin/shutdown-watch.py"
         "/usr/local/bin/shutdown_watch.py"
         "/usr/local/bin/wspr_watch.py"
         "/var/www/html/wspr/"
-        "/var/www/html/wsprrypi/"
         "/var/log/wspr/"
         "/var/log/WsprryPi/"
-        "/var/log/wsprrypi/"
         "/etc/logrotate.d/wspr"
-        "/etc/logrotate.d/wsprrypi"
     )
 
     for item in "${files_and_dirs[@]}"; do
