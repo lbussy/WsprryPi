@@ -2,8 +2,6 @@
 
 ## C++ Code
 
-- [ ] Check default state of shutdown pin
-
 ## Web UI
 
 - [ ] Implement freq_test?
