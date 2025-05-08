@@ -169,22 +169,25 @@ sudo systemctl stop wsprrypi
 sudo systemctl disable wsprrypi
 ```
 
-## Required Libs
+## Required Devel Libs
 
-If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, you would need some libs to compile the project:
+If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
 
-- jq
-- git
+
 - apache2
 - php
-- gpiod
-- libgpiod-dev
 - chrony
+- libgpiod2
+
+If you are doing development, you will need, in additon:
+
+- git
+- libgpiod-dev
 
 Install these with:
 
 ``` bash
-sudo apt install jq git apache2 php chrony gpiod libgpiod-dev -y
+sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 -y
 ```
 
 ## A Note About Submodules
