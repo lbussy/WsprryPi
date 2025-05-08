@@ -6,14 +6,14 @@
 
 ## Web UI
 
-- [ ] Implement freq_test
+- [ ] Implement freq_test?
 - [ ] Think about separating header/footer/body pages
 
 ## Orchestration
 
 - [ ] Inline the apache_tool into install.
 - [ ] Create release script orchestration
-- [ ] Update unstall.sh on release:
+- [ ] Update install.sh on release:
     - declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
     - declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
     - declare SEM_VER="${SEM_VER:-2.0_Beta.3}"
