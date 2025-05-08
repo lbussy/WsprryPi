@@ -41,7 +41,8 @@ IFS=$'\n\t'
 # sudo ./install.sh
 # sudo ./install.sh debug
 # sudo ACTION=uninstall ./install.sh
-# curl -fsSL {url} | sudo bash -s -- install debug
+# curl -fsSL {url} | sudo bash
+# curl -fsSL {url} | sudo bash -s -- debug
 # curl -fsSL {url} | sudo env ACTION=uninstall bash -s -- debug
 #
 # -----------------------------------------------------------------------------
@@ -209,7 +210,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0_devel}"
+declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
 declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
 declare SEM_VER="${SEM_VER:-2.0_Beta.3}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -495,17 +496,15 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # -----------------------------------------------------------------------------
 # @var LOG_FILE
 # @brief Specifies the path to the log file.
-# @details Defines the file path where log messages are written when logging
-#          to a file is enabled. If not explicitly set, this variable defaults
-#          to blank, meaning no log file will be used unless a specific path
-#          is assigned at runtime or through an external environment variable.
 #
-# @default ""
+# @details Uses the environment variable LOG_FILE if set; otherwise defaults
+#          to "$USER_HOME/$WSPR_EXE.log", where USER_HOME is the user's home
+#          directory and WSPR_EXE is the executable name.
 #
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-}" # Use the provided LOG_FILE or default to blank.
+declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
@@ -569,7 +568,6 @@ declare -ar DEPENDENCIES=(
     "whoami"
     "touch"
     "dpkg"
-    "git"
     "dpkg-reconfigure"
     "curl"
     "wget"
@@ -692,13 +690,11 @@ readonly SYSTEM_READS
 # done
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
-    "jq"
     "git"
     "apache2"
     "php"
     "chrony"
-    "gpiod"
-    "libgpiod-dev"
+    "libgpiod2"
 )
 
 # -----------------------------------------------------------------------------
@@ -4230,52 +4226,6 @@ get_proj_params() {
 ############
 
 # -----------------------------------------------------------------------------
-# @brief Downloads a single file from a Git repository's raw URL.
-# @details Fetches a file from the raw content URL of the repository and saves
-#          it to the specified local directory. Ensures the destination
-#          directory exists before downloading.
-#
-# @param $1 The relative path of the file in the repository.
-# @param $2 The local destination directory where the file will be saved.
-#
-# @global GIT_RAW The base URL for raw content access in the Git repository.
-# @global REPO_BRANCH The branch name from which the file will be fetched.
-#
-# @throws Logs an error and returns non-zero if the file download fails.
-#
-# @return None. Downloads the file to the specified directory.
-#
-# @example
-# download_file "path/to/file.txt" "/local/dir"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-download_file() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-    local file_path="$1"
-    local dest_dir="$2"
-
-    mkdir -p "$dest_dir"
-
-    local file_name
-    file_name=$(basename "$file_path")
-    file_name="${file_name//\'/}"
-
-    logI "Downloading from: $GIT_RAW/$REPO_BRANCH/$file_path to $dest_dir/$file_name"
-
-    wget -q -O "$dest_dir/$file_name" "$GIT_RAW/$REPO_BRANCH/$file_path" || {
-        warn "Failed to download file: $file_path to $dest_dir/$file_name"
-        return 1
-    }
-
-    local dest_file="$dest_dir/$file_name"
-    mv "$dest_file" "${dest_file//\'/}"
-    debug_end "$debug"
-    return
-}
-
-# -----------------------------------------------------------------------------
 # @brief Clones a GitHub repository to the specified local destination.
 # @details This function clones the repository from the provided Git URL to the
 #          specified local destination directory.
@@ -4300,8 +4250,8 @@ git_clone() {
     local clone_command dest_root retval
     dest_root="$LOCAL_REPO_DIR"
     retval=0
-    # We need to sudo here because it needs to be done as pi (or current real user)
-    clone_command="sudo -u $SUDO_USER git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    # We need to runuser here because it needs to be done as pi (or current real user)
+    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
     logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
@@ -4318,110 +4268,6 @@ git_clone() {
 
     debug_end "$debug"
     return "$retval"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Fetches the Git tree of a specified branch from a repository.
-# @details Retrieves the SHA of the specified branch and then fetches the
-#          complete tree structure of the repository, allowing recursive access
-#          to all files and directories.
-#
-# @global GIT_API The base URL for the GitHub API, pointing to the repository.
-# @global REPO_BRANCH The branch name to fetch the tree from.
-#
-# @throws Prints an error message and exits if the branch SHA cannot be
-#         fetched.
-#
-# @return Outputs the JSON representation of the repository tree.
-#
-# @example
-# fetch_tree
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-fetch_tree() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-    local branch_sha
-    branch_sha=$(curl -s "$GIT_API/git/ref/heads/$REPO_BRANCH" | jq -r '.object.sha')
-
-    if [[ -z "$branch_sha" || "$branch_sha" == "null" ]]; then
-        warn "Failed to fetch branch SHA for branch: $REPO_BRANCH. Check repository details or API access."
-        return 1
-    fi
-
-    curl -s "$GIT_API/git/trees/$branch_sha?recursive=1"
-    debug_end "$debug"
-    return
-}
-
-# -----------------------------------------------------------------------------
-# @brief Downloads files from specified directories in a repository.
-# @details This function retrieves a repository tree, identifies files within
-#          specified directories, and downloads them to the local system.
-#
-# @param $1 The target directory to update.
-#
-# @global USER_HOME The home directory of the user, used as the base for
-#         storing files.
-# @global GIT_DIRS Array of directories in the repository to process.
-#
-# @throws Exits the script with an error if the repository tree cannot be
-#         fetched.
-#
-# @return Downloads files to the specified directory structure under
-#         $USER_HOME/{appname}.
-#
-# @example
-# download_files_in_directories
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-download_files_in_directories() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local dest_root="$LOCAL_REPO_DIR"
-
-    if [[ "$IS_REPO" == "true" || "$(realpath -m "$dest_root")" == "$(realpath -m "$LOCAL_REPO_DIR")" ]]; then
-        logI "Running from repo, skipping download."
-        debug_end "$debug"
-        return
-    fi
-
-    logI "Fetching repository tree."
-    local tree
-    tree=$("$debug")
-
-    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
-        die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
-    fi
-
-    for dir in "${GIT_DIRS[@]}"; do
-        logI "Processing directory: $dir"
-
-        local files
-        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
-            '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
-
-        if [[ -z "$files" ]]; then
-            logI "No files found in directory: $dir"
-            continue
-        fi
-
-        local dest_dir="$dest_root/$dir"
-        mkdir -p "$dest_dir"
-
-        printf "%s\n" "$files" | while read -r file; do
-            logI "Downloading: $file"
-            download_file "$file" "$dest_dir"
-        done
-
-        logI "Files from $dir downloaded to: $dest_dir"
-    done
-
-    debug_end "$debug"
-    logI "Files saved in: $dest_root"
 }
 
 ############
@@ -5077,15 +4923,15 @@ usage() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 remove_legacy_services() {
-    local debug
+    local debug services service_name unit_dash unit_uscore name full dir unit_file
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
     logI "Cleaning up older services."
 
-    local services
     services=(
         wspr
+        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
@@ -5093,27 +4939,40 @@ remove_legacy_services() {
     )
 
     for service_name in "${services[@]}"; do
-        # Only proceed if the unit really exists
-        if systemctl list-units --all --type=service | grep -q "^${service_name}\.service"; then
-            # Stop it
-            exec_command "Stopping ${service_name}.service" "systemctl stop ${service_name}.service" "$debug"
+        # derive both dash- and underscore-variants
+        unit_dash="${service_name//_/-}"
+        unit_uscore="${unit_dash//-/_}"
 
-            # Disable it
-            exec_command "Disabling ${service_name}.service" "systemctl disable ${service_name}.service" "$debug"
+        # for each variant, stop if running, disable if enabled
+        for name in "${unit_dash}" "${unit_uscore}"; do
+            full="${name}.service"
 
-            # Remove its unit file(s)
-            for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
-                unit_file="$dir/${service_name}.service"
+            if systemctl is-active --quiet "$full"; then
+                exec_command "Stopping ${full}" \
+                             "systemctl stop ${full}"   "$debug"
+            fi
+
+            if systemctl is-enabled --quiet "$full"; then
+                exec_command "Disabling ${full}" \
+                             "systemctl disable ${full}" "$debug"
+            fi
+        done
+
+        # now rip out any on-disk unit files (both forms)
+        for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+            for name in "${unit_dash}" "${unit_uscore}"; do
+                unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
-                    exec_command "Removing unit file ${unit_file}" "rm -f -- \"$unit_file\"" "$debug"
+                    exec_command "Removing unit file ${unit_file}" \
+                                 "rm -f -- ${unit_file}"       "$debug"
                 fi
             done
-        fi
+        done
     done
 
-    # Cleanup and reload
-    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
-    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
+    # final cleanup
+    exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
+    exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5156,7 +5015,7 @@ remove_legacy_files_and_dirs() {
 
     for item in "${files_and_dirs[@]}"; do
         if [[ -e $item ]]; then
-            exec_command "Removing $item" "rm -rf -- \"$item\"" "$debug"
+            exec_command "Removing $item" "rm -rf -- $item" "$debug"
         fi
     done
 
@@ -5699,8 +5558,8 @@ manage_web() {
             # Set correct permissions:
             # - Directories: `rwxr-xr-x` (755)
             # - Files: `rw-r--r--` (644)
-            exec_command "Set directory permissions" "find $target_path -type d -exec chmod 755 {} +" "$debug" || retval=1
-            exec_command "Set file permissions" "find $target_path -type f -exec chmod 644 {} +" "$debug" || retval=1
+            exec_command "Set directory permissions" "find $target_path -type d -exec sudo chmod 755 {} +" "$debug" || retval=1
+            exec_command "Set file permissions" "find $target_path -type f -exec sudo chmod 644 {} +" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
