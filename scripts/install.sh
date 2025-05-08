@@ -5534,7 +5534,6 @@ manage_service() {
             # Now copy our fresh unit into /etc
             exec_command "Copy systemd file" "cp -f $source_path $service_path" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
-            pause
 
             if [[ "$use_syslog" == "false" ]]; then
                 modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
