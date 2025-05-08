@@ -5081,8 +5081,7 @@ remove_legacy_services() {
 
     logI "Cleaning up older services."
 
-    local services service_name unit_dash unit_uscore dir name unit_file
-    services=(
+    local services=( 
         wspr
         wsprrypi
         shutdown-button
@@ -5090,35 +5089,39 @@ remove_legacy_services() {
         shutdown_watch
         wspr_watch
     )
+    local service_name unit_dash unit_uscore dir name unit_file
 
     for service_name in "${services[@]}"; do
-        # normalize to dash form and prepare underscore form
+        # normalize names
         unit_dash="${service_name//_/-}"
         unit_uscore="${unit_dash//-/_}"
 
-        # only stop & disable if systemd knows about it
-        if systemctl list-unit-files --type=service \
-           | grep -qE "^(${unit_dash}|${unit_uscore})\.service"; then
+        # only stop if it's actually running
+        if systemctl is-active --quiet "${unit_dash}.service"; then
             exec_command "Stopping ${unit_dash}.service" \
-                         "systemctl stop ${unit_dash}.service"   "$debug"
+                         "systemctl stop ${unit_dash}.service"  "$debug"
+        fi
+
+        # only disable if it's enabled
+        if systemctl is-enabled --quiet "${unit_dash}.service"; then
             exec_command "Disabling ${unit_dash}.service" \
                          "systemctl disable ${unit_dash}.service" "$debug"
         fi
 
-        # remove any on-disk unit files (both forms)
+        # remove any on-disk unit files (both dash & underscore)
         for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
             for name in "${unit_dash}" "${unit_uscore}"; do
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}"              "$debug"
+                                 "rm -f -- ${unit_file}"           "$debug"
                 fi
             done
         done
     done
 
-    # Cleanup and reload
-    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
+    # final cleanup
+    exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
     exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
