@@ -5021,6 +5021,7 @@ remove_legacy_services() {
 
     services=(
         wspr
+        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
@@ -5036,12 +5037,20 @@ remove_legacy_services() {
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
 
+<<<<<<< HEAD
             if systemctl is-active --quiet "$full" 2>/dev/null; then
+=======
+            if systemctl is-active --quiet "$full"; then
+>>>>>>> 37cef3e (Fix branch)
                 exec_command "Stopping ${full}" \
                              "systemctl stop ${full}"   "$debug"
             fi
 
+<<<<<<< HEAD
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
+=======
+            if systemctl is-enabled --quiet "$full"; then
+>>>>>>> 37cef3e (Fix branch)
                 exec_command "Disabling ${full}" \
                              "systemctl disable ${full}" "$debug"
             fi
@@ -5260,7 +5269,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "sudo cp -f $source_path $exe_path" "$debug" || {
+            exec_command "Install application" "cp -f $source_path $exe_path" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5272,7 +5281,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "sudo chown root:root $exe_path" "$debug" || {
+            exec_command "Change ownership on application" "chown root:root $exe_path" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5284,7 +5293,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "sudo chmod 755 $exe_path" "$debug" || {
+            exec_command "Make app executable" "chmod 755 $exe_path" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5299,7 +5308,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "sudo rm -f $exe_path" "$debug" || {
+            exec_command "Remove application" "rm -f $exe_path" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
