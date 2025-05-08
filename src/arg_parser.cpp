@@ -149,7 +149,6 @@ void callback_ini_changed()
     {
         if (config.transmit)
         {
-            // TODO:  Make sure config.transmit is changed before we make this determination
             // Transmit not changed, make pending change
             llog.logS(INFO, "INI file changed, reload after transmission.");
         }
@@ -475,15 +474,9 @@ bool validate_config_data()
     // Handle test tone mode (TONE mode does not require callsign, grid, etc.)
     if (config.mode == ModeType::TONE)
     {
-        if (config.test_tone <= 0.0)
-        {
-            llog.logE(FATAL, "Test tone frequency must be positive.");
-            return false;
-        }
-
         // Log test tone frequency
-        llog.logS(INFO, "A test tone will be generated at",
-                  lookup.freq_display_string(config.test_tone), ".");
+        llog.logS(INFO, "A test tone will be generated at:",
+                  lookup.freq_display_string(config.test_tone));
     }
     else if (config.mode == ModeType::WSPR)
     {
@@ -652,7 +645,7 @@ bool set_frequencies()
     }
 
     // Ensure we have at least one valid frequency.
-    if (config.center_freq_set.empty()) {
+    if (config.center_freq_set.empty() && config.mode == ModeType::WSPR) {
         llog.logE(ERROR, "Empty or invalid frequency list; disabling transmission.");
         config.transmit = false;
         return false;
@@ -892,7 +885,7 @@ bool parse_command_line(int argc, char *argv[])
     while (true)
     {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "h?vnrDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "h?vnroDp:x:t:a:l:s:d:w:k:", long_options, &option_index);
 
         if (c == -1)
             break;

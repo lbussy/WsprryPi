@@ -454,12 +454,25 @@ bool wspr_loop()
         callback_transmission_complete);
 
     // Wait for something to happen
+
     llog.logS(INFO, "WSPR loop running.");
 
     // Set pending config flags and do initial config
     ini_reload_pending.store(true, std::memory_order_relaxed);
     ppm_reload_pending.store(true, std::memory_order_relaxed);
-    set_config(true); // Handles get next (or only) frequency, PPM, and setup
+    if (config.mode == ModeType::WSPR)
+    {
+        // Set up WSPR transmissions
+        set_config(true); // Handles get next (or only) frequency, PPM, and setup
+    }
+    else
+    {
+        // Setup test tone
+        validate_config_data();
+        wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
+        wsprTransmitter.enableTransmission();
+        llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
+    }
 
     // -------------------------------------------------------------------------
     // Loop (block wspr_loop only) until shutdown is triggered
