@@ -5081,7 +5081,7 @@ remove_legacy_services() {
 
     logI "Cleaning up older services."
 
-    local services
+    local services service_name unit_dash unit_uscore dir name unit_file
     services=(
         wspr
         wsprrypi
@@ -5092,22 +5092,26 @@ remove_legacy_services() {
     )
 
     for service_name in "${services[@]}"; do
-        # normalize to dash form for systemctl
+        # normalize to dash form and prepare underscore form
         unit_dash="${service_name//_/-}"
+        unit_uscore="${unit_dash//-/_}"
 
-        # stop & disable (will silently fail if it doesn't exist)
-        exec_command "Stopping ${unit_dash}.service"   \
-                     "systemctl stop ${unit_dash}.service"   "$debug"
-        exec_command "Disabling ${unit_dash}.service"  \
-                     "systemctl disable ${unit_dash}.service" "$debug"
+        # only stop & disable if systemd knows about it
+        if systemctl list-unit-files --type=service \
+           | grep -qE "^(${unit_dash}|${unit_uscore})\.service"; then
+            exec_command "Stopping ${unit_dash}.service" \
+                         "systemctl stop ${unit_dash}.service"   "$debug"
+            exec_command "Disabling ${unit_dash}.service" \
+                         "systemctl disable ${unit_dash}.service" "$debug"
+        fi
 
-        # remove on-disk files, both dash and underscore names
+        # remove any on-disk unit files (both forms)
         for dir in /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
-            for name in "${unit_dash}" "${unit_dash//-/_}"; do
+            for name in "${unit_dash}" "${unit_uscore}"; do
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}"         "$debug"
+                                 "rm -f -- ${unit_file}"              "$debug"
                 fi
             done
         done
@@ -5115,7 +5119,7 @@ remove_legacy_services() {
 
     # Cleanup and reload
     exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
-    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
+    exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
     return 0
