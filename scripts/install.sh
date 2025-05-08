@@ -4254,7 +4254,7 @@ git_clone() {
     # We need to runuser here because it needs to be done as pi (or current real user)
     clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
 
-    logI "Ensuring destination directory does not exist: '$dest_root'" "$debug"
+    debug_print "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
         logI "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
@@ -5295,41 +5295,24 @@ manage_config() {
             return 1
         fi
 
-        if [[ -f "/usr/local/etc/wspr.ini" ]]; then
-            old_path="/usr/local/etc/wspr.ini"
-        elif [[ -f "/usr/local/etc/wsprrypi.ini" ]]; then
-            old_path="/usr/local/etc/wsprrypi.ini"
-        else
-            old_path=""
-        fi
+        # If we are doing the INI file, see if we can merge
+        if [[ "${config_file}" != "$WSPR_INI" ]]; then
+            local old_path
+            if [[ -f "/usr/local/etc/wspr.ini" ]]; then
+                old_path="/usr/local/etc/wspr.ini"
+            elif [[ -f "/usr/local/etc/wsprrypi.ini" ]]; then
+                old_path="/usr/local/etc/wsprrypi.ini"
+            else
+                old_path=""
+            fi
 
-        if [[ -n "$old_path" ]]; then
-            upgrade_ini "$old_path" \
-                        "$source_path" \
-                        "${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini" \
-                        "$debug"
-        else
-            logI "No legacy INI found—skipping merge."
-        fi
-
-        # Install the configuration
-        debug_print "Copying configuration." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $source_path $source_path"
-        else
-            exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
-        fi
-
-        # Choose the right source: prefer merged ini if present
-        debug_print "Copying configuration." "$debug"
-        local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
-        local config_src
-        if [[ -f "$merged_ini" ]]; then
-            config_src="$merged_ini"
-            debug_print "Using merged INI as source: $config_src" "$debug"
-        else
-            config_src="$source_path"
-            debug_print "Using original INI as source: $config_src" "$debug"
+            if [[ -n "$old_path" ]]; then
+                local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
+                upgrade_ini "$old_path" "$source_path" "${merged_ini}" "$debug"
+                source_path="$merged_ini"
+            else
+                logI "No legacy INI found—skipping merge."
+            fi
         fi
 
         # Install the configuration
