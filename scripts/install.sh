@@ -5496,14 +5496,14 @@ manage_service() {
     local syslog_identifier
     local log_path
     local log_std_out
-    local log_std_err
     local retval=0 # Initialize return value
 
     daemon_name="${daemon_exe##*/}" # Remove path
     daemon_name="${daemon_name%.*}" # Remove extension (only if there is one)
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
-    service_path="/lib/systemd/system/${daemon_systemd_name}"
+    # Install under /etc so it overrides anything in /lib
+    service_path="/etc/systemd/system/${daemon_systemd_name}"
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
     log_path="/var/log/$syslog_identifier" # Use exe name
     log_std_out="$log_path/${syslog_identifier}_log"
@@ -5522,14 +5522,19 @@ manage_service() {
                 fi
             fi
         fi
-        pause
 
         if [[ ! -f "$source_path" ]]; then
             warn "$source_path not found."
             retval=1
         elif [[ "$DRY_RUN" != "true" ]]; then
+            # Remove any existing override in /etc
+            if [[ -f "$service_path" ]]; then
+                exec_command "Removing old unit in /etc" "rm -f $service_path" "$debug" || retval=1
+            fi
+            # Now copy our fresh unit into /etc
             exec_command "Copy systemd file" "cp -f $source_path $service_path" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
+            pause
 
             if [[ "$use_syslog" == "false" ]]; then
                 modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
