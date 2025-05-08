@@ -5438,7 +5438,6 @@ upgrade_ini() {
     fi
 
     logI "Merged $old_ini into new config."
-    pause
     exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
 
     rm -f /tmp/upgrade_ini.err
@@ -5987,6 +5986,7 @@ manage_wsprry_pi() {
         "cleanup_files_in_directories"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
+        "manage_sound"
     )
 
     # Start the script
@@ -6022,8 +6022,8 @@ manage_wsprry_pi() {
                   { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
                   grep -v -E "^($skip_regex)( |$)"
             )
-
-            debug_print "(UNINSTALL) Final group_to_execute list after filter:" "$debug"
+            # Re-add manage_sound at the very end
+            group_to_execute+=( "manage_sound" )
             ;;
         *)
             die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
