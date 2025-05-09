@@ -68,8 +68,17 @@ IFS=$'\n\t'
 # -----------------------------------------------------------------------------
 
 # Defaults
-THIS_SCRIPT="${THIS_SCRIPT:-$(basename "${BASH_SOURCE[0]}")}"
-FALLBACK_SCRIPT_NAME="apache_tool.sh"
+
+# -----------------------------------------------------------------------------
+# Determine this script’s name, with a safe fallback all the way to "apache_tool.sh"
+# -----------------------------------------------------------------------------
+# 1) If $THIS_SCRIPT is already set, keep it.
+# 2) Else try basename of BASH_SOURCE[0] or $0.
+# 3) If that still produces empty, use literal "apache_tool.sh".
+: "${THIS_SCRIPT:=$(basename "${BASH_SOURCE[0]:-$0}")}"
+: "${THIS_SCRIPT:=apache_tool.sh}"
+FALLBACK_SCRIPT_NAME="$THIS_SCRIPT"
+
 declare DEFAULT_TARGET_FILE="/var/www/html/index.html"
 declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
 declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
