@@ -338,21 +338,25 @@ int get_processor_type_int()
  */
 std::string get_pi_model()
 {
-    static std::string model; // Static variable to cache the model string.
-    std::ifstream modelFile("/proc/device-tree/model");
+    static std::string model;  // cache so we only read once
+    if (!model.empty())
+        return model;
 
-    // Check if the file opened successfully.
+    std::ifstream modelFile("/proc/device-tree/model", std::ios::binary);
     if (!modelFile.is_open())
     {
         llog.logE(ERROR, "Failed to open /proc/device-tree/model.");
-        return ""; // Return an empty string instead of nullptr.
+        return "";
     }
 
-    // Read the first line from the file.
+    // Read everything up to EOF (the file has no newline)
     std::getline(modelFile, model);
     modelFile.close();
 
-    // Return the cached model string.
+    // Strip a single trailing NUL character if present
+    if (!model.empty() && model.back() == '\0')
+        model.pop_back();
+
     return model;
 }
 
