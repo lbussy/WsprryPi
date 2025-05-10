@@ -1828,17 +1828,22 @@ replace_string_in_script() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Pauses execution and waits for user input to continue.
-# @details This function displays a message prompting the user to press any key
-#          to continue. It waits for a key press, then resumes execution.
+# @fn pause
+# @brief Pauses execution until a single key is pressed.
+# @details Displays the prompt “Press any key to continue…” and waits for
+#          exactly one keystroke (no Enter required). It reads directly
+#          from /dev/tty so it still works when the script’s stdin is
+#          coming from a pipe (e.g. `curl … | bash`).
 #
 # @example
 # pause
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 pause() {
-    printf "Press any key to continue.\n"
-    read -n 1 -sr key </dev/tty || true
+    # Prompt the user
+    printf "Press any key to continue..."
+    # Read one character silently from the controlling terminal
+    read -n1 -s -r -p "" </dev/tty || true
+    # Newline after keypress
     printf "\n"
     return 0
 }
