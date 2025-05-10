@@ -11,11 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @date 2025-05-08
-# @copyright MIT License
 #
-# @license
-# MIT License
+# @license MIT License
 #
 # Copyright (c) 2023-2025 Lee C. Bussy
 #
@@ -511,20 +508,23 @@ declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 # @var LOG_LEVEL
 # @brief Specifies the logging verbosity level.
 # @details Defines the verbosity level for logging messages. This variable
-#          controls which messages are logged based on their severity. It
-#          defaults to `"DEBUG"` if not set. Common log levels include:
-#          - `"DEBUG"`: Detailed messages for troubleshooting and development.
-#          - `"INFO"`: Informational messages about normal operations.
-#          - `"WARN"`: Warning messages indicating potential issues.
-#          - `"ERROR"`: Errors that require immediate attention.
-#          - `"CRITICAL"`: Critical issues that may cause the script to fail.
+#          controls which messages are logged based on their severity.
+#          It defaults to:
+#            - `"INFO"` when running on the `main` or `master` branch.
+#            - `"DEBUG"` on any other branch.
 #
-# @default "DEBUG"
+# @default "INFO" on main/master; "DEBUG" on any other branch
 #
 # @example
-# LOG_LEVEL="INFO" ./install.sh  # Set the log level to INFO.
+# LOG_LEVEL="ERROR" ./install.sh  # Force log level to ERROR.
 # -----------------------------------------------------------------------------
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null \
+                      | grep -Eq '^(main|master)$'; then
+                   echo INFO
+                 else
+                   echo DEBUG
+                 fi)}"
+declare LOG_LEVEL
 
 # -----------------------------------------------------------------------------
 # @var DEPENDENCIES
@@ -717,6 +717,81 @@ readonly APT_PACKAGES=(
 # WARN_STACK_TRACE=false ./install.sh # Disable stack traces for warnings.
 # -----------------------------------------------------------------------------
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_TARGET_FILE
+# @type string
+# @brief Default Apache landing page path.
+# @details Path to the HTML file used to detect the stock Apache welcome page
+#          before applying any custom configurations.
+# @default "/var/www/html/index.html"
+# @example DEFAULT_TARGET_FILE="/custom/index.html" ./install.sh
+# -----------------------------------------------------------------------------
+declare DEFAULT_TARGET_FILE="/var/www/html/index.html"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_APACHE_CONF
+# @type string
+# @brief Default Apache configuration file path.
+# @details Path to the primary Apache2 configuration file where global directives
+#          (like ServerName) are managed.
+# @default "/etc/apache2/apache2.conf"
+# @example DEFAULT_APACHE_CONF="/etc/apache2/custom.conf" ./install.sh
+# -----------------------------------------------------------------------------
+declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_LOG_FILE
+# @type string
+# @brief Default log file for installer operations.
+# @details Path where the script writes its operational logs if logging is enabled.
+# @default "/var/log/apache_tool.log"
+# @example DEFAULT_LOG_FILE="/var/log/custom_installer.log" ./install.sh
+# -----------------------------------------------------------------------------
+declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_SERVERNAME
+# @type string
+# @brief Default ServerName directive.
+# @details The ServerName line to insert into apache2.conf to suppress FQDN warnings.
+# @default "ServerName localhost"
+# @example DEFAULT_SERVERNAME="ServerName myhost.local" ./install.sh
+# -----------------------------------------------------------------------------
+declare DEFAULT_SERVERNAME="ServerName localhost"
+
+# -----------------------------------------------------------------------------
+# @var TARGET_FILE
+# @type string
+# @brief Effective target file for stock-page detection.
+# @details Overrides DEFAULT_TARGET_FILE if set in the environment; otherwise
+#          falls back to DEFAULT_TARGET_FILE.
+# @default value of DEFAULT_TARGET_FILE
+# @example TARGET_FILE="/custom/index.html" ./install.sh
+# -----------------------------------------------------------------------------
+declare TARGET_FILE="${TARGET_FILE:-$DEFAULT_TARGET_FILE}"
+
+# -----------------------------------------------------------------------------
+# @var APACHE_CONF
+# @type string
+# @brief Effective Apache configuration file path.
+# @details Overrides DEFAULT_APACHE_CONF if set in the environment; otherwise
+#          falls back to DEFAULT_APACHE_CONF.
+# @default value of DEFAULT_APACHE_CONF
+# @example APACHE_CONF="/etc/apache2/custom.conf" ./install.sh
+# -----------------------------------------------------------------------------
+declare APACHE_CONF="${APACHE_CONF:-$DEFAULT_APACHE_CONF}"
+
+# -----------------------------------------------------------------------------
+# @var SERVERNAME_DIRECTIVE
+# @type string
+# @brief Effective ServerName directive.
+# @details Overrides DEFAULT_SERVERNAME if set in the environment; otherwise
+#          falls back to DEFAULT_SERVERNAME.
+# @default value of DEFAULT_SERVERNAME
+# @example SERVERNAME_DIRECTIVE="ServerName example.com" ./install.sh
+# -----------------------------------------------------------------------------
+declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
 
 ############
 ### Standard Functions
@@ -1753,17 +1828,22 @@ replace_string_in_script() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Pauses execution and waits for user input to continue.
-# @details This function displays a message prompting the user to press any key
-#          to continue. It waits for a key press, then resumes execution.
+# @fn pause
+# @brief Pauses execution until a single key is pressed.
+# @details Displays the prompt “Press any key to continue…” and waits for
+#          exactly one keystroke (no Enter required). It reads directly
+#          from /dev/tty so it still works when the script’s stdin is
+#          coming from a pipe (e.g. `curl … | bash`).
 #
 # @example
 # pause
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 pause() {
-    printf "Press any key to continue.\n"
-    read -n 1 -sr key </dev/tty || true
+    # Prompt the user
+    printf "Press any key to continue..."
+    # Read one character silently from the controlling terminal
+    read -n1 -s -r -p "" </dev/tty || true
+    # Newline after keypress
     printf "\n"
     return 0
 }
@@ -5785,6 +5865,308 @@ manage_sound() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief    Unified install/uninstall handler for Apache settings
+# @details  If ACTION=install, checks for the stock Apache page and, on success,
+#           adds the ServerName directive and enables the redirect site.
+#           If the stock page isn’t present, logs a warning and does nothing.
+#           If ACTION=uninstall, it reverts both the ServerName and the redirect site.
+#
+# @param    $@             Optional debug flags (e.g. "debug").
+# @global   ACTION         "install" or "uninstall"
+# @global   TARGET_FILE    Path to the stock Apache landing page (e.g. /var/www/html/index.html)
+# @global   APACHE_CONF    Path to apache2.conf
+# @global   SERVERNAME_DIRECTIVE
+#                         The ServerName directive to inject
+#
+# @return   0 on success; non-zero on error.
+# -----------------------------------------------------------------------------
+manage_apache() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    if [[ "$ACTION" == "install" ]]; then
+        if is_stock_apache_page "$TARGET_FILE" "$debug"; then
+            logI "Configuring Apache for Wsprry Pi." "$debug"
+            add_servername_directive "$debug"
+            setup_wsprrypi_site "$debug"
+        else
+            logW "Warning: Could not validate the Apache home page at $TARGET_FILE. No changes made." "$debug"
+        fi
+
+    elif [[ "$ACTION" == "uninstall" ]]; then
+        logI "Reverting Apache configuration for Wsprry Pi." "$debug"
+        remove_servername_directive "$debug"
+        disable_wsprrypi_site "$debug"
+
+    else
+        logE "Error: ACTION must be 'install' or 'uninstall' (currently '$ACTION')." "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    test_apache_config "$debug"
+    restart_apache "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Add the ServerName directive to the Apache configuration.
+# @details  Checks if the ServerName directive defined in $SERVERNAME_DIRECTIVE
+#           is present in the file specified by $APACHE_CONF. If it is not
+#           found, inserts the directive at the top of the configuration file.
+#
+# @global   APACHE_CONF            Path to the Apache configuration file.
+# @global   SERVERNAME_DIRECTIVE   The ServerName directive string to add.
+#
+# @return   0 on success; non-zero on failure.
+# -----------------------------------------------------------------------------
+add_servername_directive() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local rc=0
+
+    if grep -qE '^[[:space:]]*'"$SERVERNAME_DIRECTIVE" "$APACHE_CONF"; then
+        logD "ServerName directive is already set in $APACHE_CONF."
+        rc=0
+    else
+        exec_command "Adding ServerName directive to $APACHE_CONF" \
+                     "sed -i '1i $SERVERNAME_DIRECTIVE' $APACHE_CONF" \
+                     "$debug"
+        rc=$?
+    fi
+
+    debug_end "$debug"
+    return $rc
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Create and enable a dedicated Apache site for Wsprry Pi.
+# @details  Writes /etc/apache2/sites-available/wsprrypi.conf containing a
+#           <VirtualHost *:80> definition that redirects “/” to “/wsprrypi/”.
+#           Disables the default Debian site (000-default.conf) and enables
+#           wsprrypi.conf so your redirect becomes the active virtual host.
+#
+# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
+#
+# @return   0 on success; non-zero on failure.
+# -----------------------------------------------------------------------------
+setup_wsprrypi_site() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local rc
+
+    local site_conf="/etc/apache2/sites-available/wsprrypi.conf"
+
+    # Create the site file
+    exec_command "Creating site definition at $site_conf" "tee $site_conf" "$debug" <<'EOF' >/dev/null
+<VirtualHost *:80>
+    ServerName localhost
+    ServerAlias *
+    DocumentRoot /var/www/html
+    RedirectMatch 301 ^/$ /wsprrypi/
+</VirtualHost>
+EOF
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        debug_end "$debug"
+        return $rc
+    fi
+
+    # Disable the default site
+    exec_command "Disabling default site (000-default.conf)" "a2dissite 000-default.conf" "$debug"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        debug_end "$debug"
+        return $rc
+    fi
+
+    # Enable the new site
+    exec_command "Enabling wsprrypi site" "a2ensite wsprrypi.conf" "$debug"
+    rc=$?
+
+    debug_end "$debug"
+    return $rc
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Remove the ServerName directive from the Apache configuration.
+# @details  Creates a backup of the Apache config file and deletes any line
+#           matching the ServerName directive defined in $SERVERNAME_DIRECTIVE.
+#
+# @global   APACHE_CONF            Path to the Apache configuration file.
+# @global   SERVERNAME_DIRECTIVE   The ServerName directive string to remove.
+#
+# @return   0 on success; non-zero on failure.
+# -----------------------------------------------------------------------------
+remove_servername_directive() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local rc=0
+
+    if grep -qE '^[[:space:]]*'"$SERVERNAME_DIRECTIVE" "$APACHE_CONF"; then
+        exec_command "Removing ServerName directive from $APACHE_CONF" \
+                     "sed -i '/^[[:space:]]*${SERVERNAME_DIRECTIVE//\//\\/}/d' $APACHE_CONF" \
+                     "$debug"
+        rc=$?
+    else
+        logD "ServerName directive not found in $APACHE_CONF."
+    fi
+
+    debug_end "$debug"
+    return $rc
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Restart the Apache HTTP Server service.
+# @details  Invokes systemctl to restart Apache2, using exec_command
+#           so that the function’s exit code is exactly exec_command’s.
+#
+# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
+#
+# @return   0 on success; 1 on failure (from exec_command).
+# -----------------------------------------------------------------------------
+restart_apache() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local rc=0
+
+    # Run the restart and capture its exit status
+    exec_command "Restarting Apache" "systemctl restart apache2" "$debug"
+    rc=$?
+
+    debug_end "$debug"
+    return $rc
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Test the Apache HTTP Server configuration for syntax correctness.
+# @details  Runs `apache2ctl configtest`, filters out benign warnings
+#           (e.g., FQDN notices), and logs whether the configuration is valid.
+#           On failure, it captures and echoes the error output for review.
+#
+# @return   0 if the configuration test passes; 1 if it fails.
+# -----------------------------------------------------------------------------
+test_apache_config() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    logI "Testing Apache configuration."
+    # Run configtest once, capturing both stdout+stderr
+    local output
+    if output="$(apache2ctl configtest 2>&1)"; then
+        # Success exit-code → test passed
+        local extra
+        # Drop the FQDN warning and Syntax OK, but never error
+        extra="$(printf "%s\n" "$output" \
+            | grep -v "Could not reliably determine the server's fully qualified domain name" \
+            | grep -v "Syntax OK" \
+            || true)"
+
+        if [[ -n "$extra" ]]; then
+            logW "Apache test reported:"
+            logX "$extra"
+        fi
+        logI "Apache configuration is syntactically OK."
+        debug_end "$debug"
+        return 0
+    else
+        logE "Apache configuration test failed. Output:"
+        logX "$output"
+        debug_end "$debug"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Restart the Apache HTTP Server service.
+# @details  Invokes systemctl to restart the Apache2 service, ensuring that
+#           any configuration changes take effect and the web server is
+#           running with the latest settings.
+#
+# @return   0 on success; non-zero if the restart command fails.
+# -----------------------------------------------------------------------------
+restart_apache() {
+    local debug rc
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Restart Apache
+    exec_command "Restarting Apache" "systemctl restart apache2" "$debug"
+    rc=$?
+
+    debug_end "$debug"
+    return $rc
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Check if an HTML file is the stock Apache landing page.
+# @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
+# @return   0 if it looks like the stock Apache page, 1 otherwise.
+# -----------------------------------------------------------------------------
+is_stock_apache_page() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local file="${1:-/var/www/html/index.html}"
+
+    # must exist and be readable
+    [[ -r "$file" ]] || return 1
+
+    # common stock-page phrases (Ubuntu/Debian, RHEL/CentOS, generic)
+    if grep -qiE \
+       'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
+       "$file"
+    then
+        debug_end "$debug"
+        return 0
+    else
+        debug_end "$debug"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief    Disable the Wsprry Pi Apache site and restore the default.
+# @details  Runs a2dissite on wsprrypi.conf, re-enables the Debian default
+#           site (000-default.conf), and removes the wsprrypi.conf file from
+#           sites-available to clean up after uninstall.
+#
+# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
+#
+# @return   0 on success; non-zero on failure.
+# -----------------------------------------------------------------------------
+disable_wsprrypi_site() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Make sure we reference the same path as setup_wsprrypi_site
+    local site_conf="/etc/apache2/sites-available/wsprrypi.conf"
+
+    exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
+
+    exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
+
+    exec_command "Removing site file $site_conf" "rm -f $site_conf" "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Cleans up the local repository files after installation or uninstallation.
 # @details This function removes the local repository directory unless the script
 #          is being executed from within the repository itself, in which case it
@@ -5816,11 +6198,15 @@ cleanup_files_in_directories() {
     local dest_root
     dest_root="$LOCAL_REPO_DIR"
 
-    # Ensure target directory is not empty
-    if [[ -z "$dest_root" ]]; then
-        logE "Error: Target directory for cleanup is empty. Aborting."
-        debug_end "$debug"
-        return 1
+    # Always cleanup merged INI if it exists
+    if [[ -f "$dest_root/config/wsprrypi_merged.ini" ]]; then
+        exec_command "Delete merged INI source" \
+                    "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
+                    "$debug" || {
+            logE "Failed to delete local install files."
+            debug_end "$debug"
+            return 1
+        }
     fi
 
     # Prevent deletion if running inside the repository
@@ -5830,7 +6216,6 @@ cleanup_files_in_directories() {
         return 0
     else
         logI "Deleting local repository tree."
-
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Delete local repo files (dry-run)."
             debug_end "$debug"
@@ -5981,8 +6366,9 @@ manage_wsprry_pi() {
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
-        "manage_sound"
         "cleanup_files_in_directories"
+        "manage_apache"
+        "manage_sound"
     )
 
     # Define functions to skip on uninstall using an indexed array
