@@ -11,11 +11,8 @@ IFS=$'\n\t'
 #          function for better flexibility.
 #
 # @author Lee C. Bussy <Lee@Bussy.org>
-# @date 2025-05-08
-# @copyright MIT License
 #
-# @license
-# MIT License
+# @license MIT License
 #
 # Copyright (c) 2023-2025 Lee C. Bussy
 #
@@ -511,20 +508,23 @@ declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 # @var LOG_LEVEL
 # @brief Specifies the logging verbosity level.
 # @details Defines the verbosity level for logging messages. This variable
-#          controls which messages are logged based on their severity. It
-#          defaults to `"DEBUG"` if not set. Common log levels include:
-#          - `"DEBUG"`: Detailed messages for troubleshooting and development.
-#          - `"INFO"`: Informational messages about normal operations.
-#          - `"WARN"`: Warning messages indicating potential issues.
-#          - `"ERROR"`: Errors that require immediate attention.
-#          - `"CRITICAL"`: Critical issues that may cause the script to fail.
+#          controls which messages are logged based on their severity.
+#          It defaults to:
+#            - `"INFO"` when running on the `main` or `master` branch.
+#            - `"DEBUG"` on any other branch.
 #
-# @default "DEBUG"
+# @default "INFO" on main/master; "DEBUG" on any other branch
 #
 # @example
-# LOG_LEVEL="INFO" ./install.sh  # Set the log level to INFO.
+# LOG_LEVEL="ERROR" ./install.sh  # Force log level to ERROR.
 # -----------------------------------------------------------------------------
-declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null \
+                      | grep -Eq '^(main|master)$'; then
+                   echo INFO
+                 else
+                   echo DEBUG
+                 fi)}"
+declare LOG_LEVEL
 
 # -----------------------------------------------------------------------------
 # @var DEPENDENCIES
@@ -718,12 +718,79 @@ readonly APT_PACKAGES=(
 # -----------------------------------------------------------------------------
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 
+# -----------------------------------------------------------------------------
+# @var DEFAULT_TARGET_FILE
+# @type string
+# @brief Default Apache landing page path.
+# @details Path to the HTML file used to detect the stock Apache welcome page
+#          before applying any custom configurations.
+# @default "/var/www/html/index.html"
+# @example DEFAULT_TARGET_FILE="/custom/index.html" ./install.sh
+# -----------------------------------------------------------------------------
 declare DEFAULT_TARGET_FILE="/var/www/html/index.html"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_APACHE_CONF
+# @type string
+# @brief Default Apache configuration file path.
+# @details Path to the primary Apache2 configuration file where global directives
+#          (like ServerName) are managed.
+# @default "/etc/apache2/apache2.conf"
+# @example DEFAULT_APACHE_CONF="/etc/apache2/custom.conf" ./install.sh
+# -----------------------------------------------------------------------------
 declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_LOG_FILE
+# @type string
+# @brief Default log file for installer operations.
+# @details Path where the script writes its operational logs if logging is enabled.
+# @default "/var/log/apache_tool.log"
+# @example DEFAULT_LOG_FILE="/var/log/custom_installer.log" ./install.sh
+# -----------------------------------------------------------------------------
 declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
+
+# -----------------------------------------------------------------------------
+# @var DEFAULT_SERVERNAME
+# @type string
+# @brief Default ServerName directive.
+# @details The ServerName line to insert into apache2.conf to suppress FQDN warnings.
+# @default "ServerName localhost"
+# @example DEFAULT_SERVERNAME="ServerName myhost.local" ./install.sh
+# -----------------------------------------------------------------------------
 declare DEFAULT_SERVERNAME="ServerName localhost"
+
+# -----------------------------------------------------------------------------
+# @var TARGET_FILE
+# @type string
+# @brief Effective target file for stock-page detection.
+# @details Overrides DEFAULT_TARGET_FILE if set in the environment; otherwise
+#          falls back to DEFAULT_TARGET_FILE.
+# @default value of DEFAULT_TARGET_FILE
+# @example TARGET_FILE="/custom/index.html" ./install.sh
+# -----------------------------------------------------------------------------
 declare TARGET_FILE="${TARGET_FILE:-$DEFAULT_TARGET_FILE}"
+
+# -----------------------------------------------------------------------------
+# @var APACHE_CONF
+# @type string
+# @brief Effective Apache configuration file path.
+# @details Overrides DEFAULT_APACHE_CONF if set in the environment; otherwise
+#          falls back to DEFAULT_APACHE_CONF.
+# @default value of DEFAULT_APACHE_CONF
+# @example APACHE_CONF="/etc/apache2/custom.conf" ./install.sh
+# -----------------------------------------------------------------------------
 declare APACHE_CONF="${APACHE_CONF:-$DEFAULT_APACHE_CONF}"
+
+# -----------------------------------------------------------------------------
+# @var SERVERNAME_DIRECTIVE
+# @type string
+# @brief Effective ServerName directive.
+# @details Overrides DEFAULT_SERVERNAME if set in the environment; otherwise
+#          falls back to DEFAULT_SERVERNAME.
+# @default value of DEFAULT_SERVERNAME
+# @example SERVERNAME_DIRECTIVE="ServerName example.com" ./install.sh
+# -----------------------------------------------------------------------------
 declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
 
 ############
