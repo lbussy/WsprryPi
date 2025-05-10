@@ -5887,7 +5887,7 @@ setup_wsprrypi_site() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
-    
+
     local rc
 
     local site_conf="/etc/apache2/sites-available/wsprrypi.conf"
@@ -6126,11 +6126,15 @@ cleanup_files_in_directories() {
     local dest_root
     dest_root="$LOCAL_REPO_DIR"
 
-    # Ensure target directory is not empty
-    if [[ -z "$dest_root" ]]; then
-        logE "Error: Target directory for cleanup is empty. Aborting."
-        debug_end "$debug"
-        return 1
+    # Always cleanup merged INI if it exists
+    if [[ -f "$dest_root/config/wsprrypi_merged.ini" ]]; then
+        exec_command "Delete merged INI source" \
+                    "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
+                    "$debug" || {
+            logE "Failed to delete local install files."
+            debug_end "$debug"
+            return 1
+        }
     fi
 
     # Prevent deletion if running inside the repository
@@ -6140,7 +6144,6 @@ cleanup_files_in_directories() {
         return 0
     else
         logI "Deleting local repository tree."
-
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Delete local repo files (dry-run)."
             debug_end "$debug"
