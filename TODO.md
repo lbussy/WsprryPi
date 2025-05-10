@@ -11,6 +11,7 @@
 
 ## Orchestration
 
+- [ ] Remove ./config/wsprrypi_merged.ini after local install
 - [ ] Inline the apache_tool into install
 - [ ] Create release script orchestration
 - [ ] Update install.sh on release:
