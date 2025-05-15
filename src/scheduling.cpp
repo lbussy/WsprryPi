@@ -151,6 +151,22 @@ std::atomic<bool> reboot_flag{false};
 std::atomic<bool> shutdown_flag{false};
 
 /**
+ * @brief Stores the previous transmission mode.
+ *
+ * This variable saves the last value of config.mode before entering
+ * test tone mode so that the original mode can be restored later.
+ */
+ModeType lastMode;
+
+/**
+ * @brief Flag indicating if a web-triggered test tone is active.
+ *
+ * An atomic bool that is true while a test tone transmission is in
+ * progress via web controls, and false otherwise.
+ */
+std::atomic<bool> web_test_tone{false};
+
+/**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
  * This function checks whether there are pending PPM or INI changes that need
@@ -163,10 +179,11 @@ void callback_transmission_started(const std::string &msg = {})
 {
     // Record start time
     g_start = std::chrono::steady_clock::now();
+
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started (frequency =", lookup.freq_display_string(current_frequency), ").");
+    llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
     // Notify clients of start
     send_ws_message("transmit", "starting");
 }
@@ -395,6 +412,96 @@ void reboot_system()
     exitwspr_cv.notify_one();
     // Set reboot flag
     reboot_flag.store(true, std::memory_order_relaxed);
+}
+
+/**
+ * @brief   Initiates a continuous test‐tone transmission.
+ *
+ * Stops any ongoing transmission, saves the current mode,
+ * switches into TONE mode, and transmits on the first
+ * configured frequency using the current power and PPM.
+ */
+void start_test_tone()
+{
+    if (!web_test_tone.load())
+    {
+        web_test_tone.store(true);
+
+        // Save previous mode so we can restore it later
+        lastMode = config.mode;
+
+        // Tear down any ongoing WSPR/transmission
+        if (wsprTransmitter.isTransmitting())
+        {
+            llog.logS(INFO, "Stopping an in-process message early.");
+        }
+        wsprTransmitter.shutdownTransmitter();
+
+        // Pick the “first” frequency
+        auto freq = next_frequency(/*restart=*/true);
+
+        while (wsprTransmitter.isTransmitting())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        ledControl.toggleGPIO(true);
+        llog.logS(INFO, "Beginning test tone requested by web UI.");
+
+        // Switch into tone mode
+        config.mode = ModeType::TONE;
+
+        // Set up and start the tone
+        wsprTransmitter.setupTransmission(freq,
+                                          config.power_level,
+                                          config.ppm);
+        wsprTransmitter.enableTransmission();
+        llog.logS(INFO, "Test tone being transmitted at:", lookup.freq_display_string(freq));
+        send_ws_message("transmit", "starting");
+    }
+}
+
+/**
+ * @brief   Ends the test‐tone and restores the previous mode.
+ *
+ * If we’re in test‐tone, shut it down, clear the flag,
+ * restore lastMode, and re-configure either WSPR or
+ * (if it wasn’t WSPR) another tone on config.test_tone.
+ */
+void end_test_tone()
+{
+    if (web_test_tone.load())
+    {
+        llog.logS(INFO, "Ending test tone requested by Web UI.");
+
+        // Stop current tone
+        wsprTransmitter.shutdownTransmitter();
+        send_ws_message("transmit", "finished");
+        ledControl.toggleGPIO(false);
+
+        // Clear the “we’re testing” flag
+        web_test_tone.store(false);
+
+        // Restore whatever mode we were in before
+        config.mode = lastMode;
+
+        if (config.mode == ModeType::WSPR)
+        {
+            // Re-initialize WSPR with next frequency, PPM, etc.
+            set_config(/*advance_freq=*/true);
+        }
+        else
+        {
+            // It was already a tone, so set it up again
+            validate_config_data();
+            wsprTransmitter.setupTransmission(config.test_tone,
+                                              config.power_level,
+                                              config.ppm);
+            wsprTransmitter.enableTransmission();
+
+            llog.logS(INFO,
+                      "Transmitting tone, hit Ctrl-C to terminate tone.");
+        }
+    }
 }
 
 /**

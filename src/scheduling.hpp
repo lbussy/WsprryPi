@@ -174,6 +174,24 @@ void reboot_system();
 bool ppm_init();
 
 /**
+ * @brief   Initiates a continuous test‐tone transmission.
+ *
+ * Stops any ongoing transmission, saves the current mode,
+ * switches into TONE mode, and transmits on the first
+ * configured frequency using the current power and PPM.
+ */
+extern void start_test_tone();
+
+/**
+ * @brief   Ends the test‐tone and restores the previous mode.
+ *
+ * If we’re in test‐tone, shut it down, clear the flag,
+ * restore lastMode, and re-configure either WSPR or
+ * (if it wasn’t WSPR) another tone on config.test_tone.
+ */
+extern void end_test_tone();
+
+/**
  * @brief Runs the main WSPR scheduler and transmission loop.
  *
  * @details
