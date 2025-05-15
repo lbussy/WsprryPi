@@ -7,9 +7,6 @@
 ## Web UI
 
 - [ ] Add "Are you sure" for shutdown and reboot
-- [ ] Create a simpler page json loader for non-config?
-- [ ] Use proxies for config and websocket
-- [ ] Colorize time when config.ntp_good is false?
 - [ ] Can we make the card title an include?
 
 ## Orchestration
@@ -29,6 +26,7 @@
 - [ ] Add spots documentation
 - [ ] Add apache redirect documentation
 - [ ] Add documentation about chrony running vs being synchronized
+- [ ] See if I need to update docs for apache proxy @ /etc/apache2/sites-available/wsprrypi.conf
 
 ## Shit to Remember
 

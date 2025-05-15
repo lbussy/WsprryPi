@@ -5874,249 +5874,98 @@ manage_sound() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief    Unified install/uninstall handler for Apache settings
-# @details  If ACTION=install, checks for the stock Apache page and, on success,
-#           adds the ServerName directive and enables the redirect site.
-#           If the stock page isn’t present, logs a warning and does nothing.
-#           If ACTION=uninstall, it reverts both the ServerName and the redirect site.
+# @brief    Install or uninstall all Apache bits for WsprryPi
+# @details
+#   * On install (ACTION=install or empty):
+#     – Adds DEFAULT_SERVERNAME to $APACHE_CONF if missing  
+#     – Writes the single $DEFAULT_SITES_CONF/wsprrypi.conf with:
+#         • A redirect “/ → /wsprrypi/”  
+#         • REST proxies (31415) for /wsprrypi/config & /version  
+#         • WS proxy (31416) for /wsprrypi/socket  
+#         • <Proxy> blocks allowing remote access  
+#     – Disables 000-default.conf, enables wsprrypi.conf  
+#   * On uninstall (ACTION=uninstall):
+#     – Disables wsprrypi.conf, re-enables 000-default.conf  
+#     – Deletes wsprrypi.conf  
+#     – Removes the ServerName line from $APACHE_CONF  
+#   In all cases it runs configtest + reload.
 #
-# @param    $@             Optional debug flags (e.g. "debug").
-# @global   ACTION         "install" or "uninstall"
-# @global   TARGET_FILE    Path to the stock Apache landing page (e.g. /var/www/html/index.html)
-# @global   APACHE_CONF    Path to apache2.conf
-# @global   SERVERNAME_DIRECTIVE
-#                         The ServerName directive to inject
-#
-# @return   0 on success; non-zero on error.
+# @global ACTION             install|uninstall (empty→install)
+# @global APACHE_CONF        path to apache2.conf
+# @global DEFAULT_SITES_CONF path to sites-available
+# @global DEFAULT_SERVERNAME the literal “ServerName …” line
+# @param  $@                 optional debug flags
+# @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
 manage_apache() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    if [[ "$ACTION" == "install" ]]; then
-        if is_stock_apache_page "$TARGET_FILE" "$debug"; then
-            logI "Configuring Apache for Wsprry Pi." "$debug"
-            add_servername_directive "$debug"
-            setup_wsprrypi_site "$debug"
-        else
-            logW "Warning: Could not validate the Apache home page at $TARGET_FILE. No changes made." "$debug"
-        fi
-
-    elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Reverting Apache configuration for Wsprry Pi." "$debug"
-        remove_servername_directive "$debug"
-        disable_wsprrypi_site "$debug"
-
-    else
-        logE "Error: ACTION must be 'install' or 'uninstall' (currently '$ACTION')." "$debug"
-        debug_end "$debug"
-        return 1
-    fi
-
-    test_apache_config "$debug"
-    restart_apache "$debug"
-
-    debug_end "$debug"
-    return 0
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Add the ServerName directive to the Apache configuration.
-# @details  Checks if the ServerName directive defined in $SERVERNAME_DIRECTIVE
-#           is present in the file specified by $APACHE_CONF. If it is not
-#           found, inserts the directive at the top of the configuration file.
-#
-# @global   APACHE_CONF            Path to the Apache configuration file.
-# @global   SERVERNAME_DIRECTIVE   The ServerName directive string to add.
-#
-# @return   0 on success; non-zero on failure.
-# -----------------------------------------------------------------------------
-add_servername_directive() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local rc=0
-
-    if grep -qE '^[[:space:]]*'"$SERVERNAME_DIRECTIVE" "$APACHE_CONF"; then
-        logD "ServerName directive is already set in $APACHE_CONF."
-        rc=0
-    else
-        exec_command "Adding ServerName directive to $APACHE_CONF" \
-                     "sed -i '1i $SERVERNAME_DIRECTIVE' $APACHE_CONF" \
-                     "$debug"
-        rc=$?
-    fi
-
-    debug_end "$debug"
-    return $rc
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Create and enable a dedicated Apache site for Wsprry Pi.
-# @details  Writes $DEFAULT_SITES_CONF/wsprrypi.conf containing a
-#           <VirtualHost *:80> definition that redirects “/” to “/wsprrypi/”.
-#           Disables the default Debian site (000-default.conf) and enables
-#           wsprrypi.conf so your redirect becomes the active virtual host.
-#
-# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
-#
-# @return   0 on success; non-zero on failure.
-# -----------------------------------------------------------------------------
-setup_wsprrypi_site() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local rc
-
+    local debug; debug=$(debug_start "$@");  eval set -- "$(debug_filter "$@")"
     local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
+    local sn="$DEFAULT_SERVERNAME"
 
-    # Create the site file
-    exec_command "Creating site definition at $site_conf" "tee $site_conf" "$debug" <<'EOF' >/dev/null
+    if [[ -z "$ACTION" || "$ACTION" == install ]]; then
+
+        if is_stock_apache_page "$TARGET_FILE" "$debug"; then
+
+            # 1) Add ServerName if missing
+            exec_command "Adding ServerName directive" \
+                "grep -qF '$sn' $APACHE_CONF || sed -i '1i $sn' $APACHE_CONF" \
+                "$debug"
+
+            # 2) Write the one vhost file
+            exec_command "Writing $site_conf" \
+                "tee $site_conf <<'EOF'
 <VirtualHost *:80>
     ServerName localhost
     ServerAlias *
     DocumentRoot /var/www/html
+    ProxyPreserveHost On
+
+    # Redirect root
     RedirectMatch 301 ^/$ /wsprrypi/
+
+    # REST API (port 31415)
+    ProxyPass        /wsprrypi/config  http://127.0.0.1:31415/config
+    ProxyPassReverse /wsprrypi/config  http://127.0.0.1:31415/config
+    ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version
+    ProxyPassReverse /wsprrypi/version http://127.0.0.1:31415/version
+
+    # WebSocket (port 31416)
+    ProxyPass        /wsprrypi/socket  ws://127.0.0.1:31416/socket
+    ProxyPassReverse /wsprrypi/socket  ws://127.0.0.1:31416/socket
+
+    <Proxy \"http://127.0.0.1:31415/*\">
+        Require all granted
+    </Proxy>
+    <Proxy \"ws://127.0.0.1:31416/*\">
+        Require all granted
+    </Proxy>
 </VirtualHost>
 EOF
-    rc=$?
-    if [ $rc -ne 0 ]; then
-        debug_end "$debug"
-        return $rc
-    fi
+" "$debug"
 
-    # Disable the default site
-    exec_command "Disabling default site (000-default.conf)" "a2dissite 000-default.conf" "$debug"
-    rc=$?
-    if [ $rc -ne 0 ]; then
-        debug_end "$debug"
-        return $rc
-    fi
+            # 3) Turn sites on/off
+            exec_command "Disabling default site"    "a2dissite 000-default.conf" "$debug"
+            exec_command "Enabling wsprrypi site"    "a2ensite wsprrypi.conf" "$debug"
 
-    # Enable the new site
-    exec_command "Enabling wsprrypi site" "a2ensite wsprrypi.conf" "$debug"
-    rc=$?
-
-    debug_end "$debug"
-    return $rc
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Remove the ServerName directive from the Apache configuration.
-# @details  Creates a backup of the Apache config file and deletes any line
-#           matching the ServerName directive defined in $SERVERNAME_DIRECTIVE.
-#
-# @global   APACHE_CONF            Path to the Apache configuration file.
-# @global   SERVERNAME_DIRECTIVE   The ServerName directive string to remove.
-#
-# @return   0 on success; non-zero on failure.
-# -----------------------------------------------------------------------------
-remove_servername_directive() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local rc=0
-
-    if grep -qE '^[[:space:]]*'"$SERVERNAME_DIRECTIVE" "$APACHE_CONF"; then
-        exec_command "Removing ServerName directive from $APACHE_CONF" \
-                     "sed -i '/^[[:space:]]*${SERVERNAME_DIRECTIVE//\//\\/}/d' $APACHE_CONF" \
-                     "$debug"
-        rc=$?
-    else
-        logD "ServerName directive not found in $APACHE_CONF."
-    fi
-
-    debug_end "$debug"
-    return $rc
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Restart the Apache HTTP Server service.
-# @details  Invokes systemctl to restart Apache2, using exec_command
-#           so that the function’s exit code is exactly exec_command’s.
-#
-# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
-#
-# @return   0 on success; 1 on failure (from exec_command).
-# -----------------------------------------------------------------------------
-restart_apache() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local rc=0
-
-    # Run the restart and capture its exit status
-    exec_command "Restarting Apache" "systemctl restart apache2" "$debug"
-    rc=$?
-
-    debug_end "$debug"
-    return $rc
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Test the Apache HTTP Server configuration for syntax correctness.
-# @details  Runs `apache2ctl configtest`, filters out benign warnings
-#           (e.g., FQDN notices), and logs whether the configuration is valid.
-#           On failure, it captures and echoes the error output for review.
-#
-# @return   0 if the configuration test passes; 1 if it fails.
-# -----------------------------------------------------------------------------
-test_apache_config() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    logI "Testing Apache configuration."
-    # Run configtest once, capturing both stdout+stderr
-    local output
-    if output="$(apache2ctl configtest 2>&1)"; then
-        # Success exit-code → test passed
-        local extra
-        # Drop the FQDN warning and Syntax OK, but never error
-        extra="$(printf "%s\n" "$output" \
-            | grep -v "Could not reliably determine the server's fully qualified domain name" \
-            | grep -v "Syntax OK" \
-            || true)"
-
-        if [[ -n "$extra" ]]; then
-            logW "Apache test reported:"
-            logX "$extra"
+        else
+            logW "Stock Apache page not found at $TARGET_FILE; skipping install." "$debug"
         fi
-        logI "Apache configuration is syntactically OK."
-        debug_end "$debug"
-        return 0
-    else
-        logE "Apache configuration test failed. Output:"
-        logX "$output"
-        debug_end "$debug"
-        return 1
+
+    else  # ACTION=uninstall
+
+        exec_command "Disabling wsprrypi site"      "a2dissite wsprrypi.conf"     "$debug"
+        exec_command "Re-enabling default site"     "a2ensite 000-default.conf"   "$debug"
+        exec_command "Removing site config"         "rm -f $site_conf"            "$debug"
+        exec_command "Removing ServerName directive" \
+                     "sed -i '/^$sn/d' $APACHE_CONF"  "$debug"
     fi
-}
 
-# -----------------------------------------------------------------------------
-# @brief    Restart the Apache HTTP Server service.
-# @details  Invokes systemctl to restart the Apache2 service, ensuring that
-#           any configuration changes take effect and the web server is
-#           running with the latest settings.
-#
-# @return   0 on success; non-zero if the restart command fails.
-# -----------------------------------------------------------------------------
-restart_apache() {
-    local debug rc
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    # Restart Apache
-    exec_command "Restarting Apache" "systemctl restart apache2" "$debug"
-    rc=$?
+    # final sanity-check + reload
+    exec_command "Testing Apache configuration"   "apache2ctl configtest"       "$debug"
+    exec_command "Reloading Apache"               "systemctl reload apache2"    "$debug"
 
     debug_end "$debug"
-    return $rc
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -6145,104 +5994,6 @@ is_stock_apache_page() {
         debug_end "$debug"
         return 1
     fi
-}
-
-# -----------------------------------------------------------------------------
-# @brief    Disable the Wsprry Pi Apache site and restore the default.
-# @details  Runs a2dissite on wsprrypi.conf, re-enables the Debian default
-#           site (000-default.conf), and removes the wsprrypi.conf file from
-#           sites-available to clean up after uninstall.
-#
-# @param    $1 [Optional] Debug flag ("debug") to enable debug output.
-#
-# @return   0 on success; non-zero on failure.
-# -----------------------------------------------------------------------------
-disable_wsprrypi_site() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    # Make sure we reference the same path as setup_wsprrypi_site
-    local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
-
-    exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
-
-    exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
-
-    exec_command "Removing site file $site_conf" "rm -f $site_conf" "$debug"
-
-    debug_end "$debug"
-    return 0
-}
-
-# -----------------------------------------------------------------------------
-# @brief Install or uninstall an Apache reverse-proxy
-# @details
-#   Proxies a given mount path on :80 → 127.0.0.1:PORT.  On install it
-#   enables proxy modules, writes & enables a vhost; on uninstall it
-#   disables the vhost and removes the file.  In both cases it tests
-#   the config and reloads Apache.
-#
-# @param $1  PORT number your app is listening on (e.g. 31415)
-# @param $2  MOUNT_PATH under / (e.g. /wsprrypi/config)
-# @global ACTION  install|uninstall (empty = install)
-# @throws If missing args or unknown ACTION.
-# -----------------------------------------------------------------------------
-configure_wsprrypi_proxy() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    # args
-    local port="${1:?Missing port (e.g. 31415)}"
-    local mount_path="${2:?Missing mount path (e.g. /wsprrypi/config)}"
-
-    # make a safe filename, e.g. "wsprrypi-proxy-31415-wsprrypi_config.conf"
-    local safe_path="${mount_path#/}"
-    safe_path="${safe_path//\//_}"
-    local conf_file="${DEFAULT_SITES_CONF}wsprrypi-proxy-${port}-${safe_path}.conf"
-
-    if [[ -z "$ACTION" || "$ACTION" == "install" ]]; then
-        logI "Installing proxy for ${mount_path} → localhost:${port}${mount_path}" "$debug"
-
-        exec_command "Enabling Apache proxy modules" "a2enmod proxy proxy_http" "$debug"
-
-        logI "Writing vhost to $conf_file" "$debug"
-        cat > "$conf_file" <<EOF
-<VirtualHost *:80>
-    ServerName ${SERVER_NAME:-_}
-
-    ProxyPreserveHost On
-    ProxyPass        ${mount_path} http://127.0.0.1:${port}${mount_path}
-    ProxyPassReverse ${mount_path} http://127.0.0.1:${port}${mount_path}
-
-    <Proxy http://127.0.0.1:${port}${mount_path}>
-        Require local
-    </Proxy>
-</VirtualHost>
-EOF
-
-        exec_command "Enabling site $(basename "$conf_file" .conf)" \
-             "a2ensite $(basename "$conf_file")" "$debug"
-
-    elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Uninstalling proxy for ${mount_path} → localhost:${port}${mount_path}" "$debug"
-
-        exec_command "Disabling site $(basename "$conf_file" .conf)" \
-             "a2dissite $(basename "$conf_file")" "$debug"
-
-        exec_command "Removing vhost file $conf_file" "rm -f $conf_file" "$debug"
-
-    else
-        die "Unknown ACTION: '$ACTION' (use 'install' or 'uninstall')" "$debug"
-    fi
-
-    exec_command "Testing Apache configuration" "apache2ctl configtest" "$debug"
-
-    exec_command "Reloading Apache to apply changes" "systemctl reload apache2" "$debug"
-
-    debug_end "$debug"
-    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -6447,8 +6198,6 @@ manage_wsprry_pi() {
         "manage_web"
         "cleanup_files_in_directories"
         "manage_apache"
-        "configure_wsprrypi_proxy 31415 /wsprrypi/config"
-        "configure_wsprrypi_proxy 31416 /wsprrypi/server"
         "manage_sound"
     )
 
