@@ -7,14 +7,12 @@
   - 2025-05-12 11:17:16.935 UTC [INFO ] Running on: Raspberry Pi 4 Model B Rev 1.1.
   - 2025-05-12 11:17:16.935 UTC [INFO ] Process PID: 708
   - 2025-05-12 11:17:17.093 UTC [WARN ] System time is not synchronized. Unable to measure PPM accurately.
-- [ ] Logs do not restart after a reboot (or startup?)
-- [ ] For Test Tone
-  - 2025-05-14 18:03:17.792 UTC [WARN ] Unknown command received: tone_start
-  - 2025-05-14 18:03:19.433 UTC [WARN ] Unknown command received: tone_end
+- [ ] Logs do not restart after a reboot (or startup?) (did I mean the web log?)
 
 ## Web UI
 
-- [ ] Implement freq_test?
+- [ ] Logs sometimes gets multiple messages
+- [ ] Add "Are you sure" for shutdowna and reboot
 
 ## Orchestration
 

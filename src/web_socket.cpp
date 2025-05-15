@@ -355,17 +355,17 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             // Report current TX state
             reply["tx_state"] = wsprTransmitter.isTransmitting();
         }
-        else if (cmd == "test_tone_start")
+        else if (cmd == "tone_start")
         {
             llog.logS(DEBUG, "Received JSON test_tone_start command.");
-            // TODO:
-            reply["test_tone_start"] = "ok";
+            start_test_tone();
+            reply["tone_start"] = "ok";
         }
-        else if (cmd == "test_tone_stop")
+        else if (cmd == "tone_end")
         {
             llog.logS(DEBUG, "Received JSON test_tone_stop command.");
-            // TODO:
-            reply["test_tone_stop"] = "ok";
+            end_test_tone();
+            reply["tone_end"] = "ok";
         }
         else if (cmd == "echo")
         {
