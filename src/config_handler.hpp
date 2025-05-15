@@ -112,6 +112,7 @@ struct ArgParserConfig
     bool use_ini;                        ///< Load configuration from INI file.
     std::string ini_filename;            ///< INI file name and path.
     std::vector<double> center_freq_set; ///< Parsed list of center frequencies in Hz.
+    bool ntp_good;                       ///< A more ualitative measurement of NTP vs simply running
 
     /**
      * @brief Default constructor initializing all configuration parameters.
@@ -140,7 +141,8 @@ struct ArgParserConfig
           mode(ModeType::WSPR),
           use_ini(false),
           ini_filename(""),
-          center_freq_set({})
+          center_freq_set({}),
+          ntp_good(false)
     {
     }
 };

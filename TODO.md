@@ -2,21 +2,18 @@
 
 ## C++ Code
 
-- [ ] PPM not initialized after reboot
-  - 2025-05-12 11:17:16.934 UTC [INFO ] WsprryPi version 2.0_Beta.2-2-0-devel+0c60b4e (2-0-devel).
-  - 2025-05-12 11:17:16.935 UTC [INFO ] Running on: Raspberry Pi 4 Model B Rev 1.1.
-  - 2025-05-12 11:17:16.935 UTC [INFO ] Process PID: 708
-  - 2025-05-12 11:17:17.093 UTC [WARN ] System time is not synchronized. Unable to measure PPM accurately.
-- [ ] Logs do not restart after a reboot (or startup?) (did I mean the web log?)
+- [ ] ?
 
 ## Web UI
 
-- [ ] Logs sometimes gets multiple messages
-- [ ] Add "Are you sure" for shutdowna and reboot
+- [ ] Add "Are you sure" for shutdown and reboot
+- [ ] Create a simpler page json loader for non-config?
+- [ ] Create proxies for config and websocket
 
 ## Orchestration
 
 - [ ] Create release script orchestration
+  - `clear && make clean && make debug && make release && make install && cp ./build/bin/wsprrypi* ../executables/`
 - [ ] Update install.sh on release:
   - declare REPO_BRANCH="${REPO_BRANCH:-do_not_use}"
   - declare GIT_TAG="${GIT_TAG:-2.0_Beta.3}"
@@ -28,6 +25,8 @@
 - [ ] Add testtone documentation
 - [ ] Add Log viewer documentation
 - [ ] Add spots documentation
+- [ ] Add apache redirect documentation
+- [ ] Add documentation about chrony running vs being synchronized
 
 ## Shit to Remember
 

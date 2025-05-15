@@ -235,79 +235,80 @@ void callback_transmission_complete(const std::string &msg)
 }
 
 /**
- * @brief Callback function to update the configured PPM (frequency offset).
+ * @brief  Callback invoked when PPMManager has a new PPM reading.
  *
  * @details
- * This function updates the global `config.ppm` value with a new PPM correction
- * value. It also sets the `ppm_reload_pending` flag to notify other parts of
- * the system that a reload or recalibration is necessary.
+ * Sets the `ppm_reload_pending` flag so that downstream consumers
+ * will pick up the new PPM, and marks NTP as “good” once Chrony
+ * has delivered a real clock‐drift measurement.
  *
- * This function may be triggered by user input, external calibration, or
- * another subsystem responsible for frequency adjustments.
- *
- * @param new_ppm The new PPM correction value to apply.
+ * @param new_ppm  The latest PPM correction value (ignored here; reload
+ *                 logic will pull it from PPMManager when needed).
  */
-void ppm_callback(double new_ppm)
+void ppm_callback(double /*new_ppm*/)
 {
+    // Notify other subsystems to reload/recalibrate with the fresh PPM.
     ppm_reload_pending.store(true, std::memory_order_relaxed);
-    return;
+
+    // Now that Chrony has produced a PPM value, we know time is valid.
+    config.ntp_good = true;
+
+    llog.logS(INFO, "Chrony service has updated it's initial value.");
 }
 
 /**
- * @brief Initializes the PPM manager and registers a callback.
+ * @brief   Initialize the PPM subsystem.
  *
- * @details
- * This function attempts to initialize the `ppmManager`, which is responsible
- * for calculating or retrieving the system's PPM (parts per million) drift
- * for accurate frequency generation.
+ * Registers the PPM callback, initializes the PPMManager, and handles
+ * any returned status.  If the Chrony daemon is running, we assume
+ * synchronization and never treat unsynchronized time as fatal.
  *
- * The initialization result is evaluated, and appropriate logging is performed
- * based on the returned `PPMStatus`. Critical failure conditions such as
- * high PPM or lack of time synchronization cause the function to return `false`.
- * If successful or recoverable, the PPM callback is registered.
- *
- * @return `true` if initialization succeeded or fallback is acceptable.
- * @return `false` if a critical error was detected (e.g., high PPM or unsynced time).
- *
- * @note
- * The `ppm_callback()` will be triggered later to handle live updates to PPM.
+ * @return  true if initialization is considered successful;
+ *          false only on a fatal PPM error (e.g. excessive drift).
  */
 bool ppm_init()
 {
-    // Set callbacks
+    bool retval = false;
+
+    // Register the PPM update callback
     ppmManager.setPPMCallback(ppm_callback);
 
-    // Initialize the PPM Manager
+    // Perform the normal initialization
     PPMStatus status = ppmManager.initialize();
+
+    // If Chrony is active, assume time is synced
+    if (ppmManager.isChronyAlive())
+    {
+        llog.logS(INFO, "Chrony service is active.");
+        retval = true;
+    }
 
     switch (status)
     {
-    case PPMStatus::SUCCESS:
-        llog.logS(DEBUG, "PPM Manager initialized successfully.");
-        break;
+        case PPMStatus::SUCCESS:
+            llog.logS(DEBUG, "PPM Manager initialized successfully.");
+            break;
 
-    case PPMStatus::WARNING_HIGH_PPM:
-        llog.logS(ERROR, "Measured PPM exceeds safe threshold.");
-        return false;
+        case PPMStatus::WARNING_HIGH_PPM:
+            llog.logE(ERROR, "Measured PPM exceeds safe threshold.");
+            return false;
 
-    case PPMStatus::ERROR_CHRONY_NOT_FOUND:
-        llog.logE(WARN, "Chrony not found. Falling back to clock drift measurement.");
-        break;
+        case PPMStatus::ERROR_CHRONY_NOT_FOUND:
+            llog.logE(WARN,
+                      "Chrony not found; falling back to clock-drift measurement.");
+            break;
 
-    case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
-        llog.logE(WARN,
-                  "System time is not synchronized. Unable to measure PPM accurately.\n"
-                  "Transmission timing or frequencies may be negatively impacted.");
-        config.use_ntp = false;
-        config_to_json();
-        break;
+        case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
+            // Chrony wasn’t yet reporting sync—but if the daemon is running,
+            // assume the user has NTP configured and proceed.
+            break;
 
-    default:
-        llog.logE(WARN, "Unknown PPM status.");
-        break;
+        default:
+            llog.logE(WARN, "Unknown PPMStatus returned from initialize().");
+            break;
     }
 
-    return true;
+    return retval;
 }
 
 /**
