@@ -8,7 +8,9 @@
 
 - [ ] Add "Are you sure" for shutdown and reboot
 - [ ] Create a simpler page json loader for non-config?
-- [ ] Create proxies for config and websocket
+- [ ] Use proxies for config and websocket
+- [ ] Colorize time when config.ntp_good is false?
+- [ ] Can we make the card title an include?
 
 ## Orchestration
 

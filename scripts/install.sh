@@ -751,6 +751,15 @@ declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
 declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
 
 # -----------------------------------------------------------------------------
+# @var DEFAULT_SITES_CONF
+# @brief Default directory for Apache site configuration files.
+# @details
+#   Holds the path to the Apache “sites-available” directory where
+#   virtual host configuration files are stored.
+# -----------------------------------------------------------------------------
+declare DEFAULT_SITES_CONF="/etc/apache2/sites-available/"
+
+# -----------------------------------------------------------------------------
 # @var DEFAULT_SERVERNAME
 # @type string
 # @brief Default ServerName directive.
@@ -5946,7 +5955,7 @@ add_servername_directive() {
 
 # -----------------------------------------------------------------------------
 # @brief    Create and enable a dedicated Apache site for Wsprry Pi.
-# @details  Writes /etc/apache2/sites-available/wsprrypi.conf containing a
+# @details  Writes $DEFAULT_SITES_CONF/wsprrypi.conf containing a
 #           <VirtualHost *:80> definition that redirects “/” to “/wsprrypi/”.
 #           Disables the default Debian site (000-default.conf) and enables
 #           wsprrypi.conf so your redirect becomes the active virtual host.
@@ -5962,7 +5971,7 @@ setup_wsprrypi_site() {
 
     local rc
 
-    local site_conf="/etc/apache2/sites-available/wsprrypi.conf"
+    local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
 
     # Create the site file
     exec_command "Creating site definition at $site_conf" "tee $site_conf" "$debug" <<'EOF' >/dev/null
@@ -6154,13 +6163,83 @@ disable_wsprrypi_site() {
     eval set -- "$(debug_filter "$@")"
 
     # Make sure we reference the same path as setup_wsprrypi_site
-    local site_conf="/etc/apache2/sites-available/wsprrypi.conf"
+    local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
 
     exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
 
     exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
 
     exec_command "Removing site file $site_conf" "rm -f $site_conf" "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Install or uninstall an Apache reverse-proxy
+# @details
+#   Proxies a given mount path on :80 → 127.0.0.1:PORT.  On install it
+#   enables proxy modules, writes & enables a vhost; on uninstall it
+#   disables the vhost and removes the file.  In both cases it tests
+#   the config and reloads Apache.
+#
+# @param $1  PORT number your app is listening on (e.g. 31415)
+# @param $2  MOUNT_PATH under / (e.g. /wsprrypi/config)
+# @global ACTION  install|uninstall (empty = install)
+# @throws If missing args or unknown ACTION.
+# -----------------------------------------------------------------------------
+configure_wsprrypi_proxy() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # args
+    local port="${1:?Missing port (e.g. 31415)}"
+    local mount_path="${2:?Missing mount path (e.g. /wsprrypi/config)}"
+
+    # make a safe filename, e.g. "wsprrypi-proxy-31415-wsprrypi_config.conf"
+    local safe_path="${mount_path#/}"
+    safe_path="${safe_path//\//_}"
+    local conf_file="${DEFAULT_SITES_CONF}wsprrypi-proxy-${port}-${safe_path}.conf"
+
+    if [[ -z "$ACTION" || "$ACTION" == "install" ]]; then
+        logI "Installing proxy for ${mount_path} → localhost:${port}${mount_path}" "$debug"
+
+        exec_command "Enabling Apache proxy modules" "a2enmod proxy proxy_http" "$debug"
+
+        logI "Writing vhost to $conf_file" "$debug"
+        cat > "$conf_file" <<EOF
+<VirtualHost *:80>
+    ServerName ${SERVER_NAME:-_}
+
+    ProxyPreserveHost On
+    ProxyPass        ${mount_path} http://127.0.0.1:${port}${mount_path}
+    ProxyPassReverse ${mount_path} http://127.0.0.1:${port}${mount_path}
+
+    <Proxy http://127.0.0.1:${port}${mount_path}>
+        Require local
+    </Proxy>
+</VirtualHost>
+EOF
+
+        exec_command "Enabling site $(basename "$conf_file" .conf)" \
+             "a2ensite $(basename "$conf_file")" "$debug"
+
+    elif [[ "$ACTION" == "uninstall" ]]; then
+        logI "Uninstalling proxy for ${mount_path} → localhost:${port}${mount_path}" "$debug"
+
+        exec_command "Disabling site $(basename "$conf_file" .conf)" \
+             "a2dissite $(basename "$conf_file")" "$debug"
+
+        exec_command "Removing vhost file $conf_file" "rm -f $conf_file" "$debug"
+
+    else
+        die "Unknown ACTION: '$ACTION' (use 'install' or 'uninstall')" "$debug"
+    fi
+
+    exec_command "Testing Apache configuration" "apache2ctl configtest" "$debug"
+
+    exec_command "Reloading Apache to apply changes" "systemctl reload apache2" "$debug"
 
     debug_end "$debug"
     return 0
@@ -6368,6 +6447,8 @@ manage_wsprry_pi() {
         "manage_web"
         "cleanup_files_in_directories"
         "manage_apache"
+        "configure_wsprrypi_proxy 31415 /wsprrypi/config"
+        "configure_wsprrypi_proxy 31416 /wsprrypi/server"
         "manage_sound"
     )
 
