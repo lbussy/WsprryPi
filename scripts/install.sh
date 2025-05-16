@@ -5037,20 +5037,12 @@ remove_legacy_services() {
         for name in "${unit_dash}" "${unit_uscore}"; do
             full="${name}.service"
 
-<<<<<<< HEAD
             if systemctl is-active --quiet "$full" 2>/dev/null; then
-=======
-            if systemctl is-active --quiet "$full"; then
->>>>>>> 37cef3e (Fix branch)
                 exec_command "Stopping ${full}" \
                              "systemctl stop ${full}"   "$debug"
             fi
 
-<<<<<<< HEAD
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
-=======
-            if systemctl is-enabled --quiet "$full"; then
->>>>>>> 37cef3e (Fix branch)
                 exec_command "Disabling ${full}" \
                              "systemctl disable ${full}" "$debug"
             fi
