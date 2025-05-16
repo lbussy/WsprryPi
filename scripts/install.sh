@@ -5944,6 +5944,7 @@ EOF
 " "$debug"
 
             # 3) Turn sites on/off
+            exec_command "Enable Apache modules"     "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
             exec_command "Disabling default site"    "a2dissite 000-default.conf" "$debug"
             exec_command "Enabling wsprrypi site"    "a2ensite wsprrypi.conf" "$debug"
 
