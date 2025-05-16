@@ -5021,7 +5021,6 @@ remove_legacy_services() {
 
     services=(
         wspr
-        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
@@ -6271,7 +6270,6 @@ manage_wsprry_pi() {
         if [[ $status -ne 0 ]]; then
             logE "$func failed with status $status" "$debug"
             overall_status=1
-            debug_end "$debug"
         else
             debug_print "$func succeeded." "$debug"
         fi
