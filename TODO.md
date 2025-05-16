@@ -6,7 +6,7 @@
 
 ## Web UI
 
-- [ ] Can we make the card title an include?
+- [ ] ?
 
 ## Orchestration
 
