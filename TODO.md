@@ -6,7 +6,6 @@
 
 ## Web UI
 
-- [ ] Add "Are you sure" for shutdown and reboot
 - [ ] Can we make the card title an include?
 
 ## Orchestration
