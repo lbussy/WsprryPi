@@ -1,3 +1,4 @@
+<!-- Grammar and spelling checked -->
 # Wsprry Pi System Internals
 
 The system consists of the following:
@@ -22,4 +23,4 @@ You may review these text files with standard Linux tools:
 - `tail -f /var/log/wsprrypi/wsprrypi_log`: Show the end of the log and continue to show new lines as they are logged (`man tail` for more information.)
 - You may also view the live log file via the web UI.
 
-The `logd` daemon rotates the log daily, the old log is compressed, and 14 logs are retained (14 days.)
+The `logd` daemon rotates the log daily, compresses the old log, and retains 14 logs (14 days).
