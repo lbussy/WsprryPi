@@ -12,10 +12,11 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 - [Set up SSH to your PI](#set-up-ssh-to-your-pi)
 - [Optional Housekeeping](#optional-housekeeping)
 - [VS Code](#vs-code)
-- [Required Libs](#required-libs)
+- [Required Devel Libs](#required-devel-libs)
 - [A Note About Submodules](#a-note-about-submodules)
 - [Reboot](#reboot)
 - [Working with the Project](#working-with-the-project)
+- [Documentation](#documentation)
 
 ## Set up SSH to your PI
 
@@ -152,10 +153,10 @@ If you are going to use VS Code from your workstation:
     # Generated with:
     # code --list-extensions | xargs -L 1 echo code --install-extension
     code --install-extension bmewburn.vscode-intelephense-client
-    code --install-extension ms-python.debugpy
-    code --install-extension ms-python.python
-    code --install-extension ms-python.vscode-pylance
+    code --install-extension davidanson.vscode-markdownlint
+    code --install-extension ms-vscode.cpptools
     code --install-extension rifi2k.format-html-in-php
+    code --install-extension yzhang.markdown-all-in-one
     ```
 
 8. Use the "Open Folder" button and select the root of your repo on the Pi.
@@ -172,7 +173,6 @@ sudo systemctl disable wsprrypi
 ## Required Devel Libs
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
-
 
 - apache2
 - php
