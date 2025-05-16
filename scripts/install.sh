@@ -208,6 +208,7 @@ declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-2.0_Beta}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0_Beta}"
 declare GIT_TAG="${GIT_TAG:-2.0_Beta.6}"
 declare SEM_VER="${SEM_VER:-2.0_Beta.6}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
