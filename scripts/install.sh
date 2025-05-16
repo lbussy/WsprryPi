@@ -5021,7 +5021,6 @@ remove_legacy_services() {
 
     services=(
         wspr
-        wsprrypi
         shutdown-button
         shutdown-watch
         shutdown_watch
