@@ -251,9 +251,11 @@ void ppm_callback(double /*new_ppm*/)
     ppm_reload_pending.store(true, std::memory_order_relaxed);
 
     // Now that Chrony has produced a PPM value, we know time is valid.
-    config.ntp_good = true;
-
-    llog.logS(INFO, "Chrony service has updated it's initial value.");
+    if (!config.ntp_good)
+    {
+        llog.logS(INFO, "Chrony service has updated it's initial value.");
+        config.ntp_good = true;
+    }
 }
 
 /**
@@ -285,27 +287,27 @@ bool ppm_init()
 
     switch (status)
     {
-        case PPMStatus::SUCCESS:
-            llog.logS(DEBUG, "PPM Manager initialized successfully.");
-            break;
+    case PPMStatus::SUCCESS:
+        llog.logS(DEBUG, "PPM Manager initialized successfully.");
+        break;
 
-        case PPMStatus::WARNING_HIGH_PPM:
-            llog.logE(ERROR, "Measured PPM exceeds safe threshold.");
-            return false;
+    case PPMStatus::WARNING_HIGH_PPM:
+        llog.logE(ERROR, "Measured PPM exceeds safe threshold.");
+        return false;
 
-        case PPMStatus::ERROR_CHRONY_NOT_FOUND:
-            llog.logE(WARN,
-                      "Chrony not found; falling back to clock-drift measurement.");
-            break;
+    case PPMStatus::ERROR_CHRONY_NOT_FOUND:
+        llog.logE(WARN,
+                  "Chrony not found; falling back to clock-drift measurement.");
+        break;
 
-        case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
-            // Chrony wasn’t yet reporting sync—but if the daemon is running,
-            // assume the user has NTP configured and proceed.
-            break;
+    case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
+        // Chrony wasn’t yet reporting sync—but if the daemon is running,
+        // assume the user has NTP configured and proceed.
+        break;
 
-        default:
-            llog.logE(WARN, "Unknown PPMStatus returned from initialize().");
-            break;
+    default:
+        llog.logE(WARN, "Unknown PPMStatus returned from initialize().");
+        break;
     }
 
     return retval;
