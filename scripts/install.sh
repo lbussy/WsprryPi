@@ -4546,12 +4546,12 @@ exec_command() {
     complete_pre+=":"
     failed_pre+=":"
 
-    # 1) Print ephemeral “Running” line
+    # Print ephemeral “Running” line
     printf "%b[-]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
     # Optionally ensure it shows up (especially if the command is super fast):
     sleep 0.02
 
-    # 2) If DRY_RUN == "true", skip real exec
+    # If DRY_RUN == "true", skip real exec
     if [[ "$DRY_RUN" == "true" ]]; then
         # Move up & clear ephemeral line
         printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
@@ -4560,7 +4560,7 @@ exec_command() {
         return 0
     fi
 
-    # 3) Check if exec_process is a function or a command
+    # Check if exec_process is a function or a command
     local status=0
     if declare -F "$exec_process" &>/dev/null; then
         # It's a function, pass remaining arguments to the function
@@ -4570,10 +4570,10 @@ exec_command() {
         bash -c "$exec_process" &>/dev/null || status=$?
     fi
 
-    # 4) Move up & clear ephemeral “Running” line
+    # Move up & clear ephemeral “Running” line
     printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
 
-    # 5) Print final success/fail
+    # Print final success/fail
     if [[ $status -eq 0 ]]; then
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
     else
@@ -5906,12 +5906,12 @@ manage_apache() {
 
         if is_stock_apache_page "$TARGET_FILE" "$debug"; then
 
-            # 1) Add ServerName if missing
+            # Add ServerName if missing
             exec_command "Adding ServerName directive" \
                 "grep -qF '$sn' $APACHE_CONF || sed -i '1i $sn' $APACHE_CONF" \
                 "$debug"
 
-            # 2) Write the one vhost file
+            # Write the one vhost file
             exec_command "Writing $site_conf" \
                 "tee $site_conf <<'EOF'
 <VirtualHost *:80>
@@ -5943,7 +5943,7 @@ manage_apache() {
 EOF
 " "$debug"
 
-            # 3) Turn sites on/off
+            # Turn sites on/off
             exec_command "Enable Apache modules"     "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
             exec_command "Disabling default site"    "a2dissite 000-default.conf" "$debug"
             exec_command "Enabling wsprrypi site"    "a2ensite wsprrypi.conf" "$debug"
@@ -5961,7 +5961,7 @@ EOF
                      "sed -i '/^$sn/d' $APACHE_CONF"  "$debug"
     fi
 
-    # final sanity-check + reload
+    # Final sanity-check + reload
     exec_command "Testing Apache configuration"   "apache2ctl configtest"       "$debug"
     exec_command "Reloading Apache"               "systemctl reload apache2"    "$debug"
 

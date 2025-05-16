@@ -153,10 +153,13 @@ If you are going to use VS Code from your workstation:
     # Generated with:
     # code --list-extensions | xargs -L 1 echo code --install-extension
     code --install-extension bmewburn.vscode-intelephense-client
+    code --install-extension ms-python.debugpy
+    code --install-extension ms-python.python
+    code --install-extension ms-python.vscode-pylance
+    code --install-extension rifi2k.format-html-in-php
     code --install-extension davidanson.vscode-markdownlint
     code --install-extension ms-vscode.cpptools
-    code --install-extension rifi2k.format-html-in-php
-    code --install-extension yzhang.markdown-all-in-one
+    code --install-extension yzhang.markdown-all-in-one 
     ```
 
 8. Use the "Open Folder" button and select the root of your repo on the Pi.
@@ -174,6 +177,7 @@ sudo systemctl disable wsprrypi
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
 
+- git
 - apache2
 - php
 - chrony
@@ -181,13 +185,18 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 
 If you are doing development, you will need, in additon:
 
-- git
 - libgpiod-dev
 
-Install these with:
+Install these (withour running the installer) with:
 
 ``` bash
 sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 -y
+```
+
+If you ran the installer:
+
+``` bash
+sudo apt install libgpiod-dev -y
 ```
 
 ## A Note About Submodules
@@ -214,7 +223,7 @@ The documents are written in Markdown with Sphinx.  First, create a virtual envi
 ``` bash
 cd docs
 sudo apt install python3-venv
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
