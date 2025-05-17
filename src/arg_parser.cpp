@@ -439,7 +439,7 @@ bool validate_config_data()
     // Determine NTP functionality
     if (!config.use_ntp && config.ppm != 0.0)
     {
-        llog.logS(INFO, "PPM value to be used for tone generation:",
+        llog.logS(INFO, "PPM value to be used for tone generation: ",
                   std::fixed, std::setprecision(2), config.ppm);
     }
     else if (!config.use_ntp && config.ppm != 0.0)
