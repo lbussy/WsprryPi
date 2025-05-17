@@ -5877,17 +5877,17 @@ manage_sound() {
 # @brief    Install or uninstall all Apache bits for WsprryPi
 # @details
 #   * On install (ACTION=install or empty):
-#     – Adds DEFAULT_SERVERNAME to $APACHE_CONF if missing  
+#     – Adds DEFAULT_SERVERNAME to $APACHE_CONF if missing
 #     – Writes the single $DEFAULT_SITES_CONF/wsprrypi.conf with:
-#         • A redirect “/ → /wsprrypi/”  
-#         • REST proxies (31415) for /wsprrypi/config & /version  
-#         • WS proxy (31416) for /wsprrypi/socket  
-#         • <Proxy> blocks allowing remote access  
-#     – Disables 000-default.conf, enables wsprrypi.conf  
+#         • A redirect “/ → /wsprrypi/”
+#         • REST proxies (31415) for /wsprrypi/config & /version
+#         • WS proxy (31416) for /wsprrypi/socket
+#         • <Proxy> blocks allowing remote access
+#     – Disables 000-default.conf, enables wsprrypi.conf
 #   * On uninstall (ACTION=uninstall):
-#     – Disables wsprrypi.conf, re-enables 000-default.conf  
-#     – Deletes wsprrypi.conf  
-#     – Removes the ServerName line from $APACHE_CONF  
+#     – Disables wsprrypi.conf, re-enables 000-default.conf
+#     – Deletes wsprrypi.conf
+#     – Removes the ServerName line from $APACHE_CONF
 #   In all cases it runs configtest + reload.
 #
 # @global ACTION             install|uninstall (empty→install)

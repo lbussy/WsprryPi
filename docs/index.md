@@ -16,6 +16,9 @@ About_WSPR/index
 About_Wsprry_Pi/index
 Install/index
 Web_UI_Operations/index
+Web_UI_Operations/Configuration/index
+Web_UI_Operations/Logs/index
+Web_UI_Operations/Spots/index
 Command_Line_Operations/index
 Advanced_Operations/index
 Internals/index
