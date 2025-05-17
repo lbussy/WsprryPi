@@ -22,12 +22,12 @@ main() {
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null) \
         || die "Unable to detect git repository root directory."
-    debug_print "Repository root detected at '$repo_root'."
+    echo "Repository root detected at '$repo_root'."
 
     # Navigate to the src directory under the repo root
     cd "$repo_root/src" \
         || die "Failed to change directory to '$repo_root/src'."
-    debug_print "Changed directory to '$repo_root/src'."
+    echo "Changed directory to '$repo_root/src'."
 
     # Run the build pipeline
     clear
