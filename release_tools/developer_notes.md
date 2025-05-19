@@ -159,7 +159,7 @@ If you are going to use VS Code from your workstation:
     code --install-extension rifi2k.format-html-in-php
     code --install-extension davidanson.vscode-markdownlint
     code --install-extension ms-vscode.cpptools
-    code --install-extension yzhang.markdown-all-in-one 
+    code --install-extension yzhang.markdown-all-in-one
     ```
 
 8. Use the "Open Folder" button and select the root of your repo on the Pi.
