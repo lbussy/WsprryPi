@@ -257,7 +257,10 @@
         "variant": "cpp",
         "numbers": "cpp",
         "semaphore": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "stdio.h": "c",
+        "stdint.h": "c",
+        "csetjmp": "cpp"
     },
-    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
+    "C_Cpp.default.compilerPath": "/usr/bin/g++"
 }
