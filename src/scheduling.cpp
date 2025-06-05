@@ -167,8 +167,8 @@ ModeType lastMode;
 std::atomic<bool> web_test_tone{false};
 
 /**
- * @brief Overloaded allback function for housekeeping tasks between
- * transmissions.
+ * @brief Overloaded callback function for housekeeping tasks between
+ * transmissions.`
  *
  * This will intercept a double sent from the callback handler and pass
  * it as a formatted string to
