@@ -5649,6 +5649,8 @@ manage_service() {
             exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
             exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
             exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Change ownership on logs" "chown root:www-data $log_path/${syslog_identifier}_log" "$debug" || retval=1
+            exec_command "Change permissions on logs" "chmod 644 $log_path/${syslog_identifier}_log" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_name created."
