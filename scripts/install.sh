@@ -207,9 +207,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
-declare GIT_TAG="${GIT_TAG:-2.0.0}"
-declare SEM_VER="${SEM_VER:-2.0.0}"
+declare REPO_BRANCH="${REPO_BRANCH:-devel}"
+declare GIT_TAG="${GIT_TAG:-2.0.1_Beta.1}"
+declare SEM_VER="${SEM_VER:-2.0.1_Beta.1}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -5649,6 +5649,8 @@ manage_service() {
             exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
             exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
             exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Change ownership on logs" "chown root:www-data $log_path/${syslog_identifier}_log" "$debug" || retval=1
+            exec_command "Change permissions on logs" "chmod 644 $log_path/${syslog_identifier}_log" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_name created."

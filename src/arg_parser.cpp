@@ -613,7 +613,6 @@ bool validate_config_data()
  */
 bool set_frequencies()
 {
-    llog.logS(DEBUG, "Loading set_frequencies().");
     // Safely read the raw frequency string (accessor may throw).
     std::string raw_list;
     try {
