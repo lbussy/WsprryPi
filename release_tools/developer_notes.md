@@ -116,9 +116,9 @@ If you are going to use VS Code from your workstation:
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
     > [!IMPORTANT]
-    > You MUST clone the repo with `--recurse-submodules` to get all parts.
+    > You MUST clone the repo with `--recurse-submodules -j8` to get all parts.
 
-    Either:
+    Either clone then (optionally) install:
 
     ``` bash
     sudo apt install git -y
@@ -127,9 +127,7 @@ If you are going to use VS Code from your workstation:
     sudo ./scripts/install.sh -l
    ```
 
-    (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
-
-    Or:
+    Or install, then clone the repo:
 
     ``` bash
     curl -L installwspr.aa0nt.net | sudo bash
@@ -137,9 +135,34 @@ If you are going to use VS Code from your workstation:
     cd ~/WsprryPi/
     ```
 
-    (This lets the installer install everything, but then you clone the repo after.)
+    If you choose NOT to install the repo, you can either:
 
-6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
+    ```bash
+    git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
+    cd ~/WsprryPi/
+    sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 -y
+    ```
+
+    Finally, sometimes weird things happen to branches.  You can run this script to clone and make sure all branches are tracking locally:
+
+    ```bash
+    curl -fsSL https://gist.githubusercontent.com/lbussy/e14fba1572de53df46701b9d772f244f/raw/sync_all.sh | bash -s -- https://github.com/lbussy/WsprryPi.git
+    ```
+
+    This is also available locally after you clone should things start getting weird:
+
+    ```bash
+    ./release_tools/sync_all_branches.sh
+    ```
+
+    Or even:
+    ```bash
+    curl -fsSL https://gist.githubusercontent.com/lbussy/e14fba1572de53df46701b9d772f244f/raw/sync_all.sh | bash
+    ```
+    (if you need to clean up things in another repo)
+
+
+6. You should be in your git repo directory. Set up the Git global environment if not already done. Replace placeholders with your Git username and email:
 
     ``` bash
     git config --global user.email "you@example.com"
@@ -177,17 +200,17 @@ sudo systemctl disable wsprrypi
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
 
-- git
-- apache2
-- php
-- chrony
-- libgpiod2
+- `git`
+- `apache2`
+- `php`
+- `chrony`
+- `libgpiod2`
 
 If you are doing development, you will need, in additon:
 
-- libgpiod-dev
+- `libgpiod-dev`
 
-Install these (withour running the installer) with:
+Install these (without running the installer) with:
 
 ``` bash
 sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 -y
@@ -204,7 +227,6 @@ sudo apt install libgpiod-dev -y
 I have opted to use submodules to reuse common elements in my projects, as well as to clearly delineate licensing of historic code. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
 
 ``` bash
-git submodule foreach --recursive 'git clean -xfd'
 git submodule update --init --recursive
 ```
 
@@ -230,10 +252,10 @@ pip install -r requirements.txt
 
 Now you have the requirements:
 
-- sphinx
-- sphinx_rtd_theme
-- myst-parser
-- esbonio
+- `sphinx`
+- `sphinx_rtd_theme`
+- `myst-parser`
+- `esbonio`
 
 From here you can `make html` to create the docs in `./build/html`.
 

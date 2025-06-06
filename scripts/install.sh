@@ -4341,7 +4341,7 @@ git_clone() {
     dest_root="$LOCAL_REPO_DIR"
     retval=0
     # We need to runuser here because it needs to be done as pi (or current real user)
-    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
+    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH $GIT_CLONE $dest_root"
 
     debug_print "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
