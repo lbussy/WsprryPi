@@ -23,10 +23,11 @@
 # -----------------------------------------------------------------------------
 
 # Debug flags
-DEBUG := -DDEBUG_WSPR
-# DEBUG += -DDEBUG_WSPR_TRANSMIT
+# DEBUG := -DDEBUG_WSPR
 # DEBUG += -DDEBUG_PPMMANAGER
 # DEBUG += -DDEBUG_SIGNAL_HANDLER
+# DEBUG += -DDEBUG_WSPR_TRANSMIT
+# DEBUG += -DDEBUG_MAILBOX
 
 # C++ Version
 CXXVER := 17
