@@ -207,9 +207,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-devel}"
-declare GIT_TAG="${GIT_TAG:-2.0.1_Beta.1}"
-declare SEM_VER="${SEM_VER:-2.0.1_Beta.1}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0.1_Beta.3}"
+declare GIT_TAG="${GIT_TAG:-2.0.1_Beta.3}"
+declare SEM_VER="${SEM_VER:-2.0.1_Beta.3}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -249,7 +249,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # -----------------------------------------------------------------------------
 readonly WSPR_EXE="wsprrypi"
 readonly WSPR_INI="wsprrypi.ini"
-declare OLD_INI=""
+# declare OLD_INI=""
 readonly LOG_ROTATE="logrotate.conf"
 
 # -----------------------------------------------------------------------------
@@ -748,7 +748,7 @@ declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
 # @default "/var/log/apache_tool.log"
 # @example DEFAULT_LOG_FILE="/var/log/custom_installer.log" ./install.sh
 # -----------------------------------------------------------------------------
-declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
+# declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
 
 # -----------------------------------------------------------------------------
 # @var DEFAULT_SITES_CONF
@@ -1847,6 +1847,7 @@ replace_string_in_script() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pause() {
     # Prompt the user
     printf "Press any key to continue..."
@@ -4341,7 +4342,7 @@ git_clone() {
     dest_root="$LOCAL_REPO_DIR"
     retval=0
     # We need to runuser here because it needs to be done as pi (or current real user)
-    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH $GIT_CLONE $dest_root"
+    clone_command="runuser -u $SUDO_USER -- git clone --recurse-submodules -j8 -b $REPO_BRANCH $GIT_CLONE $dest_root"
 
     debug_print "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
@@ -5899,6 +5900,7 @@ manage_sound() {
 # @param  $@                 optional debug flags
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 manage_apache() {
     local debug; debug=$(debug_start "$@");  eval set -- "$(debug_filter "$@")"
     local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
@@ -5976,6 +5978,7 @@ EOF
 # @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
 # @return   0 if it looks like the stock Apache page, 1 otherwise.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 is_stock_apache_page() {
     local debug
     debug=$(debug_start "$@")
@@ -6242,6 +6245,7 @@ manage_wsprry_pi() {
 
             # Reverse and drop any line that starts with a skip-name
             mapfile -t group_to_execute < <(
+                # shellcheck disable=SC2015
                 printf '%s\n' "${install_group[@]}" |
                   { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
                   grep -v -E "^($skip_regex)( |$)"

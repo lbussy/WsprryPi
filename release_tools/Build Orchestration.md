@@ -13,25 +13,30 @@ Globally search/replace `2.0.1_Beta.3` with your desired version.
 1. **Create or update your release branch**
 
    ```bash
-   git checkout -b refs/heads/2.0.1_Beta.3
+   git checkout -b 2.0.1_Beta.3
    ```
 
 2. **Edit your source and install script**
 
-   * Update `VERSION` macros or annotations to `2.0.1_Beta.3`.
-   * Apply any required feature changes or bug fixes.
+    * Update `scripts\install.sh` with proper version:
+        ```bash
+        declare REPO_BRANCH="${REPO_BRANCH:-2.0.1_Beta.3}"
+        declare GIT_TAG="${GIT_TAG:-2.0.1_Beta.3}"
+        declare SEM_VER="${SEM_VER:-2.0.1_Beta.3}"
+        ```
+    * Apply any required feature changes or bug fixes.
 
 3. **Commit those edits**
 
    ```bash
-   git add src/ install.sh
+   git add scripts/install.sh
    git commit -m "Prepare 2.0.1_Beta.3 release"
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-   git tag -a refs/tags/2.0.1_Beta.3 -m "Release 2.0.1_Beta.3"
+   git tag -a 2.0.1_Beta.3 -m "Release 2.0.1_Beta.3"
    ```
 
 5. **Build the binary**
@@ -55,14 +60,14 @@ Globally search/replace `2.0.1_Beta.3` with your desired version.
 8. **Force the tag to point to the amended commit**
 
    ```bash
-   git tag -f refs/tags/2.0.1_Beta.3
+   git tag -f 2.0.1_Beta.3
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
-   git push origin refs/heads/2.0.1_Beta.3
-   git push origin --force refs/tags/2.0.1_Beta.3
+   git push origin HEAD:refs/heads/2.0.1_Beta.3
+   git push origin --force tag 2.0.1_Beta.3
    ```
 
 ---
