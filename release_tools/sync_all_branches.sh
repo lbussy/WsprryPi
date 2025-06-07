@@ -21,10 +21,10 @@ fetch_and_prune() {
 
 track_remote_branches() {
     printf "Tracking remote branches.\n"
-    for branch in $(git branch -r | grep -v '\->'); do
-        local local_branch="${branch#origin/}"
-        if ! git show-ref --quiet --verify "refs/heads/$local_branch"; then
-            git branch --track "$local_branch" "$branch" 2>/dev/null || true
+    for full_ref in $(git for-each-ref --format='%(refname)' refs/remotes/origin/); do
+        local remote_branch="${full_ref#refs/remotes/origin/}"
+        if ! git show-ref --quiet --verify "refs/heads/$remote_branch"; then
+            git branch --track "$remote_branch" "origin/$remote_branch" 2>/dev/null || true
         fi
     done
 }
@@ -33,7 +33,8 @@ prompt_to_delete_stale_branches() {
     printf "Checking for local branches that do not exist on origin.\n"
     local to_delete=()
 
-    for branch in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+    for full_ref in $(git for-each-ref --format='%(refname)' refs/heads/); do
+        local branch="${full_ref#refs/heads/}"
         if ! git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
             to_delete+=("$branch")
         fi
@@ -57,10 +58,9 @@ prompt_to_delete_stale_branches() {
 iterate_and_update_branches() {
     local stashed_any=0
     cd "$(git rev-parse --show-toplevel)"
-    local stash_name
-    stash_name="auto-sync-branches-$(date +%s)"
+    local stash_name="auto-sync-branches-$(date +%s)"
     local original_branch
-    original_branch=$(git rev-parse --abbrev-ref HEAD)
+    original_branch=$(git symbolic-ref --quiet --short HEAD || echo "")
 
     if [[ -n "$(git status --porcelain)" ]]; then
         printf "Uncommitted changes detected. Stashing before processing.\n"
@@ -68,7 +68,8 @@ iterate_and_update_branches() {
         stashed_any=1
     fi
 
-    for branch in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+    for full_ref in $(git for-each-ref --format='%(refname)' refs/heads/); do
+        local branch="${full_ref#refs/heads/}"
         printf "Switching to '%s'.\n" "$branch"
         git checkout "$branch" 2>/dev/null || {
             printf "Warning: Failed to checkout '%s'. Skipping.\n" "$branch" >&2
@@ -81,12 +82,15 @@ iterate_and_update_branches() {
             }
         fi
 
+        printf "\nAbout to reinit submodules, this may take a moment if there are many.\n"
         git submodule update --init --recursive 2>/dev/null || true
     done
 
-    git checkout "$original_branch" 2>/dev/null || {
-        printf "Warning: Could not return to original branch '%s'.\n" "$original_branch" >&2
-    }
+    if [[ -n "$original_branch" ]]; then
+        git checkout "$original_branch" 2>/dev/null || {
+            printf "Warning: Could not return to original branch '%s'.\n" "$original_branch" >&2
+        }
+    fi
 
     if (( stashed_any )); then
         stash_ref=$(git stash list | grep "$stash_name" | awk -F: '{print $1}')
