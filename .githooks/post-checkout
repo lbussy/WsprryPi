@@ -1,0 +1,6 @@
+#!/bin/bash
+# Automatically sync and update submodules after a branch checkout
+
+echo "Syncing submodules."
+git submodule sync
+git submodule update --init --recursive

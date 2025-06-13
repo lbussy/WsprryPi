@@ -1,0 +1,11 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# @brief Prevent accidental push to main or master without PR
+# -----------------------------------------------------------------------------
+
+branch=$(git symbolic-ref --short HEAD)
+
+if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+    echo "Error: Pushing directly to $branch is disabled. Use a PR instead."
+    exit 1
+fi
