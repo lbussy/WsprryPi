@@ -181,7 +181,7 @@ void callback_transmission_started(double frequency)
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
- * 
+ *
  * This function regords the start time of a transmission, turns on the
  * LED if enabled, sends messages to any WebSockets clients, and logs the
  * start message
@@ -196,7 +196,6 @@ void callback_transmission_started(const std::string &msg = {})
 
     // Notify clients of start
     send_ws_message("transmit", "starting");
-
 
     // Log with custom message if providedAdd commentMore actions
     if (!msg.empty())
@@ -580,6 +579,9 @@ bool wspr_loop()
 
     // Set transmission server and set priority
     wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
+
+    // Set transmission event callbacks
+    wsprTransmitter.setTransmissionCallbacks(
         [](const WsprTransmitter::CallbackArg &arg) {
             callback_transmission_started(std::get<double>(arg));
         },
@@ -588,63 +590,63 @@ bool wspr_loop()
         }
     );
 
-    // Wait for something to happen
+        // Wait for something to happen
 
-    llog.logS(INFO, "WSPR loop running.");
+        llog.logS(INFO, "WSPR loop running.");
 
-    // Set pending config flags and do initial config
-    ini_reload_pending.store(true, std::memory_order_relaxed);
-    ppm_reload_pending.store(true, std::memory_order_relaxed);
-    if (config.mode == ModeType::WSPR)
-    {
-        // Set up WSPR transmissions
-        set_config(true); // Handles get next (or only) frequency, PPM, and setup
-    }
-    else
-    {
-        // Setup test tone
-        validate_config_data();
-        wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
-        wsprTransmitter.enableTransmission();
-        llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
-    }
+        // Set pending config flags and do initial config
+        ini_reload_pending.store(true, std::memory_order_relaxed);
+        ppm_reload_pending.store(true, std::memory_order_relaxed);
+        if (config.mode == ModeType::WSPR)
+        {
+            // Set up WSPR transmissions
+            set_config(true); // Handles get next (or only) frequency, PPM, and setup
+        }
+        else
+        {
+            // Setup test tone
+            validate_config_data();
+            wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
+            wsprTransmitter.enableTransmission();
+            llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
+        }
 
-    // -------------------------------------------------------------------------
-    // Loop (block wspr_loop only) until shutdown is triggered
-    // -------------------------------------------------------------------------
-    {
-        std::unique_lock<std::mutex> lk(exitwspr_mtx);
-        exitwspr_cv.wait(lk, []
-                         { return exitwspr_ready; });
-    }
+        // -------------------------------------------------------------------------
+        // Loop (block wspr_loop only) until shutdown is triggered
+        // -------------------------------------------------------------------------
+        {
+            std::unique_lock<std::mutex> lk(exitwspr_mtx);
+            exitwspr_cv.wait(lk, []
+                             { return exitwspr_ready; });
+        }
 
-    llog.logS(DEBUG, "WSPR Loop terminating.");
+        llog.logS(DEBUG, "WSPR Loop terminating.");
 
-    // -------------------------------------------------------------------------
-    // Shutdown and cleanup
-    // -------------------------------------------------------------------------
-    wsprTransmitter.shutdownTransmitter();
-    ppmManager.stop();      // Stop PPM manager (if active)
-    iniMonitor.stop();      // Stop config file monitor
-    ledControl.stop();      // Stop LED driver
-    shutdownMonitor.stop(); // Stop shutdown GPIO monitor
-    webServer.stop();       // Stop web server
-    socketServer.stop();    // Stop the socket server
+        // -------------------------------------------------------------------------
+        // Shutdown and cleanup
+        // -------------------------------------------------------------------------
+        wsprTransmitter.shutdownTransmitter();
+        ppmManager.stop();      // Stop PPM manager (if active)
+        iniMonitor.stop();      // Stop config file monitor
+        ledControl.stop();      // Stop LED driver
+        shutdownMonitor.stop(); // Stop shutdown GPIO monitor
+        webServer.stop();       // Stop web server
+        socketServer.stop();    // Stop the socket server
 
-    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
+        llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
 
-    if (reboot_flag.load())
-    {
-        llog.logS(INFO, "Rebooting.");
-        reboot_machine();
-    }
-    if (shutdown_flag.load())
-    {
-        llog.logS(INFO, "Shutting down.");
-        shutdown_machine();
-    }
+        if (reboot_flag.load())
+        {
+            llog.logS(INFO, "Rebooting.");
+            reboot_machine();
+        }
+        if (shutdown_flag.load())
+        {
+            llog.logS(INFO, "Shutting down.");
+            shutdown_machine();
+        }
 
-    return true;
+        return true;
 }
 
 /**
