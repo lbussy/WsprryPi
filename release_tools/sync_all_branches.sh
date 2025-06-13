@@ -58,8 +58,8 @@ prompt_to_delete_stale_branches() {
 iterate_and_update_branches() {
     local stashed_any=0
     cd "$(git rev-parse --show-toplevel)"
-    local stash_name="auto-sync-branches-$(date +%s)"
-    local original_branch
+    local stash_name original_branch
+    stash_name="auto-sync-branches-$(date +%s)"
     original_branch=$(git symbolic-ref --quiet --short HEAD || echo "")
 
     if [[ -n "$(git status --porcelain)" ]]; then

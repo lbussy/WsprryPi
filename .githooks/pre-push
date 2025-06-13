@@ -3,6 +3,8 @@
 # @brief Prevent accidental push to main or master without PR
 # -----------------------------------------------------------------------------
 
+echo "[githook: pre-push] Checking for improper push."
+
 branch=$(git symbolic-ref --short HEAD)
 
 if [[ "$branch" == "main" || "$branch" == "master" ]]; then

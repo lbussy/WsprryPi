@@ -3,18 +3,18 @@
 # @brief Check for staged debug symbols or merge conflict markers before commit
 # -----------------------------------------------------------------------------
 
-echo "[githook] pre-commit: Checking for debug symbols or conflict markers."
+echo "[githook: pre-commit] Checking for debug symbols or conflict markers."
 
 if git diff --cached --name-only | grep -q '^.githooks/'; then
-    echo "[githook] Skipping checks for .githooks/*"
+    echo "[githook: pre-commit] Skipping checks for .githooks/*"
 else
     if git diff --cached | grep -E '^\+.*(DEBUG|std::cerr|console\.log|print\()'; then
-        echo "Error: Debug code detected in staged files. Please remove it before committing."
+        echo "[githook: pre-commit] Error: Debug code detected in staged files. Please remove it before committing."
         exit 1
     fi
 
     if git diff --cached | grep -E '^[<=>]{7}'; then
-        echo "Error: Merge conflict markers detected. Please resolve them before committing."
+        echo "[githook: pre-commit] Error: Merge conflict markers detected. Please resolve them before committing."
         exit 1
     fi
 fi
