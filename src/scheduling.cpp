@@ -167,13 +167,24 @@ ModeType lastMode;
 std::atomic<bool> web_test_tone{false};
 
 /**
- * @brief Callback function for housekeeping tasks between transmissions.
+ * @brief Overloaded callback function for housekeeping tasks between
+ * transmissions.
  *
- * This function checks whether there are pending PPM or INI changes that need
- * to be integrated. If a pending PPM change is detected, it logs the event and
- * resets the flag. Similarly, if a pending INI change is detected, it applies the
- * deferred changes, logs the integration, and resets the flag. If any changes were
- * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ * This will intercept a double sent from the callback handler and pass
+ * it as a formatted string to
+ * callback_transmission_started(const std::string &msg)
+ */
+void callback_transmission_started(double frequency)
+{
+    callback_transmission_started(lookup.freq_display_string(frequency));
+}
+
+/**
+ * @brief Callback function for housekeeping tasks between transmissions.
+ * 
+ * This function regords the start time of a transmission, turns on the
+ * LED if enabled, sends messages to any WebSockets clients, and logs the
+ * start message
  */
 void callback_transmission_started(const std::string &msg = {})
 {
@@ -183,19 +194,29 @@ void callback_transmission_started(const std::string &msg = {})
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
     // Notify clients of start
     send_ws_message("transmit", "starting");
+
+
+    // Log with custom message if providedAdd commentMore actions
+    if (!msg.empty())
+    {
+        llog.logS(INFO, "Transmission started at", msg, ".");
+    }
+    else
+    {
+        llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
+    }
 }
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
- * This function checks whether there are pending PPM or INI changes that need
- * to be integrated. If a pending PPM change is detected, it logs the event and
- * resets the flag. Similarly, if a pending INI change is detected, it applies the
- * deferred changes, logs the integration, and resets the flag. If any changes were
- * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ * to be integrated. If a pending PPM change is detected, it logs the event
+ * and resets the flag. Similarly, if a pending INI change is detected, it
+ * applies the deferred changes, logs the integration, and resets the flag.
+ * If any changes were integrated, a flag is set to indicate that DMA/Symbol
+ * reconfiguration is required.
  */
 void callback_transmission_complete(const std::string &msg)
 {
@@ -559,9 +580,13 @@ bool wspr_loop()
 
     // Set transmission server and set priority
     wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
-    wsprTransmitter.setTransmissionCallbacks(
-        callback_transmission_started,
-        callback_transmission_complete);
+        [](const WsprTransmitter::CallbackArg &arg) {
+            callback_transmission_started(std::get<double>(arg));
+        },
+        [](const WsprTransmitter::CallbackArg &arg) {
+            callback_transmission_complete(std::get<std::string>(arg));
+        }
+    );
 
     // Wait for something to happen
 
