@@ -273,7 +273,7 @@ void ppm_callback(double /*new_ppm*/)
     // Now that Chrony has produced a PPM value, we know time is valid.
     if (!config.ntp_good)
     {
-        llog.logS(INFO, "Chrony service has updated it's initial value.");
+        llog.logS(INFO, "Chrony service has updated its initial value.");
         config.ntp_good = true;
     }
 }
