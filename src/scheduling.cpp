@@ -864,7 +864,7 @@ void set_config(bool initial)
     {
         wsprTransmitter.enableTransmission();
         last_transmit = true;
-        llog.logS(INFO, "DMA setup complete, waiting for next transmission window.");
+        llog.logS(INFO, "Setup complete, waiting for next transmission window.");
     }
     else if (config.transmit != last_transmit)
     {
