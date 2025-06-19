@@ -257,7 +257,8 @@
         "variant": "cpp",
         "numbers": "cpp",
         "semaphore": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "*.tpp": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
