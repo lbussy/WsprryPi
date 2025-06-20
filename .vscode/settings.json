@@ -258,7 +258,8 @@
         "numbers": "cpp",
         "semaphore": "cpp",
         "span": "cpp",
-        "*.tpp": "cpp"
+        "*.tpp": "cpp",
+        "ioctl.h": "c"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

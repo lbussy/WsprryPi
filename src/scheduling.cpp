@@ -620,6 +620,8 @@ bool wspr_loop()
                              { return exitwspr_ready; });
         }
 
+        // TODO: LED stays on, other wierdness on shutdown.
+
         llog.logS(DEBUG, "WSPR Loop terminating.");
 
         // -------------------------------------------------------------------------
