@@ -314,6 +314,7 @@ install: release
 	$(Q)sudo systemctl stop $(OUT).service || true
 	$(Q)sudo install -d $(PREFIX)
 	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/$(OUT)
+	$(Q)sudo systemctl enable $(OUT).service || true
 	$(Q)sudo systemctl start $(OUT).service || true
 	$(Q)echo "Installation complete."
 

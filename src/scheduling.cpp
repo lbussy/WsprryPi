@@ -839,6 +839,11 @@ void set_config(bool initial)
         last_freq = current_frequency;
         do_config = true;
     }
+    else if (config.use_offset && current_frequency != 0.0)
+    {
+        // Allow randomization as/if needed
+        // TODO: do_config = true; (currently doesn't cleanup properly)
+    }
 
     // If we are going to transmit and we have a change, do setup
     if (do_config && config.transmit)
