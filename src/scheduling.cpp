@@ -273,7 +273,7 @@ void ppm_callback(double /*new_ppm*/)
     // Now that Chrony has produced a PPM value, we know time is valid.
     if (!config.ntp_good)
     {
-        llog.logS(INFO, "Chrony service has updated its initial value.");
+        llog.logS(DEBUG, "Chrony service has updated its initial value.");
         config.ntp_good = true;
     }
 }
@@ -301,7 +301,7 @@ bool ppm_init()
     // If Chrony is active, assume time is synced
     if (ppmManager.isChronyAlive())
     {
-        llog.logS(INFO, "Chrony service is active.");
+        llog.logS(DEBUG, "Chrony service is active.");
         retval = true;
     }
 
