@@ -84,7 +84,7 @@ struct ArgParserConfig
     std::string callsign;    ///< WSPR callsign.
     std::string grid_square; ///< 4- or 6-character Maidenhead locator.
     int power_dbm;           ///< Transmit power in dBm.
-    std::string frequencies; ///< Comma-separated frequency list.
+    std::string frequencies; ///< Space-separated frequency list.
     int tx_pin;              ///< GPIO pin number for RF transmit control.
 
     // Extended
