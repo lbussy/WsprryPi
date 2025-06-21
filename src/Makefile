@@ -32,6 +32,13 @@ DEBUG := -DDEBUG_WSPR
 CXXVER := 17
 # Prefix for executing tests, "sudo" if required (comment out "sudo" if not)
 SUDO := sudo
+# INI File(s)
+# INI_FILE :=   ../../../config/wsprrypi.ini # Repo INI file
+INI_FILE := /usr/local/etc/wsprrypi.ini	# System INI file
+# WSPR Parameters
+WSPR_PARAMS := AA0NT EM18 20 40m
+# Test Frequency
+TEST_FREQ := 730000 # Frequency for test tone
 
 # Add any required submodules by their src path
 SUBMODULE_SRCDIRS := $(wildcard ./Broadcom-Mailbox/src)
@@ -62,27 +69,22 @@ VER := $(VER)$(PRE)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # Get exact version tag
 VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
-
 # Output Items
 OUT := $(EXE_NAME)						# Git Repo-Based Name
 TEST_OUT := $(EXE_NAME)_debug			# Git Repo-Based Name for debug
-# Strip whitespace from comments
+
+# Strip whitespace from file names
 OUT := $(strip $(OUT))
 TEST_OUT := $(strip $(TEST_OUT))
-
-# INI File(s)
-#INI_FILE :=   ../../../config/wsprrypi.ini	# INI file for test target
-INI_FILE := /usr/local/etc/wsprrypi.ini	# INI file for system version
-# Strip whitespace from comments
+# Strip whitespace from INI
 INI_FILE := $(strip $(INI_FILE))
+# Strip whitespace from WSPR parameters
+WSPR_PARAMS:= $(strip $(WSPR_PARAMS))
+# Strip whitespace from test frequency
+TEST_FREQ := $(strip $(TEST_FREQ))
 
 # Install Location
 PREFIX := /usr/local/bin
-
-# Test Frequency
-TEST_FREQ := 730000						# Frequency for test tone
-# Strip whitespace from comments
-TEST_FREQ := $(strip $(TEST_FREQ))
 
 # Output directories
 OBJ_DIR_RELEASE = build/obj/release
@@ -299,7 +301,7 @@ test-tone: debug
 .PHONY: test-oneshot
 test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
-	$(Q)sudo ./build/bin/$(TEST_OUT) -D -x 1 AA0NT EM18 20 40m
+	$(Q)sudo ./build/bin/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
 # Test target with GDB
 .PHONY: gdb
