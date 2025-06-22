@@ -4,7 +4,7 @@
  *        and back to Hz, validate frequencies, and translate terms like
  *        "20m" to a valid WSPR frequency.
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2025 Lee C. Bussy (@LBussy). All rights reserved.

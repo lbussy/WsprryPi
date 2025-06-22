@@ -2,7 +2,7 @@
  * @file scheduling.cpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -273,7 +273,7 @@ void ppm_callback(double /*new_ppm*/)
     // Now that Chrony has produced a PPM value, we know time is valid.
     if (!config.ntp_good)
     {
-        llog.logS(INFO, "Chrony service has updated it's initial value.");
+        llog.logS(DEBUG, "Chrony service has updated its initial value.");
         config.ntp_good = true;
     }
 }
@@ -301,7 +301,7 @@ bool ppm_init()
     // If Chrony is active, assume time is synced
     if (ppmManager.isChronyAlive())
     {
-        llog.logS(INFO, "Chrony service is active.");
+        llog.logS(DEBUG, "Chrony service is active.");
         retval = true;
     }
 
@@ -620,6 +620,8 @@ bool wspr_loop()
                              { return exitwspr_ready; });
         }
 
+        // TODO: LED stays on, other wierdness on shutdown.
+
         llog.logS(DEBUG, "WSPR Loop terminating.");
 
         // -------------------------------------------------------------------------
@@ -837,6 +839,11 @@ void set_config(bool initial)
         last_freq = current_frequency;
         do_config = true;
     }
+    else if (config.use_offset && current_frequency != 0.0)
+    {
+        // Allow randomization as/if needed
+        // TODO: do_config = true; (currently doesn't cleanup properly)
+    }
 
     // If we are going to transmit and we have a change, do setup
     if (do_config && config.transmit)
@@ -864,7 +871,7 @@ void set_config(bool initial)
     {
         wsprTransmitter.enableTransmission();
         last_transmit = true;
-        llog.logS(INFO, "DMA setup complete, waiting for next transmission window.");
+        llog.logS(INFO, "Setup complete, waiting for next transmission window.");
     }
     else if (config.transmit != last_transmit)
     {

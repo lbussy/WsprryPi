@@ -2,7 +2,7 @@
  * @file scheduling.hpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.

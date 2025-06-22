@@ -2,7 +2,7 @@
  * @file logging.hpp
  * @brief Handles management of the LCBLog logging utility.
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.

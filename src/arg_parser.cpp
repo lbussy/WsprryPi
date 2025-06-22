@@ -2,7 +2,7 @@
  * @file arg_parser.cpp
  * @brief Command-line argument parser and configuration handler.
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -551,19 +551,30 @@ bool validate_config_data()
         llog.logS(INFO, "- Callsign:", config.callsign);
         llog.logS(INFO, "- Locator:", config.grid_square);
         llog.logS(INFO, "- Power:", config.power_dbm, " dBm");
-        llog.logS(INFO, "Requested TX frequencies:");
 
-        // Concatenate frequency messages for logging
-        for (const auto &freq : config.center_freq_set)
+        // total number of entries (including any 0.0 ones)
+        if (config.center_freq_set.size() > 1)
         {
-            if (freq == 0.0)
+            // Print frequency list
+            llog.logS(INFO, "Requested TX frequencies:");
+
+            // Concatenate frequency messages for logging
+            for (const auto &freq : config.center_freq_set)
             {
-                llog.logS(INFO, "- Skip (0.0)");
+                if (freq == 0.0)
+                {
+                    llog.logS(INFO, "- Skip (0.0)");
+                }
+                else
+                {
+                    llog.logS(INFO, "- ", lookup.freq_display_string(freq));
+                }
             }
-            else
-            {
-                llog.logS(INFO, "- ", lookup.freq_display_string(freq));
-            }
+        }
+        else
+        {
+            // Print single frequency
+            llog.logS(INFO, "Requested TX frequency:", lookup.freq_display_string(config.center_freq_set[0]));
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode
@@ -575,7 +586,8 @@ bool validate_config_data()
             }
             else
             {
-                if (config.tx_iterations.load() <= 0) {
+                if (config.tx_iterations.load() <= 0)
+                {
                     config.tx_iterations.store(1);
                     config.transmit = true;
                 }
@@ -615,13 +627,16 @@ bool set_frequencies()
 {
     // Safely read the raw frequency string (accessor may throw).
     std::string raw_list;
-    try {
+    try
+    {
         raw_list = config.frequencies;
-    } catch (const std::exception &e) {
+    }
+    catch (const std::exception &e)
+    {
         llog.logE(WARN, "Failed to read frequency list:", e.what());
         raw_list.clear();
     }
-    llog.logS(DEBUG, "Parsing raw:" , raw_list);
+    llog.logS(DEBUG, "Parsing raw:", raw_list);
 
     // Tokenize on whitespace.
     std::istringstream iss(raw_list);
@@ -630,21 +645,25 @@ bool set_frequencies()
     config.center_freq_set.clear();
 
     std::string token;
-    while (iss >> token) {
-        try {
+    while (iss >> token)
+    {
+        try
+        {
             // Parse each token to a double (Hz) and validate against known bands.
             double freq = lookup.parse_string_to_frequency(token, /*validate=*/true);
             llog.logS(DEBUG, "Pushing back:", freq);
             config.center_freq_set.push_back(freq);
         }
-        catch (const std::invalid_argument &e) {
+        catch (const std::invalid_argument &e)
+        {
             // Log and skip invalid entries.
             llog.logE(WARN, "Ignoring invalid frequency token:", token);
         }
     }
 
     // Ensure we have at least one valid frequency.
-    if (config.center_freq_set.empty() && config.mode == ModeType::WSPR) {
+    if (config.center_freq_set.empty() && config.mode == ModeType::WSPR)
+    {
         llog.logE(ERROR, "Empty or invalid frequency list; disabling transmission.");
         config.transmit = false;
         return false;
@@ -870,9 +889,9 @@ bool parse_command_line(int argc, char *argv[])
         {"offset", no_argument, nullptr, 'o'},        // Via: [Extended] Offset = True
         {"date-time-log", no_argument, nullptr, 'D'}, // Global: config.date_time_log
         // Required arguments
-        {"ppm", required_argument, nullptr, 'p'},             // Via: [Extended] PPM = 0.0
-        {"terminate", required_argument, nullptr, 'x'},       // Global: config.tx_iterations
-        {"test-tone", required_argument, nullptr, 't'},       // Global: config.test_tone
+        {"ppm", required_argument, nullptr, 'p'},       // Via: [Extended] PPM = 0.0
+        {"terminate", required_argument, nullptr, 'x'}, // Global: config.tx_iterations
+        {"test-tone", required_argument, nullptr, 't'}, // Global: config.test_tone
         // Not yet imeplemented: {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
@@ -953,7 +972,7 @@ bool parse_command_line(int argc, char *argv[])
             {
                 try
                 {
-                    config.tx_iterations.store( std::stoi(optarg) );
+                    config.tx_iterations.store(std::stoi(optarg));
                 }
                 catch (const std::invalid_argument &)
                 {
