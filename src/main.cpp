@@ -75,7 +75,7 @@ void callback_signal_handler(int signum, bool is_critical)
     std::string_view signal_name = SignalHandler::signalToString(signum);
     if (!is_critical)
     {
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
         llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
         {
             std::lock_guard<std::mutex> lk(exitwspr_mtx);

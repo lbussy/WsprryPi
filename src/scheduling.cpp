@@ -458,7 +458,7 @@ void start_test_tone()
         {
             llog.logS(INFO, "Stopping an in-process message early.");
         }
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
 
         // Pick the “first” frequency
         auto freq = next_frequency(/*restart=*/true);
@@ -497,7 +497,7 @@ void end_test_tone()
         llog.logS(INFO, "Ending test tone requested by Web UI.");
 
         // Stop current tone
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
         send_ws_message("transmit", "finished");
         ledControl.toggleGPIO(false);
 
@@ -628,7 +628,7 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.shutdownTransmitter();
+    wsprTransmitter.stop(); // Stop the transitter threads
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
     ledControl.stop();      // Stop LED driver
