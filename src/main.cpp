@@ -75,7 +75,7 @@ void callback_signal_handler(int signum, bool is_critical)
     std::string_view signal_name = SignalHandler::signalToString(signum);
     if (!is_critical)
     {
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
         llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
         {
             std::lock_guard<std::mutex> lk(exitwspr_mtx);
@@ -109,7 +109,15 @@ void callback_signal_handler(int signum, bool is_critical)
  */
 int main(int argc, char *argv[])
 {
+    // Maintain retval for main()
     int retval = EXIT_SUCCESS;
+
+    // Register signal handlers for safe shutdown and terminal management.
+    block_signals();
+    signalHandler.setCallback(callback_signal_handler);
+    signalHandler.start();
+    signalHandler.setPriority(SCHED_RR, 40);
+
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
@@ -149,12 +157,6 @@ int main(int argc, char *argv[])
 
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
-
-    // Register signal handlers for safe shutdown and terminal management.
-    block_signals();
-    signalHandler.setCallback(callback_signal_handler);
-    signalHandler.start();
-    signalHandler.setPriority(SCHED_RR, 40);
 
     // Startup WSPR loop
     try
