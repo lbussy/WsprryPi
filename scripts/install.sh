@@ -207,9 +207,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0.1_Beta.5}"
-declare GIT_TAG="${GIT_TAG:-2.0.1_Beta.5}"
-declare SEM_VER="${SEM_VER:-2.0.1_Beta.5}"
+declare REPO_BRANCH="${REPO_BRANCH:-mbox_errors}"
+declare GIT_TAG="${GIT_TAG:-mbox_errors}"
+declare SEM_VER="${SEM_VER:-mbox_errors}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -518,12 +518,12 @@ declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 # @example
 # LOG_LEVEL="ERROR" ./install.sh  # Force log level to ERROR.
 # -----------------------------------------------------------------------------
-: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null \
-                      | grep -Eq '^(main|master)$'; then
-                   echo INFO
-                 else
-                   echo DEBUG
-                 fi)}"
+: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null |
+    grep -Eq '^(main|master)$'; then
+    echo INFO
+else
+    echo DEBUG
+fi)}"
 declare LOG_LEVEL
 
 # -----------------------------------------------------------------------------
@@ -5038,12 +5038,12 @@ remove_legacy_services() {
 
             if systemctl is-active --quiet "$full" 2>/dev/null; then
                 exec_command "Stopping ${full}" \
-                             "systemctl stop ${full}"   "$debug"
+                    "systemctl stop ${full}" "$debug"
             fi
 
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
                 exec_command "Disabling ${full}" \
-                             "systemctl disable ${full}" "$debug"
+                    "systemctl disable ${full}" "$debug"
             fi
         done
 
@@ -5053,15 +5053,15 @@ remove_legacy_services() {
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}"       "$debug"
+                        "rm -f -- ${unit_file}" "$debug"
                 fi
             done
         done
     done
 
     # final cleanup
-    exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
-    exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
+    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
+    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5239,7 +5239,12 @@ manage_exe() {
     local executable exe_name source_path exe_path
 
     # Get from args or associative array
-    executable="$1"
+    # If we are not in "main" use the debug executable
+    if [[ "$REPO_BRANCH" == "main" ]]; then
+        executable="$1"
+    else
+        executable="${1}_debug"
+    fi
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
     source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
@@ -5513,7 +5518,7 @@ upgrade_ini() {
       }
       print
     }
-    ' "$old_ini" "$new_ini" > "$merged_ini" 2> /tmp/upgrade_ini.err; then
+    ' "$old_ini" "$new_ini" >"$merged_ini" 2>/tmp/upgrade_ini.err; then
         rc=$?
         # Capture the errors
         local err_details
@@ -5900,7 +5905,9 @@ manage_sound() {
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
 manage_apache() {
-    local debug; debug=$(debug_start "$@");  eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
     local sn="$DEFAULT_SERVERNAME"
 
@@ -5946,26 +5953,26 @@ EOF
 " "$debug"
 
             # Turn sites on/off
-            exec_command "Enable Apache modules"     "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
-            exec_command "Disabling default site"    "a2dissite 000-default.conf" "$debug"
-            exec_command "Enabling wsprrypi site"    "a2ensite wsprrypi.conf" "$debug"
+            exec_command "Enable Apache modules" "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
+            exec_command "Disabling default site" "a2dissite 000-default.conf" "$debug"
+            exec_command "Enabling wsprrypi site" "a2ensite wsprrypi.conf" "$debug"
 
         else
             logW "Stock Apache page not found at $TARGET_FILE; skipping install." "$debug"
         fi
 
-    else  # ACTION=uninstall
+    else # ACTION=uninstall
 
-        exec_command "Disabling wsprrypi site"      "a2dissite wsprrypi.conf"     "$debug"
-        exec_command "Re-enabling default site"     "a2ensite 000-default.conf"   "$debug"
-        exec_command "Removing site config"         "rm -f $site_conf"            "$debug"
+        exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
+        exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
+        exec_command "Removing site config" "rm -f $site_conf" "$debug"
         exec_command "Removing ServerName directive" \
-                     "sed -i '/^$sn/d' $APACHE_CONF"  "$debug"
+            "sed -i '/^$sn/d' $APACHE_CONF" "$debug"
     fi
 
     # Final sanity-check + reload
-    exec_command "Testing Apache configuration"   "apache2ctl configtest"       "$debug"
-    exec_command "Reloading Apache"               "systemctl reload apache2"    "$debug"
+    exec_command "Testing Apache configuration" "apache2ctl configtest" "$debug"
+    exec_command "Reloading Apache" "systemctl reload apache2" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5988,9 +5995,8 @@ is_stock_apache_page() {
 
     # common stock-page phrases (Ubuntu/Debian, RHEL/CentOS, generic)
     if grep -qiE \
-       'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
-       "$file"
-    then
+        'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
+        "$file"; then
         debug_end "$debug"
         return 0
     else
@@ -6034,8 +6040,8 @@ cleanup_files_in_directories() {
     # Always cleanup merged INI if it exists
     if [[ -f "$dest_root/config/wsprrypi_merged.ini" ]]; then
         exec_command "Delete merged INI source" \
-                    "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
-                    "$debug" || {
+            "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
+            "$debug" || {
             logE "Failed to delete local install files."
             debug_end "$debug"
             return 1
@@ -6228,30 +6234,30 @@ manage_wsprry_pi() {
     # Select the execution order based on the action
     local group_to_execute=()
     case "$ACTION" in
-        install)
-            debug_print "(INSTALL) Creating group_to_execute list (after processing):" "$debug"
-            group_to_execute=("${install_group[@]}")
-            ;;
-        uninstall)
-            debug_print "(UNINSTALL) Reversing and filtering install_group…" "$debug"
+    install)
+        debug_print "(INSTALL) Creating group_to_execute list (after processing):" "$debug"
+        group_to_execute=("${install_group[@]}")
+        ;;
+    uninstall)
+        debug_print "(UNINSTALL) Reversing and filtering install_group…" "$debug"
 
-            # Build a regex like: git_clone|remove_legacy_services|remove_legacy_files_and_dirs|cleanup_files_in_directories
-            local skip_regex
-            skip_regex=$(printf "|%s" "${skip_on_uninstall[@]}")
-            skip_regex=${skip_regex:1}
+        # Build a regex like: git_clone|remove_legacy_services|remove_legacy_files_and_dirs|cleanup_files_in_directories
+        local skip_regex
+        skip_regex=$(printf "|%s" "${skip_on_uninstall[@]}")
+        skip_regex=${skip_regex:1}
 
-            # Reverse and drop any line that starts with a skip-name
-            mapfile -t group_to_execute < <(
-                printf '%s\n' "${install_group[@]}" |
-                  { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
-                  grep -v -E "^($skip_regex)( |$)"
-            )
-            # Re-add manage_sound at the very end
-            group_to_execute+=( "manage_sound" )
-            ;;
-        *)
-            die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
-            ;;
+        # Reverse and drop any line that starts with a skip-name
+        mapfile -t group_to_execute < <(
+            printf '%s\n' "${install_group[@]}" |
+                { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}'; } |
+                grep -v -E "^($skip_regex)( |$)"
+        )
+        # Re-add manage_sound at the very end
+        group_to_execute+=("manage_sound")
+        ;;
+    *)
+        die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
+        ;;
     esac
 
     # Debug print the final group_to_execute list
