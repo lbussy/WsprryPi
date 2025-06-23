@@ -582,73 +582,74 @@ bool wspr_loop()
 
     // Set transmission event callbacks
     wsprTransmitter.setTransmissionCallbacks(
-        [](const WsprTransmitter::CallbackArg &arg) {
+        [](const WsprTransmitter::CallbackArg &arg)
+        {
             callback_transmission_started(std::get<double>(arg));
         },
-        [](const WsprTransmitter::CallbackArg &arg) {
+        [](const WsprTransmitter::CallbackArg &arg)
+        {
             callback_transmission_complete(std::get<std::string>(arg));
-        }
-    );
+        });
 
-        // Wait for something to happen
+    // Wait for something to happen
 
-        llog.logS(INFO, "WSPR loop running.");
+    llog.logS(INFO, "WSPR loop running.");
 
-        // Set pending config flags and do initial config
-        ini_reload_pending.store(true, std::memory_order_relaxed);
-        ppm_reload_pending.store(true, std::memory_order_relaxed);
-        if (config.mode == ModeType::WSPR)
-        {
-            // Set up WSPR transmissions
-            set_config(true); // Handles get next (or only) frequency, PPM, and setup
-        }
-        else
-        {
-            // Setup test tone
-            validate_config_data();
-            wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
-            wsprTransmitter.enableTransmission();
-            llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
-        }
+    // Set pending config flags and do initial config
+    ini_reload_pending.store(true, std::memory_order_relaxed);
+    ppm_reload_pending.store(true, std::memory_order_relaxed);
+    if (config.mode == ModeType::WSPR)
+    {
+        // Set up WSPR transmissions
+        set_config(true); // Handles get next (or only) frequency, PPM, and setup
+    }
+    else
+    {
+        // Setup test tone
+        validate_config_data();
+        wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
+        wsprTransmitter.enableTransmission();
+        llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
+    }
 
-        // -------------------------------------------------------------------------
-        // Loop (block wspr_loop only) until shutdown is triggered
-        // -------------------------------------------------------------------------
-        {
-            std::unique_lock<std::mutex> lk(exitwspr_mtx);
-            exitwspr_cv.wait(lk, []
-                             { return exitwspr_ready; });
-        }
+    // -------------------------------------------------------------------------
+    // Loop (block wspr_loop only) until shutdown is triggered
+    // -------------------------------------------------------------------------
+    {
+        std::unique_lock<std::mutex> lk(exitwspr_mtx);
+        exitwspr_cv.wait(lk, []
+                         { return exitwspr_ready; });
+    }
 
-        // TODO: LED stays on, other wierdness on shutdown.
+    // TODO: LED stays on, other wierdness on shutdown.
 
-        llog.logS(DEBUG, "WSPR Loop terminating.");
+    llog.logS(DEBUG, "WSPR Loop terminating.");
 
-        // -------------------------------------------------------------------------
-        // Shutdown and cleanup
-        // -------------------------------------------------------------------------
-        wsprTransmitter.shutdownTransmitter();
-        ppmManager.stop();      // Stop PPM manager (if active)
-        iniMonitor.stop();      // Stop config file monitor
-        ledControl.stop();      // Stop LED driver
-        shutdownMonitor.stop(); // Stop shutdown GPIO monitor
-        webServer.stop();       // Stop web server
-        socketServer.stop();    // Stop the socket server
+    // -------------------------------------------------------------------------
+    // Shutdown and cleanup
+    // -------------------------------------------------------------------------
+    wsprTransmitter.shutdownTransmitter();
+    ppmManager.stop();      // Stop PPM manager (if active)
+    iniMonitor.stop();      // Stop config file monitor
+    ledControl.stop();      // Stop LED driver
+    shutdownMonitor.stop(); // Stop shutdown GPIO monitor
+    webServer.stop();       // Stop web server
+    socketServer.stop();    // Stop the socket server
 
-        llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
+    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
 
-        if (reboot_flag.load())
-        {
-            llog.logS(INFO, "Rebooting.");
-            reboot_machine();
-        }
-        if (shutdown_flag.load())
-        {
-            llog.logS(INFO, "Shutting down.");
-            shutdown_machine();
-        }
+    if (reboot_flag.load())
+    {
+        llog.logS(INFO, "Rebooting.");
+        reboot_machine();
+    }
+    if (shutdown_flag.load())
+    {
+        llog.logS(INFO, "Shutting down.");
+        shutdown_machine();
+    }
 
-        return true;
+    return true;
 }
 
 /**
@@ -798,11 +799,13 @@ double next_frequency(bool initial = false)
 void set_config(bool initial)
 {
     bool do_config = false;
+    bool do_random = false;
     if (initial)
     {
         do_config = true;
-        freq_iterator = 0;       // Reset iterator
-        current_frequency = 0.0; // Zero out freq
+        freq_iterator = 0;                     // Reset iterator
+        current_frequency = 0.0;               // Zero out freq
+        wsprTransmitter.disableTransmission(); // Shutdown if running
     }
 
     // Update PPM if a change was noted
@@ -842,16 +845,13 @@ void set_config(bool initial)
     else if (config.use_offset && current_frequency != 0.0)
     {
         // Allow randomization as/if needed
-        // TODO: do_config = true; (currently doesn't cleanup properly)
+        do_random = true;
     }
 
-    // If we are going to transmit and we have a change, do setup
-    if (do_config && config.transmit)
+    // If we have a change, do setup
+    if (do_config || do_random)
     {
-        // Disable before we (re)set config or PPM
-        wsprTransmitter.disableTransmission();
-
-        // Do DMA configuration
+        // Do DMA configuration (calls disableTransmission() internally)
         wsprTransmitter.setupTransmission(
             current_frequency,
             config.power_level,
@@ -867,11 +867,18 @@ void set_config(bool initial)
 
     // Enable/disable transmit if/as needed
     static bool last_transmit = false;
-    if (config.transmit && do_config)
+    if (config.transmit && (do_config || do_random))
     {
         wsprTransmitter.enableTransmission();
         last_transmit = true;
-        llog.logS(INFO, "Setup complete, waiting for next transmission window.");
+        if (do_random)
+        {
+            llog.logS(DEBUG, "New random frequency, waiting for next transmission window.");
+        }
+        else
+        {
+            llog.logS(INFO, "Setup complete, waiting for next transmission window.");
+        }
     }
     else if (config.transmit != last_transmit)
     {
