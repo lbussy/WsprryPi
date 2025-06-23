@@ -866,11 +866,9 @@ void set_config(bool initial)
     ppm_reload_pending.store(false, std::memory_order_relaxed);
 
     // Enable/disable transmit if/as needed
-    static bool last_transmit = false;
     if (config.transmit && (do_config || do_random))
     {
         wsprTransmitter.enableTransmission();
-        last_transmit = true;
         if (do_random)
         {
             llog.logS(DEBUG, "New random frequency, waiting for next transmission window.");
@@ -880,10 +878,9 @@ void set_config(bool initial)
             llog.logS(INFO, "Setup complete, waiting for next transmission window.");
         }
     }
-    else if (config.transmit != last_transmit)
+    else if (!config.transmit)
     {
         wsprTransmitter.disableTransmission();
-        last_transmit = false;
         llog.logS(INFO, "Transmissions disabled.");
     }
 }
