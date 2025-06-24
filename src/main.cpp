@@ -177,8 +177,6 @@ int main(int argc, char *argv[])
         retval = EXIT_FAILURE;
     }
 
-    llog.logS(INFO, get_project_name(), "exiting.");
-
     // Stop the SignalHandler.
     signalHandler.stop();
 

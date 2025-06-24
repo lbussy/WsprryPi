@@ -649,6 +649,8 @@ bool wspr_loop()
         shutdown_machine();
     }
 
+    llog.logS(INFO, get_project_name(), "exiting.");
+
     return true;
 }
 
