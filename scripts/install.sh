@@ -232,10 +232,16 @@ declare OPTIONS_LIST=()   # List of -f--fl arguments for command line parsing
 readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "systemd")}"
 
 # -----------------------------------------------------------------------------
+# @var WSPR_SERVICE
+# @brief The systemd service name for WsprryPi.
+# @details This variable holds the name of the main WsprryPi service that
+#          will be installed in `/etc/systemd/system/`.
+#
 # @var WSPR_EXE
 # @brief The executable name for WsprryPi.
 # @details This variable holds the name of the main WsprryPi executable that
-#          will be installed in `/usr/local/bin/` and used for signal processing.
+#          will be installed in `/usr/local/bin/` and used for signal
+#          processing.  Branches != main will use the debug version.
 #
 # @var WSPR_INI
 # @brief The configuration file for WsprryPi.
@@ -244,12 +250,14 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 #
 # @var LOG_ROTATE
 # @brief The log rotation configuration file.
-# @details This variable defines the logrotate configuration file, used to manage
-#          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
+# @details This variable defines the logrotate configuration file, used to
+#          manage WsprryPi logs under `/var/log/wsprrypi/` by limiting file
+#          size and retention.
 # -----------------------------------------------------------------------------
-readonly WSPR_EXE="wsprrypi"
+readonly WSPR_SERVICE="wsprrypi"
+# shellcheck disable=SC2155
+readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
 readonly WSPR_INI="wsprrypi.ini"
-declare OLD_INI=""
 readonly LOG_ROTATE="logrotate.conf"
 
 # -----------------------------------------------------------------------------
@@ -496,13 +504,13 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # @brief Specifies the path to the log file.
 #
 # @details Uses the environment variable LOG_FILE if set; otherwise defaults
-#          to "$USER_HOME/$WSPR_EXE.log", where USER_HOME is the user's home
-#          directory and WSPR_EXE is the executable name.
+#          to "$USER_HOME/$WSPR_SERVICE.log", where USER_HOME is the user's home
+#          directory and WSPR_SERVICE is the executable name.
 #
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
+declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_SERVICE.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
@@ -748,6 +756,7 @@ declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
 # @default "/var/log/apache_tool.log"
 # @example DEFAULT_LOG_FILE="/var/log/custom_installer.log" ./install.sh
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
 declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
 
 # -----------------------------------------------------------------------------
@@ -1847,6 +1856,7 @@ replace_string_in_script() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 pause() {
     # Prompt the user
     printf "Press any key to continue..."
@@ -4547,7 +4557,7 @@ exec_command() {
     failed_pre+=":"
 
     # Print ephemeral “Running” line
-    printf "%b[-]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
     # Optionally ensure it shows up (especially if the command is super fast):
     sleep 0.02
 
@@ -4575,9 +4585,9 @@ exec_command() {
 
     # Print final success/fail
     if [[ $status -eq 0 ]]; then
-        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+        printf "%b[  ✔  ]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
     else
-        printf "%b[✘]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
+        printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
         # If specifically “command not found” exit code:
         if [[ $status -eq 127 ]]; then
             warn "Command not found: $exec_process"
@@ -4748,7 +4758,7 @@ ARGUMENTS_LIST=(
 # -----------------------------------------------------------------------------
 OPTIONS_LIST=(
     "-h|--help 0 usage Show these instructions 1"
-    "-v|--version 0 version Display $WSPR_EXE version 1"
+    "-v|--version 0 version Display $WSPR_SERVICE version 1"
 )
 
 # -----------------------------------------------------------------------------
@@ -5239,12 +5249,7 @@ manage_exe() {
     local executable exe_name source_path exe_path
 
     # Get from args or associative array
-    # If we are not in "main" use the debug executable
-    if [[ "$REPO_BRANCH" == "main" ]]; then
-        executable="$1"
-    else
-        executable="${1}_debug"
-    fi
+    executable="$1"
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
     source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
@@ -5578,6 +5583,7 @@ manage_service() {
     fi
 
     # Get from args
+    # shellcheck disable=SC2034
     local daemon_exe="$1"
     local exec_start="$2"
     local use_syslog="$3"
@@ -5592,8 +5598,7 @@ manage_service() {
     local log_std_out
     local retval=0 # Initialize return value
 
-    daemon_name="${daemon_exe##*/}" # Remove path
-    daemon_name="${daemon_name%.*}" # Remove extension (only if there is one)
+    daemon_name="${WSPR_SERVICE}" # Remove path
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
     # Install under /etc so it overrides anything in /lib
@@ -5904,6 +5909,7 @@ manage_sound() {
 # @param  $@                 optional debug flags
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 manage_apache() {
     local debug
     debug=$(debug_start "$@")
@@ -5983,6 +5989,7 @@ EOF
 # @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
 # @return   0 if it looks like the stock Apache page, 1 otherwise.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 is_stock_apache_page() {
     local debug
     debug=$(debug_start "$@")
@@ -6027,7 +6034,7 @@ is_stock_apache_page() {
 # @example
 #   cleanup_files_in_directories "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 cleanup_files_in_directories() {
     local debug
     debug=$(debug_start "$@")
@@ -6083,7 +6090,7 @@ cleanup_files_in_directories() {
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
 # @global REPO_TITLE The display name of the repository.
-# @global WSPR_EXE The executable name for WsprryPi.
+# @global WSPR_SERVICE The executable name for WsprryPi.
 #
 # @param $1 The overall success or failure status (0 for success, 1 for failure).
 # @param $2 Debug flag for enabling or disabling debug output.
@@ -6095,7 +6102,7 @@ cleanup_files_in_directories() {
 # @example
 #   finish_script 0 "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 finish_script() {
     local debug
     debug=$(debug_start "$@")
@@ -6174,7 +6181,7 @@ finish_script() {
 #          for uninstallation. Certain functions are skipped during uninstall.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
-# @global WSPR_EXE The executable name for WsprryPi.
+# @global WSPR_SERVICE The executable name for WsprryPi.
 # @global WSPR_INI The configuration file name for WsprryPi.
 # @global WSPR_WATCH_EXE The WsprryPi watch executable.
 # @global REPO_NAME The repository name for log file management.
@@ -6189,7 +6196,7 @@ finish_script() {
 # @example
 #   manage_wsprry_pi "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 manage_wsprry_pi() {
     local debug
     debug=$(debug_start "$@")
@@ -6247,6 +6254,7 @@ manage_wsprry_pi() {
         skip_regex=${skip_regex:1}
 
         # Reverse and drop any line that starts with a skip-name
+        # shellcheck disable=SC2015
         mapfile -t group_to_execute < <(
             printf '%s\n' "${install_group[@]}" |
                 { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}'; } |
