@@ -314,6 +314,7 @@ gdb: debug
 install: release
 	$(Q)echo "Installing $(OUT) to $(PREFIX)."
 	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo bash -c 'echo > /var/log/wsprrypi/wsprrypi_log' || true
 	$(Q)sudo install -d $(PREFIX)
 	$(Q)sudo install -m 755 build/bin/$(OUT) $(PREFIX)/$(OUT)
 	$(Q)sudo systemctl enable $(OUT).service || true

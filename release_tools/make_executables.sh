@@ -18,6 +18,7 @@ set -euo pipefail
 # @return None.
 # -----------------------------------------------------------------------------
 main() {
+    clear
     # Detect the repository root directory
     local repo_root
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null) \
@@ -27,14 +28,11 @@ main() {
     # Navigate to the src directory under the repo root
     cd "$repo_root/src" \
         || die "Failed to change directory to '$repo_root/src'."
-    echo "Changed directory to '$repo_root/src'."
 
     # Run the build pipeline
-    clear
     make clean
     make debug
     make release
-    make install
 
     # Copy the generated wsprrypi executables
     cp ./build/bin/wsprrypi* ../executables/ \
