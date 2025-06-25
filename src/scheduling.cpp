@@ -649,6 +649,8 @@ bool wspr_loop()
         shutdown_machine();
     }
 
+    llog.logS(INFO, get_project_name(), "exiting.");
+
     return true;
 }
 
@@ -871,12 +873,13 @@ void set_config(bool initial)
         wsprTransmitter.enableTransmission();
         if (do_random)
         {
-            llog.logS(DEBUG, "New random frequency, waiting for next transmission window.");
+            llog.logS(DEBUG, "New random frequency.");
         }
         else
         {
-            llog.logS(INFO, "Setup complete, waiting for next transmission window.");
+            llog.logS(DEBUG, "Setup complete.");
         }
+        llog.logS(INFO, "Waiting for next transmission window.");
     }
     else if (!config.transmit)
     {
