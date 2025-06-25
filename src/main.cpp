@@ -75,8 +75,8 @@ void callback_signal_handler(int signum, bool is_critical)
     std::string_view signal_name = SignalHandler::signalToString(signum);
     if (!is_critical)
     {
-        wsprTransmitter.stop();
-        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
+        exiting.store(true, std::memory_order_relaxed);
+        llog.logS(DEBUG, "Intercepted signal, shutdown will proceed:", signal_name);
         {
             std::lock_guard<std::mutex> lk(exitwspr_mtx);
             exitwspr_ready = true;
@@ -154,9 +154,6 @@ int main(int argc, char *argv[])
     llog.logS(INFO, get_version_string());
     llog.logS(INFO, "Running on:", get_pi_model(), ".");
     llog.logS(INFO, "Process PID:", getpid());
-
-    // Display the final configuration after parsing arguments and INI file.
-    show_config_values();
 
     // Startup WSPR loop
     try

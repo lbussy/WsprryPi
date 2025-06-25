@@ -80,6 +80,11 @@ std::mutex exitwspr_mtx;
 std::condition_variable exitwspr_cv;
 
 /**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+std::atomic<bool> exiting = false;
+
+/**
  * @brief Flag indicating whether the WSPR loop should terminate.
  *
  * Set to \c true by the signal handler callback under protection of
@@ -543,16 +548,13 @@ void end_test_tone()
  */
 bool wspr_loop()
 {
+    // Display the final configuration after parsing arguments and INI file.
+    show_config_values();
+
+    // Start NTP (chrony) monitoring
     if (config.use_ntp)
     {
         ppm_init();
-    }
-
-    if (config.use_ini)
-    {
-        // Start INI monitor
-        iniMonitor.filemon(config.ini_filename, callback_ini_changed);
-        iniMonitor.setPriority(SCHED_RR, 10);
     }
 
     // Start web server and set priority
@@ -591,7 +593,13 @@ bool wspr_loop()
             callback_transmission_complete(std::get<std::string>(arg));
         });
 
-    // Wait for something to happen
+    // Monitor INI file for changes
+    if (config.use_ini)
+    {
+        // Start INI monitor
+        iniMonitor.filemon(config.ini_filename, callback_ini_changed);
+        iniMonitor.setPriority(SCHED_RR, 10);
+    }
 
     llog.logS(INFO, "WSPR loop running.");
 
@@ -618,7 +626,9 @@ bool wspr_loop()
     {
         std::unique_lock<std::mutex> lk(exitwspr_mtx);
         exitwspr_cv.wait(lk, []
-                         { return exitwspr_ready; });
+                         {
+                              exiting.store(true, std::memory_order_relaxed);
+                              return exitwspr_ready; });
     }
 
     llog.logS(DEBUG, "WSPR Loop terminating.");
@@ -626,16 +636,13 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    // TODO: Check for/add Meyers' Singletons here
     wsprTransmitter.stop(); // Stop the transitter threads
-    ppmManager.stop();      // Stop PPM manager (if active)
-    iniMonitor.stop();      // Stop config file monitor
+    shutdownMonitor.stop(); // Stop the GPIO monitor
     ledControl.stop();      // Stop LED driver
-    shutdownMonitor.stop(); // Stop shutdown GPIO monitor
+    iniMonitor.stop();      // Stop config file monitor
+    ppmManager.stop();      // Stop PPM manager (if active)
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
-
-    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
 
     if (reboot_flag.load())
     {
@@ -799,7 +806,10 @@ double next_frequency(bool initial = false)
  */
 void set_config(bool initial)
 {
-    // TODO:  Skip if we are shutting down
+    // Exit if we are shutting down
+    if (exiting.load())
+        return;
+
     bool do_config = false;
     bool do_random = false;
     if (initial)
