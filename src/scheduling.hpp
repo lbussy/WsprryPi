@@ -67,6 +67,11 @@ extern std::condition_variable exitwspr_cv;
 extern bool exitwspr_ready;
 
 /**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+extern std::atomic<bool> exiting;
+
+/**
  * @brief Flag indicating if a system shutdown is in progress.
  *
  * @details

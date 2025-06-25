@@ -698,7 +698,7 @@ bool set_frequencies()
 bool load_from_ini()
 {
     // Attempt to load INI file if enabled
-    bool loaded = config.use_ini && ini.load();
+    bool loaded = config.use_ini && iniFile.load();
 
     if (!loaded)
     {
@@ -708,7 +708,7 @@ bool load_from_ini()
     // Load Control section
     try
     {
-        config.transmit = ini.get_bool_value("Control", "Transmit");
+        config.transmit = iniFile.get_bool_value("Control", "Transmit");
     }
     catch (...)
     {
@@ -717,35 +717,35 @@ bool load_from_ini()
     // Load Common section
     try
     {
-        config.callsign = ini.get_string_value("Common", "Call Sign");
+        config.callsign = iniFile.get_string_value("Common", "Call Sign");
     }
     catch (...)
     {
     }
     try
     {
-        config.grid_square = ini.get_string_value("Common", "Grid Square");
+        config.grid_square = iniFile.get_string_value("Common", "Grid Square");
     }
     catch (...)
     {
     }
     try
     {
-        config.power_dbm = ini.get_int_value("Common", "TX Power");
+        config.power_dbm = iniFile.get_int_value("Common", "TX Power");
     }
     catch (...)
     {
     }
     try
     {
-        config.frequencies = ini.get_string_value("Common", "Frequency");
+        config.frequencies = iniFile.get_string_value("Common", "Frequency");
     }
     catch (...)
     {
     }
     try
     {
-        config.tx_pin = ini.get_int_value("Common", "Transmit Pin");
+        config.tx_pin = iniFile.get_int_value("Common", "Transmit Pin");
     }
     catch (...)
     {
@@ -754,42 +754,42 @@ bool load_from_ini()
     // Load Extended section
     try
     {
-        config.ppm = ini.get_double_value("Extended", "PPM");
+        config.ppm = iniFile.get_double_value("Extended", "PPM");
     }
     catch (...)
     {
     }
     try
     {
-        config.use_ntp = ini.get_bool_value("Extended", "Use NTP");
+        config.use_ntp = iniFile.get_bool_value("Extended", "Use NTP");
     }
     catch (...)
     {
     }
     try
     {
-        config.use_offset = ini.get_bool_value("Extended", "Offset");
+        config.use_offset = iniFile.get_bool_value("Extended", "Offset");
     }
     catch (...)
     {
     }
     try
     {
-        config.power_level = ini.get_int_value("Extended", "Power Level");
+        config.power_level = iniFile.get_int_value("Extended", "Power Level");
     }
     catch (...)
     {
     }
     try
     {
-        config.use_led = ini.get_bool_value("Extended", "Use LED");
+        config.use_led = iniFile.get_bool_value("Extended", "Use LED");
     }
     catch (...)
     {
     }
     try
     {
-        config.led_pin = ini.get_int_value("Extended", "LED Pin");
+        config.led_pin = iniFile.get_int_value("Extended", "LED Pin");
     }
     catch (...)
     {
@@ -798,28 +798,28 @@ bool load_from_ini()
     // Load Server section
     try
     {
-        config.web_port = ini.get_int_value("Server", "Web Port");
+        config.web_port = iniFile.get_int_value("Server", "Web Port");
     }
     catch (...)
     {
     }
     try
     {
-        config.socket_port = ini.get_int_value("Server", "Socket Port");
+        config.socket_port = iniFile.get_int_value("Server", "Socket Port");
     }
     catch (...)
     {
     }
     try
     {
-        config.use_shutdown = ini.get_bool_value("Server", "Use Shutdown");
+        config.use_shutdown = iniFile.get_bool_value("Server", "Use Shutdown");
     }
     catch (...)
     {
     }
     try
     {
-        config.shutdown_pin = ini.get_int_value("Server", "Shutdown Button");
+        config.shutdown_pin = iniFile.get_int_value("Server", "Shutdown Button");
     }
     catch (...)
     {
@@ -867,7 +867,7 @@ bool parse_command_line(int argc, char *argv[])
             config.use_ini = true;
             config.loop_tx = true;
             // Create original JSON and Config struct, overlay INI contents
-            ini.set_filename(config.ini_filename);
+            iniFile.set_filename(config.ini_filename);
             ini_to_json(config.ini_filename);
             json_to_config();
 
