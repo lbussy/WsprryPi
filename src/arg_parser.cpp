@@ -409,7 +409,7 @@ void show_config_values(bool reload)
     llog.logS(DEBUG, "Transmit Pin:", config.tx_pin);
     // [Extended]
     llog.logS(DEBUG, "PPM Offset:", config.ppm);
-    llog.logS(DEBUG, "Check NTP Each Run:", config.use_ntp ? "true" : "false");
+    llog.logS(DEBUG, "Synchronize with NTP:", config.use_ntp ? "true" : "false");
     llog.logS(DEBUG, "Use Frequency Randomization:", config.use_offset ? "true" : "false");
     llog.logS(DEBUG, "Power Level:", config.power_level);
     llog.logS(DEBUG, "Use LED:", config.use_led ? "true" : "false");

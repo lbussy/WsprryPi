@@ -82,7 +82,7 @@ std::condition_variable exitwspr_cv;
 /**
  * @brief Atomic bool used to signal other functions that we are shutting down.
  */
-std::atomic<bool> exiting = false;
+std::atomic<bool> exiting_wspr = false;
 
 /**
  * @brief Flag indicating whether the WSPR loop should terminate.
@@ -371,6 +371,7 @@ void callback_shutdown_system()
  */
 void shutdown_system()
 {
+    exiting_wspr.store(true, std::memory_order_seq_cst);
     if (config.use_led)
     {
         // Flash LED three times if configured
@@ -416,6 +417,7 @@ void shutdown_system()
  */
 void reboot_system()
 {
+    exiting_wspr.store(true, std::memory_order_seq_cst);
     if (config.use_led)
     {
         // Flash LED two times if configured
@@ -626,9 +628,7 @@ bool wspr_loop()
     {
         std::unique_lock<std::mutex> lk(exitwspr_mtx);
         exitwspr_cv.wait(lk, []
-                         {
-                              exiting.store(true, std::memory_order_relaxed);
-                              return exitwspr_ready; });
+                         { return exitwspr_ready; });
     }
 
     llog.logS(DEBUG, "WSPR Loop terminating.");
@@ -656,6 +656,8 @@ bool wspr_loop()
     }
 
     llog.logS(INFO, get_project_name(), "exiting.");
+    // Flush all file system buffers to disk
+    sync();
 
     return true;
 }
@@ -807,8 +809,15 @@ double next_frequency(bool initial = false)
 void set_config(bool initial)
 {
     // Exit if we are shutting down
-    if (exiting.load())
+    if (exiting_wspr.load())
+    {
+        llog.logS(DEBUG, "Exiting set_config() early.");
         return;
+    }
+    else
+    {
+        llog.logS(DEBUG, "Processing set_config().");
+    }
 
     bool do_config = false;
     bool do_random = false;

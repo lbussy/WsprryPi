@@ -75,9 +75,10 @@ void callback_signal_handler(int signum, bool is_critical)
     std::string_view signal_name = SignalHandler::signalToString(signum);
     if (!is_critical)
     {
-        exiting.store(true, std::memory_order_relaxed);
+        exiting_wspr.store(true, std::memory_order_relaxed);
         llog.logS(DEBUG, "Intercepted signal, shutdown will proceed:", signal_name);
         {
+            exiting_wspr.store(true, std::memory_order_seq_cst);
             std::lock_guard<std::mutex> lk(exitwspr_mtx);
             exitwspr_ready = true;
         }

@@ -58,6 +58,11 @@ extern std::mutex exitwspr_mtx;
 extern std::condition_variable exitwspr_cv;
 
 /**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+extern std::atomic<bool> exiting_wspr;
+
+/**
  * @brief Flag indicating whether the WSPR loop should terminate.
  *
  * Set to \c true by the signal handler callback under protection of
