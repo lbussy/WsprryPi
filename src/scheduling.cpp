@@ -621,13 +621,12 @@ bool wspr_loop()
                          { return exitwspr_ready; });
     }
 
-    // TODO: LED stays on, other wierdness on shutdown.
-
     llog.logS(DEBUG, "WSPR Loop terminating.");
 
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
+    // TODO: Check for/add Meyers' Singletons here
     wsprTransmitter.stop(); // Stop the transitter threads
     ppmManager.stop();      // Stop PPM manager (if active)
     iniMonitor.stop();      // Stop config file monitor
@@ -800,6 +799,7 @@ double next_frequency(bool initial = false)
  */
 void set_config(bool initial)
 {
+    // TODO:  Skip if we are shutting down
     bool do_config = false;
     bool do_random = false;
     if (initial)

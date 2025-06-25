@@ -37,12 +37,12 @@
 #include <vector>
 
 /**
- * @brief Global INI handler instance.
+ * @brief  Construct the singleton IniFile instance.
  *
- * This instance of the IniFile class is used to load, save, and manage the
- * INI file configuration for the application.
+ * Provides a global reference `iniFile` that resolves to
+ * `IniFile::instance()`.
  */
-extern IniFile ini;
+inline auto &iniFile = IniFile::instance();
 
 /**
  * @brief Global JSON configuration object.
@@ -260,7 +260,7 @@ extern void config_to_json();
  * the `dump()` method; otherwise, the value is retrieved as a string.
  *
  * Finally, the new data is set into the global INI handler object (`ini`) using
- * `ini.setData(newData)` and saved to disk via `ini.save()`.
+ * `iniFile.setData(newData)` and saved to disk via `iniFile.save()`.
  *
  * @note This function assumes that all JSON values can be represented as strings.
  */

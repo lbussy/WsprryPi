@@ -38,14 +38,6 @@
 #include <vector>
 
 /**
- * @brief Global INI handler instance.
- *
- * This instance of the IniFile class is used to load, save, and manage the
- * INI file configuration for the application.
- */
-IniFile ini;
-
-/**
  * @brief Global configuration object.
  *
  * This ArgParserConfig instance holds the application’s configuration settings,
@@ -283,7 +275,7 @@ void init_config_json()
 void ini_to_json(std::string filename)
 {
     nlohmann::json patch;
-    auto ini_data = ini.getData();
+    auto ini_data = iniFile.getData();
 
     for (const auto& sectionPair : ini_data)
     {
@@ -342,7 +334,7 @@ void ini_to_json(std::string filename)
  * the `dump()` method; otherwise, the value is retrieved as a string.
  *
  * Finally, the new data is set into the global INI handler object (`ini`) using
- * `ini.setData(newData)` and saved to disk via `ini.save()`.
+ * `iniFile.setData(newData)` and saved to disk via `iniFile.save()`.
  *
  * @note This function assumes that all JSON values can be represented as strings.
  */
@@ -384,8 +376,8 @@ void json_to_ini()
         }
 
         // Set the new data into the INI file object and save the changes.
-        ini.setData(newData);
-        ini.save();
+        iniFile.setData(newData);
+        iniFile.save();
     }
 }
 
