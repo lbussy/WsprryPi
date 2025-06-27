@@ -54,6 +54,26 @@ ArgParserConfig config;
 nlohmann::json jConfig;
 
 /**
+ * @brief Convert a JSON value to a string representation.
+ *
+ * Safely extracts a JSON value as a string. If the value is already a string,
+ * it is returned directly. If the value is numeric, it is converted to a
+ * string. For all other types, the JSON is serialized using dump().
+ *
+ * @param j The JSON value to convert.
+ * @return A string representation of the JSON value.
+ */
+std::string json_to_string(const nlohmann::json &j)
+{
+    if (j.is_string())
+        return j.get<std::string>();
+    else if (j.is_number())
+        return std::to_string(j.get<double>());
+    else
+        return j.dump(); // Fallback for other types
+}
+
+/**
  * @brief Parses configuration from a JSON object into an ArgParser struct.
  *
  * @param jConfig The JSON object containing configuration data.
@@ -131,7 +151,8 @@ void json_to_config()
     config.callsign = jConfig["Common"]["Call Sign"].get<std::string>();
     config.grid_square = jConfig["Common"]["Grid Square"].get<std::string>();
     config.power_dbm = jConfig["Common"]["TX Power"].get<int>();
-    config.frequencies = jConfig["Common"]["Frequency"].get<std::string>();
+    // "Frequency" can be an integer or a double stored as a string.
+    config.frequencies = json_to_string(jConfig["Common"]["Frequency"]);
     config.tx_pin = jConfig["Common"]["Transmit Pin"].get<int>();
 
     // Extended
@@ -277,15 +298,15 @@ void ini_to_json(std::string filename)
     nlohmann::json patch;
     auto ini_data = iniFile.getData();
 
-    for (const auto& sectionPair : ini_data)
+    for (const auto &sectionPair : ini_data)
     {
-        const std::string& section = sectionPair.first;
-        const auto& keyValues = sectionPair.second;
+        const std::string &section = sectionPair.first;
+        const auto &keyValues = sectionPair.second;
 
-        for (const auto& kv : keyValues)
+        for (const auto &kv : keyValues)
         {
-            const std::string& key = kv.first;
-            const std::string& raw_value = kv.second;
+            const std::string &key = kv.first;
+            const std::string &raw_value = kv.second;
 
             std::string val = raw_value;
             std::transform(val.begin(), val.end(), val.begin(), ::tolower);
@@ -296,7 +317,7 @@ void ini_to_json(std::string filename)
             }
             else
             {
-                char* end = nullptr;
+                char *end = nullptr;
                 long lval = std::strtol(raw_value.c_str(), &end, 10);
                 if (*end == '\0')
                 {
@@ -444,10 +465,10 @@ void dump_json(const nlohmann::json &j, std::string tag = "")
  */
 void patch_all_from_web(const nlohmann::json &j)
 {
-    jConfig.merge_patch(j);        ///< Patch new values into the global JSON config
-    json_to_ini();                 ///< Write patched config to INI
-    json_to_config();              ///< Write patched config into global struct
-    config_to_json();              ///< Rebuild jConfig from sanitized struct
+    jConfig.merge_patch(j); ///< Patch new values into the global JSON config
+    json_to_ini();          ///< Write patched config to INI
+    json_to_config();       ///< Write patched config into global struct
+    config_to_json();       ///< Rebuild jConfig from sanitized struct
     // Send all WebSocket clients notice that we have a new config
     send_ws_message("configuration", "reload");
 }
