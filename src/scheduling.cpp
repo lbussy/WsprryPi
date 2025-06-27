@@ -313,7 +313,7 @@ bool ppm_init()
     switch (status)
     {
     case PPMStatus::SUCCESS:
-        llog.logS(DEBUG, "PPM Manager initialized successfully.");
+        llog.logS(INFO, "PPM Manager initialized successfully.");
         break;
 
     case PPMStatus::WARNING_HIGH_PPM:
@@ -553,12 +553,6 @@ bool wspr_loop()
     // Display the final configuration after parsing arguments and INI file.
     show_config_values();
 
-    // Start NTP (chrony) monitoring
-    if (config.use_ntp)
-    {
-        ppm_init();
-    }
-
     // Start web server and set priority
     if (config.web_port >= 1024 && config.web_port <= 49151)
     {
@@ -607,7 +601,7 @@ bool wspr_loop()
 
     // Set pending config flags and do initial config
     ini_reload_pending.store(true, std::memory_order_relaxed);
-    ppm_reload_pending.store(true, std::memory_order_relaxed);
+
     if (config.mode == ModeType::WSPR)
     {
         // Set up WSPR transmissions
@@ -829,13 +823,8 @@ void set_config(bool initial)
         wsprTransmitter.disableTransmission(); // Shutdown if running
     }
 
-    // Update PPM if a change was noted
-    if (config.use_ntp && ppm_reload_pending.load())
-    {
-        do_config = true;
-        config.ppm = ppmManager.getCurrentPPM();
-        llog.logS(INFO, "PPM updated:", config.ppm);
-    }
+    // Store the PPM flag we had coming in
+    bool using_ntp_ = config.use_ntp;
 
     // If we are reloading from INI:
     if (ini_reload_pending.load())
@@ -853,6 +842,37 @@ void set_config(bool initial)
             exitwspr_cv.notify_one();
             return;
         }
+    }
+
+    // See if we need to start NTP (chrony) monitoring
+    if (
+        // If we are starting and set to use it, or
+        (config.use_ntp && initial) ||
+        // If we are not using it now but should be
+        (!using_ntp_ && config.use_ntp)
+    )
+    {
+        ppm_init();
+        ppm_reload_pending.store(true, std::memory_order_seq_cst);
+    }
+    // Or, see if we need to stop it
+    else if (using_ntp_ && !config.use_ntp)
+    {
+        ppmManager.stop();
+        llog.logS(INFO, "PPM Manager disabled.");
+        ppm_reload_pending.store(false, std::memory_order_seq_cst);
+    }
+    else if (initial && !config.use_ntp)
+    {
+        llog.logS(INFO, "PPM Manager disabled.");
+    }
+
+    // Update PPM if a change was noted
+    if (config.use_ntp && ppm_reload_pending.load())
+    {
+        do_config = true;
+        config.ppm = ppmManager.getCurrentPPM();
+        llog.logS(INFO, "PPM updated:", config.ppm);
     }
 
     // Get next frequency and indicate if we are (re)setting the stack
