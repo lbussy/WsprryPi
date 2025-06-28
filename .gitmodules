@@ -2,9 +2,9 @@
 	path = WsprryPi-UI
 	url = https://github.com/lbussy/WsprryPi-UI.git
 	branch = bootstrap_5
-[submodule "src/Broadcom-Mailbox"]
-	path = src/Broadcom-Mailbox
-	url = https://github.com/lbussy/Broadcom-Mailbox.git
+[submodule "src/Mailbox"]
+	path = src/Mailbox
+	url = https://github.com/lbussy/Mailbox.git
 [submodule "src/INI-Handler"]
 	path = src/INI-Handler
 	url = https://github.com/lbussy/INI-Handler.git
@@ -29,3 +29,6 @@
 [submodule "src/WSPR-Transmitter"]
 	path = src/WSPR-Transmitter
 	url = https://github.com/lbussy/WSPR-Transmitter.git
+[submodule "src/--foirce"]
+	path = src/Mailbox
+	url = https://github.com/lbussy/Mailbox.git
