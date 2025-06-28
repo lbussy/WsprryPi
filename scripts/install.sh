@@ -37,9 +37,11 @@ IFS=$'\n\t'
 # @usage
 # sudo ./install.sh
 # sudo ./install.sh debug
+# sudo DRY_RUN=true ./install.sh debug
 # sudo ACTION=uninstall ./install.sh
 # curl -fsSL {url} | sudo bash
 # curl -fsSL {url} | sudo bash -s -- debug
+# curl -fsSL {url} | sudo env DRY_RUN=true bash -s -- debug
 # curl -fsSL {url} | sudo env ACTION=uninstall bash -s -- debug
 #
 # -----------------------------------------------------------------------------
@@ -209,7 +211,7 @@ declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-64-bit}"
 declare GIT_TAG="${GIT_TAG:-2.0.1}"
-declare SEM_VER="${SEM_VER:-2.0.1-64-bit+f4247d0}"
+declare SEM_VER="${SEM_VER:-2.0.1-64-bit+55aa7ac}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -704,6 +706,7 @@ readonly APT_PACKAGES=(
     "php"
     "chrony"
     "libgpiod2"
+    "libgpiod-dev"
 )
 
 # -----------------------------------------------------------------------------
@@ -4259,9 +4262,16 @@ get_proj_params() {
         fi
 
         LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+        mkdir -p "${LOCAL_EXECUTABLES_DIR}"
         if [[ ! -d "${LOCAL_EXECUTABLES_DIR:-}" ]]; then
             debug_end "$debug"
             die 1 "Executables source directory does not exist."
+        fi
+
+        LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
+        if [[ ! -d "${LOCAL_SOURCE_DIR:-}" ]]; then
+            debug_end "$debug"
+            die 1 "Source files directory does not exist."
         fi
 
         GIT_RAW="$GIT_RAW_BASE/$REPO_ORG/$REPO_NAME"
@@ -4279,6 +4289,7 @@ get_proj_params() {
         SEM_VER="${SEM_VER:-0.0.1}"
         LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
         LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+        LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
         LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/${UI_REPO_DIR}/data"
@@ -4295,6 +4306,7 @@ get_proj_params() {
     export SEM_VER
     export LOCAL_REPO_DIR
     export LOCAL_EXECUTABLES_DIR
+    export LOCAL_SOURCE_DIR
     export LOCAL_SYSTEMD_DIR
     export LOCAL_CONFIG_DIR
     export LOCAL_WWW_DIR
@@ -4310,6 +4322,7 @@ get_proj_params() {
     debug_print "Exported SEM_VER: $SEM_VER" "$debug"
     debug_print "Exported LOCAL_REPO_DIR: $LOCAL_REPO_DIR" "$debug"
     debug_print "Exported LOCAL_EXECUTABLES_DIR: $LOCAL_EXECUTABLES_DIR" "$debug"
+    debug_print "Exported LOCAL_SOURCE_DIR: $LOCAL_SOURCE_DIR" "$debug"
     debug_print "Exported LOCAL_SYSTEMD_DIR: $LOCAL_SYSTEMD_DIR" "$debug"
     debug_print "Exported LOCAL_CONFIG_DIR: $LOCAL_CONFIG_DIR" "$debug"
     debug_print "Exported LOCAL_WWW_DIR: $LOCAL_WWW_DIR" "$debug"
@@ -5206,6 +5219,87 @@ start_script() {
 
     debug_end "$debug"
     return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Compile and stage a binary executable.
+#
+# @details
+#   `compile_binary()` takes an optional debug flag and an executable name,
+#   determines whether to build the debug or release target based on the
+#   executable’s “_debug” suffix, runs `make` in the source directory, and
+#   then copies the resulting binary into the staging directory. In DRY_RUN
+#   mode, it prints the commands instead of executing them.
+#
+# @global LOCAL_SOURCE_DIR       Directory containing the source for `make`.
+# @global LOCAL_EXECUTABLES_DIR  Directory to which the compiled binary is copied.
+# @global DRY_RUN                If "true", commands are only logged (no exec).
+#
+# @param $1  Debug flag for enabling or disabling debug output.
+# @param $2  Executable name (with optional path/extension) to compile.
+#
+# @throws Exits with status 1 if arguments are missing, compilation fails,
+#         or moving the binary fails.
+# @return Returns 0 on success, 1 on error.
+#
+# @example
+#   compile_binary "wsprrypi" "debug" 
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+compile_binary() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Ensure the executable argument is provided
+    if [[ -z "$1" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: compile_exe <type>"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Declare local variables
+    local executable exe_name compiled_path staging_path type
+
+    # Get from args or associative array
+    executable="$1"
+    exe_name="${executable##*/}" # Remove path
+    exe_name="${exe_name%.*}"    # Remove extension (if present)
+    compiled_path="${LOCAL_SOURCE_DIR}/build/bin/${executable}"
+    staging_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
+
+    if [[ "$executable" == *_debug ]]; then
+        type=debug
+    else
+        type=release
+    fi
+
+    # Compile the binary
+    debug_print "Compiling binary." "$debug"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: (cd ${LOCAL_SOURCE_DIR} && make ${type})"
+    else
+        exec_command "Compile ${type} binary (this may take several minutes)" "(cd ${LOCAL_SOURCE_DIR} && make ${type})" "$debug" || {
+            logE "Failed to compile binary."
+            debug_end "$debug"
+            return 1
+        }
+    fi
+
+    # Move the binary
+    debug_print "Moving binary to staging." "$debug"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: cp -f $compiled_path $staging_path"
+    else
+        exec_command "Moving binary to staging" "cp -f ${compiled_path} ${staging_path}" "$debug" || {
+            logE "Failed to move binary."
+            debug_end "$debug"
+            return 1
+        }
+    fi
+
+    debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
@@ -6207,6 +6301,7 @@ manage_wsprry_pi() {
         "git_clone"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
+        "compile_binary \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
@@ -6220,6 +6315,7 @@ manage_wsprry_pi() {
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
         "git_clone"
+        "compile_exe"
         "cleanup_files_in_directories"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
