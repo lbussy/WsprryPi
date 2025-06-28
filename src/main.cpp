@@ -2,7 +2,7 @@
  * @file main.cpp
  * @brief Entry point for the Wsprry Pi application.
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -75,9 +75,10 @@ void callback_signal_handler(int signum, bool is_critical)
     std::string_view signal_name = SignalHandler::signalToString(signum);
     if (!is_critical)
     {
-        wsprTransmitter.shutdownTransmitter();
-        llog.logS(INFO, "Intercepted signal, shutdown will proceed:", signal_name);
+        exiting_wspr.store(true, std::memory_order_relaxed);
+        llog.logS(DEBUG, "Intercepted signal, shutdown will proceed:", signal_name);
         {
+            exiting_wspr.store(true, std::memory_order_seq_cst);
             std::lock_guard<std::mutex> lk(exitwspr_mtx);
             exitwspr_ready = true;
         }
@@ -109,7 +110,15 @@ void callback_signal_handler(int signum, bool is_critical)
  */
 int main(int argc, char *argv[])
 {
+    // Maintain retval for main()
     int retval = EXIT_SUCCESS;
+
+    // Register signal handlers for safe shutdown and terminal management.
+    block_signals();
+    signalHandler.setCallback(callback_signal_handler);
+    signalHandler.start();
+    signalHandler.setPriority(SCHED_RR, 40);
+
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
@@ -147,15 +156,6 @@ int main(int argc, char *argv[])
     llog.logS(INFO, "Running on:", get_pi_model(), ".");
     llog.logS(INFO, "Process PID:", getpid());
 
-    // Display the final configuration after parsing arguments and INI file.
-    show_config_values();
-
-    // Register signal handlers for safe shutdown and terminal management.
-    block_signals();
-    signalHandler.setCallback(callback_signal_handler);
-    signalHandler.start();
-    signalHandler.setPriority(SCHED_RR, 40);
-
     // Startup WSPR loop
     try
     {
@@ -174,8 +174,6 @@ int main(int argc, char *argv[])
         llog.logE(ERROR, "Unknown fatal error in main().");
         retval = EXIT_FAILURE;
     }
-
-    llog.logS(INFO, get_project_name(), "exiting.");
 
     // Stop the SignalHandler.
     signalHandler.stop();

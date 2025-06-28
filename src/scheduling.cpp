@@ -2,7 +2,7 @@
  * @file scheduling.cpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -78,6 +78,11 @@ std::mutex exitwspr_mtx;
  * to wake up and perform shutdown.
  */
 std::condition_variable exitwspr_cv;
+
+/**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+std::atomic<bool> exiting_wspr = false;
 
 /**
  * @brief Flag indicating whether the WSPR loop should terminate.
@@ -167,13 +172,24 @@ ModeType lastMode;
 std::atomic<bool> web_test_tone{false};
 
 /**
+ * @brief Overloaded callback function for housekeeping tasks between
+ * transmissions.
+ *
+ * This will intercept a double sent from the callback handler and pass
+ * it as a formatted string to
+ * callback_transmission_started(const std::string &msg)
+ */
+void callback_transmission_started(double frequency)
+{
+    callback_transmission_started(lookup.freq_display_string(frequency));
+}
+
+/**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
- * This function checks whether there are pending PPM or INI changes that need
- * to be integrated. If a pending PPM change is detected, it logs the event and
- * resets the flag. Similarly, if a pending INI change is detected, it applies the
- * deferred changes, logs the integration, and resets the flag. If any changes were
- * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ * This function regords the start time of a transmission, turns on the
+ * LED if enabled, sends messages to any WebSockets clients, and logs the
+ * start message
  */
 void callback_transmission_started(const std::string &msg = {})
 {
@@ -183,19 +199,28 @@ void callback_transmission_started(const std::string &msg = {})
     // Turn on LED
     ledControl.toggleGPIO(true);
 
-    llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
     // Notify clients of start
     send_ws_message("transmit", "starting");
+
+    // Log with custom message if providedAdd commentMore actions
+    if (!msg.empty())
+    {
+        llog.logS(INFO, "Transmission started at", msg, ".");
+    }
+    else
+    {
+        llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
+    }
 }
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
- * This function checks whether there are pending PPM or INI changes that need
- * to be integrated. If a pending PPM change is detected, it logs the event and
- * resets the flag. Similarly, if a pending INI change is detected, it applies the
- * deferred changes, logs the integration, and resets the flag. If any changes were
- * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
+ * to be integrated. If a pending PPM change is detected, it logs the event
+ * and resets the flag. Similarly, if a pending INI change is detected, it
+ * applies the deferred changes, logs the integration, and resets the flag.
+ * If any changes were integrated, a flag is set to indicate that DMA/Symbol
+ * reconfiguration is required.
  */
 void callback_transmission_complete(const std::string &msg)
 {
@@ -253,7 +278,7 @@ void ppm_callback(double /*new_ppm*/)
     // Now that Chrony has produced a PPM value, we know time is valid.
     if (!config.ntp_good)
     {
-        llog.logS(INFO, "Chrony service has updated it's initial value.");
+        llog.logS(DEBUG, "Chrony service has updated its initial value.");
         config.ntp_good = true;
     }
 }
@@ -281,14 +306,14 @@ bool ppm_init()
     // If Chrony is active, assume time is synced
     if (ppmManager.isChronyAlive())
     {
-        llog.logS(INFO, "Chrony service is active.");
+        llog.logS(DEBUG, "Chrony service is active.");
         retval = true;
     }
 
     switch (status)
     {
     case PPMStatus::SUCCESS:
-        llog.logS(DEBUG, "PPM Manager initialized successfully.");
+        llog.logS(INFO, "PPM Manager initialized successfully.");
         break;
 
     case PPMStatus::WARNING_HIGH_PPM:
@@ -346,6 +371,7 @@ void callback_shutdown_system()
  */
 void shutdown_system()
 {
+    exiting_wspr.store(true, std::memory_order_seq_cst);
     if (config.use_led)
     {
         // Flash LED three times if configured
@@ -391,6 +417,7 @@ void shutdown_system()
  */
 void reboot_system()
 {
+    exiting_wspr.store(true, std::memory_order_seq_cst);
     if (config.use_led)
     {
         // Flash LED two times if configured
@@ -438,7 +465,7 @@ void start_test_tone()
         {
             llog.logS(INFO, "Stopping an in-process message early.");
         }
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
 
         // Pick the “first” frequency
         auto freq = next_frequency(/*restart=*/true);
@@ -477,7 +504,7 @@ void end_test_tone()
         llog.logS(INFO, "Ending test tone requested by Web UI.");
 
         // Stop current tone
-        wsprTransmitter.shutdownTransmitter();
+        wsprTransmitter.stop();
         send_ws_message("transmit", "finished");
         ledControl.toggleGPIO(false);
 
@@ -523,17 +550,8 @@ void end_test_tone()
  */
 bool wspr_loop()
 {
-    if (config.use_ntp)
-    {
-        ppm_init();
-    }
-
-    if (config.use_ini)
-    {
-        // Start INI monitor
-        iniMonitor.filemon(config.ini_filename, callback_ini_changed);
-        iniMonitor.setPriority(SCHED_RR, 10);
-    }
+    // Display the final configuration after parsing arguments and INI file.
+    show_config_values();
 
     // Start web server and set priority
     if (config.web_port >= 1024 && config.web_port <= 49151)
@@ -559,17 +577,31 @@ bool wspr_loop()
 
     // Set transmission server and set priority
     wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
-    wsprTransmitter.setTransmissionCallbacks(
-        callback_transmission_started,
-        callback_transmission_complete);
 
-    // Wait for something to happen
+    // Set transmission event callbacks
+    wsprTransmitter.setTransmissionCallbacks(
+        [](const WsprTransmitter::CallbackArg &arg)
+        {
+            callback_transmission_started(std::get<double>(arg));
+        },
+        [](const WsprTransmitter::CallbackArg &arg)
+        {
+            callback_transmission_complete(std::get<std::string>(arg));
+        });
+
+    // Monitor INI file for changes
+    if (config.use_ini)
+    {
+        // Start INI monitor
+        iniMonitor.filemon(config.ini_filename, callback_ini_changed);
+        iniMonitor.setPriority(SCHED_RR, 10);
+    }
 
     llog.logS(INFO, "WSPR loop running.");
 
     // Set pending config flags and do initial config
     ini_reload_pending.store(true, std::memory_order_relaxed);
-    ppm_reload_pending.store(true, std::memory_order_relaxed);
+
     if (config.mode == ModeType::WSPR)
     {
         // Set up WSPR transmissions
@@ -598,15 +630,13 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.shutdownTransmitter();
-    ppmManager.stop();      // Stop PPM manager (if active)
-    iniMonitor.stop();      // Stop config file monitor
+    wsprTransmitter.stop(); // Stop the transitter threads
+    shutdownMonitor.stop(); // Stop the GPIO monitor
     ledControl.stop();      // Stop LED driver
-    shutdownMonitor.stop(); // Stop shutdown GPIO monitor
+    iniMonitor.stop();      // Stop config file monitor
+    ppmManager.stop();      // Stop PPM manager (if active)
     webServer.stop();       // Stop web server
     socketServer.stop();    // Stop the socket server
-
-    llog.logS(DEBUG, "Checking all threads before exiting wspr_loop().");
 
     if (reboot_flag.load())
     {
@@ -618,6 +648,10 @@ bool wspr_loop()
         llog.logS(INFO, "Shutting down.");
         shutdown_machine();
     }
+
+    llog.logS(INFO, get_project_name(), "exiting.");
+    // Flush all file system buffers to disk
+    sync();
 
     return true;
 }
@@ -768,21 +802,29 @@ double next_frequency(bool initial = false)
  */
 void set_config(bool initial)
 {
+    // Exit if we are shutting down
+    if (exiting_wspr.load())
+    {
+        llog.logS(DEBUG, "Exiting set_config() early.");
+        return;
+    }
+    else
+    {
+        llog.logS(DEBUG, "Processing set_config().");
+    }
+
     bool do_config = false;
+    bool do_random = false;
     if (initial)
     {
         do_config = true;
-        freq_iterator = 0;       // Reset iterator
-        current_frequency = 0.0; // Zero out freq
+        freq_iterator = 0;                     // Reset iterator
+        current_frequency = 0.0;               // Zero out freq
+        wsprTransmitter.disableTransmission(); // Shutdown if running
     }
 
-    // Update PPM if a change was noted
-    if (config.use_ntp && ppm_reload_pending.load())
-    {
-        do_config = true;
-        config.ppm = ppmManager.getCurrentPPM();
-        llog.logS(INFO, "PPM updated:", config.ppm);
-    }
+    // Store the PPM flag we had coming in
+    bool using_ntp_ = config.use_ntp;
 
     // If we are reloading from INI:
     if (ini_reload_pending.load())
@@ -802,6 +844,37 @@ void set_config(bool initial)
         }
     }
 
+    // See if we need to start NTP (chrony) monitoring
+    if (
+        // If we are starting and set to use it, or
+        (config.use_ntp && initial) ||
+        // If we are not using it now but should be
+        (!using_ntp_ && config.use_ntp)
+    )
+    {
+        ppm_init();
+        ppm_reload_pending.store(true, std::memory_order_seq_cst);
+    }
+    // Or, see if we need to stop it
+    else if (using_ntp_ && !config.use_ntp)
+    {
+        ppmManager.stop();
+        llog.logS(INFO, "PPM Manager disabled.");
+        ppm_reload_pending.store(false, std::memory_order_seq_cst);
+    }
+    else if (initial && !config.use_ntp)
+    {
+        llog.logS(INFO, "PPM Manager disabled.");
+    }
+
+    // Update PPM if a change was noted
+    if (config.use_ntp && ppm_reload_pending.load())
+    {
+        do_config = true;
+        config.ppm = ppmManager.getCurrentPPM();
+        llog.logS(INFO, "PPM updated:", config.ppm);
+    }
+
     // Get next frequency and indicate if we are (re)setting the stack
     static double last_freq = 0.0;
     current_frequency = next_frequency(initial);
@@ -810,14 +883,16 @@ void set_config(bool initial)
         last_freq = current_frequency;
         do_config = true;
     }
-
-    // If we are going to transmit and we have a change, do setup
-    if (do_config && config.transmit)
+    else if (config.use_offset && current_frequency != 0.0)
     {
-        // Disable before we (re)set config or PPM
-        wsprTransmitter.disableTransmission();
+        // Allow randomization as/if needed
+        do_random = true;
+    }
 
-        // Do DMA configuration
+    // If we have a change, do setup
+    if (do_config || do_random)
+    {
+        // Do DMA configuration (calls disableTransmission() internally)
         wsprTransmitter.setupTransmission(
             current_frequency,
             config.power_level,
@@ -832,17 +907,22 @@ void set_config(bool initial)
     ppm_reload_pending.store(false, std::memory_order_relaxed);
 
     // Enable/disable transmit if/as needed
-    static bool last_transmit = false;
-    if (config.transmit && do_config)
+    if (config.transmit && (do_config || do_random))
     {
         wsprTransmitter.enableTransmission();
-        last_transmit = true;
-        llog.logS(INFO, "DMA setup complete, waiting for next transmission window.");
+        if (do_random)
+        {
+            llog.logS(DEBUG, "New random frequency.");
+        }
+        else
+        {
+            llog.logS(DEBUG, "Setup complete.");
+        }
+        llog.logS(INFO, "Waiting for next transmission window.");
     }
-    else if (config.transmit != last_transmit)
+    else if (!config.transmit)
     {
         wsprTransmitter.disableTransmission();
-        last_transmit = false;
         llog.logS(INFO, "Transmissions disabled.");
     }
 }

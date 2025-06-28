@@ -1,0 +1,8 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# @brief Hook run after a successful git merge (e.g. from git pull)
+# -----------------------------------------------------------------------------
+
+echo "[githook: post-merge] Syncing submodules."
+git submodule sync
+git submodule update --init --recursive

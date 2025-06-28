@@ -1,0 +1,56 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# Git post-checkout hook to sync submodules and clean obsolete ones interactively
+# -----------------------------------------------------------------------------
+
+# Sync and update submodules
+sync_submodules() {
+    echo "[githook: post-checkout] Syncing submodules."
+    git submodule sync
+    git submodule update --init --recursive
+}
+
+# Check and optionally delete obsolete submodule directories
+clean_obsolete_submodules() {
+    local prev_ref="$1"
+    local new_ref="$2"
+
+    # Find submodule directories in the previous branch
+    local old_submodules
+    old_submodules=$(git ls-tree -r "$prev_ref" | awk '/160000/ {print $4}')
+
+    for submodule in $old_submodules; do
+        # Check if the submodule still exists in the new branch
+        if ! git ls-files --error-unmatch "$submodule" &>/dev/null; then
+            if [ -d "$submodule" ]; then
+                echo "Submodule directory '$submodule' is no longer tracked in this branch."
+                read -rp "Do you want to delete this directory? [y/N] " answer
+                if [[ "$answer" =~ ^[Yy]$ ]]; then
+                    rm -rf "$submodule"
+                    echo "Deleted $submodule."
+                else
+                    echo "Skipped deleting $submodule."
+                fi
+            fi
+        fi
+    done
+}
+
+# Main execution
+main() {
+    local prev_ref="$1"
+    local new_ref="$2"
+    local checkout_type="$3"
+
+    # Only proceed if this is a branch switch (checkout_type = 0)
+    if [ "$checkout_type" -eq 1 ]; then
+        # File checkout, not branch switch, skip cleanup
+        exit 0
+    fi
+
+    sync_submodules
+    clean_obsolete_submodules "$prev_ref" "$new_ref"
+}
+
+main "$@"
+exit 0

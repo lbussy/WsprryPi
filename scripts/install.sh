@@ -207,9 +207,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
-declare GIT_TAG="${GIT_TAG:-2.0.0}"
-declare SEM_VER="${SEM_VER:-2.0.0}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0.1_RC.2}"
+declare GIT_TAG="${GIT_TAG:-2.0.1_RC.2}"
+declare SEM_VER="${SEM_VER:-2.0.1_RC.2}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -232,10 +232,16 @@ declare OPTIONS_LIST=()   # List of -f--fl arguments for command line parsing
 readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "systemd")}"
 
 # -----------------------------------------------------------------------------
+# @var WSPR_SERVICE
+# @brief The systemd service name for WsprryPi.
+# @details This variable holds the name of the main WsprryPi service that
+#          will be installed in `/etc/systemd/system/`.
+#
 # @var WSPR_EXE
 # @brief The executable name for WsprryPi.
 # @details This variable holds the name of the main WsprryPi executable that
-#          will be installed in `/usr/local/bin/` and used for signal processing.
+#          will be installed in `/usr/local/bin/` and used for signal
+#          processing.  Branches != main will use the debug version.
 #
 # @var WSPR_INI
 # @brief The configuration file for WsprryPi.
@@ -244,12 +250,14 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 #
 # @var LOG_ROTATE
 # @brief The log rotation configuration file.
-# @details This variable defines the logrotate configuration file, used to manage
-#          WsprryPi logs under `/var/log/wsprrypi/` by limiting file size and retention.
+# @details This variable defines the logrotate configuration file, used to
+#          manage WsprryPi logs under `/var/log/wsprrypi/` by limiting file
+#          size and retention.
 # -----------------------------------------------------------------------------
-readonly WSPR_EXE="wsprrypi"
+readonly WSPR_SERVICE="wsprrypi"
+# shellcheck disable=SC2155
+readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
 readonly WSPR_INI="wsprrypi.ini"
-declare OLD_INI=""
 readonly LOG_ROTATE="logrotate.conf"
 
 # -----------------------------------------------------------------------------
@@ -496,13 +504,13 @@ declare LOG_OUTPUT="${LOG_OUTPUT:-both}"
 # @brief Specifies the path to the log file.
 #
 # @details Uses the environment variable LOG_FILE if set; otherwise defaults
-#          to "$USER_HOME/$WSPR_EXE.log", where USER_HOME is the user's home
-#          directory and WSPR_EXE is the executable name.
+#          to "$USER_HOME/$WSPR_SERVICE.log", where USER_HOME is the user's home
+#          directory and WSPR_SERVICE is the executable name.
 #
 # @example
 # LOG_FILE="/var/log/my_script.log" ./install.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
-declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
+declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_SERVICE.log}"
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
@@ -518,12 +526,12 @@ declare LOG_FILE="${LOG_FILE:-$USER_HOME/$WSPR_EXE.log}"
 # @example
 # LOG_LEVEL="ERROR" ./install.sh  # Force log level to ERROR.
 # -----------------------------------------------------------------------------
-: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null \
-                      | grep -Eq '^(main|master)$'; then
-                   echo INFO
-                 else
-                   echo DEBUG
-                 fi)}"
+: "${LOG_LEVEL:=$(if git rev-parse --abbrev-ref HEAD 2>/dev/null |
+    grep -Eq '^(main|master)$'; then
+    echo INFO
+else
+    echo DEBUG
+fi)}"
 declare LOG_LEVEL
 
 # -----------------------------------------------------------------------------
@@ -748,6 +756,7 @@ declare DEFAULT_APACHE_CONF="/etc/apache2/apache2.conf"
 # @default "/var/log/apache_tool.log"
 # @example DEFAULT_LOG_FILE="/var/log/custom_installer.log" ./install.sh
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
 declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
 
 # -----------------------------------------------------------------------------
@@ -1847,6 +1856,7 @@ replace_string_in_script() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 pause() {
     # Prompt the user
     printf "Press any key to continue..."
@@ -4547,7 +4557,7 @@ exec_command() {
     failed_pre+=":"
 
     # Print ephemeral “Running” line
-    printf "%b[-]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
     # Optionally ensure it shows up (especially if the command is super fast):
     sleep 0.02
 
@@ -4575,9 +4585,9 @@ exec_command() {
 
     # Print final success/fail
     if [[ $status -eq 0 ]]; then
-        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+        printf "%b[  ✔  ]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
     else
-        printf "%b[✘]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
+        printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
         # If specifically “command not found” exit code:
         if [[ $status -eq 127 ]]; then
             warn "Command not found: $exec_process"
@@ -4748,7 +4758,7 @@ ARGUMENTS_LIST=(
 # -----------------------------------------------------------------------------
 OPTIONS_LIST=(
     "-h|--help 0 usage Show these instructions 1"
-    "-v|--version 0 version Display $WSPR_EXE version 1"
+    "-v|--version 0 version Display $WSPR_SERVICE version 1"
 )
 
 # -----------------------------------------------------------------------------
@@ -5038,12 +5048,12 @@ remove_legacy_services() {
 
             if systemctl is-active --quiet "$full" 2>/dev/null; then
                 exec_command "Stopping ${full}" \
-                             "systemctl stop ${full}"   "$debug"
+                    "systemctl stop ${full}" "$debug"
             fi
 
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
                 exec_command "Disabling ${full}" \
-                             "systemctl disable ${full}" "$debug"
+                    "systemctl disable ${full}" "$debug"
             fi
         done
 
@@ -5053,15 +5063,15 @@ remove_legacy_services() {
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
                     exec_command "Removing unit file ${unit_file}" \
-                                 "rm -f -- ${unit_file}"       "$debug"
+                        "rm -f -- ${unit_file}" "$debug"
                 fi
             done
         done
     done
 
     # final cleanup
-    exec_command "Resetting failed systemd states" "systemctl reset-failed"   "$debug"
-    exec_command "Reloading systemd daemon"        "systemctl daemon-reload" "$debug"
+    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
+    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5513,7 +5523,7 @@ upgrade_ini() {
       }
       print
     }
-    ' "$old_ini" "$new_ini" > "$merged_ini" 2> /tmp/upgrade_ini.err; then
+    ' "$old_ini" "$new_ini" >"$merged_ini" 2>/tmp/upgrade_ini.err; then
         rc=$?
         # Capture the errors
         local err_details
@@ -5573,6 +5583,7 @@ manage_service() {
     fi
 
     # Get from args
+    # shellcheck disable=SC2034
     local daemon_exe="$1"
     local exec_start="$2"
     local use_syslog="$3"
@@ -5587,8 +5598,7 @@ manage_service() {
     local log_std_out
     local retval=0 # Initialize return value
 
-    daemon_name="${daemon_exe##*/}" # Remove path
-    daemon_name="${daemon_name%.*}" # Remove extension (only if there is one)
+    daemon_name="${WSPR_SERVICE}" # Remove path
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
     # Install under /etc so it overrides anything in /lib
@@ -5649,6 +5659,8 @@ manage_service() {
             exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
             exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
             exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
+            exec_command "Change ownership on logs" "chown root:www-data $log_path/${syslog_identifier}_log" "$debug" || retval=1
+            exec_command "Change permissions on logs" "chmod 644 $log_path/${syslog_identifier}_log" "$debug" || retval=1
         fi
 
         logI "Systemd service $daemon_name created."
@@ -5897,8 +5909,11 @@ manage_sound() {
 # @param  $@                 optional debug flags
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 manage_apache() {
-    local debug; debug=$(debug_start "$@");  eval set -- "$(debug_filter "$@")"
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
     local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
     local sn="$DEFAULT_SERVERNAME"
 
@@ -5944,26 +5959,26 @@ EOF
 " "$debug"
 
             # Turn sites on/off
-            exec_command "Enable Apache modules"     "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
-            exec_command "Disabling default site"    "a2dissite 000-default.conf" "$debug"
-            exec_command "Enabling wsprrypi site"    "a2ensite wsprrypi.conf" "$debug"
+            exec_command "Enable Apache modules" "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
+            exec_command "Disabling default site" "a2dissite 000-default.conf" "$debug"
+            exec_command "Enabling wsprrypi site" "a2ensite wsprrypi.conf" "$debug"
 
         else
             logW "Stock Apache page not found at $TARGET_FILE; skipping install." "$debug"
         fi
 
-    else  # ACTION=uninstall
+    else # ACTION=uninstall
 
-        exec_command "Disabling wsprrypi site"      "a2dissite wsprrypi.conf"     "$debug"
-        exec_command "Re-enabling default site"     "a2ensite 000-default.conf"   "$debug"
-        exec_command "Removing site config"         "rm -f $site_conf"            "$debug"
+        exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
+        exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
+        exec_command "Removing site config" "rm -f $site_conf" "$debug"
         exec_command "Removing ServerName directive" \
-                     "sed -i '/^$sn/d' $APACHE_CONF"  "$debug"
+            "sed -i '/^$sn/d' $APACHE_CONF" "$debug"
     fi
 
     # Final sanity-check + reload
-    exec_command "Testing Apache configuration"   "apache2ctl configtest"       "$debug"
-    exec_command "Reloading Apache"               "systemctl reload apache2"    "$debug"
+    exec_command "Testing Apache configuration" "apache2ctl configtest" "$debug"
+    exec_command "Reloading Apache" "systemctl reload apache2" "$debug"
 
     debug_end "$debug"
     return 0
@@ -5974,6 +5989,7 @@ EOF
 # @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
 # @return   0 if it looks like the stock Apache page, 1 otherwise.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 is_stock_apache_page() {
     local debug
     debug=$(debug_start "$@")
@@ -5986,9 +6002,8 @@ is_stock_apache_page() {
 
     # common stock-page phrases (Ubuntu/Debian, RHEL/CentOS, generic)
     if grep -qiE \
-       'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
-       "$file"
-    then
+        'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
+        "$file"; then
         debug_end "$debug"
         return 0
     else
@@ -6019,7 +6034,7 @@ is_stock_apache_page() {
 # @example
 #   cleanup_files_in_directories "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 cleanup_files_in_directories() {
     local debug
     debug=$(debug_start "$@")
@@ -6032,8 +6047,8 @@ cleanup_files_in_directories() {
     # Always cleanup merged INI if it exists
     if [[ -f "$dest_root/config/wsprrypi_merged.ini" ]]; then
         exec_command "Delete merged INI source" \
-                    "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
-                    "$debug" || {
+            "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
+            "$debug" || {
             logE "Failed to delete local install files."
             debug_end "$debug"
             return 1
@@ -6075,7 +6090,7 @@ cleanup_files_in_directories() {
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
 # @global REPO_TITLE The display name of the repository.
-# @global WSPR_EXE The executable name for WsprryPi.
+# @global WSPR_SERVICE The executable name for WsprryPi.
 #
 # @param $1 The overall success or failure status (0 for success, 1 for failure).
 # @param $2 Debug flag for enabling or disabling debug output.
@@ -6087,7 +6102,7 @@ cleanup_files_in_directories() {
 # @example
 #   finish_script 0 "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 finish_script() {
     local debug
     debug=$(debug_start "$@")
@@ -6166,7 +6181,7 @@ finish_script() {
 #          for uninstallation. Certain functions are skipped during uninstall.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
-# @global WSPR_EXE The executable name for WsprryPi.
+# @global WSPR_SERVICE The executable name for WsprryPi.
 # @global WSPR_INI The configuration file name for WsprryPi.
 # @global WSPR_WATCH_EXE The WsprryPi watch executable.
 # @global REPO_NAME The repository name for log file management.
@@ -6181,7 +6196,7 @@ finish_script() {
 # @example
 #   manage_wsprry_pi "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
 manage_wsprry_pi() {
     local debug
     debug=$(debug_start "$@")
@@ -6226,30 +6241,31 @@ manage_wsprry_pi() {
     # Select the execution order based on the action
     local group_to_execute=()
     case "$ACTION" in
-        install)
-            debug_print "(INSTALL) Creating group_to_execute list (after processing):" "$debug"
-            group_to_execute=("${install_group[@]}")
-            ;;
-        uninstall)
-            debug_print "(UNINSTALL) Reversing and filtering install_group…" "$debug"
+    install)
+        debug_print "(INSTALL) Creating group_to_execute list (after processing):" "$debug"
+        group_to_execute=("${install_group[@]}")
+        ;;
+    uninstall)
+        debug_print "(UNINSTALL) Reversing and filtering install_group…" "$debug"
 
-            # Build a regex like: git_clone|remove_legacy_services|remove_legacy_files_and_dirs|cleanup_files_in_directories
-            local skip_regex
-            skip_regex=$(printf "|%s" "${skip_on_uninstall[@]}")
-            skip_regex=${skip_regex:1}
+        # Build a regex like: git_clone|remove_legacy_services|remove_legacy_files_and_dirs|cleanup_files_in_directories
+        local skip_regex
+        skip_regex=$(printf "|%s" "${skip_on_uninstall[@]}")
+        skip_regex=${skip_regex:1}
 
-            # Reverse and drop any line that starts with a skip-name
-            mapfile -t group_to_execute < <(
-                printf '%s\n' "${install_group[@]}" |
-                  { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}' ; } |
-                  grep -v -E "^($skip_regex)( |$)"
-            )
-            # Re-add manage_sound at the very end
-            group_to_execute+=( "manage_sound" )
-            ;;
-        *)
-            die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
-            ;;
+        # Reverse and drop any line that starts with a skip-name
+        # shellcheck disable=SC2015
+        mapfile -t group_to_execute < <(
+            printf '%s\n' "${install_group[@]}" |
+                { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}'; } |
+                grep -v -E "^($skip_regex)( |$)"
+        )
+        # Re-add manage_sound at the very end
+        group_to_execute+=("manage_sound")
+        ;;
+    *)
+        die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
+        ;;
     esac
 
     # Debug print the final group_to_execute list

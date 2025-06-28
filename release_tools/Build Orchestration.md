@@ -1,69 +1,116 @@
-# Build Orchestration
+# Release Orchestration
 
-Builds require the tag and branch to be consistent for use in the install script as well as the executable linking for compiler tags.  To do that, we will follow these steps:
+Wsprry Pi builds require the tag and branch to be consistent for use in the install script as well as the executable linking for compiler tags. To do that, we will follow these steps.
 
-1. Create or update your release branch
+This guide outlines the precise steps to prepare a release where the Git **branch** and **tag** share the same name. In this situation, Git can be ambiguous when resolving references. We resolve this by being explicit with `refs/heads/` (branches) and `refs/tags/` (tags) in all commands.
 
-    ```bash
-    git checkout -b 2.0_RC.1
-    ```
+Globally search/replace `2.0.1_RC.2` with your desired version.
 
-2. Edit your source & install script
-   - Bump any VERSION macros or install-script annotations to v1.2.3.
-   - Make all other bug-fix or feature changes you need.
+---
 
-3. Commit just those edits
+## Build Orchestration Steps
 
-    ```bash
-    git add src/ install.sh
-    git commit -m "Prepare 2.0_RC.1 release"
-    ```
+1. **Create or update your release branch**
 
-4. Tag that commit (so your Makefile’s git describe/git rev-parse --abbrev-ref HEAD sees v1.2.3)
+   ```bash
+   git checkout -b 2.0.1_RC.2
+   ```
 
-    ```bash
-    git tag -a 2.0_RC.1 -m "Release Candidate 2.0 RC.1"
-    ```
+2. **Edit your source and install script**
 
-5. Build the binary
+    * Update `scripts\install.sh` with proper version:
+        ```bash
+        declare REPO_BRANCH="${REPO_BRANCH:-2.0.1_RC.2}"
+        declare GIT_TAG="${GIT_TAG:-2.0.1_RC.2}"
+        declare SEM_VER="${SEM_VER:-2.0.1_RC.2}"
+        ```
+    * Apply any required feature changes or bug fixes.
 
-    ```bash
-    ./release_tools/make_executables.sh
-    ```
+3. **Commit those edits**
 
-6. Stage the freshly built executable
+   ```bash
+   git add scripts/install.sh
+   git add git add release_tools/Build\ Orchestration.md 
+   git commit -m "Prepare 2.0.1_RC.2 release"
+   ```
 
-    ```bash
-    git add ./executables/
-    ```
+4. **Create an annotated tag on that commit**
 
-7. Amend your “2.0_RC.1” commit so it now includes the binary too
+   ```bash
+   git tag -a 2.0.1_RC.2 -m "Release 2.0.1_RC.2"
+   ```
 
-    ```bash
-    git commit --amend --no-edit
-    ```
+5. **Build the binary**
 
-8. Move the tag to point at the amended commit
+   ```bash
+   ./release_tools/make_executables.sh
+   ```
 
-    ```bash
-    git tag -f 2.0_RC.1
-    ```
+6. **Stage the built executable**
 
+   ```bash
+   git add ./executables/
+   ```
 
-9. Push your branch and tags
+7. **Amend the previous commit to include the binary**
 
-    ```bash
-    git push origin 2.0_RC.1
-    git push origin --force --tags
-    ```
+   ```bash
+   git commit --amend --no-edit
+   ```
 
-⸻
+8. **Force the tag to point to the amended commit**
 
-Why this order?
+   ```bash
+   git tag -f 2.0.1_RC.2
+   ```
 
-- Tag before build so your Makefile macros (e.g. via git describe --tags) pick up the new version.
-- Build before adding the binary so the binary you commit really contains that tag.
-- Amend + retag to keep everything (source edits, install-script note, and binary) in a single tagged commit.
-- Force-push only on your release branch (never on main) so history rewriting is contained.
+9. **Push the branch and tag to the origin**
 
-This guarantees that checking out v1.2.3 gives you exactly the source, the installer annotation, and the matching executable all in one shot.
+   ```bash
+   git push origin HEAD:refs/heads/2.0.1_RC.2
+   git push origin --force tag 2.0.1_RC.2
+   ```
+
+---
+
+## Why This Order?
+
+* **Tag before build**: Ensures `git describe --tags` returns the correct version for embedding in the executable.
+* **Build before staging**: Guarantees the binary contains that exact tag.
+* **Amend + retag**: Ensures all release content (code, install script, and binary) lives in a single commit.
+* **Explicit refs**: Prevents ambiguity between `refs/tags/2.0.1_RC.2` and `refs/heads/2.0.1_RC.2`.
+* **Force-push allowed only on release branches**: Avoid rewriting history on `main`.
+
+---
+
+## Notes
+
+* `git checkout 2.0.1_RC.2` will prefer the **branch**.
+
+* To check out the tag explicitly, use:
+
+  ```bash
+  git checkout refs/tags/2.0.1_RC.2
+  ```
+
+* Consider prefixing tags with `v`, e.g., `v2.0.1_Beta.3`, to avoid ambiguity.
+
+---
+
+## Validation Tip
+
+Verify what `git describe` sees before and after the tag:
+
+```bash
+git describe --tags --always
+```
+
+To confirm the tag points to the correct commit:
+
+```bash
+git show refs/tags/2.0.1_RC.2
+```
+
+---
+
+By following this process with **explicit reference usage**, your release artifacts will remain consistent and unambiguous across source, install scripts, and compiled binaries.

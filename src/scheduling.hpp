@@ -2,7 +2,7 @@
  * @file scheduling.hpp
  * @brief Manages transmit, INI monitoring and scheduling for Wsprry Pi
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -58,6 +58,11 @@ extern std::mutex exitwspr_mtx;
 extern std::condition_variable exitwspr_cv;
 
 /**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+extern std::atomic<bool> exiting_wspr;
+
+/**
  * @brief Flag indicating whether the WSPR loop should terminate.
  *
  * Set to \c true by the signal handler callback under protection of
@@ -65,6 +70,11 @@ extern std::condition_variable exitwspr_cv;
  * loop can break out of its wait and begin shutdown.
  */
 extern bool exitwspr_ready;
+
+/**
+ * @brief Atomic bool used to signal other functions that we are shutting down.
+ */
+extern std::atomic<bool> exiting;
 
 /**
  * @brief Flag indicating if a system shutdown is in progress.
@@ -99,6 +109,7 @@ extern void callback_shutdown_system();
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
+void callback_transmission_started(double frequency);
 void callback_transmission_started(const std::string &msg);
 
 /**

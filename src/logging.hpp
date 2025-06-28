@@ -2,7 +2,7 @@
  * @file logging.hpp
  * @brief Handles management of the LCBLog logging utility.
  *
- * This project is is licensed under the MIT License. See LICENSE.MIT.md
+ * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
  * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
@@ -30,28 +30,6 @@
 #define _LOGGING_HPP
 
 #include "lcblog.hpp"
-
-/**
- * @brief Global instance of the LCBLog logging utility.
- *
- * The `llog` object provides thread-safe logging functionality with support for
- * multiple log levels, including DEBUG, INFO, WARN, ERROR, and FATAL.
- * It is used throughout the application to log messages for debugging,
- * monitoring, and error reporting.
- *
- * This instance is initialized globally to allow consistent logging across all
- * modules. Log messages can include timestamps and are output to standard streams
- * or log files depending on the configuration.
- *
- * Example usage:
- * @code
- * llog.logS(INFO, "Application started.");
- * llog.logE(ERROR, "Failed to open configuration file.");
- * @endcode
- *
- * @see https://github.com/lbussy/LCBLog for detailed documentation and examples.
- */
-extern LCBLog llog;
 
 /**
  * @brief Initializes the logger with the appropriate log level.
