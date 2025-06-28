@@ -2,7 +2,7 @@
 
 ## C++ Code
 
-- [ ] Compile during install vs packaging executables
+- [ ] Compile during install vs packaging executables (check apt packages)
 - [ ] Do 64-bit
 - [ ] Add QRSS
 
