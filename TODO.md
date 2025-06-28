@@ -15,7 +15,6 @@
 
 ## Documentation
 
-- [ ] Update for 64-bit
 - [ ] Update for QRSS
 
 ## Shit to Remember

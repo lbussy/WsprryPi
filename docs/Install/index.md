@@ -5,21 +5,11 @@
 
 You will need the following:
 
-- A Raspberry Pi:
-  - Raspberry Pi 1 B
-  - Raspberry Pi 1 B+
-  - Raspberry Pi 1 A+
-  - Raspberry Pi 2
-  - Raspberry Pi Zero
-  - Raspberry Pi 3
-  - Raspberry Pi Zero W
-  - Raspberry Pi 3 B+
-  - Raspberry Pi 3 A+
-  - Raspberry Pi 4
+- A Raspberry Pi
 - An SD card for the OS image
-- A power supply for the Pi.  Pay attention here to potentially noisy power supplies.  You will benefit from a well-regulated supply with sufficient ripple suppression.  You may see supply ripple as mixing products centered around the transmit carrier, typically at 100/120Hz.
+- A power supply for the Pi.  Pay attention here to potentially noisy power supplies.  You will benefit from a well-regulated supply with sufficient ripple suppression.  You may see supply ripple as mixing products centered around the transmit carrier, typically at 120Hz (60Hz mains) and 100Hz (50Hz mains.)
 
-**NOTE: The Raspberry Pi 5 and any 64-bit OS is not (yet?) supported.**
+**NOTE: The Raspberry Pi 5 is not supported.**
 
 ## Prerequisites
 
@@ -27,7 +17,7 @@ This section may be the most challenging part of the whole installation.  *You m
 
 ![Raspberry Pi Imager](rpi_imager.png)
 
-**You MUST use a 32-bit version**, and I am only testing with the current `stable` and `oldstable` versions: Bookworm and Bullseye.
+I am only testing the current `stable` and `oldstable` versions: Bookworm and Bullseye.
 
 You can use a full-featured desktop version with all the bells and whistles, or Wsprry Pi will run just fine on the Lite version on an SD card as small as 2 GB (although a minimum of 8 GB seems more comfortable these days.)  You can even run it headless without a keyboard, mouse, or monitor.  If you enable SSH, you can use your command line from Windows 10/11, MacOS, or another Pi.
 
@@ -36,12 +26,8 @@ Whatever you do, you will need command line access to your Pi to proceed.  Once 
 **Open the Raspberry Pi Imager:**
 
 * Choose your Raspberry Pi Device
-* Choose your Operating system from one of these:
-  * Raspberry Pi OS (32-bit)
-  * Raspberry Pi OS (other)
-    * Raspberry Pi OS Lite (32-bit)
-    * Raspberry Pi OS Full (32-bit)
-* Choose Storage (there should be only one SD card inserted)
+* Choose your Operating system
+* Choose Storage (you should only insert one SD card)
 * Next
 * At "Use OS Customizations," select "Edit Settings."
   * On the General Tab
@@ -66,14 +52,15 @@ Whatever you do, you will need command line access to your Pi to proceed.  Once 
 
 Aside from the obvious, installing Wsprry Pi, the install script will do the following:
 
-- **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers.  The [Apache Software Foundation](https://www.apache.org/) maintains Apache.  Apache is used to control Wsprry Pi from an easy-to-use web page.  In addition, if the Apache installation was not being used previously, a redirect from the root of the webserver to `/wsprrypi/` is created for ease of use.  Finally, three proxies are created to communicate from the web page to the application:
+- **Install Apache2**, a popular open-source, cross-platform web server that is the most popular web server by the numbers.  The [Apache Software Foundation](https://www.apache.org/) maintains Apache.  Apache is used to control Wsprry Pi from an easy-to-use web page.  In addition, if you have not used the Apache installation previously, a redirect from the root of the webserver to `/wsprrypi/` will be created for ease of use.  Finally, the script creates three proxies to communicate from the web page to the application:
   - `http://127.0.0.1:31415/config` to `/wsprrypi/config` for getting/setting the configuration
   - `http://127.0.0.1:31415/version` to `/wsprrypi/version` to retrieve the running version.
   - `ws://127.0.0.1:31416/socket` to `/wsprrypi/socket` for Web Socket communications.
 - **Install Chrony**, [a replacement for ntpd](https://chrony-project.org/).
 - **Install PHP**, a popular general-purpose scripting language especially suited to web development.  The [PHP Group](https://www.php.net/) maintains PHP.  I wrote the web pages in PHP.
 - **Install Raspberry Pi development libraries and other Packages**, `git`, and `libgpiod2`.
-- **Disable the Raspberry Pi's built-in sound card.**  Wsprry Pi uses the RPi PWM peripheral to time the frequency transitions of the output clock.  The Pi's sound system also uses this peripheral; any sound events during a WSPR transmission will interfere with WSPR transmissions.
+- **Compile and configure Wsprry Pi**
+- **Disable the Raspberry Pi's built-in sound card.** Wsprry Pi uses the RPi PWM peripheral to time the frequency transitions of the output clock.  The Pi's sound system also uses this peripheral; any sound events during a WSPR transmission will interfere with WSPR transmissions.
 
 ## Install WSPR
 
@@ -87,57 +74,74 @@ If my DNS is broken for some reason, this longer form should work:
 
 This install command is idempotent; running it additional times will not have any negative impact.  If an update is released, re-run the installer to take advantage of the new release.
 
-This installer has been GREATLY simplified since version 1.x.  Here is more or less what you will see:
+I have GREATLY simplified the installer since version 1.x.  Here is more or less what you will see:
 
 ```
 [INFO ] Checking environment.
-[INFO ] System: Raspbian GNU/Linux 11 (bullseye).
-[INFO ] Running Wsprry Pi's 'install.sh', version 2.0
+[INFO ] System: Debian GNU/Linux 12 (bookworm).
+[INFO ] Running Wsprry Pi's 'install.sh', version 2.0.1-64-bit+6.a4a0da8-dirty
 [INFO ] Updating and managing required packages (this may take a few minutes).
-[✔] Complete: Update local package index.
-[✔] Complete: Fixing broken or incomplete package installations.
-[✔] Complete: Upgrade jq.
-[✔] Complete: Upgrade git.
-[✔] Complete: Upgrade apache2.
-[✔] Complete: Upgrade php.
-[✔] Complete: Upgrade chrony.
-[✔] Complete: Upgrade gpiod.
-[✔] Complete: Upgrade libgpiod-dev.
+[  ✔  ] Complete: Update local package index.
+[  ✔  ] Complete: Fixing broken or incomplete package installations.
+[  ✔  ] Complete: Upgrade git.
+[  ✔  ] Complete: Upgrade apache2.
+[  ✔  ] Complete: Upgrade php.
+[  ✔  ] Complete: Upgrade chrony.
+[  ✔  ] Complete: Upgrade libgpiod2.
 [INFO ] APT package handling completed successfully.
 [INFO ] Wsprry Pi installation beginning.
-[INFO ] Ensuring destination directory does not exist: '/home/pi/WsprryPi'
 [INFO ] Destination directory already exists: '/home/pi/WsprryPi'
-[INFO ] Installing wsprrypi.
-[✔] Complete: Install application.
-[✔] Complete: Change ownership on application.
-[✔] Complete: Make app executable.
+[INFO ] Cleaning up older services.
+[  ✔  ] Complete: Resetting failed systemd states.
+[  ✔  ] Complete: Reloading systemd daemon.
+[INFO ] Cleaning up older files and directories.
+[  ✔  ] Complete: Compile debug binary (this may take several minutes).
+[  ✔  ] Complete: Moving binary to staging.
+[INFO ] Installing wsprrypi_debug.
+[  ✔  ] Complete: Install application.
+[  ✔  ] Complete: Change ownership on application.
+[  ✔  ] Complete: Make app executable.
 [INFO ] Installing 'wsprrypi' configuration.
-[✔] Complete: Install configuration.
-[✔] Complete: Change ownership on configuration.
-[✔] Complete: Set config permissions.
+[INFO ] Merged /usr/local/etc/wsprrypi.ini into new config.
+[  ✔  ] Complete: Remove old INI after merge.
+[  ✔  ] Complete: Install configuration.
+[  ✔  ] Complete: Change ownership on configuration.
+[  ✔  ] Complete: Set config permissions.
 [INFO ] Updating systemd service: wsprrypi.service.
-[✔] Complete: Disable systemd service.
-[✔] Complete: Stop systemd service.
-[✔] Complete: Copy systemd file.
-[✔] Complete: Change ownership on systemd file.
-[✔] Complete: Change permissions on systemd file.
-[✔] Complete: Create log path.
-[✔] Complete: Change ownership on log path.
-[✔] Complete: Change permissions on log path.
-[✔] Complete: Enable systemd service.
-[✔] Complete: Reload systemd.
-[✔] Complete: Start systemd service.
+[  ✔  ] Complete: Disable systemd service.
+[  ✔  ] Complete: Stop systemd service.
+[  ✔  ] Complete: Removing old unit in /etc.
+[  ✔  ] Complete: Copy systemd file.
+[  ✔  ] Complete: Change ownership on systemd file.
+[  ✔  ] Complete: Change permissions on systemd file.
+[  ✔  ] Complete: Create log path.
+[  ✔  ] Complete: Change ownership on log path.
+[  ✔  ] Complete: Change permissions on log path.
+[  ✔  ] Complete: Enable systemd service.
+[  ✔  ] Complete: Reload systemd.
+[  ✔  ] Complete: Start systemd service.
+[  ✔  ] Complete: Change ownership on logs.
+[  ✔  ] Complete: Change permissions on logs.
 [INFO ] Systemd service wsprrypi created.
 [INFO ] Installing 'logrotate' configuration.
-[✔] Complete: Install configuration.
-[✔] Complete: Change ownership on configuration.
-[✔] Complete: Set config permissions.
+[  ✔  ] Complete: Install configuration.
+[  ✔  ] Complete: Change ownership on configuration.
+[  ✔  ] Complete: Set config permissions.
 [INFO ] Installing web files to '/var/www/html/wsprrypi'.
-[✔] Complete: Create target web directory.
-[✔] Complete: Copy web files.
-[✔] Complete: Set ownership.
-[✔] Complete: Set directory permissions.
-[✔] Complete: Set file permissions.
+[  ✔  ] Complete: Create target web directory.
+[  ✔  ] Complete: Copy web files.
+[  ✔  ] Complete: Set ownership.
+[  ✔  ] Complete: Set directory permissions.
+[  ✔  ] Complete: Set file permissions.
+[  ✔  ] Complete: Delete merged INI source.
+[INFO ] Running from repo, skipping cleanup.
+[  ✔  ] Complete: Adding ServerName directive.
+[  ✔  ] Complete: Writing /etc/apache2/sites-available/wsprrypi.conf.
+[  ✔  ] Complete: Enable Apache modules.
+[  ✔  ] Complete: Disabling default site.
+[  ✔  ] Complete: Enabling wsprrypi site.
+[  ✔  ] Complete: Testing Apache configuration.
+[  ✔  ] Complete: Reloading Apache.
 ```
 
 You may see:
@@ -170,7 +174,7 @@ Ensure your device is on the same network and that mDNS is
 supported by your system.
 ```
 
-If you were prompted to reboot, do that now.  At this point (and if you rebooted if prompted), Wsprry Pi is installed and running.
+If the script prompts you to reboot, do that now.  At this point (and if you rebooted if prompted), Wsprry Pi is installed and running.
 
 Note the URL for the configuration UI listed as a `{name}.local` and IP address choice.  You can access your system with the `{name}.local` names without remembering the IP address.  The `{name}.local` is convenient for automatically assigned IP addresses in most home networks.  The IP address of your Raspberry Pi may change over time, but the name will not.
 
@@ -180,6 +184,6 @@ Connect to your new web page from your favorite computer or cell phone with the 
 
 ## Additional Hardware
 
-While the TAPR Hat is optional, an antenna is not.  Choosing an antenna is beyond the scope of this documentation, but you can use something as simple as a random wire connected to the GPIO4 pin (GPCLK0), which is numbered 7 on the header.
+While the TAPR Hat is optional, an antenna is not.  Choosing an antenna is beyond the scope of this documentation, but you can use something as simple as a random wire connected to the GPIO4 pin (GPCLK0), which is numbered `7` on the header.
 
 ![Raspberry Pi Pinout](pinout.png)
