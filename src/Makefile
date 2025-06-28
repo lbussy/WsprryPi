@@ -41,7 +41,7 @@ WSPR_PARAMS := AA0NT EM18 20 40m
 TEST_FREQ := 730000 # Frequency for test tone
 
 # Add any required submodules by their src path
-SUBMODULE_SRCDIRS := $(wildcard ./Broadcom-Mailbox/src)
+SUBMODULE_SRCDIRS := $(wildcard ./Mailbox/src)
 SUBMODULE_SRCDIRS += $(wildcard ./INI-Handler/src)
 SUBMODULE_SRCDIRS += $(wildcard ./LCBLog/src)
 SUBMODULE_SRCDIRS += $(wildcard ./MonitorFile/src)
