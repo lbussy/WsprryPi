@@ -19,7 +19,6 @@ Globally search/replace `main` with your desired version.
 2. **Edit your source and install script**
 
     * Update `scripts\install.sh` with proper version:
-
         ```bash
         declare REPO_BRANCH="${REPO_BRANCH:-2.0.2_Beta.1}"
         declare GIT_TAG="${GIT_TAG:-v2.0.2_Beta.1}"
