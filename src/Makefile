@@ -273,7 +273,7 @@ build/bin/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
 .PHONY: clean
 clean:
 	$(Q)echo "Cleaning up build artifacts."
-	$(Q)rm -rf build
+	$(Q)sudo rm -rf build
 
 # Release target
 .PHONY: release
