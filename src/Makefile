@@ -133,8 +133,29 @@ DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
 CXX = g++
 CC = gcc
 
-# Allow threading using all available processors
-# MAKEFLAGS := -j$(nproc)
+# Compute total physical RAM in kilobytes
+MEM_KB := $(shell awk '/^MemTotal:/ {print $$2}' /proc/meminfo)
+
+# Define thresholds in kB (1.5 GiB = 1536 MiB, 3.5 GiB = 3584 MiB)
+ONE_POINT_FIVE_GIB_KB   := $(shell expr 1536 \* 1024)
+THREE_POINT_FIVE_GIB_KB := $(shell expr 3584 \* 1024)
+
+# Count CPU cores
+NPROCS := $(shell nproc)
+
+# Select job count based on memory tier:
+#   Below 1.5 GiB → 1 job
+#   Between 1.5 and 3.5 GiB → half of nproc
+#   Above 3.5 GiB → full nproc
+ifeq ($(shell [ $(MEM_KB) -lt $(ONE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
+	JOBS := 1
+else ifeq ($(shell [ $(MEM_KB) -lt $(THREE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
+	JOBS := $(shell expr $(NPROCS) / 2)
+else
+	JOBS := $(NPROCS)
+endif
+# Pass the chosen parallelism into Make
+MAKEFLAGS += -j$(JOBS)
 
 # Compiler Flags
 #
@@ -268,7 +289,9 @@ build/bin/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
 ##
 # Phony targets
 ##
-.PHONY: clean release debug test test-tone test-oneshot gdb install uninstall lint macros help
+.PHONY: clean release RELEASE debug DEBUG test test-tone test-oneshot gdb install uninstall lint macros help
+DEBUG: debug
+RELEASE: release
 
 .PHONY: clean
 clean:
