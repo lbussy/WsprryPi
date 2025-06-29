@@ -209,9 +209,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-64-bit}"
-declare GIT_TAG="${GIT_TAG:-2.0.1}"
-declare SEM_VER="${SEM_VER:-2.0.1-64-bit+55aa7ac}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.0.2_Beta.1}"
+declare GIT_TAG="${GIT_TAG:-v2.0.2_Beta.1}"
+declare SEM_VER="${SEM_VER:-2.0.2_Beta.1}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -813,6 +813,20 @@ declare APACHE_CONF="${APACHE_CONF:-$DEFAULT_APACHE_CONF}"
 # @example SERVERNAME_DIRECTIVE="ServerName example.com" ./install.sh
 # -----------------------------------------------------------------------------
 declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
+
+# -----------------------------------------------------------------------------
+# @var WAS_RUNNING
+# @type bool
+# @brief Semaphore indicating if the service was running before invocation.
+# @details
+#   Set to true if the target service was active at the start of the script.
+#   Used to decide whether to restart or stop the service during cleanup.
+# @default false
+# @example
+#   # Check and record service status before changes
+#   WAS_RUNNING=$(systemctl is-active --quiet myservice && echo true || echo false)
+# -----------------------------------------------------------------------------
+declare WAS_RUNNING="false"
 
 ############
 ### Standard Functions
@@ -5243,7 +5257,7 @@ start_script() {
 # @return Returns 0 on success, 1 on error.
 #
 # @example
-#   compile_binary "wsprrypi" "debug" 
+#   compile_binary "wsprrypi" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 compile_binary() {
@@ -5260,14 +5274,16 @@ compile_binary() {
     fi
 
     # Declare local variables
-    local executable exe_name compiled_path staging_path type
+    local executable exe_name compiled_path staging_path type daemon_name
 
     # Get from args or associative array
     executable="$1"
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
     compiled_path="${LOCAL_SOURCE_DIR}/build/bin/${executable}"
-    staging_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
+    staging_path="${LOCAL_REPO_DIR}/executables/"
+    daemon_name="${WSPR_SERVICE}" # Remove path
+    daemon_systemd_name="${daemon_name}.service"
 
     if [[ "$executable" == *_debug ]]; then
         type=debug
@@ -5275,13 +5291,26 @@ compile_binary() {
         type=release
     fi
 
+    # Stop Daemon
+    debug_print "Stopping daemon" "$debug"
+    if systemctl is-active --quiet "$daemon_name" 2>/dev/null; then
+        WAS_RUNNING="true"
+        exec_command "Stopping ${full}" \
+            "systemctl stop ${full}" "$debug" || {
+                logE "Error: Unable to stop daemon."
+                debug_end "$debug"
+                return 1
+            }
+    fi
+
+
     # Compile the binary
     debug_print "Compiling binary." "$debug"
     if [[ "$DRY_RUN" == "true" ]]; then
         logD "Exec: (cd ${LOCAL_SOURCE_DIR} && make ${type})"
     else
-        exec_command "Compile ${type} binary (this may take several minutes)" "(cd ${LOCAL_SOURCE_DIR} && make ${type})" "$debug" || {
-            logE "Failed to compile binary."
+        exec_command "Compile ${type} binary (this takes ~10 minutes on a Pi 3)" "(cd ${LOCAL_SOURCE_DIR} && make ${type})" "$debug" || {
+            logE "Error: Unable to compile binary."
             debug_end "$debug"
             return 1
         }
@@ -5293,7 +5322,7 @@ compile_binary() {
         logD "Exec: cp -f $compiled_path $staging_path"
     else
         exec_command "Moving binary to staging" "cp -f ${compiled_path} ${staging_path}" "$debug" || {
-            logE "Failed to move binary."
+            logE "Error: Unable to move compiled binary."
             debug_end "$debug"
             return 1
         }
@@ -6177,6 +6206,54 @@ cleanup_files_in_directories() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Restore the daemon to its previous running state.
+# @details
+#   If the service was active before script changes and still exists,
+#   this function attempts to start it again. The operation is logged
+#   and errors are captured without aborting the script.
+#
+# @global WSPR_SERVICE  The name of the WSPR systemd service.
+# @global WAS_RUNNING   Semaphore indicating if the service was running
+#                     before the script stopped it.
+#
+# @param $1  Debug flag for enabling or disabling debug output.
+#
+# @return Returns 0 if no restart was needed or it succeeded;
+#         returns 1 if the restart command failed.
+#
+# @example
+#   restore_daemon_state "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+restore_daemon_state() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local daemon_name retval
+    retval=0
+
+    # Get from args
+    daemon_name="${WSPR_SERVICE}"
+
+    # Restore Daemon
+    debug_print "Restoring daemon" "$debug"
+    # If it was running before, and the service still exists, start it again
+    if [[ "$WAS_RUNNING" == true ]] && \
+    systemctl list-unit-files "${daemon_name}.service" &>/dev/null; then
+        exec_command "Restarting ${WSPR_SERVICE}" \
+            "systemctl start ${daemon_name}.service" "$debug" || {
+                logE "Error: Unable to restart ${WSPR_SERVICE}."
+                retval=1
+            }
+    fi
+
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Finalizes the installation or uninstallation process.
 # @details Logs and displays a completion message based on whether the install
 #          or uninstall was successful or failed. It also provides follow-up
@@ -6310,6 +6387,7 @@ manage_wsprry_pi() {
         "cleanup_files_in_directories"
         "manage_apache"
         "manage_sound"
+        "restore_daemon_state"
     )
 
     # Define functions to skip on uninstall using an indexed array
@@ -6320,6 +6398,7 @@ manage_wsprry_pi() {
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
         "manage_sound"
+        "restore_daemon_state"
     )
 
     # Start the script
@@ -6376,8 +6455,11 @@ manage_wsprry_pi() {
 
         # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
+        # Disable -e (crash out on error) temporarily
+        set +e
         eval "$func \"$debug\""
         local status=$?
+        set -e
 
         # Check if the function failed
         if [[ $status -ne 0 ]]; then

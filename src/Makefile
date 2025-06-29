@@ -134,7 +134,7 @@ CXX = g++
 CC = gcc
 
 # Allow threading using all available processors
-MAKEFLAGS := -j$(nproc)
+# MAKEFLAGS := -j$(nproc)
 
 # Compiler Flags
 #
