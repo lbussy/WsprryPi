@@ -24,7 +24,7 @@
 
 # Debug flags
 DEBUG := -DDEBUG_WSPR
-DEBUG += -DDEBUG_WSPR_TRANSMIT
+# DEBUG += -DDEBUG_WSPR_TRANSMIT
 # DEBUG += -DDEBUG_PPMMANAGER
 # DEBUG += -DDEBUG_SIGNAL_HANDLER
 
@@ -41,7 +41,7 @@ WSPR_PARAMS := AA0NT EM18 20 40m
 TEST_FREQ := 730000 # Frequency for test tone
 
 # Add any required submodules by their src path
-SUBMODULE_SRCDIRS := $(wildcard ./Broadcom-Mailbox/src)
+SUBMODULE_SRCDIRS := $(wildcard ./Mailbox/src)
 SUBMODULE_SRCDIRS += $(wildcard ./INI-Handler/src)
 SUBMODULE_SRCDIRS += $(wildcard ./LCBLog/src)
 SUBMODULE_SRCDIRS += $(wildcard ./MonitorFile/src)
@@ -273,7 +273,7 @@ build/bin/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
 .PHONY: clean
 clean:
 	$(Q)echo "Cleaning up build artifacts."
-	$(Q)rm -rf build
+	$(Q)sudo rm -rf build
 
 # Release target
 .PHONY: release

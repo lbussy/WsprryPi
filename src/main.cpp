@@ -153,7 +153,9 @@ int main(int argc, char *argv[])
 
     // Display version, Raspberry Pi model, and process ID for context.
     llog.logS(INFO, get_version_string());
-    llog.logS(INFO, "Running on:", get_pi_model(), ".");
+
+    llog.logS(INFO, "Running on:", get_pi_model(), ",", (sizeof(void *) == 8 ? "64-bit" : "32-bit"), " OS.");
+
     llog.logS(INFO, "Process PID:", getpid());
 
     // Startup WSPR loop

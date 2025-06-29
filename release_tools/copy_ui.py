@@ -146,10 +146,6 @@ def main():
     if not copy_files(submodule_data_path, web_path):
         sys.exit(1)
 
-    # Make link
-    if not link_ini("/usr/local/etc/wsprrypi.ini", web_path):
-        sys.exit(1)
-
     # Set permissions
     if not set_permissions(web_path):
         sys.exit(1)
