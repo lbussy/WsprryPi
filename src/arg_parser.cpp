@@ -704,121 +704,30 @@ bool load_from_ini()
     {
         return false;
     }
-
-    // Load Control section
     try
     {
+        // Load Control section
         config.transmit = iniFile.get_bool_value("Control", "Transmit");
-    }
-    catch (...)
-    {
-    }
 
-    // Load Common section
-    try
-    {
+        // Load Common section
         config.callsign = iniFile.get_string_value("Common", "Call Sign");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.grid_square = iniFile.get_string_value("Common", "Grid Square");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.power_dbm = iniFile.get_int_value("Common", "TX Power");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.frequencies = iniFile.get_string_value("Common", "Frequency");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.tx_pin = iniFile.get_int_value("Common", "Transmit Pin");
-    }
-    catch (...)
-    {
-    }
 
-    // Load Extended section
-    try
-    {
+        // Load Extended section
         config.ppm = iniFile.get_double_value("Extended", "PPM");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.use_ntp = iniFile.get_bool_value("Extended", "Use NTP");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.use_offset = iniFile.get_bool_value("Extended", "Offset");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.power_level = iniFile.get_int_value("Extended", "Power Level");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.use_led = iniFile.get_bool_value("Extended", "Use LED");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.led_pin = iniFile.get_int_value("Extended", "LED Pin");
-    }
-    catch (...)
-    {
-    }
 
-    // Load Server section
-    try
-    {
+        // Load Server section
         config.web_port = iniFile.get_int_value("Server", "Web Port");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.socket_port = iniFile.get_int_value("Server", "Socket Port");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.use_shutdown = iniFile.get_bool_value("Server", "Use Shutdown");
-    }
-    catch (...)
-    {
-    }
-    try
-    {
         config.shutdown_pin = iniFile.get_int_value("Server", "Shutdown Button");
     }
     catch (...)
@@ -892,6 +801,7 @@ bool parse_command_line(int argc, char *argv[])
         {"ppm", required_argument, nullptr, 'p'},       // Via: [Extended] PPM = 0.0
         {"terminate", required_argument, nullptr, 'x'}, // Global: config.tx_iterations
         {"test-tone", required_argument, nullptr, 't'}, // Global: config.test_tone
+        {"qrss", required_argument, nullptr, 'q'},      // Global: config.qrss
         // Not yet imeplemented: {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
@@ -1012,6 +922,46 @@ bool parse_command_line(int argc, char *argv[])
             else
             {
                 print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
+            }
+            break;
+        }
+        case 'q': // Use QRSS
+        {
+            /**
+             * TODO:
+             * We need:
+                - Transmit toggle (existing)
+                - TX LED (existing)
+                - Shutdown (existing)
+                - QRSS Mode (NEW) - QRSS, FSKCW, DFCW
+                - QRSS Dot Length (NEW) - In seconds
+                - Transmitted Characters (NEW)
+                - First Transmission Start Time (NEW) - From 0 to 59 minutes after the hour.
+                - Transmit Repeat Every (NEW) - Range from 0 (continuous) to 60 minutes.
+                - Exact Transmit Frequency (NEW)
+                - Frequency Calibration (existing)
+                - PPM Offset (existing)
+                - Transmit Power (existing)
+                - The “offset” in Hz for the frequency shift when using FSKCW and DFCW modes.
+            */
+            if (!config.use_ini)
+            {
+                try
+                {
+                    config.mode = ModeType::QRSS;
+                    // TODO: Figure out what we need here
+                }
+                catch (const std::invalid_argument &e)
+                {
+                    std::string error_message = "Invalid QRSS: " +
+                                                std::string(optarg) +
+                                                " Exception: " + e.what();
+                    print_usage(error_message, EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                // TODO: Insert ome valid message - print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
             }
             break;
         }
