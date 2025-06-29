@@ -13,17 +13,19 @@ Globally search/replace `main` with your desired version.
 1. **Create or update your release branch**
 
    ```bash
-   git checkout -b main
+   git checkout -b 2.0.2_Beta.1
    ```
 
 2. **Edit your source and install script**
 
     * Update `scripts\install.sh` with proper version:
+  
         ```bash
-        declare REPO_BRANCH="${REPO_BRANCH:-main}"
-        declare GIT_TAG="${GIT_TAG:-2.0.1}"
-        declare SEM_VER="${SEM_VER:-2.0.1}"
+        declare REPO_BRANCH="${REPO_BRANCH:-2.0.2_Beta.1}"
+        declare GIT_TAG="${GIT_TAG:-v2.0.2_Beta.1}"
+        declare SEM_VER="${SEM_VER:-2.0.2_Beta.1}"
         ```
+
     * Apply any required feature changes or bug fixes.
 
 3. **Commit those edits**
@@ -31,44 +33,44 @@ Globally search/replace `main` with your desired version.
    ```bash
    git add scripts/install.sh
    git add release_tools/Build\ Orchestration.md 
-   git commit -m "Prepare 2.0.1 release"
+   git commit -m "Prepare 2.0.2_Beta.1 release"
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-   git tag -a 2.0.1 -m "Release 2.0.1"
+   git tag -a v2.0.2_Beta.1 -m "Release 2.0.2_Beta.1"
    ```
 
-5. **Build the binary**
+5. ~~Build the binary~~ **No longer needed**
 
    ```bash
    ./release_tools/make_executables.sh
    ```
 
-6. **Stage the built executable**
+6. ~~Stage the built executable~~ **No lomger needed**
 
    ```bash
    git add ./executables/
    ```
 
-7. **Amend the previous commit to include the binary**
+7. ~~Amend the previous commit to include the binary~~ **No longer needed**
 
    ```bash
    git commit --amend --no-edit
    ```
 
-8. **Force the tag to point to the amended commit**
+8. ~~Force the tag to point to the amended commit~~ **No lomger needed**
 
    ```bash
-   git tag -f 2.0.1
+   git tag -f v2.0.2_Beta.1
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
-   git push origin HEAD:refs/heads/main
-   git push origin --force tag 2.0.1
+   git push origin HEAD:refs/heads/2.0.2_Beta.1
+   git push origin tag v2.0.2_Beta.1
    ```
 
 ---
