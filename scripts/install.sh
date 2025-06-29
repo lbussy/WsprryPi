@@ -4303,6 +4303,11 @@ get_proj_params() {
         SEM_VER="${SEM_VER:-0.0.1}"
         LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
         LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+            mkdir -p "${LOCAL_EXECUTABLES_DIR}"
+        if [[ ! -d "${LOCAL_EXECUTABLES_DIR:-}" ]]; then
+            debug_end "$debug"
+            die 1 "Executables source directory does not exist."
+        fi
         LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
@@ -5302,7 +5307,6 @@ compile_binary() {
                 return 1
             }
     fi
-
 
     # Compile the binary
     debug_print "Compiling binary." "$debug"
