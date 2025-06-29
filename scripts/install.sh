@@ -1767,7 +1767,11 @@ exec_command() {
 
     # Declare local variables after debug initialization
     local status=0 exec_name running_pre complete_pre failed_pre
+<<<<<<< HEAD
     local args cmd cmd_str
+=======
+    local args cmd
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
 
     # Assign the human readable name and shift it off
     exec_name="$1"; shift
@@ -1783,10 +1787,19 @@ exec_command() {
     # Build the actual command array
     cmd=( "${args[@]}" )
 
+<<<<<<< HEAD
     # Join cmd[@] on spaces into one line
     cmd_str=$(printf '%s ' "${cmd[@]}")
     cmd_str=${cmd_str% }   # strip trailing space
     if [[ "$debug" == "debug" ]]; then
+=======
+    if [[ "$debug" == "debug" ]]; then
+        # Join cmd[@] on spaces into one line
+        local cmd_str
+        cmd_str=$(printf '%s ' "${cmd[@]}")
+        cmd_str=${cmd_str% }   # strip trailing space
+
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
         logD "Name:    $exec_name"
         logD "Command: $cmd_str"
     fi
@@ -1827,9 +1840,15 @@ exec_command() {
     else
         printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
         if [[ $status -eq 127 ]]; then
+<<<<<<< HEAD
             warn "Command not found: ${cmd_str}"
         else
             warn "Command failed with status $status: ${cmd_str}"
+=======
+            warn "Command not found: ${cmd[0]}"
+        else
+            warn "Command failed with status $status: ${cmd[*]}"
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
         fi
     fi
 
@@ -5350,7 +5369,11 @@ compile_binary() {
     if [[ "$DRY_RUN" == "true" ]]; then
         logD "Exec: (cd ${LOCAL_SOURCE_DIR} && make ${type})"
     else
+<<<<<<< HEAD
         exec_command "Compile ${type,,} binary" runuser -u "$SUDO_USER" -- make -C "${LOCAL_SOURCE_DIR}" "${type}" "$debug" || {
+=======
+        exec_command "Compile ${type,,} binary" runuser -u pi -- make -C "${LOCAL_SOURCE_DIR}" "${type}" "$debug" || {
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
             logE "Error: Unable to compile binary."
             debug_end "$debug"
             return 1
@@ -5566,7 +5589,11 @@ manage_config() {
             if [[ -n "$old_path" ]]; then
                 local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
                 upgrade_ini "$old_path" "$source_path" "${merged_ini}" "$debug"
+<<<<<<< HEAD
                 source_path="$merged_ini"
+=======
+                source_path="$merged_ini"   
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
             fi
         fi
 
@@ -5804,6 +5831,7 @@ manage_service() {
             exec_command "Change ownership on systemd file" \
                 chown root:root "$service_path" \
                 "$debug" || retval=1
+<<<<<<< HEAD
 
             exec_command "Change permissions on systemd file" \
                 chmod 644 "$service_path" \
@@ -5842,6 +5870,46 @@ manage_service() {
                 "$debug" || retval=1
         fi
 
+=======
+
+            exec_command "Change permissions on systemd file" \
+                chmod 644 "$service_path" \
+                "$debug" || retval=1
+
+            exec_command "Create log path" \
+                mkdir -p "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Change ownership on log path" \
+                chown root:www-data "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Change permissions on log path" \
+                chmod 755 "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Enable systemd service" \
+                systemctl enable "$daemon_systemd_name" \
+                "$debug" || retval=1
+
+            exec_command "Reload systemd" \
+                systemctl daemon-reload \
+                "$debug" || retval=1
+
+            exec_command "Start systemd service" \
+                systemctl restart "$daemon_systemd_name" \
+                "$debug" || retval=1
+
+            exec_command "Change ownership on logs" \
+                chown root:www-data "$log_path/${syslog_identifier}_log" \
+                "$debug" || retval=1
+
+            exec_command "Change permissions on logs" \
+                chmod 644 "$log_path/${syslog_identifier}_log" \
+                "$debug" || retval=1
+        fi
+
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
     elif [[ "$ACTION" == "uninstall" ]]; then
         if [[ -f "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
@@ -6098,14 +6166,24 @@ manage_apache() {
             return 1
         fi
 
+<<<<<<< HEAD
         exec_command "Copy Apache vhost to sites-available" cp "$source_path" "$site_conf" "$debug" || {
             logE "Failed to copy '$source_path' to '$site_conf'"
             debug_end "$debug"
             return 1
+=======
+        exec_command "Copy Apache vhost to sites-available" \
+            cp "$source_path" "$site_conf" \
+            "$debug" || {
+        logE "Failed to copy '$source_path' to '$site_conf'"
+        debug_end "$debug"
+        return 1
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
         }
 
         # If stock page, comment out log lines in the vhost before enabling
         if is_stock_apache_page "${site_conf}" "$debug"; then
+<<<<<<< HEAD
             modify_comment_lines "${site_conf}" ".log" comment "$debug"
         fi
 
@@ -6153,6 +6231,54 @@ manage_apache() {
         debug_end "$debug"
         return 1
     }
+=======
+            modify_comment_lines "${site_conf}" ".log" comment \
+                "$debug"
+        fi
+
+        # Enable required modules
+        exec_command "Enable proxy modules" \
+            a2enmod proxy proxy_http proxy_wstunnel \
+            "$debug"
+
+        # Disable default site
+        exec_command "Disable default site" \
+            a2dissite 000-default.conf \
+            "$debug"
+
+        # Enable wsprrypi site
+        exec_command "Enable wsprrypi site" \
+            a2ensite wsprrypi.conf \
+            "$debug"
+
+    else
+        # Uninstall path
+        exec_command "Disable wsprrypi site" \
+            a2dissite wsprrypi.conf \
+            "$debug"
+
+        exec_command "Enable default site" \
+            a2ensite 000-default.conf \
+            "$debug"
+
+        exec_command "Remove wsprrypi available config" \
+            rm -f "${site_conf}" \
+            "$debug"
+
+        exec_command "Remove ServerName directive" \
+            sed -i "/^${server_name}/d" "$APACHE_CONF" \
+            "$debug"
+    fi
+
+    # Test and reload Apache
+    exec_command "Test Apache configuration" \
+        apache2ctl configtest \
+        "$debug"
+
+    exec_command "Reload Apache" \
+        systemctl reload apache2 \
+        "$debug"
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
 
     debug_end "$debug"
     return 0
@@ -6322,6 +6448,34 @@ restore_daemon_state() {
 
     debug_end "$debug"
     return "$retval"
+}
+
+flag_need_reboot() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Print reboot message if REBOOT is true
+    if [[ "$REBOOT" == "true" ]]; then
+        printf "\n*Important Note:*\n\n"
+        if [[ "$ACTION" == "install" ]]; then
+            printf "Wsprry Pi uses the same hardware as the sound system to generate\n"
+            printf "radio frequencies. This soundcard has been disabled. You must\n"
+            printf "reboot the Pi with the following command after install for this\n"
+            printf "to take effect:\n\n"
+        else
+            printf "The sound system has been re-enabled. If you wish to use\n"
+            printf "audio on the Raspberry Pi, you must reboot for changes\n"
+            printf "to take effect:\n\n"
+        fi
+        printf "'sudo reboot'\n\n"
+
+        read -rp "Press any key to continue." </dev/tty
+        echo
+    fi
+
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -6635,7 +6789,11 @@ _main() {
     validate_sys_accs "$debug" # Verify critical system files are accessible
     validate_env_vars "$debug" # Check for required environment variables
     get_proj_params "$debug"   # Get project and git parameters
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
     check_bash "$debug"        # Ensure the script is executed in a Bash shell
     check_sh_ver "$debug"      # Verify the Bash version meets minimum requirements
     check_bitness "$debug"     # Validate system bitness compatibility
@@ -6651,7 +6809,11 @@ _main() {
     print_version "$debug" # Log the script version
 
     # Feedback on multi-proc compilation
+<<<<<<< HEAD
     [[ "$ACTION" != "uninstall" ]] && display_mem_compilation_notes "$debug"
+=======
+    display_mem_compilation_notes "$debug"
+>>>>>>> ebe37a7 (Rebase to 2.1.0)
 
     # Install dependencies after system checks
     [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
