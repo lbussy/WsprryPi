@@ -6468,6 +6468,10 @@ manage_wsprry_pi() {
         # Check if the function failed
         if [[ $status -ne 0 ]]; then
             logE "$func failed with status $status" "$debug"
+            if [[ "$ACTION" == "install" ]]; then
+                cleanup_files_in_directories "${func}" "${debug}"
+                restore_daemon_state "${func}" "${debug}"
+            fi
             overall_status=1
         else
             debug_print "$func succeeded." "$debug"
