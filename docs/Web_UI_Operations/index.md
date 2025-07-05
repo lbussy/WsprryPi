@@ -29,7 +29,7 @@ For those of you impacted by a type of color-blindness that may make this less v
 - **Wsprry Pi Application:** A drop-down is available on each page with links to the Wsprry Pi pages.
 - **Documentation:** Opens the online documentation in a new tab.
 - **GitHub:** Since this is an open-source project, this links to the source code repository where issues may be raised and where you should consider contributing if you are technically inclined.
-- **TAPR:** A link in a new tap to our favorite non-profit 501(c)(3) organization of amateur radio ("ham") operators who are interested in advancing the state of the radio art.
+- **TAPR:** A link in a new tap to our favorite non-profit 501(c)(3) organization of amateur radio operators who are interested in advancing the state of the radio art.
 - **WSPRNet Spots:** This will open the WSPRNet database, and if your call sign is configured, it will go directly to your most recent spots.
 
 #### Wsprry Pi Application

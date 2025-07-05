@@ -1,12 +1,12 @@
 <!-- Grammar and spelling checked -->
 # Wsprry Pi Development
 
-All current development has been done with g++ version 10.2.1 20210110 (Raspbian 10.2.1-6+rpi1).  The compilation is done on Bullseye to allow the compiled executable to be run on Bullseye (`old stable) and Bookworm (`stable`).
+All current development has been done with `g++` version 10.2.1 20210110 (Raspbian 10.2.1-6+rpi1).  The compilation is done on on the user's Pi to allow the compiled executable to run regardless of the `GLIBC` library versions.
 
 Because of modularity, re-use, and licensing considerations, the central WsprryPi repository references the following Git Repositories as submodules:
 
 - [WsprryPi-UI](https://github.com/lbussy/WsprryPi-UI): The Bootstrap-based Wsprry Pi Web UI.
-- [Broadcom-Mailbox](https://github.com/lbussy/Broadcom-Mailbox): Boradcom's interface for Mailbox communication.
+- [Mailbox](https://github.com/lbussy/Mailbox): A replacement for Broadcom's interface for Mailbox communication.
 - [INI-Handler](https://github.com/lbussy/INI-Handler): A class that allows reading and wriging formatted INI cfiles.
 - [LCBLog](https://github.com/lbussy/LCBLog): A class to handle log formatting, writing, and timestamps.
 - [MonitorFile](https://github.com/lbussy/MonitorFile): A class to watch a file for changes.
