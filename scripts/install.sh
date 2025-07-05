@@ -6338,17 +6338,19 @@ restore_daemon_state() {
     return "$retval"
 }
 
-## @brief Displays a reboot prompt if a system reboot is required.
-## @details
-##   Checks the global semaphore flag REBOOT. If it is set to "true",
-##   prints a contextual message and prompts the user to reboot the system.
-##   The message varies based on whether ACTION is "install" or another mode.
-##   Reads a key press before continuing.
-##
-## @param ... Optional debugging flag; when "debug" is passed, debug messages
-are enabled.
-##
-## @return Always returns 0.
+# -----------------------------------------------------------------------------
+# @brief Displays a reboot prompt if a system reboot is required.
+# @details
+#   Checks the global semaphore flag REBOOT. If it is set to "true",
+#   prints a contextual message and prompts the user to reboot the system.
+#   The message varies based on whether ACTION is "install" or another mode.
+#   Reads a key press before continuing.
+#
+# @param ... Optional debugging flag; when "debug" is passed, debug messages
+#            are enabled.
+#
+# @return Always returns 0.
+# -----------------------------------------------------------------------------
 flag_need_reboot() {
     local debug
     debug=$(debug_start "$@")
