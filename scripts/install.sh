@@ -1767,7 +1767,7 @@ exec_command() {
 
     # Declare local variables after debug initialization
     local status=0 exec_name running_pre complete_pre failed_pre
-    local args cmd
+    local args cmd cmd_str
 
     # Assign the human readable name and shift it off
     exec_name="$1"; shift
@@ -1783,12 +1783,10 @@ exec_command() {
     # Build the actual command array
     cmd=( "${args[@]}" )
 
+    # Join cmd[@] on spaces into one line
+    cmd_str=$(printf '%s ' "${cmd[@]}")
+    cmd_str=${cmd_str% }   # strip trailing space
     if [[ "$debug" == "debug" ]]; then
-        # Join cmd[@] on spaces into one line
-        local cmd_str
-        cmd_str=$(printf '%s ' "${cmd[@]}")
-        cmd_str=${cmd_str% }   # strip trailing space
-
         logD "Name:    $exec_name"
         logD "Command: $cmd_str"
     fi
@@ -1829,9 +1827,9 @@ exec_command() {
     else
         printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
         if [[ $status -eq 127 ]]; then
-            warn "Command not found: ${cmd[0]}"
+            warn "Command not found: ${cmd_str}"
         else
-            warn "Command failed with status $status: ${cmd[*]}"
+            warn "Command failed with status $status: ${cmd_str}"
         fi
     fi
 
@@ -4396,7 +4394,6 @@ get_proj_params() {
         SEM_VER="${SEM_VER:-0.0.1}"
         LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
         LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
-        LOCAL_REPO_DIR="${LOCAL_REPO_DIR}/executables"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
         LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/${UI_REPO_DIR}/data"
@@ -5324,7 +5321,7 @@ compile_binary() {
     daemon_name="${WSPR_SERVICE}" # Remove path
     daemon_systemd_name="${daemon_name}.service"
 
-    mkdir -p "${staging_path}"
+    runuser -u "$SUDO_USER" -- mkdir -p "${staging_path}"
     if [[ ! -d "${staging_path:-}" ]]; then
         debug_end "$debug"
         die 1 "Executables source directory does not exist."
@@ -5353,7 +5350,7 @@ compile_binary() {
     if [[ "$DRY_RUN" == "true" ]]; then
         logD "Exec: (cd ${LOCAL_SOURCE_DIR} && make ${type})"
     else
-        exec_command "Compile ${type,,} binary" runuser -u pi -- make -C "${LOCAL_SOURCE_DIR}" "${type}" "$debug" || {
+        exec_command "Compile ${type,,} binary" runuser -u "$SUDO_USER" -- make -C "${LOCAL_SOURCE_DIR}" "${type}" "$debug" || {
             logE "Error: Unable to compile binary."
             debug_end "$debug"
             return 1
@@ -5419,7 +5416,7 @@ manage_exe() {
     executable="$1"
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
-    source_path="${LOCAL_REPO_DIR}/${executable}"
+    source_path="${LOCAL_REPO_DIR}/executables/${exe_name}"
     exe_path="/usr/local/bin/${executable}"
 
     if [[ "$ACTION" == "install" ]]; then
@@ -5467,8 +5464,6 @@ manage_exe() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$exe_name'."
-
         # Remove the application
         debug_print "Removing application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -5603,8 +5598,6 @@ manage_config() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$config_name' configuration."
-
         # Remove the configuration
         debug_print "Removing configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -5850,8 +5843,6 @@ manage_service() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing systemd service: $daemon_systemd_name."
-
         if [[ -f "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
                 if systemctl is-active --quiet "$daemon_systemd_name"; then
@@ -5871,8 +5862,6 @@ manage_service() {
         if [[ -d "$log_path" ]]; then
             exec_command "Remove log target" rm -fr "${log_path}" "$debug" || retval=1
         fi
-
-        logI "Systemd service $daemon_systemd_name removed."
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
@@ -5962,8 +5951,6 @@ manage_web() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing web files from '$target_path'."
-
         # Remove the web directory
         debug_print "Removing web directory '$target_path'." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -6111,62 +6098,61 @@ manage_apache() {
             return 1
         fi
 
-        exec_command "Copy Apache vhost to sites-available" \
-            cp "$source_path" "$site_conf" \
-            "$debug" || {
-        logE "Failed to copy '$source_path' to '$site_conf'"
-        debug_end "$debug"
-        return 1
+        exec_command "Copy Apache vhost to sites-available" cp "$source_path" "$site_conf" "$debug" || {
+            logE "Failed to copy '$source_path' to '$site_conf'"
+            debug_end "$debug"
+            return 1
         }
 
         # If stock page, comment out log lines in the vhost before enabling
         if is_stock_apache_page "${site_conf}" "$debug"; then
-            modify_comment_lines "${site_conf}" ".log" comment \
-                "$debug"
+            modify_comment_lines "${site_conf}" ".log" comment "$debug"
         fi
 
         # Enable required modules
-        exec_command "Enable proxy modules" \
-            a2enmod proxy proxy_http proxy_wstunnel \
-            "$debug"
+        exec_command "Enable proxy modules" a2enmod proxy proxy_http proxy_wstunnel "$debug" || {
+            logE "Failed to enable proxy modules."
+            debug_end "$debug"
+            return 1
+        }
 
         # Disable default site
-        exec_command "Disable default site" \
-            a2dissite 000-default.conf \
-            "$debug"
+        exec_command "Disable default site" a2dissite 000-default.conf "$debug" || {
+            logE "Failed to disable default site."
+            debug_end "$debug"
+            return 1
+        }
 
         # Enable wsprrypi site
-        exec_command "Enable wsprrypi site" \
-            a2ensite wsprrypi.conf \
-            "$debug"
+        exec_command "Enable wsprrypi site" a2ensite wsprrypi.conf "$debug" || {
+            logE "Failed to enablw wsprrypi site."
+            debug_end "$debug"
+            return 1
+        }
 
     else
         # Uninstall path
-        exec_command "Disable wsprrypi site" \
-            a2dissite wsprrypi.conf \
-            "$debug"
+        exec_command "Disable wsprrypi site" a2dissite wsprrypi.conf "$debug"
 
-        exec_command "Enable default site" \
-            a2ensite 000-default.conf \
-            "$debug"
+        exec_command "Enable default site" a2ensite 000-default.conf "$debug"
 
-        exec_command "Remove wsprrypi available config" \
-            rm -f "${site_conf}" \
-            "$debug"
+        exec_command "Remove wsprrypi available config" rm -f "${site_conf}" "$debug"
 
-        exec_command "Remove ServerName directive" \
-            sed -i "/^${server_name}/d" "$APACHE_CONF" \
-            "$debug"
+        exec_command "Remove ServerName directive" sed -i "/^${server_name}/d" "$APACHE_CONF" "$debug"
     fi
 
     # Test and reload Apache
-    exec_command "Test Apache configuration" \
-        apache2ctl configtest \
-        "$debug"
+    exec_command "Test Apache configuration" apache2ctl configtest "$debug" || {
+        logE "Apache test failed."
+        debug_end "$debug"
+        return 1
+    }
 
-    exec_command "Reload Apache" \
-        systemctl reload apache2 \
-        "$debug"
+    exec_command "Reload Apache" systemctl reload apache2 "$debug" || {
+        logE "Failed to reload Apache."
+        debug_end "$debug"
+        return 1
+    }
 
     debug_end "$debug"
     return 0
@@ -6338,17 +6324,19 @@ restore_daemon_state() {
     return "$retval"
 }
 
-## @brief Displays a reboot prompt if a system reboot is required.
-## @details
-##   Checks the global semaphore flag REBOOT. If it is set to "true",
-##   prints a contextual message and prompts the user to reboot the system.
-##   The message varies based on whether ACTION is "install" or another mode.
-##   Reads a key press before continuing.
-##
-## @param ... Optional debugging flag; when "debug" is passed, debug messages
-are enabled.
-##
-## @return Always returns 0.
+# -----------------------------------------------------------------------------
+# @brief Displays a reboot prompt if a system reboot is required.
+# @details
+#   Checks the global semaphore flag REBOOT. If it is set to "true",
+#   prints a contextual message and prompts the user to reboot the system.
+#   The message varies based on whether ACTION is "install" or another mode.
+#   Reads a key press before continuing.
+#
+# @param ... Optional debugging flag; when "debug" is passed, debug messages
+#            are enabled.
+#
+# @return Always returns 0.
+# -----------------------------------------------------------------------------
 flag_need_reboot() {
     local debug
     debug=$(debug_start "$@")
@@ -6663,7 +6651,7 @@ _main() {
     print_version "$debug" # Log the script version
 
     # Feedback on multi-proc compilation
-    display_mem_compilation_notes "$debug"
+    [[ "$ACTION" != "uninstall" ]] && display_mem_compilation_notes "$debug"
 
     # Install dependencies after system checks
     [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
