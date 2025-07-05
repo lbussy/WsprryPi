@@ -3,13 +3,13 @@
 
 WsprryPi creates a very simple WSPR beacon on your Raspberry Pi by generating a Pulse-Width Modulation (PWM) square-wave signal through a General-Purpose Input/Output (GPIO) pin on a Raspberry Pi.  You connect through a [Low-Pass Filter to remove harmonics](https://www.nutsvolts.com/magazine/article/making\_waves\_) and then to an appropriate antenna.  It operates on LF, MF, HF, and VHF bands from 0 to 250 MHz.
 
-This image shows a square waveform, with an overlay showing how a waveform might look through successive low-pass filters:
+**You should not use Wsprry Pi without a low-pass filter, as it will create interference from harmonics on other bands.**
+
+This image shows a square waveform, typical of the output from the Pi GPIO, with an overlay showing how a waveform might look through successive low-pass filters:
 
 ![Waveforms](waveforms.png)
 
 Image from [https://analogisnotdead.com/article25/circuit-analysis-the-boss-bd2](https://analogisnotdead.com/article25/circuit-analysis-the-boss-bd2)
-
-You should not use Wsprry Pi without a low-pass filter, as it will create interference from harmonics on other bands.
 
 This software is compatible with:
 

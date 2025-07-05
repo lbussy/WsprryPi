@@ -13,7 +13,7 @@ You will need the following:
 
 ## Prerequisites
 
-This section may be the most challenging part of the whole installation.  *You must have a working Raspberry Pi with Internet access.* It can be hard-wired or on Wi-Fi.  There is no better place to learn how to set up your new Pi than the people who make it themselves.  [Go here](https://www.raspberrypi.com/documentation/computers/getting-started.html), and learn how to install the operating system with the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).  To enable SSH access, pre-configure your image with your local/time zone, Wi-Fi credentials, and a different hostname.
+This section may be the most challenging part of the whole installation.  *You must have a working Raspberry Pi with Internet access.* It can be hard-wired or on Wi-Fi.  There is no better place to learn how to set up your new Pi than the people who make it themselves.  [Go here](https://www.raspberrypi.com/documentation/computers/getting-started.html), and learn how to install the operating system with the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).  To enable SSH access, pre-configure your image with your local/time zone, Wi-Fi credentials, and a unique hostname.
 
 ![Raspberry Pi Imager](rpi_imager.png)
 
@@ -21,12 +21,12 @@ I am only testing the current `stable` and `oldstable` versions: Bookworm and Bu
 
 You can use a full-featured desktop version with all the bells and whistles, or Wsprry Pi will run just fine on the Lite version on an SD card as small as 2 GB (although a minimum of 8 GB seems more comfortable these days.)  You can even run it headless without a keyboard, mouse, or monitor.  If you enable SSH, you can use your command line from Windows 10/11, MacOS, or another Pi.
 
-Whatever you do, you will need command line access to your Pi to proceed.  Once you are up and running and connected to the Internet, you may proceed with Wsprry Pi installation.  Here is a recommended process:
+Whatever you do, you will need command line access to your Pi to proceed via ssh or the console.  Once you are up and running and connected to the Internet, you may proceed with Wsprry Pi installation.  Here is a recommended process:
 
 **Open the Raspberry Pi Imager:**
 
 * Choose your Raspberry Pi Device
-* Choose your Operating system
+* Choose your Operating System
 * Choose Storage (you should only insert one SD card)
 * Next
 * At "Use OS Customizations," select "Edit Settings."
@@ -68,7 +68,11 @@ You may use this command to install Wsprry Pi (one line):
 
 `curl -fsSL installwspr.aa0nt.net | sudo bash`
 
-If my DNS is broken for some reason, this longer form should work:
+This shorter URL relies on my hosted DNS for a redirect to GitHub.  If my DNS is broken for some reason, you may see an error like this:
+
+`curl: (22) The requested URL returned error: 404`
+
+If that happens, this longer form should work:
 
 `curl -fsSL https://raw.githubusercontent.com/lbussy/WsprryPi/refs/heads/main/scripts/install.sh | sudo bash`
 
@@ -76,7 +80,7 @@ This install command is idempotent; running it additional times will not have an
 
 I have GREATLY simplified the installer since version 1.x.  Here is more or less what you will see:
 
-```
+```text
 [INFO ] Checking environment.
 [INFO ] System: Debian GNU/Linux 12 (bookworm).
 [INFO ] Running Wsprry Pi's 'install.sh', version 2.0.1-64-bit+6.a4a0da8-dirty
@@ -146,7 +150,7 @@ I have GREATLY simplified the installer since version 1.x.  Here is more or less
 
 You may see:
 
-```
+```text
 *Important Note:*
 
 Wsprry Pi uses the same hardware as the sound system to generate
@@ -161,7 +165,7 @@ Press any key to continue.
 
 The installation will finish with:
 
-```
+```text
 Installation successful: Wsprry Pi.
 
 To configure Wsprry Pi, open the following URL in your browser:

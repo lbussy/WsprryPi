@@ -2,6 +2,7 @@
 # FAQ and Known Errors
 
 ## Install Error ``bash: line 1: syntax error near unexpected token `<'``
+## or `curl: (22) The requested URL returned error: 404`
 If this happens, the DNS redirect (vanity URL) I use to make the install command shorter and easier to type may have broken.
 
 **Explanation:** The installation command line uses an application called `curl` to download the target URL.  The pipe operator (`|`) redirects that to whatever follows, in this case, `sudo` (run as root) and `bash` (the command interpreter) to make the bash script run as soon as it downloads.  If the redirect breaks somehow, a regular HTML page will be sent instead of the bash script.  Bash doesn't know what to do with HTML (the `<` in the first position of the first line), so it simply refuses to do anything.
