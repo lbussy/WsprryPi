@@ -209,9 +209,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0.2_Beta.1}"
-declare GIT_TAG="${GIT_TAG:-v2.0.2_Beta.1}"
-declare SEM_VER="${SEM_VER:-2.0.2_Beta.1}"
+declare REPO_BRANCH="${REPO_BRANCH:-2.1.0}"
+declare GIT_TAG="${GIT_TAG:-v2.1.0}"
+declare SEM_VER="${SEM_VER:-2.1.0}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -6338,17 +6338,19 @@ restore_daemon_state() {
     return "$retval"
 }
 
-## @brief Displays a reboot prompt if a system reboot is required.
-## @details
-##   Checks the global semaphore flag REBOOT. If it is set to "true",
-##   prints a contextual message and prompts the user to reboot the system.
-##   The message varies based on whether ACTION is "install" or another mode.
-##   Reads a key press before continuing.
-##
-## @param ... Optional debugging flag; when "debug" is passed, debug messages
-are enabled.
-##
-## @return Always returns 0.
+# -----------------------------------------------------------------------------
+# @brief Displays a reboot prompt if a system reboot is required.
+# @details
+#   Checks the global semaphore flag REBOOT. If it is set to "true",
+#   prints a contextual message and prompts the user to reboot the system.
+#   The message varies based on whether ACTION is "install" or another mode.
+#   Reads a key press before continuing.
+#
+# @param ... Optional debugging flag; when "debug" is passed, debug messages
+#            are enabled.
+#
+# @return Always returns 0.
+# -----------------------------------------------------------------------------
 flag_need_reboot() {
     local debug
     debug=$(debug_start "$@")

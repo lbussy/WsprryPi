@@ -4,7 +4,7 @@ Wsprry Pi builds require the tag and branch to be consistent for use in the inst
 
 This guide outlines the precise steps to prepare a release where the Git **branch** and **tag** share the same name. In this situation, Git can be ambiguous when resolving references. We resolve this by being explicit with `refs/heads/` (branches) and `refs/tags/` (tags) in all commands.
 
-Globally search/replace `main` with your desired version.
+Globally search/replace `2.1.0` with your desired version.
 
 ---
 
@@ -13,7 +13,7 @@ Globally search/replace `main` with your desired version.
 1. **Create or update your release branch**
 
    ```bash
-   git checkout -b 2.0.2_Beta.1
+   git checkout -b 2.1.0
    ```
 
 2. **Edit your source and install script**
@@ -21,9 +21,9 @@ Globally search/replace `main` with your desired version.
     * Update `scripts\install.sh` with proper version:
 
         ```bash
-        declare REPO_BRANCH="${REPO_BRANCH:-2.0.2_Beta.1}"
-        declare GIT_TAG="${GIT_TAG:-v2.0.2_Beta.1}"
-        declare SEM_VER="${SEM_VER:-2.0.2_Beta.1}"
+        declare REPO_BRANCH="${REPO_BRANCH:-2.1.0}"
+        declare GIT_TAG="${GIT_TAG:-v2.1.0}"
+        declare SEM_VER="${SEM_VER:-2.1.0}"
         ```
 
     * Apply any required feature changes or bug fixes.
@@ -33,13 +33,13 @@ Globally search/replace `main` with your desired version.
    ```bash
    git add scripts/install.sh
    git add release_tools/Build\ Orchestration.md
-   git commit -m "Prepare 2.0.2_Beta.1 release"
+   git commit -m "Prepare 2.1.0 release"
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-   git tag -a v2.0.2_Beta.1 -m "Release 2.0.2_Beta.1"
+   git tag -a v2.1.0 -m "Release 2.1.0"
    ```
 
 5. ~~Build the binary~~ **No longer needed**
@@ -63,14 +63,14 @@ Globally search/replace `main` with your desired version.
 8. ~~Force the tag to point to the amended commit~~ **No lomger needed**
 
    ```bash
-   git tag -f v2.0.2_Beta.1
+   git tag -f v2.1.0
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
-   git push origin HEAD:refs/heads/2.0.2_Beta.1
-   git push origin tag v2.0.2_Beta.1
+   git push origin HEAD:refs/heads/2.1.0
+   git push origin tag v2.1.0
    ```
 
 ---
