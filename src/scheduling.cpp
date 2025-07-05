@@ -576,7 +576,7 @@ bool wspr_loop()
     }
 
     // Set transmission server and set priority
-    wsprTransmitter.setThreadScheduling(SCHED_RR, 40);
+    wsprTransmitter.setThreadScheduling(SCHED_FIFO, 40);
 
     // Set transmission event callbacks
     wsprTransmitter.setTransmissionCallbacks(
@@ -925,4 +925,7 @@ void set_config(bool initial)
         wsprTransmitter.disableTransmission();
         llog.logS(INFO, "Transmissions disabled.");
     }
+#ifdef DEBUG_WSPR_TRANSMIT
+        wsprTransmitter.printParameters();
+#endif
 }
