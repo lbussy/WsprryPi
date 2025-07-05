@@ -828,8 +828,13 @@ declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
 # -----------------------------------------------------------------------------
 declare WAS_RUNNING="false"
 
-declare LOCAL_EXECUTABLES_DIR="${LOCAL_EXECUTABLES_DIR:-}"
-
+# -----------------------------------------------------------------------------
+# @var REBOOT
+# @brief Indicates whether a system reboot is required.
+# @details
+#   Acts as a semaphore flag. Defaults to "false" if not set.
+#   Operations that require a reboot must set this to "true".
+# -----------------------------------------------------------------------------
 declare REBOOT=${REBOOT:-false}
 
 ############
@@ -4295,7 +4300,6 @@ get_sem_ver() {
 # @global GIT_TAG The latest Git tag (release) for the repository.
 # @global SEM_VER The semantic version retrieved from the latest Git tag.
 # @global LOCAL_REPO_DIR The local root directory of the repository.
-# @global LOCAL_EXECUTABLES_DIR The path to the local executables directory.
 # @global LOCAL_SYSTEMD_DIR The path to the local systemd configuration directory.
 # @global LOCAL_CONFIG_DIR The path to the local configuration directory.
 # @global LOCAL_WWW_DIR The path to the local web assets directory.
@@ -4392,6 +4396,7 @@ get_proj_params() {
         SEM_VER="${SEM_VER:-0.0.1}"
         LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
         LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
+        LOCAL_REPO_DIR="${LOCAL_REPO_DIR}/executables"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
         LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/${UI_REPO_DIR}/data"
@@ -4407,7 +4412,6 @@ get_proj_params() {
     export GIT_TAG
     export SEM_VER
     export LOCAL_REPO_DIR
-    export LOCAL_EXECUTABLES_DIR
     export LOCAL_SOURCE_DIR
     export LOCAL_SYSTEMD_DIR
     export LOCAL_CONFIG_DIR
@@ -4423,7 +4427,6 @@ get_proj_params() {
     debug_print "Exported GIT_TAG: $GIT_TAG" "$debug"
     debug_print "Exported SEM_VER: $SEM_VER" "$debug"
     debug_print "Exported LOCAL_REPO_DIR: $LOCAL_REPO_DIR" "$debug"
-    debug_print "Exported LOCAL_EXECUTABLES_DIR: $LOCAL_EXECUTABLES_DIR" "$debug"
     debug_print "Exported LOCAL_SOURCE_DIR: $LOCAL_SOURCE_DIR" "$debug"
     debug_print "Exported LOCAL_SYSTEMD_DIR: $LOCAL_SYSTEMD_DIR" "$debug"
     debug_print "Exported LOCAL_CONFIG_DIR: $LOCAL_CONFIG_DIR" "$debug"
@@ -5283,7 +5286,6 @@ display_mem_compilation_notes() {
 #   mode, it prints the commands instead of executing them.
 #
 # @global LOCAL_SOURCE_DIR       Directory containing the source for `make`.
-# @global LOCAL_EXECUTABLES_DIR  Directory to which the compiled binary is copied.
 # @global DRY_RUN                If "true", commands are only logged (no exec).
 #
 # @param $1  Debug flag for enabling or disabling debug output.
@@ -5322,9 +5324,8 @@ compile_binary() {
     daemon_name="${WSPR_SERVICE}" # Remove path
     daemon_systemd_name="${daemon_name}.service"
 
-    LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
-    mkdir -p "${LOCAL_EXECUTABLES_DIR}"
-    if [[ ! -d "${LOCAL_EXECUTABLES_DIR:-}" ]]; then
+    mkdir -p "${staging_path}"
+    if [[ ! -d "${staging_path:-}" ]]; then
         debug_end "$debug"
         die 1 "Executables source directory does not exist."
     fi
@@ -5418,7 +5419,7 @@ manage_exe() {
     executable="$1"
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
-    source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
+    source_path="${LOCAL_REPO_DIR}/${executable}"
     exe_path="/usr/local/bin/${executable}"
 
     if [[ "$ACTION" == "install" ]]; then
@@ -6268,24 +6269,46 @@ cleanup_files_in_directories() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Restore the daemon to its previous running state.
+# @brief Display a reboot prompt when required.
 # @details
-#   If the service was active before script changes and still exists,
-#   this function attempts to start it again. The operation is logged
-#   and errors are captured without aborting the script.
+#   Checks the global REBOOT flag. If "true", prints a message
+#   explaining why a reboot is needed (install or uninstall path),
+#   shows the reboot command, and waits for a key press.
 #
-# @global WSPR_SERVICE  The name of the WSPR systemd service.
-# @global WAS_RUNNING   Semaphore indicating if the service was running
-#                     before the script stopped it.
+# @global ACTION  Install or uninstall mode indicator.
+# @global REBOOT  Semaphore flag for reboot requirement.
 #
-# @param $1  Debug flag for enabling or disabling debug output.
+# @param $1  Optional debug flag to enable debug output.
 #
-# @return Returns 0 if no restart was needed or it succeeded;
-#         returns 1 if the restart command failed.
+# @return Always returns 0.
 #
 # @example
-#   restore_daemon_state "debug"
+#   flag_need_reboot "debug"
 # -----------------------------------------------------------------------------
+flag_need_reboot() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    if [[ "$REBOOT" == "true" ]]; then
+        printf "\n*Important Note:*\n\n"
+        if [[ "$ACTION" == "install" ]]; then
+            printf "Wsprry Pi uses the same hardware as the sound system to\n"
+            printf "generate radio frequencies. This soundcard has been disabled.\n"
+            printf "Reboot with 'sudo reboot' after install for changes to take\n"
+            printf "effect.\n\n"
+        else
+            printf "The sound system has been re-enabled. To use audio, reboot\n"
+            printf "with 'sudo reboot' for changes to take effect.\n\n"
+        fi
+        read -rp "Press any key to continue." </dev/tty
+        echo
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
 # shellcheck disable=SC2317
 restore_daemon_state() {
     local debug
@@ -6315,12 +6338,22 @@ restore_daemon_state() {
     return "$retval"
 }
 
+## @brief Displays a reboot prompt if a system reboot is required.
+## @details
+##   Checks the global semaphore flag REBOOT. If it is set to "true",
+##   prints a contextual message and prompts the user to reboot the system.
+##   The message varies based on whether ACTION is "install" or another mode.
+##   Reads a key press before continuing.
+##
+## @param ... Optional debugging flag; when "debug" is passed, debug messages
+are enabled.
+##
+## @return Always returns 0.
 flag_need_reboot() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    # Print reboot message if REBOOT is true
     if [[ "$REBOOT" == "true" ]]; then
         printf "\n*Important Note:*\n\n"
         if [[ "$ACTION" == "install" ]]; then
