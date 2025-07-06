@@ -21,15 +21,9 @@ Globally search/replace `2.1.1` with your desired version.
     * Update `scripts\install.sh` with proper version:
 
         ```bash
-<<<<<<< HEAD
         declare REPO_BRANCH="${REPO_BRANCH:-main}"
         declare GIT_TAG="${GIT_TAG:-v2.1.1}"
         declare SEM_VER="${SEM_VER:-2.1.1}"
-=======
-        declare REPO_BRANCH="${REPO_BRANCH:-2.1.0}"
-        declare GIT_TAG="${GIT_TAG:-v2.1.0}"
-        declare SEM_VER="${SEM_VER:-2.1.0}"
->>>>>>> 5face86 (Prepare 2.1.0 release)
         ```
 
     * Apply any required feature changes or bug fixes.
@@ -39,21 +33,13 @@ Globally search/replace `2.1.1` with your desired version.
    ```bash
    git add scripts/install.sh
    git add release_tools/Build\ Orchestration.md
-<<<<<<< HEAD
    git commit -m "Prepare 2.1.1 release"
-=======
-   git commit -m "Prepare 2.1.0 release"
->>>>>>> 5face86 (Prepare 2.1.0 release)
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-<<<<<<< HEAD
    git tag -a v2.1.1 -m "Release 2.1.1"
-=======
-   git tag -a v2.1.0 -m "Release 2.1.0"
->>>>>>> 5face86 (Prepare 2.1.0 release)
    ```
 
 5. ~~Build the binary~~ **No longer needed**
@@ -77,23 +63,14 @@ Globally search/replace `2.1.1` with your desired version.
 8. ~~Force the tag to point to the amended commit~~ **No lomger needed**
 
    ```bash
-<<<<<<< HEAD
    git tag -f v2.1.1
-=======
-   git tag -f v2.1.0
->>>>>>> 5face86 (Prepare 2.1.0 release)
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
-<<<<<<< HEAD
    git push origin HEAD:refs/heads/main
    git push origin tag v2.1.1
-=======
-   git push origin HEAD:refs/heads/2.1.0
-   git push origin tag v2.1.0
->>>>>>> 5face86 (Prepare 2.1.0 release)
    ```
 
 ---
