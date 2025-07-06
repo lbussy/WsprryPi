@@ -116,7 +116,7 @@ If you are going to use VS Code from your workstation:
 5. Once done and you have connected the terminal screen in VS Code to the Pi:
 
     > [!IMPORTANT]
-    > You MUST clone the repo with `--recurse-submodules` to get all parts.
+    > You MUST clone the repo with `--recurse-submodules` (or it is aliased as `--recursive`) to get all sub-modules.
 
     Either:
 
@@ -182,21 +182,12 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 - php
 - chrony
 - libgpiod2
-
-If you are doing development, you will need, in additon:
-
 - libgpiod-dev
 
-Install these (withour running the installer) with:
+Install these (without running the installer) with:
 
 ``` bash
-sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 -y
-```
-
-If you ran the installer:
-
-``` bash
-sudo apt install libgpiod-dev -y
+sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 libgpiod-dev -y
 ```
 
 ## A Note About Submodules
@@ -227,6 +218,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+(or you can use the `create_venv.sh` script)
 
 Now you have the requirements:
 
