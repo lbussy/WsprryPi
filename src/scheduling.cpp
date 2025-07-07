@@ -110,15 +110,6 @@ int freq_iterator = 0;
 double current_frequency = 0.0;
 
 /**
- * @brief Timestamp marking the start of the current transmission.
- *
- * Captured at the moment a transmission begins (inside the start callback),
- * and later used to compute the elapsed duration when the transmission
- * completes.
- */
-static std::chrono::steady_clock::time_point g_start;
-
-/**
  * @brief File-scope self-pipe descriptors for signal notifications.
  *
  * @details Declared `extern` here so that any TU (like scheduling.cpp)
@@ -193,9 +184,6 @@ void callback_transmission_started(double frequency)
  */
 void callback_transmission_started(const std::string &msg = {})
 {
-    // Record start time
-    g_start = std::chrono::steady_clock::now();
-
     // Turn on LED
     ledControl.toggleGPIO(true);
 
@@ -222,7 +210,7 @@ void callback_transmission_started(const std::string &msg = {})
  * If any changes were integrated, a flag is set to indicate that DMA/Symbol
  * reconfiguration is required.
  */
-void callback_transmission_complete(const std::string &msg)
+void callback_transmission_complete(const std::string &msg, double secs)
 {
     if (!msg.empty())
     {
@@ -245,8 +233,6 @@ void callback_transmission_complete(const std::string &msg)
     else
     {
         // No message path ⇒ an actual WSPR window completion
-        auto end = std::chrono::steady_clock::now();
-        double secs = std::chrono::duration<double>(end - g_start).count();
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(3) << secs;
         llog.logS(INFO, "Transmission complete (", oss.str(), " secs).");
