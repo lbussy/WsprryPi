@@ -209,27 +209,19 @@ void callback_transmission_complete(const std::string &msg, double elapsed)
 {
     if (!msg.empty() && elapsed != 0.0)
     {
-        std::cout << "[Callback] Completed transmission (" << msg << ") "
-                  << std::setprecision(3)
-                  << elapsed << " seconds."
-                  << std::endl;
+        llog.logS(INFO, "ompleted transmission (", msg, ") ", std::setprecision(3), elapsed, " seconds.");
     }
     else if (elapsed != 0.0)
     {
-        std::cout << "[Callback] Completed transmission: "
-                  << std::setprecision(3)
-                  << elapsed << " seconds."
-                  << std::endl;
+        llog.logS(INFO, "Completed transmission: ", std::setprecision(3), elapsed, " seconds.");
     }
     else if (!msg.empty())
     {
-        std::cout << "[Callback] Completed transmission ("
-                  << msg << ")."
-                  << std::endl;
+        llog.logS(INFO, "Completed transmission (", msg, ").");
     }
     else
     {
-        std::cout << "[Callback] Completed transmission." << std::endl;
+        llog.logS(INFO, "Completed transmission.");
     }
 
     // Turn off LED
