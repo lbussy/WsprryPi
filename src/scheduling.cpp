@@ -184,7 +184,7 @@ void callback_transmission_started(const std::string &msg, double frequency)
     }
     else if (frequency != 0.0)
     {
-        llog.logS(INFO, "Started transmission: ", std::setprecision(6), (frequency / 1e6), " MHz.");
+        llog.logS(INFO, "Started transmission: ", std::fixed, std::setprecision(6), (frequency / 1e6), " MHz.");
     }
     else if (!msg.empty())
     {
