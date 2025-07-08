@@ -9,14 +9,11 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 <!-- omit in toc -->
 ## Table of Contents
 
-- [Set up SSH to your PI](#set-up-ssh-to-your-pi)
-- [Optional Housekeeping](#optional-housekeeping)
-- [VS Code](#vs-code)
-- [Required Devel Libs](#required-devel-libs)
-- [A Note About Submodules](#a-note-about-submodules)
-- [Reboot](#reboot)
-- [Working with the Project](#working-with-the-project)
-- [Documentation](#documentation)
+- [Install these (without running the installer) with:](#install-these-without-running-the-installer-with)
+  - [A Note About Submodules](#a-note-about-submodules)
+  - [Reboot](#reboot)
+  - [Working with the Project](#working-with-the-project)
+  - [Documentation](#documentation)
 
 ## Set up SSH to your PI
 
@@ -184,7 +181,12 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 - libgpiod2
 - libgpiod-dev
 
+<<<<<<< HEAD
 Install these (without running the installer) with:
+=======
+
+Install these (withour running the installer) with:
+>>>>>>> e61de5c (Fix WSPR Loop Timing (#210))
 
 ``` bash
 sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 libgpiod-dev -y
@@ -219,7 +221,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-(or you can use the `create_venv.sh` script)
+Or you can use the `create_venv.sh` script provided.
 
 Now you have the requirements:
 

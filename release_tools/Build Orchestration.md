@@ -4,7 +4,7 @@ Wsprry Pi builds require the tag and branch to be consistent for use in the inst
 
 This guide outlines the precise steps to prepare a release where the Git **branch** and **tag** share the same name. In this situation, Git can be ambiguous when resolving references. We resolve this by being explicit with `refs/heads/` (branches) and `refs/tags/` (tags) in all commands.
 
-Globally search/replace `2.1.0` with your desired version.
+Globally search/replace `2.1.1` with your desired version.
 
 ---
 
@@ -22,8 +22,8 @@ Globally search/replace `2.1.0` with your desired version.
 
         ```bash
         declare REPO_BRANCH="${REPO_BRANCH:-main}"
-        declare GIT_TAG="${GIT_TAG:-v2.1.0}"
-        declare SEM_VER="${SEM_VER:-2.1.0}"
+        declare GIT_TAG="${GIT_TAG:-v2.1.1}"
+        declare SEM_VER="${SEM_VER:-2.1.1}"
         ```
 
     * Apply any required feature changes or bug fixes.
@@ -33,13 +33,13 @@ Globally search/replace `2.1.0` with your desired version.
    ```bash
    git add scripts/install.sh
    git add release_tools/Build\ Orchestration.md
-   git commit -m "Prepare 2.1.0 release"
+   git commit -m "Prepare 2.1.1 release"
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-   git tag -a v2.1.0 -m "Release 2.1.0"
+   git tag -a v2.1.1 -m "Release 2.1.1"
    ```
 
 5. ~~Build the binary~~ **No longer needed**
@@ -63,14 +63,14 @@ Globally search/replace `2.1.0` with your desired version.
 8. ~~Force the tag to point to the amended commit~~ **No lomger needed**
 
    ```bash
-   git tag -f v2.1.0
+   git tag -f v2.1.1
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
    git push origin HEAD:refs/heads/main
-   git push origin tag v2.1.0
+   git push origin tag v2.1.1
    ```
 
 ---

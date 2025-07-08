@@ -6,6 +6,14 @@
 # Sync and update submodules
 sync_submodules() {
     echo "[githook: post-checkout] Syncing submodules."
+    git submodule foreach --recursive '
+        git clean -xfd
+        if [ -f Makefile ]; then
+            make clean
+        elif [ -f src/Makefile ]; then
+            make -C src clean
+        fi
+    '
     git submodule sync
     git submodule update --init --recursive
 }
