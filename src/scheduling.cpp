@@ -163,26 +163,13 @@ ModeType lastMode;
 std::atomic<bool> web_test_tone{false};
 
 /**
- * @brief Overloaded callback function for housekeeping tasks between
- * transmissions.
- *
- * This will intercept a double sent from the callback handler and pass
- * it as a formatted string to
- * callback_transmission_started(const std::string &msg)
- */
-void callback_transmission_started(double frequency)
-{
-    callback_transmission_started(lookup.freq_display_string(frequency));
-}
-
-/**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
  * This function regords the start time of a transmission, turns on the
  * LED if enabled, sends messages to any WebSockets clients, and logs the
  * start message
  */
-void callback_transmission_started(const std::string &msg = {})
+void callback_transmission_started(const std::string &msg, double frequency)
 {
     // Turn on LED
     ledControl.toggleGPIO(true);
@@ -190,14 +177,22 @@ void callback_transmission_started(const std::string &msg = {})
     // Notify clients of start
     send_ws_message("transmit", "starting");
 
-    // Log with custom message if providedAdd commentMore actions
-    if (!msg.empty())
+    // Log messages
+    if (!msg.empty() && frequency != 0.0)
     {
-        llog.logS(INFO, "Transmission started at", msg, ".");
+        llog.logS(INFO, "Started transmission (", msg, ") ", std::setprecision(6), (frequency / 1e6), " MHz.");
+    }
+    else if (frequency != 0.0)
+    {
+        llog.logS(INFO, "Started transmission: ", std::setprecision(6), (frequency / 1e6), " MHz.");
+    }
+    else if (!msg.empty())
+    {
+        llog.logS(INFO, "Started transmission (", msg, ").");
     }
     else
     {
-        llog.logS(INFO, "Transmission started at", lookup.freq_display_string(current_frequency), ".");
+        std::cout << "[Callback] Started transmission.\n";
     }
 }
 
@@ -210,34 +205,33 @@ void callback_transmission_started(const std::string &msg = {})
  * If any changes were integrated, a flag is set to indicate that DMA/Symbol
  * reconfiguration is required.
  */
-void callback_transmission_complete(const std::string &msg, double secs)
+void callback_transmission_complete(const std::string &msg, double elapsed)
 {
-    if (!msg.empty())
+    if (!msg.empty() && elapsed != 0.0)
     {
-        // “skipping transmission” or passed-in message
-        std::string lower = msg;
-        std::transform(lower.begin(), lower.end(), lower.begin(),
-                       [](unsigned char c)
-                       { return std::tolower(c); });
-
-        if (lower.find("skipping transmission") != std::string::npos)
-        {
-            llog.logS(INFO, msg);
-        }
-        else
-        {
-            // Some other non-skip message
-            llog.logS(INFO, msg);
-        }
+        std::cout << "[Callback] Completed transmission (" << msg << ") "
+                  << std::setprecision(3)
+                  << elapsed << " seconds."
+                  << std::endl;
+    }
+    else if (elapsed != 0.0)
+    {
+        std::cout << "[Callback] Completed transmission: "
+                  << std::setprecision(3)
+                  << elapsed << " seconds."
+                  << std::endl;
+    }
+    else if (!msg.empty())
+    {
+        std::cout << "[Callback] Completed transmission ("
+                  << msg << ")."
+                  << std::endl;
     }
     else
     {
-        // No message path ⇒ an actual WSPR window completion
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(3) << secs;
-        llog.logS(INFO, "Transmission complete (", oss.str(), " secs).");
-        send_ws_message("transmit", "finished");
+        std::cout << "[Callback] Completed transmission." << std::endl;
     }
+
     // Turn off LED
     ledControl.toggleGPIO(false);
 
@@ -313,7 +307,7 @@ bool ppm_init()
 
     case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
         // Chrony wasn’t yet reporting sync—but if the daemon is running,
-        // assume the user has NTP configured and proceed.
+        // assume chrony is configured and proceed.
         break;
 
     default:
@@ -562,17 +556,18 @@ bool wspr_loop()
     }
 
     // Set transmission server and set priority
-    wsprTransmitter.setThreadScheduling(SCHED_FIFO, 40);
+    wsprTransmitter.setThreadScheduling(SCHED_FIFO, 50);
 
     // Set transmission event callbacks
     wsprTransmitter.setTransmissionCallbacks(
-        [](const WsprTransmitter::CallbackArg &arg)
+        [](const std::string &msg, double frequency)
         {
-            callback_transmission_started(std::get<double>(arg));
+            callback_transmission_started(msg, frequency);
         },
-        [](const WsprTransmitter::CallbackArg &arg)
+
+        [](const std::string &msg, double elapsed_secs)
         {
-            callback_transmission_complete(std::get<std::string>(arg));
+            callback_transmission_complete(msg, elapsed_secs);
         });
 
     // Monitor INI file for changes
