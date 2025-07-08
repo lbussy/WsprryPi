@@ -4,5 +4,4 @@
 # -----------------------------------------------------------------------------
 
 echo "[githook: post-merge] Syncing submodules."
-git submodule sync
-git submodule update --init --recursive
+./post-checkout

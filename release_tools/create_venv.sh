@@ -22,7 +22,7 @@ else
         pip install --upgrade pip
         pip install -r requirements.txt
     fi
+    source "${VENV_DIR}/bin/activate"
 fi
 
-# Activate the virtual environment
 return 0

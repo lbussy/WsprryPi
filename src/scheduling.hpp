@@ -109,8 +109,7 @@ extern void callback_shutdown_system();
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
-void callback_transmission_started(double frequency);
-void callback_transmission_started(const std::string &msg);
+void callback_transmission_started(const std::string &msg, double frequency);
 
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
@@ -121,7 +120,7 @@ void callback_transmission_started(const std::string &msg);
  * deferred changes, logs the integration, and resets the flag. If any changes were
  * integrated, a flag is set to indicate that DMA/Symbol reconfiguration is required.
  */
-void callback_transmission_complete(const std::string &msg);
+void callback_transmission_complete(const std::string &msg, double elapsed);
 
 /**
  * @brief Perform a system shutdown sequence.

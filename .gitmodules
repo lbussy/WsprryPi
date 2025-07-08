@@ -29,6 +29,3 @@
 [submodule "src/WSPR-Transmitter"]
 	path = src/WSPR-Transmitter
 	url = https://github.com/lbussy/WSPR-Transmitter.git
-[submodule "src/--foirce"]
-	path = src/Mailbox
-	url = https://github.com/lbussy/Mailbox.git
