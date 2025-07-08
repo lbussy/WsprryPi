@@ -62,8 +62,11 @@ extern nlohmann::json jConfig;
  */
 enum class ModeType
 {
-    WSPR, ///< WSPR transmission mode
-    TONE  ///< Test tone generation mode
+    WSPR,  ///< WSPR transmission mode
+    TONE,  ///< Test tone generation mode
+    QRSS,  ///< Extreme slow speed CW
+    FSKCW, ///< Frequency Shift Keying CW
+    DFCW   ///< Dual Frequency CW
 };
 
 /**

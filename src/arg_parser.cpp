@@ -933,16 +933,20 @@ bool parse_command_line(int argc, char *argv[])
                 - Transmit toggle (existing)
                 - TX LED (existing)
                 - Shutdown (existing)
+
                 - QRSS Mode (NEW) - QRSS, FSKCW, DFCW
                 - QRSS Dot Length (NEW) - In seconds
+                - Exact Transmit Frequency (NEW)
+                - The “offset” in Hz for the frequency shift when using FSKCW and DFCW modes.
+
                 - Transmitted Characters (NEW)
+
                 - First Transmission Start Time (NEW) - From 0 to 59 minutes after the hour.
                 - Transmit Repeat Every (NEW) - Range from 0 (continuous) to 60 minutes.
-                - Exact Transmit Frequency (NEW)
+
                 - Frequency Calibration (existing)
                 - PPM Offset (existing)
                 - Transmit Power (existing)
-                - The “offset” in Hz for the frequency shift when using FSKCW and DFCW modes.
             */
             if (!config.use_ini)
             {
