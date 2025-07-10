@@ -54,6 +54,22 @@ ArgParserConfig config;
 nlohmann::json jConfig;
 
 /**
+ * @brief Prints a formatted JSON object to standard output.
+ *
+ * @details This function outputs the given JSON object to `std::cout` with
+ *          an indent of 4 spaces and ensures key names are sorted.
+ *          Useful for debugging or configuration output.
+ *
+ * @param j The JSON object to dump (will not be modified).
+ *
+ * @return void
+ */
+void dump_json(const nlohmann::json &json, std::string tag = "")
+{
+    llog.logS(DEBUG, tag, "JSON Dump:", json.dump());
+}
+
+/**
  * @brief Convert a JSON value to a string representation.
  *
  * Safely extracts a JSON value as a string. If the value is already a string,
@@ -101,6 +117,15 @@ std::string json_to_string(const nlohmann::json &j)
  *       "Frequency": "20m",
  *       "Transmit Pin": 4
  *   },
+ *   "QRSS": {
+ *      "Mode": "QRSS",
+ *      "Dot Length":10,
+ *      "FSK Offset": 100,
+ *      "Frequency": 7039900.0,
+ *      "TX Start Minute": tx_start_minute,
+ *      "TX Repeat Every": tx_repeat_every,
+ *      "Message": qrss_message,
+ *   },
  *   "Extended": {
  *       "PPM": 0.0,
  *       "Use NTP": true,
@@ -122,25 +147,12 @@ void json_to_config()
 {
     // Meta
     std::string modeStr = jConfig["Meta"]["Mode"].get<std::string>();
-    if (modeStr == "WSPR")
-    {
-        config.mode = ModeType::WSPR;
-    }
-    else if (modeStr == "TONE")
-    {
-        config.mode = ModeType::TONE;
-    }
-    else
-    {
-        // Handle invalid mode values
-        config.mode = ModeType::WSPR; // Default
-    }
-
+    config.mode = mode_from_string(modeStr);
     config.use_ini = jConfig["Meta"]["Use INI"].get<bool>();
     config.ini_filename = jConfig["Meta"]["INI Filename"].get<std::string>();
     config.date_time_log = jConfig["Meta"]["Date Time Log"].get<bool>();
     config.loop_tx = jConfig["Meta"]["Loop TX"].get<bool>();
-    config.tx_iterations.store(jConfig["Meta"]["TX Iterations"].get<int>());
+    config.tx_iterations = jConfig["Meta"]["TX Iterations"].get<int>();
     config.test_tone = jConfig["Meta"]["Test Tone"].get<double>();
     config.center_freq_set = jConfig["Meta"]["Center Frequency Set"].get<std::vector<double>>();
 
@@ -154,6 +166,16 @@ void json_to_config()
     // "Frequency" can be an integer or a double stored as a string.
     config.frequencies = json_to_string(jConfig["Common"]["Frequency"]);
     config.tx_pin = jConfig["Common"]["Transmit Pin"].get<int>();
+
+    // QRSS
+    std::string qModeStr = jConfig["QRSS"]["Mode"].get<std::string>();
+    config.qrss_mode = qrss_mode_from_string(qModeStr);
+    config.dot_length = jConfig["QRSS"]["Dot Length"].get<int>();
+    config.fsk_offset = jConfig["QRSS"]["FSK Offset"].get<int>();
+    config.qrss_frequency = jConfig["QRSS"]["Frequency"].get<double>();
+    config.tx_start_minute = jConfig["QRSS"]["TX Start Minute"].get<int>();
+    config.tx_repeat_every = jConfig["QRSS"]["TX Repeat Every"].get<int>();
+    config.qrss_message = jConfig["QRSS"]["Message"].get<std::string>();
 
     // Extended
     config.ppm = jConfig["Extended"]["PPM"].get<double>();
@@ -184,11 +206,7 @@ void json_to_config()
 void config_to_json()
 {
     // Meta
-    jConfig["Meta"]["Mode"] = "WSPR";
-    if (config.mode == ModeType::TONE)
-    {
-        jConfig["Meta"]["Mode"] = "TONE";
-    }
+    jConfig["Meta"]["Mode"] = mode_to_string(config.mode);
     jConfig["Meta"]["Use INI"] = config.use_ini;
     jConfig["Meta"]["INI Filename"] = config.ini_filename;
     jConfig["Meta"]["Date Time Log"] = config.date_time_log;
@@ -206,6 +224,15 @@ void config_to_json()
     jConfig["Common"]["TX Power"] = config.power_dbm;
     jConfig["Common"]["Frequency"] = config.frequencies;
     jConfig["Common"]["Transmit Pin"] = config.tx_pin;
+
+    // QRSS
+    jConfig["QRSS"]["Mode"] = qrss_mode_to_string(config.qrss_mode);
+    jConfig["QRSS"]["dot_length"] = config.dot_length;
+    jConfig["QRSS"]["fsk_offset"] = config.fsk_offset;
+    jConfig["QRSS"]["Frequency"] = config.qrss_frequency;
+    jConfig["QRSS"]["TX Start Minute"] = config.tx_start_minute;
+    jConfig["QRSS"]["TX Repeat Every"] = config.tx_repeat_every;
+    jConfig["QRSS"]["Message"] = config.qrss_message;
 
     // Extended
     jConfig["Extended"]["PPM"] = config.ppm;
@@ -245,7 +272,9 @@ void init_config_json()
         {"Date Time Log", false},
         {"Loop TX", false},
         {"TX Iterations", 0},
-        {"Test Tone", 730000.0}};
+        {"Test Tone", 730000.0}
+    };
+
     // Initialize "Center Frequency Set" as an empty JSON array
     jConfig["Meta"]["Center Frequency Set"] = nlohmann::json::array();
 
@@ -255,11 +284,23 @@ void init_config_json()
         {"Frequency", "20m"},
         {"Grid Square", "ZZ99"},
         {"TX Power", 20},
-        {"Transmit Pin", 4}};
+        {"Transmit Pin", 4}
+    };
+
+    jConfig["QRSS"] = {
+        {"Mode", "QRSS"},
+        {"Dot Length", 10},
+        {"FSK Offset", 100},
+        {"Frequency", 7039900.0},
+        {"TX Start Minute", 0},
+        {"TX Repeat Every", 10},
+        {"Message", "AA0NT EM18"},
+    };
 
     // Control section: Enable/disable controls
     jConfig["Control"] = {
-        {"Transmit", false}};
+        {"Transmit", false}
+    };
 
     // Extended section: Additional configuration options
     jConfig["Extended"] = {
@@ -268,14 +309,16 @@ void init_config_json()
         {"PPM", 0.0},
         {"Power Level", 7},
         {"Use LED", false},
-        {"Use NTP", true}};
+        {"Use NTP", true}
+    };
 
     // Server section: Settings for server communication
     jConfig["Server"] = {
         {"Web Port", 31415},
         {"Socket Port", 31416},
         {"Shutdown Button", 19},
-        {"Use Shutdown", false}};
+        {"Use Shutdown", false}
+    };
 }
 
 /**
@@ -356,8 +399,6 @@ void ini_to_json(std::string filename)
  *
  * Finally, the new data is set into the global INI handler object (`ini`) using
  * `iniFile.setData(newData)` and saved to disk via `iniFile.save()`.
- *
- * @note This function assumes that all JSON values can be represented as strings.
  */
 void json_to_ini()
 {
@@ -419,6 +460,8 @@ void json_to_ini()
  */
 void load_json(std::string filename)
 {
+    llog.logS(DEBUG, "DEBUG: load_json() entry.");
+
     // Create the base JSON configuration with default values.
     init_config_json();
 
@@ -427,22 +470,6 @@ void load_json(std::string filename)
 
     // Parse the updated JSON configuration into the global configuration struct.
     json_to_config();
-}
-
-/**
- * @brief Prints a formatted JSON object to standard output.
- *
- * @details This function outputs the given JSON object to `std::cout` with
- *          an indent of 4 spaces and ensures key names are sorted.
- *          Useful for debugging or configuration output.
- *
- * @param j The JSON object to dump (will not be modified).
- *
- * @return void
- */
-void dump_json(const nlohmann::json &j, std::string tag = "")
-{
-    llog.logS(DEBUG, tag, "JSON Dump:", j.dump());
 }
 
 /**
@@ -463,9 +490,9 @@ void dump_json(const nlohmann::json &j, std::string tag = "")
  *
  * @throws May throw exceptions from internal calls (e.g., parsing or write errors).
  */
-void patch_all_from_web(const nlohmann::json &j)
+void patch_all_from_web(const nlohmann::json &json)
 {
-    jConfig.merge_patch(j); ///< Patch new values into the global JSON config
+    jConfig.merge_patch(json); ///< Patch new values into the global JSON config
     json_to_ini();          ///< Write patched config to INI
     json_to_config();       ///< Write patched config into global struct
     config_to_json();       ///< Rebuild jConfig from sanitized struct

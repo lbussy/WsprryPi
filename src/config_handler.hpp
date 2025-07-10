@@ -54,20 +54,122 @@ extern nlohmann::json jConfig;
 
 /**
  * @enum ModeType
- * @brief Specifies the mode of operation for the application.
+ * @brief Represents the operational mode of the application.
  *
- * This enumeration defines the available modes for operation.
- * - `WSPR`: Represents the WSPR (Weak Signal Propagation Reporter) transmission mode.
- * - `TONE`: Represents a test tone generation mode.
+ * Enumerates the supported transmission or test modes available in the system.
+ *
+ * @var ModeType::WSPR
+ * WSPR (Weak Signal Propagation Reporter) transmission mode.
+ *
+ * @var ModeType::TONE
+ * Test tone generation mode used for calibration or diagnostics.
+ *
+ * @var ModeType::QRSS
+ * QRSS mode for extremely slow speed CW (continuous wave) transmissions.
+ *
+ * @var ModeType::UNKNOWN
+ * Sentinel value indicating an unrecognized or unsupported mode.
  */
-enum class ModeType
+enum class ModeType {
+    WSPR,
+    TONE,
+    QRSS,
+    UNKNOWN
+};
+
+/**
+ * @brief Converts a string to its corresponding ModeType enumeration.
+ *
+ * Accepts a case-sensitive string view and returns the matching ModeType.
+ * If the string does not match any known mode, ModeType::UNKNOWN is returned.
+ *
+ * @param str The input mode name as a string view (e.g., "WSPR", "QRSS").
+ * @return The corresponding ModeType enum value.
+ */
+constexpr ModeType mode_from_string(std::string_view str) {
+    if (str == "WSPR")  return ModeType::WSPR;
+    if (str == "QRSS")  return ModeType::QRSS;
+    if (str == "TONE")  return ModeType::TONE;
+    return ModeType::UNKNOWN;
+}
+
+/**
+ * @brief Converts a ModeType enumeration value to its string representation.
+ *
+ * Returns the string form of the given ModeType. If the mode is unknown,
+ * the string "UNKNOWN" is returned.
+ *
+ * @param mode The ModeType enum value to convert.
+ * @return A string view representing the mode (e.g., "WSPR", "QRSS").
+ */
+constexpr std::string_view mode_to_string(ModeType mode) {
+    switch (mode) {
+        case ModeType::WSPR:   return "WSPR";
+        case ModeType::QRSS:   return "QRSS";
+        case ModeType::TONE:   return "TONE";
+        default:               return "UNKNOWN";
+    }
+}
+
+/**
+ * @enum QRSSMode
+ * @brief Represents the modulation type used in QRSS transmissions.
+ *
+ * Defines the supported QRSS-related modes of operation.
+ *
+ * @var QRSSMode::QRSS
+ * Traditional extremely slow-speed Morse code transmission.
+ *
+ * @var QRSSMode::FSKCW
+ * Frequency Shift Keying CW mode, using two tones to encode bits.
+ *
+ * @var QRSSMode::DFCW
+ * Dual Frequency CW mode, using alternate frequencies for dots and dashes.
+ *
+ * @var QRSSMode::UNKNOWN
+ * Sentinel value for unrecognized or unsupported modes.
+ */
+enum class QRSSMode
 {
-    WSPR,  ///< WSPR transmission mode
-    TONE,  ///< Test tone generation mode
     QRSS,  ///< Extreme slow speed CW
     FSKCW, ///< Frequency Shift Keying CW
-    DFCW   ///< Dual Frequency CW
+    DFCW,  ///< Dual Frequency CW
+    UNKNOWN,
 };
+
+/**
+ * @brief Converts a string to a QRSSMode enumeration value.
+ *
+ * Maps a case-sensitive string to its corresponding QRSSMode. If the input does
+ * not match any known mode, QRSSMode::UNKNOWN is returned.
+ *
+ * @param str The input string representing a QRSS mode (e.g., "QRSS", "FSKCW").
+ * @return The corresponding QRSSMode enum value.
+ */
+constexpr QRSSMode qrss_mode_from_string(std::string_view str) {
+    if (str == "QRSS")   return QRSSMode::QRSS;
+    if (str == "FSKCW")  return QRSSMode::FSKCW;
+    if (str == "DFCW")   return QRSSMode::DFCW;
+    return QRSSMode::UNKNOWN;
+}
+
+/**
+ * @brief Converts a QRSSMode enumeration value to its string representation.
+ *
+ * Converts the provided QRSSMode to a string view. Returns "UNKNOWN" if the
+ * input is unrecognized.
+ *
+ * @param mode The QRSSMode enum value.
+ * @return A string view corresponding to the mode name (e.g., "QRSS").
+ */
+constexpr std::string_view qrss_mode_to_string(QRSSMode mode) {
+    switch (mode) {
+        case QRSSMode::QRSS:   return "QRSS";
+        case QRSSMode::FSKCW:  return "FSKCW";
+        case QRSSMode::DFCW:   return "DFCW";
+        default:               return "UNKNOWN";
+    }
+}
 
 /**
  * @brief Global configuration instance for argument parsing and runtime settings.
@@ -82,6 +184,7 @@ struct ArgParserConfig
 {
     // Control
     bool transmit; ///< Transmission mode enabled.
+    ModeType mode; ///< Current operating mode.
 
     // Common
     std::string callsign;    ///< WSPR callsign.
@@ -89,6 +192,15 @@ struct ArgParserConfig
     int power_dbm;           ///< Transmit power in dBm.
     std::string frequencies; ///< Space-separated frequency list.
     int tx_pin;              ///< GPIO pin number for RF transmit control.
+
+    // QRSS
+    QRSSMode qrss_mode;       ///< One of QRSS, FSKCW, DFCW
+    int dot_length;           ///< Dot lngth in seconds
+    double fsk_offset;        ///< Frequency shift offset in Hz
+    double qrss_frequency;    ///< QRSS Frequency in Hz
+    int tx_start_minute;      ///< Transmission start minute
+    int tx_repeat_every;      ///< Repeat transmissions every N minutes
+    std::string qrss_message; ///< Message to be transmitted
 
     // Extended
     double ppm;      ///< PPM frequency calibration.
@@ -111,7 +223,6 @@ struct ArgParserConfig
     double test_tone;               ///< Enable continuous tone mode (in Hz).
 
     // Runtime variables
-    ModeType mode;                       ///< Current operating mode.
     bool use_ini;                        ///< Load configuration from INI file.
     std::string ini_filename;            ///< INI file name and path.
     std::vector<double> center_freq_set; ///< Parsed list of center frequencies in Hz.
@@ -122,30 +233,37 @@ struct ArgParserConfig
      */
     ArgParserConfig()
         : transmit(true),
-          callsign(""),
-          grid_square(""),
-          power_dbm(0),
-          frequencies(""),
-          tx_pin(-1),
-          ppm(0.0),
-          use_ntp(false),
-          use_offset(false),
-          power_level(7),
-          use_led(false),
-          led_pin(-1),
-          web_port(-1),
-          socket_port(-1),
-          use_shutdown(false),
-          shutdown_pin(-1),
-          date_time_log(false),
-          loop_tx(false),
-          tx_iterations(0),
-          test_tone(0.0),
-          mode(ModeType::WSPR),
-          use_ini(false),
-          ini_filename(""),
-          center_freq_set({}),
-          ntp_good(false)
+        mode(ModeType::WSPR),
+        callsign(""),
+        grid_square(""),
+        power_dbm(0),
+        frequencies(""),
+        tx_pin(-1),
+        qrss_mode(QRSSMode::QRSS),
+        dot_length(10),
+        fsk_offset(100),
+        qrss_frequency(7039900.0),
+        tx_start_minute(0),
+        tx_repeat_every(10),
+        qrss_message(""),
+        ppm(0.0),
+        use_ntp(false),
+        use_offset(false),
+        power_level(7),
+        use_led(false),
+        led_pin(-1),
+        web_port(-1),
+        socket_port(-1),
+        use_shutdown(false),
+        shutdown_pin(-1),
+        date_time_log(false),
+        loop_tx(false),
+        tx_iterations(0),
+        test_tone(0.0),
+        use_ini(false),
+        ini_filename(""),
+        center_freq_set({}),
+        ntp_good(false)
     {
     }
 };
@@ -218,6 +336,15 @@ void ini_to_json(std::string filename);
  *       "Frequency": "20m",
  *       "Transmit Pin": 4
  *   },
+ *   "QRSS": {
+ *      "Mode": "QRSS",
+ *      "Dot Length":10,
+ *      "FSK Offset": 100,
+ *      "Frequency": 7039900.0,
+ *      "TX Start Minute": tx_start_minute,
+ *      "TX Repeat Every": tx_repeat_every,
+ *      "Message": qrss_message,
+ *   },
  *   "Extended": {
  *       "PPM": 0.0,
  *       "Use NTP": true,
@@ -233,7 +360,6 @@ void ini_to_json(std::string filename);
  *       "Shutdown Button": 19
  *   }
  * }
- * @endcode
  */
 void json_to_config();
 

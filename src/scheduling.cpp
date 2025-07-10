@@ -580,6 +580,11 @@ bool wspr_loop()
         // Set up WSPR transmissions
         set_config(true); // Handles get next (or only) frequency, PPM, and setup
     }
+    else if (config.mode == ModeType::QRSS)
+    {
+        // TODO:
+        llog.logS(DEBUG, "DEBUG: We are in QRSS Mode, no idea what to do.");
+    }
     else
     {
         // Setup test tone

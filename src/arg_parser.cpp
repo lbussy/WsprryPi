@@ -601,6 +601,11 @@ bool validate_config_data()
             llog.logS(INFO, "A random offset will be added to all transmissions.");
         }
     }
+    else if (config.mode == ModeType::QRSS)
+    {
+        // TODO:
+        llog.logS(DEBUG, "DEBUG: We are in QRSS Mode, no idea what to do.");
+    }
     else
     {
         llog.logE(FATAL, "Mode must be either WSPR or TONE.");
