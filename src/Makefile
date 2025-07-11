@@ -289,7 +289,7 @@ build/bin/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
 ##
 # Phony targets
 ##
-.PHONY: clean release RELEASE debug DEBUG test test-tone test-oneshot gdb install uninstall lint macros help
+.PHONY: clean release RELEASE debug DEBUG test test-tone test-oneshot gdb install devinstall uninstall lint macros help
 DEBUG: debug
 RELEASE: release
 
@@ -332,6 +332,18 @@ gdb: debug
 	$(Q)echo "Running test with sudo privileges."
 	$(Q)$(SUDO) sudo gdb --args ./build/bin/$(TEST_OUT) -D -i $(INI_FILE)
 
+# Install target (install only the debug binary)
+.PHONY: devinstall
+devinstall: debug
+	$(Q)echo "Installing $(OUT) to $(PREFIX)."
+	$(Q)sudo systemctl stop $(OUT).service || true
+	$(Q)sudo bash -c 'echo > /var/log/wsprrypi/wsprrypi_log' || true
+	$(Q)sudo install -d $(PREFIX)
+	$(Q)sudo install -m 755 build/bin/$(TEST_OUT) $(PREFIX)/$(TEST_OUT)
+	$(Q)sudo systemctl enable $(OUT).service || true
+	$(Q)sudo systemctl start $(OUT).service || true
+	$(Q)echo "Installation complete."
+
 # Install target (install only the release binary)
 .PHONY: install
 install: release
@@ -372,6 +384,7 @@ help:
 	$(Q)echo "  gdb          Debug with gdb"
 	$(Q)echo "  test-tone    Run the binary with a test tone."
 	$(Q)echo "  test-oneshot Run the binary with one iteration."
+	$(Q)echo "  devinstall   Install the debug binary to $(PREFIX)/bin."
 	$(Q)echo "  install      Install the binary to $(PREFIX)/bin."
 	$(Q)echo "  uninstall    Remove the installed binary."
 	$(Q)echo "  lint         Run static analysis."

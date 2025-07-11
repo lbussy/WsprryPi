@@ -168,11 +168,11 @@ void json_to_config()
     config.tx_pin = jConfig["Common"]["Transmit Pin"].get<int>();
 
     // QRSS
-    std::string qModeStr = jConfig["QRSS"]["Mode"].get<std::string>();
+    std::string qModeStr = jConfig["QRSS"]["QRSS Mode"].get<std::string>();
     config.qrss_mode = qrss_mode_from_string(qModeStr);
     config.dot_length = jConfig["QRSS"]["Dot Length"].get<int>();
     config.fsk_offset = jConfig["QRSS"]["FSK Offset"].get<int>();
-    config.qrss_frequency = jConfig["QRSS"]["Frequency"].get<double>();
+    config.qrss_frequency = jConfig["QRSS"]["QRSS Frequency"].get<double>();
     config.tx_start_minute = jConfig["QRSS"]["TX Start Minute"].get<int>();
     config.tx_repeat_every = jConfig["QRSS"]["TX Repeat Every"].get<int>();
     config.qrss_message = jConfig["QRSS"]["Message"].get<std::string>();
@@ -226,10 +226,10 @@ void config_to_json()
     jConfig["Common"]["Transmit Pin"] = config.tx_pin;
 
     // QRSS
-    jConfig["QRSS"]["Mode"] = qrss_mode_to_string(config.qrss_mode);
+    jConfig["QRSS"]["QRSS Mode"] = qrss_mode_to_string(config.qrss_mode);
     jConfig["QRSS"]["dot_length"] = config.dot_length;
     jConfig["QRSS"]["fsk_offset"] = config.fsk_offset;
-    jConfig["QRSS"]["Frequency"] = config.qrss_frequency;
+    jConfig["QRSS"]["QRSS Frequency"] = config.qrss_frequency;
     jConfig["QRSS"]["TX Start Minute"] = config.tx_start_minute;
     jConfig["QRSS"]["TX Repeat Every"] = config.tx_repeat_every;
     jConfig["QRSS"]["Message"] = config.qrss_message;
