@@ -110,47 +110,70 @@ WSPRBandLookup::WSPRBandLookup()
 }
 
 /**
- * @brief Parses a frequency string and converts it to Hz.
+ * @brief Converts a frequency string to its equivalent value in Hz.
  *
- * This function extracts the numeric value and unit (GHz, MHz, kHz, Hz) from a
- * frequency string and converts it into a `long long` value representing the
- * frequency in Hz.
+ * Parses a frequency string that may include an optional unit suffix
+ * (GHz, MHz, kHz, or Hz) and returns the corresponding frequency in Hz as a
+ * `long long` integer. If the input ends in a known WSPR band name such as
+ * "20m" or "LF-15", it is resolved using the internal band lookup.
  *
- * @param freq_str The frequency string (e.g., "7.040 MHz", "10 GHz", "475.812 kHz").
+ * @param freq_str A frequency string, such as "7.040 MHz", "10 GHz", or
+ *                 "475.812 kHz". The string may also represent a WSPR band.
  *
- * @return The frequency value in Hz.
+ * @return Frequency in Hz as a `long long` value.
  *
- * @throws std::invalid_argument If the input format is incorrect or unrecognized.
+ * @throws std::invalid_argument If the input format is invalid or cannot be
+ *         interpreted as a numeric frequency or known band name.
  */
 long long WSPRBandLookup::parse_frequency_string(const std::string &freq_str) const
 {
-    // Regular expression to extract a numeric value and an optional unit (GHz, MHz, kHz, Hz)
-    std::regex pattern(R"(^\s*([\d\.]+)\s*(GHz|MHz|kHz|Hz)?\s*$)", std::regex_constants::icase);
-    std::smatch match;
+    // Trim leading/trailing whitespace
+    std::string trimmed = freq_str;
+    trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
+    trimmed.erase(trimmed.find_last_not_of(" \t\n\r") + 1);
 
-    // Check if the input string matches the expected format
-    if (std::regex_match(freq_str, match, pattern))
+    // Special case: ends in 'm' → band name (e.g., "20m", "160m", "lf-15")
+    if (!trimmed.empty() && trimmed.back() == 'm')
     {
-        // Convert the extracted numeric part to a double
-        double value = std::stod(match[1].str());
-        std::string unit = match[2].str();
-        std::transform(unit.begin(), unit.end(), unit.begin(), ::tolower); // Convert unit to lowercase
-
-        // Convert based on the unit
-        if (unit == "ghz")
-            return static_cast<long long>(value * 1e9);
-        if (unit == "mhz")
-            return static_cast<long long>(value * 1e6);
-        if (unit == "khz")
-            return static_cast<long long>(value * 1e3);
-        if (unit == "hz")
-            return static_cast<long long>(value);
-
-        // If no unit is provided, assume Hz
-        return static_cast<long long>(value);
+        auto result = lookup(trimmed);
+        if (std::holds_alternative<double>(result))
+            return static_cast<long long>(std::get<double>(result));
     }
 
-    // Throw an exception if the input format is invalid
+    // Match number + optional unit (GHz, MHz, kHz, Hz)
+    std::regex pattern(R"(^([\d\.]+)\s*(GHz|MHz|kHz|Hz)?$)", std::regex::icase);
+    std::smatch match;
+
+    if (std::regex_match(trimmed, match, pattern))
+    {
+        try
+        {
+            double value = std::stod(match[1].str());
+            std::string unit = match[2].str();
+            std::transform(unit.begin(), unit.end(), unit.begin(), ::tolower);
+
+            if (unit == "ghz")
+                return static_cast<long long>(value * 1e9);
+            if (unit == "mhz")
+                return static_cast<long long>(value * 1e6);
+            if (unit == "khz")
+                return static_cast<long long>(value * 1e3);
+            if (unit == "hz" || unit.empty())
+                return static_cast<long long>(value);
+
+            // Fall through to try lookup if something weird
+        }
+        catch (...)
+        {
+            // Will fall through to try lookup
+        }
+    }
+
+    // Final fallback: try as a band name, regardless of format
+    auto result = lookup(trimmed);
+    if (std::holds_alternative<double>(result))
+        return static_cast<long long>(std::get<double>(result));
+
     throw std::invalid_argument("Invalid frequency format: " + freq_str);
 }
 
@@ -315,48 +338,47 @@ double WSPRBandLookup::parse_string_to_frequency(std::string_view input, bool va
 {
     std::string input_str(input);
 
-    // Trim spaces
+    // Trim leading/trailing whitespace
     input_str.erase(0, input_str.find_first_not_of(" \t\n\r"));
     input_str.erase(input_str.find_last_not_of(" \t\n\r") + 1);
 
-    // If the input contains only numbers (no letters), treat it as a raw numeric value
-    if (input_str.find_first_not_of("0123456789.-") == std::string::npos)
+    // Special case: treat "0" as a skip-transmit marker
+    if (input_str == "0")
     {
-        try
-        {
-            double raw_freq = std::stod(input_str);
-            // If it was exactly “0”, accept it without validating
-            // This is a skip transmit window designator
-            if (raw_freq == 0.0)
-            {
-                return 0.0;
-            }
-            // Validate if requested
-            if (validate)
-            {
-                std::string band = validate_frequency(static_cast<long long>(raw_freq));
-                if (band == "Invalid Frequency")
-                {
-                    throw std::invalid_argument("Frequency does not match known bands: " + input_str);
-                }
-            }
-
-            return raw_freq;
-        }
-        catch (const std::exception &e)
-        {
-            throw std::invalid_argument("Invalid frequency format: " + input_str);
-        }
+        return 0.0;
     }
 
-    // Check if input is a known WSPR band name
-    auto result = lookup(input_str);
-    if (std::holds_alternative<double>(result))
+    try
     {
-        return std::get<double>(result);
-    }
+        // Attempt to parse with frequency+unit logic
+        long long hz = parse_frequency_string(input_str);
 
-    throw std::invalid_argument("Invalid frequency format: " + input_str);
+        // If validation is requested, ensure it's a recognized band
+        if (validate)
+        {
+            std::string band = validate_frequency(hz);
+            if (band == "Invalid Frequency")
+            {
+                throw std::invalid_argument("Frequency does not match known bands: " + input_str);
+            }
+        }
+
+        return static_cast<double>(hz);
+    }
+    catch (const std::invalid_argument&)
+    {
+        // Fallback: check if it's a named band (e.g., "20m", "LF", etc.)
+        std::string band_key = input_str;
+        std::transform(band_key.begin(), band_key.end(), band_key.begin(), ::tolower);
+
+        auto result = lookup(band_key);
+        if (std::holds_alternative<double>(result))
+        {
+            return std::get<double>(result);
+        }
+
+        throw std::invalid_argument("Invalid frequency format: " + input_str);
+    }
 }
 
 /**
