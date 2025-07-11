@@ -6,9 +6,6 @@
 
 ## Web UI
 
-- [ ] Stack external links in a dropdown
-- [ ] Add QRSS
-
 ## Orchestration
 
 - [ ] Create release script orchestration

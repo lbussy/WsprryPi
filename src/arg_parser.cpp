@@ -970,7 +970,7 @@ bool parse_command_line(int argc, char *argv[])
             }
             else
             {
-                // TODO: Insert ome valid message - print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
+                // TODO: Insert some valid message - print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
             }
             break;
         }
