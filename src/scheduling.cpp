@@ -585,7 +585,7 @@ bool wspr_loop()
     }
     else if (config.mode == ModeType::QRSS)
     {
-        // TODO:
+        // TODO: QRSS
         llog.logS(DEBUG, "DEBUG: We are in QRSS Mode, no idea what to do.");
     }
     else

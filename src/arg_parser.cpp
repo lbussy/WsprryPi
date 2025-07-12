@@ -522,7 +522,7 @@ bool validate_config_data()
         // If any required parameter is missing, log error and exit
         if (missing_call_sign || missing_grid_square || invalid_tx_power || no_frequencies)
         {
-            llog.logE(FATAL, "Missing required parameters.");
+            llog.logE(ERROR, "Missing required parameters.");
 
             if (missing_call_sign)
             {
@@ -541,9 +541,16 @@ bool validate_config_data()
                 llog.logE(ERROR, " - At least one frequency must be specified.");
             }
 
-            llog.logE(ERROR, "Try: wsprrypi --help");
-            std::cerr << std::endl;
-            std::exit(EXIT_FAILURE);
+            if (config.use_ini)
+            {
+                llog.logE(ERROR, "INI does not contain minimum data.");
+            }
+            else
+            {
+                llog.logE(ERROR, "Try: wsprrypi --help");
+                std::cerr << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
         }
 
         // Log WSPR packet details
@@ -603,13 +610,20 @@ bool validate_config_data()
     }
     else if (config.mode == ModeType::QRSS)
     {
-        // TODO:
+        // TODO: QRSS
         llog.logS(DEBUG, "DEBUG: We are in QRSS Mode, no idea what to do.");
     }
     else
     {
-        llog.logE(FATAL, "Mode must be either WSPR or TONE.");
-        std::exit(EXIT_FAILURE);
+        if (config.use_ini)
+        {
+            llog.logE(ERROR, "INI file does not contain minimum required parameters.");
+        }
+        else
+        {
+            llog.logE(FATAL, "Mode must be either WSPR or TONE.");
+            std::exit(EXIT_FAILURE);
+        }
     }
 
     return true;
@@ -933,7 +947,7 @@ bool parse_command_line(int argc, char *argv[])
         case 'q': // Use QRSS
         {
             /**
-             * TODO:
+             * TODO: QRSS
              * We need:
                 - Transmit toggle (existing)
                 - TX LED (existing)
@@ -958,7 +972,7 @@ bool parse_command_line(int argc, char *argv[])
                 try
                 {
                     config.mode = ModeType::QRSS;
-                    // TODO: Figure out what we need here
+                    // TODO: QRSS
                 }
                 catch (const std::invalid_argument &e)
                 {
@@ -970,7 +984,8 @@ bool parse_command_line(int argc, char *argv[])
             }
             else
             {
-                // TODO: Insert some valid message - print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
+                // TODO: QRSS
+                // Insert some valid message - print_usage("Test tone is invalid when using INI file.", EXIT_FAILURE);
             }
             break;
         }
@@ -997,7 +1012,14 @@ bool parse_command_line(int argc, char *argv[])
                 int led_pin = std::stoi(optarg);
                 if (led_pin < 0 || led_pin > 27)
                 {
-                    print_usage("Invalid LED pin.", EXIT_FAILURE);
+                    if (config.use_ini)
+                    {
+                        llog.logE(ERROR, "Invalid LED pin in INI file.");
+                    }
+                    else
+                    {
+                        print_usage("Invalid LED pin.", EXIT_FAILURE);
+                    }
                 }
 
                 else
@@ -1008,7 +1030,14 @@ bool parse_command_line(int argc, char *argv[])
             }
             catch (const std::exception &)
             {
-                print_usage("Invalid LED pin.", EXIT_FAILURE);
+                if (config.use_ini)
+                {
+                    llog.logE(ERROR, "Invalid LED pin in INI file.");
+                }
+                else
+                {
+                    print_usage("Invalid LED pin.", EXIT_FAILURE);
+                }
             }
             break;
         }
@@ -1019,7 +1048,14 @@ bool parse_command_line(int argc, char *argv[])
                 int shutdown_pin = std::stoi(optarg);
                 if (shutdown_pin < 0 || shutdown_pin > 27)
                 {
-                    print_usage("Invalid shutdown pin.", EXIT_FAILURE);
+                    if (config.use_ini)
+                    {
+                        llog.logE(ERROR, "Invalid shutdown pin in INI file.");
+                    }
+                    else
+                    {
+                        print_usage("Invalid Shutdown pin.", EXIT_FAILURE);
+                    }
                 }
 
                 else
@@ -1030,7 +1066,14 @@ bool parse_command_line(int argc, char *argv[])
             }
             catch (const std::exception &)
             {
-                print_usage("Invalid shutdown pin.", EXIT_FAILURE);
+                if (config.use_ini)
+                {
+                    llog.logE(ERROR, "Invalid shutdown pin in INI file.");
+                }
+                else
+                {
+                    print_usage("Invalid Shutdown pin.", EXIT_FAILURE);
+                }
             }
             break;
         }
