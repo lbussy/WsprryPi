@@ -29,3 +29,6 @@
 [submodule "src/WSPR-Transmitter"]
 	path = src/WSPR-Transmitter
 	url = https://github.com/lbussy/WSPR-Transmitter.git
+[submodule "src/MorseCodeGenerator"]
+	path = src/MorseCodeGenerator
+	url = https://github.com/lbussy/MorseCodeGenerator.git
