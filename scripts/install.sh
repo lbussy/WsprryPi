@@ -5969,10 +5969,11 @@ manage_web() {
 # -----------------------------------------------------------------------------
 # @brief Manages the sound module for WsprryPi.
 # @details This function enables or disables the Raspberry Pi sound module
-#          (`snd_bcm2835`) by modifying the ALSA blacklist file. During
-#          installation, the module is blacklisted to allow WsprryPi to
-#          generate radio frequencies. During uninstallation, the blacklist
-#          entry is removed to restore sound functionality.
+#          (`snd_bcm2835`) by modifying `/boot/firmware/config.txt`. During
+#          installation, it sets `dtparam=audio=off` to allow WsprryPi to
+#          generate radio frequencies. During uninstallation, it restores
+#          `dtparam=audio=on` to re-enable sound. In both cases, the function
+#          runs `update-initramfs -u` to apply the changes.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
 # @global REBOOT Indicates whether a system reboot is required.
@@ -5992,51 +5993,36 @@ manage_sound() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    # Declare local variables
-    local blacklist
-    local file
-    local line_count
-
-    blacklist="blacklist snd_bcm2835"
-    file="/etc/modprobe.d/alsa-blacklist.conf"
+    # Declare local variables after debug initialization
+    local config_file="/boot/firmware/config.txt"
+    local dt_key="dtparam=audio"
+    local desired_value new_line
 
     if [[ "$ACTION" == "install" ]]; then
-        if [[ ! -f "$file" ]]; then
-            # Create file and add the blacklist line
-            echo "$blacklist" >"$file"
-            REBOOT="true"
-            debug_print "Created $file and disabled sound." "$debug"
-        elif ! grep -Fxq "$blacklist" "$file"; then
-            # Append blacklist line if it doesn't exist
-            echo "$blacklist" >>"$file"
-            REBOOT="true"
-            debug_print "Added blacklist entry to $file." "$debug"
-        else
-            REBOOT="false"
-            debug_print "Sound is already disabled." "$debug"
-        fi
-
+        desired_value="off"
     elif [[ "$ACTION" == "uninstall" ]]; then
-        if [[ -f "$file" ]] && grep -Fxq "$blacklist" "$file"; then
-            line_count=$(wc -l <"$file")
-
-            if [[ "$line_count" -eq 1 ]]; then
-                # If it's the only line, delete the file
-                rm -f "$file"
-                debug_print "Removed $file and re-enabled sound." "$debug"
-            else
-                # Otherwise, remove just the blacklist line
-                sed -i "\|$blacklist|d" "$file"
-                debug_print "Removed blacklist entry from $file." "$debug"
-            fi
-            REBOOT="true"
-        else
-            REBOOT="false"
-            debug_print "Sound is already enabled or no blacklist file exists." "$debug"
-        fi
+        desired_value="on"
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
+
+    new_line="${dt_key}=${desired_value}"
+
+    if grep -q "^${dt_key}=" "$config_file"; then
+        # Update existing line
+        exec_command "Set $dt_key=${desired_value}" \
+            sed -i "s/^${dt_key}=.*/${new_line}/" "$config_file" "$debug"
+    else
+        # Append new line to config
+        exec_command "Append $new_line" \
+            bash -c "printf '\n%s\n' '${new_line}' >> '${config_file}'" "$debug"
+    fi
+
+    # Update initramfs
+    exec_command "Update initramfs" update-initramfs -u "$debug"
+
+    # Always require reboot after this change
+    REBOOT="true"
 
     debug_end "$debug"
     return 0
@@ -6281,11 +6267,11 @@ flag_need_reboot() {
         if [[ "$ACTION" == "install" ]]; then
             printf "Wsprry Pi uses the same hardware as the sound system to\n"
             printf "generate radio frequencies. This soundcard has been disabled.\n"
-            printf "Reboot with 'sudo reboot' after install for changes to take\n"
-            printf "effect.\n\n"
+            printf "Reboot with 'sudo reboot --poweroff now' after install for\n"
+            printf "changes to take "effect.\n\n"
         else
             printf "The sound system has been re-enabled. To use audio, reboot\n"
-            printf "with 'sudo reboot' for changes to take effect.\n\n"
+            printf "with 'sudo reboot --poweroff now' for changes to take effect.\n\n"
         fi
         read -rp "Press any key to continue." </dev/tty
         echo
