@@ -13,7 +13,7 @@ Globally search/replace `2.1.1` with your desired version.
 1. **Create or update your release branch**
 
    ```bash
-   git checkout -b main
+   git checkout -b 2.1.1
    ```
 
 2. **Edit your source and install script**
@@ -21,7 +21,7 @@ Globally search/replace `2.1.1` with your desired version.
     * Update `scripts\install.sh` with proper version:
 
         ```bash
-        declare REPO_BRANCH="${REPO_BRANCH:-main}"
+        declare REPO_BRANCH="${REPO_BRANCH:-2.1.1}"
         declare GIT_TAG="${GIT_TAG:-v2.1.1}"
         declare SEM_VER="${SEM_VER:-2.1.1}"
         ```
@@ -69,7 +69,7 @@ Globally search/replace `2.1.1` with your desired version.
 9. **Push the branch and tag to the origin**
 
    ```bash
-   git push origin HEAD:refs/heads/main
+   git push origin 2.1.1
    git push origin tag v2.1.1
    ```
 
