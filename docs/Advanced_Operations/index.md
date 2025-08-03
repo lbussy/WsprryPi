@@ -166,7 +166,7 @@ So long as the connection is maintained, the server will broadcast certain event
 
 ## PWM Peripheral
 
-The code uses the RPi PWM peripheral to time the frequency transitions of the output clock. The RPi sound system also uses this peripheral; hence, any system sound events during a WSPR transmission will interfere with WSPR transmissions. Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device. This is done by the install script, and most users will not need to worry about it.
+The code uses the RPi PWM peripheral to time the frequency transitions of the output clock. The RPi sound system also uses this peripheral; hence, any system sound events during a WSPR transmission will interfere with WSPR transmissions. Sound can be permanently disabled by editing `/etc/modules` and commenting out the `snd-bcm2835` device.  Optionally, it may be turned off in `/boot/firmware/config.txt` by setting `dtparam=audio=on`.  The install script uses the second method.
 
 ## RF And Electrical Considerations
 

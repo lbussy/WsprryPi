@@ -89,7 +89,7 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 ## Optional Housekeeping
 
-I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
+I share some `bash` aliases [in my gist](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
 
 To handle all of these aliases and package installs, paste in this command:
 
