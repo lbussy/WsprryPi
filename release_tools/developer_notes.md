@@ -184,6 +184,7 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 - libgpiod2
 - libgpiod-dev
 
+
 Install these (withour running the installer) with:
 
 ``` bash

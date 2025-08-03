@@ -6267,11 +6267,11 @@ flag_need_reboot() {
         if [[ "$ACTION" == "install" ]]; then
             printf "Wsprry Pi uses the same hardware as the sound system to\n"
             printf "generate radio frequencies. This soundcard has been disabled.\n"
-            printf "Reboot with 'sudo reboot' after install for changes to take\n"
-            printf "effect.\n\n"
+            printf "Reboot with 'sudo reboot --poweroff now' after install for\n"
+            printf "changes to take "effect.\n\n"
         else
             printf "The sound system has been re-enabled. To use audio, reboot\n"
-            printf "with 'sudo reboot' for changes to take effect.\n\n"
+            printf "with 'sudo reboot --poweroff now' for changes to take effect.\n\n"
         fi
         read -rp "Press any key to continue." </dev/tty
         echo
