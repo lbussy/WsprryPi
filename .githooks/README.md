@@ -7,5 +7,5 @@ These hooks are version-controlled in `.githooks/` for team and project consiste
 To activate these hooks locally, run:
 
 ```bash
-git config core.hooksPath .githooks
+scripts/setup-hooks.sh
 ```
