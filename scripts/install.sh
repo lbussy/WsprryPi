@@ -258,7 +258,9 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # -----------------------------------------------------------------------------
 readonly WSPR_SERVICE="wsprrypi"
 # shellcheck disable=SC2155
-readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
+# DEBUG TODO
+# readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
+readonly WSPR_EXE="$WSPR_SERVICE"
 readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
 
