@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 # -----------------------------------------------------------------------------
 # @brief Git pre-commit hook to check for debug symbols in staged files when
 #        on the 'main' branch, with exclusion support, and always check for

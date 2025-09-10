@@ -5567,6 +5567,7 @@ manage_config() {
                 local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
                 upgrade_ini "$old_path" "$source_path" "${merged_ini}" "$debug"
                 source_path="$merged_ini"
+                source_path="$merged_ini"
             fi
         fi
 
@@ -6621,6 +6622,7 @@ _main() {
     validate_sys_accs "$debug" # Verify critical system files are accessible
     validate_env_vars "$debug" # Check for required environment variables
     get_proj_params "$debug"   # Get project and git parameters
+
 
     check_bash "$debug"        # Ensure the script is executed in a Bash shell
     check_sh_ver "$debug"      # Verify the Bash version meets minimum requirements
