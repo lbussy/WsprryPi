@@ -209,7 +209,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-bugfix/217-fa-sri}"
+declare REPO_BRANCH="${REPO_BRANCH:-main}"
 declare GIT_TAG="${GIT_TAG:-v2.1.2}"
 declare SEM_VER="${SEM_VER:-2.1.2}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -258,9 +258,7 @@ readonly GIT_DIRS="${GIT_DIRS:-("config" "WsprryPi-UI/data" "executables" "syste
 # -----------------------------------------------------------------------------
 readonly WSPR_SERVICE="wsprrypi"
 # shellcheck disable=SC2155
-# DEBUG TODO
-# readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
-readonly WSPR_EXE="$WSPR_SERVICE"
+readonly WSPR_EXE="${WSPR_SERVICE}$([[ "${REPO_BRANCH}" != "main" ]] && printf '_debug')"
 readonly WSPR_INI="wsprrypi.ini"
 readonly LOG_ROTATE="logrotate.conf"
 

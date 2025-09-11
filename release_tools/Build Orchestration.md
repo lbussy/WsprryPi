@@ -16,6 +16,8 @@ Globally search/replace `2.1.2` with your desired version.
    git checkout -b main
    ```
 
+   * Merge any release features into main.
+
 2. **Edit your source and install script**
 
     * Update `scripts\install.sh` with proper version:
@@ -42,25 +44,23 @@ Globally search/replace `2.1.2` with your desired version.
    git tag -a v2.1.2 -m "Release 2.1.2"
    ```
 
-5. ~~Build the binary~~ **No longer needed**
+5. **Compilation**
 
-   ```bash
-   ./release_tools/make_executables.sh
-   ```
+   * If a version-specific compile or any other process depends on the tag, execute that process now
 
-6. ~~Stage the built executable~~ **No lomger needed**
+6. **Stage any additional changes**
 
    ```bash
    git add ./executables/
    ```
 
-7. ~~Amend the previous commit to include the binary~~ **No longer needed**
+7. **Amend the previous commit to include the binary**
 
    ```bash
    git commit --amend --no-edit
    ```
 
-8. ~~Force the tag to point to the amended commit~~ **No lomger needed**
+8. **Force the tag to point to the amended commit**
 
    ```bash
    git tag -f v2.1.2
