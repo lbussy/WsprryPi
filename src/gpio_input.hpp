@@ -32,10 +32,11 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <gpiod.hpp>
 #include <memory>
 #include <mutex>
 #include <thread>
+
+#include "gpio_include.hpp"
 
  /**
  * @class GPIOInput
@@ -198,7 +199,16 @@ private:
 
     Status status_;                     ///< Current operational state of the monitor.
     std::unique_ptr<gpiod::chip> chip_; ///< Represents the GPIO chip.
-    std::unique_ptr<gpiod::line> line_; ///< Represents the GPIO line being monitored.
+
+#if GPIOD_API_MAJOR >= 2
+    // v2: request handle (no default ctor) — wrap in optional
+    std::optional<gpiod::line_request> request_;
+    gpiod::edge_event_buffer event_buf_{16};
+#else
+    // libgpiod v1: hold the line handle.
+    std::unique_ptr<gpiod::line> line_;
+#endif
+
 };
 
 // Global instance
