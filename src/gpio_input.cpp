@@ -131,8 +131,9 @@ bool GPIOInput::enable(int pin,
                 break;
         }
 
-        auto builder = chip_->prepare_request().set_consumer("GPIOInput");
-        gpiod::line::offset off = static_cast<gpiod::line::offset>(pin_);
+        auto builder = chip_->prepare_request();
+        builder.set_consumer("GPIOInput");
+        gpiod::line::offset off = static_cast<gpiod::line::offset>(pin);
         request_ = builder.add_line_settings(off, ls).do_request();
 
         llog.logS(DEBUG, "GPIOInput: v2 request on /dev/gpiochip0. offset:",
@@ -311,9 +312,9 @@ void GPIOInput::monitorLoop()
         {
 #if GPIOD_API_MAJOR >= 2
             // v2: Wait and read events from the active request
-            if (request_.wait_edge_events(std::chrono::seconds(1)))
+            if (request_ && request_->wait_edge_events(std::chrono::seconds(1)))
             {
-                auto count = request_.read_edge_events(event_buf_);
+                auto count = request_->read_edge_events(event_buf_);
                 if (count > 0 && !debounce_triggered_)
                 {
                     debounce_triggered_ = true;

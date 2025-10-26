@@ -57,11 +57,14 @@ extern "C" {
 #endif
 
 #ifdef DEBUG_WSPR
-#   if GPIOD_API_MAJOR >= 2
-#       pragma message "Compiling with libgpiod **v2** support"
-#   else
-#       pragma message "Compiling with libgpiod **v1** support"
-#   endif
+#  ifndef __PRINTED_GPIOD_VERSION
+#    define __PRINTED_GPIOD_VERSION 1
+#    if GPIOD_API_MAJOR >= 2
+#      pragma message "Compiling with libgpiod v2 support"
+#    else
+#      pragma message "Compiling with libgpiod v1 support"
+#    endif
+#  endif
 #endif
 
 #endif // GPIO_INCLUDE_HPP
