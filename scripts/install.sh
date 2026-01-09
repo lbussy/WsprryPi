@@ -60,6 +60,7 @@ IFS=$'\n\t'
 # @return None (exits the script with an error code).
 # -----------------------------------------------------------------------------
 # shellcheck disable=2317
+# shellcheck disable=2329
 trap_error() {
     # Capture function name, line number, and script name
     local func="${FUNCNAME[1]:-main}" # Get the call function (default: "main")
@@ -209,9 +210,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
-declare GIT_TAG="${GIT_TAG:-v2.1.3}"
-declare SEM_VER="${SEM_VER:-2.1.4}"
+declare REPO_BRANCH="${REPO_BRANCH:-compile-fails-on-bookworm}"
+declare GIT_TAG="${GIT_TAG:-v2.1.5}"
+declare SEM_VER="${SEM_VER:-2.1.5}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -854,8 +855,9 @@ declare REBOOT=${REBOOT:-false}
 # @note The function uses `history | wc -l` to count the commands executed in
 #       the current session and `date` to capture the session end time.
 # -----------------------------------------------------------------------------
+# shellcheck disable=2317
+# shellcheck disable=2329
 egress() {
-    # shellcheck disable=SC2317
     true
 }
 
@@ -1513,7 +1515,8 @@ die() {
 # add_dot ".example"  # Outputs ".example"
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=2317
+# shellcheck disable=2329
 add_dot() {
     local debug
     debug=$(debug_start "$@")
@@ -1591,7 +1594,8 @@ remove_dot() {
 # result=$(add_period "Hello")
 # echo "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=2317
+# shellcheck disable=2329
 add_period() {
     local debug
     debug=$(debug_start "$@")
@@ -2068,6 +2072,67 @@ print_version() {
 
     debug_end "$debug"
     return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Retrieve the full name of the detected Raspberry Pi model.
+# @details This function reads the Raspberry Pi compatibility string from
+#          /proc/device-tree/compatible, extracts the model identifier, and
+#          matches it against the SUPPORTED_MODELS associative array. When a
+#          matching entry is found, the full descriptive model name is printed
+#          to standard output.
+#
+#          The function uses the standard debug_start and debug_filter helpers
+#          for argument handling. If debug output is enabled, the detected
+#          model identifier is printed using debug_print.
+#
+#          If the model cannot be detected or is not present in
+#          SUPPORTED_MODELS, the function terminates execution using die with
+#          a non-zero exit status.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global SUPPORTED_MODELS Associative array mapping model identifiers to
+#          support status entries using the format
+#          "Full Name|model|chip".
+#
+# @return None. The full model name is written to standard output.
+#
+# @example
+# model_name=$(print_model_name debug)
+# -----------------------------------------------------------------------------
+print_model_name() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local detected_model key full_name model chip
+
+    # Read and process the compatible string
+    if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null \
+        | sed -n 's/raspberrypi,//p'); then
+        debug_end "$debug"
+        die 1 "Failed to read or process /proc/device-tree/compatible."
+    fi
+
+    # Ensure a model was detected
+    if [[ -z "${detected_model:-}" ]]; then
+        debug_end "$debug"
+        die 1 "No Raspberry Pi model found in /proc/device-tree/compatible."
+    fi
+
+    # Match detected model against SUPPORTED_MODELS keys
+    for key in "${!SUPPORTED_MODELS[@]}"; do
+        IFS='|' read -r full_name model chip <<<"$key"
+        if [[ "$model" == "$detected_model" ]]; then
+            logI "Detected model: $full_name." "$debug"
+            debug_end "$debug"
+            return 0
+        fi
+    done
+
+    debug_end "$debug"
+    die 1 "Detected Raspberry Pi model '$detected_model' is not recognized."
 }
 
 ############
@@ -2705,6 +2770,7 @@ check_arch() {
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 is_supported=true
                 debug_print "Model: '$full_name' ($chip) is supported." "$debug"
+                debug_print "Detected model: $detected_model" "$debug" # TODO
             else
                 debug_end "$debug"
                 die 1 "Model: '$full_name' ($chip) is not supported."
@@ -3625,7 +3691,7 @@ init_colors() {
 # @example
 # generate_separator "heavy"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 generate_separator() {
     local debug
     debug=$(debug_start "$@")
@@ -3773,7 +3839,7 @@ setup_log() {
 #
 # @return 0 on success, 1 on invalid input.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 toggle_console_log() {
     local debug
     debug=$(debug_start "$@")
@@ -3989,34 +4055,44 @@ get_repo_branch() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    local branch="${REPO_BRANCH:-}" # Use existing $REPO_BRANCH if set
-    local detached_from
+    local branch=""
+    local detached_from=""
 
-    # Attempt to retrieve branch name dynamically from Git
-    if [[ -z "$branch" ]]; then
-        branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    # Prefer the local Git branch if available
+    if branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); then
         if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
-            debug_print "Retrieved branch name from Git: $branch" "$debug"
-        elif [[ "$branch" == "HEAD" ]]; then
-            # Handle detached HEAD state: attempt to determine the source
-            detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
+            debug_print "Retrieved branch name from Git: $branch." "$debug"
+        else
+            # Detached HEAD state
+            detached_from=$(git reflog show --pretty='%gs' 2>/dev/null \
+                | grep -oE 'checkout: moving from [^ ]+' \
+                | head -n 1 \
+                | awk '{print $NF}')
+
             if [[ -n "$detached_from" ]]; then
                 branch="$detached_from"
-                debug_print "Detached HEAD state. Detached from branch: $branch" "$debug"
+                debug_print "Detached HEAD state. Detached from branch: $branch." "$debug"
             else
-                debug_print "Detached HEAD state. Cannot determine the source branch." "$debug"
-                branch="unknown"
+                debug_print "Detached HEAD state. Source branch unknown." "$debug"
+                branch=""
             fi
         fi
+    else
+        branch=""
     fi
 
-    # Use "unknown" if no branch name could be determined
+    # Fall back to REPO_BRANCH if Git did not yield a usable value
+    if [[ -z "$branch" && -n "${REPO_BRANCH:-}" ]]; then
+        branch="$REPO_BRANCH"
+        debug_print "Using REPO_BRANCH fallback: $branch." "$debug"
+    fi
+
+    # Final fallback
     if [[ -z "$branch" ]]; then
-        debug_print "Unable to determine Git branch. Returning 'unknown'." "$debug"
         branch="unknown"
+        debug_print "Unable to determine Git branch. Using 'unknown'." "$debug"
     fi
 
-    # Output the determined or fallback branch name
     printf "%s\n" "$branch"
 
     debug_end "$debug"
@@ -6647,8 +6723,9 @@ _main() {
     start_script "$debug"
 
     # Print/display the environment
-    print_system "$debug"  # Log system information
-    print_version "$debug" # Log the script version
+    print_model_name "$debug"   # Log board variant
+    print_system "$debug"       # Log system information
+    print_version "$debug"      # Log the script version
 
     # Feedback on multi-proc compilation
     [[ "$ACTION" != "uninstall" ]] && display_mem_compilation_notes "$debug"
