@@ -1,17 +1,17 @@
 /**
- * @file gpio_input.cpp
+ * @file gpio_input.hpp
  * @brief Handles shutdown button sensing.
  *
- * This project is is licensed under the MIT License. See LICENSE.md
- * for more information.
+ * This project is licensed under the MIT License. See LICENSE.md for more
+ * information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy).
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -26,8 +26,10 @@
  * SOFTWARE.
  */
 
-#ifndef SHUTDOWN_HANDLER_HPP
-#define SHUTDOWN_HANDLER_HPP
+#ifndef GPIO_INPUT_HPP
+#define GPIO_INPUT_HPP
+
+#include "gpio_include.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -37,9 +39,7 @@
 #include <optional>
 #include <thread>
 
-#include "gpio_include.hpp"
-
- /**
+/**
  * @class GPIOInput
  * @brief Monitors a GPIO pin using libgpiod with thread-based event handling.
  *
@@ -48,26 +48,13 @@
  * internal pull-up or pull-down configuration, CPU priority control, debounce
  * management, and thread-safe lifecycle operations.
  *
- * Designed for use on the Raspberry Pi platform with BCM GPIO numbering,
- * the class is thread-based and suitable for global instantiation.
+ * Designed for use on the Raspberry Pi platform with BCM GPIO numbering, the
+ * class is thread-based and suitable for global instantiation.
  *
- * Example usage:
- * @code
- * GPIOInput monitor;
- * monitor.enable(19, false, GPIOInput::PullMode::PullUp, []() {
- *     std::cout << "Shutdown button pressed." << std::endl;
- * });
- * @endcode
+ * Dependencies: libgpiod >= 1.6.
  *
- * The monitoring thread will invoke the callback only once per edge trigger
- * until resetTrigger() is called. The thread can be stopped, reconfigured,
- * and restarted as needed.
- *
- * Dependencies:
- *  - libgpiod >= 1.6
- *
- * Thread-safe: Yes
- * Reentrant: No
+ * Thread-safe: Yes.
+ * Reentrant: No.
  */
 class GPIOInput
 {
@@ -93,126 +80,52 @@ public:
         Error          ///< An error occurred during setup or runtime.
     };
 
-    /**
-     * @brief Constructs a GPIOInput instance.
-     */
     GPIOInput();
-
-    /**
-     * @brief Destructor that stops monitoring and cleans up resources.
-     */
     ~GPIOInput();
 
-    // Delete copy operations to prevent hardware access duplication.
-    GPIOInput(const GPIOInput &) = delete;
-    GPIOInput &operator=(const GPIOInput &) = delete;
+    GPIOInput(const GPIOInput&) = delete;
+    GPIOInput& operator=(const GPIOInput&) = delete;
 
-    /**
-     * @brief Enable GPIO monitoring on a specified pin.
-     *
-     * @details
-     * Configures the GPIO line, sets the trigger edge and pull mode, and
-     * starts a thread that monitors the pin and invokes the callback when
-     * a trigger is detected.
-     *
-     * @param pin          BCM GPIO pin number.
-     * @param trigger_high `true` to trigger on rising edge; `false` for falling.
-     * @param pull_mode    Desired pull configuration (up/down/none).
-     * @param callback     Function to call on edge detection.
-     *
-     * @return `true` if successfully configured and monitoring started.
-     */
-    bool enable(int pin, bool trigger_high, PullMode pull_mode, std::function<void()> callback);
+    bool enable(int pin,
+                bool trigger_high,
+                PullMode pull_mode,
+                std::function<void()> callback);
 
-    /**
-     * @brief Stop the GPIO monitoring thread.
-     *
-     * @return `true` if the monitor was previously running and is now stopped.
-     */
     bool stop();
 
-    /**
-     * @brief Reset internal debounce state to allow re-triggering.
-     *
-     * @details
-     * This clears the debounce flag so that another edge event can be recognized.
-     */
     void resetTrigger();
 
-    /**
-     * @brief Sets the scheduling policy and priority of the monitor thread.
-     *
-     * @details
-     * Applies a specified real-time policy and priority using `pthread_setschedparam()`.
-     * Useful when GPIO response time is critical.
-     *
-     * @param schedPolicy Scheduling policy (`SCHED_FIFO`, `SCHED_RR`, etc.).
-     * @param priority    Thread priority associated with the policy.
-     *
-     * @return `true` if the scheduling parameters were successfully applied,
-     *         `false` otherwise.
-     *
-     * @note Requires `CAP_SYS_NICE` or root privileges for real-time policies.
-     */
     bool setPriority(int schedPolicy, int priority);
 
-    /**
-     * @brief Get the current operational status of the GPIO monitor.
-     *
-     * @return A `Status` enum indicating the monitor's current state.
-     */
     Status getStatus() const;
 
 private:
-    /**
-     * @brief Internal thread loop for monitoring GPIO edge events.
-     *
-     * @details
-     * Uses libgpiod to wait for edge events, handles debounce logic,
-     * and invokes the callback function if a trigger condition is met.
-     */
     void monitorLoop();
 
-    // ------------------------------------------------------------------------
-    // Configuration Parameters
-    // ------------------------------------------------------------------------
-
     int gpio_pin_;                   ///< BCM GPIO pin number.
-    bool trigger_high_;              ///< Trigger on rising edge if true, falling if false.
+    bool trigger_high_;              ///< Rising edge if true, falling if false.
     PullMode pull_mode_;             ///< Pull resistor mode.
     std::function<void()> callback_; ///< User callback function on trigger.
 
-    // ------------------------------------------------------------------------
-    // Threading and Synchronization
-    // ------------------------------------------------------------------------
-
-    std::atomic<bool> debounce_triggered_; ///< Indicates if a trigger has been handled (debounce).
-    std::atomic<bool> running_;            ///< Indicates if monitoring is currently running.
-    std::atomic<bool> stop_thread_;        ///< Flag to request thread shutdown.
+    std::atomic<bool> debounce_triggered_; ///< Debounce one-shot flag.
+    std::atomic<bool> running_;            ///< Monitoring active.
+    std::atomic<bool> stop_thread_;        ///< Request thread shutdown.
 
     std::thread monitor_thread_; ///< Thread used to monitor GPIO changes.
-    std::mutex monitor_mutex_;   ///< Protects shared state for monitoring thread.
-    std::condition_variable cv_; ///< Used to coordinate thread shutdown.
+    std::mutex monitor_mutex_;   ///< Protects shared state.
+    std::condition_variable cv_; ///< Coordinates thread shutdown.
 
-    // ------------------------------------------------------------------------
-    // State and Resource Management
-    // ------------------------------------------------------------------------
-
-    Status status_;                     ///< Current operational state of the monitor.
-    std::unique_ptr<gpiod::chip> chip_; ///< Represents the GPIO chip.
+    Status status_;                     ///< Current operational state.
+    std::unique_ptr<gpiod::chip> chip_; ///< GPIO chip handle.
 
 #if GPIOD_API_MAJOR >= 2
-    // v2: request handle (no default ctor) — wrap in optional
     std::optional<gpiod::line_request> request_;
     gpiod::edge_event_buffer event_buf_{16};
 #else
-    // libgpiod v1: hold the line handle.
-    std::unique_ptr<gpiod::line> line_;
+    gpiod::line line_;
 #endif
-
 };
 
-// Global instance
 extern GPIOInput shutdownMonitor;
 
-#endif // SHUTDOWN_HANDLER_HPP
+#endif // GPIO_INPUT_HPP
