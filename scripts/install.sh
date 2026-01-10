@@ -59,8 +59,8 @@ IFS=$'\n\t'
 #
 # @return None (exits the script with an error code).
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
-# shellcheck disable=2329
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 trap_error() {
     # Capture function name, line number, and script name
     local func="${FUNCNAME[1]:-main}" # Get the call function (default: "main")
@@ -210,7 +210,7 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-devel}"
+declare REPO_BRANCH="${REPO_BRANCH:-231-os-check-on-trixie-fails}"
 declare GIT_TAG="${GIT_TAG:-v2.1.5}"
 declare SEM_VER="${SEM_VER:-2.1.5}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -396,7 +396,7 @@ readonly MIN_OS="${MIN_OS:-11}"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly MAX_OS="${MAX_OS:-12}" # (use -1 for no upper limit)
+readonly MAX_OS="${MAX_OS:-13}" # (use -1 for no upper limit)
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_BITNESS
@@ -707,7 +707,6 @@ readonly APT_PACKAGES=(
     "php"
     "chrony"
     "libgpiod-dev"
-    "libgpiod2"
 )
 
 # -----------------------------------------------------------------------------
@@ -855,8 +854,8 @@ declare REBOOT=${REBOOT:-false}
 # @note The function uses `history | wc -l` to count the commands executed in
 #       the current session and `date` to capture the session end time.
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
-# shellcheck disable=2329
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 egress() {
     true
 }
@@ -1515,8 +1514,8 @@ die() {
 # add_dot ".example"  # Outputs ".example"
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
-# shellcheck disable=2329
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_dot() {
     local debug
     debug=$(debug_start "$@")
@@ -1594,8 +1593,8 @@ remove_dot() {
 # result=$(add_period "Hello")
 # echo "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
-# shellcheck disable=2329
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_period() {
     local debug
     debug=$(debug_start "$@")
@@ -1637,6 +1636,7 @@ add_period() {
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_period() {
     local debug
     debug=$(debug_start "$@")
@@ -1677,6 +1677,7 @@ remove_period() {
 # add_slash ""                    # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_slash() {
     local debug
     debug=$(debug_start "$@")
@@ -1718,6 +1719,7 @@ add_slash() {
 # remove_slash ""                     # Logs an error and returns an error code
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_slash() {
     local debug
     debug=$(debug_start "$@")
@@ -1763,6 +1765,7 @@ remove_slash() {
 # exec_command "Test Command" echo Hello World debug
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 exec_command() {
     # Start debug and filter parameters
     local debug status
@@ -1858,6 +1861,7 @@ exec_command() {
 # @return 0 on success, non-zero on failure.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 modify_comment_lines() {
     # Start debug and filter parameters
     local debug status
@@ -1938,6 +1942,7 @@ modify_comment_lines() {
 # replace_string_in_script "script.sh" "PLACEHOLDER" "new_value"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 replace_string_in_script() {
     local debug
     debug=$(debug_start "$@")
@@ -1974,7 +1979,8 @@ replace_string_in_script() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 pause() {
     # Prompt the user
     printf "Press any key to continue..."
@@ -1988,6 +1994,67 @@ pause() {
 ############
 ### Print/Display Environment Functions
 ############
+
+# -----------------------------------------------------------------------------
+# @brief Retrieve the full name of the detected Raspberry Pi model.
+# @details This function reads the Raspberry Pi compatibility string from
+#          /proc/device-tree/compatible, extracts the model identifier, and
+#          matches it against the SUPPORTED_MODELS associative array. When a
+#          matching entry is found, the full descriptive model name is printed
+#          to standard output.
+#
+#          The function uses the standard debug_start and debug_filter helpers
+#          for argument handling. If debug output is enabled, the detected
+#          model identifier is printed using debug_print.
+#
+#          If the model cannot be detected or is not present in
+#          SUPPORTED_MODELS, the function terminates execution using die with
+#          a non-zero exit status.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global SUPPORTED_MODELS Associative array mapping model identifiers to
+#          support status entries using the format
+#          "Full Name|model|chip".
+#
+# @return None. The full model name is written to standard output.
+#
+# @example
+# model_name=$(print_model_name debug)
+# -----------------------------------------------------------------------------
+print_model_name() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local detected_model key full_name model chip
+
+    # Read and process the compatible string
+    if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null \
+        | sed -n 's/raspberrypi,//p'); then
+        debug_end "$debug"
+        die 1 "Failed to read or process /proc/device-tree/compatible."
+    fi
+
+    # Ensure a model was detected
+    if [[ -z "${detected_model:-}" ]]; then
+        debug_end "$debug"
+        die 1 "No Raspberry Pi model found in /proc/device-tree/compatible."
+    fi
+
+    # Match detected model against SUPPORTED_MODELS keys
+    for key in "${!SUPPORTED_MODELS[@]}"; do
+        IFS='|' read -r full_name model chip <<<"$key"
+        if [[ "$model" == "$detected_model" ]]; then
+            logI "Detected model: $full_name." "$debug"
+            debug_end "$debug"
+            return 0
+        fi
+    done
+
+    debug_end "$debug"
+    die 1 "Detected Raspberry Pi model '$detected_model' is not recognized."
+}
 
 # -----------------------------------------------------------------------------
 # @brief Print the system information to the log.
@@ -2072,67 +2139,6 @@ print_version() {
 
     debug_end "$debug"
     return 0
-}
-
-# -----------------------------------------------------------------------------
-# @brief Retrieve the full name of the detected Raspberry Pi model.
-# @details This function reads the Raspberry Pi compatibility string from
-#          /proc/device-tree/compatible, extracts the model identifier, and
-#          matches it against the SUPPORTED_MODELS associative array. When a
-#          matching entry is found, the full descriptive model name is printed
-#          to standard output.
-#
-#          The function uses the standard debug_start and debug_filter helpers
-#          for argument handling. If debug output is enabled, the detected
-#          model identifier is printed using debug_print.
-#
-#          If the model cannot be detected or is not present in
-#          SUPPORTED_MODELS, the function terminates execution using die with
-#          a non-zero exit status.
-#
-# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
-#
-# @global SUPPORTED_MODELS Associative array mapping model identifiers to
-#          support status entries using the format
-#          "Full Name|model|chip".
-#
-# @return None. The full model name is written to standard output.
-#
-# @example
-# model_name=$(print_model_name debug)
-# -----------------------------------------------------------------------------
-print_model_name() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local detected_model key full_name model chip
-
-    # Read and process the compatible string
-    if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null \
-        | sed -n 's/raspberrypi,//p'); then
-        debug_end "$debug"
-        die 1 "Failed to read or process /proc/device-tree/compatible."
-    fi
-
-    # Ensure a model was detected
-    if [[ -z "${detected_model:-}" ]]; then
-        debug_end "$debug"
-        die 1 "No Raspberry Pi model found in /proc/device-tree/compatible."
-    fi
-
-    # Match detected model against SUPPORTED_MODELS keys
-    for key in "${!SUPPORTED_MODELS[@]}"; do
-        IFS='|' read -r full_name model chip <<<"$key"
-        if [[ "$model" == "$detected_model" ]]; then
-            logI "Detected model: $full_name." "$debug"
-            debug_end "$debug"
-            return 0
-        fi
-    done
-
-    debug_end "$debug"
-    die 1 "Detected Raspberry Pi model '$detected_model' is not recognized."
 }
 
 ############
@@ -2770,7 +2776,6 @@ check_arch() {
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 is_supported=true
                 debug_print "Model: '$full_name' ($chip) is supported." "$debug"
-                debug_print "Detected model: $detected_model" "$debug" # TODO
             else
                 debug_end "$debug"
                 die 1 "Model: '$full_name' ($chip) is not supported."
@@ -3391,6 +3396,7 @@ log_message() {
 #   "This is an error message" "Additional details" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 log_message_with_severity() {
     local debug
     debug=$(debug_start "$@")
@@ -3476,16 +3482,22 @@ log_message_with_severity() {
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
@@ -3615,6 +3627,7 @@ default_color() {
 # init_colors "debug"  # Initializes terminal colors with debug output.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 init_colors() {
     local debug
     debug=$(debug_start "$@")
@@ -3691,6 +3704,7 @@ init_colors() {
 # @example
 # generate_separator "heavy"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 # shellcheck disable=SC2329
 generate_separator() {
     local debug
@@ -3839,6 +3853,7 @@ setup_log() {
 #
 # @return 0 on success, 1 on invalid input.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 # shellcheck disable=SC2329
 toggle_console_log() {
     local debug
@@ -3951,6 +3966,7 @@ get_repo_org() {
 #         repository name cannot be determined.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 get_repo_name() {
     local debug
     debug=$(debug_start "$@")
@@ -3999,6 +4015,7 @@ get_repo_name() {
 # @throws Exits with an error if the repository name is empty.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 repo_to_title_case() {
     local debug
     debug=$(debug_start "$@")
@@ -4055,44 +4072,34 @@ get_repo_branch() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    local branch=""
-    local detached_from=""
+    local branch="${REPO_BRANCH:-}" # Use existing $REPO_BRANCH if set
+    local detached_from
 
-    # Prefer the local Git branch if available
-    if branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); then
+    # Attempt to retrieve branch name dynamically from Git
+    if [[ -z "$branch" ]]; then
+        branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
         if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
-            debug_print "Retrieved branch name from Git: $branch." "$debug"
-        else
-            # Detached HEAD state
-            detached_from=$(git reflog show --pretty='%gs' 2>/dev/null \
-                | grep -oE 'checkout: moving from [^ ]+' \
-                | head -n 1 \
-                | awk '{print $NF}')
-
+            debug_print "Retrieved branch name from Git: $branch" "$debug"
+        elif [[ "$branch" == "HEAD" ]]; then
+            # Handle detached HEAD state: attempt to determine the source
+            detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
             if [[ -n "$detached_from" ]]; then
                 branch="$detached_from"
-                debug_print "Detached HEAD state. Detached from branch: $branch." "$debug"
+                debug_print "Detached HEAD state. Detached from branch: $branch" "$debug"
             else
-                debug_print "Detached HEAD state. Source branch unknown." "$debug"
-                branch=""
+                debug_print "Detached HEAD state. Cannot determine the source branch." "$debug"
+                branch="unknown"
             fi
         fi
-    else
-        branch=""
     fi
 
-    # Fall back to REPO_BRANCH if Git did not yield a usable value
-    if [[ -z "$branch" && -n "${REPO_BRANCH:-}" ]]; then
-        branch="$REPO_BRANCH"
-        debug_print "Using REPO_BRANCH fallback: $branch." "$debug"
-    fi
-
-    # Final fallback
+    # Use "unknown" if no branch name could be determined
     if [[ -z "$branch" ]]; then
+        debug_print "Unable to determine Git branch. Returning 'unknown'." "$debug"
         branch="unknown"
-        debug_print "Unable to determine Git branch. Using 'unknown'." "$debug"
     fi
 
+    # Output the determined or fallback branch name
     printf "%s\n" "$branch"
 
     debug_end "$debug"
@@ -4161,6 +4168,7 @@ get_last_tag() {
 #         provided.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 is_sem_ver() {
     local debug
     debug=$(debug_start "$@")
@@ -4534,6 +4542,7 @@ get_proj_params() {
 # git_clone
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 git_clone() {
     local debug
     debug=$(debug_start "$@")
@@ -4666,6 +4675,7 @@ set_time() {
 # DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 exec_new_shell() {
     local debug
     debug=$(debug_start "$@")
@@ -4735,7 +4745,10 @@ handle_apt_packages() {
         return 0
     fi
 
-    local package error_count=0 # Counter for failed operations
+    local package
+    local error_count=0
+    local runtime_pkg=""
+    local packages_to_install=()
 
     logI "Updating and managing required packages (this may take a few minutes)."
 
@@ -4744,20 +4757,44 @@ handle_apt_packages() {
         warn "Failed to update package list."
         ((error_count++))
     fi
-    if ! exec_command "Fix broken or incomplete package installations" apt-get install -f -y "$debug"; then
+    if ! exec_command \
+        "Fix broken or incomplete package installations" \
+        apt-get install -f -y "$debug"; then
         warn "Failed to fix broken installs."
         ((error_count++))
     fi
 
+    # Resolve the correct runtime package for libgpiod-dev (libgpiod2/libgpiod3).
+    runtime_pkg="$(resolve_libgpiod_runtime_pkg "$debug")"
+    if [[ -z "$runtime_pkg" ]]; then
+        warn "Failed to resolve required libgpiod runtime package."
+        debug_print "Continuing without explicit libgpiod runtime package." \
+            "$debug"
+        ((error_count++))
+    else
+        debug_print "Using libgpiod runtime package '$runtime_pkg'." "$debug"
+    fi
+
+    # Build final install list: base packages + resolved libgpiod runtime package.
+    packages_to_install=( "${APT_PACKAGES[@]}" )
+    if [[ -n "$runtime_pkg" ]]; then
+        packages_to_install+=( "$runtime_pkg" )
+    fi
+
     # Install or upgrade each package in the list
-    for package in "${APT_PACKAGES[@]}"; do
-        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! exec_command "Upgrade $package" apt-get install --only-upgrade -y "${package}" "$debug"; then
+    for package in "${packages_to_install[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null \
+            | grep -q "install ok installed"; then
+            if ! exec_command \
+                "Upgrade $package" \
+                apt-get install --only-upgrade -y "${package}" "$debug"; then
                 warn "Failed to upgrade package: $package."
                 ((error_count++))
             fi
         else
-            if ! exec_command "Install $package" apt-get install -y "${package}" "$debug"; then
+            if ! exec_command \
+                "Install $package" \
+                apt-get install -y "${package}" "$debug"; then
                 warn "Failed to install package: $package."
                 ((error_count++))
             fi
@@ -4767,13 +4804,90 @@ handle_apt_packages() {
     # Log summary of errors
     if ((error_count > 0)); then
         warn "APT package handling completed with $error_count errors."
-        debug_print "APT package handling completed with $error_count errors." "$debug"
+        debug_print "APT package handling completed with $error_count errors." \
+            "$debug"
     else
         debug_print "APT package handling completed successfully." "$debug"
     fi
 
     debug_end "$debug"
     return "$error_count"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Resolve the libgpiod runtime package required by libgpiod-dev.
+# @details Ensures libgpiod-dev has a non-(none) candidate in the configured
+#          APT repos, then extracts the SONAME runtime dependency (libgpiod2,
+#          libgpiod3, etc.) from APT metadata. Validates that the resolved
+#          runtime package exists in the repo.
+#
+#          Uses POSIX character classes for awk to remain compatible with mawk.
+#          Uses apt-cache show to extract the dependency, which is less likely
+#          to change format than apt-cache depends output.
+#
+# @param $1 [Optional] Debug flag.
+#
+# @return 0 on success, 1 on failure.
+# @stdout Prints the resolved runtime package name (e.g., libgpiod3).
+# -----------------------------------------------------------------------------
+resolve_libgpiod_runtime_pkg() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local dev_candidate=""
+    local runtime_pkg=""
+    local runtime_candidate=""
+
+    # Ensure libgpiod-dev is available (non-(none) candidate).
+    dev_candidate="$(apt-cache policy libgpiod-dev 2>/dev/null \
+        | awk '/^[[:space:]]*Candidate:[[:space:]]*/ {print $2; exit}')"
+    if [[ -z "$dev_candidate" || "$dev_candidate" == "(none)" ]]; then
+        warn "libgpiod-dev has no installable candidate in configured APT repos."
+        debug_print "apt-cache policy libgpiod-dev candidate is empty or (none)." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_print "libgpiod-dev candidate version is '$dev_candidate'." "$debug"
+
+    # Extract the SONAME runtime dependency for libgpiod-dev from package metadata.
+    runtime_pkg="$(apt-cache show libgpiod-dev 2>/dev/null \
+        | awk -F'[:, ]+' '/^Depends:/ {
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /^libgpiod[0-9]+$/) {
+                    print $i
+                    exit
+                }
+            }
+        }')"
+    if [[ -z "$runtime_pkg" ]]; then
+        warn "Unable to resolve libgpiod runtime dependency from libgpiod-dev."
+        debug_print "apt-cache show did not expose a libgpiodN dependency." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Ensure the resolved runtime package is also available (non-(none) candidate).
+    runtime_candidate="$(apt-cache policy "$runtime_pkg" 2>/dev/null \
+        | awk '/^[[:space:]]*Candidate:[[:space:]]*/ {print $2; exit}')"
+    if [[ -z "$runtime_candidate" || "$runtime_candidate" == "(none)" ]]; then
+        warn "Resolved runtime package '$runtime_pkg' has no installable candidate."
+        debug_print "apt-cache policy '$runtime_pkg' candidate is empty or (none)." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_print "Resolved libgpiod runtime package is '$runtime_pkg'." "$debug"
+    debug_print "Runtime candidate version is '$runtime_candidate'." "$debug"
+
+    printf "%s\n" "$runtime_pkg"
+
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -5028,6 +5142,7 @@ process_args() {
 # @return 0 on success.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 usage() {
     local debug
     debug=$(debug_start "$@")
@@ -5126,6 +5241,7 @@ usage() {
 #
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_legacy_services() {
     local debug services service_name unit_dash unit_uscore name full dir unit_file
     debug=$(debug_start "$@")
@@ -5192,6 +5308,7 @@ remove_legacy_services() {
 #
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_legacy_files_and_dirs() {
     local debug
     debug=$(debug_start "$@")
@@ -5372,6 +5489,7 @@ display_mem_compilation_notes() {
 #   compile_binary "wsprrypi" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 compile_binary() {
     local debug
     debug=$(debug_start "$@")
@@ -5472,6 +5590,7 @@ compile_binary() {
 #   manage_exe "wsprrypi" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_exe() {
     local debug
     debug=$(debug_start "$@")
@@ -5583,6 +5702,7 @@ manage_exe() {
 #   manage_config "wsprrypi.ini" "/usr/local/etc" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_config() {
     local debug
     debug=$(debug_start "$@")
@@ -5703,6 +5823,7 @@ manage_config() {
 # @return Returns 0 on success, exits non-zero on failure.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 upgrade_ini() {
     local debug old_ini new_ini merged_ini rc
     debug=$(debug_start "$@")
@@ -5798,6 +5919,7 @@ upgrade_ini() {
 #   manage_service "/usr/bin/mydaemon" "/usr/local/bin/mydaemon -D" "false" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_service() {
     local debug
     debug=$(debug_start "$@")
@@ -5969,6 +6091,7 @@ manage_service() {
 #   manage_web "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_web() {
     local debug
     debug=$(debug_start "$@")
@@ -6063,6 +6186,7 @@ manage_web() {
 #   manage_sound "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_sound() {
     local debug
     debug=$(debug_start "$@")
@@ -6142,7 +6266,8 @@ manage_sound() {
 # @param  $@                 optional debug flags
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_apache() {
     # Start debug and filter parameters
     local debug
@@ -6239,7 +6364,8 @@ manage_apache() {
 # @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
 # @return   0 if it looks like the stock Apache page, 1 otherwise.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 is_stock_apache_page() {
     local debug
     debug=$(debug_start "$@")
@@ -6347,6 +6473,8 @@ cleanup_files_in_directories() {
 # @example
 #   flag_need_reboot "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 flag_need_reboot() {
     local debug
     debug=$(debug_start "$@")
