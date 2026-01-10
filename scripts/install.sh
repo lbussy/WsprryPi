@@ -396,7 +396,7 @@ readonly MIN_OS="${MIN_OS:-11}"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly MAX_OS="${MAX_OS:-12}" # (use -1 for no upper limit)
+readonly MAX_OS="${MAX_OS:-13}" # (use -1 for no upper limit)
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_BITNESS
