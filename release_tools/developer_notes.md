@@ -85,11 +85,11 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
         PreferredAuthentications publickey
     ```
 
-6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwordless) logins.
+6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwords) logins.
 
 ## Optional Housekeeping
 
-I share some `bash` aliases [here](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
+I share some [`bash` aliases here](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
 
 To handle all of these aliases and package installs, paste in this command:
 
@@ -152,14 +152,29 @@ If you are going to use VS Code from your workstation:
     # Extensions installed on SSH: wsprrypi.local:
     # Generated with:
     # code --list-extensions | xargs -L 1 echo code --install-extension
+    code --install-extension Extensions installed on SSH: wspr4:
     code --install-extension bmewburn.vscode-intelephense-client
+    code --install-extension davidanson.vscode-markdownlint
+    code --install-extension eamodio.gitlens
+    code --install-extension ecmel.vscode-html-css
+    code --install-extension foxundermoon.shell-format
+    code --install-extension github.copilot
+    code --install-extension github.copilot-chat
+    code --install-extension github.vscode-pull-request-github
+    code --install-extension gruntfuggly.todo-tree
+    code --install-extension mechatroner.rainbow-csv
+    code --install-extension mhutchie.git-graph
     code --install-extension ms-python.debugpy
     code --install-extension ms-python.python
     code --install-extension ms-python.vscode-pylance
-    code --install-extension rifi2k.format-html-in-php
-    code --install-extension davidanson.vscode-markdownlint
+    code --install-extension ms-python.vscode-python-envs
+    code --install-extension ms-vscode.cmake-tools
     code --install-extension ms-vscode.cpptools
-    code --install-extension yzhang.markdown-all-in-one
+    code --install-extension njpwerner.autodocstring
+    code --install-extension rifi2k.format-html-in-php
+    code --install-extension streetsidesoftware.code-spell-checker
+    code --install-extension timonwong.shellcheck
+    code --install-extension xdebug.php-debug
     ```
 
 8. Use the "Open Folder" button and select the root of your repo on the Pi.
@@ -181,14 +196,12 @@ If you did not run `install.sh` from within the Wsprry Pi repo or with the Wsprr
 - apache2
 - php
 - chrony
-- libgpiod2
-- libgpiod-dev
+- libgpiod-dev (libgpiod2 or libgpiod3 are required, but the installer or libgpiod-dev will pull the correct one in)
 
-
-Install these (withour running the installer) with:
+Install these (without running the installer) with:
 
 ``` bash
-sudo apt install git libgpiod-dev apache2 php chrony libgpiod2 libgpiod-dev -y
+sudo apt install git apache2 php chrony libgpiod-dev -y
 ```
 
 ## A Note About Submodules
