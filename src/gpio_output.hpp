@@ -30,8 +30,10 @@
 #define GPIO_OUTPUT_HPP
 
 #include <memory>
+#include <optional>
 #include <string>
-#include <gpiod.hpp>
+
+#include "gpio_include.hpp"
 
 /**
  * @class GPIOOutput
@@ -103,9 +105,15 @@ private:
     bool active_high_;
     bool enabled_;
 
-    // Using unique_ptr to manage the libgpiod chip and line objects.
+    // Using unique_ptr to manage the libgpiod chip.
     std::unique_ptr<gpiod::chip> chip_;
-    std::unique_ptr<gpiod::line> line_;
+#if GPIOD_API_MAJOR >= 2
+    // v2: request handle (no default ctor) — wrap in optional
+    std::optional<gpiod::line_request> request_;
+#else
+    // v1: store the line by value.
+    gpiod::line line_;
+#endif
 
     // Helper to compute the physical state to write based on active configuration.
     int compute_physical_state(bool logical_state) const;

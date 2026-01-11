@@ -42,11 +42,11 @@ GPIOOutput ledControl;
  *
  * The object must be explicitly configured using enableGPIOPin() before use.
  */
-GPIOOutput::GPIOOutput() : pin_(-1),
-                           active_high_(true),
-                           enabled_(false),
-                           chip_(nullptr),
-                           line_(nullptr)
+GPIOOutput::GPIOOutput() :
+    pin_(-1),
+    active_high_(true),
+    enabled_(false),
+    chip_(nullptr)
 {
 }
 
@@ -77,7 +77,6 @@ GPIOOutput::~GPIOOutput()
  */
 bool GPIOOutput::enableGPIOPin(int pin, bool active_high)
 {
-    // If already enabled, disable first.
     if (enabled_)
     {
         stop();
@@ -88,27 +87,49 @@ bool GPIOOutput::enableGPIOPin(int pin, bool active_high)
     try
     {
         chip_ = std::make_unique<gpiod::chip>("/dev/gpiochip0");
-        line_ = std::make_unique<gpiod::line>(chip_->get_line(pin_));
-        if (!line_)
-        {
-            throw std::runtime_error("Failed to get GPIO line for pin " + std::to_string(pin_));
-        }
+
+#if GPIOD_API_MAJOR >= 2
+        // ---- libgpiod v2 path (Trixie) ----
+        gpiod::line_settings ls;
+        ls.set_direction(gpiod::line::direction::OUTPUT);
+
+        // Let the kernel handle inversion.
+        ls.set_active_low(!active_high_);
+
+        auto builder = chip_->prepare_request();
+        builder.set_consumer("GPIOOutput");                     // separate call: no copy
+        const gpiod::line::offset off = static_cast<gpiod::line::offset>(pin_);
+        builder.add_line_settings(off, ls);
+        request_ = builder.do_request();                        // move into optional
+
+        // Initial logical state: inactive (false). Kernel inverts if needed.
+        request_->set_value(off, gpiod::line::value::INACTIVE);
+#else
+        // ---- libgpiod v1 path (Bookworm) ----
+        line_ = chip_->get_line(pin_);
 
         gpiod::line_request req;
         req.consumer = "GPIOOutput";
         req.request_type = gpiod::line_request::DIRECTION_OUTPUT;
 
-        line_->request(req);
+        // Let the kernel handle inversion.
+        if (!active_high_)
+        {
+            req.flags |= gpiod::line_request::FLAG_ACTIVE_LOW;
+        }
 
-        int init_value = compute_physical_state(false);
-        line_->set_value(init_value);
+        line_.request(req);
+
+        // Initial logical state: inactive (false). Kernel inverts if needed.
+        line_.set_value(/*logical*/ 0);
+#endif
 
         enabled_ = true;
     }
-    catch (const std::exception &e)
+    catch (const std::exception& e)
     {
-        throw std::runtime_error("Error enabling GPIO pin " + std::to_string(pin_) +
-                                 ": " + e.what());
+        throw std::runtime_error(
+            "Error enabling GPIO pin " + std::to_string(pin_) + ": " + e.what());
     }
     return enabled_;
 }
@@ -123,15 +144,35 @@ bool GPIOOutput::enableGPIOPin(int pin, bool active_high)
  */
 void GPIOOutput::stop()
 {
-    if (enabled_ && line_)
+    if (!enabled_)
     {
-        toggleGPIO(false);
-        // Release the line.
-        line_->release();
-        enabled_ = false;
+        // Clear any stale handles just in case
+        chip_.reset();
+        return;
     }
-    // Reset pointers.
-    line_.reset();
+
+    // Try to put the output in inactive state before releasing
+    (void)toggleGPIO(false);
+
+#if GPIOD_API_MAJOR >= 2
+    // v2: Destroys the handle, releasing the line
+    if (request_) {
+        // optional reset destroys the handle and releases the line
+        request_.reset();
+    }
+#else
+    // v1: release the line by value
+    try
+    {
+        line_.release();
+    }
+    catch (...)
+    {
+        // Ignore; Releasing twice is harmless but may throw
+    }
+#endif
+
+    enabled_ = false;
     chip_.reset();
 }
 
@@ -150,16 +191,24 @@ void GPIOOutput::stop()
  */
 bool GPIOOutput::toggleGPIO(bool state)
 {
-    if (!enabled_ || !line_)
+    if (!enabled_)
     {
         return false;
     }
+
     try
     {
-        int physical_state = compute_physical_state(state);
-        line_->set_value(physical_state);
+        int physical = compute_physical_state(state);
+
+#if GPIOD_API_MAJOR >= 2
+    const gpiod::line::offset off = static_cast<gpiod::line::offset>(pin_);
+    request_->set_value(off,
+        physical ? gpiod::line::value::ACTIVE : gpiod::line::value::INACTIVE);
+#else
+        line_.set_value(physical);
+#endif
     }
-    catch (const std::exception &e)
+    catch (const std::exception&)
     {
         return false;
     }
@@ -167,20 +216,15 @@ bool GPIOOutput::toggleGPIO(bool state)
 }
 
 /**
- * @brief Converts a logical output state to a physical voltage level.
- * @details Applies the active-high or active-low configuration to map the
- *          logical state to the correct hardware signal level:
- *          - For active-high: true → 1 (high), false → 0 (low)
- *          - For active-low:  true → 0 (sink), false → 1 (idle)
+ * @brief Converts logical state to the value written to the line.
  *
- * This method is used internally before writing a value to the GPIO line.
+ * With kernel-level inversion enabled (active_low), the driver performs
+ * the mapping. This function passes the logical value through.
  *
  * @param logical_state Desired logical output state (true = active).
- * @return The corresponding physical value to write to the GPIO line (0 or 1).
+ * @return 1 for logical true, 0 for logical false.
  */
 int GPIOOutput::compute_physical_state(bool logical_state) const
 {
-    // For an active-high pin, the physical state equals the logical state.
-    // For an active-low (sink) pin, invert the logical state.
-    return (active_high_ ? (logical_state ? 1 : 0) : (logical_state ? 0 : 1));
+    return logical_state ? 1 : 0;
 }

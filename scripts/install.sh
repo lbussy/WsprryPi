@@ -37,9 +37,11 @@ IFS=$'\n\t'
 # @usage
 # sudo ./install.sh
 # sudo ./install.sh debug
+# sudo DRY_RUN=true ./install.sh debug
 # sudo ACTION=uninstall ./install.sh
 # curl -fsSL {url} | sudo bash
 # curl -fsSL {url} | sudo bash -s -- debug
+# curl -fsSL {url} | sudo env DRY_RUN=true bash -s -- debug
 # curl -fsSL {url} | sudo env ACTION=uninstall bash -s -- debug
 #
 # -----------------------------------------------------------------------------
@@ -57,7 +59,8 @@ IFS=$'\n\t'
 #
 # @return None (exits the script with an error code).
 # -----------------------------------------------------------------------------
-# shellcheck disable=2317
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 trap_error() {
     # Capture function name, line number, and script name
     local func="${FUNCNAME[1]:-main}" # Get the call function (default: "main")
@@ -207,9 +210,9 @@ declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-2.0.1}"
-declare GIT_TAG="${GIT_TAG:-v2.0.1}"
-declare SEM_VER="${SEM_VER:-2.0.1}"
+declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare GIT_TAG="${GIT_TAG:-v2.1.5}"
+declare SEM_VER="${SEM_VER:-2.1.5}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -393,7 +396,7 @@ readonly MIN_OS="${MIN_OS:-11}"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly MAX_OS="${MAX_OS:-12}" # (use -1 for no upper limit)
+readonly MAX_OS="${MAX_OS:-13}" # (use -1 for no upper limit)
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_BITNESS
@@ -415,7 +418,7 @@ readonly MAX_OS="${MAX_OS:-12}" # (use -1 for no upper limit)
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
+readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-both}" # ("32", "64", or "both")
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_MODELS
@@ -452,12 +455,12 @@ if [[ -z "${SUPPORTED_MODELS+x}" || ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
     # If SUPPORTED_MODELS is not set or empty, define the default supported models
     SUPPORTED_MODELS=(
         # Unsupported models
-        ["Raspberry Pi 5|5-model-b|bcm2712"]="Supported"
+        ["Raspberry Pi 5|5-model-b|bcm2712"]="Unsupported"
+        # Supported models
         ["Raspberry Pi 400|400|bcm2711"]="Supported"
         ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Supported"
         ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Supported"
         ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Supported"
-        # Supported models
         ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"
         ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"
         ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"
@@ -703,7 +706,7 @@ readonly APT_PACKAGES=(
     "apache2"
     "php"
     "chrony"
-    "libgpiod2"
+    "libgpiod-dev"
 )
 
 # -----------------------------------------------------------------------------
@@ -766,7 +769,7 @@ declare DEFAULT_LOG_FILE="/var/log/apache_tool.log"
 #   Holds the path to the Apache “sites-available” directory where
 #   virtual host configuration files are stored.
 # -----------------------------------------------------------------------------
-declare DEFAULT_SITES_CONF="/etc/apache2/sites-available/"
+declare DEFAULT_SITES_CONF="/etc/apache2/sites-available"
 
 # -----------------------------------------------------------------------------
 # @var DEFAULT_SERVERNAME
@@ -811,6 +814,29 @@ declare APACHE_CONF="${APACHE_CONF:-$DEFAULT_APACHE_CONF}"
 # -----------------------------------------------------------------------------
 declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
 
+# -----------------------------------------------------------------------------
+# @var WAS_RUNNING
+# @type bool
+# @brief Semaphore indicating if the service was running before invocation.
+# @details
+#   Set to true if the target service was active at the start of the script.
+#   Used to decide whether to restart or stop the service during cleanup.
+# @default false
+# @example
+#   # Check and record service status before changes
+#   WAS_RUNNING=$(systemctl is-active --quiet myservice && echo true || echo false)
+# -----------------------------------------------------------------------------
+declare WAS_RUNNING="false"
+
+# -----------------------------------------------------------------------------
+# @var REBOOT
+# @brief Indicates whether a system reboot is required.
+# @details
+#   Acts as a semaphore flag. Defaults to "false" if not set.
+#   Operations that require a reboot must set this to "true".
+# -----------------------------------------------------------------------------
+declare REBOOT=${REBOOT:-false}
+
 ############
 ### Standard Functions
 ############
@@ -828,8 +854,9 @@ declare SERVERNAME_DIRECTIVE="${SERVERNAME_DIRECTIVE:-$DEFAULT_SERVERNAME}"
 # @note The function uses `history | wc -l` to count the commands executed in
 #       the current session and `date` to capture the session end time.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 egress() {
-    # shellcheck disable=SC2317
     true
 }
 
@@ -894,17 +921,16 @@ debug_start() {
 # debug_filter "arg1" "debug" "arg2"  # Returns "arg1 arg2"
 # -----------------------------------------------------------------------------
 debug_filter() {
-    local args=() # Array to hold non-debug arguments
+    local args=()  # Collect all non-debug, non-empty args
 
-    # Iterate over each argument and exclude "debug"
     for arg in "$@"; do
-        if [[ "$arg" != "debug" ]]; then
+        if [[ -n "$arg" && "$arg" != "debug" ]]; then
             args+=("$arg")
         fi
     done
 
-    # Print the filtered arguments, safely quoting them for use in a command
-    printf "%q " "${args[@]}"
+    # Emit them safely quoted for eval/set
+    printf '%q ' "${args[@]}"
 }
 
 # -----------------------------------------------------------------------------
@@ -1489,6 +1515,7 @@ die() {
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_dot() {
     local debug
     debug=$(debug_start "$@")
@@ -1567,6 +1594,7 @@ remove_dot() {
 # echo "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_period() {
     local debug
     debug=$(debug_start "$@")
@@ -1608,6 +1636,7 @@ add_period() {
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_period() {
     local debug
     debug=$(debug_start "$@")
@@ -1648,6 +1677,7 @@ remove_period() {
 # add_slash ""                    # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 add_slash() {
     local debug
     debug=$(debug_start "$@")
@@ -1689,6 +1719,7 @@ add_slash() {
 # remove_slash ""                     # Logs an error and returns an error code
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_slash() {
     local debug
     debug=$(debug_start "$@")
@@ -1713,90 +1744,181 @@ remove_slash() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Modify lines in a file based on a given suffix and action.
-# @details This function searches for lines in a file that end with a given
-#          suffix and either comments or uncomments them based on the specified
-#          action. Commenting adds a "# " prefix if it is not already present,
-#          while uncommenting removes the "#" and any following whitespace but
-#          retains leading spaces.
+# @brief Executes a command in a separate Bash process.
+# @details This function manages the execution of a shell command, handling the
+#          display of status messages. It supports dry-run mode, where the
+#          command is simulated without execution. The function prints success
+#          or failure messages and handles the removal of the "Running" line
+#          once the command finishes.
 #
-# @param $1 Filename to process.
-# @param $2 Search string (suffix to match at the end of lines).
-# @param $3 Action to perform: "comment" to add "# ", "uncomment" to remove it.
+# @param exec_name The name of the command or task being executed.
+# @param ...       The command and its arguments, followed optionally by the
+#                  debug flag as the last parameter.
 #
-# @global None.
+# @return Returns 0 if the command was successful, non-zero otherwise.
 #
-# @throws Exits with an error if the file does not exist, an invalid action is
-#         provided, or a temporary file cannot be created.
-#
-# @return 0 on success, non-zero on failure.
+# @note The function supports dry-run mode, controlled by the DRY_RUN variable.
+#       When DRY_RUN is true, the command is only simulated without actual
+#       execution.
 #
 # @example
-# modify_comment_lines "example.txt" ".log" "comment"
-# modify_comment_lines "example.txt" ".log" "uncomment"
+# exec_command "Test Command" echo Hello World debug
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-modify_comment_lines() {
-    local debug
+# shellcheck disable=SC2329
+exec_command() {
+    # Start debug and filter parameters
+    local debug status
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    # Ensure all three arguments are provided
-    if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
-        logE "Error: Missing required arguments."
-        logE "Usage: modify_comment_lines 'example.txt' '.log' 'comment'"
-        debug_end "$debug"
-        return 1
+    # Declare local variables after debug initialization
+    local status=0 exec_name running_pre complete_pre failed_pre
+    local args cmd cmd_str
+
+    # Assign the human readable name and shift it off
+    exec_name="$1"; shift
+
+    # Collect command arguments (debug has already been filtered out)
+    local args=( "$@" )
+
+    # Now also remove any empty trailing arguments to be safe
+    while (( ${#args[@]} > 0 )) && [[ -z "${args[-1]}" ]]; do
+        unset 'args[-1]'
+    done
+
+    # Build the actual command array
+    cmd=( "${args[@]}" )
+
+    # Join cmd[@] on spaces into one line
+    cmd_str=$(printf '%s ' "${cmd[@]}")
+    cmd_str=${cmd_str% }   # strip trailing space
+    if [[ "$debug" == "debug" ]]; then
+        logD "Name:    $exec_name"
+        logD "Command: $cmd_str"
     fi
 
-    local filename="$1"
-    local search_string="$2"
-    local action="$3"
-
-    if [[ ! -f "$filename" ]]; then
-        debug_print "Error: File '$filename' not found." "$debug"
-        debug_end "$debug"
-        return 1
+    # Prepare status prefixes
+    running_pre="Running:" complete_pre="Complete:" failed_pre="Failed:"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        running_pre+=" (dry)"
+        complete_pre+=" (dry)"
+        failed_pre+=" (dry)"
     fi
 
-    if [[ "$action" != "comment" && "$action" != "uncomment" ]]; then
-        debug_print "Error: Invalid action '$action'. Use 'comment' or 'uncomment'." "$debug"
+    # Show running status line
+    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    sleep 0.02
+    if [[ "$DRY_RUN" == "true" ]]; then
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
         debug_end "$debug"
-        return 1
+        return 0
     fi
 
-    local temp_file
-    temp_file=$(mktemp) || {
-        debug_print "Error: Failed to create temp file." "$debug"
-        debug_end "$debug"
-        return 1
-    }
+    # Execute the command, swallowing output unless debug is enabled
+    if [[ "$debug" == "debug" ]]; then
+        "${cmd[@]}" || status=$?
+    else
+        "${cmd[@]}" &>/dev/null || status=$?
+    fi
 
-    while IFS= read -r line; do
-        if [[ "$line" =~ ${search_string}$ ]]; then
-            if [[ "$action" == "comment" ]]; then
-                if [[ ! "$line" =~ ^# ]]; then
-                    echo "# $line" >>"$temp_file"
-                    debug_print "Commenting: $line" "$debug"
-                else
-                    echo "$line" >>"$temp_file"
-                fi
-            elif [[ "$action" == "uncomment" ]]; then
-                echo "${line#"${line%%[!# ]*}"}" >>"$temp_file"
-                debug_print "Uncommenting: $line" "$debug"
-            fi
+    # Clear running status line only when not in debug mode
+    if [[ "$debug" != "debug" ]]; then
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+    fi
+
+    # Report result
+    if [[ $status -eq 0 ]]; then
+        printf "%b[  ✔  ]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+    else
+        printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
+        if [[ $status -eq 127 ]]; then
+            warn "Command not found: ${cmd_str}"
         else
-            echo "$line" >>"$temp_file"
+            warn "Command failed with status $status: ${cmd_str}"
         fi
-    done <"$filename"
-
-    mv "$temp_file" "$filename" || {
-        debug_print "Error: Failed to update file." "$debug"
-        debug_end "$debug"
-        return 1
-    }
+    fi
 
     debug_end "$debug"
+    return "$status"
+}
+
+# -----------------------------------------------------------------------------
+# @brief  Comment or uncomment lines ending with a given suffix.
+# @details
+#   Searches for lines in a file whose text ends with the given
+#   suffix, then either comments them (adds "# ") or
+#   uncomments them (removes "#" plus any following space).
+#   Honors $DRY_RUN: when true, only logs what would run.
+#
+# @param  $1  Filename to process.
+# @param  $2  Suffix to match at end of lines (literal, not a regex).
+# @param  $3  Action: "comment" to add "# ", "uncomment" to remove it.
+#
+# @global DRY_RUN  If "true", commands are only logged.
+#
+# @return 0 on success, non-zero on failure.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+modify_comment_lines() {
+    # Start debug and filter parameters
+    local debug status
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local file="$1"; shift
+    local suffix="$1"; shift
+    local action="$1"; shift
+
+    # Sanity checks
+    if [[ -z "$file" || -z "$suffix" || -z "$action" ]]; then
+        logE "Usage: modify_comment_lines <file> <suffix> <comment|uncomment>"
+        debug_end "$debug"; return 1
+    fi
+
+    if [[ "$debug" == "debug" ]]; then
+        logD "File: ${file}"
+        logD "File: ${suffix}"
+        logD "File: ${action}"
+    fi
+
+    if [[ ! -f "$file" ]]; then
+        logE "File not found: $file"
+        debug_end "$debug"; return 1
+    fi
+    if [[ "$action" != "comment" && "$action" != "uncomment" ]]; then
+        logE "Invalid action '$action'; use 'comment' or 'uncomment'"
+        debug_end "$debug"; return 1
+    fi
+
+    # Escape any "/" in the suffix for our sed script
+    local esc_suffix=${suffix//\//\\/}
+
+    # Build the sed command
+    local sed_script
+    if [[ "$action" == "comment" ]]; then
+        sed_script="/${esc_suffix}\$/ { /^[[:space:]]*#/! s|^|# | }"
+    else
+        sed_script="/${esc_suffix}\$/ { s|^[[:space:]]*#\s*|| }"
+    fi
+
+    debug_print "Prepared sed script: $sed_script" "$debug"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        # Just show what would happen
+        logD "Exec: sed -i '$sed_script' '$file'"
+    else
+        # Actually apply it
+        sed -i "$sed_script" "$file" || {
+            logE "sed failed on $file"
+            debug_end "$debug"; return 1
+        }
+    fi
+
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -1820,6 +1942,7 @@ modify_comment_lines() {
 # replace_string_in_script "script.sh" "PLACEHOLDER" "new_value"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 replace_string_in_script() {
     local debug
     debug=$(debug_start "$@")
@@ -1856,7 +1979,8 @@ replace_string_in_script() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 pause() {
     # Prompt the user
     printf "Press any key to continue..."
@@ -1870,6 +1994,67 @@ pause() {
 ############
 ### Print/Display Environment Functions
 ############
+
+# -----------------------------------------------------------------------------
+# @brief Retrieve the full name of the detected Raspberry Pi model.
+# @details This function reads the Raspberry Pi compatibility string from
+#          /proc/device-tree/compatible, extracts the model identifier, and
+#          matches it against the SUPPORTED_MODELS associative array. When a
+#          matching entry is found, the full descriptive model name is printed
+#          to standard output.
+#
+#          The function uses the standard debug_start and debug_filter helpers
+#          for argument handling. If debug output is enabled, the detected
+#          model identifier is printed using debug_print.
+#
+#          If the model cannot be detected or is not present in
+#          SUPPORTED_MODELS, the function terminates execution using die with
+#          a non-zero exit status.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global SUPPORTED_MODELS Associative array mapping model identifiers to
+#          support status entries using the format
+#          "Full Name|model|chip".
+#
+# @return None. The full model name is written to standard output.
+#
+# @example
+# model_name=$(print_model_name debug)
+# -----------------------------------------------------------------------------
+print_model_name() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local detected_model key full_name model chip
+
+    # Read and process the compatible string
+    if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null \
+        | sed -n 's/raspberrypi,//p'); then
+        debug_end "$debug"
+        die 1 "Failed to read or process /proc/device-tree/compatible."
+    fi
+
+    # Ensure a model was detected
+    if [[ -z "${detected_model:-}" ]]; then
+        debug_end "$debug"
+        die 1 "No Raspberry Pi model found in /proc/device-tree/compatible."
+    fi
+
+    # Match detected model against SUPPORTED_MODELS keys
+    for key in "${!SUPPORTED_MODELS[@]}"; do
+        IFS='|' read -r full_name model chip <<<"$key"
+        if [[ "$model" == "$detected_model" ]]; then
+            logI "Detected model: $full_name." "$debug"
+            debug_end "$debug"
+            return 0
+        fi
+    done
+
+    debug_end "$debug"
+    die 1 "Detected Raspberry Pi model '$detected_model' is not recognized."
+}
 
 # -----------------------------------------------------------------------------
 # @brief Print the system information to the log.
@@ -2082,11 +2267,15 @@ handle_execution_context() {
     case $context in
     0)
         THIS_SCRIPT="piped_script"
+        # Only set DEBIAN_FRONTEND if it isn’t already set in the environment
+        export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
         IS_REPO=false
         debug_print "Execution context: Script was piped (e.g., 'curl url | sudo bash')." "$debug"
         ;;
     1)
         THIS_SCRIPT="piped_script"
+        # Only set DEBIAN_FRONTEND if it isn’t already set in the environment
+        export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
         IS_REPO=false
         warn "Execution context: Script run with 'bash' in an unusual way."
         ;;
@@ -3207,6 +3396,7 @@ log_message() {
 #   "This is an error message" "Additional details" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 log_message_with_severity() {
     local debug
     debug=$(debug_start "$@")
@@ -3239,9 +3429,8 @@ log_message_with_severity() {
         return 1
     fi
 
-    if [[ -n "$3" ]]; then
-        extended_message="$3"
-    fi
+    # Extended_message will be empty if $3 is unset
+    extended_message="${3:-}"
 
     # Print debug information if the flag is set
     debug_print "Logging message at severity '$severity' with message='$message'." "$debug"
@@ -3293,16 +3482,22 @@ log_message_with_severity() {
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
@@ -3432,6 +3627,7 @@ default_color() {
 # init_colors "debug"  # Initializes terminal colors with debug output.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 init_colors() {
     local debug
     debug=$(debug_start "$@")
@@ -3509,6 +3705,7 @@ init_colors() {
 # generate_separator "heavy"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 generate_separator() {
     local debug
     debug=$(debug_start "$@")
@@ -3657,6 +3854,7 @@ setup_log() {
 # @return 0 on success, 1 on invalid input.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 toggle_console_log() {
     local debug
     debug=$(debug_start "$@")
@@ -3768,6 +3966,7 @@ get_repo_org() {
 #         repository name cannot be determined.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 get_repo_name() {
     local debug
     debug=$(debug_start "$@")
@@ -3816,6 +4015,7 @@ get_repo_name() {
 # @throws Exits with an error if the repository name is empty.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 repo_to_title_case() {
     local debug
     debug=$(debug_start "$@")
@@ -3968,6 +4168,7 @@ get_last_tag() {
 #         provided.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 is_sem_ver() {
     local debug
     debug=$(debug_start "$@")
@@ -4181,7 +4382,6 @@ get_sem_ver() {
 # @global GIT_TAG The latest Git tag (release) for the repository.
 # @global SEM_VER The semantic version retrieved from the latest Git tag.
 # @global LOCAL_REPO_DIR The local root directory of the repository.
-# @global LOCAL_EXECUTABLES_DIR The path to the local executables directory.
 # @global LOCAL_SYSTEMD_DIR The path to the local systemd configuration directory.
 # @global LOCAL_CONFIG_DIR The path to the local configuration directory.
 # @global LOCAL_WWW_DIR The path to the local web assets directory.
@@ -4241,7 +4441,6 @@ get_proj_params() {
         # Set local script paths based on repository structure
         LOCAL_WWW_DIR="$LOCAL_REPO_DIR/$UI_REPO_DIR/data"
         if [[ ! -d "${LOCAL_WWW_DIR:-}" ]]; then
-            logD "HTML source directory $LOCAL_WWW_DIR (UI: $UI_REPO_DIR) does not exist."
             debug_end "$debug"
             die 1 "HTML source directory does not exist."
         fi
@@ -4258,10 +4457,10 @@ get_proj_params() {
             die 1 "systemd source directory does not exist."
         fi
 
-        LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
-        if [[ ! -d "${LOCAL_EXECUTABLES_DIR:-}" ]]; then
+        LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
+        if [[ ! -d "${LOCAL_SOURCE_DIR:-}" ]]; then
             debug_end "$debug"
-            die 1 "Executables source directory does not exist."
+            die 1 "Source files directory does not exist."
         fi
 
         GIT_RAW="$GIT_RAW_BASE/$REPO_ORG/$REPO_NAME"
@@ -4278,7 +4477,7 @@ get_proj_params() {
 
         SEM_VER="${SEM_VER:-0.0.1}"
         LOCAL_REPO_DIR="$USER_HOME/$REPO_NAME"
-        LOCAL_EXECUTABLES_DIR="${LOCAL_REPO_DIR}/executables"
+        LOCAL_SOURCE_DIR="${LOCAL_REPO_DIR}/src"
         LOCAL_SYSTEMD_DIR="${LOCAL_REPO_DIR}/systemd"
         LOCAL_CONFIG_DIR="${LOCAL_REPO_DIR}/config"
         LOCAL_WWW_DIR="${LOCAL_REPO_DIR}/${UI_REPO_DIR}/data"
@@ -4294,7 +4493,7 @@ get_proj_params() {
     export GIT_TAG
     export SEM_VER
     export LOCAL_REPO_DIR
-    export LOCAL_EXECUTABLES_DIR
+    export LOCAL_SOURCE_DIR
     export LOCAL_SYSTEMD_DIR
     export LOCAL_CONFIG_DIR
     export LOCAL_WWW_DIR
@@ -4309,7 +4508,7 @@ get_proj_params() {
     debug_print "Exported GIT_TAG: $GIT_TAG" "$debug"
     debug_print "Exported SEM_VER: $SEM_VER" "$debug"
     debug_print "Exported LOCAL_REPO_DIR: $LOCAL_REPO_DIR" "$debug"
-    debug_print "Exported LOCAL_EXECUTABLES_DIR: $LOCAL_EXECUTABLES_DIR" "$debug"
+    debug_print "Exported LOCAL_SOURCE_DIR: $LOCAL_SOURCE_DIR" "$debug"
     debug_print "Exported LOCAL_SYSTEMD_DIR: $LOCAL_SYSTEMD_DIR" "$debug"
     debug_print "Exported LOCAL_CONFIG_DIR: $LOCAL_CONFIG_DIR" "$debug"
     debug_print "Exported LOCAL_WWW_DIR: $LOCAL_WWW_DIR" "$debug"
@@ -4343,24 +4542,33 @@ get_proj_params() {
 # git_clone
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 git_clone() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
-    local clone_command dest_root retval
+
+    local dest_root retval
     dest_root="$LOCAL_REPO_DIR"
     retval=0
-    # We need to runuser here because it needs to be done as pi (or current real user)
-    clone_command="runuser -u $SUDO_USER -- git clone -b $REPO_BRANCH --recurse-submodules -j8 $GIT_CLONE $dest_root"
+
+    # Return if we are in the repo
+    if [[ -d "$dest_root" && "${IS_REPO}" ]]; then
+        debug_end "$debug"
+        return 0
+    fi
 
     debug_print "Ensuring destination directory does not exist: '$dest_root'" "$debug"
     if [[ -d "$dest_root" ]]; then
         logI "Destination directory already exists: '$dest_root'" "$debug"
         debug_end "$debug"
-        return 0
+        return 1
     fi
 
-    exec_command "Cloning repository '$GIT_CLONE'" "$clone_command" "$debug" || {
+    exec_command "Clone repository '$GIT_CLONE'" \
+        runuser -u "$SUDO_USER" -- git clone -b "$REPO_BRANCH" --recurse-submodules -j8 \
+            "$GIT_CLONE" "$dest_root" \
+        "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
         debug_end "$debug"
         return 1
@@ -4467,6 +4675,7 @@ set_time() {
 # DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 exec_new_shell() {
     local debug
     debug=$(debug_start "$@")
@@ -4507,100 +4716,6 @@ exec_new_shell() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Executes a command in a separate Bash process.
-# @details This function manages the execution of a shell command, handling the
-#          display of status messages. It supports dry-run mode, where the
-#          command is simulated without execution. The function prints success
-#          or failure messages and handles the removal of the "Running" line
-#          once the command finishes.
-#
-# @param exec_name The name of the command or task being executed.
-# @param exec_process The command string to be executed.
-# @param debug Optional flag to enable debug messages. Set to "debug" to
-#              enable.
-#
-# @return Returns 0 if the command was successful, non-zero otherwise.
-#
-# @note The function supports dry-run mode, controlled by the DRY_RUN variable.
-#       When DRY_RUN is true, the command is only simulated without actual
-#       execution.
-#
-# @example
-# exec_command "Test Command" "echo Hello World" "debug"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-exec_command() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    local exec_name="$1"
-    local exec_process="$2"
-
-    # Debug information
-    debug_print "exec_name: $exec_name" "$debug"
-    debug_print "exec_process: $exec_process" "$debug"
-
-    # Basic status prefixes
-    local running_pre="Running"
-    local complete_pre="Complete"
-    local failed_pre="Failed"
-
-    # If DRY_RUN is enabled, show that in the prefix
-    if [[ "$DRY_RUN" == "true" ]]; then
-        running_pre+=" (dry)"
-        complete_pre+=" (dry)"
-        failed_pre+=" (dry)"
-    fi
-    running_pre+=":"
-    complete_pre+=":"
-    failed_pre+=":"
-
-    # Print ephemeral “Running” line
-    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
-    # Optionally ensure it shows up (especially if the command is super fast):
-    sleep 0.02
-
-    # If DRY_RUN == "true", skip real exec
-    if [[ "$DRY_RUN" == "true" ]]; then
-        # Move up & clear ephemeral line
-        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
-        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
-        debug_end "$debug"
-        return 0
-    fi
-
-    # Check if exec_process is a function or a command
-    local status=0
-    if declare -F "$exec_process" &>/dev/null; then
-        # It's a function, pass remaining arguments to the function
-        "$exec_process" "$@" "$debug" || status=$?
-    else
-        # It's a command, pass remaining arguments to the command
-        bash -c "$exec_process" &>/dev/null || status=$?
-    fi
-
-    # Move up & clear ephemeral “Running” line
-    printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
-
-    # Print final success/fail
-    if [[ $status -eq 0 ]]; then
-        printf "%b[  ✔  ]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
-    else
-        printf "%b[  ✘  ]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
-        # If specifically “command not found” exit code:
-        if [[ $status -eq 127 ]]; then
-            warn "Command not found: $exec_process"
-        else
-            warn "Command failed with status $status: $exec_process"
-        fi
-    fi
-
-    debug_end "$debug"
-    return "$status"
-}
-
-# -----------------------------------------------------------------------------
 # @brief Installs or upgrades all packages in the APT_PACKAGES list.
 # @details Updates the package list and resolves broken dependencies before
 #          proceeding. Accumulates errors for each failed package and logs a
@@ -4630,29 +4745,56 @@ handle_apt_packages() {
         return 0
     fi
 
-    local package error_count=0 # Counter for failed operations
+    local package
+    local error_count=0
+    local runtime_pkg=""
+    local packages_to_install=()
 
     logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    if ! exec_command "Update local package index" "apt-get update -y" "$debug"; then
+    if ! exec_command "Update local package index" apt-get update "$debug"; then
         warn "Failed to update package list."
         ((error_count++))
     fi
-    if ! exec_command "Fixing broken or incomplete package installations" "apt-get install -f -y" "$debug"; then
+    if ! exec_command \
+        "Fix broken or incomplete package installations" \
+        apt-get install -f -y "$debug"; then
         warn "Failed to fix broken installs."
         ((error_count++))
     fi
 
+    # Resolve the correct runtime package for libgpiod-dev (libgpiod2/libgpiod3).
+    runtime_pkg="$(resolve_libgpiod_runtime_pkg "$debug")"
+    if [[ -z "$runtime_pkg" ]]; then
+        warn "Failed to resolve required libgpiod runtime package."
+        debug_print "Continuing without explicit libgpiod runtime package." \
+            "$debug"
+        ((error_count++))
+    else
+        debug_print "Using libgpiod runtime package '$runtime_pkg'." "$debug"
+    fi
+
+    # Build final install list: base packages + resolved libgpiod runtime package.
+    packages_to_install=( "${APT_PACKAGES[@]}" )
+    if [[ -n "$runtime_pkg" ]]; then
+        packages_to_install+=( "$runtime_pkg" )
+    fi
+
     # Install or upgrade each package in the list
-    for package in "${APT_PACKAGES[@]}"; do
-        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-            if ! exec_command "Upgrade $package" "apt-get install --only-upgrade -y $package"; then
+    for package in "${packages_to_install[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null \
+            | grep -q "install ok installed"; then
+            if ! exec_command \
+                "Upgrade $package" \
+                apt-get install --only-upgrade -y "${package}" "$debug"; then
                 warn "Failed to upgrade package: $package."
                 ((error_count++))
             fi
         else
-            if ! exec_command "Install $package" "apt-get install -y $package"; then
+            if ! exec_command \
+                "Install $package" \
+                apt-get install -y "${package}" "$debug"; then
                 warn "Failed to install package: $package."
                 ((error_count++))
             fi
@@ -4662,14 +4804,90 @@ handle_apt_packages() {
     # Log summary of errors
     if ((error_count > 0)); then
         warn "APT package handling completed with $error_count errors."
-        debug_print "APT package handling completed with $error_count errors." "$debug"
+        debug_print "APT package handling completed with $error_count errors." \
+            "$debug"
     else
-        logI "APT package handling completed successfully."
         debug_print "APT package handling completed successfully." "$debug"
     fi
 
     debug_end "$debug"
     return "$error_count"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Resolve the libgpiod runtime package required by libgpiod-dev.
+# @details Ensures libgpiod-dev has a non-(none) candidate in the configured
+#          APT repos, then extracts the SONAME runtime dependency (libgpiod2,
+#          libgpiod3, etc.) from APT metadata. Validates that the resolved
+#          runtime package exists in the repo.
+#
+#          Uses POSIX character classes for awk to remain compatible with mawk.
+#          Uses apt-cache show to extract the dependency, which is less likely
+#          to change format than apt-cache depends output.
+#
+# @param $1 [Optional] Debug flag.
+#
+# @return 0 on success, 1 on failure.
+# @stdout Prints the resolved runtime package name (e.g., libgpiod3).
+# -----------------------------------------------------------------------------
+resolve_libgpiod_runtime_pkg() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local dev_candidate=""
+    local runtime_pkg=""
+    local runtime_candidate=""
+
+    # Ensure libgpiod-dev is available (non-(none) candidate).
+    dev_candidate="$(apt-cache policy libgpiod-dev 2>/dev/null \
+        | awk '/^[[:space:]]*Candidate:[[:space:]]*/ {print $2; exit}')"
+    if [[ -z "$dev_candidate" || "$dev_candidate" == "(none)" ]]; then
+        warn "libgpiod-dev has no installable candidate in configured APT repos."
+        debug_print "apt-cache policy libgpiod-dev candidate is empty or (none)." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_print "libgpiod-dev candidate version is '$dev_candidate'." "$debug"
+
+    # Extract the SONAME runtime dependency for libgpiod-dev from package metadata.
+    runtime_pkg="$(apt-cache show libgpiod-dev 2>/dev/null \
+        | awk -F'[:, ]+' '/^Depends:/ {
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /^libgpiod[0-9]+$/) {
+                    print $i
+                    exit
+                }
+            }
+        }')"
+    if [[ -z "$runtime_pkg" ]]; then
+        warn "Unable to resolve libgpiod runtime dependency from libgpiod-dev."
+        debug_print "apt-cache show did not expose a libgpiodN dependency." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Ensure the resolved runtime package is also available (non-(none) candidate).
+    runtime_candidate="$(apt-cache policy "$runtime_pkg" 2>/dev/null \
+        | awk '/^[[:space:]]*Candidate:[[:space:]]*/ {print $2; exit}')"
+    if [[ -z "$runtime_candidate" || "$runtime_candidate" == "(none)" ]]; then
+        warn "Resolved runtime package '$runtime_pkg' has no installable candidate."
+        debug_print "apt-cache policy '$runtime_pkg' candidate is empty or (none)." \
+            "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_print "Resolved libgpiod runtime package is '$runtime_pkg'." "$debug"
+    debug_print "Runtime candidate version is '$runtime_candidate'." "$debug"
+
+    printf "%s\n" "$runtime_pkg"
+
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -4924,6 +5142,7 @@ process_args() {
 # @return 0 on success.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 usage() {
     local debug
     debug=$(debug_start "$@")
@@ -5022,12 +5241,11 @@ usage() {
 #
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_legacy_services() {
     local debug services service_name unit_dash unit_uscore name full dir unit_file
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
-
-    logI "Cleaning up older services."
 
     services=(
         wspr
@@ -5047,13 +5265,13 @@ remove_legacy_services() {
             full="${name}.service"
 
             if systemctl is-active --quiet "$full" 2>/dev/null; then
-                exec_command "Stopping ${full}" \
-                    "systemctl stop ${full}" "$debug"
+                exec_command "Stop ${full}" \
+                    systemctl stop "${full}" "$debug"
             fi
 
             if systemctl is-enabled --quiet "$full" 2>/dev/null; then
-                exec_command "Disabling ${full}" \
-                    "systemctl disable ${full}" "$debug"
+                exec_command "Disable ${full}" \
+                    systemctl disable "${full}" "$debug"
             fi
         done
 
@@ -5062,16 +5280,16 @@ remove_legacy_services() {
             for name in "${unit_dash}" "${unit_uscore}"; do
                 unit_file="${dir}/${name}.service"
                 if [ -f "$unit_file" ]; then
-                    exec_command "Removing unit file ${unit_file}" \
-                        "rm -f -- ${unit_file}" "$debug"
+                    exec_command "Remove unit file ${unit_file}" \
+                        rm -f -- "${unit_file}" "$debug"
                 fi
             done
         done
     done
 
     # final cleanup
-    exec_command "Resetting failed systemd states" "systemctl reset-failed" "$debug"
-    exec_command "Reloading systemd daemon" "systemctl daemon-reload" "$debug"
+    exec_command "Reset failed systemd states" systemctl reset-failed "$debug"
+    exec_command "Reload systemd daemon" systemctl daemon-reload "$debug"
 
     debug_end "$debug"
     return 0
@@ -5090,6 +5308,7 @@ remove_legacy_services() {
 #
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 remove_legacy_files_and_dirs() {
     local debug
     debug=$(debug_start "$@")
@@ -5097,7 +5316,6 @@ remove_legacy_files_and_dirs() {
 
     local files_and_dirs
 
-    logI "Cleaning up older files and directories."
     # Cleanup List
     files_and_dirs=(
         "/usr/local/bin/wspr"
@@ -5113,7 +5331,7 @@ remove_legacy_files_and_dirs() {
 
     for item in "${files_and_dirs[@]}"; do
         if [[ -e $item ]]; then
-            exec_command "Removing $item" "rm -rf -- $item" "$debug"
+            exec_command "Remove $item" rm -rf -- "${item}" "$debug"
         fi
     done
 
@@ -5209,6 +5427,146 @@ start_script() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief  Detect the Pi’s nominal RAM size (1 GB, 2 GB or 4 GB) and provides
+#         compilation feedback.
+# @details
+#   Reads MemTotal in kB, then:
+#     - < 1.5 GiB → treats as 1 GB model
+#     - < 3.0 GiB → treats as 2 GB model
+#     - otherwise  → treats as 4 GB model
+#
+# @stdout Prints one of: 1GB, 2GB, 4GB
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+display_mem_compilation_notes() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Read total RAM (kB)
+    local mem_kb
+    mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+
+    # Mid-points in kB: 1.5 GiB and 3.0 GiB
+    local thresh1=$((1536 * 1024))
+    local thresh2=$((3072 * 1024))
+
+    # 1 GB Pi
+    if (( mem_kb < thresh1 )); then
+        logW "The compilation step may take from 10m (Pi 3) to up to 50m (Pi 1)"
+    # 2 GB Pi
+    elif (( mem_kb < thresh2 )); then
+        logW "The compilation step may take more than 10m"
+    # 4 GB Pi
+    else
+        logI "The compilation step should take ~5m"
+    fi
+
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Compile and stage a binary executable.
+#
+# @details
+#   `compile_binary()` takes an optional debug flag and an executable name,
+#   determines whether to build the debug or release target based on the
+#   executable’s “_debug” suffix, runs `make` in the source directory, and
+#   then copies the resulting binary into the staging directory. In DRY_RUN
+#   mode, it prints the commands instead of executing them.
+#
+# @global LOCAL_SOURCE_DIR       Directory containing the source for `make`.
+# @global DRY_RUN                If "true", commands are only logged (no exec).
+#
+# @param $1  Debug flag for enabling or disabling debug output.
+# @param $2  Executable name (with optional path/extension) to compile.
+#
+# @throws Exits with status 1 if arguments are missing, compilation fails,
+#         or moving the binary fails.
+# @return Returns 0 on success, 1 on error.
+#
+# @example
+#   compile_binary "wsprrypi" "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+compile_binary() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Ensure the executable argument is provided
+    if [[ -z "$1" ]]; then
+        logE "Error: Missing required arguments."
+        logE "Usage: compile_binary <type>"
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Declare local variables
+    local executable exe_name compiled_path staging_path type daemon_name
+
+    # Get from args or associative array
+    executable="$1"
+    exe_name="${executable##*/}" # Remove path
+    exe_name="${exe_name%.*}"    # Remove extension (if present)
+    compiled_path="${LOCAL_SOURCE_DIR}/build/bin/${executable}"
+    staging_path="${LOCAL_REPO_DIR}/executables/"
+    daemon_name="${WSPR_SERVICE}" # Remove path
+    daemon_systemd_name="${daemon_name}.service"
+
+    runuser -u "$SUDO_USER" -- mkdir -p "${staging_path}"
+    if [[ ! -d "${staging_path:-}" ]]; then
+        debug_end "$debug"
+        die 1 "Executables source directory does not exist."
+    fi
+
+    if [[ "$executable" == *_debug ]]; then
+        type=DEBUG
+    else
+        type=RELEASE
+    fi
+
+    # Stop Daemon
+    debug_print "Stopping daemon" "$debug"
+    if systemctl is-active --quiet "$daemon_name" 2>/dev/null; then
+        WAS_RUNNING="true"
+        exec_command "Stop ${daemon_systemd_name}" \
+            systemctl stop "${daemon_systemd_name}" "$debug" || {
+                logE "Error: Unable to stop daemon."
+                debug_end "$debug"
+                return 1
+            }
+    fi
+
+    # Compile the binary
+    debug_print "Compiling binary." "$debug"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: (cd ${LOCAL_SOURCE_DIR} && make ${type})"
+    else
+        exec_command "Compile ${type,,} binary" runuser -u "$SUDO_USER" -- make -C "${LOCAL_SOURCE_DIR}" "${type}" "$debug" || {
+            logE "Error: Unable to compile binary."
+            debug_end "$debug"
+            return 1
+        }
+    fi
+
+    # Move the binary
+    debug_print "Moving binary to staging." "$debug"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: cp -f $compiled_path $staging_path"
+    else
+        exec_command "Move binary to staging" cp -f "${compiled_path}" "${staging_path}" "$debug" || {
+            logE "Error: Unable to move compiled binary."
+            debug_end "$debug"
+            return 1
+        }
+    fi
+
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of an executable.
 # @details This function installs or removes an executable binary in
 #          `/usr/local/bin/`. During installation, it verifies the existence
@@ -5232,6 +5590,7 @@ start_script() {
 #   manage_exe "wsprrypi" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_exe() {
     local debug
     debug=$(debug_start "$@")
@@ -5252,12 +5611,10 @@ manage_exe() {
     executable="$1"
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
-    source_path="${LOCAL_EXECUTABLES_DIR}/${executable}"
+    source_path="${LOCAL_REPO_DIR}/executables/${exe_name}"
     exe_path="/usr/local/bin/${executable}"
 
     if [[ "$ACTION" == "install" ]]; then
-        logI "Installing $exe_name."
-
         # Validate source file exists
         if [[ ! -f "$source_path" ]]; then
             logE "Error: Source file '$source_path' not found."
@@ -5270,7 +5627,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $exe_path"
         else
-            exec_command "Install application" "cp -f $source_path $exe_path" "$debug" || {
+            exec_command "Install application" cp -f "${source_path}" "${exe_path}" "$debug" || {
                 logE "Failed to install application."
                 debug_end "$debug"
                 return 1
@@ -5282,7 +5639,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $exe_path"
         else
-            exec_command "Change ownership on application" "chown root:root $exe_path" "$debug" || {
+            exec_command "Change ownership on application" chown root:root "${exe_path}" "$debug" || {
                 logE "Failed to change ownership on application."
                 debug_end "$debug"
                 return 1
@@ -5294,7 +5651,7 @@ manage_exe() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 755 $exe_path"
         else
-            exec_command "Make app executable" "chmod 755 $exe_path" "$debug" || {
+            exec_command "Make app executable" chmod 755 "${exe_path}" "$debug" || {
                 logE "Failed to change permissions on application."
                 debug_end "$debug"
                 return 1
@@ -5302,14 +5659,12 @@ manage_exe() {
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$exe_name'."
-
         # Remove the application
         debug_print "Removing application." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -f $exe_path"
         else
-            exec_command "Remove application" "rm -f $exe_path" "$debug" || {
+            exec_command "Remove application" rm -f "${exe_path}" "$debug" || {
                 logE "Failed to remove application."
                 debug_end "$debug"
                 return 1
@@ -5347,6 +5702,7 @@ manage_exe() {
 #   manage_config "wsprrypi.ini" "/usr/local/etc" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_config() {
     local debug
     debug=$(debug_start "$@")
@@ -5378,8 +5734,6 @@ manage_config() {
     fi
 
     if [[ "$ACTION" == "install" ]]; then
-        logI "Installing '$config_name' configuration."
-
         # Validate source file exists
         if [[ ! -f "$source_path" ]]; then
             logE "Error: Source file '$source_path' not found."
@@ -5409,8 +5763,6 @@ manage_config() {
                 local merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
                 upgrade_ini "$old_path" "$source_path" "${merged_ini}" "$debug"
                 source_path="$merged_ini"
-            else
-                logI "No legacy INI found—skipping merge."
             fi
         fi
 
@@ -5419,7 +5771,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -f $source_path $config_path"
         else
-            exec_command "Install configuration" "cp -f $source_path $config_path" "$debug" || retval=1
+            exec_command "Install configuration" cp -f "${source_path}" "${config_path}" "$debug" || retval=1
         fi
 
         # Update version
@@ -5430,7 +5782,7 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chown root:root $config_path"
         else
-            exec_command "Change ownership on configuration" "chown root:root $config_path" "$debug" || retval=1
+            exec_command "Change ownership on configuration" chown root:root "${config_path}" "$debug" || retval=1
         fi
 
         # Change permissions on the configuration
@@ -5438,18 +5790,16 @@ manage_config() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: chmod 644 $config_path"
         else
-            exec_command "Set config permissions" "chmod 644 $config_path" "$debug" || retval=1
+            exec_command "Set config permissions" chmod 644 "${config_path}" "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing '$config_name' configuration."
-
         # Remove the configuration
         debug_print "Removing configuration." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $config_path"
         else
-            exec_command "Remove configuration" "rm -f $config_path" "$debug" || retval=1
+            exec_command "Remove configuration" rm -f "${config_path}" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5473,6 +5823,7 @@ manage_config() {
 # @return Returns 0 on success, exits non-zero on failure.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 upgrade_ini() {
     local debug old_ini new_ini merged_ini rc
     debug=$(debug_start "$@")
@@ -5527,7 +5878,7 @@ upgrade_ini() {
         rc=$?
         # Capture the errors
         local err_details
-        err_details=$(sed 's/^/  › /' /tmp/upgrade_ini.err)
+        err_details=$(sed 's/^/  > /' /tmp/upgrade_ini.err)
 
         # log summary + details
         logE "INI merge failed (mawk exited $rc)." "$err_details"
@@ -5536,8 +5887,7 @@ upgrade_ini() {
         return 1
     fi
 
-    logI "Merged $old_ini into new config."
-    exec_command "Remove old INI after merge" "rm $old_ini" "$debug" || retval=1
+    exec_command "Remove old INI after merge" rm "${old_ini}" "$debug" || retval=1
 
     rm -f /tmp/upgrade_ini.err
     debug_end "$debug"
@@ -5569,6 +5919,7 @@ upgrade_ini() {
 #   manage_service "/usr/bin/mydaemon" "/usr/local/bin/mydaemon -D" "false" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_service() {
     local debug
     debug=$(debug_start "$@")
@@ -5608,16 +5959,13 @@ manage_service() {
     log_std_out="$log_path/${syslog_identifier}_log"
 
     if [[ "$ACTION" == "install" ]]; then
-        if ! systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
-            logI "Creating systemd service: $daemon_systemd_name."
-        else
-            logI "Updating systemd service: $daemon_systemd_name." "$debug"
+        if systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
             if [[ "$DRY_RUN" != "true" ]]; then
-                exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
-                exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                exec_command "Disable systemd service" systemctl disable "${daemon_systemd_name}" "$debug" || retval=1
+                exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1
 
                 if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
-                    exec_command "Unmask systemd service" "systemctl unmask $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Unmask systemd service" systemctl unmask "${daemon_systemd_name}" "$debug" || retval=1
                 fi
             fi
         fi
@@ -5628,10 +5976,10 @@ manage_service() {
         elif [[ "$DRY_RUN" != "true" ]]; then
             # Remove any existing override in /etc
             if [[ -f "$service_path" ]]; then
-                exec_command "Removing old unit in /etc" "rm -f $service_path" "$debug" || retval=1
+                exec_command "Remove old unit in /etc" rm -f "${service_path}" "$debug" || retval=1
             fi
             # Now copy our fresh unit into /etc
-            exec_command "Copy systemd file" "cp -f $source_path $service_path" "$debug" || retval=1
+            exec_command "Copy systemd file" cp -f "${source_path}" "${service_path}" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
 
             if [[ "$use_syslog" == "false" ]]; then
@@ -5651,44 +5999,67 @@ manage_service() {
             replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
             replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_out" "$debug"
 
-            exec_command "Change ownership on systemd file" "chown root:root $service_path" "$debug" || retval=1
-            exec_command "Change permissions on systemd file" "chmod 644 $service_path" "$debug" || retval=1
-            exec_command "Create log path" "mkdir -p $log_path" "$debug" || retval=1
-            exec_command "Change ownership on log path" "chown root:www-data $log_path" "$debug" || retval=1
-            exec_command "Change permissions on log path" "chmod 755 $log_path" "$debug" || retval=1
-            exec_command "Enable systemd service" "systemctl enable $daemon_systemd_name" "$debug" || retval=1
-            exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || retval=1
-            exec_command "Start systemd service" "systemctl restart $daemon_systemd_name" "$debug" || retval=1
-            exec_command "Change ownership on logs" "chown root:www-data $log_path/${syslog_identifier}_log" "$debug" || retval=1
-            exec_command "Change permissions on logs" "chmod 644 $log_path/${syslog_identifier}_log" "$debug" || retval=1
+            exec_command "Change ownership on systemd file" \
+                chown root:root "$service_path" \
+                "$debug" || retval=1
+
+            exec_command "Change permissions on systemd file" \
+                chmod 644 "$service_path" \
+                "$debug" || retval=1
+
+            exec_command "Create log path" \
+                mkdir -p "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Change ownership on log path" \
+                chown root:www-data "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Change permissions on log path" \
+                chmod 755 "$log_path" \
+                "$debug" || retval=1
+
+            exec_command "Enable systemd service" \
+                systemctl enable "$daemon_systemd_name" \
+                "$debug" || retval=1
+
+            exec_command "Reload systemd" \
+                systemctl daemon-reload \
+                "$debug" || retval=1
+
+            exec_command "Start systemd service" \
+                systemctl restart "$daemon_systemd_name" \
+                "$debug" || retval=1
+
+            exec_command "Change ownership on logs" \
+                chown root:www-data "$log_path/${syslog_identifier}_log" \
+                "$debug" || retval=1
+
+            exec_command "Change permissions on logs" \
+                chmod 644 "$log_path/${syslog_identifier}_log" \
+                "$debug" || retval=1
         fi
 
-        logI "Systemd service $daemon_name created."
-
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing systemd service: $daemon_systemd_name."
-
         if [[ -f "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
                 if systemctl is-active --quiet "$daemon_systemd_name"; then
-                    exec_command "Stop systemd service" "systemctl stop $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1
                 fi
 
                 if systemctl is-enabled --quiet "$daemon_systemd_name"; then
-                    exec_command "Disable systemd service" "systemctl disable $daemon_systemd_name" "$debug" || retval=1
+                    exec_command "Disable systemd service" systemctl disable "${daemon_systemd_name}" "$debug" || retval=1
                 fi
             fi
 
-            exec_command "Remove service file" "rm -f $service_path" "$debug" || retval=1
+            exec_command "Remove service file" rm -f "${service_path}" "$debug" || retval=1
         else
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
 
         if [[ -d "$log_path" ]]; then
-            exec_command "Remove log target" "rm -fr $log_path" "$debug" || retval=1
+            exec_command "Remove log target" rm -fr "${log_path}" "$debug" || retval=1
         fi
-
-        logI "Systemd service $daemon_systemd_name removed."
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
@@ -5720,6 +6091,7 @@ manage_service() {
 #   manage_web "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_web() {
     local debug
     debug=$(debug_start "$@")
@@ -5731,8 +6103,6 @@ manage_web() {
     local retval=0 # Initialize return value
 
     if [[ "$ACTION" == "install" ]]; then
-        logI "Installing web files to '$target_path'."
-
         # Validate source directory exists
         if [[ ! -d "$source_path" ]]; then
             logE "Error: Source directory '$source_path' not found."
@@ -5745,7 +6115,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: mkdir -p $target_path"
         else
-            exec_command "Create target web directory" "mkdir -p $target_path" "$debug" || retval=1
+            exec_command "Create target web directory" mkdir -p "${target_path}" "$debug" || retval=1
         fi
 
         # Copy web files
@@ -5753,7 +6123,9 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: cp -r $source_path* $target_path/"
         else
-            exec_command "Copy web files" "cp -r $source_path/* $target_path/" "$debug" || retval=1
+            exec_command "Copy web files" \
+                cp -r "${source_path}"/* "${target_path}/" \
+                "$debug" || retval=1
         fi
 
         # Change ownership and permissions
@@ -5763,24 +6135,27 @@ manage_web() {
             logD "Exec: sudo chmod -R 755 $target_path"
         else
             # Set ownership for the entire directory
-            exec_command "Set ownership" "chown -R www-data:www-data $target_path" "$debug" || retval=1
+            exec_command "Set ownership" chown -R www-data:www-data "${target_path}" "$debug" || retval=1
 
             # Set correct permissions:
             # - Directories: `rwxr-xr-x` (755)
             # - Files: `rw-r--r--` (644)
-            exec_command "Set directory permissions" "find $target_path -type d -exec sudo chmod 755 {} +" "$debug" || retval=1
-            exec_command "Set file permissions" "find $target_path -type f -exec sudo chmod 644 {} +" "$debug" || retval=1
+            exec_command "Set directory permissions" \
+                find "$target_path" -type d -exec sudo chmod 755 {} + \
+                "$debug" || retval=1
+
+            exec_command "Set file permissions" \
+                find "$target_path" -type f -exec sudo chmod 644 {} + \
+                "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        logI "Removing web files from '$target_path'."
-
         # Remove the web directory
         debug_print "Removing web directory '$target_path'." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: rm -rf $target_path"
         else
-            exec_command "Remove web directory" "rm -rf $target_path" "$debug" || retval=1
+            exec_command "Remove web directory" rm -rf "${target_path}" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -5811,6 +6186,7 @@ manage_web() {
 #   manage_sound "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_sound() {
     local debug
     debug=$(debug_start "$@")
@@ -5862,25 +6238,6 @@ manage_sound() {
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
-    # Print reboot message only if REBOOT is true
-    if [[ "$REBOOT" == "true" ]]; then
-        printf "\n*Important Note:*\n\n"
-        if [[ "$ACTION" == "install" ]]; then
-            printf "Wsprry Pi uses the same hardware as the sound system to generate\n"
-            printf "radio frequencies. This soundcard has been disabled. You must\n"
-            printf "reboot the Pi with the following command after install for this\n"
-            printf "to take effect:\n\n"
-        else
-            printf "The sound system has been re-enabled. If you wish to use\n"
-            printf "audio on the Raspberry Pi, you must reboot for changes\n"
-            printf "to take effect:\n\n"
-        fi
-        printf "'sudo reboot'\n\n"
-
-        read -rp "Press any key to continue." </dev/tty
-        echo
-    fi
-
     debug_end "$debug"
     return 0
 }
@@ -5891,7 +6248,7 @@ manage_sound() {
 #   * On install (ACTION=install or empty):
 #     – Adds DEFAULT_SERVERNAME to $APACHE_CONF if missing
 #     – Writes the single $DEFAULT_SITES_CONF/wsprrypi.conf with:
-#         • A redirect “/ → /wsprrypi/”
+#         • A redirect “/ → /wsprrypi/” (if stock Apache home is detected)
 #         • REST proxies (31415) for /wsprrypi/config & /version
 #         • WS proxy (31416) for /wsprrypi/socket
 #         • <Proxy> blocks allowing remote access
@@ -5909,76 +6266,94 @@ manage_sound() {
 # @param  $@                 optional debug flags
 # @return 0 on success, non-zero on failure
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_apache() {
+    # Start debug and filter parameters
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
-    local site_conf="${DEFAULT_SITES_CONF}wsprrypi.conf"
-    local sn="$DEFAULT_SERVERNAME"
+
+    # Declare local variables after debug initialization
+    local status=0
+    local config_file source_path site_conf server_name
+
+    config_file="wsprrypi.conf"
+    source_path="${LOCAL_CONFIG_DIR}/${config_file}"
+    site_conf="${DEFAULT_SITES_CONF}/${config_file}"
+    server_name="${DEFAULT_SERVERNAME}"
 
     if [[ -z "$ACTION" || "$ACTION" == install ]]; then
-
-        if is_stock_apache_page "$TARGET_FILE" "$debug"; then
-
-            # Add ServerName if missing
-            exec_command "Adding ServerName directive" \
-                "grep -qF '$sn' $APACHE_CONF || sed -i '1i $sn' $APACHE_CONF" \
+        # Ensure ServerName is present in the main Apache config
+        if ! grep -qF "$server_name" "$APACHE_CONF"; then
+            exec_command "Insert ServerName directive" \
+                sed -i "1i $server_name" "$APACHE_CONF" \
                 "$debug"
-
-            # Write the one vhost file
-            exec_command "Writing $site_conf" \
-                "tee $site_conf <<'EOF'
-<VirtualHost *:80>
-    ServerName localhost
-    ServerAlias *
-    DocumentRoot /var/www/html
-    ProxyPreserveHost On
-
-    # Redirect root
-    RedirectMatch 301 ^/$ /wsprrypi/
-
-    # REST API (port 31415)
-    ProxyPass        /wsprrypi/config  http://127.0.0.1:31415/config
-    ProxyPassReverse /wsprrypi/config  http://127.0.0.1:31415/config
-    ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version
-    ProxyPassReverse /wsprrypi/version http://127.0.0.1:31415/version
-
-    # WebSocket (port 31416)
-    ProxyPass        /wsprrypi/socket  ws://127.0.0.1:31416/socket
-    ProxyPassReverse /wsprrypi/socket  ws://127.0.0.1:31416/socket
-
-    <Proxy \"http://127.0.0.1:31415/*\">
-        Require all granted
-    </Proxy>
-    <Proxy \"ws://127.0.0.1:31416/*\">
-        Require all granted
-    </Proxy>
-</VirtualHost>
-EOF
-" "$debug"
-
-            # Turn sites on/off
-            exec_command "Enable Apache modules" "a2enmod proxy proxy_http proxy_wstunnel" "$debug"
-            exec_command "Disabling default site" "a2dissite 000-default.conf" "$debug"
-            exec_command "Enabling wsprrypi site" "a2ensite wsprrypi.conf" "$debug"
-
-        else
-            logW "Stock Apache page not found at $TARGET_FILE; skipping install." "$debug"
         fi
 
-    else # ACTION=uninstall
+        # Copy vhost config to sites-available
+        debug_print "Copying vhost from $source_path → $site_conf" "$debug"
+        if [[ ! -f "$source_path" ]]; then
+            logE "Config file not found at '$source_path'"
+            debug_end "$debug"
+            return 1
+        fi
 
-        exec_command "Disabling wsprrypi site" "a2dissite wsprrypi.conf" "$debug"
-        exec_command "Re-enabling default site" "a2ensite 000-default.conf" "$debug"
-        exec_command "Removing site config" "rm -f $site_conf" "$debug"
-        exec_command "Removing ServerName directive" \
-            "sed -i '/^$sn/d' $APACHE_CONF" "$debug"
+        exec_command "Copy Apache vhost to sites-available" cp "$source_path" "$site_conf" "$debug" || {
+            logE "Failed to copy '$source_path' to '$site_conf'"
+            debug_end "$debug"
+            return 1
+        }
+
+        # If stock page, comment out log lines in the vhost before enabling
+        if is_stock_apache_page "${site_conf}" "$debug"; then
+            modify_comment_lines "${site_conf}" ".log" comment "$debug"
+        fi
+
+        # Enable required modules
+        exec_command "Enable proxy modules" a2enmod proxy proxy_http proxy_wstunnel "$debug" || {
+            logE "Failed to enable proxy modules."
+            debug_end "$debug"
+            return 1
+        }
+
+        # Disable default site
+        exec_command "Disable default site" a2dissite 000-default.conf "$debug" || {
+            logE "Failed to disable default site."
+            debug_end "$debug"
+            return 1
+        }
+
+        # Enable wsprrypi site
+        exec_command "Enable wsprrypi site" a2ensite wsprrypi.conf "$debug" || {
+            logE "Failed to enablw wsprrypi site."
+            debug_end "$debug"
+            return 1
+        }
+
+    else
+        # Uninstall path
+        exec_command "Disable wsprrypi site" a2dissite wsprrypi.conf "$debug"
+
+        exec_command "Enable default site" a2ensite 000-default.conf "$debug"
+
+        exec_command "Remove wsprrypi available config" rm -f "${site_conf}" "$debug"
+
+        exec_command "Remove ServerName directive" sed -i "/^${server_name}/d" "$APACHE_CONF" "$debug"
     fi
 
-    # Final sanity-check + reload
-    exec_command "Testing Apache configuration" "apache2ctl configtest" "$debug"
-    exec_command "Reloading Apache" "systemctl reload apache2" "$debug"
+    # Test and reload Apache
+    exec_command "Test Apache configuration" apache2ctl configtest "$debug" || {
+        logE "Apache test failed."
+        debug_end "$debug"
+        return 1
+    }
+
+    exec_command "Reload Apache" systemctl reload apache2 "$debug" || {
+        logE "Failed to reload Apache."
+        debug_end "$debug"
+        return 1
+    }
 
     debug_end "$debug"
     return 0
@@ -5989,7 +6364,8 @@ EOF
 # @param    $1  Path to the file to check (defaults to /var/www/html/index.html).
 # @return   0 if it looks like the stock Apache page, 1 otherwise.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 is_stock_apache_page() {
     local debug
     debug=$(debug_start "$@")
@@ -5997,10 +6373,10 @@ is_stock_apache_page() {
 
     local file="${1:-/var/www/html/index.html}"
 
-    # must exist and be readable
+    # Must exist and be readable
     [[ -r "$file" ]] || return 1
 
-    # common stock-page phrases (Ubuntu/Debian, RHEL/CentOS, generic)
+    # Common stock-page phrases (Ubuntu/Debian, RHEL/CentOS, generic)
     if grep -qiE \
         'It works!|Apache2 (Ubuntu|Debian) Default Page|If you see this page, the Apache HTTP Server must be installed correctly' \
         "$file"; then
@@ -6034,7 +6410,7 @@ is_stock_apache_page() {
 # @example
 #   cleanup_files_in_directories "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
 cleanup_files_in_directories() {
     local debug
     debug=$(debug_start "$@")
@@ -6047,7 +6423,7 @@ cleanup_files_in_directories() {
     # Always cleanup merged INI if it exists
     if [[ -f "$dest_root/config/wsprrypi_merged.ini" ]]; then
         exec_command "Delete merged INI source" \
-            "rm -f \"$dest_root/config/wsprrypi_merged.ini\"" \
+            rm -f "${dest_root}/config/wsprrypi_merged.ini" \
             "$debug" || {
             logE "Failed to delete local install files."
             debug_end "$debug"
@@ -6057,18 +6433,16 @@ cleanup_files_in_directories() {
 
     # Prevent deletion if running inside the repository
     if [[ "$IS_REPO" == "true" ]]; then
-        logI "Running from repo, skipping cleanup."
         debug_end "$debug"
         return 0
     else
-        logI "Deleting local repository tree."
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Delete local repo files (dry-run)."
             debug_end "$debug"
             return 0
         elif [[ -d "$dest_root" ]]; then
             # Delete the repository directory
-            exec_command "Delete local repository" "rm -fr $dest_root" "$debug" || {
+            exec_command "Delete local repository" rm -fr "${dest_root}" "$debug" || {
                 logE "Failed to delete local install files."
                 debug_end "$debug"
                 return 1
@@ -6076,6 +6450,118 @@ cleanup_files_in_directories() {
         else
             logW "Unable to delete '$dest_root', not a directory."
         fi
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Display a reboot prompt when required.
+# @details
+#   Checks the global REBOOT flag. If "true", prints a message
+#   explaining why a reboot is needed (install or uninstall path),
+#   shows the reboot command, and waits for a key press.
+#
+# @global ACTION  Install or uninstall mode indicator.
+# @global REBOOT  Semaphore flag for reboot requirement.
+#
+# @param $1  Optional debug flag to enable debug output.
+#
+# @return Always returns 0.
+#
+# @example
+#   flag_need_reboot "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+flag_need_reboot() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    if [[ "$REBOOT" == "true" ]]; then
+        printf "\n*Important Note:*\n\n"
+        if [[ "$ACTION" == "install" ]]; then
+            printf "Wsprry Pi uses the same hardware as the sound system to\n"
+            printf "generate radio frequencies. This soundcard has been disabled.\n"
+            printf "Reboot with 'sudo reboot' after install for changes to take\n"
+            printf "effect.\n\n"
+        else
+            printf "The sound system has been re-enabled. To use audio, reboot\n"
+            printf "with 'sudo reboot' for changes to take effect.\n\n"
+        fi
+        read -rp "Press any key to continue." </dev/tty
+        echo
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# shellcheck disable=SC2317
+restore_daemon_state() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local daemon_name retval
+    retval=0
+
+    # Get from args
+    daemon_name="${WSPR_SERVICE}"
+
+    # Restore Daemon
+    debug_print "Restoring daemon" "$debug"
+    # If it was running before, and the service still exists, start it again
+    if [[ "$WAS_RUNNING" == true ]] && \
+    systemctl list-unit-files "${daemon_name}.service" &>/dev/null; then
+        exec_command "Restart ${WSPR_SERVICE}" \
+            systemctl start "${daemon_name}.service" "$debug" || {
+                logE "Error: Unable to restart ${WSPR_SERVICE}."
+                retval=1
+            }
+    fi
+
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Displays a reboot prompt if a system reboot is required.
+# @details
+#   Checks the global semaphore flag REBOOT. If it is set to "true",
+#   prints a contextual message and prompts the user to reboot the system.
+#   The message varies based on whether ACTION is "install" or another mode.
+#   Reads a key press before continuing.
+#
+# @param ... Optional debugging flag; when "debug" is passed, debug messages
+#            are enabled.
+#
+# @return Always returns 0.
+# -----------------------------------------------------------------------------
+flag_need_reboot() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    if [[ "$REBOOT" == "true" ]]; then
+        printf "\n*Important Note:*\n\n"
+        if [[ "$ACTION" == "install" ]]; then
+            printf "Wsprry Pi uses the same hardware as the sound system to generate\n"
+            printf "radio frequencies. This soundcard has been disabled. You must\n"
+            printf "reboot the Pi with the following command after install for this\n"
+            printf "to take effect:\n\n"
+        else
+            printf "The sound system has been re-enabled. If you wish to use\n"
+            printf "audio on the Raspberry Pi, you must reboot for changes\n"
+            printf "to take effect:\n\n"
+        fi
+        printf "'sudo reboot'\n\n"
+
+        read -rp "Press any key to continue." </dev/tty
+        echo
     fi
 
     debug_end "$debug"
@@ -6102,7 +6588,7 @@ cleanup_files_in_directories() {
 # @example
 #   finish_script 0 "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
 finish_script() {
     local debug
     debug=$(debug_start "$@")
@@ -6196,7 +6682,7 @@ finish_script() {
 # @example
 #   manage_wsprry_pi "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317  # ignore unreachable-code warnings in this function
+# shellcheck disable=SC2317  # Ignore unreachable-code warnings in this function
 manage_wsprry_pi() {
     local debug
     debug=$(debug_start "$@")
@@ -6207,27 +6693,28 @@ manage_wsprry_pi() {
         "git_clone"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
+        "compile_binary \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
-        "cleanup_files_in_directories"
         "manage_apache"
         "manage_sound"
+        "cleanup_files_in_directories"
+        "restore_daemon_state"
     )
 
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
         "git_clone"
+        "compile_binary"
         "cleanup_files_in_directories"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
         "manage_sound"
+        "restore_daemon_state"
     )
-
-    # Start the script
-    start_script "$debug"
 
     # Track overall success/failure
     local overall_status=0
@@ -6280,17 +6767,28 @@ manage_wsprry_pi() {
 
         # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
+        # Disable -e (crash out on error) temporarily
+        set +e
         eval "$func \"$debug\""
         local status=$?
+        set -e
 
         # Check if the function failed
         if [[ $status -ne 0 ]]; then
             logE "$func failed with status $status" "$debug"
-            overall_status=1
+            if [[ "$ACTION" == "install" ]]; then
+                cleanup_files_in_directories "${func}" "${debug}"
+                restore_daemon_state "${func}" "${debug}"
+                overall_status=1
+                break
+            fi
         else
             debug_print "$func succeeded." "$debug"
         fi
     done
+
+    # Indicate if a reboot will be necessary
+    flag_need_reboot "$debug"
 
     # Finish the script, passing success or failure
     finish_script "$overall_status" "$debug"
@@ -6341,6 +6839,7 @@ _main() {
     validate_sys_accs "$debug" # Verify critical system files are accessible
     validate_env_vars "$debug" # Check for required environment variables
     get_proj_params "$debug"   # Get project and git parameters
+
     check_bash "$debug"        # Ensure the script is executed in a Bash shell
     check_sh_ver "$debug"      # Verify the Bash version meets minimum requirements
     check_bitness "$debug"     # Validate system bitness compatibility
@@ -6348,9 +6847,16 @@ _main() {
     check_arch "$debug"        # Validate Raspberry Pi model compatibility
     check_internet "$debug"    # Verify internet connectivity if required
 
+    # Start the script
+    start_script "$debug"
+
     # Print/display the environment
-    print_system "$debug"  # Log system information
-    print_version "$debug" # Log the script version
+    print_model_name "$debug"   # Log board variant
+    print_system "$debug"       # Log system information
+    print_version "$debug"      # Log the script version
+
+    # Feedback on multi-proc compilation
+    [[ "$ACTION" != "uninstall" ]] && display_mem_compilation_notes "$debug"
 
     # Install dependencies after system checks
     [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"

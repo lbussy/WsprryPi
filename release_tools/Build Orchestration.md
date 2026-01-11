@@ -4,7 +4,7 @@ Wsprry Pi builds require the tag and branch to be consistent for use in the inst
 
 This guide outlines the precise steps to prepare a release where the Git **branch** and **tag** share the same name. In this situation, Git can be ambiguous when resolving references. We resolve this by being explicit with `refs/heads/` (branches) and `refs/tags/` (tags) in all commands.
 
-Globally search/replace `main` with your desired version.
+Globally search/replace `2.1.5` with your desired version.
 
 ---
 
@@ -13,40 +13,44 @@ Globally search/replace `main` with your desired version.
 1. **Create or update your release branch**
 
    ```bash
-   git checkout -b main
+   git checkout main
+   git pull origin main
+   git merge devel
    ```
+
+   * Merge any release features into main.
 
 2. **Edit your source and install script**
 
     * Update `scripts\install.sh` with proper version:
+
         ```bash
         declare REPO_BRANCH="${REPO_BRANCH:-main}"
-        declare GIT_TAG="${GIT_TAG:-2.0.1}"
-        declare SEM_VER="${SEM_VER:-2.0.1}"
+        declare GIT_TAG="${GIT_TAG:-v2.1.2}"
+        declare SEM_VER="${SEM_VER:-2.1.5}"
         ```
+
     * Apply any required feature changes or bug fixes.
 
 3. **Commit those edits**
 
    ```bash
    git add scripts/install.sh
-   git add release_tools/Build\ Orchestration.md 
-   git commit -m "Prepare 2.0.1 release"
+   git add release_tools/Build\ Orchestration.md
+   git commit -m "Prepare 2.1.5 release"
    ```
 
 4. **Create an annotated tag on that commit**
 
    ```bash
-   git tag -a v2.0.1 -m "Release 2.0.1"
+   git tag -a v2.1.5 -m "Release 2.1.5"
    ```
 
-5. **Build the binary**
+5. **Compilation**
 
-   ```bash
-   ./release_tools/make_executables.sh
-   ```
+   * If a version-specific compile or any other process depends on the tag, execute that process now
 
-6. **Stage the built executable**
+6. **Stage any additional changes**
 
    ```bash
    git add ./executables/
@@ -61,14 +65,14 @@ Globally search/replace `main` with your desired version.
 8. **Force the tag to point to the amended commit**
 
    ```bash
-   git tag -f v2.0.1
+   git tag -f v2.1.5
    ```
 
 9. **Push the branch and tag to the origin**
 
    ```bash
-   git push origin 2.0.1
-   git push origin tag v2.0.1
+   git push origin HEAD:refs/heads/main
+   git push origin tag v2.1.5
    ```
 
 ---
@@ -92,8 +96,6 @@ Globally search/replace `main` with your desired version.
   ```bash
   git checkout refs/tags/main
   ```
-
-* Consider prefixing tags with `v`, e.g., `v2.0.1_Beta.3`, to avoid ambiguity.
 
 ---
 
