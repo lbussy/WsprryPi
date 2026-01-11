@@ -1451,7 +1451,11 @@ void timeval_print(struct timeval *tv)
     curtime = tv->tv_sec;
     // strftime(buffer, 30, "%m-%d-%Y %T", localtime(&curtime));
     strftime(buffer, 30, "%Y-%m-%d %T", gmtime(&curtime));
-    printf("%s.%03ld", buffer, (tv->tv_usec + 500) / 1000);
+    printf(
+        "%s.%03lld",
+        buffer,
+        static_cast<long long>((tv->tv_usec + 500) / 1000)
+    );
     std::cout << " UTC";
 }
 
