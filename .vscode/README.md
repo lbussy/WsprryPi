@@ -1,5 +1,9 @@
 # VS Code Config
 
-This folder is generally omitted by most developers.  However, I use [Code Spell Checker](https://cspell.org/) because my typing and spelling is horrendous and I need all the help I can get.  There is an "add to workspace" configuration for things like variable/function/method names you add, to keep them from showing up as typos.  These igored words stored in `/vscode/settings.json`.
+This folder is generally omitted by most developers.  I have included it for:
 
-I don't think this will mess anyone up - we wil see.
+- `settings.json`: For the purposes of a spell checker, some words are unique to the project.
+- `c_cpp_properties.json`: This helps Intellisense undertsand the environment.
+- `extensions.json`: Prompts to install the extensions I use if they are not already installed.
+
+I don't think this will mess anyone up - we will see.
