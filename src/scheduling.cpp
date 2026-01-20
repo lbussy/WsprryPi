@@ -165,7 +165,7 @@ std::atomic<bool> web_test_tone{false};
 /**
  * @brief Callback function for housekeeping tasks between transmissions.
  *
- * This function regords the start time of a transmission, turns on the
+ * This function records the start time of a transmission, turns on the
  * LED if enabled, sends messages to any WebSockets clients, and logs the
  * start message
  */
@@ -209,7 +209,7 @@ void callback_transmission_complete(const std::string &msg, double elapsed)
 {
     if (!msg.empty() && elapsed != 0.0)
     {
-        llog.logS(INFO, "ompleted transmission (", msg, ") ", std::setprecision(3), elapsed, " seconds.");
+        llog.logS(INFO, "Completed transmission (", msg, ") ", std::setprecision(3), elapsed, " seconds.");
     }
     else if (elapsed != 0.0)
     {
@@ -586,7 +586,7 @@ bool wspr_loop()
         validate_config_data();
         wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
         wsprTransmitter.enableTransmission();
-        llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
+        llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
     }
 
     // -------------------------------------------------------------------------
@@ -603,7 +603,7 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.stop(); // Stop the transitter threads
+    wsprTransmitter.stop(); // Stop the transmitter threads
     shutdownMonitor.stop(); // Stop the GPIO monitor
     ledControl.stop();      // Stop LED driver
     iniMonitor.stop();      // Stop config file monitor
@@ -793,7 +793,9 @@ void set_config(bool initial)
         do_config = true;
         freq_iterator = 0;                     // Reset iterator
         current_frequency = 0.0;               // Zero out freq
-        wsprTransmitter.disableTransmission(); // Shutdown if running
+        if (config.transmit)
+            wsprTransmitter.requestSoftOff();
+        // Soft-off any active scheduling if we were transmitting.
     }
 
     // Store the PPM flag we had coming in
@@ -862,10 +864,58 @@ void set_config(bool initial)
         do_random = true;
     }
 
-    // If we have a change, do setup
+    // If we have a change, mark that we need a setup.
+    // Actual setupTransmission() is performed only when transmit is enabled.
+    // Clear pending config flags
+    ini_reload_pending.store(false, std::memory_order_relaxed);
+    ppm_reload_pending.store(false, std::memory_order_relaxed);
+
+    // Enable/disable transmit if/as needed
+    static bool last_transmit = false;
+    const bool want_transmit = config.transmit;
+
+    // When transmit is disabled, keep the transmitter in soft-off and avoid
+    // calling setupTransmission() on startup or config reloads. This prevents
+    // blocking mailbox/DMA init when TX is intentionally off.
+    if (!want_transmit)
+    {
+        if (last_transmit)
+        {
+            // If transmitting now, note that.
+            if (wsprTransmitter.isTransmitting())
+            {
+                llog.logS(INFO, "Queuing: Transmissions disabled.");
+            }
+            else
+            {
+                llog.logS(INFO, "Disabling transmissions.");
+            }
+            wsprTransmitter.requestSoftOff();
+        }
+        else
+        {
+            // Ensure we are latched off, but do not spam the log.
+            llog.logS(INFO, "Transmissions are disabled.");
+            wsprTransmitter.requestSoftOff();
+        }
+
+        last_transmit = false;
+#ifdef DEBUG_WSPR_TRANSMIT
+        wsprTransmitter.printParameters();
+#endif
+        return;
+    }
+
+    // Transmit is enabled. Clear any soft-off latch, then ensure we are set up
+    // and scheduling.
+    wsprTransmitter.clearSoftOff();
+
+    // Force a (re)setup when we transition from disabled->enabled.
+    if (!last_transmit)
+        do_config = true;
+
     if (do_config || do_random)
     {
-        // Do DMA configuration (calls disableTransmission() internally)
         wsprTransmitter.setupTransmission(
             current_frequency,
             config.power_level,
@@ -875,29 +925,16 @@ void set_config(bool initial)
             config.power_dbm,
             config.use_offset);
     }
-    // Clear pending config flags
-    ini_reload_pending.store(false, std::memory_order_relaxed);
-    ppm_reload_pending.store(false, std::memory_order_relaxed);
 
-    // Enable/disable transmit if/as needed
-    if (config.transmit && (do_config || do_random))
-    {
-        wsprTransmitter.enableTransmission();
-        if (do_random)
-        {
-            llog.logS(DEBUG, "New random frequency.");
-        }
-        else
-        {
-            llog.logS(DEBUG, "Setup complete.");
-        }
-        llog.logS(INFO, "Waiting for next transmission window.");
-    }
-    else if (!config.transmit)
-    {
-        wsprTransmitter.disableTransmission();
-        llog.logS(INFO, "Transmissions disabled.");
-    }
+    wsprTransmitter.enableTransmission();
+    if (do_random)
+        llog.logS(DEBUG, "New random frequency.");
+    else
+        llog.logS(DEBUG, "Setup complete.");
+
+    llog.logS(INFO, "Waiting for next transmission window.");
+    last_transmit = true;
+
 #ifdef DEBUG_WSPR_TRANSMIT
         wsprTransmitter.printParameters();
 #endif
