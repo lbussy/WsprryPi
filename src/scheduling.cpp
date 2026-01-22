@@ -433,7 +433,7 @@ void start_test_tone()
         lastMode = config.mode;
 
         // Tear down any ongoing WSPR/transmission
-        if (wsprTransmitter.isTransmitting())
+        if (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
         {
             llog.logS(INFO, "Stopping an in-process message early.");
         }
@@ -442,7 +442,7 @@ void start_test_tone()
         // Pick the “first” frequency
         auto freq = next_frequency(/*restart=*/true);
 
-        while (wsprTransmitter.isTransmitting())
+        while (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -882,7 +882,7 @@ void set_config(bool initial)
         if (last_transmit)
         {
             // If transmitting now, note that.
-            if (wsprTransmitter.isTransmitting())
+            if (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
             {
                 // TODO: Check this vs the one in arg_parser
                 llog.logS(INFO, "Queuing: Disable transmissions.");

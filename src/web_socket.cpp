@@ -314,6 +314,7 @@ std::string WebSocketServer::computeWebSocketAccept(const std::string &client_ke
  *
  * @param raw_message The raw text message received from the client.
  */
+
 /**
  * @brief Handle an incoming JSON‐formatted message from the WebSocket client.
  *
@@ -353,7 +354,8 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         {
             llog.logS(DEBUG, "Received JSON get_tx_state command.");
             // Report current TX state
-            reply["tx_state"] = wsprTransmitter.isTransmitting();
+            reply["tx_state"] = wsprTransmitter.stateToLower(
+                wsprTransmitter.getState());
         }
         else if (cmd == "tone_start")
         {

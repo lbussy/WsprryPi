@@ -147,7 +147,7 @@ void callback_ini_changed()
     // TODO: Rethink this logic
 
     ini_reload_pending.store(true, std::memory_order_relaxed);
-    if (wsprTransmitter.isTransmitting())
+    if (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
     {
         if (config.transmit)
         {
