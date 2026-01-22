@@ -144,6 +144,8 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
+    // TODO: Rethink this logic
+
     ini_reload_pending.store(true, std::memory_order_relaxed);
     if (wsprTransmitter.isTransmitting())
     {
@@ -155,6 +157,7 @@ void callback_ini_changed()
         else
         {
             // Kill the transmission
+            // TODO: This is potentially a duplicate logging item with scheduling set_config()
             llog.logS(INFO, "Transmission disabled, stopping transmission.");
             set_config(true);
         }
@@ -892,7 +895,7 @@ bool parse_command_line(int argc, char *argv[])
         {"ppm", required_argument, nullptr, 'p'},       // Via: [Extended] PPM = 0.0
         {"terminate", required_argument, nullptr, 'x'}, // Global: config.tx_iterations
         {"test-tone", required_argument, nullptr, 't'}, // Global: config.test_tone
-        // Not yet imeplemented: {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
+        // Not yet implemented: {"transmit-pin", required_argument, nullptr, 'a'},    // Via: [Common] Transmit Pin = 4
         {"led_pin", required_argument, nullptr, 'l'},         // Via: [Extended] LED Pin = 18
         {"shutdown_button", required_argument, nullptr, 's'}, // Via: [Server] Shutdown Button = 19
         {"power_level", required_argument, nullptr, 'd'},     // Via: [Extended] Power Level = 7

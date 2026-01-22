@@ -6,7 +6,6 @@
 
 ## Web UI
 
-- [ ] Stack external links in a dropdown
 - [ ] Add QRSS
 
 ## Orchestration
@@ -19,4 +18,4 @@
 
 ## Shit to Remember
 
-- [ ] No need to disable_sound() on Pi 5 and up (install and uninstall)
+- [ ] ?
