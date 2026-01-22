@@ -884,7 +884,8 @@ void set_config(bool initial)
             // If transmitting now, note that.
             if (wsprTransmitter.isTransmitting())
             {
-                llog.logS(INFO, "Queuing: Transmissions disabled.");
+                // TODO: Check this vs the one in arg_parser
+                llog.logS(INFO, "Queuing: Disable transmissions.");
             }
             else
             {

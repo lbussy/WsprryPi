@@ -5288,7 +5288,7 @@ remove_legacy_services() {
     done
 
     # final cleanup
-    exec_command "Reset failed systemd states" systemctl reset-failed "$debug"
+    exec_command "Reset systemd states" systemctl reset-failed "$debug"
     exec_command "Reload systemd daemon" systemctl daemon-reload "$debug"
 
     debug_end "$debug"
