@@ -28,6 +28,7 @@
         "chipset",
         "CHRONY",
         "chronyc",
+        "chronyd",
         "CLPRU",
         "convertm",
         "copydocs",
