@@ -437,7 +437,7 @@ void start_test_tone()
         {
             llog.logS(INFO, "Stopping an in-process message early.");
         }
-        wsprTransmitter.stop();
+        wsprTransmitter.stopAndJoin();
 
         // Pick the “first” frequency
         auto freq = next_frequency(/*restart=*/true);
@@ -453,10 +453,10 @@ void start_test_tone()
         config.mode = ModeType::TONE;
 
         // Set up and start the tone
-        wsprTransmitter.setupTransmission(freq,
+        wsprTransmitter.configure(freq,
                                           config.power_level,
                                           config.ppm);
-        wsprTransmitter.enableTransmission();
+        wsprTransmitter.startAsync();
         llog.logS(INFO, "Test tone being transmitted at:", lookup.freq_display_string(freq));
         send_ws_message("transmit", "starting");
     }
@@ -476,7 +476,7 @@ void end_test_tone()
         llog.logS(INFO, "Ending test tone requested by Web UI.");
 
         // Stop current tone
-        wsprTransmitter.stop();
+        wsprTransmitter.stopAndJoin();
         send_ws_message("transmit", "finished");
         ledControl.toggleGPIO(false);
 
@@ -495,10 +495,10 @@ void end_test_tone()
         {
             // It was already a tone, so set it up again
             validate_config_data();
-            wsprTransmitter.setupTransmission(config.test_tone,
+            wsprTransmitter.configure(config.test_tone,
                                               config.power_level,
                                               config.ppm);
-            wsprTransmitter.enableTransmission();
+            wsprTransmitter.startAsync();
 
             llog.logS(INFO,
                       "Transmitting tone, hit Ctrl-C to terminate tone.");
@@ -584,8 +584,8 @@ bool wspr_loop()
     {
         // Setup test tone
         validate_config_data();
-        wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
-        wsprTransmitter.enableTransmission();
+        wsprTransmitter.configure(config.test_tone, config.power_level, config.ppm);
+        wsprTransmitter.startAsync();
         llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
     }
 
@@ -603,7 +603,7 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.stop(); // Stop the transmitter threads
+    wsprTransmitter.stopAndJoin(); // Stop the transmitter threads
     shutdownMonitor.stop(); // Stop the GPIO monitor
     ledControl.stop();      // Stop LED driver
     iniMonitor.stop();      // Stop config file monitor
@@ -771,7 +771,7 @@ double next_frequency(bool initial = false)
  * with the specified frequency and parameters.
  *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
- *         `setupTransmission()`.
+ *         `configure()`.
  */
 void set_config(bool initial)
 {
@@ -865,7 +865,7 @@ void set_config(bool initial)
     }
 
     // If we have a change, mark that we need a setup.
-    // Actual setupTransmission() is performed only when transmit is enabled.
+    // Actual configure() is performed only when transmit is enabled.
     // Clear pending config flags
     ini_reload_pending.store(false, std::memory_order_relaxed);
     ppm_reload_pending.store(false, std::memory_order_relaxed);
@@ -875,7 +875,7 @@ void set_config(bool initial)
     const bool want_transmit = config.transmit;
 
     // When transmit is disabled, keep the transmitter in soft-off and avoid
-    // calling setupTransmission() on startup or config reloads. This prevents
+    // calling configure() on startup or config reloads. This prevents
     // blocking mailbox/DMA init when TX is intentionally off.
     if (!want_transmit)
     {
@@ -902,7 +902,7 @@ void set_config(bool initial)
 
         last_transmit = false;
 #ifdef DEBUG_WSPR_TRANSMIT
-        wsprTransmitter.printParameters();
+        wsprTransmitter.dumpParameters();
 #endif
         return;
     }
@@ -917,7 +917,7 @@ void set_config(bool initial)
 
     if (do_config || do_random)
     {
-        wsprTransmitter.setupTransmission(
+        wsprTransmitter.configure(
             current_frequency,
             config.power_level,
             config.ppm,
@@ -927,7 +927,7 @@ void set_config(bool initial)
             config.use_offset);
     }
 
-    wsprTransmitter.enableTransmission();
+    wsprTransmitter.startAsync();
     if (do_random)
         llog.logS(DEBUG, "New random frequency.");
     else
@@ -937,6 +937,6 @@ void set_config(bool initial)
     last_transmit = true;
 
 #ifdef DEBUG_WSPR_TRANSMIT
-        wsprTransmitter.printParameters();
+        wsprTransmitter.dumpParameters();
 #endif
 }

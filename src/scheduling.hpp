@@ -273,7 +273,7 @@ double next_frequency(bool initial);
  * @param initial Call with 'true' if this is the first run
  *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
- *         `setupTransmission()`.
+ *         `configure()`.
  */
 void set_config(bool initial = false);
 
