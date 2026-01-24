@@ -2092,8 +2092,9 @@ print_system() {
         warn "System: Unknown (could not extract system information)."
         debug_print "System information could not be extracted." "$debug"
     else
-        logI "System: $system_name." # Log the system information
-        debug_print "Logged system information: $system_name" "$debug"
+        bitness=$(getconf LONG_BIT 2>/dev/null || printf "unknown")
+        logI "System: $system_name on $bitness-bit OS." # Log the system information
+        debug_print "Logged system information: $system_name on $bitness-bit OS" "$debug"
     fi
 
     debug_end "$debug"

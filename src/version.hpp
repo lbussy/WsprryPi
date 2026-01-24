@@ -84,6 +84,19 @@ extern std::string get_debug_state();
 extern std::string get_pi_model();
 
 /**
+ * @brief Return the operating system version name.
+ *
+ * Reads the operating system identification from the standard
+ * /etc/os-release file and returns the PRETTY_NAME value.
+ *
+ * If the file is unavailable or the value cannot be determined,
+ * the function returns "Unknown OS".
+ *
+ * @return Human-readable operating system version string.
+ */
+std::string get_os_version_name();
+
+/**
  * @brief Constructs a formatted version string for the project.
  *
  * This function combines the project name, executable version, and branch name

@@ -177,7 +177,14 @@ void WebServer::start(int port)
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               // Retrieve the version
-              std::string version = get_raw_version_string();
+              std::string version =
+                get_raw_version_string()
+                + " on a "
+                + get_pi_model()
+                + ", "
+                + get_os_version_name()
+                + (sizeof(void *) == 8 ? " 64-bit" : " 32-bit")
+                + " OS.";
 
               // Build a JSON object
               nlohmann::json j;
