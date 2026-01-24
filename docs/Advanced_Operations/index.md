@@ -149,7 +149,7 @@ You may also `GET` the version JSON at `{servername.local:31415/version`:
 
 ### Web Socket
 
-The executable exposes a Web Socketon port `31416` by default.  The available commands are:
+The executable exposes a Web Socket on port `31416` by default.  The available commands are:
 
 - `get_tx_state`: The server will respond with `{"tx_state": true}` (or false).
 - `reboot`: The server will respond with `{"command": "reboot"}` and reboot the server.

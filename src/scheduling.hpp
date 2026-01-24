@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -261,7 +261,7 @@ void send_ws_message(std::string type, std::string state);
  *   - `freq_iterator_` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency(bool initial);
+double next_frequency(bool reset = false);
 
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
@@ -273,8 +273,8 @@ double next_frequency(bool initial);
  * @param initial Call with 'true' if this is the first run
  *
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
- *         `setupTransmission()`.
+ *         `configure()`.
  */
-void set_config(bool initial = false);
+void set_config(bool force = false);
 
 #endif // _SCHEDULING_HPP

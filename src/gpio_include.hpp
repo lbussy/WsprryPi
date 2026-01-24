@@ -5,7 +5,7 @@
  * This project is licensed under the MIT License. See LICENSE.md for more
  * information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy).
+ * Copyright © 2023 - 2026 Lee C. Bussy (@LBussy).
  *
  * The build system should define GPIOD_API_MAJOR (for example via pkg-config
  * detection in the Makefile). This header intentionally avoids fragile
