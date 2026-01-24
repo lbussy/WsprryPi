@@ -289,6 +289,7 @@ RELEASE: release
 clean:
 	$(Q)echo "Cleaning up build artifacts."
 	$(Q)$(SUDO) rm -rf build
+	$(Q)$(SUDO) rm -rf ../executables
 
 release: $(BIN_DIR)/$(OUT)
 	$(Q)echo "Release build completed successfully."
