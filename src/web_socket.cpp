@@ -298,12 +298,15 @@ std::string WebSocketServer::computeWebSocketAccept(const std::string &client_ke
 }
 
 /**
- * @brief Handles and dispatches incoming client messages.
+ * @brief Handles and dispatches incoming JSON client messages.
  *
- * This function trims and lowercases the incoming message to
- * allow for case- and whitespace-insensitive command parsing.
- * It recognizes specific command keywords and sends corresponding
- * responses back to the client:
+ * This function parses the raw input text as JSON, extracts the
+ * "command" field, and dispatches the request to the appropriate
+ * stubbed action (shutdown, reboot, get_tx_state, or echo). It
+ * trims and lowercases the incoming message to support case- and
+ * whitespace-insensitive command parsing, recognizes supported
+ * command keywords, and sends a JSON response back to the client
+ * via sendJSON().
  *
  * - "tx_status" → Responds with transmission status acknowledgment.
  * - "shutdown"  → Responds with shutdown acknowledgment.
@@ -313,16 +316,6 @@ std::string WebSocketServer::computeWebSocketAccept(const std::string &client_ke
  * All other messages are echoed back with a generic reply.
  *
  * @param raw_message The raw text message received from the client.
- */
-
-/**
- * @brief Handle an incoming JSON‐formatted message from the WebSocket client.
- *
- * This function parses the raw text as JSON, extracts the "command" field,
- * dispatches to the appropriate stubbed action (shutdown, reboot,
- * get_tx_state, echo), and then sends a JSON reply via sendJSON().
- *
- * @param raw_message The raw text payload received over the WebSocket.
  */
 void WebSocketServer::handleMessage(const std::string &raw_message)
 {

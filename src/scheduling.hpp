@@ -261,7 +261,7 @@ void send_ws_message(std::string type, std::string state);
  *   - `freq_iterator_` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency(bool initial);
+double next_frequency(bool reset = false);
 
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
@@ -275,6 +275,6 @@ double next_frequency(bool initial);
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `configure()`.
  */
-void set_config(bool initial = false);
+void set_config(bool force = false);
 
 #endif // _SCHEDULING_HPP

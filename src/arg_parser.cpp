@@ -144,8 +144,6 @@ const std::vector<int> wspr_power_levels = {0, 3, 7, 10, 13, 17, 20, 23, 27, 30,
  */
 void callback_ini_changed()
 {
-    // TODO: Rethink this logic
-
     ini_reload_pending.store(true, std::memory_order_relaxed);
     if (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
     {
@@ -154,11 +152,9 @@ void callback_ini_changed()
             // Transmit not changed, make pending change
             llog.logS(INFO, "INI file changed, reload after transmission.");
         }
-        else
+        else // We are or are setting transmissions to disabled
         {
-            // Kill the transmission
-            // TODO: This is potentially a duplicate logging item with scheduling set_config()
-            llog.logS(INFO, "Transmission disabled, stopping transmission.");
+            // Execute reconfig immediately.
             set_config(true);
         }
     }
@@ -436,6 +432,9 @@ void show_config_values(bool reload)
  */
 bool validate_config_data()
 {
+    // Clear pending config flags
+    ini_reload_pending.store(false, std::memory_order_relaxed);
+
     // Parse frequency string data
     set_frequencies();
 
@@ -549,35 +548,44 @@ bool validate_config_data()
             std::exit(EXIT_FAILURE);
         }
 
-        // Log WSPR packet details
-        llog.logS(INFO, "WSPR packet payload:");
-        llog.logS(INFO, "- Callsign:", config.callsign);
-        llog.logS(INFO, "- Locator:", config.grid_square);
-        llog.logS(INFO, "- Power:", config.power_dbm, " dBm");
-
-        // total number of entries (including any 0.0 ones)
-        if (config.center_freq_set.size() > 1)
+        if (config.transmit)
         {
-            // Print frequency list
-            llog.logS(INFO, "Requested TX frequencies:");
+            // Log WSPR packet details
+            llog.logS(INFO, "WSPR packet payload:");
+            llog.logS(INFO, "- Callsign:", config.callsign);
+            llog.logS(INFO, "- Locator:", config.grid_square);
+            llog.logS(INFO, "- Power:", config.power_dbm, " dBm");
 
-            // Concatenate frequency messages for logging
-            for (const auto &freq : config.center_freq_set)
+            // total number of entries (including any 0.0 ones)
+            if (config.center_freq_set.size() > 1)
             {
-                if (freq == 0.0)
+                // Print frequency list
+                llog.logS(INFO, "Requested TX frequencies:");
+
+                // Concatenate frequency messages for logging
+                for (const auto &freq : config.center_freq_set)
                 {
-                    llog.logS(INFO, "- Skip (0.0)");
-                }
-                else
-                {
-                    llog.logS(INFO, "- ", lookup.freq_display_string(freq));
+                    if (freq == 0.0)
+                    {
+                        llog.logS(INFO, "- Skip (0.0)");
+                    }
+                    else
+                    {
+                        llog.logS(INFO, "- ", lookup.freq_display_string(freq));
+                    }
                 }
             }
-        }
-        else
-        {
-            // Print single frequency
-            llog.logS(INFO, "Requested TX frequency:", lookup.freq_display_string(config.center_freq_set[0]));
+            else
+            {
+                // Print single frequency
+                llog.logS(INFO, "Requested TX frequency:", lookup.freq_display_string(config.center_freq_set[0]));
+            }
+
+            // Handle frequency offset
+            if (config.use_offset)
+            {
+                llog.logS(INFO, "A random offset will be added to all transmissions.");
+            }
         }
 
         // Set termination count (defaults to 1 if unset) if not in loop_tx and use_ini mode
@@ -596,12 +604,6 @@ bool validate_config_data()
                 }
                 llog.logS(INFO, "TX will stop after:", config.tx_iterations.load(), "iteration(s) of the frequency list.");
             }
-        }
-
-        // Handle frequency offset
-        if (config.use_offset)
-        {
-            llog.logS(INFO, "A random offset will be added to all transmissions.");
         }
     }
     else
