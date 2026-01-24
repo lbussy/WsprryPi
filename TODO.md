@@ -2,6 +2,8 @@
 
 ## C++ Code
 
+- [ ] Make stop trans immediate
+- [ ] Re-do callback_ini_changed() and arg_parser handling
 - [ ] Add QRSS
 
 ## Web UI
