@@ -180,11 +180,11 @@ void callback_transmission_started(const std::string &msg, double frequency)
     // Log messages
     if (!msg.empty() && frequency != 0.0)
     {
-        llog.logS(INFO, "Started transmission (", msg, ") ", std::setprecision(6), (frequency / 1e6), " MHz.");
+        llog.logS(INFO, "Started transmission (", msg, ") ", wsprTransmitter.formatFrequencyMHz(frequency), " MHz.");
     }
     else if (frequency != 0.0)
     {
-        llog.logS(INFO, "Started transmission: ", std::setprecision(6), (frequency / 1e6), " MHz.");
+        llog.logS(INFO, "Started transmission: ", wsprTransmitter.formatFrequencyMHz(frequency), " MHz.");
     }
     else if (!msg.empty())
     {
