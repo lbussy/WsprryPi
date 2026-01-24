@@ -929,6 +929,6 @@ void set_config(bool force)
         llog.logS(INFO, "Transmissions disabled.");
     }
 #ifdef DEBUG_WSPR_TRANSMIT
-    wsprTransmitter.printParameters();
+    wsprTransmitter.dumpParameters();
 #endif
 }
