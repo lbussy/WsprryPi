@@ -1,31 +1,33 @@
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
-	url = https://github.com/lbussy/WsprryPi-UI.git
-	branch = bootstrap_5
+	url = https://github.com/WsprryPi/WsprryPi-UI.git
 [submodule "src/Mailbox"]
 	path = src/Mailbox
-	url = https://github.com/lbussy/Mailbox.git
+	url = https://github.com/WsprryPi/Mailbox.git
 [submodule "src/INI-Handler"]
 	path = src/INI-Handler
-	url = https://github.com/lbussy/INI-Handler.git
+	url = https://github.com/WsprryPi/INI-Handler.git
 [submodule "src/LCBLog"]
 	path = src/LCBLog
 	url = https://github.com/lbussy/LCBLog.git
 [submodule "src/MonitorFile"]
 	path = src/MonitorFile
-	url = https://github.com/lbussy/MonitorFile.git
+	url = https://github.com/WsprryPi/MonitorFile.git
 [submodule "src/PPM-Manager"]
 	path = src/PPM-Manager
-	url = https://github.com/lbussy/PPM-Manager.git
+	url = https://github.com/WsprryPi/PPM-Manager.git
 [submodule "src/Signal-Handler"]
 	path = src/Signal-Handler
-	url = https://github.com/lbussy/Signal-Handler.git
+	url = https://github.com/WsprryPi/Signal-Handler.git
 [submodule "src/Singleton"]
 	path = src/Singleton
-	url = https://github.com/lbussy/Singleton.git
+	url = https://github.com/WsprryPi/Singleton.git
 [submodule "src/WSPR-Message"]
 	path = src/WSPR-Message
-	url = https://github.com/lbussy/WSPR-Message.git
+	url = https://github.com/WsprryPi/WSPR-Message.git
 [submodule "src/WSPR-Transmitter"]
 	path = src/WSPR-Transmitter
-	url = https://github.com/lbussy/WSPR-Transmitter.git
+	url = https://github.com/WsprryPi/WSPR-Transmitter.git
+[submodule ".github"]
+	path = .github
+	url = https://github.com/WsprryPi/.github.git

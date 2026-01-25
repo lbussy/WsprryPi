@@ -1,5 +1,0 @@
-requests>=2.32.5
-myst-parser
-sphinx
-sphinx_rtd_theme
-esbonio

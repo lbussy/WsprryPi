@@ -206,7 +206,7 @@ declare DRY_RUN="${DRY_RUN:-false}"
 # @global GIT_CLONE_BASE The base URL for cloning repositories from GitHub.
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"
-declare REPO_ORG="${REPO_ORG:-lbussy}"
+declare REPO_ORG="${REPO_ORG:-WsprryPi}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"

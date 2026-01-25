@@ -55,7 +55,7 @@
  * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
  * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
  *
- * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
+ * @see https://github.com/WsprryPi/MonitorFile for detailed documentation and examples.
  */
 extern MonitorFile iniMonitor;
 

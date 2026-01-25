@@ -50,7 +50,7 @@ __version__ = "1.2.1-1.3.0_devel+13.a1eba8d"
 
 
 class SemanticVersion:
-    def __init__(self, repo_org="lbussy", repo_name="wsprrypi", repo_title="Wsprry Pi", repo_branch="install_update", git_tag="1.3.0", debug=False):
+    def __init__(self, repo_org="WsprryPi", repo_name="wsprrypi", repo_title="Wsprry Pi", repo_branch="install_update", git_tag="1.3.0", debug=False):
         self.repo_org = repo_org
         self.repo_name = repo_name
         self.repo_title = repo_title

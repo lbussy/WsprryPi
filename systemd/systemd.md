@@ -137,7 +137,7 @@ Here’s an updated service file incorporating the suggestions:
 ```ini
 [Unit]
 Description=wsprrypi daemon for: wsprrypi
-Documentation=https://github.com/lbussy/WsprryPi/discussions
+Documentation=https://github.com/WsprryPi/WsprryPi/discussions
 After=multi-user.target
 
 [Service]
