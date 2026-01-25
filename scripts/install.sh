@@ -14,7 +14,7 @@ IFS=$'\n\t'
 #
 # @license MIT License
 #
-# Copyright © 2023-2025 Lee C. Bussy
+# Copyright © 2023 - 2026 Lee C. Bussy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -210,9 +210,9 @@ declare REPO_ORG="${REPO_ORG:-WsprryPi}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-devel}"
-declare GIT_TAG="${GIT_TAG:-v2.1.5}"
-declare SEM_VER="${SEM_VER:-2.1.5}"
+declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare GIT_TAG="${GIT_TAG:-v2.1.6}"
+declare SEM_VER="${SEM_VER:-2.1.6}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"

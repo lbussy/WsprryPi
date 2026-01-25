@@ -20,7 +20,7 @@ IFS=$'\n\t'
 # @license
 # MIT License
 #
-# Copyright © 2023-2025 Lee C. Bussy
+# Copyright © 2023 - 2026 Lee C. Bussy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

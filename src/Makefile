@@ -71,9 +71,16 @@ SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 # Project naming/versioning (from Git)
 # ─────────────────────────────────────────────────────────────────────────────
 
-PRJ := $(notdir $(shell git rev-parse --show-toplevel))
+PRJ := $(strip $(shell \
+	url="$$(git remote get-url origin 2>/dev/null)"; \
+	if [ -n "$$url" ]; then \
+		echo "$$url" \
+		| sed -E 's#.*/##; s#\.git$$##'; \
+	else \
+		echo unknown; \
+	fi \
+))
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
-
 BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | awk '{ gsub(/[^[:alnum:]]+/, "-"); sub(/-$$/, ""); print }' || echo unknown)
 RAW_TAG := $(strip $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null))
 BASE_VER := $(if $(RAW_TAG),$(patsubst v%,%,$(RAW_TAG)),0.0.0)
