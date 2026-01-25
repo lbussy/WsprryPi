@@ -1,15 +1,18 @@
+[submodule ".github"]
+	path = .github
+	url = https://github.com/WsprryPi/.github.git
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
 	url = https://github.com/WsprryPi/WsprryPi-UI.git
-[submodule "src/Mailbox"]
-	path = src/Mailbox
-	url = https://github.com/WsprryPi/Mailbox.git
 [submodule "src/INI-Handler"]
 	path = src/INI-Handler
 	url = https://github.com/WsprryPi/INI-Handler.git
 [submodule "src/LCBLog"]
 	path = src/LCBLog
 	url = https://github.com/WsprryPi/LCBLog
+[submodule "src/Mailbox"]
+	path = src/Mailbox
+	url = https://github.com/WsprryPi/Mailbox.git
 [submodule "src/MonitorFile"]
 	path = src/MonitorFile
 	url = https://github.com/WsprryPi/MonitorFile.git
@@ -28,6 +31,3 @@
 [submodule "src/WSPR-Transmitter"]
 	path = src/WSPR-Transmitter
 	url = https://github.com/WsprryPi/WSPR-Transmitter.git
-[submodule ".github"]
-	path = .github
-	url = https://github.com/WsprryPi/.github.git
