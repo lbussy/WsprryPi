@@ -21,6 +21,7 @@
         "rifi2k.format-html-in-php",
         "streetsidesoftware.code-spell-checker",
         "timonwong.shellcheck",
+        "yzhang.markdown-all-in-one",
         "xdebug.php-debug"
     ]
 }
