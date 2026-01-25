@@ -122,7 +122,7 @@ If you are going to use VS Code from your workstation:
 
     ``` bash
     sudo apt install git -y
-    git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
+    git clone --recurse-submodules -j8 https://github.com/WsprryPi/WsprryPi.git
     cd ~/WsprryPi/
     sudo ./scripts/install.sh -l
    ```
@@ -133,7 +133,7 @@ If you are going to use VS Code from your workstation:
 
     ``` bash
     curl -L installwspr.aa0nt.net | sudo bash
-    git clone --recurse-submodules -j8 https://github.com/lbussy/WsprryPi.git
+    git clone --recurse-submodules -j8 https://github.com/WsprryPi/WsprryPi.git
     cd ~/WsprryPi/
     ```
 

@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -177,7 +177,14 @@ void WebServer::start(int port)
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               // Retrieve the version
-              std::string version = get_raw_version_string();
+              std::string version =
+                get_raw_version_string()
+                + " on a "
+                + get_pi_model()
+                + ", "
+                + get_os_version_name()
+                + (sizeof(void *) == 8 ? " 64-bit" : " 32-bit")
+                + " OS.";
 
               // Build a JSON object
               nlohmann::json j;

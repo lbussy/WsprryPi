@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -55,7 +55,7 @@
  * The `iniMonitor` object works by checking the file's last modified timestamp and comparing
  * it with the previous known state. If a change is detected, it returns `true` on `changed()`.
  *
- * @see https://github.com/lbussy/MonitorFile for detailed documentation and examples.
+ * @see https://github.com/WsprryPi/MonitorFile for detailed documentation and examples.
  */
 extern MonitorFile iniMonitor;
 

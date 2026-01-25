@@ -17635,7 +17635,7 @@ This implementation is a slightly modified version of the reference
 implementation which may be obtained from
 http://florian.loitsch.com/publications (bench.tar.gz).
 
-The code is distributed under the MIT license, Copyright (c) 2009 Florian Loitsch.
+The code is distributed under the MIT license, Copyright © 2009 Florian Loitsch.
 
 For a detailed description of the algorithm see:
 
@@ -19600,7 +19600,7 @@ class serializer
 
     @note The function has been edited: a std::array is used.
 
-    @copyright Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+    @copyright Copyright © 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
     @sa http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     */
     static std::uint8_t decode(std::uint8_t& state, std::uint32_t& codep, const std::uint8_t byte) noexcept

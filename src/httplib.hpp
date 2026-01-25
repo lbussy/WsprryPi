@@ -1,7 +1,7 @@
 /**
 * httplib.h
 *
-* Copyright (c) 2025 Yuji Hirose. All rights reserved.
+* Copyright © 2025 Yuji Hirose. All rights reserved.
 * MIT License
 *
 * From cpp-httplib: https://github.com/yhirose/cpp-httplib

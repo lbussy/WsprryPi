@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -42,7 +42,9 @@
 #include "wspr_transmit.hpp"
 
 // Standard library headers
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <condition_variable>
 #include <cstring>
@@ -162,73 +164,166 @@ ModeType lastMode;
  */
 std::atomic<bool> web_test_tone{false};
 
-/**
- * @brief Callback function for housekeeping tasks between transmissions.
- *
- * This function regords the start time of a transmission, turns on the
- * LED if enabled, sends messages to any WebSockets clients, and logs the
- * start message
- */
-void callback_transmission_started(const std::string &msg, double frequency)
+static std::string to_lower_copy(const std::string &s)
 {
-    // Turn on LED
-    ledControl.toggleGPIO(true);
-
-    // Notify clients of start
-    send_ws_message("transmit", "starting");
-
-    // Log messages
-    if (!msg.empty() && frequency != 0.0)
-    {
-        llog.logS(INFO, "Started transmission (", msg, ") ", std::setprecision(6), (frequency / 1e6), " MHz.");
-    }
-    else if (frequency != 0.0)
-    {
-        llog.logS(INFO, "Started transmission: ", std::setprecision(6), (frequency / 1e6), " MHz.");
-    }
-    else if (!msg.empty())
-    {
-        llog.logS(INFO, "Started transmission (", msg, ").");
-    }
-    else
-    {
-        std::cout << "[Callback] Started transmission.\n";
-    }
+    std::string out = s;
+    std::transform(out.begin(),
+                   out.end(),
+                   out.begin(),
+                   [](unsigned char c)
+                   {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    return out;
 }
 
-/**
- * @brief Callback function for housekeeping tasks between transmissions.
- *
- * to be integrated. If a pending PPM change is detected, it logs the event
- * and resets the flag. Similarly, if a pending INI change is detected, it
- * applies the deferred changes, logs the integration, and resets the flag.
- * If any changes were integrated, a flag is set to indicate that DMA/Symbol
- * reconfiguration is required.
- */
-void callback_transmission_complete(const std::string &msg, double elapsed)
+static std::string format_elapsed(double elapsed)
 {
-    if (!msg.empty() && elapsed != 0.0)
+    if (elapsed == 0.0)
+        return std::string();
+
+    std::ostringstream oss;
+    oss << std::fixed
+        << std::setprecision(6)
+        << elapsed;
+    return oss.str();
+}
+
+constexpr LogLevel to_log_level(WsprTransmitter::LogLevel level)
+{
+    switch (level)
     {
-        llog.logS(INFO, "ompleted transmission (", msg, ") ", std::setprecision(3), elapsed, " seconds.");
-    }
-    else if (elapsed != 0.0)
-    {
-        llog.logS(INFO, "Completed transmission: ", std::setprecision(3), elapsed, " seconds.");
-    }
-    else if (!msg.empty())
-    {
-        llog.logS(INFO, "Completed transmission (", msg, ").");
-    }
-    else
-    {
-        llog.logS(INFO, "Completed transmission.");
+    case WsprTransmitter::LogLevel::DEBUG:
+        return LogLevel::DEBUG;
+    case WsprTransmitter::LogLevel::INFO:
+        return LogLevel::INFO;
+    case WsprTransmitter::LogLevel::WARN:
+        return LogLevel::WARN;
+    case WsprTransmitter::LogLevel::ERROR:
+        return LogLevel::ERROR;
+    case WsprTransmitter::LogLevel::FATAL:
+        return LogLevel::FATAL;
     }
 
-    // Turn off LED
-    ledControl.toggleGPIO(false);
+    return LogLevel::INFO; // Safe fallback
+}
 
-    // Set Config will determine if we have work to do
-    set_config();
+void transmitter_cb(WsprTransmitter::TransmissionCallbackEvent event,
+                    WsprTransmitter::LogLevel level,
+                    const std::string &msg,
+                    double value)
+{
+    switch (event)
+    {
+    case WsprTransmitter::TransmissionCallbackEvent::STARTING:
+    {
+        const double frequency = value;
+
+        // Turn on LED.
+        ledControl.toggleGPIO(true);
+
+        // Notify clients of start.
+        send_ws_message("transmit", "starting");
+
+        // Log messages.
+        if (!msg.empty() && frequency != 0.0)
+        {
+            llog.logS(to_log_level(level),
+                      "Started transmission (",
+                      msg,
+                      ") ",
+                      wsprTransmitter.formatFrequencyMHz(frequency),
+                      " MHz.");
+        }
+        else if (frequency != 0.0)
+        {
+            llog.logS(to_log_level(level),
+                      "Started transmission: ",
+                      wsprTransmitter.formatFrequencyMHz(frequency),
+                      " MHz.");
+        }
+        else if (!msg.empty())
+        {
+            llog.logS(to_log_level(level),
+                      "Started transmission (",
+                      msg,
+                      ").");
+        }
+        else
+        {
+            llog.logS(to_log_level(level),
+                      "Started transmission.");
+        }
+        break;
+    }
+    case WsprTransmitter::TransmissionCallbackEvent::COMPLETE:
+    {
+        const double elapsed = value;
+
+        bool do_config = true;
+
+        const std::string s_elapsed = format_elapsed(elapsed);
+        const std::string msg_lower = to_lower_copy(msg);
+
+        if (msg_lower.find("canceled") != std::string::npos)
+        {
+            llog.logS(to_log_level(level),
+                      "Transmission cancelled after ",
+                      s_elapsed,
+                      " seconds.");
+            do_config = false;
+        }
+        else
+        {
+            if (!msg.empty() && elapsed != 0.0)
+            {
+                llog.logS(to_log_level(level),
+                          "Completed transmission (",
+                          msg,
+                          ") ",
+                          s_elapsed,
+                          " seconds.");
+            }
+            else if (elapsed != 0.0)
+            {
+                llog.logS(to_log_level(level),
+                          "Completed transmission: ",
+                          s_elapsed,
+                          " seconds.");
+            }
+            else if (!msg.empty())
+            {
+                llog.logS(to_log_level(level),
+                          "Completed transmission (",
+                          msg,
+                          ").");
+            }
+            else
+            {
+                llog.logS(to_log_level(level),
+                          "Completed transmission.");
+            }
+        }
+
+        // Turn off LED.
+        ledControl.toggleGPIO(false);
+
+        // Set Config will determine if we have work to do (if not canceled).
+        if (do_config)
+            set_config();
+
+        break;
+    }
+    case WsprTransmitter::TransmissionCallbackEvent::LOGGING:
+    default:
+    {
+        // Optional: treat LOGGING as an informational message.
+        if (!msg.empty())
+            llog.logS(to_log_level(level), msg);
+
+        break;
+    }
+    }
 }
 
 /**
@@ -433,16 +528,16 @@ void start_test_tone()
         lastMode = config.mode;
 
         // Tear down any ongoing WSPR/transmission
-        if (wsprTransmitter.isTransmitting())
+        if (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
         {
             llog.logS(INFO, "Stopping an in-process message early.");
         }
-        wsprTransmitter.stop();
+        wsprTransmitter.stopAndJoin();
 
         // Pick the “first” frequency
         auto freq = next_frequency(/*restart=*/true);
 
-        while (wsprTransmitter.isTransmitting())
+        while (wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -453,10 +548,10 @@ void start_test_tone()
         config.mode = ModeType::TONE;
 
         // Set up and start the tone
-        wsprTransmitter.setupTransmission(freq,
-                                          config.power_level,
-                                          config.ppm);
-        wsprTransmitter.enableTransmission();
+        wsprTransmitter.configure(freq,
+                                  config.power_level,
+                                  config.ppm);
+        wsprTransmitter.startAsync();
         llog.logS(INFO, "Test tone being transmitted at:", lookup.freq_display_string(freq));
         send_ws_message("transmit", "starting");
     }
@@ -476,7 +571,7 @@ void end_test_tone()
         llog.logS(INFO, "Ending test tone requested by Web UI.");
 
         // Stop current tone
-        wsprTransmitter.stop();
+        wsprTransmitter.stopAndJoin();
         send_ws_message("transmit", "finished");
         ledControl.toggleGPIO(false);
 
@@ -495,10 +590,10 @@ void end_test_tone()
         {
             // It was already a tone, so set it up again
             validate_config_data();
-            wsprTransmitter.setupTransmission(config.test_tone,
-                                              config.power_level,
-                                              config.ppm);
-            wsprTransmitter.enableTransmission();
+            wsprTransmitter.configure(config.test_tone,
+                                      config.power_level,
+                                      config.ppm);
+            wsprTransmitter.startAsync();
 
             llog.logS(INFO,
                       "Transmitting tone, hit Ctrl-C to terminate tone.");
@@ -552,14 +647,12 @@ bool wspr_loop()
 
     // Set transmission event callbacks
     wsprTransmitter.setTransmissionCallbacks(
-        [](const std::string &msg, double frequency)
+        [](WsprTransmitter::TransmissionCallbackEvent event,
+           WsprTransmitter::LogLevel level,
+           const std::string &msg,
+           double value)
         {
-            callback_transmission_started(msg, frequency);
-        },
-
-        [](const std::string &msg, double elapsed_secs)
-        {
-            callback_transmission_complete(msg, elapsed_secs);
+            transmitter_cb(event, level, msg, value);
         });
 
     // Monitor INI file for changes
@@ -584,9 +677,9 @@ bool wspr_loop()
     {
         // Setup test tone
         validate_config_data();
-        wsprTransmitter.setupTransmission(config.test_tone, config.power_level, config.ppm);
-        wsprTransmitter.enableTransmission();
-        llog.logS(INFO, "Transitting tone, hit Ctrl-C to terminate tone.");
+        wsprTransmitter.configure(config.test_tone, config.power_level, config.ppm);
+        wsprTransmitter.startAsync();
+        llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
     }
 
     // -------------------------------------------------------------------------
@@ -603,13 +696,13 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     // Shutdown and cleanup
     // -------------------------------------------------------------------------
-    wsprTransmitter.stop(); // Stop the transitter threads
-    shutdownMonitor.stop(); // Stop the GPIO monitor
-    ledControl.stop();      // Stop LED driver
-    iniMonitor.stop();      // Stop config file monitor
-    ppmManager.stop();      // Stop PPM manager (if active)
-    webServer.stop();       // Stop web server
-    socketServer.stop();    // Stop the socket server
+    wsprTransmitter.stopAndJoin(); // Stop the transmitter threads
+    shutdownMonitor.stop();        // Stop the GPIO monitor
+    ledControl.stop();             // Stop LED driver
+    iniMonitor.stop();             // Stop config file monitor
+    ppmManager.stop();             // Stop PPM manager (if active)
+    webServer.stop();              // Stop web server
+    socketServer.stop();           // Stop the socket server
 
     if (reboot_flag.load())
     {
@@ -716,7 +809,7 @@ void send_ws_message(std::string type, std::string state)
  *   - `freq_iterator` should be initialized to 0.
  *   - Wrapping is handled via the modulo operation.
  */
-double next_frequency(bool initial = false)
+double next_frequency(bool reset)
 {
     const auto &freqs = config.center_freq_set;
     if (freqs.empty())
@@ -728,7 +821,7 @@ double next_frequency(bool initial = false)
     const size_t idx = freq_iterator % freqs.size();
 
     // True whenever we’ve wrapped back around to the “first” slot
-    if (idx == 0 && !initial)
+    if (idx == 0 && !reset)
     {
         // Check if we are doing transmission iterations
         if (!config.use_ini && !config.loop_tx)
@@ -773,7 +866,7 @@ double next_frequency(bool initial = false)
  * @throws std::runtime_error if DMA setup or mailbox operations fail within
  *         `setupTransmission()`.
  */
-void set_config(bool initial)
+void set_config(bool force)
 {
     // Exit if we are shutting down
     if (exiting_wspr.load())
@@ -788,12 +881,11 @@ void set_config(bool initial)
 
     bool do_config = false;
     bool do_random = false;
-    if (initial)
+    if (force)
     {
         do_config = true;
-        freq_iterator = 0;                     // Reset iterator
-        current_frequency = 0.0;               // Zero out freq
-        wsprTransmitter.disableTransmission(); // Shutdown if running
+        freq_iterator = 0;       // Reset iterator
+        current_frequency = 0.0; // Zero out freq
     }
 
     // Store the PPM flag we had coming in
@@ -819,11 +911,8 @@ void set_config(bool initial)
 
     // See if we need to start NTP (chrony) monitoring
     if (
-        // If we are starting and set to use it, or
-        (config.use_ntp && initial) ||
         // If we are not using it now but should be
-        (!using_ntp_ && config.use_ntp)
-    )
+        (!using_ntp_ && config.use_ntp))
     {
         ppm_init();
         ppm_reload_pending.store(true, std::memory_order_seq_cst);
@@ -835,22 +924,25 @@ void set_config(bool initial)
         llog.logS(INFO, "PPM Manager disabled.");
         ppm_reload_pending.store(false, std::memory_order_seq_cst);
     }
-    else if (initial && !config.use_ntp)
+    else if (force && !config.use_ntp)
     {
         llog.logS(INFO, "PPM Manager disabled.");
     }
 
     // Update PPM if a change was noted
-    if (config.use_ntp && ppm_reload_pending.load())
+    if (ppm_reload_pending.load())
     {
-        do_config = true;
         config.ppm = ppmManager.getCurrentPPM();
+        wsprTransmitter.applyPpmCorrection(config.ppm);
         llog.logS(INFO, "PPM updated:", config.ppm);
+
+        // Clear pending ppm flags
+        ppm_reload_pending.store(false, std::memory_order_relaxed);
     }
 
     // Get next frequency and indicate if we are (re)setting the stack
     static double last_freq = 0.0;
-    current_frequency = next_frequency(initial);
+    current_frequency = next_frequency(force);
     if (current_frequency != last_freq)
     {
         last_freq = current_frequency;
@@ -865,8 +957,8 @@ void set_config(bool initial)
     // If we have a change, do setup
     if (do_config || do_random)
     {
-        // Do DMA configuration (calls disableTransmission() internally)
-        wsprTransmitter.setupTransmission(
+        // Do DMA configuration
+        wsprTransmitter.configure(
             current_frequency,
             config.power_level,
             config.ppm,
@@ -875,14 +967,10 @@ void set_config(bool initial)
             config.power_dbm,
             config.use_offset);
     }
-    // Clear pending config flags
-    ini_reload_pending.store(false, std::memory_order_relaxed);
-    ppm_reload_pending.store(false, std::memory_order_relaxed);
 
     // Enable/disable transmit if/as needed
     if (config.transmit && (do_config || do_random))
     {
-        wsprTransmitter.enableTransmission();
         if (do_random)
         {
             llog.logS(DEBUG, "New random frequency.");
@@ -892,13 +980,13 @@ void set_config(bool initial)
             llog.logS(DEBUG, "Setup complete.");
         }
         llog.logS(INFO, "Waiting for next transmission window.");
+        wsprTransmitter.startAsync();
     }
-    else if (!config.transmit)
+    else if (!config.transmit && (do_config || do_random))
     {
-        wsprTransmitter.disableTransmission();
         llog.logS(INFO, "Transmissions disabled.");
     }
 #ifdef DEBUG_WSPR_TRANSMIT
-        wsprTransmitter.printParameters();
+    wsprTransmitter.dumpParameters();
 #endif
 }

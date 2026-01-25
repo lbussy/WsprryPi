@@ -14,7 +14,7 @@ IFS=$'\n\t'
 #
 # @license MIT License
 #
-# Copyright (c) 2023-2025 Lee C. Bussy
+# Copyright © 2023-2025 Lee C. Bussy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -206,11 +206,11 @@ declare DRY_RUN="${DRY_RUN:-false}"
 # @global GIT_CLONE_BASE The base URL for cloning repositories from GitHub.
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"
-declare REPO_ORG="${REPO_ORG:-lbussy}"
+declare REPO_ORG="${REPO_ORG:-WsprryPi}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare REPO_BRANCH="${REPO_BRANCH:-devel}"
 declare GIT_TAG="${GIT_TAG:-v2.1.5}"
 declare SEM_VER="${SEM_VER:-2.1.5}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -2092,8 +2092,9 @@ print_system() {
         warn "System: Unknown (could not extract system information)."
         debug_print "System information could not be extracted." "$debug"
     else
-        logI "System: $system_name." # Log the system information
-        debug_print "Logged system information: $system_name" "$debug"
+        bitness=$(getconf LONG_BIT 2>/dev/null || printf "unknown")
+        logI "System: $system_name on $bitness-bit OS." # Log the system information
+        debug_print "Logged system information: $system_name on $bitness-bit OS" "$debug"
     fi
 
     debug_end "$debug"
@@ -5288,7 +5289,7 @@ remove_legacy_services() {
     done
 
     # final cleanup
-    exec_command "Reset failed systemd states" systemctl reset-failed "$debug"
+    exec_command "Reset systemd states" systemctl reset-failed "$debug"
     exec_command "Reload systemd daemon" systemctl daemon-reload "$debug"
 
     debug_end "$debug"

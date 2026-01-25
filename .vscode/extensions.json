@@ -1,0 +1,27 @@
+{
+    "recommendations": [
+        "bmewburn.vscode-intelephense-client",
+        "davidanson.vscode-markdownlint",
+        "eamodio.gitlens",
+        "ecmel.vscode-html-css",
+        "foxundermoon.shell-format",
+        "github.copilot",
+        "github.copilot-chat",
+        "github.vscode-pull-request-github",
+        "gruntfuggly.todo-tree",
+        "mechatroner.rainbow-csv",
+        "mhutchie.git-graph",
+        "ms-python.debugpy",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.vscode-python-envs",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools",
+        "njpwerner.autodocstring",
+        "rifi2k.format-html-in-php",
+        "streetsidesoftware.code-spell-checker",
+        "timonwong.shellcheck",
+        "yzhang.markdown-all-in-one",
+        "xdebug.php-debug"
+    ]
+}

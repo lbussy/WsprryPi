@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -154,7 +154,14 @@ int main(int argc, char *argv[])
     // Display version, Raspberry Pi model, and process ID for context.
     llog.logS(INFO, get_version_string());
 
-    llog.logS(INFO, "Running on:", get_pi_model(), ",", (sizeof(void *) == 8 ? "64-bit" : "32-bit"), " OS.");
+    llog.logS(
+        INFO,
+        "Running on a ",
+        get_pi_model(),
+        ", ",
+        get_os_version_name(),
+        (sizeof(void *) == 8 ? " 64-bit" : " 32-bit"),
+        " OS.");
 
     llog.logS(INFO, "Process PID:", getpid());
 

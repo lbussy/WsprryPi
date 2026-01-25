@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -338,7 +338,7 @@ int get_processor_type_int()
  */
 std::string get_pi_model()
 {
-    static std::string model;  // cache so we only read once
+    static std::string model; // cache so we only read once
     if (!model.empty())
         return model;
 
@@ -375,7 +375,7 @@ std::string get_version_string()
     // Retrieve project details.
     std::string proj = get_project_name(); ///< Project name.
     std::string ver = get_exe_version();   ///< Executable version.
-    std::string br = get_exe_branch();         ///< Git branch name.
+    std::string br = get_exe_branch();     ///< Git branch name.
 
     // Construct and return the formatted version string.
     return proj + " version " + ver + " (" + br + ").";
@@ -395,8 +395,39 @@ std::string get_raw_version_string()
     // Retrieve project details.
     std::string proj = get_project_name(); ///< Project name.
     std::string ver = get_exe_version();   ///< Executable version.
-    std::string br = get_exe_branch();         ///< Git branch name.
+    std::string br = get_exe_branch();     ///< Git branch name.
 
     // Construct and return the formatted version string.
     return ver + " (" + br + ")";
+}
+
+std::string get_os_version_name()
+{
+    std::ifstream file("/etc/os-release");
+    if (!file)
+        return "Unknown OS";
+
+    constexpr const char prefix[] = "PRETTY_NAME=";
+
+    std::string line;
+    std::string pretty;
+
+    while (std::getline(file, line))
+    {
+        if (line.rfind(prefix, 0) == 0)
+        {
+            pretty = line.substr(sizeof(prefix) - 1); // exclude null terminator
+            break;
+        }
+    }
+
+    // Strip surrounding quotes if present
+    if (pretty.size() >= 2 &&
+        pretty.front() == '"' &&
+        pretty.back() == '"')
+    {
+        pretty = pretty.substr(1, pretty.size() - 2);
+    }
+
+    return pretty.empty() ? "Unknown OS" : pretty;
 }

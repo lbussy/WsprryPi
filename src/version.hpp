@@ -5,7 +5,7 @@
  * This project is is licensed under the MIT License. See LICENSE.md
  * for more information.
  *
- * Copyright (C) 2023-2025 Lee C. Bussy (@LBussy). All rights reserved.
+ * Copyright © 2023-2026 Lee C. Bussy (@LBussy). All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -82,6 +82,19 @@ extern std::string get_debug_state();
  * ```
  */
 extern std::string get_pi_model();
+
+/**
+ * @brief Return the operating system version name.
+ *
+ * Reads the operating system identification from the standard
+ * /etc/os-release file and returns the PRETTY_NAME value.
+ *
+ * If the file is unavailable or the value cannot be determined,
+ * the function returns "Unknown OS".
+ *
+ * @return Human-readable operating system version string.
+ */
+std::string get_os_version_name();
 
 /**
  * @brief Constructs a formatted version string for the project.

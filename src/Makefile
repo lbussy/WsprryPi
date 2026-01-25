@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # MIT License
 #
-# Copyright (c) 2025 Lee C. Bussy (@lbussy)
+# Copyright © 2025 - 2026 Lee C. Bussy (@lbussy)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,12 +27,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Debug flags (add/remove as needed)
-DEBUG_DEFS := -DDEBUG_WSPR -DDEBUG_WSPR_TRANSMIT
+DEBUG_DEFS := -DDEBUG_WSPR
 # DEBUG_DEFS += -DDEBUG_PPMMANAGER
 # DEBUG_DEFS += -DDEBUG_SIGNAL_HANDLER
 
 # C++ version
-CXXVER := 17
+CXXVER := 20
 
 # Prefix for executing tests, "sudo" if required (set SUDO= to disable)
 SUDO ?= sudo
@@ -289,6 +289,7 @@ RELEASE: release
 clean:
 	$(Q)echo "Cleaning up build artifacts."
 	$(Q)$(SUDO) rm -rf build
+	$(Q)$(SUDO) rm -rf ../executables
 
 release: $(BIN_DIR)/$(OUT)
 	$(Q)echo "Release build completed successfully."
