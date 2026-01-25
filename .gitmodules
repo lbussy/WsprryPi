@@ -9,7 +9,7 @@
 	url = https://github.com/WsprryPi/INI-Handler.git
 [submodule "src/LCBLog"]
 	path = src/LCBLog
-	url = https://github.com/lbussy/LCBLog.git
+	url = https://github.com/WsprryPi/LCBLog
 [submodule "src/MonitorFile"]
 	path = src/MonitorFile
 	url = https://github.com/WsprryPi/MonitorFile.git

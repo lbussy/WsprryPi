@@ -33,7 +33,7 @@ DEBUG_DEFS := -DDEBUG_WSPR
 # DEBUG_DEFS += -DDEBUG_SIGNAL_HANDLER
 
 # C++ version
-CXXVER := 17
+CXXVER := 20
 
 # Prefix for executing tests, "sudo" if required (set SUDO= to disable)
 SUDO ?= sudo
