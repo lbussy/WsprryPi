@@ -71,15 +71,7 @@ SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 # Project naming/versioning (from Git)
 # ─────────────────────────────────────────────────────────────────────────────
 
-PRJ := $(strip $(shell \
-	url="$$(git remote get-url origin 2>/dev/null)"; \
-	if [ -n "$$url" ]; then \
-		echo "$$url" \
-		| sed -E 's#.*/##; s#\.git$$##'; \
-	else \
-		echo unknown; \
-	fi \
-))
+PRJ := $(strip $(shell 	url="$$(git remote get-url origin 2>/dev/null)"; 	if [ -n "$$url" ]; then 		echo "$$url" 		| sed -E 's#.*/##; s#\.git$$##'; 	else 		echo unknown; 	fi ))
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | awk '{ gsub(/[^[:alnum:]]+/, "-"); sub(/-$$/, ""); print }' || echo unknown)
 RAW_TAG := $(strip $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null))
@@ -104,24 +96,16 @@ DEP_DIR         := build/dep
 BIN_DIR         := build/bin
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Source discovery
+# Source discovery (C++ only)
 # ─────────────────────────────────────────────────────────────────────────────
 
-LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp')
-LOCAL_C_SOURCES   := $(shell find . -maxdepth 1 -type f -name '*.c')
+LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp' 2>/dev/null)
+SUBMODULE_CPP_SOURCES := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.cpp' ! -name 'main.cpp' 2>/dev/null)
 
-SUBMODULE_C_SOURCES   := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.c'   ! -name 'main.c')
-SUBMODULE_CPP_SOURCES := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.cpp' ! -name 'main.cpp')
-
-C_SOURCES   := $(LOCAL_C_SOURCES)   $(SUBMODULE_C_SOURCES)
 CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(SUBMODULE_CPP_SOURCES)
-
-REL_C_SOURCES   := $(patsubst ../../%,%,$(C_SOURCES))
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
-C_OBJECTS         := $(patsubst %.c,   $(OBJ_DIR_RELEASE)/%.o,$(REL_C_SOURCES))
 CPP_OBJECTS       := $(patsubst %.cpp, $(OBJ_DIR_RELEASE)/%.o,$(REL_CPP_SOURCES))
-C_DEBUG_OBJECTS   := $(patsubst %.c,   $(OBJ_DIR_DEBUG)/%.o,$(REL_C_SOURCES))
 CPP_DEBUG_OBJECTS := $(patsubst %.cpp, $(OBJ_DIR_DEBUG)/%.o,$(REL_CPP_SOURCES))
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,25 +120,79 @@ DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
 # ─────────────────────────────────────────────────────────────────────────────
 
 CXX := g++
-CC  := gcc
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Parallel build sizing (based on RAM)
+# Parallel build sizing (RAM + swap + current availability)
+#
+# Goals:
+# - Clamp when MemAvailable is low at build time (desktop load, etc.)
+# - Be conservative when swap is disabled on low-memory systems
+# - Guarantee JOBS >= 1 (avoid make -j0 meaning "unlimited jobs")
+# - Allow override: JOBS=1 make ...
+# - Optionally clamp further if a GUI is active
+# - Do not override an explicit -j passed to make
 # ─────────────────────────────────────────────────────────────────────────────
 
-MEM_KB := $(shell awk '/^MemTotal:/ {print $$2}' /proc/meminfo)
+MEM_KB       := $(shell awk '/^MemTotal:/ {print $$2}' /proc/meminfo)
+MEM_AVAIL_KB := $(shell awk '/^MemAvailable:/ {print $$2}' /proc/meminfo)
+SWAP_KB      := $(shell awk '/^SwapTotal:/ {print $$2}' /proc/meminfo)
+
 ONE_POINT_FIVE_GIB_KB   := $(shell expr 1536 \* 1024)
 THREE_POINT_FIVE_GIB_KB := $(shell expr 3584 \* 1024)
+
+# If available memory is below this threshold, force single-job builds.
+# 1280 MiB is a safer default for C++ builds when a desktop is running.
+MIN_MEM_AVAIL_KB ?= $(shell expr 1280 \* 1024)
+
 NPROCS := $(shell nproc)
 
-ifeq ($(shell [ $(MEM_KB) -lt $(ONE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
-	JOBS := 1
+JOBS_COMPUTED :=
+
+ifeq ($(shell [ $(MEM_AVAIL_KB) -lt $(MIN_MEM_AVAIL_KB) ] && echo yes),yes)
+	JOBS_COMPUTED := 1
+else ifeq ($(shell [ $(MEM_KB) -lt $(ONE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
+	JOBS_COMPUTED := 1
+else ifeq ($(shell [ $(SWAP_KB) -eq 0 ] && [ $(MEM_KB) -lt $(THREE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
+	JOBS_COMPUTED := 1
 else ifeq ($(shell [ $(MEM_KB) -lt $(THREE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
-	JOBS := $(shell expr $(NPROCS) / 2)
+	JOBS_COMPUTED := $(shell j=$$(expr $(NPROCS) / 2); [ $$j -lt 1 ] && echo 1 || echo $$j)
 else
-	JOBS := $(NPROCS)
+	JOBS_COMPUTED := $(NPROCS)
 endif
+
+# Allow users to override: JOBS=1 make ...
+JOBS ?= $(JOBS_COMPUTED)
+
+# Harden against accidental JOBS=0 or empty (GNU make treats -j0 as unlimited).
+ifeq ($(strip $(JOBS)),)
+	JOBS := 1
+endif
+ifeq ($(JOBS),0)
+	JOBS := 1
+endif
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional: Detect an active GUI session and clamp JOBS.
+# Notes:
+# - This is a hint only; MemAvailable is the primary signal.
+# - Set GUI_CLAMP=0 to disable this behavior.
+# ─────────────────────────────────────────────────────────────────────────────
+
+GUI_ACTIVE := $(shell 	if pgrep -x Xorg >/dev/null 2>&1; then echo yes; 	elif pgrep -x Xwayland >/dev/null 2>&1; then echo yes; 	elif pgrep -x wayfire >/dev/null 2>&1; then echo yes; 	elif pgrep -x weston >/dev/null 2>&1; then echo yes; 	elif pgrep -x gnome-shell >/dev/null 2>&1; then echo yes; 	elif pgrep -x lightdm >/dev/null 2>&1; then echo yes; 	elif pgrep -x gdm3 >/dev/null 2>&1; then echo yes; 	elif pgrep -x sddm >/dev/null 2>&1; then echo yes; 	elif pgrep -x lxdm >/dev/null 2>&1; then echo yes; 	else echo no; fi)
+
+GUI_CLAMP ?= 1
+ifeq ($(GUI_CLAMP),1)
+ifeq ($(GUI_ACTIVE),yes)
+	JOBS := $(shell j=$(JOBS); h=$$(expr $$j / 2); [ $$h -lt 1 ] && echo 1 || echo $$h)
+endif
+endif
+
+# Apply -j only if the user did not already specify one (e.g., make -j1).
+ifneq ($(filter -j%,$(MAKEFLAGS)),)
+# User already set -j in MAKEFLAGS/command line. Do not override.
+else
 MAKEFLAGS += -j$(JOBS)
+endif
 
 # ─────────────────────────────────────────────────────────────────────────────
 # libgpiod flags and version detection (build-time define)
@@ -181,7 +219,6 @@ endif
 
 COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
 
-CFLAGS   := $(COMMON_FLAGS) $(PKG_CFLAGS) -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR)
 CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) $(COMMON_FLAGS) $(PKG_CFLAGS) -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR)
 
 # Include paths
@@ -192,8 +229,6 @@ CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
 CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
 
 # Debug/release variants
-C_DEBUG_FLAGS     := $(CFLAGS)   -g $(DEBUG_DEFS)
-C_RELEASE_FLAGS   := $(CFLAGS)   -O2
 CXX_DEBUG_FLAGS   := $(CXXFLAGS) -g $(DEBUG_DEFS)
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2
 
@@ -215,12 +250,6 @@ endif
 # Compile rules (debug)
 # ─────────────────────────────────────────────────────────────────────────────
 
-$(OBJ_DIR_DEBUG)/%.o: %.c
-	$(Q)mkdir -p $(dir $@)
-	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
-	$(Q)echo "Compiling (debug) $< into $@"
-	$(Q)$(CC) $(C_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
-
 $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
@@ -228,12 +257,6 @@ $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
 define MAKE_DEBUG_SUBMOD_RULES
-$(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.c
-	$(Q)mkdir -p $$(@D)
-	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
-	$(Q)echo "Compiling (debug) $$< into $$@"
-	$(Q)$(CC) $(C_DEBUG_FLAGS) -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
-
 $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
@@ -243,7 +266,7 @@ endef
 $(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_DEBUG_SUBMOD_RULES,$(dir))))
 
 # Link debug binary
-$(BIN_DIR)/$(TEST_OUT): $(CPP_DEBUG_OBJECTS) $(C_DEBUG_OBJECTS)
+$(BIN_DIR)/$(TEST_OUT): $(CPP_DEBUG_OBJECTS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)echo "Linking debug: $(TEST_OUT) (libgpiod major: $(GPIOD_API_MAJOR))"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
@@ -252,12 +275,6 @@ $(BIN_DIR)/$(TEST_OUT): $(CPP_DEBUG_OBJECTS) $(C_DEBUG_OBJECTS)
 # Compile rules (release)
 # ─────────────────────────────────────────────────────────────────────────────
 
-$(OBJ_DIR_RELEASE)/%.o: %.c
-	$(Q)mkdir -p $(dir $@)
-	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
-	$(Q)echo "Compiling (release) $< into $@"
-	$(Q)$(CC) $(C_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
-
 $(OBJ_DIR_RELEASE)/%.o: %.cpp
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
@@ -265,12 +282,6 @@ $(OBJ_DIR_RELEASE)/%.o: %.cpp
 	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
 define MAKE_RELEASE_SUBMOD_RULES
-$(OBJ_DIR_RELEASE)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.c
-	$(Q)mkdir -p $$(@D)
-	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
-	$(Q)echo "Compiling (release) $$< into $$@"
-	$(Q)$(CC) $(C_RELEASE_FLAGS) -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
-
 $(OBJ_DIR_RELEASE)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
@@ -280,7 +291,7 @@ endef
 $(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_RELEASE_SUBMOD_RULES,$(dir))))
 
 # Link release binary
-$(BIN_DIR)/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
+$(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)echo "Linking release: $(OUT) (libgpiod major: $(GPIOD_API_MAJOR))"
 	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) $^ -o $@ $(LDFLAGS)
@@ -337,16 +348,13 @@ uninstall:
 	$(Q)$(SUDO) rm -f $(PREFIX)/$(OUT)
 
 lint:
-	$(Q)command -v cppcheck >/dev/null 2>&1 || { \
-	  echo "Warning: cppcheck not installed."; exit 1; }
+	$(Q)command -v cppcheck >/dev/null 2>&1 || { 	  echo "Warning: cppcheck not installed."; exit 1; }
 	$(Q)echo "Running cppcheck."
-	$(Q)cppcheck --std=c++$(CXXVER) --enable=all --inconclusive \
-	      --force --inline-suppr --quiet $(CPP_SOURCES)
+	$(Q)cppcheck --std=c++$(CXXVER) --enable=all --inconclusive 	      --force --inline-suppr --quiet $(CPP_SOURCES)
 
 macros:
 	$(Q)echo "Project macros."
-	$(Q)$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null \
-	      | grep -v '^#define _' || true
+	$(Q)$(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null 	      | grep -v '^#define _' || true
 
 help:
 	$(Q)echo "Available targets:"
