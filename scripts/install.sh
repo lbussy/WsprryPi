@@ -210,7 +210,7 @@ declare REPO_ORG="${REPO_ORG:-WsprryPi}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare REPO_BRANCH="${REPO_BRANCH:-devel}"
 declare GIT_TAG="${GIT_TAG:-v2.1.6}"
 declare SEM_VER="${SEM_VER:-2.1.6}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -5428,41 +5428,112 @@ start_script() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief  Detect the Pi’s nominal RAM size (1 GB, 2 GB or 4 GB) and provides
-#         compilation feedback.
+# @brief  Analyze system resources and display compilation concurrency notes.
 # @details
-#   Reads MemTotal in kB, then:
-#     - < 1.5 GiB → treats as 1 GB model
-#     - < 3.0 GiB → treats as 2 GB model
-#     - otherwise  → treats as 4 GB model
+#   Evaluates the system environment using the same heuristics as the Makefile
+#   JOBS logic, but is strictly informational.
 #
-# @stdout Prints one of: 1GB, 2GB, 4GB
+#   Signals considered:
+#     - Total RAM (MemTotal)
+#     - Available RAM at runtime (MemAvailable)
+#     - Swap availability
+#     - CPU core count
+#     - Presence of a running desktop environment
+#
+#   This function does NOT return or export a JOBS value. It is intended solely
+#   to explain expected compilation behavior and potential performance impacts
+#   to the user.
+#
+#   Overrides respected (for explanation only):
+#     - JOBS            Environment override
+#     - MIN_MEM_AVAIL_KB
+#     - GUI_CLAMP
+#
+# @stdout Human-readable informational and warning logs only.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-display_mem_compilation_notes() {
+display_compilation_resource_notes() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    # Read total RAM (kB)
     local mem_kb
-    mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+    local mem_avail_kb
+    local swap_kb
+    local nprocs
+    local one_point_five_gib_kb
+    local three_point_five_gib_kb
+    local min_mem_avail_kb
+    local gui_clamp
+    local jobs_estimate
 
-    # Mid-points in kB: 1.5 GiB and 3.0 GiB
-    local thresh1=$((1536 * 1024))
-    local thresh2=$((3072 * 1024))
+    mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
+    mem_avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null)
+    swap_kb=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
+    nprocs=$(nproc 2>/dev/null)
 
-    # 1 GB Pi
-    if (( mem_kb < thresh1 )); then
-        logW "The compilation step may take from 10m (Pi 3) to up to 50m (Pi 1)"
-    # 2 GB Pi
-    elif (( mem_kb < thresh2 )); then
-        logW "The compilation step may take more than 10m"
-    # 4 GB Pi
+    [[ -z "$mem_kb" ]] && mem_kb=0
+    [[ -z "$mem_avail_kb" ]] && mem_avail_kb=0
+    [[ -z "$swap_kb" ]] && swap_kb=0
+    [[ -z "$nprocs" ]] && nprocs=1
+
+    one_point_five_gib_kb=$((1536 * 1024))
+    three_point_five_gib_kb=$((3584 * 1024))
+    min_mem_avail_kb="${MIN_MEM_AVAIL_KB:-$((1280 * 1024))}"
+    gui_clamp="${GUI_CLAMP:-1}"
+
+    # Determine an estimated job count (for explanation only)
+    if [[ -n "${JOBS:-}" ]]; then
+        jobs_estimate="$JOBS"
+        (( jobs_estimate < 1 )) && jobs_estimate=1
+        logI "JOBS override detected: ${jobs_estimate}."
+    elif (( mem_avail_kb > 0 && mem_avail_kb < min_mem_avail_kb )); then
+        jobs_estimate=1
+        logW "Low available memory detected at build time."
+    elif (( mem_kb < one_point_five_gib_kb )); then
+        jobs_estimate=1
+        logW "System has less than 1.5 GiB total RAM."
+    elif (( swap_kb == 0 && mem_kb < three_point_five_gib_kb )); then
+        jobs_estimate=1
+        logW "Swap is disabled on a low-memory system."
+    elif (( mem_kb < three_point_five_gib_kb )); then
+        jobs_estimate=$((nprocs / 2))
+        (( jobs_estimate < 1 )) && jobs_estimate=1
+        logI "Moderate RAM system detected; limiting parallelism."
     else
-        logI "The compilation step should take ~5m"
+        jobs_estimate="$nprocs"
+        logI "Sufficient RAM detected; full parallelism likely."
     fi
 
+    # Desktop / GUI hint
+    if [[ "$gui_clamp" -eq 1 ]]; then
+        if pgrep -x Xorg        >/dev/null 2>&1 || \
+           pgrep -x Xwayland    >/dev/null 2>&1 || \
+           pgrep -x wayfire     >/dev/null 2>&1 || \
+           pgrep -x weston      >/dev/null 2>&1 || \
+           pgrep -x gnome-shell >/dev/null 2>&1 || \
+           pgrep -x lightdm     >/dev/null 2>&1 || \
+           pgrep -x gdm3        >/dev/null 2>&1 || \
+           pgrep -x sddm        >/dev/null 2>&1 || \
+           pgrep -x lxdm        >/dev/null 2>&1; then
+            logW "A desktop environment is running; compilation may be slower."
+            jobs_estimate=$((jobs_estimate / 2))
+            (( jobs_estimate < 1 )) && jobs_estimate=1
+        fi
+    fi
+
+    # User-facing timing guidance
+    if (( mem_kb < one_point_five_gib_kb )); then
+        logW "Compilation may take from 10m (Pi 3) up to 50m (Pi 1)."
+    elif (( mem_kb < (3072 * 1024) )); then
+        logW "Compilation may take more than 10m."
+    else
+        logI "Compilation should typically complete in around 5m"
+    fi
+
+    logI "Estimated effective parallelism: ${jobs_estimate} job(s)."
+
+    # Intentionally no stdout return; informational only.
     debug_end "$debug"
 }
 
@@ -6857,7 +6928,7 @@ _main() {
     print_version "$debug"      # Log the script version
 
     # Feedback on multi-proc compilation
-    [[ "$ACTION" != "uninstall" ]] && display_mem_compilation_notes "$debug"
+    [[ "$ACTION" != "uninstall" ]] && display_compilation_resource_notes "$debug"
 
     # Install dependencies after system checks
     [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
