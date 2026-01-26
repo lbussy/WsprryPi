@@ -3,7 +3,7 @@
 
 [Unit]
 Description=Wsprry Pi daemon for: %DAEMON_NAME%
-Documentation=https://github.com/WsprryPi/WsprryPi/discussions
+Documentation=https://github.com/orgs/WsprryPi/discussions
 After=multi-user.target
 
 [Service]
