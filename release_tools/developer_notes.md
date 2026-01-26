@@ -3,19 +3,13 @@
 
 I use VS Code installed on my working laptop (Windows or Mac) and the [Visual Studio Code Remote—SSH](https://code.visualstudio.com/docs/remote/ssh) extension to access VS Code's feature set on a Raspberry Pi from a familiar Dev UI on my laptop.
 
-> [!IMPORTANT]
-> You MUST clone the repo with `--recurse-submodules` to get all parts.
-
 <!-- omit in toc -->
 ## Table of Contents
 
 - [Set up SSH to your PI](#set-up-ssh-to-your-pi)
-- [Optional Housekeeping](#optional-housekeeping)
-- [VS Code](#vs-code)
-- [Required Devel Libs](#required-devel-libs)
+- [Clone Repo](#clone-repo)
 - [A Note About Submodules](#a-note-about-submodules)
 - [Reboot](#reboot)
-- [Working with the Project](#working-with-the-project)
 - [Documentation](#documentation)
 
 ## Set up SSH to your PI
@@ -87,33 +81,9 @@ Any references to `{hostname}` should be replaced with the hostname of your targ
 
 6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwords) logins.
 
-## Optional Housekeeping
+## Clone Repo
 
-I share some [`bash` aliases here](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) that help me when I work on a *nix system..
-
-To handle all of these aliases and package installs, paste in this command:
-
-``` bash
-curl -fsSL https://gist.githubusercontent.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b/raw/install_aliases.sh | bash
-```
-
-See the [Gist](https://gist.github.com/lbussy/23c05d8dc8c24d8d8edddf1d381f1c8b) for more info if you have never used these.
-
-## VS Code
-
-I use VS Code to develop this environment and connect my workstation to my Pi via the [VS Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview) option. This tool makes compiling and testing on the Pi very easy as I work from my laptop.
-
-If you are going to use VS Code from your workstation:
-
-1. In VS Code, install the "Remote Development" extension.
-
-2. View -> Command Palette -> >Remote-SSH:Connect Current Window to Host
-
-3. Select or enter your {hostname}.local
-
-4. The local VS Code engine will install the VS Code Server on the Pi.
-
-5. Once done and you have connected the terminal screen in VS Code to the Pi:
+1. Once done and connected via SSH:
 
     > [!IMPORTANT]
     > You MUST clone the repo with `--recurse-submodules` to get all parts.
@@ -139,14 +109,32 @@ If you are going to use VS Code from your workstation:
 
     (This lets the installer install everything, but then you clone the repo after.)
 
-6. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
+2. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
 
     ``` bash
     git config --global user.email "you@example.com"
     git config --global user.name "Your Name"
-    ```
 
-7. These are the extensions I use. If you paste them all in at once it will seem to hang, even for minutes on a slower Pi, but it will work:
+
+## VS Code
+
+I use VS Code to develop this environment and connect my workstation to my Pi via the [VS Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview) option. This tool makes compiling and testing on the Pi very easy as I work from my laptop.
+
+If you are going to use VS Code from your workstation:
+
+1. In VS Code, install the `Remote Development` extension.
+
+2. `View -> Command Palette -> >Remote-SSH:Connect Current Window to Host`
+
+3. Select or enter your `{hostname}.local`
+
+4. The local VS Code engine will install the VS Code Server on the Pi.
+
+5. Use the "Open Folder" button and select the root of your repo on the Pi (e.g. `~/WsprryPi/`).
+
+6. I use several VS Code extensions. You may note that VS Code will prompt you to install recommended extensions.  This is a configuration I added to the Git repo to make it easier.  You can choose not to use any or all of these extensions.
+
+    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.  
 
     ``` bash
     # Extensions installed on SSH: wsprrypi.local:
@@ -174,29 +162,29 @@ If you are going to use VS Code from your workstation:
     code --install-extension rifi2k.format-html-in-php
     code --install-extension streetsidesoftware.code-spell-checker
     code --install-extension timonwong.shellcheck
+    code --install-extension yzhang.markdown-all-in-one
     code --install-extension xdebug.php-debug
     ```
 
-8. Use the "Open Folder" button and select the root of your repo on the Pi.
+7. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
 
-9. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
-
-Remember that the **Wsprry Pi** systemd daemon is running. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
-
-``` bash
-sudo systemctl stop wsprrypi
-sudo systemctl disable wsprrypi
-```
+> [!IMPORTANT]
+> Remember that the **Wsprry Pi** systemd daemon is running if you ran the installer. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
+>
+> ``` bash
+> sudo systemctl stop wsprrypi
+> sudo systemctl disable wsprrypi
+> ```
 
 ## Required Devel Libs
 
 If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
 
-- git
-- apache2
-- php
-- chrony
-- libgpiod-dev (libgpiod2 or libgpiod3 are required, but the installer or libgpiod-dev will pull the correct one in)
+- `git`
+- `apache2`
+- `php`
+- `chrony`
+- `libgpiod-dev` (`libgpiod2` or `libgpiod3` are required, but the installer or `libgpiod-dev` will pull the correct one in)
 
 Install these (without running the installer) with:
 
@@ -217,10 +205,6 @@ git submodule update --init --recursive
 
 The installer blacklists the onboard snd_bcm2835 device, as Wsprry Pi uses this for generating the signal. You will need a reboot at some point before expecting Wsprry Pi to work correctly.
 
-## Working with the Project
-
-See [release.md](./scripts/release.md) for information about the project development tools.
-
 ## Documentation
 
 The documents are written in Markdown with Sphinx.  First, create a virtual environment:
@@ -237,10 +221,10 @@ Or you can use the `create_venv.sh` script provided.
 
 Now you have the requirements:
 
-- sphinx
-- sphinx_rtd_theme
-- myst-parser
-- esbonio
+- `sphinx`
+- `sphinx_rtd_theme`
+- `myst-parser`
+- `esbonio`
 
 From here you can `make html` to create the docs in `./build/html`.
 
