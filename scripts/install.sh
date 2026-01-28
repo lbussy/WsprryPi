@@ -5988,7 +5988,7 @@ upgrade_ini() {
 # @return Returns 0 on success, or 1 if any operation fails.
 #
 # @example
-#   manage_service "/usr/bin/mydaemon" "/usr/local/bin/mydaemon -D" "false" "debug"
+#   manage_service "/usr/bin/mydaemon" "/usr/local/bin/mydaemon -i" "false" "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
@@ -6028,7 +6028,7 @@ manage_service() {
     service_path="/etc/systemd/system/${daemon_systemd_name}"
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
     log_path="/var/log/$syslog_identifier" # Use exe name
-    log_std_out="$log_path/${syslog_identifier}_log"
+    log_std_out="journal"
 
     if [[ "$ACTION" == "install" ]]; then
         if systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
@@ -6056,12 +6056,12 @@ manage_service() {
 
             if [[ "$use_syslog" == "false" ]]; then
                 modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
-                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "uncomment" "$debug"
-                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "uncomment" "$debug"
+                modify_comment_lines "$service_path" "StandardOutput=%LOG_STD_OUT%" "uncomment" "$debug"
+                modify_comment_lines "$service_path" "StandardError=%LOG_STD_ERR%" "uncomment" "$debug"
             else
                 modify_comment_lines "$service_path" "StandardOutput=null" "uncomment" "$debug"
-                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "comment" "$debug"
-                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "comment" "$debug"
+                modify_comment_lines "$service_path" "StandardOutput=%LOG_STD_OUT%" "comment" "$debug"
+                modify_comment_lines "$service_path" "StandardError=%LOG_STD_ERR%" "comment" "$debug"
             fi
 
             replace_string_in_script "$service_path" "SEMANTIC_VERSION" "$(get_sem_ver "$debug")" "$debug"
@@ -6079,18 +6079,6 @@ manage_service() {
                 chmod 644 "$service_path" \
                 "$debug" || retval=1
 
-            exec_command "Create log path" \
-                mkdir -p "$log_path" \
-                "$debug" || retval=1
-
-            exec_command "Change ownership on log path" \
-                chown root:www-data "$log_path" \
-                "$debug" || retval=1
-
-            exec_command "Change permissions on log path" \
-                chmod 755 "$log_path" \
-                "$debug" || retval=1
-
             exec_command "Enable systemd service" \
                 systemctl enable "$daemon_systemd_name" \
                 "$debug" || retval=1
@@ -6103,13 +6091,6 @@ manage_service() {
                 systemctl restart "$daemon_systemd_name" \
                 "$debug" || retval=1
 
-            exec_command "Change ownership on logs" \
-                chown root:www-data "$log_path/${syslog_identifier}_log" \
-                "$debug" || retval=1
-
-            exec_command "Change permissions on logs" \
-                chmod 644 "$log_path/${syslog_identifier}_log" \
-                "$debug" || retval=1
         fi
 
     elif [[ "$ACTION" == "uninstall" ]]; then
@@ -6398,11 +6379,17 @@ manage_apache() {
 
         # Enable wsprrypi site
         exec_command "Enable wsprrypi site" a2ensite wsprrypi.conf "$debug" || {
-            logE "Failed to enablw wsprrypi site."
+            logE "Failed to enable wsprrypi site."
             debug_end "$debug"
             return 1
         }
 
+        # Grant www-data access to journald
+        exec_command "Enable journald access" usermod -a -G systemd-journal www-data "$debug" || {
+            logE "Failed to enable journal access."
+            debug_end "$debug"
+            return 1
+        }
     else
         # Uninstall path
         exec_command "Disable wsprrypi site" a2dissite wsprrypi.conf "$debug"
@@ -6768,7 +6755,7 @@ manage_wsprry_pi() {
         "compile_binary \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
-        "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -D -i /usr/local/etc/$WSPR_INI\" \"false\""
+        "manage_service \"/usr/bin/$WSPR_EXE\" \"/usr/local/bin/$WSPR_EXE -i /usr/local/etc/$WSPR_INI\" \"false\""
         "manage_config \"$LOG_ROTATE\" \"/etc/logrotate.d\""
         "manage_web"
         "manage_apache"

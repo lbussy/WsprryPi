@@ -2,21 +2,24 @@
 # Copyright (C) 2023 - 2026 Lee C. Bussy (@LBussy)
 
 [Unit]
-Description=Wsprry Pi daemon for: %DAEMON_NAME%
+Description=Wsprry Pi daemon for: %SYSLOG_IDENTIFIER%
 Documentation=https://github.com/orgs/WsprryPi/discussions
-After=multi-user.target
+After=time-sync.target
+Wants=time-sync.target
+StartLimitIntervalSec=5min
+StartLimitBurst=6
 
 [Service]
 Type=simple
 Restart=on-failure
-RestartSec=5
-User=root
-Group=www-data
-ExecStart=%EXEC_START%
+RestartSec=10
+
 SyslogIdentifier=%SYSLOG_IDENTIFIER%
-# StandardOutput=null
-# StandardOutput=append:%LOG_STD_OUT%
-# StandardError=append:%LOG_STD_ERR%
+StandardOutput=null
+StandardOutput=%LOG_STD_OUT%
+StandardError=%LOG_STD_ERR%
+
+ExecStart=%EXEC_START%
 
 [Install]
 WantedBy=multi-user.target
