@@ -6165,6 +6165,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: sudo chown -R www-data:www-data $target_path"
             logD "Exec: sudo chmod -R 755 $target_path"
+            logD "Exec: sudo usermod -aG systemd-journal www-data"
         else
             # Set ownership for the entire directory
             exec_command "Set ownership" chown -R www-data:www-data "${target_path}" "$debug" || retval=1
@@ -6178,6 +6179,10 @@ manage_web() {
 
             exec_command "Set file permissions" \
                 find "$target_path" -type f -exec sudo chmod 644 {} + \
+                "$debug" || retval=1
+
+            exec_command "Set log permissions" \
+                sudo usermod -aG systemd-journal www-data \
                 "$debug" || retval=1
         fi
 
