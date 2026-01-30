@@ -210,7 +210,7 @@ declare REPO_ORG="${REPO_ORG:-WsprryPi}"
 declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare REPO_BRANCH="${REPO_BRANCH:-syslog_changes}"
 declare GIT_TAG="${GIT_TAG:-v2.1.7}"
 declare SEM_VER="${SEM_VER:-2.1.7}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
@@ -707,6 +707,7 @@ readonly APT_PACKAGES=(
     "php"
     "chrony"
     "libgpiod-dev"
+    "libsystemd-dev"
 )
 
 # -----------------------------------------------------------------------------
