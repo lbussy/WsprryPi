@@ -6,13 +6,14 @@ Description=WsprryPi daemon for: %DAEMON_NAME%
 Documentation=https://github.com/orgs/WsprryPi/discussions
 Wants=time-sync.target
 After=time-sync.target
+After=systemd-journald.service
 
 [Service]
 Type=simple
 
 User=root
 
-ExecStartPre=/bin/sleep 5
+ExecStartPre=/bin/sleep 10
 ExecStart=%EXEC_START%
 SyslogIdentifier=%SYSLOG_IDENTIFIER%
 
