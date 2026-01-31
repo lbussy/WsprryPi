@@ -134,7 +134,7 @@ If you are going to use VS Code from your workstation:
 
 6. I use several VS Code extensions. You may note that VS Code will prompt you to install recommended extensions.  This is a configuration I added to the Git repo to make it easier.  You can choose not to use any or all of these extensions.
 
-    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.  
+    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.
 
     ``` bash
     # Extensions installed on SSH: wsprrypi.local:
