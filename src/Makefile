@@ -31,6 +31,27 @@ DEBUG_DEFS := -DDEBUG_WSPR
 # DEBUG_DEFS += -DDEBUG_PPMMANAGER
 # DEBUG_DEFS += -DDEBUG_SIGNAL_HANDLER
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional journald support (sd-journal.h)
+# - If sd-journal.h is available, link with -lsystemd and define LIB_JOURNALD=1
+# - Otherwise, define LIB_JOURNALD=0 and do not link libsystemd
+# ─────────────────────────────────────────────────────────────────────────────
+
+SYSTEMD_CFLAGS :=
+SYSTEMD_LIBS   :=
+HAVE_JOURNALD  := 0
+
+# Prefer pkg-config for libsystemd, but also allow header-only detection as fallback.
+ifeq ($(shell pkg-config --exists libsystemd 2>/dev/null && echo yes),yes)
+	SYSTEMD_CFLAGS := $(strip $(shell pkg-config --cflags libsystemd 2>/dev/null))
+	SYSTEMD_LIBS   := $(strip $(shell pkg-config --libs   libsystemd 2>/dev/null))
+	HAVE_JOURNALD  := 1
+else ifneq ($(wildcard /usr/include/systemd/sd-journal.h),)
+	# Header exists but pkg-config missing; link with -lsystemd anyway.
+	SYSTEMD_LIBS  := -lsystemd
+	HAVE_JOURNALD := 1
+endif
+
 # C++ version
 CXXVER := 20
 
@@ -219,21 +240,32 @@ endif
 
 COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
 
-CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) $(COMMON_FLAGS) $(PKG_CFLAGS) -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR)
+# Base compiler flags
+CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
+           $(COMMON_FLAGS) \
+           $(PKG_CFLAGS) \
+           $(SYSTEMD_CFLAGS) \
+           -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR) \
+           -DLIB_JOURNALD=$(HAVE_JOURNALD)
 
 # Include paths
 CXXFLAGS += -I$(abspath .)
 CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
 
 # Build metadata defines
-CXXFLAGS += -DMAKE_TAG=\"$(VER)\" -DMAKE_BRH=\"$(BRH)\" -DMAKE_EXE=\"$(OUT)\" -DMAKE_PRJ=\"$(PRJ)\"
+CXXFLAGS += -DMAKE_TAG=\"$(VER)\" \
+            -DMAKE_BRH=\"$(BRH)\" \
+            -DMAKE_EXE=\"$(OUT)\" \
+            -DMAKE_PRJ=\"$(PRJ)\"
 
 # Debug/release variants
 CXX_DEBUG_FLAGS   := $(CXXFLAGS) -g $(DEBUG_DEFS)
 CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2
 
 # Linker flags
-LDFLAGS := -lpthread -latomic $(PKG_LIBS)
+LDFLAGS := -lpthread -latomic \
+           $(PKG_LIBS) \
+           $(SYSTEMD_LIBS)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Verbosity control
@@ -334,7 +366,6 @@ gdb: debug
 install: release
 	$(Q)echo "Installing $(OUT) to $(PREFIX)."
 	$(Q)$(SUDO) systemctl stop $(OUT).service || true
-	$(Q)$(SUDO) bash -c 'echo > /var/log/wsprrypi/wsprrypi_log' || true
 	$(Q)$(SUDO) install -d $(PREFIX)
 	$(Q)$(SUDO) install -m 755 $(BIN_DIR)/$(OUT) $(PREFIX)/$(OUT)
 	$(Q)$(SUDO) systemctl enable $(OUT).service || true

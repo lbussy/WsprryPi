@@ -53,10 +53,14 @@ void initialize_logger()
     // Set the appropriate log level.
     if (debug_state == "DEBUG")
     {
-        llog.setLogLevel(DEBUG);  // Enable detailed debug logging.
+        llog.setLogLevel(DEBUG); // Enable detailed debug logging.
     }
     else
     {
-        llog.setLogLevel(INFO);   // Default to informational logging.
+        llog.setLogLevel(INFO); // Default to informational logging.
     }
+
+    // Set up journald logging
+    llog.enableJournald(true);
+    llog.setJournaldIdentifier(get_exe_name());
 }
