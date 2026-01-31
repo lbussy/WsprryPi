@@ -3,7 +3,7 @@
 
 *A QRP WSPR transmitter leveraging a Raspberry Pi*, (pronounced: (Whispery Pi))
 
-[![Documentation Status](https://readthedocs.org/projects/wsprry-pi/badge/?version=latest)](https://wsprry-pi.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/wsprry-pi/badge/?version=latest)](https://wsprry-pi.readthedocs.io/?badge=latest)
 
 <!-- omit in toc -->
 ## Table of Contents
@@ -30,7 +30,7 @@ Version 2.x+ is re-written from scratch, is no longer a derivative work, and is 
 
 ## Installation
 
-Please see [the documentation](https://wsprry-pi.readthedocs.io/en/latest/) for background, installation, and use.
+Please see [the documentation](https://wsprry-pi.readthedocs.io/) for background, installation, and use.
 
 If you want to get started and not read anything, here is how to install it:
 
