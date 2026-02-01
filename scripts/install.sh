@@ -5529,7 +5529,7 @@ display_compilation_resource_notes() {
     elif (( mem_kb < (3072 * 1024) )); then
         logW "Compilation may take more than 10m."
     else
-        logI "Compilation should typically complete in around 5m"
+        logI "Compilation should typically complete in around 5m."
     fi
 
     logI "Estimated effective parallelism: ${jobs_estimate} job(s)."
