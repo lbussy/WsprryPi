@@ -156,12 +156,16 @@ int main(int argc, char *argv[])
 
     llog.logS(
         INFO,
-        "Running on a ",
+        "Platform: ",
         get_pi_model(),
-        ", ",
+        ".");
+
+    llog.logS(
+        INFO,
+        "OS: ",
         get_os_version_name(),
         (sizeof(void *) == 8 ? " 64-bit" : " 32-bit"),
-        " OS.");
+        ".");
 
     llog.logS(INFO, "Process PID:", getpid());
 
