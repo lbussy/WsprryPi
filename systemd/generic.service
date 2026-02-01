@@ -10,10 +10,8 @@ After=systemd-journald.service
 
 [Service]
 Type=simple
-
 User=root
 
-ExecStartPre=/bin/sleep 10
 ExecStart=%EXEC_START%
 SyslogIdentifier=%SYSLOG_IDENTIFIER%
 
