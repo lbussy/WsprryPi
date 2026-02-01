@@ -1,6 +1,3 @@
-[submodule ".github"]
-	path = .github
-	url = https://github.com/WsprryPi/.github.git
 [submodule "WsprryPi-UI"]
 	path = WsprryPi-UI
 	url = https://github.com/WsprryPi/WsprryPi-UI.git

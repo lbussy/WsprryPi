@@ -42,6 +42,16 @@
 extern std::string get_project_name();
 
 /**
+ * @brief Retrieves the executable name.
+ *
+ * This function returns the name of the executable as defined by the build system.
+ * If the `MAKE_EXE` macro is not defined, it returns "unknown".
+ *
+ * @return A `std::string` representing the executable name.
+ */
+extern std::string get_exe_name();
+
+/**
  * @brief Retrieves the current debug state based on the build configuration.
  *
  * This function determines whether the current build is a debug or release

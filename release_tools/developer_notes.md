@@ -10,7 +10,6 @@ I use VS Code installed on my working laptop (Windows or Mac) and the [Visual St
 - [Clone Repo](#clone-repo)
 - [A Note About Submodules](#a-note-about-submodules)
 - [Reboot](#reboot)
-- [Documentation](#documentation)
 
 ## Set up SSH to your PI
 
@@ -134,7 +133,7 @@ If you are going to use VS Code from your workstation:
 
 6. I use several VS Code extensions. You may note that VS Code will prompt you to install recommended extensions.  This is a configuration I added to the Git repo to make it easier.  You can choose not to use any or all of these extensions.
 
-    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.  
+    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.
 
     ``` bash
     # Extensions installed on SSH: wsprrypi.local:
@@ -204,28 +203,3 @@ git submodule update --init --recursive
 ## Reboot
 
 The installer blacklists the onboard snd_bcm2835 device, as Wsprry Pi uses this for generating the signal. You will need a reboot at some point before expecting Wsprry Pi to work correctly.
-
-## Documentation
-
-The documents are written in Markdown with Sphinx.  First, create a virtual environment:
-
-``` bash
-cd docs
-sudo apt install python3-venv -y
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Or you can use the `create_venv.sh` script provided.
-
-Now you have the requirements:
-
-- `sphinx`
-- `sphinx_rtd_theme`
-- `myst-parser`
-- `esbonio`
-
-From here you can `make html` to create the docs in `./build/html`.
-
-You can also use the release script `copy_docs.sh` to copy the documentation to your local webserver at `wsprrypi/docs`.

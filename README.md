@@ -3,7 +3,7 @@
 
 *A QRP WSPR transmitter leveraging a Raspberry Pi*, (pronounced: (Whispery Pi))
 
-[![Documentation Status](https://readthedocs.org/projects/wsprry-pi/badge/?version=latest)](https://wsprry-pi.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/wsprry-pi/badge/?version=stable)](https://wsprry-pi.readthedocs.io/en/stable/?badge=stable)
 
 <!-- omit in toc -->
 ## Table of Contents

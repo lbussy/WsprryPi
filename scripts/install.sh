@@ -211,8 +211,8 @@ declare REPO_NAME="WsprryPi"      # Case Sensitive
 declare UI_REPO_DIR="WsprryPi-UI" # Case Sensitive
 declare REPO_TITLE="${REPO_TITLE:-Wsprry Pi}"
 declare REPO_BRANCH="${REPO_BRANCH:-main}"
-declare GIT_TAG="${GIT_TAG:-v2.1.7}"
-declare SEM_VER="${SEM_VER:-2.1.7}"
+declare GIT_TAG="${GIT_TAG:-v2.1.8}"
+declare SEM_VER="${SEM_VER:-2.1.8}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
@@ -707,6 +707,7 @@ readonly APT_PACKAGES=(
     "php"
     "chrony"
     "libgpiod-dev"
+    "libsystemd-dev"
 )
 
 # -----------------------------------------------------------------------------
@@ -6000,7 +6001,7 @@ manage_service() {
     # Ensure all three arguments are provided
     if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
         logE "Error: Missing required arguments."
-        logE "Usage: manage_service <daemon_exe> <exec_start> <use_syslog>"
+        logE "Usage: manage_service <daemon_exe> <exec_start>"
         debug_end "$debug"
         return 1
     fi
@@ -6009,7 +6010,6 @@ manage_service() {
     # shellcheck disable=SC2034
     local daemon_exe="$1"
     local exec_start="$2"
-    local use_syslog="$3"
 
     # Declare local variables
     local daemon_name
@@ -6017,8 +6017,6 @@ manage_service() {
     local daemon_systemd_name
     local service_path
     local syslog_identifier
-    local log_path
-    local log_std_out
     local retval=0 # Initialize return value
 
     daemon_name="${WSPR_SERVICE}" # Remove path
@@ -6027,8 +6025,6 @@ manage_service() {
     # Install under /etc so it overrides anything in /lib
     service_path="/etc/systemd/system/${daemon_systemd_name}"
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
-    log_path="/var/log/$syslog_identifier" # Use exe name
-    log_std_out="$log_path/${syslog_identifier}_log"
 
     if [[ "$ACTION" == "install" ]]; then
         if systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
@@ -6054,22 +6050,10 @@ manage_service() {
             exec_command "Copy systemd file" cp -f "${source_path}" "${service_path}" "$debug" || retval=1
             debug_print "Updating $service_path." "$debug"
 
-            if [[ "$use_syslog" == "false" ]]; then
-                modify_comment_lines "$service_path" "StandardOutput=null" "comment" "$debug"
-                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "uncomment" "$debug"
-                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "uncomment" "$debug"
-            else
-                modify_comment_lines "$service_path" "StandardOutput=null" "uncomment" "$debug"
-                modify_comment_lines "$service_path" "StandardOutput=append:%LOG_STD_OUT%" "comment" "$debug"
-                modify_comment_lines "$service_path" "StandardError=append:%LOG_STD_ERR%" "comment" "$debug"
-            fi
-
             replace_string_in_script "$service_path" "SEMANTIC_VERSION" "$(get_sem_ver "$debug")" "$debug"
             replace_string_in_script "$service_path" "DAEMON_NAME" "$daemon_name" "$debug"
             replace_string_in_script "$service_path" "EXEC_START" "$exec_start" "$debug"
             replace_string_in_script "$service_path" "SYSLOG_IDENTIFIER" "$syslog_identifier" "$debug"
-            replace_string_in_script "$service_path" "LOG_STD_OUT" "$log_std_out" "$debug"
-            replace_string_in_script "$service_path" "LOG_STD_ERR" "$log_std_out" "$debug"
 
             exec_command "Change ownership on systemd file" \
                 chown root:root "$service_path" \
@@ -6077,18 +6061,6 @@ manage_service() {
 
             exec_command "Change permissions on systemd file" \
                 chmod 644 "$service_path" \
-                "$debug" || retval=1
-
-            exec_command "Create log path" \
-                mkdir -p "$log_path" \
-                "$debug" || retval=1
-
-            exec_command "Change ownership on log path" \
-                chown root:www-data "$log_path" \
-                "$debug" || retval=1
-
-            exec_command "Change permissions on log path" \
-                chmod 755 "$log_path" \
                 "$debug" || retval=1
 
             exec_command "Enable systemd service" \
@@ -6101,14 +6073,6 @@ manage_service() {
 
             exec_command "Start systemd service" \
                 systemctl restart "$daemon_systemd_name" \
-                "$debug" || retval=1
-
-            exec_command "Change ownership on logs" \
-                chown root:www-data "$log_path/${syslog_identifier}_log" \
-                "$debug" || retval=1
-
-            exec_command "Change permissions on logs" \
-                chmod 644 "$log_path/${syslog_identifier}_log" \
                 "$debug" || retval=1
         fi
 
@@ -6127,10 +6091,6 @@ manage_service() {
             exec_command "Remove service file" rm -f "${service_path}" "$debug" || retval=1
         else
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
-        fi
-
-        if [[ -d "$log_path" ]]; then
-            exec_command "Remove log target" rm -fr "${log_path}" "$debug" || retval=1
         fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
@@ -6205,6 +6165,7 @@ manage_web() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Exec: sudo chown -R www-data:www-data $target_path"
             logD "Exec: sudo chmod -R 755 $target_path"
+            logD "Exec: sudo usermod -aG systemd-journal www-data"
         else
             # Set ownership for the entire directory
             exec_command "Set ownership" chown -R www-data:www-data "${target_path}" "$debug" || retval=1
@@ -6218,6 +6179,10 @@ manage_web() {
 
             exec_command "Set file permissions" \
                 find "$target_path" -type f -exec sudo chmod 644 {} + \
+                "$debug" || retval=1
+
+            exec_command "Set log permissions" \
+                sudo usermod -aG systemd-journal www-data \
                 "$debug" || retval=1
         fi
 

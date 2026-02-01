@@ -272,6 +272,8 @@ void transmitter_cb(WsprTransmitter::TransmissionCallbackEvent event,
                       s_elapsed,
                       " seconds.");
             do_config = false;
+            // Notify clients of cancellation.
+            send_ws_message("transmit", "canceled");
         }
         else
         {
@@ -307,6 +309,9 @@ void transmitter_cb(WsprTransmitter::TransmissionCallbackEvent event,
 
         // Turn off LED.
         ledControl.toggleGPIO(false);
+
+        // Notify the websocket clients
+        send_ws_message("transmit", "finished");
 
         // Set Config will determine if we have work to do (if not canceled).
         if (do_config)
