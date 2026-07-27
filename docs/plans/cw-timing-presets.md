@@ -571,6 +571,22 @@ During configuration population:
 
 Configuration loading must not overwrite custom timing merely because preset controls now exist.
 
+### Repairing an Invalid Inactive Spacing Triplet
+
+All seven timing values must be valid before autosave. If the inactive spacing triplet is invalid:
+
+1. Block autosave without normalizing the invalid values or changing modulation.
+2. Identify the invalid inactive group in the save-status feedback.
+3. Provide a `Review QRSS/FSKCW spacing` action when the conventional triplet is invalid, or a `Review DFCW spacing` action when the DFCW triplet is invalid.
+4. When invoked, reveal a temporary inactive-triplet repair section without changing `Operation.Mode`.
+5. Focus the first invalid field in the revealed group.
+6. Keep the unresolved invalid group revealed while saving remains blocked; do not hide it automatically or allow a close action to hide it.
+7. Revealing the repair section must not mutate timing values or trigger autosave.
+8. If the operator closes the repair section after its fields are valid, closing it must not mutate values, change `Operation.Mode`, or trigger autosave.
+9. After all seven timing values become valid, validate once and schedule one coherent autosave.
+
+Do not automatically switch modulation to expose an invalid inactive triplet. The repair section is a temporary editing surface for preserved inactive values, not a modulation change or a second persisted spacing mode.
+
 ### Disabled Fields and Serialization
 
 Disabled timing fields still represent active configuration values.
@@ -616,6 +632,19 @@ Each intentional selector transition should follow one coherent path:
 
 Configuration population must use a non-saving synchronization path.
 
+### Autosave Feedback for Inactive Timing Errors
+
+When autosave is blocked by an invalid inactive triplet, save-status feedback must:
+
+- state that settings were not saved;
+- name either QRSS/FSKCW spacing or DFCW spacing as the group requiring correction;
+- expose the applicable review action;
+- keep the action available until the group is valid;
+- avoid implying that the active modulation or its active spacing is invalid when it is not; and
+- transition through one validation and one coherent autosave after all seven timing values become valid.
+
+Opening or closing the repair section is navigation and disclosure only. Neither action may mark the configuration dirty, issue a PATCH, schedule autosave, change `Operation.Mode`, or alter the autosave baseline.
+
 ## Validation
 
 ### Shared Dot Duration
@@ -630,6 +659,8 @@ When a preset is selected, validate the canonical preset value even if the visib
 
 Do not rely solely on existing validation behavior that treats a disabled input as valid.
 
+Finite-number validation must be enforced symmetrically for Dot Seconds and all six gap values across every supported input path. A small parent-backend change is permitted when needed to make candidate validation, configuration parsing, command-line parsing, and web PATCH validation enforce the same finite-and-positive contract. This does not authorize a schema change or alteration of valid timing semantics.
+
 ### Gap Multipliers
 
 All six persisted gap multipliers must be:
@@ -638,7 +669,7 @@ All six persisted gap multipliers must be:
 - finite;
 - greater than zero.
 
-The visible validation state should emphasize the active triplet, but serialization must never replace an invalid inactive value silently.
+The visible validation state should emphasize the active triplet, but serialization must never replace an invalid inactive value silently. An invalid inactive triplet blocks autosave and uses the temporary repair workflow defined above.
 
 When Standard is selected:
 
@@ -683,6 +714,11 @@ The UI estimate and backend repeat-policy calculation must agree for equivalent 
 - Announce meaningful calculated-duration changes without excessive screen-reader chatter.
 - Use operator-facing terminology rather than internal variable or JSON names.
 - Preserve visible validation feedback for advanced editable fields.
+- Identify an invalid inactive spacing group in save-status feedback using its operator-facing name.
+- Make each inactive-group review action keyboard operable and expose a clear accessible name.
+- When a review action reveals the repair section, move focus to the first invalid field and announce the newly available editing context without excessive chatter.
+- Keep an unresolved invalid repair section exposed while autosave remains blocked.
+- Return focus predictably when a valid repair section is closed, without changing modulation or timing values.
 - Explain how to enable editing when a field is disabled.
 - Explain that QRSS speed names select a shared base duration without implying identical modulation construction.
 
@@ -979,7 +1015,18 @@ Verify:
 - disabled preset controls serialize canonical valid values;
 - invalid custom values are not silently relabeled as presets;
 - validation identifies the applicable active controls;
-- inactive values are not silently discarded.
+- inactive values are not silently discarded;
+- all seven timing values must be valid before autosave;
+- an invalid inactive triplet blocks autosave without normalization or a modulation change;
+- save-status feedback identifies the invalid inactive group;
+- an invalid conventional triplet provides `Review QRSS/FSKCW spacing`;
+- an invalid DFCW triplet provides `Review DFCW spacing`;
+- the review action reveals the applicable temporary repair section and focuses its first invalid field;
+- revealing the repair section does not change `Operation.Mode`, mutate values, mark the configuration dirty, or trigger autosave;
+- an unresolved invalid repair section cannot be hidden while autosave remains blocked;
+- closing a valid repair section does not change `Operation.Mode`, mutate values, or trigger autosave;
+- correcting the last invalid timing value validates once and schedules one coherent autosave; and
+- the repair workflow never automatically switches modulation.
 
 ### Backend Regression Tests
 
@@ -989,6 +1036,7 @@ Verify:
 - QRSS and FSKCW continue sharing conventional gap values;
 - DFCW continues using separate gap values;
 - all seven timing values load, validate, serialize, and round-trip;
+- Dot Seconds and all six gap values receive symmetrical finite-and-positive validation across supported input paths;
 - conventional timing produces expected runtime durations;
 - DFCW timing produces expected runtime durations;
 - message-duration calculations include mode-appropriate spacing;
@@ -1014,6 +1062,12 @@ Using Impeccable and the rendered application, verify:
 - calculated-duration updates;
 - message-duration and repeat validation;
 - autosave feedback;
+- blocked autosave with an invalid inactive QRSS/FSKCW triplet and its review action;
+- blocked autosave with an invalid inactive DFCW triplet and its review action;
+- temporary inactive-triplet repair disclosure, first-invalid-field focus, and predictable close focus;
+- unresolved invalid repair content remaining visible while saving is blocked;
+- repair disclosure opening and closing without modulation, value, dirty-state, or autosave side effects;
+- one coherent autosave after the final invalid timing value becomes valid;
 - reload restoration;
 - keyboard order and radio-group behavior;
 - focus behavior when entering Advanced;
@@ -1078,6 +1132,13 @@ The feature is acceptable when:
 - Timing controls are grouped coherently.
 - Existing custom configurations round-trip without loss.
 - All seven existing timing values remain preserved.
+- All seven timing values must be finite and positive before autosave.
+- An invalid inactive triplet blocks autosave without normalization or automatic modulation changes.
+- Save-status feedback names the invalid inactive spacing group and provides the applicable review action.
+- The review action reveals a temporary repair section and focuses the first invalid field without mutating configuration state or triggering autosave.
+- An unresolved invalid repair section remains visible while saving is blocked.
+- Correcting the final invalid timing value validates once and schedules one coherent autosave.
+- Dot Seconds and all six gap values receive symmetrical finite-number validation across supported input paths, with a small parent-backend consistency change allowed if required.
 - No backend configuration migration is required.
 - UI behavioral tests cover transitions, persistence, validation, and autosave.
 - Backend regression and repeat-policy tests pass.
@@ -1103,6 +1164,9 @@ This initial feature does not:
 - introduce persisted preset names;
 - introduce persisted Spacing-mode names;
 - restore hidden previous advanced drafts;
+- automatically switch modulation to repair an invalid inactive spacing triplet;
+- normalize, discard, or conceal an invalid inactive triplet;
+- treat opening or closing the temporary inactive-triplet repair section as a configuration change;
 - change the backend configuration schema;
 - alter RF frequency behavior;
 - alter Frequency Offset semantics;
