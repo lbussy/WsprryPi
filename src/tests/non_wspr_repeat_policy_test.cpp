@@ -275,7 +275,7 @@ int main()
 
         require(
             !set_config(true),
-            "scheduler must reject an overlong QRSS configuration before committing execution");
+            "scheduler runtime path must reject an overlong QRSS configuration before committing execution");
         require(
             current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
                 current_transmission_request_for_test().payload.frames.empty(),
@@ -302,35 +302,63 @@ int main()
         clear_dfcw_startup_request();
         prime_valid_runtime_identity_config();
         const ModeType original_mode = config.mode;
-        bool threw_patch_error = false;
+        const nlohmann::json original_json = jConfig;
 
-        try
+        for (const std::string mode : {"QRSS", "FSKCW", "DFCW"})
         {
-            patch_all_from_web({
-                {"Operation",
-                 {{"Mode", "QRSS"},
-                  {"Transmit", true}}},
-                {"CW",
-                 {{"Message", "E"},
-                  {"Base Frequency", 10140100.0},
-                  {"Dot Seconds", 61.0},
-                  {"Repeat Minutes", 1}}}});
-        }
-        catch (const std::exception &e)
-        {
-            threw_patch_error = true;
+            bool threw_patch_error = false;
+            try
+            {
+                patch_all_from_web({
+                    {"Operation",
+                     {{"Mode", mode},
+                      {"Transmit", false}}},
+                    {"CW",
+                     {{"Message", "E"},
+                      {"Base Frequency", 10140100.0},
+                      {"Shift Hz", 5.0},
+                      {"Dot Seconds", 61.0},
+                      {"Repeat Minutes", 1}}}});
+            }
+            catch (const ConfigValidationError &e)
+            {
+                threw_patch_error = true;
+                require(
+                    std::string(e.what()).find(
+                        "Configured " + mode + " message duration") !=
+                        std::string::npos,
+                    "web patch validation must expose the mode-specific repeat policy error");
+                require(
+                    e.details().value("policy", "") ==
+                            "cw_duration_repeat_interval" &&
+                        e.details().value("field", "") == "CW.Message" &&
+                        e.details().value("mode", "") == mode,
+                    "web patch duration rejection must provide structured field policy details");
+            }
+
             require(
-                std::string(e.what()).find("Configured QRSS message duration") !=
-                    std::string::npos,
-                "web patch validation must expose the repeat_every policy error");
+                threw_patch_error,
+                "web patch validation must reject an overlong " + mode +
+                    " configuration even while transmission is disabled");
+            require(
+                config.mode == original_mode && jConfig == original_json,
+                "web patch rejection must preserve the previous live and persisted candidates");
         }
 
+        patch_all_from_web({
+            {"Operation",
+             {{"Mode", "QRSS"},
+              {"Transmit", false}}},
+            {"CW",
+             {{"Message", "E"},
+              {"Base Frequency", 10140100.0},
+              {"Dot Seconds", 60.0},
+              {"Repeat Minutes", 1}}}});
         require(
-            threw_patch_error,
-            "web patch validation must reject an overlong QRSS configuration");
-        require(
-            config.mode == original_mode,
-            "web patch rejection must not mutate the live mode");
+            config.mode == ModeType::QRSS &&
+                config.schedule_repeat_minutes == 1 &&
+                config.modulation_dot_seconds == 60.0,
+            "web patch duration equal to repeat interval must be accepted");
     }
 
     clear_raspberry_pi_generation_override_for_test();

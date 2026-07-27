@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -2255,6 +2256,47 @@ void patch_all_from_web(const nlohmann::json &j)
         if (!validate_config_candidate(candidate_config, &error_message))
         {
             throw std::runtime_error(error_message);
+        }
+
+        if (candidate_config.mode == ModeType::QRSS ||
+            candidate_config.mode == ModeType::FSKCW ||
+            candidate_config.mode == ModeType::DFCW)
+        {
+            std::chrono::nanoseconds message_duration{};
+            if (!compute_non_wspr_message_duration(
+                    candidate_config,
+                    message_duration,
+                    &error_message))
+            {
+                throw std::runtime_error(error_message);
+            }
+
+            const auto repeat_interval =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::minutes(
+                        candidate_config.schedule_repeat_minutes));
+            if (message_duration > repeat_interval)
+            {
+                validate_non_wspr_repeat_interval_policy(
+                    candidate_config,
+                    &error_message);
+                throw ConfigValidationError(
+                    error_message,
+                    {
+                        {"policy", "cw_duration_repeat_interval"},
+                        {"field", "CW.Message"},
+                        {"mode",
+                         candidate_config.mode == ModeType::QRSS
+                             ? "QRSS"
+                             : (candidate_config.mode == ModeType::FSKCW
+                                    ? "FSKCW"
+                                    : "DFCW")},
+                        {"message_duration_seconds",
+                         std::chrono::duration<double>(message_duration).count()},
+                        {"repeat_interval_seconds",
+                         std::chrono::duration<double>(repeat_interval).count()},
+                    });
+            }
         }
 
         if (candidate_config.transmit &&
