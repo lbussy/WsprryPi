@@ -83,6 +83,18 @@ If the Impeccable skill is missing, unavailable, or cannot be used, stop before 
 
 Do not commit local skill/runtime artifacts such as `.agents/`, `.impeccable/`, `.claude/`, or `.codex/` unless the user explicitly requests them and they are intended repository content.
 
+## Operator Documentation Repository
+
+Operator documentation lives in the separate sibling Git repository `../Wsprry_Pi_Docs`; it is not a submodule of `WsprryPi`.
+
+- Inspect and follow `Wsprry_Pi_Docs/AGENTS.md` before working there.
+- Do not write to that repository without explicit cross-repository authorization.
+- Preserve its current branch and working tree, including all existing user changes.
+- Build, render, and verify documentation using that repository's documented workflow.
+- Use Impeccable to review affected rendered UI documentation. Replace screenshots only when they are materially inaccurate.
+- Keep application, `WsprryPi-UI` submodule, and `Wsprry_Pi_Docs` changes as separate review, commit, and push boundaries.
+- If cross-repository documentation changes are not authorized, review and report the required operator-documentation follow-up without modifying that repository.
+
 ## Submodule Policy
 
 WsprryPi uses Git submodules in two distinct roles:
