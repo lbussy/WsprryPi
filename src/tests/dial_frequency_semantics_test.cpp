@@ -13,6 +13,7 @@
 #include <getopt.h>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <limits.h>
 #include <map>
 #include <optional>
@@ -5359,7 +5360,7 @@ int main(int argc, char *argv[])
         std::string validation_error;
         require(
             !validate_config_candidate(invalid_gap_candidate, &validation_error) &&
-                validation_error == "CW gap settings must be greater than 0.",
+                validation_error == "CW gap settings must be finite and greater than 0.",
             "validation must reject non-positive CW gap settings");
 
         ArgParserConfig invalid_dfcw_gap_candidate;
@@ -5367,8 +5368,35 @@ int main(int argc, char *argv[])
         validation_error.clear();
         require(
             !validate_config_candidate(invalid_dfcw_gap_candidate, &validation_error) &&
-                validation_error == "DFCW gap settings must be greater than 0.",
+                validation_error == "DFCW gap settings must be finite and greater than 0.",
             "validation must reject non-positive DFCW gap settings");
+
+        ArgParserConfig non_finite_dot_candidate;
+        non_finite_dot_candidate.modulation_dot_seconds =
+            std::numeric_limits<double>::infinity();
+        validation_error.clear();
+        require(
+            !validate_config_candidate(non_finite_dot_candidate, &validation_error) &&
+                validation_error == "Modulation dot_seconds must be finite and greater than 0.",
+            "validation must reject non-finite shared CW dot timing");
+
+        ArgParserConfig non_finite_cw_gap_candidate;
+        non_finite_cw_gap_candidate.cw_inter_character_gap =
+            std::numeric_limits<double>::quiet_NaN();
+        validation_error.clear();
+        require(
+            !validate_config_candidate(non_finite_cw_gap_candidate, &validation_error) &&
+                validation_error == "CW gap settings must be finite and greater than 0.",
+            "validation must reject non-finite conventional CW gaps");
+
+        ArgParserConfig non_finite_dfcw_gap_candidate;
+        non_finite_dfcw_gap_candidate.dfcw_intra_element_gap =
+            std::numeric_limits<double>::infinity();
+        validation_error.clear();
+        require(
+            !validate_config_candidate(non_finite_dfcw_gap_candidate, &validation_error) &&
+                validation_error == "DFCW gap settings must be finite and greater than 0.",
+            "validation must reject non-finite DFCW gaps");
 
         ArgParserConfig invalid_shift_candidate;
         invalid_shift_candidate.mode = ModeType::FSKCW;

@@ -111,6 +111,8 @@ int main()
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.js");
     const std::string config_view_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/config.php");
+    const std::string cw_timing_source =
+        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/cw_timing_state.js");
     const std::string maintenance_script_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/maintenance.js");
     const std::string operation_script_source =
@@ -126,6 +128,18 @@ int main()
             config_view_source.find("Estimated Message Length: unavailable") != std::string::npos &&
             config_view_source.find("aria-live=\"polite\"") != std::string::npos,
         "configuration view must expose a live CW message length estimate near the CW message field");
+    require(
+        config_view_source.find("name=\"cw_speed\"") != std::string::npos &&
+            config_view_source.find("['QRSS1', 'QRSS3', 'QRSS6', 'Advanced']") != std::string::npos &&
+            config_view_source.find("name=\"cw_spacing\"") != std::string::npos &&
+            config_view_source.find("Review QRSS/FSKCW spacing") != std::string::npos &&
+            config_view_source.find("Review DFCW spacing") != std::string::npos &&
+            config_view_source.find("id=\"cw_frequency_controls\"") != std::string::npos &&
+            config_view_source.find("id=\"cw_schedule_controls\"") != std::string::npos &&
+            ui_source.find("detailActionControls") != std::string::npos &&
+            ui_source.find("actionButton.setAttribute(\"aria-controls\", detailActionControls)") != std::string::npos &&
+            ui_source.find("actionButton.setAttribute(\"aria-expanded\", \"false\")") != std::string::npos,
+        "CW Control must expose accessible speed, mode-aware spacing, inactive-repair, frequency, and schedule groups");
     require(
         ui_source.find("persist_transmit: persistTransmit") !=
                 std::string::npos,
@@ -221,16 +235,16 @@ int main()
             ui_source.find("function validatePositiveCwField(fieldId, errorMessage)") != std::string::npos &&
             ui_source.find("function parseFrequencyWithOptionalUnits(rawValue)") != std::string::npos &&
             ui_source.find("Enter CW base frequency as whole-number Hz or as a value with Hz, kHz, MHz, or GHz.") != std::string::npos &&
-            ui_source.find("Enter a positive CW dot length.") != std::string::npos &&
+            ui_source.find("Enter a positive finite CW base duration.") != std::string::npos &&
             ui_source.find("CW message is required.") != std::string::npos &&
             ui_source.find("Enter a whole-number CW frequency offset in Hz.") != std::string::npos &&
             ui_source.find("Enter a repeat interval of at least 1 minute.") != std::string::npos &&
-            ui_source.find("Enter a positive CW intra-element gap.") != std::string::npos &&
-            ui_source.find("Enter a positive CW inter-character gap.") != std::string::npos &&
-            ui_source.find("Enter a positive CW inter-word gap.") != std::string::npos &&
-            ui_source.find("Enter a positive DFCW intra-element gap.") != std::string::npos &&
-            ui_source.find("Enter a positive DFCW inter-character gap.") != std::string::npos &&
-            ui_source.find("Enter a positive DFCW inter-word gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite QRSS/FSKCW intra-element gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite QRSS/FSKCW inter-character gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite QRSS/FSKCW inter-word gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite DFCW intra-element gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite DFCW inter-character gap.") != std::string::npos &&
+            ui_source.find("Enter a positive finite DFCW inter-word gap.") != std::string::npos &&
             ui_source.find("const CW_MESSAGE_MORSE_TABLE = Object.freeze({") != std::string::npos &&
             ui_source.find("function estimateCwMessageSeconds(message, mode, timing)") != std::string::npos &&
             ui_source.find("function updateCwMessageLengthEstimate()") != std::string::npos &&
@@ -254,20 +268,20 @@ int main()
             ui_source.find("let cw_message = String($('#qrss_message').val() || \"\").trim();") != std::string::npos &&
             ui_source.find("\"Message\": cw_message,") != std::string::npos &&
             ui_source.find("let cw_base_frequency = parseFrequencyWithOptionalUnits($('#qrss_frequency').val());") != std::string::npos &&
-            ui_source.find("let cw_intra_element_gap = parseFloat($('#cw_intra_element_gap').val());") != std::string::npos &&
-            ui_source.find("let cw_inter_character_gap = parseFloat($('#cw_inter_character_gap').val());") != std::string::npos &&
-            ui_source.find("let cw_inter_word_gap = parseFloat($('#cw_inter_word_gap').val());") != std::string::npos &&
-            ui_source.find("let dfcw_intra_element_gap = parseFloat($('#dfcw_intra_element_gap').val());") != std::string::npos &&
-            ui_source.find("let dfcw_inter_character_gap = parseFloat($('#dfcw_inter_character_gap').val());") != std::string::npos &&
-            ui_source.find("let dfcw_inter_word_gap = parseFloat($('#dfcw_inter_word_gap').val());") != std::string::npos &&
+            ui_source.find("let cw_intra_element_gap = Number(String($('#cw_intra_element_gap').val()") != std::string::npos &&
+            ui_source.find("let dfcw_intra_element_gap = Number(String($('#dfcw_intra_element_gap').val()") != std::string::npos &&
             ui_source.find("\"Intra Element Gap\": cw_intra_element_gap") != std::string::npos &&
             ui_source.find("\"Inter Character Gap\": cw_inter_character_gap") != std::string::npos &&
             ui_source.find("\"Inter Word Gap\": cw_inter_word_gap") != std::string::npos &&
             ui_source.find("\"DFCW Intra Element Gap\": dfcw_intra_element_gap") != std::string::npos &&
             ui_source.find("\"DFCW Inter Character Gap\": dfcw_inter_character_gap") != std::string::npos &&
             ui_source.find("\"DFCW Inter Word Gap\": dfcw_inter_word_gap") != std::string::npos &&
-            ui_source.find("$(\".cw-shared-gap-control\").toggleClass(\"d-none\", dfcwSelected);") != std::string::npos &&
-            ui_source.find("$(\".dfcw-gap-control\").toggleClass(\"d-none\", !dfcwSelected);") != std::string::npos &&
+            ui_source.find("function syncCwTimingControls(options = {})") != std::string::npos &&
+            ui_source.find("function inactiveInvalidCwTimingGroup()") != std::string::npos &&
+            ui_source.find("detailActionLabel: `Review ${label}`") != std::string::npos &&
+            cw_timing_source.find("function inferSpeed(value)") != std::string::npos &&
+            cw_timing_source.find("function inferSpacing(group, triplet)") != std::string::npos &&
+            cw_timing_source.find("intraElement: 0.333333") != std::string::npos &&
             ui_source.find("let cw_base_frequency = parseFloat($('#qrss_frequency').val());") == std::string::npos &&
             ui_source.find("normalizedValue = value * 1e6;") != std::string::npos &&
             ui_source.find("normalizedValue = value * 1e3;") != std::string::npos &&
@@ -397,12 +411,12 @@ int main()
             site_source.find("let cw_base_frequency = getConfigFloatValue(cw, \"CW\", \"Base Frequency\", 3572000.0);") == std::string::npos,
         "UI config loader must default CW.Base Frequency to 14096900 Hz to match backend normalization");
     require(
-        site_source.find("let cw_intra_element_gap = getConfigFloatValue(cw, \"CW\", \"Intra Element Gap\", 1.0);") != std::string::npos &&
-            site_source.find("let cw_inter_character_gap = getConfigFloatValue(cw, \"CW\", \"Inter Character Gap\", 3.0);") != std::string::npos &&
-            site_source.find("let cw_inter_word_gap = getConfigFloatValue(cw, \"CW\", \"Inter Word Gap\", 7.0);") != std::string::npos &&
-            site_source.find("let dfcw_intra_element_gap = getConfigFloatValue(cw, \"CW\", \"DFCW Intra Element Gap\", 0.333333);") != std::string::npos &&
-            site_source.find("let dfcw_inter_character_gap = getConfigFloatValue(cw, \"CW\", \"DFCW Inter Character Gap\", 1.0);") != std::string::npos &&
-            site_source.find("let dfcw_inter_word_gap = getConfigFloatValue(cw, \"CW\", \"DFCW Inter Word Gap\", 3.0);") != std::string::npos &&
+        site_source.find("let cw_intra_element_gap = getConfigTimingValue(cw, \"CW\", \"Intra Element Gap\", 1.0);") != std::string::npos &&
+            site_source.find("let cw_inter_character_gap = getConfigTimingValue(cw, \"CW\", \"Inter Character Gap\", 3.0);") != std::string::npos &&
+            site_source.find("let cw_inter_word_gap = getConfigTimingValue(cw, \"CW\", \"Inter Word Gap\", 7.0);") != std::string::npos &&
+            site_source.find("let dfcw_intra_element_gap = getConfigTimingValue(cw, \"CW\", \"DFCW Intra Element Gap\", 0.333333);") != std::string::npos &&
+            site_source.find("let dfcw_inter_character_gap = getConfigTimingValue(cw, \"CW\", \"DFCW Inter Character Gap\", 1.0);") != std::string::npos &&
+            site_source.find("let dfcw_inter_word_gap = getConfigTimingValue(cw, \"CW\", \"DFCW Inter Word Gap\", 3.0);") != std::string::npos &&
             site_source.find("$(\"#cw_intra_element_gap\").val(cw_intra_element_gap).trigger(\"change\");") != std::string::npos &&
             site_source.find("$(\"#cw_inter_character_gap\").val(cw_inter_character_gap).trigger(\"change\");") != std::string::npos &&
             site_source.find("$(\"#cw_inter_word_gap\").val(cw_inter_word_gap).trigger(\"change\");") != std::string::npos &&

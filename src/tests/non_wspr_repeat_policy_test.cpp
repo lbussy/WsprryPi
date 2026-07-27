@@ -1,6 +1,7 @@
 #include "arg_parser.hpp"
 #include "config_handler.hpp"
 #include "scheduling.hpp"
+#include "version.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -116,6 +117,7 @@ int main()
 {
     set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
     set_si5351_detection_override_for_test(true);
+    set_raspberry_pi_generation_override_for_test(4);
 
     {
         std::chrono::nanoseconds qrss_duration{};
@@ -331,6 +333,7 @@ int main()
             "web patch rejection must not mutate the live mode");
     }
 
+    clear_raspberry_pi_generation_override_for_test();
     std::cout << "Non-WSPR repeat policy regression tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

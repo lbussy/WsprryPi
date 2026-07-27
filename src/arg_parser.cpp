@@ -1424,11 +1424,12 @@ bool validate_config_candidate(
          !candidate.loop_tx) ||
         candidate.transmit;
 
-    if (candidate.modulation_dot_seconds <= 0.0)
+    if (!std::isfinite(candidate.modulation_dot_seconds) ||
+        candidate.modulation_dot_seconds <= 0.0)
     {
         if (error_message != nullptr)
         {
-            *error_message = "Modulation dot_seconds must be greater than 0.";
+            *error_message = "Modulation dot_seconds must be finite and greater than 0.";
         }
 
         return false;
@@ -1468,13 +1469,16 @@ bool validate_config_candidate(
         return false;
     }
 
-    if (candidate.cw_intra_element_gap <= 0.0 ||
+    if (!std::isfinite(candidate.cw_intra_element_gap) ||
+        !std::isfinite(candidate.cw_inter_character_gap) ||
+        !std::isfinite(candidate.cw_inter_word_gap) ||
+        candidate.cw_intra_element_gap <= 0.0 ||
         candidate.cw_inter_character_gap <= 0.0 ||
         candidate.cw_inter_word_gap <= 0.0)
     {
         if (error_message != nullptr)
         {
-            *error_message = "CW gap settings must be greater than 0.";
+            *error_message = "CW gap settings must be finite and greater than 0.";
         }
 
         return false;
@@ -1489,7 +1493,7 @@ bool validate_config_candidate(
     {
         if (error_message != nullptr)
         {
-            *error_message = "DFCW gap settings must be greater than 0.";
+            *error_message = "DFCW gap settings must be finite and greater than 0.";
         }
 
         return false;
