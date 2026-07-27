@@ -6,21 +6,66 @@ Repositories affected: `WsprryPi` and `WsprryPi-UI`
 
 ## Purpose
 
-Add clear QRSS1, QRSS3, and QRSS6 timing presets to the WsprryPi web interface while preserving support for custom CW timing.
+Add QRSS1, QRSS3, and QRSS6 speed presets to the WsprryPi web interface while preserving custom CW timing and the existing mode-specific behavior of QRSS, FSKCW, and DFCW.
+
+The speed presets define a shared base timing unit, \(T\):
+
+| Speed preset | Base timing unit |
+|---|---:|
+| QRSS1 | \(T = 1\) second |
+| QRSS3 | \(T = 3\) seconds |
+| QRSS6 | \(T = 6\) seconds |
+| Advanced | Operator-defined positive \(T\) |
+
+The presets apply to QRSS, FSKCW, and DFCW. They do not make those modes instantiate dots, dashes, tones, or gaps identically.
 
 The design must:
 
-- Default new CW configurations to QRSS3.
+- Default new or incomplete CW timing to QRSS3.
+- Apply the selected base timing unit consistently across QRSS, FSKCW, and DFCW.
+- Preserve each modulation’s existing element-construction rules.
+- Preserve the existing QRSS/FSKCW and DFCW spacing contracts.
 - Make standard timing easy to select and understand.
 - Preserve existing custom timing configurations.
 - Keep advanced controls available without presenting every operator with editable low-level timing fields.
 - Preserve the existing backend configuration format.
-- Apply consistently to QRSS, FSKCW, and DFCW where they share CW timing.
+- Preserve all existing timing keys, including inactive mode-specific values.
 - Group related timing controls together in the UI.
+- Avoid changing RF, scheduling, or transmitter behavior outside the approved timing-preset presentation.
+
+## Governing Timing Model
+
+The implementation must keep two concepts distinct:
+
+1. **Shared speed contract**
+   - QRSS1, QRSS3, QRSS6, and Advanced select the shared base duration \(T\).
+   - The existing `CW.Dot Seconds` value stores \(T\).
+   - QRSS, FSKCW, and DFCW all consume this shared value.
+
+2. **Mode-specific signal construction**
+   - Each modulation constructs its transmitted elements according to its existing runtime behavior.
+   - Selecting a speed preset must not replace those mode-specific rules with one universal Morse timing model.
+
+### Mode-Specific Construction
+
+| Modulation | Dot construction | Dash construction | Standard spacing |
+|---|---|---|---|
+| QRSS | Keyed element lasting \(T\) | Keyed element lasting \(3T\) | Conventional `1/3/7` multipliers |
+| FSKCW | Mode-specific tone element lasting \(T\) | Mode-specific tone element lasting \(3T\) | Conventional `1/3/7` multipliers |
+| DFCW | Tone-distinguished element lasting \(T\) | Different-tone element also lasting \(T\) | DFCW-specific `0.333333/1/3` multipliers |
+
+The table describes the timing contract that the preset UI must preserve. The existing scheduler and modulation implementations remain authoritative for the exact construction and placement of transmitted elements.
+
+The preset feature must not:
+
+- make a DFCW dash last \(3T\);
+- apply conventional `1/3/7` spacing to DFCW;
+- replace DFCW’s frequency-distinguished elements with ordinary keyed Morse elements;
+- create separate dot-duration values for the three modulation modes.
 
 ## Current Behavior
 
-The CW Control panel currently presents these settings as independent editable fields:
+The CW Control panel currently presents settings including:
 
 - CW modulation mode:
   - QRSS
@@ -32,45 +77,70 @@ The CW Control panel currently presents these settings as independent editable f
 - Frequency calibration
 - Start minute
 - Repeat interval
-- Intra-Element Gap
-- Inter-Character Gap
-- Inter-Word Gap
+- QRSS/FSKCW gap multipliers
+- DFCW-specific gap multipliers
 
 The backend already uses:
 
-- `CW.Dot Seconds` as the shared dot duration for QRSS, FSKCW, and DFCW.
-- `CW.Intra Element Gap` as a dot-length multiplier.
-- `CW.Inter Character Gap` as a dot-length multiplier.
-- `CW.Inter Word Gap` as a dot-length multiplier.
+- one shared Dot Seconds value for QRSS, FSKCW, and DFCW;
+- one spacing triplet shared by QRSS and FSKCW;
+- a separate spacing triplet for DFCW;
+- separate runtime construction paths for conventional CW timing and DFCW timing.
 
 Actual gap durations are calculated from:
 
 ```text
-gap duration = dot duration × gap multiplier
+gap duration = shared base duration T × active gap multiplier
 ```
 
-The current default timing is:
+### Current Shared Default
 
 ```text
-Dot Seconds:          3
+Dot Seconds: 3
+```
+
+This corresponds to QRSS3.
+
+### Current QRSS/FSKCW Standard Spacing
+
+```text
 Intra Element Gap:    1
 Inter Character Gap:  3
 Inter Word Gap:       7
 ```
 
-This corresponds to QRSS3 with standard Morse spacing.
+### Current DFCW Standard Spacing
+
+```text
+DFCW Intra Element Gap:    0.333333
+DFCW Inter Character Gap:  1
+DFCW Inter Word Gap:       3
+```
+
+These triplets are intentionally different and must remain separately persisted.
 
 ## Proposed Operator Model
 
 ### Modulation Mode
 
-Continue to provide the existing modulation choices:
+Continue providing the existing modulation choices:
 
 - QRSS
 - FSKCW
 - DFCW
 
-These choices control how the signal is generated. They are separate from the speed preset.
+The modulation selection controls how the signal is generated. It is separate from the Speed preset.
+
+Changing modulation must:
+
+- preserve the shared Dot Seconds value;
+- preserve both stored spacing triplets;
+- display the spacing triplet applicable to the selected modulation;
+- infer Standard or Advanced spacing from the active triplet;
+- recalculate the active mode’s displayed durations;
+- not normalize or overwrite either triplet merely because modulation changed.
+
+QRSS and FSKCW use the same conventional spacing triplet. DFCW uses its separate DFCW spacing triplet.
 
 ### Speed Preset
 
@@ -81,69 +151,104 @@ Add a Speed control with four choices:
 - QRSS6
 - Advanced
 
-The choices map to dot duration as follows:
+The preset names use established QRSS speed nomenclature, but the selected base duration applies to QRSS, FSKCW, and DFCW.
 
-| Speed | Dot duration |
-|---|---:|
-| QRSS1 | 1 second |
-| QRSS3 | 3 seconds |
-| QRSS6 | 6 seconds |
-| Advanced | Operator-defined positive duration |
+Recommended supporting text:
 
-QRSS3 is the default when a new or incomplete CW configuration requires a default.
+```text
+Select the shared base duration used by QRSS, FSKCW, and DFCW.
+Each modulation retains its own dot, dash, tone, and spacing behavior.
+```
+
+QRSS3 is the default when no valid existing shared dot duration is available.
 
 ### Dot Duration
 
-Keep the Dot Duration field visible for all speed selections.
+Keep Dot Duration visible for every Speed selection.
 
 For QRSS1, QRSS3, and QRSS6:
 
-- Populate the corresponding duration.
+- Populate Dot Duration with `1`, `3`, or `6`.
 - Disable manual editing.
-- Display the selected value clearly.
-- Explain that the duration comes from the selected speed preset.
+- Display the effective value clearly.
+- Explain that the selected Speed preset determines the value.
 
 For Advanced:
 
 - Enable manual editing.
-- Preserve the current valid duration when switching into Advanced.
+- Preserve the currently effective valid Dot Duration when entering Advanced.
 - Require a finite value greater than zero.
-- Continue using the backend’s existing validation limits and semantics.
+- Continue using existing backend validation limits and semantics.
 
-Selecting Advanced must not blank or arbitrarily reset the current duration.
+Selecting Advanced must not blank or arbitrarily replace the current duration.
+
+The initial implementation does not retain hidden previous advanced drafts. For example:
+
+```text
+Advanced 2.5 → QRSS3 → Advanced
+```
+
+results in an editable value of `3`, not restoration of `2.5`.
+
+This is intentional. Hidden draft restoration is outside the initial scope.
 
 ### Spacing Mode
 
-Add a separate Spacing control with two choices:
+Add one visible Spacing control with two choices:
 
 - Standard
 - Advanced
 
-This control is independent of the Speed preset. An operator may therefore use:
+The visible control operates on the spacing triplet applicable to the selected modulation.
 
-- QRSS1 with standard spacing
-- QRSS3 with advanced spacing
-- QRSS6 with standard spacing
-- An advanced dot duration with either standard or advanced spacing
+| Selected modulation | Active spacing triplet |
+|---|---|
+| QRSS | Shared QRSS/FSKCW triplet |
+| FSKCW | Shared QRSS/FSKCW triplet |
+| DFCW | DFCW-specific triplet |
+
+Spacing is independent of Speed. Examples include:
+
+- QRSS1 with Standard QRSS spacing
+- FSKCW3 with Advanced conventional spacing
+- DFCW6 with Standard DFCW spacing
+- an Advanced base duration with either Standard or Advanced mode-specific spacing
 
 ### Standard Spacing
 
-Standard spacing uses these multipliers:
+Standard spacing is mode-aware.
+
+#### QRSS and FSKCW
 
 | Gap | Multiplier |
 |---|---:|
-| Intra-element | 1× dot |
-| Inter-character | 3× dot |
-| Inter-word | 7× dot |
+| Intra-element | `1` |
+| Inter-character | `3` |
+| Inter-word | `7` |
 
-When Standard spacing is selected:
+#### DFCW
 
-- Populate the gap fields with `1`, `3`, and `7`.
-- Disable manual editing of the three multiplier fields.
+| Gap | Multiplier |
+|---|---:|
+| Intra-element | `0.333333` |
+| Inter-character | `1` |
+| Inter-word | `3` |
+
+When Standard is selected:
+
+- Populate only the active triplet with its canonical standard values.
+- Disable manual editing of the visible active triplet.
 - Continue displaying the fields so the operator can see the effective rules.
-- Display the calculated duration for each gap.
+- Display the calculated duration for each visible gap.
+- Preserve the inactive triplet unchanged.
+- Validate the resulting active values.
+- Schedule one coherent autosave after state is complete.
+
+Selecting Standard is an intentional configuration change. It replaces custom values only in the active triplet.
 
 Examples:
+
+#### QRSS/FSKCW Standard Spacing
 
 | Speed | Intra-element | Inter-character | Inter-word |
 |---|---:|---:|---:|
@@ -151,21 +256,44 @@ Examples:
 | QRSS3 | 3 seconds | 9 seconds | 21 seconds |
 | QRSS6 | 6 seconds | 18 seconds | 42 seconds |
 
+#### DFCW Standard Spacing
+
+The persisted DFCW intra-element multiplier is the canonical decimal `0.333333`, not an exact mathematical one-third.
+
+| Speed | Intra-element | Inter-character | Inter-word |
+|---|---:|---:|---:|
+| QRSS1 | 0.333333 second | 1 second | 3 seconds |
+| QRSS3 | 0.999999 second | 3 seconds | 9 seconds |
+| QRSS6 | 1.999998 seconds | 6 seconds | 18 seconds |
+
+The UI may format calculated durations for readability, but presentation rounding must not change persisted values or preset inference.
+
+If rounded values are shown, supporting text or accessible detail must avoid implying that the canonical persisted multiplier has changed.
+
 ### Advanced Spacing
 
 When Advanced spacing is selected:
 
-- Enable the three existing gap multiplier fields.
+- Enable the three fields in the active triplet.
 - Preserve their current valid values.
 - Require every multiplier to be finite and greater than zero.
-- Display the calculated duration beside or beneath each field.
-- Recalculate the displayed duration whenever the dot duration or a multiplier changes.
+- Display calculated durations beside or beneath the active fields.
+- Recalculate displayed durations whenever Dot Duration or an active multiplier changes.
+- Preserve the inactive triplet unchanged.
 
 The persisted values remain multipliers, not seconds.
 
+The initial implementation does not restore hidden previous advanced spacing drafts. For example:
+
+```text
+Advanced spacing → Standard → Advanced spacing
+```
+
+retains the newly applied standard values and makes them editable. It does not restore the earlier custom triplet.
+
 ## Proposed UI Organization
 
-Place all related timing controls together near the top of the CW Control panel.
+Place the related timing controls together near the top of CW Control.
 
 Recommended organization:
 
@@ -180,19 +308,24 @@ CW Control
 
   Dot duration:
   [ 3 seconds — disabled ]
-  Determined by the QRSS3 preset.
+  QRSS3 provides a shared base duration of three seconds.
 
   Spacing:
   [ Standard ] [ Advanced ]
 
   Intra-element:
-  [ 1 — disabled ] × dot = 3 seconds
+  [ active multiplier — disabled ] × base duration = calculated duration
 
   Inter-character:
-  [ 3 — disabled ] × dot = 9 seconds
+  [ active multiplier — disabled ] × base duration = calculated duration
 
   Inter-word:
-  [ 7 — disabled ] × dot = 21 seconds
+  [ active multiplier — disabled ] × base duration = calculated duration
+
+  Mode-specific explanation:
+  QRSS and FSKCW use conventional 1×/3×/7× spacing.
+  DFCW uses its existing 0.333333×/1×/3× spacing and
+  frequency-distinguished equal-duration elements.
 
   Frequency and Schedule
   Base frequency | Frequency offset
@@ -200,23 +333,34 @@ CW Control
   Start minute | Repeat interval
 ```
 
-The exact responsive arrangement may vary, but the semantic grouping must remain clear.
+Only the spacing triplet applicable to the selected modulation should be presented as active.
+
+The UI may:
+
+- reuse the existing separate QRSS/FSKCW and DFCW controls;
+- show and hide the applicable triplet;
+- or bind one visible presentation to separate underlying values.
+
+Regardless of implementation, both persisted triplets must survive loading, editing, modulation changes, and saving.
+
+### Narrow-Screen Order
 
 On narrow screens, controls should stack in this order:
 
 1. Modulation mode
 2. Speed preset
-3. Dot duration
+3. Dot Duration
 4. Spacing mode
-5. Gap controls
-6. Frequency controls
-7. Scheduling controls
+5. Active gap controls
+6. Mode-specific timing explanation
+7. Frequency controls
+8. Scheduling controls
 
 ## Configuration Compatibility
 
-### Existing Keys
+### Existing Timing Keys
 
-Continue using the existing configuration keys:
+Continue preserving all existing timing values:
 
 ```json
 {
@@ -224,10 +368,21 @@ Continue using the existing configuration keys:
     "Dot Seconds": 3.0,
     "Intra Element Gap": 1.0,
     "Inter Character Gap": 3.0,
-    "Inter Word Gap": 7.0
+    "Inter Word Gap": 7.0,
+    "DFCW Intra Element Gap": 0.333333,
+    "DFCW Inter Character Gap": 1.0,
+    "DFCW Inter Word Gap": 3.0
   }
 }
 ```
+
+Confirm the exact spelling and capitalization against the current configuration contract before implementation.
+
+The timing inventory consists of:
+
+- one shared Dot Seconds value;
+- three QRSS/FSKCW spacing values;
+- three DFCW spacing values.
 
 Do not require new backend configuration keys for the initial implementation.
 
@@ -239,46 +394,95 @@ In particular, do not initially persist:
 - `Spacing Mode`
 - `Advanced Spacing`
 
-These are UI interpretations of the effective timing values.
+These are UI interpretations of effective persisted values.
 
-### Inferring the Speed Selection
+### Speed Inference
 
 When loading configuration:
 
-| Persisted Dot Seconds | Selected speed |
+| Persisted Dot Seconds | Selected Speed |
 |---:|---|
 | Exactly `1` | QRSS1 |
 | Exactly `3` | QRSS3 |
 | Exactly `6` | QRSS6 |
 | Any other valid positive value | Advanced |
 
-Use numeric comparison appropriate for parsed configuration values. Do not use formatted display strings to infer the selection.
+Use strict numeric equality after finite-number parsing.
 
-### Inferring the Spacing Selection
+Preset values are exactly representable and are written directly by the UI. Do not use fuzzy comparison that would classify a deliberate custom value such as `3.0000001` as QRSS3.
 
-When loading configuration:
+### Mode-Aware Spacing Inference
 
-| Persisted multipliers | Selected spacing |
+Infer Spacing independently from the active triplet.
+
+#### QRSS or FSKCW Selected
+
+| Active persisted multipliers | Selected Spacing |
 |---|---|
 | Exactly `1`, `3`, and `7` | Standard |
 | Any other valid positive combination | Advanced |
 
-A custom configuration must remain custom after loading and saving.
+#### DFCW Selected
+
+| Active persisted multipliers | Selected Spacing |
+|---|---|
+| Exactly `0.333333`, `1`, and `3` | Standard |
+| Any other valid positive combination | Advanced |
+
+Use the exact canonical persisted DFCW constant `0.333333`. Do not infer Standard by comparing against an independently calculated one-third value.
+
+The inactive triplet does not determine the visible Spacing selection.
+
+Examples:
+
+- QRSS selected, conventional triplet standard, DFCW triplet custom:
+  - visible Spacing is Standard;
+  - DFCW custom values remain untouched.
+- DFCW selected, DFCW triplet custom, conventional triplet standard:
+  - visible Spacing is Advanced;
+  - conventional standard values remain untouched.
+- Switching between those modes changes the visible inference without modifying either triplet.
 
 ### Defaults
 
-When no valid CW timing is available, use:
+When timing keys are absent, use:
 
 ```text
-Speed:               QRSS3
-Dot Seconds:         3
-Spacing:             Standard
-Intra Element Gap:   1
-Inter Character Gap: 3
-Inter Word Gap:      7
+Speed:                         QRSS3
+Dot Seconds:                   3
+
+QRSS/FSKCW spacing:
+  Intra Element Gap:           1
+  Inter Character Gap:         3
+  Inter Word Gap:              7
+
+DFCW spacing:
+  DFCW Intra Element Gap:      0.333333
+  DFCW Inter Character Gap:    1
+  DFCW Inter Word Gap:         3
 ```
 
-An existing valid configuration always takes precedence over these defaults.
+An existing valid configuration takes precedence over these defaults.
+
+### Missing, Invalid, and Malformed Values
+
+Treat these cases separately:
+
+1. **Absent key**
+   - Apply the established default for that key.
+   - Do not disturb other present valid values.
+
+2. **Present numeric but non-finite or non-positive value**
+   - Preserve visible evidence of invalid input when the current data path can represent it.
+   - Select Advanced for the affected active timing group.
+   - Present validation requiring correction.
+   - Do not silently normalize corruption into a valid preset unless existing backend behavior prevents the value from reaching the UI.
+
+3. **Wrong JSON type or structurally malformed configuration**
+   - Preserve the backend’s configuration parsing error behavior.
+   - Do not conceal a parsing failure by treating it as an absent value.
+
+Implementation must inspect the existing loader and backend parser before finalizing invalid-value behavior. It must not weaken existing configuration validation.
 
 ## State-Transition Rules
 
@@ -286,54 +490,86 @@ An existing valid configuration always takes precedence over these defaults.
 
 When an operator selects a preset:
 
-1. Set Dot Seconds to the preset value.
+1. Set shared Dot Seconds to `1`, `3`, or `6`.
 2. Disable manual editing of Dot Duration.
-3. Recalculate all displayed gap durations.
-4. Validate the effective configuration.
-5. Use the existing autosave workflow.
+3. Preserve both spacing triplets.
+4. Recalculate displayed durations for the active modulation.
+5. Revalidate the effective active timing and message duration.
+6. Schedule one autosave after state is coherent.
+
+The selected Speed persists across modulation changes because Dot Seconds is shared.
 
 ### Selecting Advanced Speed
 
 When an operator selects Advanced:
 
-1. Retain the current valid Dot Seconds value.
-2. Enable the Dot Duration field.
-3. Focus behavior should not unexpectedly select, erase, or replace the value.
-4. Revalidate changes through the existing live-validation workflow.
+1. Retain the currently effective valid Dot Seconds.
+2. Enable Dot Duration.
+3. Do not erase, replace, or unexpectedly select the value.
+4. Preserve both spacing triplets.
+5. Revalidate through the existing live-validation workflow.
+6. Schedule autosave only when the effective value actually changes.
 
 ### Selecting Standard Spacing
 
 When an operator selects Standard:
 
-1. Set the multipliers to `1`, `3`, and `7`.
-2. Disable manual editing of the multiplier fields.
-3. Recalculate displayed gap durations.
-4. Validate the effective configuration.
-5. Use the existing autosave workflow.
-
-Switching from Advanced spacing to Standard is an intentional configuration change. It replaces custom multipliers with `1`, `3`, and `7`.
+1. Determine the active triplet from the selected modulation.
+2. For QRSS or FSKCW, set only the shared conventional triplet to `1/3/7`.
+3. For DFCW, set only the DFCW triplet to `0.333333/1/3`.
+4. Preserve the inactive triplet unchanged.
+5. Disable manual editing of the active fields.
+6. Recalculate displayed active gap durations.
+7. Revalidate the effective active timing and message duration.
+8. Schedule one autosave after state is coherent.
 
 ### Selecting Advanced Spacing
 
 When an operator selects Advanced spacing:
 
-1. Retain the current valid multipliers.
-2. Enable the three multiplier fields.
-3. Continue showing calculated durations.
-4. Revalidate changes through the existing live-validation workflow.
+1. Determine the active triplet from the selected modulation.
+2. Retain the active triplet’s current values.
+3. Enable the active fields.
+4. Preserve the inactive triplet unchanged.
+5. Continue showing calculated active durations.
+6. Revalidate through the existing live-validation workflow.
+7. Do not autosave merely because controls became editable if values did not change.
+
+### Changing Modulation
+
+When changing between QRSS, FSKCW, and DFCW:
+
+1. Preserve shared Dot Seconds.
+2. Preserve the QRSS/FSKCW spacing triplet.
+3. Preserve the DFCW spacing triplet.
+4. Select the newly active triplet.
+5. Infer Standard or Advanced from that triplet.
+6. Update field visibility and enablement.
+7. Update mode-specific explanatory text.
+8. Recalculate active durations and message duration.
+9. Do not normalize the newly active triplet.
+10. Do not overwrite the newly inactive triplet.
+11. Follow the existing guarded mode-change and autosave policy.
+
+A modulation change must not be treated as a request to apply Standard spacing.
 
 ### Loading Existing Configuration
 
 During configuration population:
 
-1. Load the four persisted timing values.
-2. Infer Speed from Dot Seconds.
-3. Infer Spacing from the three multipliers.
-4. Set enabled and disabled states without causing an unintended autosave.
-5. Calculate the displayed effective durations.
-6. Synchronize the autosave baseline only after population is complete.
+1. Load shared Dot Seconds.
+2. Load the complete QRSS/FSKCW spacing triplet.
+3. Load the complete DFCW spacing triplet.
+4. Infer Speed from Dot Seconds.
+5. Determine the active triplet from the selected modulation.
+6. Infer visible Spacing from the active triplet.
+7. Set visible values, help text, and enabled states.
+8. Calculate active gap durations and message duration.
+9. Preserve inactive values in UI state.
+10. Avoid triggering autosave or normalization.
+11. Synchronize the autosave baseline only after population is complete.
 
-Configuration loading must not overwrite custom timing merely because a preset selector now exists.
+Configuration loading must not overwrite custom timing merely because preset controls now exist.
 
 ### Disabled Fields and Serialization
 
@@ -341,62 +577,119 @@ Disabled timing fields still represent active configuration values.
 
 Before collecting the configuration payload:
 
-- Read the effective timing state rather than relying on browser form submission semantics.
-- Ensure Dot Seconds and all three gap multipliers remain present.
-- Serialize the same four existing `CW` keys.
-- Never treat a disabled control as an absent or optional setting.
+- Read canonical effective timing state rather than relying on native browser form-submission semantics.
+- Include shared Dot Seconds.
+- Include all three QRSS/FSKCW gap multipliers.
+- Include all three DFCW gap multipliers.
+- Preserve inactive custom values.
+- Never treat a disabled or hidden timing control as absent.
+- Never derive the inactive triplet from the active triplet.
+- Serialize all existing timing keys with their existing numeric semantics.
+
+## Central Timing-State Requirement
+
+Do not scatter preset, enablement, validation, calculation, and autosave behavior among unrelated event handlers.
+
+Implement testable timing-state functions that can:
+
+- parse Dot Seconds;
+- infer Speed;
+- identify the active spacing triplet;
+- infer mode-aware Spacing;
+- apply a Speed transition;
+- apply a Standard or Advanced spacing transition;
+- preserve the inactive triplet;
+- compute calculated gap durations;
+- expose canonical effective values for serialization;
+- synchronize controls without autosaving during population.
+
+Keep pure timing decisions independent of DOM mutation and autosave where practical.
+
+Each intentional selector transition should follow one coherent path:
+
+1. update canonical values;
+2. update visible controls;
+3. update enabled states and help text;
+4. recalculate durations;
+5. validate once;
+6. schedule no more than one autosave.
+
+Configuration population must use a non-saving synchronization path.
 
 ## Validation
 
-### Dot Duration
+### Shared Dot Duration
 
 Dot Duration must be:
 
-- numeric
-- finite
-- greater than zero
+- numeric;
+- finite;
+- greater than zero.
 
-When a preset is selected, validation applies to the effective preset value even though the field is disabled.
+When a preset is selected, validate the canonical preset value even if the visible input is disabled.
+
+Do not rely solely on existing validation behavior that treats a disabled input as valid.
 
 ### Gap Multipliers
 
-Every multiplier must be:
+All six persisted gap multipliers must be:
 
-- numeric
-- finite
-- greater than zero
+- numeric;
+- finite;
+- greater than zero.
 
-When Standard spacing is selected, validation applies to the effective `1`, `3`, and `7` values.
+The visible validation state should emphasize the active triplet, but serialization must never replace an invalid inactive value silently.
 
-### Repeat Interval
+When Standard is selected:
 
-Existing message-duration and repeat-interval validation remains applicable.
+- QRSS/FSKCW canonical values are `1/3/7`;
+- DFCW canonical values are `0.333333/1/3`.
 
-The implementation must continue detecting configurations in which the calculated CW message duration exceeds the configured repeat interval.
+### Message Duration and Repeat Interval
+
+Existing mode-specific message-duration and repeat-interval validation remains applicable.
+
+The implementation must continue detecting configurations in which the calculated message duration exceeds the configured repeat interval.
+
+Duration calculation must use:
+
+- shared Dot Seconds;
+- the selected modulation’s element-construction rules;
+- the selected modulation’s active spacing triplet;
+- the actual message.
 
 This is especially important for:
 
-- QRSS6
-- long messages
-- large advanced gap multipliers
-- custom dot durations
+- QRSS6;
+- FSKCW6;
+- DFCW6;
+- long messages;
+- large advanced gap multipliers;
+- custom Dot Duration;
+- modulation changes that activate a different spacing triplet.
+
+The UI estimate and backend repeat-policy calculation must agree for equivalent inputs.
 
 ## Accessibility and Interaction Requirements
 
-- Use a fieldset and legend or an equivalent accessible grouping for Speed.
+- Use a fieldset and legend or equivalent accessible grouping for Speed.
 - Use a separate accessible group for Spacing.
-- Do not communicate disabled or advanced state through color alone.
-- Associate all explanatory text and calculated-duration output with the applicable control.
+- Associate Spacing with the selected modulation’s timing context.
+- Do not communicate disabled, active, standard, or advanced state through color alone.
+- Associate help and calculated-duration output with applicable controls.
 - Keep keyboard operation complete and predictable.
-- Ensure disabled values remain readable in both light and dark themes.
-- Announce calculated-duration changes appropriately without creating excessive screen-reader chatter.
-- Use operator-facing names and avoid exposing internal variable or JSON key names as primary labels.
+- Preserve visible focus indicators.
+- Ensure disabled values remain legible in light and dark themes.
+- Announce meaningful calculated-duration changes without excessive screen-reader chatter.
+- Use operator-facing terminology rather than internal variable or JSON names.
 - Preserve visible validation feedback for advanced editable fields.
 - Explain how to enable editing when a field is disabled.
+- Explain that QRSS speed names select a shared base duration without implying identical modulation construction.
 
-Suggested operator-facing labels:
+Suggested labels:
 
 ```text
+Modulation
 Speed
 Dot duration
 Spacing
@@ -408,80 +701,99 @@ Inter-word gap
 Suggested supporting text:
 
 ```text
-QRSS3 uses a three-second dot duration.
+QRSS3 selects a shared base duration of three seconds.
 
-Standard spacing uses 1×, 3×, and 7× the selected dot duration.
+QRSS and FSKCW use conventional dot, dash, and spacing timing.
 
-Select Advanced to enter a custom dot duration.
+DFCW uses equal-duration, frequency-distinguished elements and
+DFCW-specific spacing.
 
-Select Advanced spacing to edit the gap multipliers.
+Select Advanced to enter a custom base duration.
+
+Select Advanced spacing to edit the active mode’s gap multipliers.
 ```
 
 ## Impeccable Requirement
 
-This is UI work and must use the Impeccable skill as required by the repository’s `AGENTS.md`.
+This is UI work and must use the Impeccable skill as required by `AGENTS.md`.
 
 Before implementation:
 
-1. Confirm that the Impeccable skill is installed and available.
-2. Read and follow its instructions.
-3. Inspect the existing WsprryPi design language and responsive behavior.
+1. Confirm that Impeccable is installed and usable.
+2. Read its instructions completely.
+3. Load the required `WsprryPi-UI` product and design context.
+4. Use the product register appropriate to the technical appliance interface.
+5. Inspect existing desktop, mobile, light-theme, and dark-theme behavior.
 
 During and after implementation:
 
-1. Use Impeccable to review the proposed grouping and hierarchy.
-2. Render the actual Setup page.
-3. Exercise QRSS1, QRSS3, QRSS6, Advanced speed, Standard spacing, and Advanced spacing.
-4. Inspect desktop and mobile layouts.
-5. Inspect both supported themes.
-6. Review disabled, enabled, invalid, saving, and saved states.
-7. Address applicable findings.
-8. Report any finding intentionally not adopted and why.
+1. Use Impeccable to review hierarchy and progressive disclosure.
+2. Preserve the restrained bench-instrument design language.
+3. Render the actual Setup page.
+4. Exercise every modulation and timing combination.
+5. Inspect desktop and mobile layouts.
+6. Inspect both supported themes.
+7. Review disabled, enabled, invalid, saving, saved, and failed-save states.
+8. Address applicable findings.
+9. Report findings intentionally not adopted and why.
+10. Finish with an Impeccable polish pass.
 
 If Impeccable is unavailable, stop before changing UI files.
 
-Do not commit `.agents/`, `.impeccable/`, or other local skill/runtime state unless explicitly requested.
+Do not commit `.agents/`, `.impeccable/`, `.codex/`, or other local runtime state unless explicitly requested.
 
 ## Repository Boundaries
 
 ### `WsprryPi-UI`
 
-Expected UI work belongs in the root `WsprryPi-UI` submodule, including:
+UI work belongs in the root `WsprryPi-UI` submodule, including:
 
-- timing control markup
-- labels and help text
-- responsive layout
-- selection and enablement logic
-- calculated-duration presentation
-- form population
-- autosave interaction
-- UI validation
-- UI-specific tests
+- timing-control markup;
+- labels and help text;
+- responsive layout;
+- Speed and Spacing selection;
+- mode-aware enablement;
+- calculated-duration presentation;
+- configuration population;
+- canonical timing-state logic;
+- autosave interaction;
+- UI validation;
+- behavioral UI tests.
 
 Inspect the submodule at the exact commit recorded by the parent repository before making changes.
 
 ### `WsprryPi`
 
-Expected parent-repository work may include:
+Parent-repository work may include:
 
-- UI/source regression tests
-- integration-contract tests
-- configuration compatibility tests
-- message-duration and repeat-policy regression coverage
-- documentation or planning references
-- a reviewed update to the `WsprryPi-UI` submodule pointer
+- UI/source regression tests;
+- integration-contract tests;
+- configuration compatibility tests;
+- mode-specific message-duration coverage;
+- repeat-policy regression coverage;
+- documentation or planning references;
+- a reviewed `WsprryPi-UI` submodule-pointer update.
 
 The backend configuration schema should not require modification for the initial implementation.
 
-### `src/` Submodules
+Existing backend source may require no functional change if the UI can preserve its current seven-value timing contract. Do not modify backend code merely to make the change appear symmetrical.
+
+### `src/` Dependency Submodules
 
 No changes to dependency submodules under `src/` are expected.
 
-If implementation appears to require such a change, stop and report why before modifying a dependency.
+If implementation appears to require such a change, stop and report:
+
+- the affected submodule;
+- why parent or UI changes are insufficient;
+- the proposed dependency modification;
+- required validation.
+
+Do not modify a dependency without explicit approval.
 
 ## Expected Implementation Seams
 
-Confirm current paths before implementation.
+Confirm current paths and contracts before implementation.
 
 Likely UI seams:
 
@@ -503,36 +815,70 @@ src/scheduling.cpp
 src/tests/ui_source_regression_test.cpp
 src/tests/dial_frequency_semantics_test.cpp
 src/tests/non_wspr_repeat_policy_test.cpp
+src/tests/qrss_execution_regression_test.cpp
 ```
 
-Do not modify every listed file automatically. Inspect the current contracts and change only what the approved implementation requires.
+Do not modify every listed file automatically. Inspect current contracts and change only what the approved implementation requires.
+
+## UI Behavioral Test Requirement
+
+The current source-fragment regression test is insufficient to prove state transitions, serialization, accessibility state, or autosave behavior.
+
+Add a small behavioral test harness suitable for the current UI architecture.
+
+Prefer:
+
+- testable pure timing-state functions;
+- a lightweight DOM-capable JavaScript test layer where DOM behavior must be exercised;
+- deterministic tests that do not require live hardware;
+- no unnecessary production dependency expansion.
+
+The exact harness may be selected during implementation, but string-search assertions alone do not satisfy the behavioral acceptance criteria.
 
 ## Required Test Coverage
 
-### UI State Tests
+### Speed Tests
 
 Verify:
 
-- Missing timing defaults to QRSS3.
-- QRSS1 sets Dot Seconds to `1`.
-- QRSS3 sets Dot Seconds to `3`.
-- QRSS6 sets Dot Seconds to `6`.
-- Preset dot fields are disabled.
-- Advanced enables Dot Duration.
-- Entering Advanced preserves the current valid value.
-- A custom dot duration loads as Advanced.
-- Standard spacing sets `1`, `3`, and `7`.
-- Standard spacing disables the multiplier fields.
-- Advanced spacing enables the multiplier fields.
-- Custom multipliers load as Advanced spacing.
-- Switching from Advanced spacing to Standard intentionally restores `1`, `3`, and `7`.
-- Switching into Advanced spacing retains the current values.
+- absent Dot Seconds defaults to QRSS3;
+- QRSS1 sets Dot Seconds to `1`;
+- QRSS3 sets Dot Seconds to `3`;
+- QRSS6 sets Dot Seconds to `6`;
+- preset Dot Duration is disabled;
+- Advanced enables Dot Duration;
+- entering Advanced retains the current effective value;
+- custom positive Dot Duration loads as Advanced;
+- `3.0000001` loads as Advanced, not QRSS3;
+- speed selection persists across QRSS, FSKCW, and DFCW changes;
+- speed changes preserve both spacing triplets.
+
+### Mode-Aware Spacing Tests
+
+Verify:
+
+- QRSS with `1/3/7` infers Standard;
+- FSKCW with `1/3/7` infers Standard;
+- DFCW with `0.333333/1/3` infers Standard;
+- a noncanonical conventional triplet infers Advanced;
+- a noncanonical DFCW triplet infers Advanced;
+- mathematical one-third does not replace canonical `0.333333`;
+- Standard QRSS or FSKCW writes only `1/3/7`;
+- Standard DFCW writes only `0.333333/1/3`;
+- Standard disables the active fields;
+- Advanced enables the active fields;
+- selecting Standard preserves the inactive triplet;
+- selecting Advanced does not change either triplet;
+- switching modulation changes visible inference without normalization;
+- QRSS and FSKCW expose the same shared triplet;
+- DFCW exposes its separate triplet;
+- custom inactive values survive modulation changes and saving.
 
 ### Calculated-Duration Tests
 
-Verify:
+#### QRSS/FSKCW Cases
 
-| Dot duration | Multipliers | Expected durations |
+| Dot Duration | Multipliers | Expected gap durations |
 |---:|---|---|
 | 1 | `1/3/7` | `1/3/7` seconds |
 | 3 | `1/3/7` | `3/9/21` seconds |
@@ -540,129 +886,301 @@ Verify:
 | 2.5 | `1/3/7` | `2.5/7.5/17.5` seconds |
 | 3 | `1.5/4/8` | `4.5/12/24` seconds |
 
-Presentation formatting must not change the persisted numeric values.
+#### DFCW Cases
+
+| Dot Duration | Multipliers | Exact calculated gap durations |
+|---:|---|---|
+| 1 | `0.333333/1/3` | `0.333333/1/3` seconds |
+| 3 | `0.333333/1/3` | `0.999999/3/9` seconds |
+| 6 | `0.333333/1/3` | `1.999998/6/18` seconds |
+| 2.5 | `0.333333/1/3` | `0.8333325/2.5/7.5` seconds |
+| 3 | `0.5/2/4` | `1.5/6/12` seconds |
+
+Verify calculations before presentation formatting.
+
+Presentation rounding must not:
+
+- change persisted values;
+- affect Standard inference;
+- change message-duration calculations;
+- rewrite canonical `0.333333`.
+
+### Element-Construction Tests
+
+Verify that preset selection changes only shared \(T\), not mode construction:
+
+- QRSS dot remains \(T\);
+- QRSS dash remains \(3T\);
+- FSKCW dot remains \(T\);
+- FSKCW dash remains \(3T\);
+- DFCW dot remains a tone-distinguished element of \(T\);
+- DFCW dash remains a different-tone element of \(T\);
+- DFCW is not converted to a \(T/3T\) keyed-element model;
+- existing mode-specific message duration remains consistent with runtime scheduling.
 
 ### Persistence Tests
 
-Verify that configuration collection continues emitting:
+Verify that collection continues emitting all existing timing keys:
 
 ```text
 CW.Dot Seconds
 CW.Intra Element Gap
 CW.Inter Character Gap
 CW.Inter Word Gap
+CW.DFCW Intra Element Gap
+CW.DFCW Inter Character Gap
+CW.DFCW Inter Word Gap
 ```
+
+Confirm exact key names against current source.
 
 Verify:
 
-- Preset values save correctly.
-- Disabled fields are still serialized.
-- Advanced values survive save and reload.
-- Existing custom configurations round-trip without loss.
-- Loading configuration does not trigger an unintended normalization autosave.
-- No new backend keys are required.
+- preset values save correctly;
+- disabled fields remain serialized;
+- hidden inactive values remain serialized;
+- Advanced values survive save and reload;
+- both custom triplets survive round-trip;
+- saving QRSS or FSKCW does not reset DFCW spacing;
+- saving DFCW does not reset QRSS/FSKCW spacing;
+- loading configuration does not cause normalization autosave;
+- population causes no PATCH or autosave;
+- one selector action causes no more than one coherent autosave;
+- no new backend keys are required.
+
+### Invalid-Value Tests
+
+Verify:
+
+- absent values use documented defaults;
+- zero is rejected;
+- negative values are rejected;
+- blank advanced inputs are rejected;
+- non-finite-equivalent values are rejected;
+- wrong JSON types retain existing backend error behavior;
+- disabled preset controls serialize canonical valid values;
+- invalid custom values are not silently relabeled as presets;
+- validation identifies the applicable active controls;
+- inactive values are not silently discarded.
 
 ### Backend Regression Tests
 
 Verify:
 
-- Dot duration remains shared across QRSS, FSKCW, and DFCW.
-- Standard and advanced multipliers produce the expected runtime durations.
-- All four values remain subject to backend validation.
-- Message-duration calculations continue including inter-element, inter-character, and inter-word spacing.
-- Repeat-policy rejection still works for messages longer than the repeat interval.
-- Existing configurations without UI metadata remain valid.
+- Dot Seconds remains shared across QRSS, FSKCW, and DFCW;
+- QRSS and FSKCW continue sharing conventional gap values;
+- DFCW continues using separate gap values;
+- all seven timing values load, validate, serialize, and round-trip;
+- conventional timing produces expected runtime durations;
+- DFCW timing produces expected runtime durations;
+- message-duration calculations include mode-appropriate spacing;
+- repeat-policy rejection works for messages longer than the interval;
+- existing configurations without UI metadata remain valid;
+- no backend migration is required.
 
 ### Visual and Workflow Tests
 
 Using Impeccable and the rendered application, verify:
 
-- desktop layout
-- mobile layout
-- light theme
-- dark theme
-- QRSS1, QRSS3, and QRSS6 selections
-- Advanced dot editing
-- Standard and Advanced spacing
-- disabled-field legibility
-- validation errors
-- calculated-duration updates
-- autosave feedback
-- reload and restoration of custom values
+- desktop layout at approximately `1440 × 900`;
+- narrow/mobile layout at approximately `390 × 844`;
+- light theme;
+- dark theme;
+- QRSS, FSKCW, and DFCW;
+- QRSS1, QRSS3, and QRSS6;
+- Advanced Dot Duration;
+- Standard and Advanced mode-aware spacing;
+- mode switching with one standard and one custom triplet;
+- mode switching with both triplets custom;
+- disabled-field legibility;
+- calculated-duration updates;
+- message-duration and repeat validation;
+- autosave feedback;
+- reload restoration;
+- keyboard order and radio-group behavior;
+- focus behavior when entering Advanced;
+- accessible group names and descriptions;
+- live-output announcements;
+- saving, saved, invalid, and failed-save states.
 
-Automated tests do not replace this workflow exercise.
+Automated tests do not replace rendered-page workflow inspection.
+
+## Automated Validation
+
+After implementation, inspect current Makefile targets before running them.
+
+Expected safe parent-repository validation from `src` includes:
+
+```sh
+make semantics-test
+make non-wspr-repeat-policy-test
+make qrss-execution-regression-test
+```
+
+Also run the new UI behavioral test target from the appropriate UI repository location.
+
+Do not run:
+
+```sh
+make test
+make test-tone
+make test-oneshot
+```
+
+unless separately authorized after inspecting their operational behavior. These may use elevated privileges or exercise transmitter paths.
+
+Final static checks must include:
+
+```sh
+git diff --check
+git status --short --branch
+git submodule status --recursive
+git submodule foreach --recursive 'git status --short --branch'
+```
+
+Report parent and submodule state separately.
 
 ## Acceptance Criteria
 
 The feature is acceptable when:
 
-- CW Modes defaults to QRSS3 when no valid existing timing is available.
+- CW Speed defaults to QRSS3 when no valid Dot Seconds value is available.
 - Operators can select QRSS1, QRSS3, or QRSS6 directly.
-- Presets reliably produce one-, three-, or six-second dots.
-- Dot Duration is editable only in Advanced speed.
-- Standard spacing reliably produces `1/3/7` multipliers.
-- Gap multipliers are editable only in Advanced spacing.
-- The UI displays calculated gap durations.
+- The presets select shared \(T\) values of one, three, or six seconds.
+- Dot Duration is editable only in Advanced Speed.
+- Speed selection applies to QRSS, FSKCW, and DFCW.
+- QRSS and FSKCW preserve their existing \(T/3T\) element timing.
+- DFCW preserves equal-duration, frequency-distinguished elements.
+- Standard QRSS/FSKCW spacing produces `1/3/7`.
+- Standard DFCW spacing produces `0.333333/1/3`.
+- Advanced spacing edits only the active triplet.
+- Changing modulation never normalizes or overwrites either triplet.
+- Both triplets survive loading, switching, saving, and reloading.
+- Calculated durations reflect the active modulation and spacing.
 - Timing controls are grouped coherently.
-- Existing custom configurations remain custom and round-trip without loss.
+- Existing custom configurations round-trip without loss.
+- All seven existing timing values remain preserved.
 - No backend configuration migration is required.
-- QRSS, FSKCW, and DFCW continue sharing the established timing contract.
-- Relevant UI, persistence, backend, and repeat-policy tests pass.
-- Impeccable review and real rendered-page inspection are complete.
+- UI behavioral tests cover transitions, persistence, validation, and autosave.
+- Backend regression and repeat-policy tests pass.
+- Impeccable review and rendered-page inspection are complete.
 - Documentation impact has been reviewed.
 - No `src/` dependency submodule changes are required.
-- Parent and UI submodule changes remain separately reviewable.
-- Hardware or live-transmission validation is not claimed unless separately performed and authorized.
+- UI and parent-repository changes remain separately reviewable.
+- Hardware or live-transmission validation is not claimed unless separately authorized and performed.
 
 ## Non-Goals
 
 This initial feature does not:
 
-- change Morse dash duration from three dots
-- introduce independently persisted preset names
-- change the backend configuration schema
-- create different dot durations for QRSS, FSKCW, and DFCW
-- alter RF frequency behavior
-- alter frequency offset semantics
-- alter scheduling semantics
-- redesign the entire Setup page
-- modify transmitter hardware behavior
-- modify dependency submodules under `src/`
-- authorize live RF, GPIO, service, installation, or hardware testing
-- commit or push either repository
+- make all modulation modes instantiate identical elements;
+- change QRSS or FSKCW dash duration from \(3T\);
+- change DFCW to a \(T/3T\) element model;
+- change DFCW’s frequency-distinguished dot/dash behavior;
+- replace DFCW Standard spacing with `1/3/7`;
+- combine the two persisted spacing triplets;
+- create different Dot Seconds values for each modulation;
+- introduce persisted preset names;
+- introduce persisted Spacing-mode names;
+- restore hidden previous advanced drafts;
+- change the backend configuration schema;
+- alter RF frequency behavior;
+- alter Frequency Offset semantics;
+- alter scheduling semantics outside recalculation from existing timing;
+- redesign the entire Setup page;
+- modify transmitter hardware behavior;
+- modify dependency submodules under `src/`;
+- authorize live RF, GPIO, service, installation, or hardware testing;
+- commit or push either repository.
 
 ## Documentation Impact
 
-Implementation should review the operator documentation covering:
+Implementation must review operator documentation covering:
 
-- CW mode selection
-- QRSS timing
-- FSKCW and DFCW timing
-- CW gap multipliers
-- repeat intervals
-- the Signal Setup web interface
-- screenshots depicting the CW Control panel
+- CW modulation selection;
+- shared QRSS1, QRSS3, and QRSS6 Speed presets;
+- custom Dot Duration;
+- QRSS element timing;
+- FSKCW element timing;
+- DFCW equal-duration, frequency-distinguished elements;
+- conventional QRSS/FSKCW spacing;
+- DFCW-specific spacing;
+- calculated durations;
+- repeat intervals;
+- Signal Setup;
+- screenshots depicting CW Control.
 
-Documentation must distinguish:
+Documentation must clearly distinguish:
 
-- speed presets
-- custom dot duration
-- standard spacing
-- advanced spacing
-- multiplier values
-- calculated durations in seconds
+- modulation from Speed;
+- shared \(T\) from mode-specific element construction;
+- QRSS/FSKCW spacing from DFCW spacing;
+- multiplier values from calculated seconds;
+- Standard from Advanced behavior;
+- active from preserved inactive values.
 
-Screenshots should be replaced only when the changed UI makes the existing image materially inaccurate. Age alone is not a reason to replace a contextually correct screenshot.
+Recommended documentation wording:
+
+```text
+QRSS1, QRSS3, and QRSS6 select the shared base duration used by
+QRSS, FSKCW, and DFCW. Each modulation retains its own signal
+construction. QRSS and FSKCW use conventional dot, dash, and
+spacing timing. DFCW uses equal-duration elements distinguished
+by frequency and retains its DFCW-specific spacing.
+```
+
+Replace screenshots only when the changed interface makes an existing image materially inaccurate. Age alone is not a reason to replace a contextually correct screenshot.
+
+Do not include internal test or refactoring details in operator documentation unless they materially help the operator.
+
+## Submodule and Commit Boundaries
+
+The implementation is expected to involve the `WsprryPi-UI` submodule and parent `WsprryPi` repository.
+
+If commits are later authorized:
+
+1. Review the complete UI submodule diff.
+2. Run UI behavioral and Impeccable validation.
+3. Commit the UI change inside `WsprryPi-UI`.
+4. Ensure the UI commit is available on its intended remote before publishing a parent pointer to it.
+5. Review parent integration tests and documentation changes.
+6. Review the exact old and new UI submodule commit IDs.
+7. Commit the parent submodule-pointer update and parent changes separately or as an explicitly reviewed parent change.
+8. Push only when explicitly authorized.
+
+Do not modify or advance unrelated `src/` submodules.
+
+## Implementation Sequence
+
+1. Reconfirm the current parent and recursive submodule state.
+2. Confirm the seven-key timing inventory and exact key spelling.
+3. Confirm the current QRSS, FSKCW, and DFCW runtime timing constructors.
+4. Confirm Impeccable availability and load the UI product/design context.
+5. Add testable mode-aware timing-state functions.
+6. Add behavioral tests for inference, transitions, preservation, calculations, serialization, validation, and autosave.
+7. Add accessible Speed and Spacing controls.
+8. Wire one coherent transition path per selector.
+9. Preserve non-saving configuration population.
+10. Reorganize the panel into timing, frequency, and scheduling groups.
+11. Extend parent source-contract and backend regression coverage.
+12. Run safe automated tests.
+13. Render and inspect all required UI states with Impeccable.
+14. Update operator documentation.
+15. Review complete parent and submodule diffs.
+16. Report remaining hardware or runtime qualification separately.
+17. Commit or push only if explicitly requested.
 
 ## Implementation Gate
 
-This document is a proposed implementation contract, not authorization to modify code.
+This document is an implementation contract, not authorization to modify code.
 
 Before implementation:
 
 1. Inspect the current parent repository and recursive submodule state.
 2. Confirm the exact `WsprryPi-UI` revision.
-3. Confirm that Impeccable is available.
-4. Compare current implementation behavior with this document.
-5. Report any material drift or ambiguity.
-6. Obtain explicit approval to implement.
+3. Confirm the exact timing-key inventory.
+4. Confirm current mode-specific runtime construction.
+5. Confirm that Impeccable is available.
+6. Compare current behavior with this document.
+7. Report any remaining material drift or ambiguity.
+8. Obtain explicit approval to implement.
