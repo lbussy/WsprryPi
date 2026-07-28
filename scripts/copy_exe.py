@@ -1,74 +1,122 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Update installed executables from Git repo."""
+"""Install the locally built WsprryPi executable."""
 
+from pathlib import Path
 import os
 import subprocess
+import sys
+
+
+SERVICE_NAME = "wsprrypi.service"
+INSTALL_PATH = Path("/usr/local/bin/wsprrypi")
+
+
+def run(command, *, check=True, **kwargs):
+    """Run a command and report it if it fails."""
+    try:
+        return subprocess.run(command, check=check, **kwargs)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Required command not found: {command[0]}") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"Command failed with exit status {exc.returncode}: {' '.join(command)}"
+        ) from exc
+
 
 def get_git_root():
-    """Determine the Git repository root directory."""
-    try:
-        return subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()
-    except subprocess.CalledProcessError:
-        print("Error: Not inside a Git repository.")
-        exit(1)
+    """Determine the repository root using this script's location."""
+    script_dir = Path(__file__).resolve().parent
+    result = run(
+        ["git", "-C", str(script_dir), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    return Path(result.stdout.strip())
+
 
 def service_exists(service_name):
-    """Check if a systemd service exists."""
-    subprocess.call(['systemctl', 'list-units', '--type=service', '--all', '--no-pager'],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    return service_name in subprocess.check_output(
-        ['systemctl', 'list-units', '--type=service', '--all', '--no-pager'],
-        text=True
+    """Return whether systemd knows about the service."""
+    result = run(
+        ["systemctl", "show", service_name, "--property=LoadState", "--value"],
+        check=False,
+        capture_output=True,
+        text=True,
     )
+    return result.returncode == 0 and result.stdout.strip() == "loaded"
 
-def stop_and_disable_service(service_name):
-    """Stop and disable a systemd service if it exists."""
-    if service_exists(service_name):
-        subprocess.call(['sudo', 'systemctl', 'stop', service_name])
-        subprocess.call(['sudo', 'systemctl', 'disable', service_name])
 
-def copy_file(src, dest):
-    """Copy a file to a destination with correct permissions."""
-    if os.path.exists(src):
-        subprocess.call(['sudo', 'cp', src, dest])
-        subprocess.call(['sudo', 'chown', 'root:root', dest])
-        subprocess.call(['sudo', 'chmod', '755', dest])
-    else:
-        print(f"Warning: {src} does not exist, skipping.")
+def service_is_active(service_name):
+    """Return whether the service is currently active."""
+    result = run(
+        ["systemctl", "is-active", "--quiet", service_name],
+        check=False,
+    )
+    return result.returncode == 0
 
-def clear_logs(log_dir):
-    """Delete all logs in a specified directory."""
-    if os.path.exists(log_dir):
-        subprocess.call(['sudo', 'rm', '-rf', os.path.join(log_dir, '*')])
 
-def enable_and_start_service(service_name):
-    """Enable and start a systemd service."""
-    subprocess.call(['sudo', 'systemctl', 'enable', service_name])
-    subprocess.call(['sudo', 'systemctl', 'start', service_name])
+def install_file(source, destination):
+    """Stage and atomically replace an installed executable."""
+    staged = destination.with_name(f".{destination.name}.install-{os.getpid()}")
+    try:
+        run(
+            [
+                "sudo",
+                "install",
+                "-o",
+                "root",
+                "-g",
+                "root",
+                "-m",
+                "0755",
+                str(source),
+                str(staged),
+            ]
+        )
+        run(["sudo", "mv", "-f", str(staged), str(destination)])
+    except RuntimeError:
+        run(["sudo", "rm", "-f", str(staged)], check=False)
+        raise
+
 
 def main():
-    """Check for and repoace executables."""
+    """Install the build while preserving the service's current state."""
     git_root = get_git_root()
+    source = git_root / "src" / "build" / "bin" / "wsprrypi"
 
-    wsprrypi_service = "wsprrypi.service"
+    if not source.is_file():
+        raise RuntimeError(
+            f"Built executable not found: {source}\n"
+            "Run 'make -C src release' first."
+        )
+    if not os.access(source, os.X_OK):
+        raise RuntimeError(f"Built executable is not executable: {source}")
 
-    # Paths
-    executables_dir = os.path.join(git_root, "executables")
-    wsprrypi_bin = os.path.join(executables_dir, "wsprrypi")
-    wsprrypi_dest = "/usr/local/bin/wsprrypi"
-    log_dir = "/var/log/wsprrypi"
+    exists = service_exists(SERVICE_NAME)
+    was_active = exists and service_is_active(SERVICE_NAME)
 
-    # Handle wsprrypi service
-    stop_and_disable_service(wsprrypi_service)
-    copy_file(wsprrypi_bin, wsprrypi_dest)
+    if was_active:
+        run(["sudo", "systemctl", "stop", SERVICE_NAME])
 
-    # Clear logs
-    clear_logs(log_dir)
+    try:
+        install_file(source, INSTALL_PATH)
+    finally:
+        if was_active:
+            run(["sudo", "systemctl", "start", SERVICE_NAME])
 
-    # Enable and start services
-    enable_and_start_service(wsprrypi_service)
+    print(f"Installed {source} to {INSTALL_PATH}.")
+    if not exists:
+        print(f"Note: {SERVICE_NAME} is not installed; no service state was changed.")
+    elif was_active:
+        print(f"Restarted {SERVICE_NAME} because it was active before installation.")
+    else:
+        print(f"Left inactive {SERVICE_NAME} stopped.")
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
