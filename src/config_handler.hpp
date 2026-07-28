@@ -306,6 +306,7 @@ struct ArgParserConfig
     int cw_fade_out_ms; ///< CW envelope fade-out duration in milliseconds.
     int cw_fade_slice_ms; ///< CW fade approximation slice duration in milliseconds.
     int schedule_start_minute;      ///< CW schedule minute offset within the hour.
+    int schedule_start_second;      ///< CW schedule second offset within the minute.
     int schedule_repeat_minutes;    ///< CW schedule repeat interval in minutes.
 
     // Runtime variables
@@ -376,6 +377,7 @@ struct ArgParserConfig
           cw_fade_out_ms(0),
           cw_fade_slice_ms(5),
           schedule_start_minute(0),
+          schedule_start_second(5),
           schedule_repeat_minutes(10),
           mode(ModeType::WSPR),
           wspr({}),
@@ -454,6 +456,7 @@ struct ArgParserConfig
         cw_fade_out_ms = other.cw_fade_out_ms;
         cw_fade_slice_ms = other.cw_fade_slice_ms;
         schedule_start_minute = other.schedule_start_minute;
+        schedule_start_second = other.schedule_start_second;
         schedule_repeat_minutes = other.schedule_repeat_minutes;
         mode = other.mode;
         wspr = other.wspr;
@@ -612,6 +615,7 @@ void ini_to_json(std::string filename);
  *       "Fade Out Ms": 0,
  *       "Fade Slice Ms": 5,
  *       "Start Minute": 0,
+ *       "Start Second": 5,
  *       "Repeat Minutes": 10
  *   }
  * }
