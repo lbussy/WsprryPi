@@ -344,6 +344,10 @@ bool start_non_wspr_transmission_now_for_test(const ArgParserConfig &cfg);
 bool validate_non_wspr_repeat_interval_policy(
     const ArgParserConfig &cfg,
     std::string *error_message = nullptr);
+std::chrono::system_clock::time_point next_non_wspr_schedule_time_for_test(
+    const ArgParserConfig &cfg,
+    const std::chrono::system_clock::time_point &now);
+std::uint64_t non_wspr_schedule_generation_for_test() noexcept;
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept;
 bool websocket_server_start_enabled(const ArgParserConfig &cfg) noexcept;
 bool transmitter_reload_should_defer() noexcept;

@@ -282,6 +282,12 @@ std::atomic<bool> shutdown_after_wspr_plan{false};
 static bool managed_reload_tx_inhibited = false;
 static bool suppress_scheduler_execution_for_test = false;
 static std::atomic<std::uint64_t> non_wspr_schedule_generation{0};
+
+std::uint64_t non_wspr_schedule_generation_for_test() noexcept
+{
+    return non_wspr_schedule_generation.load(std::memory_order_acquire);
+}
+
 static std::atomic<BandGPIOPrepareStatus> active_band_gpio_prepare_status{
     BandGPIOPrepareStatus::Inactive};
 static std::atomic<bool> suppress_cancelled_ws_event_for_user_stop{false};
@@ -1285,15 +1291,15 @@ static void log_scheduler_path_selection(ModeType mode)
     llog.logS(INFO, "Scheduling path selected: ", mode_type_name(mode), ".");
 }
 
-static std::chrono::system_clock::time_point next_non_wspr_schedule_time(
-    const ArgParserConfig &cfg)
+std::chrono::system_clock::time_point next_non_wspr_schedule_time_for_test(
+    const ArgParserConfig &cfg,
+    const std::chrono::system_clock::time_point &now)
 {
-    const auto now = std::chrono::system_clock::now();
     std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
     std::tm local_tm{};
     localtime_r(&now_time_t, &local_tm);
     local_tm.tm_min = cfg.schedule_start_minute;
-    local_tm.tm_sec = 0;
+    local_tm.tm_sec = cfg.schedule_start_second;
     std::time_t candidate_time_t = std::mktime(&local_tm);
     auto candidate = std::chrono::system_clock::from_time_t(candidate_time_t);
     const auto repeat =
@@ -1305,6 +1311,14 @@ static std::chrono::system_clock::time_point next_non_wspr_schedule_time(
     }
 
     return candidate;
+}
+
+static std::chrono::system_clock::time_point next_non_wspr_schedule_time(
+    const ArgParserConfig &cfg)
+{
+    return next_non_wspr_schedule_time_for_test(
+        cfg,
+        std::chrono::system_clock::now());
 }
 
 static std::string format_local_schedule_time(
@@ -2498,6 +2512,10 @@ static void schedule_next_non_wspr_launch(const ArgParserConfig &cfg)
     llog.logS(DEBUG,
               "- Start minute: ",
               cfg.schedule_start_minute);
+
+    llog.logS(DEBUG,
+              "- Start second: ",
+              cfg.schedule_start_second);
 
     llog.logS(DEBUG,
               "- Repeat interval (minutes): ",

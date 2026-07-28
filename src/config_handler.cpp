@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -207,6 +208,17 @@ namespace
         }
 
         throw std::runtime_error(context + " must be an integer.");
+    }
+
+    int parse_strict_integer_config_value(
+        const nlohmann::json &source,
+        const std::string &context)
+    {
+        if (!source.is_number_integer() && !source.is_number_unsigned())
+        {
+            throw std::runtime_error(context + " must be an integer.");
+        }
+        return parse_integer_config_value(source, context);
     }
 
     double parse_manual_ppm_value(
@@ -955,6 +967,7 @@ void init_default_config()
     config.cw_fade_out_ms = 0;
     config.cw_fade_slice_ms = 5;
     config.schedule_start_minute = 0;
+    config.schedule_start_second = 5;
     config.schedule_repeat_minutes = 10;
 
     // Runtime
@@ -1213,6 +1226,7 @@ namespace
                  key == "Fade Out Ms" ||
                  key == "Fade Slice Ms" ||
                  key == "Start Minute" ||
+                 key == "Start Second" ||
                  key == "Repeat Minutes"));
     }
 
@@ -1355,6 +1369,7 @@ namespace
             {"Fade Out Ms", 0},
             {"Fade Slice Ms", 5},
             {"Start Minute", 0},
+            {"Start Second", 5},
             {"Repeat Minutes", 10}};
         std::array<BandGPIOConfig, HAM_BAND_COUNT> default_band_gpio{};
         set_default_band_gpio_config(default_band_gpio);
@@ -1499,6 +1514,13 @@ namespace
                     source.at("CW").contains("Start Minute")
                 ? source.at("CW").at("Start Minute").get<int>()
                 : target.schedule_start_minute;
+        target.schedule_start_second =
+            source.contains("CW") &&
+                    source.at("CW").contains("Start Second")
+                ? parse_strict_integer_config_value(
+                      source.at("CW").at("Start Second"),
+                      "CW.Start Second")
+                : 5;
         target.schedule_repeat_minutes =
             source.contains("CW") &&
                     source.at("CW").contains("Repeat Minutes")
@@ -1694,6 +1716,7 @@ namespace
         target["CW"]["Fade Out Ms"] = source.cw_fade_out_ms;
         target["CW"]["Fade Slice Ms"] = source.cw_fade_slice_ms;
         target["CW"]["Start Minute"] = source.schedule_start_minute;
+        target["CW"]["Start Second"] = source.schedule_start_second;
         target["CW"]["Repeat Minutes"] = source.schedule_repeat_minutes;
 
         for (const auto &[band, band_name] : kHamBandJsonKeys)
@@ -1757,6 +1780,7 @@ namespace
         target.cw_fade_out_ms = source.cw_fade_out_ms;
         target.cw_fade_slice_ms = source.cw_fade_slice_ms;
         target.schedule_start_minute = source.schedule_start_minute;
+        target.schedule_start_second = source.schedule_start_second;
         target.schedule_repeat_minutes = source.schedule_repeat_minutes;
         target.mode = source.mode;
         target.wspr = source.wspr;
@@ -2089,6 +2113,7 @@ void json_to_ini()
                   key == "Fade Out Ms" ||
                   key == "Fade Slice Ms" ||
                   key == "Start Minute" ||
+                  key == "Start Second" ||
                   key == "Repeat Minutes"));
 
             if (!persist_key)
@@ -2255,6 +2280,47 @@ void patch_all_from_web(const nlohmann::json &j)
         if (!validate_config_candidate(candidate_config, &error_message))
         {
             throw std::runtime_error(error_message);
+        }
+
+        if (candidate_config.mode == ModeType::QRSS ||
+            candidate_config.mode == ModeType::FSKCW ||
+            candidate_config.mode == ModeType::DFCW)
+        {
+            std::chrono::nanoseconds message_duration{};
+            if (!compute_non_wspr_message_duration(
+                    candidate_config,
+                    message_duration,
+                    &error_message))
+            {
+                throw std::runtime_error(error_message);
+            }
+
+            const auto repeat_interval =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::minutes(
+                        candidate_config.schedule_repeat_minutes));
+            if (message_duration > repeat_interval)
+            {
+                validate_non_wspr_repeat_interval_policy(
+                    candidate_config,
+                    &error_message);
+                throw ConfigValidationError(
+                    error_message,
+                    {
+                        {"policy", "cw_duration_repeat_interval"},
+                        {"field", "CW.Message"},
+                        {"mode",
+                         candidate_config.mode == ModeType::QRSS
+                             ? "QRSS"
+                             : (candidate_config.mode == ModeType::FSKCW
+                                    ? "FSKCW"
+                                    : "DFCW")},
+                        {"message_duration_seconds",
+                         std::chrono::duration<double>(message_duration).count()},
+                        {"repeat_interval_seconds",
+                         std::chrono::duration<double>(repeat_interval).count()},
+                    });
+            }
         }
 
         if (candidate_config.transmit &&
