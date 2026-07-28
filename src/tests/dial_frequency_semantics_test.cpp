@@ -17,6 +17,7 @@
 #include <limits.h>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -29,6 +30,74 @@
 
 namespace
 {
+    std::vector<std::string> &scoped_temp_cleanup_paths()
+    {
+        static std::vector<std::string> paths;
+        return paths;
+    }
+
+    void cleanup_scoped_temp_files_at_exit()
+    {
+        for (const std::string &path : scoped_temp_cleanup_paths())
+        {
+            if (!path.empty())
+            {
+                unlink(path.c_str());
+            }
+        }
+    }
+
+    class ScopedTemporaryFile
+    {
+    public:
+        explicit ScopedTemporaryFile(const std::string &name_template)
+        {
+            std::vector<char> path_buffer(name_template.begin(), name_template.end());
+            path_buffer.push_back('\0');
+            const int fd = mkstemp(path_buffer.data());
+            if (fd < 0)
+            {
+                throw std::runtime_error("Failed to create scoped temporary file.");
+            }
+            close(fd);
+            path_ = path_buffer.data();
+
+            auto &cleanup_paths = scoped_temp_cleanup_paths();
+            static const bool exit_cleanup_registered =
+                std::atexit(cleanup_scoped_temp_files_at_exit) == 0;
+            if (!exit_cleanup_registered)
+            {
+                unlink(path_.c_str());
+                throw std::runtime_error("Failed to register temporary-file cleanup.");
+            }
+            cleanup_paths.push_back(path_);
+        }
+
+        ScopedTemporaryFile(const ScopedTemporaryFile &) = delete;
+        ScopedTemporaryFile &operator=(const ScopedTemporaryFile &) = delete;
+
+        ~ScopedTemporaryFile()
+        {
+            unlink(path_.c_str());
+            for (std::string &registered_path : scoped_temp_cleanup_paths())
+            {
+                if (registered_path == path_)
+                {
+                    registered_path.clear();
+                    break;
+                }
+            }
+        }
+
+        const std::string &path() const noexcept
+        {
+            return path_;
+        }
+
+    private:
+        std::string path_;
+    };
+
     void require(bool condition, const std::string &message)
     {
         if (!condition)
@@ -3365,6 +3434,7 @@ int main(int argc, char *argv[])
         config.mode = ModeType::QRSS;
         config.transmit = false;
         config.schedule_start_minute = 0;
+        config.schedule_start_second = 17;
         config.schedule_repeat_minutes = 10;
         config.qrss.message = "A A";
         config.qrss.frequency_hz = 3572000.0;
@@ -3394,6 +3464,10 @@ int main(int argc, char *argv[])
         require(
             !enabled_snapshot.next_transmission_at.empty(),
             "idle CW runtime snapshots must expose the next scheduled message time once transmissions are enabled");
+        require(
+            enabled_snapshot.next_transmission_at.size() >= 19U &&
+                enabled_snapshot.next_transmission_at.substr(17, 2) == "17",
+            "runtime next_transmission_at must include the configured CW start second");
 
         config.mode = ModeType::FSKCW;
         config.fskcw.space_frequency_hz = 10140100.0;
@@ -5583,6 +5657,231 @@ int main(int argc, char *argv[])
             "INI reload callback must not queue reload work after shutdown starts");
 
         exiting_wspr.store(false, std::memory_order_relaxed);
+    }
+
+    std::string cw_start_second_persistence_path;
+    {
+        init_config_json();
+        jConfig["CW"].erase("Start Second");
+        json_to_config();
+        require(
+            config.schedule_start_second == 5,
+            "missing CW.Start Second must default to 5");
+
+        for (const int value : {0, 5, 59})
+        {
+            jConfig["CW"]["Start Second"] = value;
+            json_to_config();
+            require(
+                config.schedule_start_second == value,
+                "json_to_config must preserve valid CW.Start Second values");
+            config_to_json();
+            require(
+                jConfig.at("CW").at("Start Second") == value &&
+                    get_public_config_json().at("CW").at("Start Second") == value,
+                "config and public JSON must round-trip CW.Start Second");
+        }
+
+        for (const auto &invalid : {
+                 nlohmann::json(-1),
+                 nlohmann::json(60),
+                 nlohmann::json(5.5),
+                 nlohmann::json("5"),
+                 nlohmann::json("invalid")})
+        {
+            init_config_json();
+            jConfig["CW"]["Start Second"] = invalid;
+            bool rejected = false;
+            try
+            {
+                json_to_config();
+                std::string validation_error;
+                rejected = !validate_config_candidate(config, &validation_error);
+            }
+            catch (const std::exception &)
+            {
+                rejected = true;
+            }
+            require(rejected, "invalid CW.Start Second JSON must be rejected");
+        }
+
+        init_config_json();
+        json_to_config();
+        config.transmit = false;
+        config_to_json();
+        patch_all_from_web({{"CW", {{"Start Second", 59}}}});
+        require(
+            config.schedule_start_second == 59 &&
+                jConfig.at("CW").at("Start Second") == 59,
+            "web PATCH must preserve CW.Start Second");
+        const nlohmann::json before_rejected_patch = jConfig;
+        bool patch_rejected = false;
+        try
+        {
+            patch_all_from_web({{"CW", {{"Start Second", 60}}}});
+        }
+        catch (const std::exception &)
+        {
+            patch_rejected = true;
+        }
+        require(
+            patch_rejected && config.schedule_start_second == 59 &&
+                jConfig == before_rejected_patch,
+            "rejected web CW.Start Second updates must not mutate live or persisted config");
+
+        ScopedTemporaryFile persistence_file(
+            "/tmp/wsprrypi_cw_start_second_persist.XXXXXX");
+        cw_start_second_persistence_path = persistence_file.path();
+        config.use_ini = true;
+        config.ini_filename = cw_start_second_persistence_path;
+        iniFile.set_filename(config.ini_filename);
+        config_to_json();
+        json_to_ini();
+        iniFile.load();
+        require(
+            iniFile.getData().at("CW").at("Start Second") == "59",
+            "INI persistence must preserve CW.Start Second");
+        config.use_ini = false;
+        config.ini_filename.clear();
+    }
+    require(
+        access(cw_start_second_persistence_path.c_str(), F_OK) != 0,
+        "scoped CW.Start Second persistence file must be removed after the test block");
+
+    {
+        auto local_time = [](int year, int month, int day, int hour, int minute, int second)
+        {
+            std::tm value{};
+            value.tm_year = year - 1900;
+            value.tm_mon = month - 1;
+            value.tm_mday = day;
+            value.tm_hour = hour;
+            value.tm_min = minute;
+            value.tm_sec = second;
+            value.tm_isdst = -1;
+            return std::chrono::system_clock::from_time_t(std::mktime(&value));
+        };
+        auto require_launch = [&](int now_hour,
+                                  int now_minute,
+                                  int now_second,
+                                  int start_second,
+                                  int expected_day,
+                                  int expected_hour,
+                                  int expected_minute,
+                                  int expected_second)
+        {
+            ArgParserConfig candidate;
+            candidate.schedule_start_minute = 0;
+            candidate.schedule_start_second = start_second;
+            candidate.schedule_repeat_minutes = 10;
+            const auto launch = next_non_wspr_schedule_time_for_test(
+                candidate,
+                local_time(2026, 7, 27, now_hour, now_minute, now_second));
+            const std::time_t launch_time = std::chrono::system_clock::to_time_t(launch);
+            std::tm actual{};
+            localtime_r(&launch_time, &actual);
+            require(
+                actual.tm_mday == expected_day &&
+                    actual.tm_hour == expected_hour &&
+                    actual.tm_min == expected_minute &&
+                    actual.tm_sec == expected_second,
+                "deterministic CW scheduler must select the expected strict-future launch");
+        };
+
+        require_launch(12, 0, 4, 5, 27, 12, 0, 5);
+        require_launch(12, 0, 5, 5, 27, 12, 10, 5);
+        require_launch(12, 0, 6, 5, 27, 12, 10, 5);
+        require_launch(12, 59, 59, 5, 27, 13, 0, 5);
+        require_launch(23, 59, 59, 5, 28, 0, 0, 5);
+        require_launch(12, 0, 0, 0, 27, 12, 10, 0);
+        require_launch(12, 0, 58, 59, 27, 12, 0, 59);
+
+        ArgParserConfig shared;
+        shared.schedule_start_minute = 20;
+        shared.schedule_start_second = 5;
+        shared.schedule_repeat_minutes = 10;
+        const auto now = local_time(2026, 7, 27, 12, 20, 4);
+        std::optional<std::chrono::system_clock::time_point> common;
+        for (const ModeType mode : {ModeType::QRSS, ModeType::FSKCW, ModeType::DFCW})
+        {
+            shared.mode = mode;
+            const auto launch = next_non_wspr_schedule_time_for_test(shared, now);
+            require(!common.has_value() || *common == launch,
+                    "QRSS, FSKCW, and DFCW must share the CW schedule calculation");
+            common = launch;
+        }
+
+        init_default_config();
+        config.use_ini = false;
+        config.mode = ModeType::QRSS;
+        config.transmit = true;
+        config.transmit_backend = TransmitBackendKind::SI5351;
+        config.si5351_i2c_bus = 1;
+        config.si5351_i2c_address = 0x60;
+        config.si5351_reference_hz = 27000000;
+        config.si5351_tx_output = 0;
+        config.si5351_power_level = 1;
+        resolve_backend_specific_config(config);
+        config.qrss.message = "TEST";
+        config.qrss.frequency_hz = 14096900.0;
+        config.qrss.dot_seconds = 1.0;
+        set_scheduler_execution_suppressed_for_test(true);
+        const auto generation = non_wspr_schedule_generation_for_test();
+        require(set_config(true),
+                "CW configuration change must apply through the production scheduler path");
+        require(
+            non_wspr_schedule_generation_for_test() > generation,
+            "schedule changes must invalidate the previous sleeping generation");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        reset_getopt_state();
+        std::vector<std::string> args = {
+            "wsprrypi", "--mode", "QRSS", "--cw-message", "TEST",
+            "--cw-base-frequency", "14096900", "--cw-dot-seconds", "1",
+            "--cw-start-second", "0"};
+        std::vector<char *> argv = argv_for(args);
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()) &&
+                config.schedule_start_second == 0,
+            "CLI --cw-start-second must accept and preserve zero");
+
+        init_config_json();
+        json_to_config();
+        reset_getopt_state();
+        args = {
+            "wsprrypi", "--mode", "QRSS", "--cw-message", "TEST",
+            "--cw-base-frequency", "14096900", "--cw-dot-seconds", "1",
+            "--cw-start-second", "59"};
+        argv = argv_for(args);
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()) &&
+                config.schedule_start_second == 59,
+            "CLI --cw-start-second must accept 59");
+
+        require_cli_parse_rejected(
+            {"--mode", "QRSS", "--cw-message", "TEST", "--cw-base-frequency", "14096900",
+             "--cw-dot-seconds", "1", "--cw-start-second", "60"},
+            "CLI --cw-start-second above 59");
+        require_cli_parse_rejected(
+            {"--mode", "QRSS", "--cw-message", "TEST", "--cw-base-frequency", "14096900",
+             "--cw-dot-seconds", "1", "--cw-start-second=-1"},
+            "negative CLI --cw-start-second");
+        require_cli_parse_rejected(
+            {"--mode", "QRSS", "--cw-message", "TEST", "--cw-base-frequency", "14096900",
+             "--cw-dot-seconds", "1", "--cw-start-second", "5.5"},
+            "fractional CLI --cw-start-second");
+        require_cli_parse_rejected(
+            {"--mode", "QRSS", "--cw-message", "TEST", "--cw-base-frequency", "14096900",
+             "--cw-dot-seconds", "1", "--cw-start-second", "invalid"},
+            "nonnumeric CLI --cw-start-second");
+        require_cli_parse_rejected(
+            {"--qrss-message", "TEST", "--qrss-frequency", "14096900",
+             "--qrss-dot-seconds", "1", "--cw-start-second", "5"},
+            "scheduled seconds with transient QRSS startup");
     }
 
     std::cout << "dial_frequency_semantics_test passed" << std::endl;

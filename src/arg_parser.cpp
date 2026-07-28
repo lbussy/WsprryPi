@@ -1285,6 +1285,7 @@ void print_usage(const std::string &message, int exit_code)
               << "  --cw-shift-hz <hz>                 FSKCW/DFCW frequency shift in Hz.\n"
               << "  --cw-dot-seconds <seconds>         Dot length in seconds.\n"
               << "  --cw-start-minute <0-59>           Scheduled non-WSPR start minute.\n"
+              << "  --cw-start-second <0-59>           Seconds after the scheduled CW start minute. Default: 5.\n"
               << "  --cw-repeat-minutes <minutes>      Scheduled non-WSPR repeat interval.\n"
               << "  --cw-intra-element-gap <multiple>  Gap between Morse elements.\n"
               << "  --cw-inter-character-gap <multiple>\n"
@@ -1454,6 +1455,17 @@ bool validate_config_candidate(
         if (error_message != nullptr)
         {
             *error_message = "Schedule start_minute must be between 0 and 59.";
+        }
+
+        return false;
+    }
+
+    if (candidate.schedule_start_second < 0 ||
+        candidate.schedule_start_second > 59)
+    {
+        if (error_message != nullptr)
+        {
+            *error_message = "Schedule start_second must be between 0 and 59.";
         }
 
         return false;
@@ -2652,6 +2664,18 @@ bool parse_command_line(int argc, char *argv[])
     clear_fskcw_startup_request();
     clear_dfcw_startup_request();
 
+    bool explicit_cw_start_second = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        if (arg == "--cw-start-second" ||
+            arg.rfind("--cw-start-second=", 0) == 0)
+        {
+            explicit_cw_start_second = true;
+            break;
+        }
+    }
+
     // Check if any arguments (besides the program name) were provided.
     if (argc == 1) // No arguments or options provided.
     {
@@ -2790,6 +2814,7 @@ bool parse_command_line(int argc, char *argv[])
         {"cw-fade-slice-ms", required_argument, nullptr, 1034},
         {"cw-start-minute", required_argument, nullptr, 1035},
         {"cw-repeat-minutes", required_argument, nullptr, 1036},
+        {"cw-start-second", required_argument, nullptr, 1050},
         {"use-led", no_argument, nullptr, 1037},
         {"no-led", no_argument, nullptr, 1038},
         {"use-shutdown", no_argument, nullptr, 1039},
@@ -3156,6 +3181,30 @@ bool parse_command_line(int argc, char *argv[])
                 }
                 config.schedule_repeat_minutes =
                     parse_integer_option(optarg, "--cw-repeat-minutes");
+            }
+            catch (const std::exception &e)
+            {
+                print_usage(e.what(), EXIT_FAILURE);
+            }
+            break;
+        }
+        case 1050:
+        {
+            try
+            {
+                if (config.use_ini)
+                {
+                    print_usage("--cw-start-second is invalid when using INI file.", EXIT_FAILURE);
+                }
+                config.schedule_start_second =
+                    parse_integer_option(optarg, "--cw-start-second");
+                if (config.schedule_start_second < 0 ||
+                    config.schedule_start_second > 59)
+                {
+                    print_usage(
+                        "--cw-start-second must be between 0 and 59.",
+                        EXIT_FAILURE);
+                }
             }
             catch (const std::exception &e)
             {
@@ -3793,6 +3842,14 @@ bool parse_command_line(int argc, char *argv[])
         !dfcw_dot_frequency_arg.empty() ||
         !dfcw_dash_frequency_arg.empty() ||
         !dfcw_dot_seconds_arg.empty();
+
+    if (explicit_cw_start_second &&
+        (any_qrss_arg || any_fskcw_arg || any_dfcw_arg))
+    {
+        print_usage(
+            "--cw-start-second is a scheduled CW option and cannot be combined with transient QRSS, FSKCW, or DFCW startup options.",
+            EXIT_FAILURE);
+    }
     if (any_dfcw_arg)
     {
         if (config.use_ini)
