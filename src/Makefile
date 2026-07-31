@@ -200,7 +200,7 @@ SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_D
 # Dependency includes
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
+DEPFILES := $(wildcard $(DEP_DIR)/*.d $(DEP_DIR)/*/*.d)
 -include $(DEPFILES)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -555,7 +555,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test monitor-file-regression-test gpio-line-resolver-test non-wspr-repeat-policy-test qrss-execution-regression-test qrss_execution_regression_test wspr-tone-regression-test wspr_tone_regression_test gpio-loopback-test band-gpio-live-monitor gdb install debuginstall uninstall lint macros help
+.PHONY: clean release debug test test-tone test-oneshot semantics-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test monitor-file-regression-test gpio-line-resolver-test non-wspr-repeat-policy-test qrss-execution-regression-test qrss_execution_regression_test wspr-tone-regression-test wspr_tone_regression_test gpio-loopback-test band-gpio-live-monitor gdb install debuginstall uninstall lint macros help
 DEBUG: debug
 RELEASE: release
 
@@ -591,6 +591,10 @@ semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSI
 	$(Q)node tests/log_timestamp_display_test.js
 	$(Q)echo "Running update-check comparison tests."
 	$(Q)node tests/update_check_comparison_test.js
+
+build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
+	$(Q)echo "Checking generated header dependency discovery."
+	$(Q)$(MAKE) --no-print-directory -pn $< | awk 'index($$0, "$<:") == 1 && index($$0, "WSPR-Transmitter/src/execution_plan.hpp") { found = 1 } END { exit !found }'
 
 update-check-comparison-test:
 	$(Q)node tests/update_check_comparison_test.js
