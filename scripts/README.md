@@ -4,6 +4,13 @@ These scripts are used for install and development orchestration.
 
 ## Support-bundle collector
 
+### Future support-route guard
+
+`SupportRequestGuard` is not yet wired to HTTP routes. It limits a future
+support route to loopback or directly connected interface subnets and validates
+local Host/Origin identities. It is network-location access control, not user
+authentication; forwarded headers are deliberately ignored.
+
 `collect-support-bundle.sh` retains its interactive behavior by creating a
 bundle in the current directory. A trusted future backend may instead invoke
 it with `--output-dir /absolute/private/directory`. The directory must already
