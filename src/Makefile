@@ -128,6 +128,7 @@ NON_WSPR_REPEAT_POLICY_TEST_OUT := non_wspr_repeat_policy_test
 QRSS_EXECUTION_REGRESSION_TEST_OUT := qrss_execution_regression_test
 WSPR_TONE_REGRESSION_TEST_OUT := wspr_tone_regression_test
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
+QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -195,6 +196,9 @@ WSPR_TONE_REGRESSION_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_
 SELECTOR_SHUTDOWN_CLEANUP_TEST_SRC := tests/selector_shutdown_cleanup_test.cpp
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/selector_shutdown_cleanup_test.o
 SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+QUALIFICATION_GPIO_TEST_MODE_TEST_SRC := tests/qualification_gpio_test_mode_test.cpp
+QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gpio_test_mode_test.o
+QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -502,6 +506,17 @@ $(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT): $(SELECTOR_SHUTDOWN_CLEANUP_TE
 	$(Q)echo "Linking debug: $(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ): $(QUALIFICATION_GPIO_TEST_MODE_TEST_SRC)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/tests/qualification_gpio_test_mode_test.d -c $< -o $@
+
+$(BIN_DIR)/$(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT): $(QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug: $(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 ifeq ($(GPIOD_HAS_V2),1)
 $(GPIO_LOOPBACK_TEST_OBJ): $(GPIO_LOOPBACK_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -555,7 +570,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test monitor-file-regression-test gpio-line-resolver-test non-wspr-repeat-policy-test qrss-execution-regression-test qrss_execution_regression_test wspr-tone-regression-test wspr_tone_regression_test gpio-loopback-test band-gpio-live-monitor gdb install debuginstall uninstall lint macros help
+.PHONY: clean release debug test test-tone test-oneshot semantics-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-line-resolver-test non-wspr-repeat-policy-test qrss-execution-regression-test qrss_execution_regression_test wspr-tone-regression-test wspr_tone_regression_test gpio-loopback-test band-gpio-live-monitor gdb install debuginstall uninstall lint macros help
 DEBUG: debug
 RELEASE: release
 
@@ -614,6 +629,10 @@ band-gpio-rotation-test: $(BIN_DIR)/$(BAND_GPIO_ROTATION_TEST_OUT)
 selector-shutdown-cleanup-test: $(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)
 	$(Q)echo "Running selector shutdown cleanup regression tests."
 	$(Q)./$(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)
+
+qualification-gpio-test-mode-test: $(BIN_DIR)/$(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT)
+	$(Q)echo "Running qualification GPIO test mode value semantics test."
+	$(Q)./$(BIN_DIR)/$(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT)
 
 monitor-file-regression-test: $(BIN_DIR)/$(MONITOR_FILE_REGRESSION_TEST_OUT)
 	$(Q)echo "Running MonitorFile regression tests."

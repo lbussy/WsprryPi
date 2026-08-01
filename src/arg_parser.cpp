@@ -371,6 +371,103 @@ static std::string transmit_gpio_validation_message()
     return oss.str();
 }
 
+static bool validate_pi_io_gpio_assignments(
+    const ArgParserConfig &candidate,
+    std::string *error_message)
+{
+    struct ReservedAssignment
+    {
+        int gpio;
+        const char *label;
+    };
+
+    std::vector<ReservedAssignment> reserved_assignments;
+    if (candidate.use_led && candidate.led_pin >= 0)
+    {
+        reserved_assignments.push_back({candidate.led_pin, "Transmit LED"});
+    }
+    if (candidate.use_shutdown && candidate.shutdown_pin >= 0)
+    {
+        reserved_assignments.push_back({candidate.shutdown_pin, "Shutdown Button"});
+    }
+    if (candidate.use_amp && candidate.amp_pin >= 0)
+    {
+        reserved_assignments.push_back({candidate.amp_pin, "Amp Control"});
+    }
+
+    for (std::size_t i = 0; i < reserved_assignments.size(); ++i)
+    {
+        for (std::size_t j = i + 1; j < reserved_assignments.size(); ++j)
+        {
+            if (reserved_assignments[i].gpio != reserved_assignments[j].gpio)
+            {
+                continue;
+            }
+
+            if (error_message != nullptr)
+            {
+                *error_message =
+                    "GPIO" + std::to_string(reserved_assignments[i].gpio) +
+                    " is assigned to both " + reserved_assignments[i].label +
+                    " and " + reserved_assignments[j].label + ".";
+            }
+            return false;
+        }
+    }
+
+    for (const BandGPIOConfig &band_config : candidate.band_gpio)
+    {
+        if (!band_config.enabled || band_config.gpio < 0)
+        {
+            continue;
+        }
+
+        for (const ReservedAssignment &reserved : reserved_assignments)
+        {
+            if (band_config.gpio != reserved.gpio)
+            {
+                continue;
+            }
+
+            if (error_message != nullptr)
+            {
+                *error_message = "GPIO" + std::to_string(band_config.gpio) +
+                                 " is reserved by " + reserved.label + ".";
+            }
+            return false;
+        }
+    }
+
+    for (std::size_t i = 0; i < candidate.band_gpio.size(); ++i)
+    {
+        const BandGPIOConfig &first = candidate.band_gpio[i];
+        if (!first.enabled || first.gpio < 0)
+        {
+            continue;
+        }
+
+        for (std::size_t j = i + 1; j < candidate.band_gpio.size(); ++j)
+        {
+            const BandGPIOConfig &second = candidate.band_gpio[j];
+            if (!second.enabled || second.gpio != first.gpio ||
+                second.active_high == first.active_high)
+            {
+                continue;
+            }
+
+            if (error_message != nullptr)
+            {
+                *error_message = "Bands sharing GPIO" +
+                                 std::to_string(first.gpio) +
+                                 " must use the same Active High setting.";
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool backend_ready_for_transmission(
     const ArgParserConfig &candidate,
     std::string *error_message)
@@ -1561,6 +1658,11 @@ bool validate_config_candidate(
             *error_message = "Invalid Amp Pin. Expected -1 or GPIO 0 through 27.";
         }
 
+        return false;
+    }
+
+    if (!validate_pi_io_gpio_assignments(candidate, error_message))
+    {
         return false;
     }
 

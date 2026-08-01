@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <sys/wait.h>
+#include <tuple>
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -638,6 +639,126 @@ int main(int argc, char *argv[])
                 stock_ini.find("2m =\n2m Active High = false") != std::string::npos &&
                 stock_ini.find("Active High = true") == std::string::npos,
             "stock INI must declare explicit disabled Band GPIO defaults for every band");
+    }
+
+    {
+        const auto configure_shared_band_gpio = [](ArgParserConfig &candidate,
+                                                    bool active_high) {
+            candidate.band_gpio[ham_band_index(HamBand::BAND_20M)] =
+                BandGPIOConfig{.gpio = 5, .enabled = true, .active_high = active_high};
+            candidate.band_gpio[ham_band_index(HamBand::BAND_40M)] =
+                BandGPIOConfig{.gpio = 5, .enabled = true, .active_high = active_high};
+        };
+
+        prime_valid_runtime_identity_config();
+        configure_shared_band_gpio(config, true);
+        std::string validation_error;
+        require(
+            validate_config_candidate(config, &validation_error),
+            "two enabled bands may share one GPIO when their polarity matches");
+
+        config.band_gpio[ham_band_index(HamBand::BAND_80M)] =
+            BandGPIOConfig{.gpio = 5, .enabled = true, .active_high = true};
+        require(
+            validate_config_candidate(config, &validation_error),
+            "three enabled bands may share one GPIO when their polarity matches");
+
+        config.band_gpio[ham_band_index(HamBand::BAND_80M)].active_high = false;
+        require(
+            !validate_config_candidate(config, &validation_error) &&
+                validation_error ==
+                    "Bands sharing GPIO5 must use the same Active High setting.",
+            "bands sharing a GPIO with conflicting polarity must be rejected");
+
+        prime_valid_runtime_identity_config();
+        configure_shared_band_gpio(config, true);
+        config_to_json();
+        json_to_config();
+        require(
+            validate_config_candidate(config, &validation_error),
+            "JSON configuration must retain valid shared Band GPIO assignments");
+
+        for (const auto &[use_led, use_shutdown, use_amp, pin, label] :
+             std::vector<std::tuple<bool, bool, bool, int, std::string>>{
+                 {true, false, false, 5, "Transmit LED"},
+                 {false, true, false, 5, "Shutdown Button"},
+                 {false, false, true, 5, "Amp Control"}})
+        {
+            prime_valid_runtime_identity_config();
+            configure_shared_band_gpio(config, true);
+            config.use_led = use_led;
+            config.led_pin = use_led ? pin : -1;
+            config.use_shutdown = use_shutdown;
+            config.shutdown_pin = use_shutdown ? pin : -1;
+            config.use_amp = use_amp;
+            config.amp_pin = use_amp ? pin : -1;
+            require(
+                !validate_config_candidate(config, &validation_error) &&
+                    validation_error == "GPIO5 is reserved by " + label + ".",
+                "Band GPIO must reject an enabled " + label + " assignment");
+        }
+
+        prime_valid_runtime_identity_config();
+        configure_shared_band_gpio(config, true);
+        config.use_led = false;
+        config.led_pin = 5;
+        config.use_shutdown = false;
+        config.shutdown_pin = 5;
+        config.use_amp = false;
+        config.amp_pin = 5;
+        require(
+            validate_config_candidate(config, &validation_error),
+            "disabled Pi I/O features must not reserve their retained GPIO values");
+
+        config.use_led = true;
+        config.led_pin = 6;
+        config.use_shutdown = true;
+        config.shutdown_pin = 6;
+        require(
+            !validate_config_candidate(config, &validation_error) &&
+                validation_error ==
+                    "GPIO6 is assigned to both Transmit LED and Shutdown Button.",
+            "enabled LED, shutdown, and amplifier roles must remain mutually exclusive");
+
+        auto managed_ini = make_managed_ini_data("AA0NT", "EM18", "20m", true);
+        managed_ini["Band GPIO"]["20m"] = "5";
+        managed_ini["Band GPIO"]["20m Active High"] = "true";
+        managed_ini["Band GPIO"]["40m"] = "5";
+        managed_ini["Band GPIO"]["40m Active High"] = "true";
+        iniFile.setData(managed_ini);
+        PreparedConfigCandidate ini_candidate;
+        prepare_ini_config_candidate("/tmp/shared_band_gpio.ini", ini_candidate);
+        require(
+            ini_candidate.valid,
+            "INI configuration must accept matching shared Band GPIO assignments");
+
+        managed_ini["Band GPIO"]["40m Active High"] = "false";
+        iniFile.setData(managed_ini);
+        prepare_ini_config_candidate("/tmp/conflicting_band_gpio.ini", ini_candidate);
+        require(
+            !ini_candidate.valid && ini_candidate.error_reason ==
+                "Bands sharing GPIO5 must use the same Active High setting.",
+            "INI configuration must reject conflicting shared Band GPIO polarity");
+
+        prime_valid_runtime_identity_config();
+        config.use_led = true;
+        config.led_pin = 5;
+        config_to_json();
+        const nlohmann::json before_invalid_patch = jConfig;
+        bool patch_rejected = false;
+        try
+        {
+            patch_all_from_web({
+                {"Band GPIO",
+                 {{"20m", {{"GPIO", 5}, {"Enabled", true}, {"Active High", true}}}}}});
+        }
+        catch (const std::exception &)
+        {
+            patch_rejected = true;
+        }
+        require(
+            patch_rejected && jConfig == before_invalid_patch,
+            "web patches must reject reserved Band GPIO assignments without changing config");
     }
 
     for (const std::string &removed_alias : {
