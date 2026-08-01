@@ -113,6 +113,10 @@ int main()
 
     const std::string ui_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.js");
+    const std::string ui_stylesheet_source =
+        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.css");
+    const std::string main_source =
+        read_text_file("/home/pi/WsprryPi/src/main.cpp");
     const std::string config_view_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/config.php");
     const std::string cw_timing_source =
@@ -123,6 +127,24 @@ int main()
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/operation.js");
     const std::string cw_message_input =
         extract_input_tag_by_id(config_view_source, "qrss_message");
+    require(
+        main_source.find("#ifdef DEBUG_WSPR\n    const char *qualification_gpio_test_mode") !=
+                std::string::npos &&
+            main_source.find("WSPRRYPI_QUALIFICATION_GPIO_TEST_MODE") !=
+                std::string::npos &&
+            main_source.find("GPIOOutput::setTestMode(true);") !=
+                std::string::npos &&
+            main_source.find("physical GPIO output requests, writes, and releases are suppressed") !=
+                std::string::npos,
+        "the debug-only qualification GPIO seam must require explicit activation and clearly state that physical output operations are suppressed");
+    require(
+        ui_source.find("if (!valid && reservedAssignment.field) {") !=
+                std::string::npos &&
+            ui_source.find("setFieldValidationState(reservedAssignment.field, false);") !=
+                std::string::npos &&
+            ui_stylesheet_source.find(".pin-dropdown-btn.is-invalid") !=
+                std::string::npos,
+        "Band GPIO conflicts with enabled reserved controls must mark both affected fields invalid");
     require(
         cw_message_input.find("type=\"text\"") != std::string::npos &&
             cw_message_input.find("step=") == std::string::npos,
@@ -1097,6 +1119,19 @@ int main()
             ui_source.find("getUseAmp() ? getAmpPin() : null") != std::string::npos &&
             ui_source.find("function validateGpioConflictFields()") != std::string::npos,
         "index.js must serialize Use Amp, retain Amp Pin as data, include Amp Pin Active High, and validate Amp GPIO conflicts only when enabled");
+    require(
+        ui_source.find("const reservedAssignments = [];") != std::string::npos &&
+            ui_source.find("const bandAssignments = [];") != std::string::npos &&
+            ui_source.find("GPIO${assignment.pin} is reserved by ${reservedAssignment.label}.") !=
+                std::string::npos &&
+            ui_source.find("Bands sharing GPIO${pin} must use the same Active High setting.") !=
+                std::string::npos &&
+            ui_source.find("Bands sharing a GPIO with matching polarity") == std::string::npos,
+        "Pi I/O validation must classify reserved controls separately, retain invalid selections, and allow only matching-polarity shared Band GPIO rows");
+    require(
+        ui_source.find("function handleBandGpioInputChange() {\n    refreshGpioConflictOptions();\n    validateBandGpioFields();\n    scheduleAutosave();") !=
+            std::string::npos,
+        "Band GPIO pin and polarity changes must schedule autosave after revalidation");
     const std::string footer_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/footer.php");
     const std::string site_css_source =

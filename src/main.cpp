@@ -31,6 +31,10 @@
 
 // Project headers
 #include "arg_parser.hpp"
+#include "gpio_output.hpp"
+#ifdef DEBUG_WSPR
+#include "qualification_gpio_test_mode.hpp"
+#endif
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "version.hpp"
@@ -42,6 +46,7 @@
 #include <atomic>
 #include <cerrno>
 #include <csignal>
+#include <cstdlib>
 #include <mutex>
 #include <string_view>
 #include <thread>
@@ -218,6 +223,15 @@ int main(int argc, char *argv[])
     // Maintain retval for main()
     int retval = EXIT_SUCCESS;
 
+#ifdef DEBUG_WSPR
+    const char *qualification_gpio_test_mode =
+        std::getenv("WSPRRYPI_QUALIFICATION_GPIO_TEST_MODE");
+    if (qualification_gpio_test_mode_requested(qualification_gpio_test_mode))
+    {
+        GPIOOutput::setTestMode(true);
+    }
+#endif
+
     if (!install_async_shutdown_handlers())
     {
         std::perror("sigaction/pipe");
@@ -311,6 +325,15 @@ int main(int argc, char *argv[])
         config.use_journald,
         config.date_time_log,
         config.debug_logging);
+
+#ifdef DEBUG_WSPR
+    if (qualification_gpio_test_mode_requested(qualification_gpio_test_mode))
+    {
+        llog.logS(
+            WARN,
+            "Qualification GPIO test mode enabled: physical GPIO output requests, writes, and releases are suppressed. Hardware is not qualified.");
+    }
+#endif
 
     // Display version, Raspberry Pi model, and process ID after CLI parsing so
     // the first backend banner matches the requested logging mode.
