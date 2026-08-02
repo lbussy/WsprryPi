@@ -138,6 +138,7 @@ SUPPORT_BUNDLE_RUNTIME_TEST_OUT := support_bundle_runtime_test
 SUPPORT_BUNDLE_HTTP_TEST_OUT := support_bundle_http_test
 SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OUT := support_bundle_web_server_wiring_test
 SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT := support_bundle_download_file_test
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT := support_bundle_checksum_file_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -234,6 +235,9 @@ SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_DEPS := $(SUPPORT_BUNDLE_WEB_SERVER_WIRING
 SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_SRC := tests/support_bundle_download_file_test.cpp
 SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_download_file_test.o
 SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_DEPS := $(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_SRC := tests/support_bundle_checksum_file_test.cpp
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_checksum_file_test.o
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_DEPS := $(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -588,6 +592,10 @@ $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT): $(SUPPORT_BUNDLE_DOWNLOAD_F
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT): $(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 ifeq ($(GPIOD_HAS_V2),1)
 $(GPIO_LOOPBACK_TEST_OBJ): $(GPIO_LOOPBACK_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -641,7 +649,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -704,6 +712,9 @@ support-bundle-web-server-wiring-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_WEB_SERVER_WI
 
 support-bundle-download-file-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT)
+
+support-bundle-checksum-file-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT)
 
 build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 	$(Q)echo "Checking generated header dependency discovery."
