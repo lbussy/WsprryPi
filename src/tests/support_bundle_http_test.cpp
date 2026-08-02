@@ -2,6 +2,7 @@
 
 #include "json.hpp"
 
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -165,6 +166,12 @@ httplib::Response get_download(httplib::Client &client,
         client.Get("/api/support-bundles/" + id + "/download", headers));
 }
 
+httplib::Response delete_bundle(httplib::Client &client,
+                                const httplib::Headers &headers,
+                                const std::string &id) {
+    return require_response(client.Delete("/api/support-bundles/" + id, headers));
+}
+
 void assert_no_private_download_leak(const httplib::Response &response,
                                      const fs::path &storage_root) {
     assert(response.body.find(storage_root.string()) == std::string::npos);
@@ -199,8 +206,17 @@ int main() {
 
     const auto executor = std::make_shared<FakeExecutor>();
     const auto provider_calls = std::make_shared<int>(0);
+    const auto fail_cleanup = std::make_shared<std::atomic<bool>>(false);
     int id_index = 0;
-    SupportBundleJobManager manager(executor, [&] { return job_id(static_cast<char>('a' + id_index++)); }, storage_root);
+    SupportBundleJobManager manager(
+        executor, [&] { return job_id(static_cast<char>('a' + id_index++)); }, storage_root,
+        [fail_cleanup](const fs::path &root, const std::string &id) {
+            if (fail_cleanup->load()) {
+                return SupportBundleJobDirectoryRemovalResult{
+                    SupportBundleJobDirectoryRemovalFailure::removal_failed};
+            }
+            return remove_support_bundle_job_directory(root, id);
+        });
     httplib::Server server;
     server.set_default_headers({{"Access-Control-Allow-Origin", "*"},
                                 {"Access-Control-Allow-Methods", "GET, POST"},
@@ -229,6 +245,11 @@ int main() {
     assert(created_body["i2c_probe_status"] == "");
     assert(!created_body["download_available"]);
     assert_no_private_download_metadata(created_body);
+
+    const auto queued_delete = delete_bundle(client, headers, first_id);
+    assert(queued_delete.status == 409 && response_json(queued_delete)["error"] == "not_terminal");
+    assert_restrictive(queued_delete);
+    assert_no_private_download_leak(queued_delete, storage_root);
 
     executor->wait_entered();
     wait_for_state(client, headers, first_id, "running");
@@ -279,6 +300,28 @@ int main() {
     assert_restrictive(downloaded);
     assert_no_private_download_leak(downloaded, storage_root);
 
+    const httplib::Headers foreign_origin{{"Host", "127.0.0.1:" + std::to_string(port)},
+                                          {"Origin", "http://example.invalid"}};
+    const auto guarded_delete = delete_bundle(client, foreign_origin, first_id);
+    assert(guarded_delete.status == 403);
+    assert_restrictive(guarded_delete);
+    assert_no_private_download_leak(guarded_delete, storage_root);
+    assert(get_download(client, headers, first_id).status == 200);
+
+    const auto deleted_after_download = delete_bundle(client, headers, first_id);
+    assert(deleted_after_download.status == 204 && deleted_after_download.body.empty());
+    assert_restrictive(deleted_after_download);
+    const auto deleted_status = get_status(client, headers, first_id);
+    assert(deleted_status.status == 200 && !response_json(deleted_status)["download_available"]);
+    assert_no_private_download_metadata(response_json(deleted_status));
+    const auto deleted_download = get_download(client, headers, first_id);
+    assert(deleted_download.status == 409 && response_json(deleted_download)["error"] == "no_download");
+    assert_restrictive(deleted_download);
+    assert_no_private_download_leak(deleted_download, storage_root);
+    const auto repeated_delete = delete_bundle(client, headers, first_id);
+    assert(repeated_delete.status == 204 && repeated_delete.body.empty());
+    assert_restrictive(repeated_delete);
+
     executor->reset();
     const auto probe_created = require_response(client.Post("/api/support-bundles", headers, "{\"probe_i2c\":true}", "application/json"));
     assert(probe_created.status == 202);
@@ -290,6 +333,12 @@ int main() {
     assert(probe_status["i2c_probe_status"] == "succeeded");
     assert(probe_status["download_available"] == true);
     assert_no_private_download_metadata(probe_status);
+    const auto deleted_without_download = delete_bundle(client, headers, probe_id);
+    assert(deleted_without_download.status == 204);
+    assert(!response_json(get_status(client, headers, probe_id))["download_available"]);
+    const auto probe_download_after_delete = get_download(client, headers, probe_id);
+    assert(probe_download_after_delete.status == 409 &&
+           response_json(probe_download_after_delete)["error"] == "no_download");
 
     executor->reset();
     const auto failed_created = require_response(client.Post("/api/support-bundles", headers, "{}", "application/json"));
@@ -309,6 +358,10 @@ int main() {
     assert(response_json(failed_download)["error"] == "no_download");
     assert_restrictive(failed_download);
     assert_no_private_download_leak(failed_download, storage_root);
+    const auto failed_delete = delete_bundle(client, headers, failed_id);
+    assert(failed_delete.status == 409 && response_json(failed_delete)["error"] == "no_download");
+    assert_restrictive(failed_delete);
+    assert_no_private_download_leak(failed_delete, storage_root);
 
     const auto complete_corrupt_job = [&](FakeExecutor::Mode mode,
                                           int expected_status,
@@ -332,6 +385,22 @@ int main() {
     complete_corrupt_job(FakeExecutor::Mode::unsafe_sidecar, 409, "artifact_unsafe");
     complete_corrupt_job(FakeExecutor::Mode::missing_archive, 503, "artifact_unavailable");
 
+    executor->reset();
+    const auto cleanup_created = require_response(
+        client.Post("/api/support-bundles", headers, "{}", "application/json"));
+    const std::string cleanup_id = response_json(cleanup_created)["id"];
+    executor->wait_entered();
+    executor->release(FakeExecutor::Mode::success);
+    wait_for_state(client, headers, cleanup_id, "succeeded");
+    fail_cleanup->store(true);
+    const auto cleanup_failed = delete_bundle(client, headers, cleanup_id);
+    assert(cleanup_failed.status == 503 && response_json(cleanup_failed)["error"] == "cleanup_failed");
+    assert_restrictive(cleanup_failed);
+    assert_no_private_download_leak(cleanup_failed, storage_root);
+    assert(get_download(client, headers, cleanup_id).status == 200);
+    fail_cleanup->store(false);
+    assert(delete_bundle(client, headers, cleanup_id).status == 204);
+
     const auto malformed = require_response(client.Get("/api/support-bundles/not-an-id", headers));
     assert(malformed.status == 404);
     assert_restrictive(malformed);
@@ -347,12 +416,18 @@ int main() {
     assert(unknown_download.status == 404);
     assert_restrictive(unknown_download);
     assert_no_private_download_leak(unknown_download, storage_root);
+    const auto malformed_delete = delete_bundle(client, headers, "not-an-id");
+    assert(malformed_delete.status == 404);
+    assert_restrictive(malformed_delete);
+    assert_no_private_download_leak(malformed_delete, storage_root);
+    const auto unknown_delete = delete_bundle(client, headers, job_id('z'));
+    assert(unknown_delete.status == 404);
+    assert_restrictive(unknown_delete);
+    assert_no_private_download_leak(unknown_delete, storage_root);
     const auto listing = require_response(client.Get("/api/support-bundles", headers));
     assert(listing.status == 404);
     assert_restrictive(listing);
 
-    const httplib::Headers foreign_origin{{"Host", "127.0.0.1:" + std::to_string(port)},
-                                          {"Origin", "http://example.invalid"}};
     const auto foreign = require_response(client.Post("/api/support-bundles", foreign_origin, "{}", "application/json"));
     assert(foreign.status == 403);
     assert_restrictive(foreign);
@@ -361,15 +436,23 @@ int main() {
     assert(foreign_download.status == 403);
     assert_restrictive(foreign_download);
     assert_no_private_download_leak(foreign_download, storage_root);
+    const auto foreign_delete = delete_bundle(client, foreign_origin, first_id);
+    assert(foreign_delete.status == 403);
+    assert_restrictive(foreign_delete);
+    assert_no_private_download_leak(foreign_delete, storage_root);
     const httplib::Headers null_origin{{"Host", "127.0.0.1:" + std::to_string(port)}, {"Origin", "null"}};
     assert(require_response(client.Post("/api/support-bundles", null_origin, "{}", "application/json")).status == 403);
     assert(require_response(client.Get("/api/support-bundles/" + first_id + "/download", null_origin)).status == 403);
+    assert(delete_bundle(client, null_origin, first_id).status == 403);
     const httplib::Headers bad_host{{"Host", "example.invalid"}, {"X-Forwarded-For", "127.0.0.1"}};
     assert(require_response(client.Post("/api/support-bundles", bad_host, "{}", "application/json")).status == 403);
     const auto forwarded_download = require_response(
         client.Get("/api/support-bundles/" + first_id + "/download", bad_host));
     assert(forwarded_download.status == 403);
     assert_restrictive(forwarded_download);
+    const auto forwarded_delete = delete_bundle(client, bad_host, first_id);
+    assert(forwarded_delete.status == 403);
+    assert_restrictive(forwarded_delete);
     const auto preflight = require_response(client.Options("/api/support-bundles", foreign_origin));
     assert(preflight.status == 403);
     assert_restrictive(preflight);
@@ -381,6 +464,15 @@ int main() {
         client.Options("/api/support-bundles/" + first_id + "/download", headers));
     assert(local_download_options.status == 204);
     assert_restrictive(local_download_options);
+    const auto delete_preflight = require_response(
+        client.Options("/api/support-bundles/" + first_id, foreign_origin));
+    assert(delete_preflight.status == 403);
+    assert_restrictive(delete_preflight);
+    const auto local_delete_options = require_response(
+        client.Options("/api/support-bundles/" + first_id, headers));
+    assert(local_delete_options.status == 204);
+    assert(local_delete_options.get_header_value("Allow") == "GET, DELETE, OPTIONS");
+    assert_restrictive(local_delete_options);
 
     server.stop();
     server_thread.join();

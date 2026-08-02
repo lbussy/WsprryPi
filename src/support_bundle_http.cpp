@@ -33,6 +33,11 @@ void set_error(httplib::Response &response, int status, const char *error) {
     set_json(response, status, {{"error", error}});
 }
 
+void set_no_content(httplib::Response &response) {
+    remove_permissive_cors_headers(response);
+    response.status = 204;
+}
+
 bool allow_support_request(const httplib::Request &request,
                            httplib::Response &response,
                            const SupportRequestGuardSnapshotProvider &snapshot_provider) {
@@ -275,6 +280,38 @@ void register_support_bundle_http_routes(
             [download](bool) {});
     });
 
+    server.Delete(R"(/api/support-bundles/(.*))", [&manager, guard](const httplib::Request &request,
+                                                                       httplib::Response &response) {
+        if (!guard(request, response)) {
+            return;
+        }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        if (!SupportBundleJobManager::valid_id(id)) {
+            set_error(response, 404, "not_found");
+            return;
+        }
+
+        switch (manager.delete_download(id).status) {
+        case SupportBundleDownloadDeletionStatus::removed:
+        case SupportBundleDownloadDeletionStatus::already_removed:
+            set_no_content(response);
+            return;
+        case SupportBundleDownloadDeletionStatus::malformed_or_unknown_id:
+            set_error(response, 404, "not_found");
+            return;
+        case SupportBundleDownloadDeletionStatus::not_terminal:
+            set_error(response, 409, "not_terminal");
+            return;
+        case SupportBundleDownloadDeletionStatus::no_retained_download:
+            set_error(response, 409, "no_download");
+            return;
+        case SupportBundleDownloadDeletionStatus::cleanup_failed:
+            set_error(response, 503, "cleanup_failed");
+            return;
+        }
+        set_error(response, 500, "internal_error");
+    });
+
     server.Get(R"(/api/support-bundles/(.*))", [&manager, guard](const httplib::Request &request,
                                                                     httplib::Response &response) {
         if (!guard(request, response)) {
@@ -326,6 +363,7 @@ void register_support_bundle_http_routes(
             return;
         }
         remove_permissive_cors_headers(response);
+        response.set_header("Allow", "GET, DELETE, OPTIONS");
         response.status = 204;
     });
 }
