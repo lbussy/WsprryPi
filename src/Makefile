@@ -662,7 +662,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -716,6 +716,9 @@ support-bundle-runtime-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_RUNTIME_TEST_OUT)
 
 support-bundle-runtime-installer-test:
 	$(Q)bash ../scripts/tests/support_bundle_runtime_install_test.sh
+
+installer-dependency-test:
+	$(Q)bash ../scripts/tests/installer_dependency_test.sh
 
 support-bundle-http-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_HTTP_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_HTTP_TEST_OUT)

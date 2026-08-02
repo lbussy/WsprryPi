@@ -771,6 +771,8 @@ readonly SYSTEM_READS
 #          Packages included:
 #          - `jq`: JSON parsing utility.
 #          - `git`: Version control system.
+#          - `libssl-dev`: OpenSSL EVP headers, libcrypto pkg-config metadata,
+#            and the matching libcrypto runtime dependency.
 #
 # @example
 # for pkg in "${APT_PACKAGES[@]}"; do
@@ -787,6 +789,7 @@ readonly APT_PACKAGES=(
     "chrony"
     "libgpiod-dev"
     "libsystemd-dev"
+    "libssl-dev"
 )
 
 # -----------------------------------------------------------------------------
