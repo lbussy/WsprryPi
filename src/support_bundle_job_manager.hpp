@@ -27,6 +27,22 @@ enum class SupportBundleDownloadReferenceStatus {
     not_ready,
     no_download,
 };
+enum class SupportBundleDownloadDeletionStatus {
+    removed,
+    already_removed,
+    malformed_or_unknown_id,
+    not_terminal,
+    no_retained_download,
+    cleanup_failed,
+};
+struct SupportBundleDownloadDeletionResult {
+    SupportBundleDownloadDeletionStatus status =
+        SupportBundleDownloadDeletionStatus::malformed_or_unknown_id;
+
+    [[nodiscard]] bool removed() const noexcept {
+        return status == SupportBundleDownloadDeletionStatus::removed;
+    }
+};
 struct SupportBundleDownloadReference {
     SupportBundleDownloadReferenceStatus status =
         SupportBundleDownloadReferenceStatus::malformed_or_unknown_id;
@@ -58,6 +74,7 @@ public:
     std::optional<SupportBundleJobSnapshot> create(SupportBundleJobRequest request, std::string &error);
     std::optional<SupportBundleJobSnapshot> lookup(const std::string &id) const;
     SupportBundleDownloadReference download_reference(const std::string &id) const;
+    SupportBundleDownloadDeletionResult delete_download(const std::string &id);
     void shutdown();
     static bool valid_id(const std::string &id);
 private:
@@ -75,6 +92,7 @@ private:
     std::string validated_archive_filename_;
     std::string validated_checksum_filename_;
     std::string validated_sha256_;
+    bool download_removed_ = false;
     std::thread worker_;
     bool shutting_down_ = false;
 };

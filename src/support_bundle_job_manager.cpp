@@ -70,6 +70,7 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     validated_archive_filename_.clear();
     validated_checksum_filename_.clear();
     validated_sha256_.clear();
+    download_removed_ = false;
     try { worker_ = std::thread(&SupportBundleJobManager::run, this, id, request.probe_i2c, directory); }
     catch (const std::system_error &) {
         job_.reset();
@@ -103,6 +104,53 @@ SupportBundleDownloadReference SupportBundleJobManager::download_reference(const
             std::move(checksum_path),
             validated_checksum_filename_,
             validated_sha256_};
+}
+
+SupportBundleDownloadDeletionResult SupportBundleJobManager::delete_download(
+    const std::string &id) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id) {
+        return {SupportBundleDownloadDeletionStatus::malformed_or_unknown_id};
+    }
+    if (job_->state == SupportBundleJobState::queued || job_->state == SupportBundleJobState::running) {
+        return {SupportBundleDownloadDeletionStatus::not_terminal};
+    }
+    if (job_->state != SupportBundleJobState::succeeded) {
+        return {SupportBundleDownloadDeletionStatus::no_retained_download};
+    }
+    if (download_removed_) {
+        return {SupportBundleDownloadDeletionStatus::already_removed};
+    }
+    if (!job_->download_available ||
+        validated_archive_filename_.empty() || validated_checksum_filename_.empty() ||
+        validated_sha256_.empty()) {
+        return {SupportBundleDownloadDeletionStatus::no_retained_download};
+    }
+    std::filesystem::path archive_path;
+    std::filesystem::path checksum_path;
+    if (!safe_download_references(storage_root_, job_directory_, id,
+                                  validated_archive_filename_, validated_checksum_filename_,
+                                  archive_path, checksum_path)) {
+        return {SupportBundleDownloadDeletionStatus::no_retained_download};
+    }
+
+    SupportBundleJobDirectoryRemovalResult cleanup_result;
+    try {
+        cleanup_result = remover_(storage_root_, id);
+    } catch (...) {
+        return {SupportBundleDownloadDeletionStatus::cleanup_failed};
+    }
+    if (!cleanup_result.removed()) {
+        return {SupportBundleDownloadDeletionStatus::cleanup_failed};
+    }
+
+    job_directory_.clear();
+    validated_archive_filename_.clear();
+    validated_checksum_filename_.clear();
+    validated_sha256_.clear();
+    download_removed_ = true;
+    job_->download_available = false;
+    return {SupportBundleDownloadDeletionStatus::removed};
 }
 void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesystem::path job_directory) {
     { std::lock_guard lock(mutex_); if (!job_ || job_->id != id) return; job_->state = SupportBundleJobState::running; }
@@ -140,6 +188,7 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
         validated_archive_filename_ = result.succeeded ? validation.archive_filename : "";
         validated_checksum_filename_ = result.succeeded ? validation.checksum_filename : "";
         validated_sha256_ = result.succeeded ? validation.sha256 : "";
+        download_removed_ = false;
         job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
         job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
         remove_job_directory = !result.succeeded;
