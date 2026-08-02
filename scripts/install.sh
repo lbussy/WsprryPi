@@ -5922,6 +5922,32 @@ manage_exe() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Installs or removes the private support-bundle collector runtime.
+# @details Storage is intentionally retained on uninstall. Administrators may
+#          remove `/var/lib/wsprrypi/support-bundles` explicitly after retaining
+#          or deleting any diagnostic artifacts they need.
+# -----------------------------------------------------------------------------
+manage_support_bundle_runtime() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    # shellcheck source=scripts/support_bundle_runtime_install.sh
+    source "${LOCAL_REPO_DIR}/scripts/support_bundle_runtime_install.sh" || {
+        logE "Failed to load support-bundle runtime provisioning."
+        debug_end "$debug"
+        return 1
+    }
+    if ! support_bundle_runtime_provision "$ACTION" "$LOCAL_REPO_DIR" "" "$debug"; then
+        logE "Failed to provision support-bundle runtime."
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of configuration files.
 # @details This function installs or removes a configuration file. During
 #          installation, it validates the source file, updates the semantic
@@ -7853,6 +7879,7 @@ manage_wsprry_pi() {
         "remove_legacy_files_and_dirs"
         "compile_binary \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
+        "manage_support_bundle_runtime"
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_i2c"
         "manage_service \"/usr/bin/$WSPR_EXE\" \"$service_command\" \"false\""
