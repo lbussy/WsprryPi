@@ -315,6 +315,14 @@ The repository maintains optional editor recommendations in
 `.vscode/extensions.json`. VS Code offers those recommendations when the
 repository opens.
 
+After installing the recommended extensions, run the following command in the
+VS Code remote terminal to configure Todo Tree to use the installed `rg`
+executable:
+
+```sh
+f="$HOME/.vscode-server/data/Machine/settings.json"; mkdir -p "$(dirname "$f")"; F="$f" RG="$(command -v rg)" python3 -c 'import json,os,pathlib; p=pathlib.Path(os.environ["F"]); d=json.loads(p.read_text()) if p.exists() else {}; d["todo-tree.ripgrep.ripgrep"]=os.environ["RG"]; p.write_text(json.dumps(d,indent=4)+"\n")'
+```
+
 ### macOS SSHFS for a 32-Bit Pi
 
 For a 32-bit `armhf` Pi, install macFUSE and SSHFS on macOS, then mount the
