@@ -50,6 +50,7 @@ std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_production
     dependencies.id_generator = generate_secure_job_id;
     dependencies.timeout = std::chrono::minutes(10);
     dependencies.term_grace = std::chrono::seconds(2);
+    dependencies.run_startup_cleanup = true;
     dependencies.executor = std::make_shared<SupportBundleCollectorExecutor>(
         dependencies.collector_executable.string(),
         dependencies.timeout,
@@ -59,6 +60,9 @@ std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_production
 
 std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_for_testing(
     SupportBundleRuntimeTestDependencies dependencies) {
+    if (dependencies.run_startup_cleanup && dependencies.startup_cleanup) {
+        (void)dependencies.startup_cleanup(dependencies.storage_root);
+    }
     if (!dependencies.executor) {
         dependencies.executor = std::make_shared<SupportBundleCollectorExecutor>(
             dependencies.collector_executable.string(),

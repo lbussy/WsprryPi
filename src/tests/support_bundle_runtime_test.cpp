@@ -6,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -78,15 +79,34 @@ int main() {
     dependencies.storage_root = temporary_root;
     dependencies.id_generator = [] { return std::string(32, 'a'); };
     dependencies.executor = fake_executor;
+    dependencies.run_startup_cleanup = true;
+    int cleanup_calls = 0;
+    dependencies.startup_cleanup = [&cleanup_calls](const fs::path &root) {
+        ++cleanup_calls;
+        return cleanup_stale_support_bundle_jobs(root);
+    };
+    const fs::path stale_job = temporary_root / std::string(32, 'z');
+    assert(mkdir(stale_job.c_str(), 0700) == 0);
+    assert(chmod(stale_job.c_str(), 0700) == 0);
+    std::ofstream(stale_job / "stale") << "stale";
     const auto manager = SupportBundleRuntime::create_for_testing(std::move(dependencies));
     assert(manager);
-    assert(fake_executor->runs == 0);
+    assert(cleanup_calls == 1 && !fs::exists(stale_job) && fake_executor->runs == 0);
     assert(!manager->lookup(std::string(32, 'a')));
 
-    const bool production_storage_existed = fs::exists(storage_root);
-    const auto production_manager = SupportBundleRuntime::create_production();
-    assert(production_manager);
-    assert(fs::exists(storage_root) == production_storage_existed);
+    SupportBundleRuntimeTestDependencies missing_dependencies;
+    missing_dependencies.collector_executable = "/test/collector";
+    missing_dependencies.storage_root = temporary_root / "unprovisioned";
+    missing_dependencies.id_generator = [] { return std::string(32, 'b'); };
+    missing_dependencies.executor = fake_executor;
+    missing_dependencies.run_startup_cleanup = true;
+    missing_dependencies.startup_cleanup = [](const fs::path &root) {
+        return cleanup_stale_support_bundle_jobs(root);
+    };
+    const auto unavailable_manager =
+        SupportBundleRuntime::create_for_testing(std::move(missing_dependencies));
+    assert(unavailable_manager);
+    assert(!fs::exists(temporary_root / "unprovisioned") && fake_executor->runs == 0);
 
     fs::remove_all(temporary_root);
     std::cout << "support_bundle_runtime_test: PASS\n";

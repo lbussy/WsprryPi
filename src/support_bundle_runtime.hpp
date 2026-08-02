@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support_bundle_job_manager.hpp"
+#include "support_bundle_startup_cleanup.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -23,6 +24,11 @@ struct SupportBundleRuntimeTestDependencies {
     std::shared_ptr<SupportBundleJobExecutor> executor;
     std::chrono::milliseconds timeout = std::chrono::minutes(10);
     std::chrono::milliseconds term_grace = std::chrono::seconds(2);
+    bool run_startup_cleanup = false;
+    std::function<SupportBundleStartupCleanupResult(const std::filesystem::path &)>
+        startup_cleanup = [](const std::filesystem::path &root) {
+            return cleanup_stale_support_bundle_jobs(root);
+        };
 };
 
 class SupportBundleRuntime {
@@ -31,8 +37,8 @@ public:
 
     static std::unique_ptr<SupportBundleJobManager> create_production();
 
-    // This override seam is for native tests only.  Runtime requests never
-    // supply paths, executors, timeouts, or ID generators.
+    // This override seam is for native tests only. Runtime requests never
+    // supply paths, executors, timeouts, ID generators, or cleanup behavior.
     static std::unique_ptr<SupportBundleJobManager> create_for_testing(
         SupportBundleRuntimeTestDependencies dependencies);
 };
