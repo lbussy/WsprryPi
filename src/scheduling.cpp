@@ -224,6 +224,10 @@ static std::mutex tx_led_state_mtx;
 static std::condition_variable tx_led_state_cv;
 static bool tx_led_active = false;
 static std::mutex transmit_gpio_lifecycle_mtx;
+static std::atomic<bool> startup_quiesce_inhibited{false};
+static std::mutex startup_quiesce_error_mtx;
+static std::string startup_quiesce_error;
+static StartupQuiesceInvokerForTest startup_quiesce_invoker_for_test{};
 
 /**
  * @brief File-scope self-pipe descriptors for signal notifications.
@@ -1369,6 +1373,39 @@ static void log_transmit_disabled_skip()
     llog.logS(INFO, "Transmit disabled, skipping transmission and scheduling.");
 }
 
+static void log_startup_quiesce_inhibited_skip()
+{
+    std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
+    llog.logS(
+        ERROR,
+        "Transmit is configured on but inhibited because startup hardware could not be quiesced: ",
+        startup_quiesce_error);
+}
+
+static wsprrypi::StartupQuiesceResult invoke_startup_quiesce()
+{
+    if (startup_quiesce_invoker_for_test)
+        return startup_quiesce_invoker_for_test();
+    return wsprTransmitter.quiesceForStartup();
+}
+
+static bool run_startup_quiesce_gate(const ArgParserConfig &cfg)
+{
+    const wsprrypi::StartupQuiesceResult result = invoke_startup_quiesce();
+    if (!result.ok)
+    {
+        std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
+        startup_quiesce_error = result.error.empty()
+            ? "The selected transmission backend did not report a reason."
+            : result.error;
+        startup_quiesce_inhibited.store(true, std::memory_order_release);
+    }
+
+    deassert_transmit_gpio_outputs(&cfg, false, "startup hardware quiesce");
+    shutdown_all_configured_selector_gpios(cfg);
+    return result.ok;
+}
+
 static bool runtime_transmit_requested(const ArgParserConfig &cfg) noexcept
 {
     if (!cfg.use_ini)
@@ -1395,7 +1432,9 @@ static bool runtime_transmit_requested(const ArgParserConfig &cfg) noexcept
 
 static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
 {
-    return runtime_transmit_requested(cfg) && !managed_reload_tx_inhibited;
+    return runtime_transmit_requested(cfg) &&
+           !managed_reload_tx_inhibited &&
+           !startup_quiesce_inhibited.load(std::memory_order_acquire);
 }
 
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept
@@ -2289,9 +2328,12 @@ bool validate_non_wspr_repeat_interval_policy(
 
 static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 {
-    if (!runtime_transmit_requested(cfg))
+    if (!runtime_transmit_enabled(cfg))
     {
-        log_transmit_disabled_skip();
+        if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+            log_startup_quiesce_inhibited_skip();
+        else
+            log_transmit_disabled_skip();
         return true;
     }
 
@@ -2492,10 +2534,13 @@ static void schedule_next_non_wspr_launch(const ArgParserConfig &cfg)
         return;
     }
 
-    if (!runtime_transmit_requested(cfg))
+    if (!runtime_transmit_enabled(cfg))
     {
         non_wspr_schedule_generation.fetch_add(1, std::memory_order_acq_rel);
-        log_transmit_disabled_skip();
+        if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+            log_startup_quiesce_inhibited_skip();
+        else
+            log_transmit_disabled_skip();
         return;
     }
 
@@ -3514,11 +3559,16 @@ TestToneStopResult end_test_tone()
     }
 
     validate_config_data();
-    if (!runtime_transmit_requested(config))
+    if (!runtime_transmit_enabled(config))
     {
-        log_transmit_disabled_skip();
+        if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+            log_startup_quiesce_inhibited_skip();
+        else
+            log_transmit_disabled_skip();
         result.stopped = true;
-        result.message = "Test tone stopped with transmit disabled.";
+        result.message = startup_quiesce_inhibited.load(std::memory_order_acquire)
+            ? "Test tone is inhibited because startup hardware could not be quiesced."
+            : "Test tone stopped with transmit disabled.";
         return result;
     }
 
@@ -3723,6 +3773,19 @@ bool wspr_loop()
         }
     }
 
+    // Backend selection occurs while loading the validated runtime
+    // configuration.  Quiesce it before any service, scheduler, selector, or
+    // automatic-transmit path can run.  This latch is process-lifetime by
+    // design: ordinary reloads and toggles cannot clear a hardware-safety
+    // failure; a deliberate process restart reinitializes the backend.
+    if (!run_startup_quiesce_gate(config))
+    {
+        llog.logS(
+            ERROR,
+            "Startup transmission inhibition latched: ",
+            startup_quiesce_error);
+    }
+
     if (!config.enable_web)
     {
         llog.logS(INFO, "Web UI disabled via CLI (--no-web)");
@@ -3797,9 +3860,12 @@ bool wspr_loop()
             return false;
         }
 
-        if (!runtime_transmit_requested(config))
+        if (!runtime_transmit_enabled(config))
         {
-            log_transmit_disabled_skip();
+            if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+                log_startup_quiesce_inhibited_skip();
+            else
+                log_transmit_disabled_skip();
         }
         else
         {
@@ -5448,4 +5514,33 @@ void reset_current_transmission_request_for_test() noexcept
 void reset_current_controller_request_for_test() noexcept
 {
     current_controller_request_for_test_storage.reset();
+}
+
+void set_startup_quiesce_invoker_for_test(StartupQuiesceInvokerForTest invoker)
+{
+    startup_quiesce_invoker_for_test = std::move(invoker);
+}
+
+void reset_startup_quiesce_for_test() noexcept
+{
+    startup_quiesce_invoker_for_test = {};
+    startup_quiesce_inhibited.store(false, std::memory_order_release);
+    std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
+    startup_quiesce_error.clear();
+}
+
+bool run_startup_quiesce_gate_for_test(const ArgParserConfig &cfg)
+{
+    return run_startup_quiesce_gate(cfg);
+}
+
+bool startup_quiesce_inhibited_for_test() noexcept
+{
+    return startup_quiesce_inhibited.load(std::memory_order_acquire);
+}
+
+std::string startup_quiesce_error_for_test()
+{
+    std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
+    return startup_quiesce_error;
 }

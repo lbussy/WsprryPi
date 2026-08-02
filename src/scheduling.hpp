@@ -43,6 +43,7 @@
 #include "arg_parser.hpp"
 #include "ppm_manager.hpp"
 #include "transmission_request.hpp"
+#include "transmission_backend.hpp"
 #include "wspr_transmit_types.hpp"
 
 // Standard library headers
@@ -51,6 +52,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <condition_variable>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -407,5 +409,13 @@ void set_current_transmission_request_for_test(
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test();
 void reset_current_transmission_request_for_test() noexcept;
 void reset_current_controller_request_for_test() noexcept;
+
+using StartupQuiesceInvokerForTest =
+    std::function<wsprrypi::StartupQuiesceResult()>;
+void set_startup_quiesce_invoker_for_test(StartupQuiesceInvokerForTest invoker);
+void reset_startup_quiesce_for_test() noexcept;
+bool run_startup_quiesce_gate_for_test(const ArgParserConfig &cfg);
+bool startup_quiesce_inhibited_for_test() noexcept;
+std::string startup_quiesce_error_for_test();
 
 #endif // _SCHEDULING_HPP
