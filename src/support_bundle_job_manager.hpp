@@ -1,5 +1,7 @@
 #pragma once
 
+#include "support_bundle_job_directory_remover.hpp"
+
 #include <functional>
 #include <filesystem>
 #include <memory>
@@ -45,7 +47,12 @@ public:
 class SupportBundleJobManager {
 public:
     using IdGenerator = std::function<std::string()>;
-    SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor, IdGenerator ids, std::filesystem::path storage_root);
+    using JobDirectoryRemover = std::function<SupportBundleJobDirectoryRemovalResult(
+        const std::filesystem::path &, const std::string &)>;
+    SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor,
+                            IdGenerator ids,
+                            std::filesystem::path storage_root,
+                            JobDirectoryRemover remover = remove_support_bundle_job_directory);
     ~SupportBundleJobManager();
     SupportBundleJobManager(const SupportBundleJobManager &) = delete;
     std::optional<SupportBundleJobSnapshot> create(SupportBundleJobRequest request, std::string &error);
@@ -55,9 +62,12 @@ public:
     static bool valid_id(const std::string &id);
 private:
     void run(std::string id, bool probe_i2c, std::filesystem::path job_directory);
+    void remove_unsuccessful_job_directory(const std::string &id,
+                                           const std::filesystem::path &job_directory);
     std::shared_ptr<SupportBundleJobExecutor> executor_;
     IdGenerator ids_;
     std::filesystem::path storage_root_;
+    JobDirectoryRemover remover_;
     bool storage_ready_ = false;
     mutable std::mutex mutex_;
     std::optional<SupportBundleJobSnapshot> job_;

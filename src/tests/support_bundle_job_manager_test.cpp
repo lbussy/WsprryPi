@@ -1,4 +1,5 @@
 #include "support_bundle_job_manager.hpp"
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
@@ -15,6 +16,7 @@ public:
     std::mutex mutex; std::condition_variable cv; bool entered=false, released=false, cancelled=false, fail=false, throw_exception=false; bool probe=false; int calls=0;
     ResultMode mode = ResultMode::valid;
     std::filesystem::path directory;
+    std::filesystem::path symlink_target;
     SupportBundleExecutionResult run(const SupportBundleExecutionContext &context) override {
         const bool requested = context.probe_i2c; directory = context.job_directory;
         std::unique_lock lock(mutex); ++calls; probe=requested; entered=true; cv.notify_all();
@@ -26,7 +28,10 @@ public:
             if (mode == ResultMode::schema_invalid) result["schema_version"] = 2;
             if (mode == ResultMode::inconsistent) result["i2c_probe_status"] = probe ? "skipped_by_user" : "succeeded";
             const auto path = context.job_directory / "WsprryPi-support-test.tar.gz.result.json";
-            if (mode == ResultMode::symlink) symlink("/tmp", path.c_str());
+            if (mode == ResultMode::symlink) {
+                const auto target = symlink_target.empty() ? std::filesystem::path("/tmp") : symlink_target;
+                symlink(target.c_str(), path.c_str());
+            }
             else if (mode == ResultMode::oversized) std::ofstream(path) << std::string(65537, 'x');
             else if (mode == ResultMode::malformed) std::ofstream(path) << "{";
             else { std::ofstream(path) << result.dump(); if (mode == ResultMode::multiple) std::ofstream(context.job_directory / "WsprryPi-support-two.tar.gz.result.json") << result.dump(); }
@@ -49,6 +54,14 @@ static void wait_terminal(SupportBundleJobManager &manager, const std::string &i
     }
     assert(false);
 }
+static void wait_removed(const std::filesystem::path &path) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (!std::filesystem::exists(path)) return;
+        std::this_thread::yield();
+    }
+    assert(false);
+}
 static std::string id(char c) { return std::string(32, c); }
 static void assert_no_download_metadata(const SupportBundleDownloadReference &reference) {
     assert(reference.archive_path.empty());
@@ -65,12 +78,27 @@ static void expect_storage_failure(const std::filesystem::path &root, const std:
 }
 static void expect_result_failure(const std::filesystem::path &root, FakeExecutor::ResultMode mode, const std::string &category, char token) {
     auto executor = std::make_shared<FakeExecutor>(); executor->mode = mode;
-    SupportBundleJobManager manager(executor, [token] { return id(token); }, root); std::string error;
+    std::atomic<int> cleanup_result{-1};
+    SupportBundleJobManager manager(
+        executor, [token] { return id(token); }, root,
+        [&cleanup_result](const std::filesystem::path &storage_root, const std::string &job_id) {
+            const auto result = remove_support_bundle_job_directory(storage_root, job_id);
+            cleanup_result.store(static_cast<int>(result.failure));
+            return result;
+        });
+    std::string error;
     const auto job = manager.create({}, error); executor->wait_entered(); executor->release(); wait_terminal(manager, job->id);
     const auto snapshot = manager.lookup(job->id); assert(snapshot->state == SupportBundleJobState::failed && snapshot->failure_category == category && snapshot->failure_message == "Support collection failed." && snapshot->i2c_probe_status.empty() && !snapshot->download_available);
     const auto reference = manager.download_reference(job->id);
     assert(reference.status == SupportBundleDownloadReferenceStatus::no_download);
     assert_no_download_metadata(reference);
+    wait_removed(root / job->id);
+    const auto cleanup_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (cleanup_result.load() == -1 && std::chrono::steady_clock::now() < cleanup_deadline) {
+        std::this_thread::yield();
+    }
+    assert(cleanup_result.load() ==
+           static_cast<int>(SupportBundleJobDirectoryRemovalFailure::none));
     manager.shutdown();
 }
 
@@ -79,6 +107,10 @@ int main() {
     assert(mkdtemp(template_path) != nullptr);
     const std::filesystem::path root = template_path;
     assert(chmod(root.c_str(), 0700) == 0);
+    const auto sibling = root / id('p');
+    assert(std::filesystem::create_directory(sibling));
+    assert(chmod(sibling.c_str(), 0700) == 0);
+    { std::ofstream sentinel(sibling / "keep"); sentinel << "sentinel"; }
     expect_storage_failure("relative-root", "storage_unavailable");
     expect_storage_failure(root / "missing", "storage_unavailable");
     const auto link_root = root / "root-link"; assert(symlink(root.c_str(), link_root.c_str()) == 0); expect_storage_failure(link_root, "storage_unavailable");
@@ -95,7 +127,7 @@ int main() {
     assert(running_reference.status == SupportBundleDownloadReferenceStatus::not_ready);
     assert_no_download_metadata(running_reference);
     assert(!manager.create({}, error) && error == "job_active"); assert(manager.lookup(first->id)); assert(!manager.lookup("bad"));
-    success->release(); wait_terminal(manager, first->id); assert(manager.lookup(first->id)->state == SupportBundleJobState::succeeded && manager.lookup(first->id)->i2c_probe_status == "succeeded" && manager.lookup(first->id)->download_available);
+    success->release(); wait_terminal(manager, first->id); assert(manager.lookup(first->id)->state == SupportBundleJobState::succeeded && manager.lookup(first->id)->i2c_probe_status == "succeeded" && manager.lookup(first->id)->download_available && std::filesystem::exists(success->directory));
     const auto ready = manager.download_reference(first->id);
     assert(ready.status == SupportBundleDownloadReferenceStatus::available);
     assert(ready.archive_path == root / first->id / "WsprryPi-support-test.tar.gz");
@@ -123,16 +155,64 @@ int main() {
     expect_result_failure(root, FakeExecutor::ResultMode::malformed, "result_invalid", 'l');
     expect_result_failure(root, FakeExecutor::ResultMode::schema_invalid, "result_invalid", 'm');
     expect_result_failure(root, FakeExecutor::ResultMode::inconsistent, "result_inconsistent", 'n');
+    assert(std::filesystem::exists(sibling / "keep"));
+
+    char external_template[] = "/tmp/wsprrypi-job-manager-cleanup-external.XXXXXX";
+    assert(mkdtemp(external_template) != nullptr);
+    const std::filesystem::path external = external_template;
+    assert(chmod(external.c_str(), 0700) == 0);
+    { std::ofstream external_sentinel(external / "keep"); external_sentinel << "sentinel"; }
+    auto symlink_failure = std::make_shared<FakeExecutor>();
+    symlink_failure->mode = FakeExecutor::ResultMode::symlink;
+    symlink_failure->symlink_target = external;
+    SupportBundleJobManager external_safe(symlink_failure, [] { return id('s'); }, root);
+    const auto external_job = external_safe.create({}, error);
+    symlink_failure->wait_entered();
+    symlink_failure->release();
+    wait_terminal(external_safe, external_job->id);
+    wait_removed(root / external_job->id);
+    assert(std::filesystem::exists(external / "keep"));
+    external_safe.shutdown();
+    std::filesystem::remove_all(external);
 
     auto failing = std::make_shared<FakeExecutor>(); failing->fail=true;
-    SupportBundleJobManager failed(failing, [] { return id('b'); }, root); auto f = failed.create({}, error); failing->wait_entered(); failing->release(); wait_terminal(failed, f->id); const auto fs=failed.lookup(f->id); assert(fs->state==SupportBundleJobState::failed && fs->failure_category=="collector_failed" && fs->failure_message=="Support collection failed." && !fs->download_available); const auto failed_reference = failed.download_reference(f->id); assert(failed_reference.status == SupportBundleDownloadReferenceStatus::no_download); assert_no_download_metadata(failed_reference); failed.shutdown();
+    SupportBundleJobManager failed(failing, [] { return id('b'); }, root); auto f = failed.create({}, error); failing->wait_entered(); failing->release(); wait_terminal(failed, f->id); wait_removed(root / f->id); const auto fs=failed.lookup(f->id); assert(fs->state==SupportBundleJobState::failed && fs->failure_category=="collector_failed" && fs->failure_message=="Support collection failed." && !fs->download_available); const auto failed_reference = failed.download_reference(f->id); assert(failed_reference.status == SupportBundleDownloadReferenceStatus::no_download); assert_no_download_metadata(failed_reference); failed.shutdown();
     auto throwing = std::make_shared<FakeExecutor>(); throwing->throw_exception=true;
-    SupportBundleJobManager exception(throwing, [] { return id('c'); }, root); auto e=exception.create({},error); throwing->wait_entered(); throwing->release(); wait_terminal(exception,e->id); assert(exception.lookup(e->id)->failure_category=="executor_exception"); exception.shutdown();
+    SupportBundleJobManager exception(throwing, [] { return id('c'); }, root); auto e=exception.create({},error); throwing->wait_entered(); throwing->release(); wait_terminal(exception,e->id); wait_removed(root / e->id); assert(exception.lookup(e->id)->failure_category=="executor_exception"); exception.shutdown();
     auto malformed = std::make_shared<FakeExecutor>(); SupportBundleJobManager bad_id(malformed, [] { return "bad"; }, root); assert(!bad_id.create({},error) && error=="invalid_job_id" && malformed->calls==0);
     auto throwing_id = std::make_shared<FakeExecutor>(); SupportBundleJobManager id_error(throwing_id, []()->std::string { throw 1; }, root); assert(!id_error.create({},error) && error=="id_generation_failed" && throwing_id->calls==0);
     std::string high=id('d'); high[0]=static_cast<char>(0x80); assert(!SupportBundleJobManager::valid_id(high));
-    auto cancelling = std::make_shared<FakeExecutor>(); SupportBundleJobManager cancel(cancelling, [] { return id('e'); }, root); auto c=cancel.create({},error); cancelling->wait_entered(); cancel.shutdown(); assert(cancelling->was_cancelled()); const auto cs=cancel.lookup(c->id); assert(cs->state==SupportBundleJobState::failed && cs->failure_category=="shutting_down" && !cs->download_available); const auto cancelled_reference = cancel.download_reference(c->id); assert(cancelled_reference.status == SupportBundleDownloadReferenceStatus::no_download); assert_no_download_metadata(cancelled_reference); assert(!cancel.create({},error) && error=="shutting_down"); cancel.shutdown();
-    { auto destructor_executor=std::make_shared<FakeExecutor>(); SupportBundleJobManager destruct(destructor_executor, [] { return id('f'); }, root); assert(destruct.create({},error)); destructor_executor->wait_entered(); }
+    auto cancelling = std::make_shared<FakeExecutor>(); SupportBundleJobManager cancel(cancelling, [] { return id('e'); }, root); auto c=cancel.create({},error); cancelling->wait_entered(); cancel.shutdown(); assert(cancelling->was_cancelled()); const auto cs=cancel.lookup(c->id); assert(cs->state==SupportBundleJobState::failed && cs->failure_category=="shutting_down" && !cs->download_available && !std::filesystem::exists(root / c->id)); const auto cancelled_reference = cancel.download_reference(c->id); assert(cancelled_reference.status == SupportBundleDownloadReferenceStatus::no_download); assert_no_download_metadata(cancelled_reference); assert(!cancel.create({},error) && error=="shutting_down"); cancel.shutdown();
+    std::string destroyed_id;
+    { auto destructor_executor=std::make_shared<FakeExecutor>(); SupportBundleJobManager destruct(destructor_executor, [] { return id('f'); }, root); const auto d = destruct.create({},error); destroyed_id = d->id; destructor_executor->wait_entered(); }
+    assert(!std::filesystem::exists(root / destroyed_id));
+    std::atomic<int> cleanup_calls = 0;
+    auto cleanup_failure_executor = std::make_shared<FakeExecutor>();
+    cleanup_failure_executor->mode = FakeExecutor::ResultMode::none;
+    SupportBundleJobManager cleanup_failure(
+        cleanup_failure_executor, [] { return id('r'); }, root,
+        [&cleanup_calls](const std::filesystem::path &, const std::string &) {
+            ++cleanup_calls;
+            return SupportBundleJobDirectoryRemovalResult{
+                SupportBundleJobDirectoryRemovalFailure::removal_failed};
+        });
+    const auto cleanup_job = cleanup_failure.create({}, error);
+    cleanup_failure_executor->wait_entered();
+    cleanup_failure_executor->release();
+    wait_terminal(cleanup_failure, cleanup_job->id);
+    const auto cleanup_snapshot = cleanup_failure.lookup(cleanup_job->id);
+    const auto cleanup_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (cleanup_calls.load() == 0 && std::chrono::steady_clock::now() < cleanup_deadline) {
+        std::this_thread::yield();
+    }
+    assert(cleanup_calls.load() == 1 && cleanup_snapshot->state == SupportBundleJobState::failed &&
+           cleanup_snapshot->failure_category == "result_missing" &&
+           cleanup_snapshot->failure_message == "Support collection failed." &&
+           !cleanup_snapshot->download_available &&
+           std::filesystem::exists(root / cleanup_job->id));
+    cleanup_failure.shutdown();
+    std::filesystem::remove_all(root / cleanup_job->id);
+    assert(std::filesystem::exists(sibling / "keep"));
     std::filesystem::remove_all(root);
     std::cout << "support_bundle_job_manager_test: PASS\n";
 }

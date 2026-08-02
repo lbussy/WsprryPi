@@ -35,7 +35,14 @@ bool safe_download_references(const std::filesystem::path &storage_root,
 
 }
 
-SupportBundleJobManager::SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor, IdGenerator ids, std::filesystem::path storage_root) : executor_(std::move(executor)), ids_(std::move(ids)) {
+SupportBundleJobManager::SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor,
+                                                 IdGenerator ids,
+                                                 std::filesystem::path storage_root,
+                                                 JobDirectoryRemover remover)
+    : executor_(std::move(executor)), ids_(std::move(ids)), remover_(std::move(remover)) {
+    if (!remover_) {
+        remover_ = remove_support_bundle_job_directory;
+    }
     struct stat info{}; if (!storage_root.is_absolute() || lstat(storage_root.c_str(), &info) != 0 || S_ISLNK(info.st_mode) || !S_ISDIR(info.st_mode) || info.st_uid != geteuid() || (info.st_mode & 0777) != 0700) return;
     std::error_code error; storage_root_ = std::filesystem::canonical(storage_root, error); storage_ready_ = !error;
 }
@@ -52,7 +59,11 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     if (!valid_id(id)) { error = "invalid_job_id"; return std::nullopt; }
     const auto directory = storage_root_ / id;
     struct stat existing{}; if (lstat(directory.c_str(), &existing) == 0 || mkdir(directory.c_str(), 0700) != 0) { error = "job_setup_failed"; return std::nullopt; }
-    if (lstat(directory.c_str(), &existing) != 0 || !S_ISDIR(existing.st_mode) || S_ISLNK(existing.st_mode) || (existing.st_mode & 0777) != 0700) { error = "job_setup_failed"; return std::nullopt; }
+    if (lstat(directory.c_str(), &existing) != 0 || !S_ISDIR(existing.st_mode) || S_ISLNK(existing.st_mode) || (existing.st_mode & 0777) != 0700) {
+        remove_unsuccessful_job_directory(id, directory);
+        error = "job_setup_failed";
+        return std::nullopt;
+    }
     if (worker_.joinable()) worker_.join();
     job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c, "", "", "", false};
     job_directory_ = directory;
@@ -60,7 +71,13 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     validated_checksum_filename_.clear();
     validated_sha256_.clear();
     try { worker_ = std::thread(&SupportBundleJobManager::run, this, id, request.probe_i2c, directory); }
-    catch (const std::system_error &) { job_.reset(); error = "worker_launch_failed"; return std::nullopt; }
+    catch (const std::system_error &) {
+        job_.reset();
+        job_directory_.clear();
+        remove_unsuccessful_job_directory(id, directory);
+        error = "worker_launch_failed";
+        return std::nullopt;
+    }
     return job_;
 }
 std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::lookup(const std::string &id) const { std::lock_guard lock(mutex_); if (!valid_id(id) || !job_ || job_->id != id) return std::nullopt; return job_; }
@@ -93,36 +110,57 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
     try { result = executor_->run({probe_i2c, job_directory}); } catch (...) { result = {false, "executor_exception", "Support collection failed."}; }
     SupportBundleResultValidation validation;
     if (result.succeeded) validation = validate_support_bundle_result(job_directory, probe_i2c);
-    std::lock_guard lock(mutex_); if (!job_ || job_->id != id || job_->state == SupportBundleJobState::failed) return;
-    if (shutting_down_) result = {false, "shutting_down", "Support collection stopped."};
-    if (result.succeeded && !validation.valid) {
-        result.succeeded = false;
-        switch (validation.failure) {
-        case SupportBundleResultFailure::missing: result.failure_category = "result_missing"; break;
-        case SupportBundleResultFailure::ambiguous: result.failure_category = "result_ambiguous"; break;
-        case SupportBundleResultFailure::unsafe_file: result.failure_category = "result_unsafe"; break;
-        case SupportBundleResultFailure::oversized: result.failure_category = "result_oversized"; break;
-        case SupportBundleResultFailure::inconsistent: result.failure_category = "result_inconsistent"; break;
-        default: result.failure_category = "result_invalid"; break;
+    bool remove_job_directory = false;
+    {
+        std::lock_guard lock(mutex_); if (!job_ || job_->id != id || job_->state == SupportBundleJobState::failed) return;
+        if (shutting_down_) result = {false, "shutting_down", "Support collection stopped."};
+        if (result.succeeded && !validation.valid) {
+            result.succeeded = false;
+            switch (validation.failure) {
+            case SupportBundleResultFailure::missing: result.failure_category = "result_missing"; break;
+            case SupportBundleResultFailure::ambiguous: result.failure_category = "result_ambiguous"; break;
+            case SupportBundleResultFailure::unsafe_file: result.failure_category = "result_unsafe"; break;
+            case SupportBundleResultFailure::oversized: result.failure_category = "result_oversized"; break;
+            case SupportBundleResultFailure::inconsistent: result.failure_category = "result_inconsistent"; break;
+            default: result.failure_category = "result_invalid"; break;
+            }
         }
+        std::filesystem::path archive_path;
+        std::filesystem::path checksum_path;
+        if (result.succeeded &&
+            !safe_download_references(storage_root_, job_directory, id,
+                                      validation.archive_filename, validation.checksum_filename,
+                                      archive_path, checksum_path)) {
+            result.succeeded = false;
+            result.failure_category = "result_invalid";
+        }
+        job_->state = result.succeeded ? SupportBundleJobState::succeeded : SupportBundleJobState::failed;
+        job_->i2c_probe_status = result.succeeded ? validation.i2c_probe_status : "";
+        job_->download_available = result.succeeded;
+        validated_archive_filename_ = result.succeeded ? validation.archive_filename : "";
+        validated_checksum_filename_ = result.succeeded ? validation.checksum_filename : "";
+        validated_sha256_ = result.succeeded ? validation.sha256 : "";
+        job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
+        job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
+        remove_job_directory = !result.succeeded;
     }
-    std::filesystem::path archive_path;
-    std::filesystem::path checksum_path;
-    if (result.succeeded &&
-        !safe_download_references(storage_root_, job_directory, id,
-                                  validation.archive_filename, validation.checksum_filename,
-                                  archive_path, checksum_path)) {
-        result.succeeded = false;
-        result.failure_category = "result_invalid";
+    if (remove_job_directory) {
+        remove_unsuccessful_job_directory(id, job_directory);
     }
-    job_->state = result.succeeded ? SupportBundleJobState::succeeded : SupportBundleJobState::failed;
-    job_->i2c_probe_status = result.succeeded ? validation.i2c_probe_status : "";
-    job_->download_available = result.succeeded;
-    validated_archive_filename_ = result.succeeded ? validation.archive_filename : "";
-    validated_checksum_filename_ = result.succeeded ? validation.checksum_filename : "";
-    validated_sha256_ = result.succeeded ? validation.sha256 : "";
-    job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
-    job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
+}
+
+void SupportBundleJobManager::remove_unsuccessful_job_directory(
+    const std::string &id,
+    const std::filesystem::path &job_directory) {
+    if (job_directory.lexically_normal().parent_path() != storage_root_ ||
+        job_directory.filename() != id) {
+        return;
+    }
+    try {
+        (void)remover_(storage_root_, id);
+    } catch (...) {
+        // Cleanup details are intentionally not exposed through job status.
+    }
 }
 void SupportBundleJobManager::shutdown() {
     { std::lock_guard lock(mutex_); shutting_down_ = true; }
