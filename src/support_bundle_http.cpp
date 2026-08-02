@@ -1,14 +1,20 @@
 #include "support_bundle_http.hpp"
 
 #include "json.hpp"
+#include "support_bundle_download_preparation.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
 #include <cctype>
+#include <memory>
 #include <optional>
 #include <string>
+#include <unistd.h>
 
 namespace {
 constexpr std::size_t kMaximumRequestBodyBytes = 1024;
+constexpr std::size_t kDownloadReadBufferBytes = 64 * 1024;
 
 void remove_permissive_cors_headers(httplib::Response &response) {
     response.headers.erase("Access-Control-Allow-Origin");
@@ -108,8 +114,41 @@ nlohmann::json snapshot_json(const SupportBundleJobSnapshot &snapshot) {
         {"i2c_probe_status", snapshot.i2c_probe_status},
         {"failure_category", snapshot.failure_category},
         {"failure_message", snapshot.failure_message},
-        {"download_available", false},
+        {"download_available", snapshot.download_available},
     };
+}
+
+std::string attachment_disposition(const std::string &basename) {
+    std::string value = "attachment; filename=\"";
+    for (const char character : basename) {
+        if (character == '\\' || character == '"') {
+            value.push_back('\\');
+        }
+        value.push_back(character);
+    }
+    value.push_back('"');
+    return value;
+}
+
+void set_download_error(httplib::Response &response,
+                        SupportBundleDownloadPreparationFailure failure) {
+    switch (failure) {
+    case SupportBundleDownloadPreparationFailure::unavailable:
+        set_error(response, 503, "artifact_unavailable");
+        return;
+    case SupportBundleDownloadPreparationFailure::unsafe:
+        set_error(response, 409, "artifact_unsafe");
+        return;
+    case SupportBundleDownloadPreparationFailure::corrupt:
+        set_error(response, 409, "artifact_corrupt");
+        return;
+    case SupportBundleDownloadPreparationFailure::internal:
+        set_error(response, 500, "internal_error");
+        return;
+    case SupportBundleDownloadPreparationFailure::none:
+        break;
+    }
+    set_error(response, 500, "internal_error");
 }
 }  // namespace
 
@@ -173,6 +212,69 @@ void register_support_bundle_http_routes(
         set_json(response, 202, snapshot_json(*snapshot));
     });
 
+    server.Get(R"(/api/support-bundles/(.*)/download)",
+               [&manager, guard](const httplib::Request &request,
+                                 httplib::Response &response) {
+        if (!guard(request, response)) {
+            return;
+        }
+
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        if (!SupportBundleJobManager::valid_id(id)) {
+            set_error(response, 404, "not_found");
+            return;
+        }
+
+        const auto reference = manager.download_reference(id);
+        switch (reference.status) {
+        case SupportBundleDownloadReferenceStatus::malformed_or_unknown_id:
+            set_error(response, 404, "not_found");
+            return;
+        case SupportBundleDownloadReferenceStatus::not_ready:
+            set_error(response, 409, "not_ready");
+            return;
+        case SupportBundleDownloadReferenceStatus::no_download:
+            set_error(response, 409, "no_download");
+            return;
+        case SupportBundleDownloadReferenceStatus::available:
+            break;
+        }
+
+        auto prepared = prepare_support_bundle_download(reference);
+        if (!prepared.available()) {
+            set_download_error(response, prepared.failure);
+            return;
+        }
+
+        auto download = std::make_shared<SupportBundlePreparedDownload>(
+            std::move(prepared.download));
+        response.status = 200;
+        response.set_header("Content-Disposition", attachment_disposition(download->basename()));
+        response.set_header("Cache-Control", "no-store");
+        response.set_header("X-Content-Type-Options", "nosniff");
+        response.set_content_provider(
+            static_cast<std::size_t>(download->size()), "application/gzip",
+            [download](std::size_t offset, std::size_t length, httplib::DataSink &sink) {
+                if (offset >= download->size() || length == 0) {
+                    return false;
+                }
+
+                const std::uint64_t remaining = download->size() - offset;
+                const std::size_t read_size = static_cast<std::size_t>(
+                    std::min<std::uint64_t>({kDownloadReadBufferBytes, length, remaining}));
+                std::array<char, kDownloadReadBufferBytes> buffer {};
+                ssize_t read_count = 0;
+                do {
+                    read_count = pread(download->descriptor(), buffer.data(), read_size,
+                                       static_cast<off_t>(offset));
+                } while (read_count < 0 && errno == EINTR);
+
+                return read_count > 0 &&
+                       sink.write(buffer.data(), static_cast<std::size_t>(read_count));
+            },
+            [download](bool) {});
+    });
+
     server.Get(R"(/api/support-bundles/(.*))", [&manager, guard](const httplib::Request &request,
                                                                     httplib::Response &response) {
         if (!guard(request, response)) {
@@ -203,6 +305,15 @@ void register_support_bundle_http_routes(
 
     server.Options("/api/support-bundles", [guard](const httplib::Request &request,
                                                       httplib::Response &response) {
+        if (!guard(request, response)) {
+            return;
+        }
+        remove_permissive_cors_headers(response);
+        response.status = 204;
+    });
+    server.Options(R"(/api/support-bundles/(.*)/download)",
+                   [guard](const httplib::Request &request,
+                           httplib::Response &response) {
         if (!guard(request, response)) {
             return;
         }

@@ -13,6 +13,7 @@
 #include <mutex>
 #include <thread>
 #include <tuple>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -26,7 +27,14 @@ std::string job_id(char value) {
 
 class FakeExecutor final : public SupportBundleJobExecutor {
 public:
-    enum class Mode { success, failure };
+    enum class Mode {
+        success,
+        failure,
+        corrupt_archive,
+        corrupt_sidecar,
+        unsafe_sidecar,
+        missing_archive,
+    };
 
     SupportBundleExecutionResult run(const SupportBundleExecutionContext &context) override {
         std::unique_lock lock(mutex_);
@@ -42,12 +50,16 @@ public:
         }
 
         const bool probe = context.probe_i2c;
+        constexpr const char *digest =
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        const fs::path archive = context.job_directory / "WsprryPi-support-test.tar.gz";
+        const fs::path checksum = archive.string() + ".sha256";
         const nlohmann::json result = {
             {"schema_version", 1},
             {"status", "success"},
             {"archive_filename", "WsprryPi-support-test.tar.gz"},
             {"sha256_filename", "WsprryPi-support-test.tar.gz.sha256"},
-            {"sha256", std::string(64, 'a')},
+            {"sha256", digest},
             {"generated_at_utc", "20260101T000000Z"},
             {"configuration_files_included", false},
             {"full_logs_included", false},
@@ -55,6 +67,19 @@ public:
             {"i2c_probe_status", probe ? "succeeded" : "skipped_by_user"},
             {"privileged_diagnostics_may_be_incomplete", false},
         };
+        if (mode_ != Mode::missing_archive) {
+            std::ofstream(archive) << (mode_ == Mode::corrupt_archive ? "def" : "abc");
+            assert(chmod(archive.c_str(), 0600) == 0);
+        }
+        if (mode_ == Mode::unsafe_sidecar) {
+            assert(symlink("/tmp", checksum.c_str()) == 0);
+        } else {
+            std::ofstream(checksum) <<
+                (mode_ == Mode::corrupt_sidecar
+                     ? std::string(64, 'b') + "  WsprryPi-support-test.tar.gz\n"
+                     : std::string(digest) + "  WsprryPi-support-test.tar.gz\n");
+            assert(chmod(checksum.c_str(), 0600) == 0);
+        }
         std::ofstream(context.job_directory / "WsprryPi-support-test.tar.gz.result.json")
             << result.dump();
         return {true, {}, {}};
@@ -133,6 +158,23 @@ httplib::Response get_status(httplib::Client &client,
     return require_response(client.Get("/api/support-bundles/" + id, headers));
 }
 
+httplib::Response get_download(httplib::Client &client,
+                               const httplib::Headers &headers,
+                               const std::string &id) {
+    return require_response(
+        client.Get("/api/support-bundles/" + id + "/download", headers));
+}
+
+void assert_no_private_download_leak(const httplib::Response &response,
+                                     const fs::path &storage_root) {
+    assert(response.body.find(storage_root.string()) == std::string::npos);
+    assert(response.body.find("sha256") == std::string::npos);
+    assert(response.body.find("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") ==
+           std::string::npos);
+    assert(response.body.find("WsprryPi-support-test.tar.gz.sha256") == std::string::npos);
+    assert(response.body.find("raw executor output") == std::string::npos);
+}
+
 void wait_for_state(httplib::Client &client,
                     const httplib::Headers &headers,
                     const std::string &id,
@@ -190,6 +232,11 @@ int main() {
 
     executor->wait_entered();
     wait_for_state(client, headers, first_id, "running");
+    const auto not_ready_download = get_download(client, headers, first_id);
+    assert(not_ready_download.status == 409);
+    assert(response_json(not_ready_download)["error"] == "not_ready");
+    assert_restrictive(not_ready_download);
+    assert_no_private_download_leak(not_ready_download, storage_root);
     const int calls_before_later_request = *provider_calls;
     const auto retained_provider = get_status(client, headers, first_id);
     assert(retained_provider.status == 200);
@@ -218,7 +265,19 @@ int main() {
     wait_for_state(client, headers, first_id, "succeeded");
     const auto succeeded = get_status(client, headers, first_id);
     assert(response_json(succeeded)["i2c_probe_status"] == "skipped_by_user");
+    assert(response_json(succeeded)["download_available"] == true);
     assert_no_private_download_metadata(response_json(succeeded));
+    const auto downloaded = get_download(client, headers, first_id);
+    assert(downloaded.status == 200);
+    assert(downloaded.body == "abc");
+    assert(downloaded.get_header_value("Content-Type") == "application/gzip");
+    assert(downloaded.get_header_value("Content-Length") == "3");
+    assert(downloaded.get_header_value("Content-Disposition") ==
+           "attachment; filename=\"WsprryPi-support-test.tar.gz\"");
+    assert(downloaded.get_header_value("Cache-Control") == "no-store");
+    assert(downloaded.get_header_value("X-Content-Type-Options") == "nosniff");
+    assert_restrictive(downloaded);
+    assert_no_private_download_leak(downloaded, storage_root);
 
     executor->reset();
     const auto probe_created = require_response(client.Post("/api/support-bundles", headers, "{\"probe_i2c\":true}", "application/json"));
@@ -227,8 +286,10 @@ int main() {
     executor->wait_entered();
     executor->release(FakeExecutor::Mode::success);
     wait_for_state(client, headers, probe_id, "succeeded");
-    assert(response_json(get_status(client, headers, probe_id))["i2c_probe_status"] == "succeeded");
-    assert_no_private_download_metadata(response_json(get_status(client, headers, probe_id)));
+    const auto probe_status = response_json(get_status(client, headers, probe_id));
+    assert(probe_status["i2c_probe_status"] == "succeeded");
+    assert(probe_status["download_available"] == true);
+    assert_no_private_download_metadata(probe_status);
 
     executor->reset();
     const auto failed_created = require_response(client.Post("/api/support-bundles", headers, "{}", "application/json"));
@@ -243,6 +304,33 @@ int main() {
     assert(failed.body.find(storage_root.string()) == std::string::npos);
     assert(!failed_body["download_available"]);
     assert_no_private_download_metadata(failed_body);
+    const auto failed_download = get_download(client, headers, failed_id);
+    assert(failed_download.status == 409);
+    assert(response_json(failed_download)["error"] == "no_download");
+    assert_restrictive(failed_download);
+    assert_no_private_download_leak(failed_download, storage_root);
+
+    const auto complete_corrupt_job = [&](FakeExecutor::Mode mode,
+                                          int expected_status,
+                                          const char *expected_error) {
+        executor->reset();
+        const auto created_corrupt = require_response(
+            client.Post("/api/support-bundles", headers, "{}", "application/json"));
+        assert(created_corrupt.status == 202);
+        const std::string corrupt_id = response_json(created_corrupt)["id"];
+        executor->wait_entered();
+        executor->release(mode);
+        wait_for_state(client, headers, corrupt_id, "succeeded");
+        const auto corrupt_download = get_download(client, headers, corrupt_id);
+        assert(corrupt_download.status == expected_status);
+        assert(response_json(corrupt_download)["error"] == expected_error);
+        assert_restrictive(corrupt_download);
+        assert_no_private_download_leak(corrupt_download, storage_root);
+    };
+    complete_corrupt_job(FakeExecutor::Mode::corrupt_archive, 409, "artifact_corrupt");
+    complete_corrupt_job(FakeExecutor::Mode::corrupt_sidecar, 409, "artifact_corrupt");
+    complete_corrupt_job(FakeExecutor::Mode::unsafe_sidecar, 409, "artifact_unsafe");
+    complete_corrupt_job(FakeExecutor::Mode::missing_archive, 503, "artifact_unavailable");
 
     const auto malformed = require_response(client.Get("/api/support-bundles/not-an-id", headers));
     assert(malformed.status == 404);
@@ -250,6 +338,15 @@ int main() {
     const auto unknown = require_response(client.Get("/api/support-bundles/" + job_id('z'), headers));
     assert(unknown.status == 404);
     assert_restrictive(unknown);
+    const auto malformed_download = require_response(
+        client.Get("/api/support-bundles/not-an-id/download", headers));
+    assert(malformed_download.status == 404);
+    assert_restrictive(malformed_download);
+    assert_no_private_download_leak(malformed_download, storage_root);
+    const auto unknown_download = get_download(client, headers, job_id('z'));
+    assert(unknown_download.status == 404);
+    assert_restrictive(unknown_download);
+    assert_no_private_download_leak(unknown_download, storage_root);
     const auto listing = require_response(client.Get("/api/support-bundles", headers));
     assert(listing.status == 404);
     assert_restrictive(listing);
@@ -259,13 +356,31 @@ int main() {
     const auto foreign = require_response(client.Post("/api/support-bundles", foreign_origin, "{}", "application/json"));
     assert(foreign.status == 403);
     assert_restrictive(foreign);
+    const auto foreign_download = require_response(
+        client.Get("/api/support-bundles/" + first_id + "/download", foreign_origin));
+    assert(foreign_download.status == 403);
+    assert_restrictive(foreign_download);
+    assert_no_private_download_leak(foreign_download, storage_root);
     const httplib::Headers null_origin{{"Host", "127.0.0.1:" + std::to_string(port)}, {"Origin", "null"}};
     assert(require_response(client.Post("/api/support-bundles", null_origin, "{}", "application/json")).status == 403);
+    assert(require_response(client.Get("/api/support-bundles/" + first_id + "/download", null_origin)).status == 403);
     const httplib::Headers bad_host{{"Host", "example.invalid"}, {"X-Forwarded-For", "127.0.0.1"}};
     assert(require_response(client.Post("/api/support-bundles", bad_host, "{}", "application/json")).status == 403);
+    const auto forwarded_download = require_response(
+        client.Get("/api/support-bundles/" + first_id + "/download", bad_host));
+    assert(forwarded_download.status == 403);
+    assert_restrictive(forwarded_download);
     const auto preflight = require_response(client.Options("/api/support-bundles", foreign_origin));
     assert(preflight.status == 403);
     assert_restrictive(preflight);
+    const auto download_preflight = require_response(
+        client.Options("/api/support-bundles/" + first_id + "/download", foreign_origin));
+    assert(download_preflight.status == 403);
+    assert_restrictive(download_preflight);
+    const auto local_download_options = require_response(
+        client.Options("/api/support-bundles/" + first_id + "/download", headers));
+    assert(local_download_options.status == 204);
+    assert_restrictive(local_download_options);
 
     server.stop();
     server_thread.join();
