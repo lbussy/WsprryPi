@@ -5,12 +5,15 @@
 #include <iostream>
 #include <filesystem>
 #include <fstream>
+#include "json.hpp"
 #include <sys/stat.h>
 #include <unistd.h>
 
 class FakeExecutor final : public SupportBundleJobExecutor {
 public:
+    enum class ResultMode { valid, none, multiple, symlink, oversized, malformed, schema_invalid, inconsistent };
     std::mutex mutex; std::condition_variable cv; bool entered=false, released=false, cancelled=false, fail=false, throw_exception=false; bool probe=false; int calls=0;
+    ResultMode mode = ResultMode::valid;
     std::filesystem::path directory;
     SupportBundleExecutionResult run(const SupportBundleExecutionContext &context) override {
         const bool requested = context.probe_i2c; directory = context.job_directory;
@@ -18,6 +21,16 @@ public:
         cv.wait(lock, [&] { return released || cancelled; });
         if (throw_exception) throw 1;
         if (cancelled) return {true, {}, {}}; // Manager must preserve cancellation over this late success.
+        if (!fail && !throw_exception && mode != ResultMode::none) {
+            nlohmann::json result={{"schema_version",1},{"status","success"},{"archive_filename","WsprryPi-support-test.tar.gz"},{"sha256_filename","WsprryPi-support-test.tar.gz.sha256"},{"sha256",std::string(64,'a')},{"generated_at_utc","20260101T000000Z"},{"configuration_files_included",true},{"full_logs_included",false},{"i2c_probe_requested",probe},{"i2c_probe_status",probe?"succeeded":"skipped_by_user"},{"privileged_diagnostics_may_be_incomplete",false}};
+            if (mode == ResultMode::schema_invalid) result["schema_version"] = 2;
+            if (mode == ResultMode::inconsistent) result["i2c_probe_status"] = probe ? "skipped_by_user" : "succeeded";
+            const auto path = context.job_directory / "WsprryPi-support-test.tar.gz.result.json";
+            if (mode == ResultMode::symlink) symlink("/tmp", path.c_str());
+            else if (mode == ResultMode::oversized) std::ofstream(path) << std::string(65537, 'x');
+            else if (mode == ResultMode::malformed) std::ofstream(path) << "{";
+            else { std::ofstream(path) << result.dump(); if (mode == ResultMode::multiple) std::ofstream(context.job_directory / "WsprryPi-support-two.tar.gz.result.json") << result.dump(); }
+        }
         return fail ? SupportBundleExecutionResult{false, "raw:/secret", "/secret/token"} : SupportBundleExecutionResult{true, {}, {}};
     }
     void request_stop() noexcept override { std::lock_guard lock(mutex); cancelled=true; cv.notify_all(); }
@@ -43,6 +56,13 @@ static void expect_storage_failure(const std::filesystem::path &root, const std:
     std::string error;
     assert(!manager.create({}, error) && error == expected && executor->calls == 0);
 }
+static void expect_result_failure(const std::filesystem::path &root, FakeExecutor::ResultMode mode, const std::string &category, char token) {
+    auto executor = std::make_shared<FakeExecutor>(); executor->mode = mode;
+    SupportBundleJobManager manager(executor, [token] { return id(token); }, root); std::string error;
+    const auto job = manager.create({}, error); executor->wait_entered(); executor->release(); wait_terminal(manager, job->id);
+    const auto snapshot = manager.lookup(job->id); assert(snapshot->state == SupportBundleJobState::failed && snapshot->failure_category == category && snapshot->failure_message == "Support collection failed." && snapshot->i2c_probe_status.empty() && !snapshot->download_available);
+    manager.shutdown();
+}
 
 int main() {
     char template_path[] = "/tmp/wsprrypi-job-manager-test.XXXXXX";
@@ -57,14 +77,22 @@ int main() {
     auto success = std::make_shared<FakeExecutor>();
     int generated = 0; SupportBundleJobManager manager(success, [&] { return id(generated++ == 0 ? 'a' : 'g'); }, root);
     const auto first = manager.create({true}, error); assert(first && error.empty() && !first->download_available);
-    success->wait_entered(); struct stat job_info{}; assert(success->probe && success->directory == root / first->id && lstat(success->directory.c_str(), &job_info) == 0 && S_ISDIR(job_info.st_mode) && (job_info.st_mode & 0777) == 0700 && manager.lookup(first->id)->state == SupportBundleJobState::running);
+    success->wait_entered(); struct stat job_info{}; assert(success->probe && success->directory == root / first->id && manager.lookup(first->id)->i2c_probe_status.empty() && lstat(success->directory.c_str(), &job_info) == 0 && S_ISDIR(job_info.st_mode) && (job_info.st_mode & 0777) == 0700 && manager.lookup(first->id)->state == SupportBundleJobState::running);
     assert(!manager.create({}, error) && error == "job_active"); assert(manager.lookup(first->id)); assert(!manager.lookup("bad"));
-    success->release(); wait_terminal(manager, first->id); assert(manager.lookup(first->id)->state == SupportBundleJobState::succeeded && !manager.lookup(first->id)->download_available);
-    success->reset(); const auto next = manager.create({false}, error); assert(next); success->wait_entered(); assert(!success->probe); manager.shutdown();
+    success->release(); wait_terminal(manager, first->id); assert(manager.lookup(first->id)->state == SupportBundleJobState::succeeded && manager.lookup(first->id)->i2c_probe_status == "succeeded" && !manager.lookup(first->id)->download_available);
+    success->reset(); const auto next = manager.create({false}, error); assert(next); success->wait_entered(); assert(!success->probe); success->release(); wait_terminal(manager,next->id); assert(manager.lookup(next->id)->i2c_probe_status == "skipped_by_user"); manager.shutdown();
 
     const auto existing_dir = root / id('z'); assert(std::filesystem::create_directory(existing_dir)); expect_storage_failure(root, "job_setup_failed"); std::filesystem::remove(existing_dir);
     const auto existing_file = root / id('z'); { std::ofstream output(existing_file); output << "x"; } expect_storage_failure(root, "job_setup_failed"); std::filesystem::remove(existing_file);
     const auto existing_link = root / id('z'); assert(symlink(root.c_str(), existing_link.c_str()) == 0); expect_storage_failure(root, "job_setup_failed"); std::filesystem::remove(existing_link);
+
+    expect_result_failure(root, FakeExecutor::ResultMode::none, "result_missing", 'h');
+    expect_result_failure(root, FakeExecutor::ResultMode::multiple, "result_ambiguous", 'i');
+    expect_result_failure(root, FakeExecutor::ResultMode::symlink, "result_unsafe", 'j');
+    expect_result_failure(root, FakeExecutor::ResultMode::oversized, "result_oversized", 'k');
+    expect_result_failure(root, FakeExecutor::ResultMode::malformed, "result_invalid", 'l');
+    expect_result_failure(root, FakeExecutor::ResultMode::schema_invalid, "result_invalid", 'm');
+    expect_result_failure(root, FakeExecutor::ResultMode::inconsistent, "result_inconsistent", 'n');
 
     auto failing = std::make_shared<FakeExecutor>(); failing->fail=true;
     SupportBundleJobManager failed(failing, [] { return id('b'); }, root); auto f = failed.create({}, error); failing->wait_entered(); failing->release(); wait_terminal(failed, f->id); const auto fs=failed.lookup(f->id); assert(fs->state==SupportBundleJobState::failed && fs->failure_category=="collector_failed" && fs->failure_message=="Support collection failed." && !fs->download_available); failed.shutdown();

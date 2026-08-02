@@ -1,4 +1,5 @@
 #include "support_bundle_job_manager.hpp"
+#include "support_bundle_result_validator.hpp"
 #include <algorithm>
 #include <cctype>
 #include <sys/stat.h>
@@ -23,7 +24,7 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     struct stat existing{}; if (lstat(directory.c_str(), &existing) == 0 || mkdir(directory.c_str(), 0700) != 0) { error = "job_setup_failed"; return std::nullopt; }
     if (lstat(directory.c_str(), &existing) != 0 || !S_ISDIR(existing.st_mode) || S_ISLNK(existing.st_mode) || (existing.st_mode & 0777) != 0700) { error = "job_setup_failed"; return std::nullopt; }
     if (worker_.joinable()) worker_.join();
-    job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c, "", "", false};
+    job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c, "", "", "", false};
     try { worker_ = std::thread(&SupportBundleJobManager::run, this, id, request.probe_i2c, directory); }
     catch (const std::system_error &) { job_.reset(); error = "worker_launch_failed"; return std::nullopt; }
     return job_;
@@ -32,11 +33,25 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::lookup(const st
 void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesystem::path job_directory) {
     { std::lock_guard lock(mutex_); if (!job_ || job_->id != id) return; job_->state = SupportBundleJobState::running; }
     SupportBundleExecutionResult result;
-    try { result = executor_->run({probe_i2c, std::move(job_directory)}); } catch (...) { result = {false, "executor_exception", "Support collection failed."}; }
+    try { result = executor_->run({probe_i2c, job_directory}); } catch (...) { result = {false, "executor_exception", "Support collection failed."}; }
+    SupportBundleResultValidation validation;
+    if (result.succeeded) validation = validate_support_bundle_result(job_directory, probe_i2c);
     std::lock_guard lock(mutex_); if (!job_ || job_->id != id || job_->state == SupportBundleJobState::failed) return;
     if (shutting_down_) result = {false, "shutting_down", "Support collection stopped."};
+    if (result.succeeded && !validation.valid) {
+        result.succeeded = false;
+        switch (validation.failure) {
+        case SupportBundleResultFailure::missing: result.failure_category = "result_missing"; break;
+        case SupportBundleResultFailure::ambiguous: result.failure_category = "result_ambiguous"; break;
+        case SupportBundleResultFailure::unsafe_file: result.failure_category = "result_unsafe"; break;
+        case SupportBundleResultFailure::oversized: result.failure_category = "result_oversized"; break;
+        case SupportBundleResultFailure::inconsistent: result.failure_category = "result_inconsistent"; break;
+        default: result.failure_category = "result_invalid"; break;
+        }
+    }
     job_->state = result.succeeded ? SupportBundleJobState::succeeded : SupportBundleJobState::failed;
-    job_->failure_category = result.succeeded ? "" : (result.failure_category == "shutting_down" ? "shutting_down" : (result.failure_category == "executor_exception" ? "executor_exception" : "collector_failed"));
+    job_->i2c_probe_status = result.succeeded ? validation.i2c_probe_status : "";
+    job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
     job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
 }
 void SupportBundleJobManager::shutdown() {

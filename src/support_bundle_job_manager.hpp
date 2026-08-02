@@ -14,6 +14,7 @@ struct SupportBundleJobSnapshot {
     std::string id;
     SupportBundleJobState state = SupportBundleJobState::queued;
     bool probe_i2c_requested = false;
+    std::string i2c_probe_status;
     std::string failure_category;
     std::string failure_message;
     bool download_available = false;
