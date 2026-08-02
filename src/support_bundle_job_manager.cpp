@@ -6,21 +6,33 @@
 #include <unistd.h>
 
 namespace {
-bool safe_archive_reference(const std::filesystem::path &storage_root,
-                            const std::filesystem::path &job_directory,
-                            const std::string &job_id,
-                            const std::string &archive_filename,
-                            std::filesystem::path &archive_path) {
-    if (archive_filename.empty() || archive_filename.find_first_of("/\\") != std::string::npos ||
-        archive_filename.find("..") != std::string::npos ||
-        job_directory.lexically_normal().parent_path() != storage_root ||
+bool safe_direct_child(const std::filesystem::path &job_directory,
+                       const std::string &basename,
+                       std::filesystem::path &path) {
+    if (basename.empty() || basename.find_first_of("/\\") != std::string::npos ||
+        basename.find("..") != std::string::npos) {
+        return false;
+    }
+    path = (job_directory / basename).lexically_normal();
+    return path.parent_path() == job_directory.lexically_normal() &&
+           path.filename() == basename;
+}
+
+bool safe_download_references(const std::filesystem::path &storage_root,
+                              const std::filesystem::path &job_directory,
+                              const std::string &job_id,
+                              const std::string &archive_filename,
+                              const std::string &checksum_filename,
+                              std::filesystem::path &archive_path,
+                              std::filesystem::path &checksum_path) {
+    if (job_directory.lexically_normal().parent_path() != storage_root ||
         job_directory.filename() != job_id) {
         return false;
     }
-    archive_path = (job_directory / archive_filename).lexically_normal();
-    return archive_path.parent_path() == job_directory.lexically_normal() &&
-           archive_path.filename() == archive_filename;
+    return safe_direct_child(job_directory, archive_filename, archive_path) &&
+           safe_direct_child(job_directory, checksum_filename, checksum_path);
 }
+
 }
 
 SupportBundleJobManager::SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor, IdGenerator ids, std::filesystem::path storage_root) : executor_(std::move(executor)), ids_(std::move(ids)) {
@@ -45,6 +57,8 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c, "", "", "", false};
     job_directory_ = directory;
     validated_archive_filename_.clear();
+    validated_checksum_filename_.clear();
+    validated_sha256_.clear();
     try { worker_ = std::thread(&SupportBundleJobManager::run, this, id, request.probe_i2c, directory); }
     catch (const std::system_error &) { job_.reset(); error = "worker_launch_failed"; return std::nullopt; }
     return job_;
@@ -59,11 +73,19 @@ SupportBundleDownloadReference SupportBundleJobManager::download_reference(const
         return {SupportBundleDownloadReferenceStatus::not_ready, {}};
     }
     std::filesystem::path archive_path;
+    std::filesystem::path checksum_path;
     if (job_->state != SupportBundleJobState::succeeded || !job_->download_available ||
-        !safe_archive_reference(storage_root_, job_directory_, id, validated_archive_filename_, archive_path)) {
-        return {SupportBundleDownloadReferenceStatus::no_download, {}};
+        !safe_download_references(storage_root_, job_directory_, id,
+                                  validated_archive_filename_, validated_checksum_filename_,
+                                  archive_path, checksum_path)) {
+        return {SupportBundleDownloadReferenceStatus::no_download, {}, {}, {}, {}, {}};
     }
-    return {SupportBundleDownloadReferenceStatus::available, std::move(archive_path)};
+    return {SupportBundleDownloadReferenceStatus::available,
+            std::move(archive_path),
+            validated_archive_filename_,
+            std::move(checksum_path),
+            validated_checksum_filename_,
+            validated_sha256_};
 }
 void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesystem::path job_directory) {
     { std::lock_guard lock(mutex_); if (!job_ || job_->id != id) return; job_->state = SupportBundleJobState::running; }
@@ -85,8 +107,11 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
         }
     }
     std::filesystem::path archive_path;
-    if (result.succeeded && !safe_archive_reference(storage_root_, job_directory, id,
-                                                     validation.archive_filename, archive_path)) {
+    std::filesystem::path checksum_path;
+    if (result.succeeded &&
+        !safe_download_references(storage_root_, job_directory, id,
+                                  validation.archive_filename, validation.checksum_filename,
+                                  archive_path, checksum_path)) {
         result.succeeded = false;
         result.failure_category = "result_invalid";
     }
@@ -94,6 +119,8 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
     job_->i2c_probe_status = result.succeeded ? validation.i2c_probe_status : "";
     job_->download_available = result.succeeded;
     validated_archive_filename_ = result.succeeded ? validation.archive_filename : "";
+    validated_checksum_filename_ = result.succeeded ? validation.checksum_filename : "";
+    validated_sha256_ = result.succeeded ? validation.sha256 : "";
     job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
     job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
 }

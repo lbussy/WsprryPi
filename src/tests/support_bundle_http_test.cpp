@@ -111,6 +111,17 @@ void assert_restrictive(const httplib::Response &response) {
     assert(!response.has_header("Access-Control-Allow-Headers"));
 }
 
+void assert_no_private_download_metadata(const nlohmann::json &body) {
+    assert(!body.contains("archive_path"));
+    assert(!body.contains("archive_basename"));
+    assert(!body.contains("archive_filename"));
+    assert(!body.contains("checksum_path"));
+    assert(!body.contains("checksum_basename"));
+    assert(!body.contains("checksum_filename"));
+    assert(!body.contains("expected_sha256"));
+    assert(!body.contains("sha256"));
+}
+
 httplib::Headers local_headers(int port) {
     return {{"Host", "127.0.0.1:" + std::to_string(port)},
             {"Origin", "http://127.0.0.1:" + std::to_string(port)}};
@@ -175,6 +186,7 @@ int main() {
     assert(created_body["probe_i2c_requested"] == false);
     assert(created_body["i2c_probe_status"] == "");
     assert(!created_body["download_available"]);
+    assert_no_private_download_metadata(created_body);
 
     executor->wait_entered();
     wait_for_state(client, headers, first_id, "running");
@@ -206,6 +218,7 @@ int main() {
     wait_for_state(client, headers, first_id, "succeeded");
     const auto succeeded = get_status(client, headers, first_id);
     assert(response_json(succeeded)["i2c_probe_status"] == "skipped_by_user");
+    assert_no_private_download_metadata(response_json(succeeded));
 
     executor->reset();
     const auto probe_created = require_response(client.Post("/api/support-bundles", headers, "{\"probe_i2c\":true}", "application/json"));
@@ -215,6 +228,7 @@ int main() {
     executor->release(FakeExecutor::Mode::success);
     wait_for_state(client, headers, probe_id, "succeeded");
     assert(response_json(get_status(client, headers, probe_id))["i2c_probe_status"] == "succeeded");
+    assert_no_private_download_metadata(response_json(get_status(client, headers, probe_id)));
 
     executor->reset();
     const auto failed_created = require_response(client.Post("/api/support-bundles", headers, "{}", "application/json"));
@@ -228,6 +242,7 @@ int main() {
     assert(failed.body.find("/secret") == std::string::npos);
     assert(failed.body.find(storage_root.string()) == std::string::npos);
     assert(!failed_body["download_available"]);
+    assert_no_private_download_metadata(failed_body);
 
     const auto malformed = require_response(client.Get("/api/support-bundles/not-an-id", headers));
     assert(malformed.status == 404);

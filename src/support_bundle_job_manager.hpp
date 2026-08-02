@@ -29,6 +29,10 @@ struct SupportBundleDownloadReference {
     SupportBundleDownloadReferenceStatus status =
         SupportBundleDownloadReferenceStatus::malformed_or_unknown_id;
     std::filesystem::path archive_path;
+    std::string archive_basename;
+    std::filesystem::path checksum_path;
+    std::string checksum_basename;
+    std::string expected_sha256;
 };
 struct SupportBundleExecutionResult { bool succeeded = false; std::string failure_category; std::string failure_message; };
 struct SupportBundleExecutionContext { bool probe_i2c = false; std::filesystem::path job_directory; };
@@ -59,6 +63,8 @@ private:
     std::optional<SupportBundleJobSnapshot> job_;
     std::filesystem::path job_directory_;
     std::string validated_archive_filename_;
+    std::string validated_checksum_filename_;
+    std::string validated_sha256_;
     std::thread worker_;
     bool shutting_down_ = false;
 };
