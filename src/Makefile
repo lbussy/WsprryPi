@@ -45,6 +45,9 @@ SYSTEMD_CFLAGS :=
 SYSTEMD_LIBS   :=
 HAVE_JOURNALD  := 0
 
+OPENSSL_CFLAGS := $(strip $(shell pkg-config --cflags libcrypto 2>/dev/null))
+OPENSSL_LIBS   := $(strip $(shell pkg-config --libs libcrypto 2>/dev/null))
+
 # Prefer pkg-config for libsystemd, but also allow header-only detection as fallback.
 ifeq ($(shell pkg-config --exists libsystemd 2>/dev/null && echo yes),yes)
 	SYSTEMD_CFLAGS := $(strip $(shell pkg-config --cflags libsystemd 2>/dev/null))
@@ -129,6 +132,20 @@ QRSS_EXECUTION_REGRESSION_TEST_OUT := qrss_execution_regression_test
 WSPR_TONE_REGRESSION_TEST_OUT := wspr_tone_regression_test
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
 QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
+SUPPORT_REQUEST_GUARD_TEST_OUT := support_request_guard_test
+SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT := support_bundle_job_manager_test
+SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT := support_bundle_result_validator_test
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT := support_bundle_collector_executor_test
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_OUT := support_bundle_collector_executor_helper
+SUPPORT_BUNDLE_RUNTIME_TEST_OUT := support_bundle_runtime_test
+SUPPORT_BUNDLE_HTTP_TEST_OUT := support_bundle_http_test
+SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OUT := support_bundle_web_server_wiring_test
+SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT := support_bundle_download_file_test
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT := support_bundle_checksum_file_test
+SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT := support_bundle_archive_digest_test
+SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT := support_bundle_download_preparation_test
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT := support_bundle_job_directory_remover_test
+SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT := support_bundle_startup_cleanup_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -199,6 +216,47 @@ SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_D
 QUALIFICATION_GPIO_TEST_MODE_TEST_SRC := tests/qualification_gpio_test_mode_test.cpp
 QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gpio_test_mode_test.o
 QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
+SUPPORT_REQUEST_GUARD_TEST_SRC := tests/support_request_guard_test.cpp
+SUPPORT_REQUEST_GUARD_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_request_guard_test.o
+SUPPORT_REQUEST_GUARD_TEST_DEPS := $(SUPPORT_REQUEST_GUARD_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_request_guard.o
+SUPPORT_BUNDLE_JOB_MANAGER_TEST_SRC := tests/support_bundle_job_manager_test.cpp
+SUPPORT_BUNDLE_JOB_MANAGER_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_job_manager_test.o
+SUPPORT_BUNDLE_JOB_MANAGER_TEST_DEPS := $(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o
+SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_SRC := tests/support_bundle_result_validator_test.cpp
+SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_result_validator_test.o
+SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_DEPS := $(SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_SRC := tests/support_bundle_collector_executor_test.cpp
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_collector_executor_test.o
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_DEPS := $(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_collector_executor.o
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_SRC := tests/support_bundle_collector_executor_helper.cpp
+SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_collector_executor_helper.o
+SUPPORT_BUNDLE_RUNTIME_TEST_SRC := tests/support_bundle_runtime_test.cpp
+SUPPORT_BUNDLE_RUNTIME_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_runtime_test.o
+SUPPORT_BUNDLE_RUNTIME_TEST_DEPS := $(SUPPORT_BUNDLE_RUNTIME_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_runtime.o $(OBJ_DIR_DEBUG)/./support_bundle_startup_cleanup.o $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_bundle_collector_executor.o
+SUPPORT_BUNDLE_HTTP_TEST_SRC := tests/support_bundle_http_test.cpp
+SUPPORT_BUNDLE_HTTP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_http_test.o
+SUPPORT_BUNDLE_HTTP_TEST_DEPS := $(SUPPORT_BUNDLE_HTTP_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_http.o $(OBJ_DIR_DEBUG)/./support_bundle_download_preparation.o $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_request_guard.o $(OBJ_DIR_DEBUG)/./httplib.o
+SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_SRC := tests/support_bundle_web_server_wiring_test.cpp
+SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_web_server_wiring_test.o
+SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_DEPS := $(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OBJ)
+SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_SRC := tests/support_bundle_download_file_test.cpp
+SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_download_file_test.o
+SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_DEPS := $(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_SRC := tests/support_bundle_checksum_file_test.cpp
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_checksum_file_test.o
+SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_DEPS := $(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o
+SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_SRC := tests/support_bundle_archive_digest_test.cpp
+SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_archive_digest_test.o
+SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_DEPS := $(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o
+SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_SRC := tests/support_bundle_download_preparation_test.cpp
+SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_download_preparation_test.o
+SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_DEPS := $(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_download_preparation.o $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_SRC := tests/support_bundle_job_directory_remover_test.cpp
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_job_directory_remover_test.o
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_DEPS := $(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o
+SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_SRC := tests/support_bundle_startup_cleanup_test.cpp
+SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_startup_cleanup_test.o
+SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_DEPS := $(SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_startup_cleanup.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -321,6 +379,7 @@ COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
 CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
            $(COMMON_FLAGS) \
            $(PKG_CFLAGS) \
+           $(OPENSSL_CFLAGS) \
            $(SYSTEMD_CFLAGS) \
            -DGPIOD_API_MAJOR=$(GPIOD_API_MAJOR) \
            -DLIB_JOURNALD=$(HAVE_JOURNALD)
@@ -347,6 +406,7 @@ CXX_RELEASE_FLAGS := $(CXXFLAGS) -O2
 # Linker flags
 LDFLAGS := -lpthread -latomic \
            $(PKG_LIBS) \
+           $(OPENSSL_LIBS) \
            $(SYSTEMD_LIBS)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -517,6 +577,62 @@ $(BIN_DIR)/$(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT): $(QUALIFICATION_GPIO_TEST_M
 	$(Q)echo "Linking debug: $(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT): $(SUPPORT_REQUEST_GUARD_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT): $(SUPPORT_BUNDLE_JOB_MANAGER_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT): $(SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT): $(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_OUT): $(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_OBJ)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_RUNTIME_TEST_OUT): $(SUPPORT_BUNDLE_RUNTIME_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_HTTP_TEST_OUT): $(SUPPORT_BUNDLE_HTTP_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OUT): $(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT): $(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT): $(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT): $(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT): $(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT): $(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT): $(SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 ifeq ($(GPIOD_HAS_V2),1)
 $(GPIO_LOOPBACK_TEST_OBJ): $(GPIO_LOOPBACK_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -570,7 +686,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-line-resolver-test non-wspr-repeat-policy-test qrss-execution-regression-test qrss_execution_regression_test wspr-tone-regression-test wspr_tone_regression_test gpio-loopback-test band-gpio-live-monitor gdb install debuginstall uninstall lint macros help
+.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-job-directory-remover-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -606,6 +722,51 @@ semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSI
 	$(Q)node tests/log_timestamp_display_test.js
 	$(Q)echo "Running update-check comparison tests."
 	$(Q)node tests/update_check_comparison_test.js
+
+support-request-guard-test: $(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
+
+support-bundle-job-manager-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
+
+support-bundle-result-validator-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT)
+
+support-bundle-collector-executor-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT) $(BIN_DIR)/$(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_HELPER_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT)
+
+support-bundle-runtime-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_RUNTIME_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_RUNTIME_TEST_OUT)
+
+support-bundle-runtime-installer-test:
+	$(Q)bash ../scripts/tests/support_bundle_runtime_install_test.sh
+
+installer-dependency-test:
+	$(Q)bash ../scripts/tests/installer_dependency_test.sh
+
+support-bundle-http-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_HTTP_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_HTTP_TEST_OUT)
+
+support-bundle-web-server-wiring-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OUT)
+
+support-bundle-download-file-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT)
+
+support-bundle-checksum-file-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT)
+
+support-bundle-archive-digest-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT)
+
+support-bundle-download-preparation-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT)
+
+support-bundle-job-directory-remover-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT)
+
+support-bundle-startup-cleanup-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT)
 
 build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 	$(Q)echo "Checking generated header dependency discovery."

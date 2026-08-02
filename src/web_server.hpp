@@ -36,7 +36,10 @@
 #include <thread>
 #include <stdexcept>
 #include <iostream>
+#include <memory>
 #include <string>
+
+class SupportBundleJobManager;
 
 /**
  * @class WebServer
@@ -103,7 +106,10 @@ public:
 
 private:
     int port_;                         ///< Port on which the server listens.
-    httplib::Server svr;               ///< Underlying HTTP server from cpp-httplib.
+    // Declared before svr so route captures are destroyed before the manager.
+    std::unique_ptr<SupportBundleJobManager> supportBundleJobManager_;
+    bool supportBundleRoutesRegistered_ = false;
+    std::unique_ptr<httplib::Server> svr; ///< Underlying HTTP server from cpp-httplib.
     std::thread serverThread;          ///< Thread running the HTTP server.
     std::mutex mtx;                    ///< Mutex for synchronizing start/stop operations.
     std::condition_variable cvStarted; ///< Condition variable to signal when the server has started.
