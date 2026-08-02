@@ -2,6 +2,7 @@
 #include "support_bundle_result_validator.hpp"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -38,13 +39,18 @@ bool safe_download_references(const std::filesystem::path &storage_root,
 SupportBundleJobManager::SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor,
                                                  IdGenerator ids,
                                                  std::filesystem::path storage_root,
-                                                 JobDirectoryRemover remover)
-    : executor_(std::move(executor)), ids_(std::move(ids)), remover_(std::move(remover)) {
+                                                 JobDirectoryRemover remover,
+                                                 std::chrono::milliseconds retention,
+                                                 std::chrono::milliseconds retry_delay)
+    : executor_(std::move(executor)), ids_(std::move(ids)), remover_(std::move(remover)),
+      retention_(std::max(retention, std::chrono::milliseconds::zero())),
+      retry_delay_(std::max(retry_delay, std::chrono::milliseconds(1))) {
     if (!remover_) {
         remover_ = remove_support_bundle_job_directory;
     }
     struct stat info{}; if (!storage_root.is_absolute() || lstat(storage_root.c_str(), &info) != 0 || S_ISLNK(info.st_mode) || !S_ISDIR(info.st_mode) || info.st_uid != geteuid() || (info.st_mode & 0777) != 0700) return;
     std::error_code error; storage_root_ = std::filesystem::canonical(storage_root, error); storage_ready_ = !error;
+    expiration_worker_ = std::thread(&SupportBundleJobManager::expiration_loop, this);
 }
 SupportBundleJobManager::~SupportBundleJobManager() { shutdown(); }
 bool SupportBundleJobManager::valid_id(const std::string &id) { return id.size() == 32 && std::all_of(id.begin(), id.end(), [](unsigned char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_'; }); }
@@ -144,12 +150,9 @@ SupportBundleDownloadDeletionResult SupportBundleJobManager::delete_download(
         return {SupportBundleDownloadDeletionStatus::cleanup_failed};
     }
 
-    job_directory_.clear();
-    validated_archive_filename_.clear();
-    validated_checksum_filename_.clear();
-    validated_sha256_.clear();
-    download_removed_ = true;
-    job_->download_available = false;
+    clear_current_download_locked(id);
+    cancel_expiration_locked(id);
+    expiration_cv_.notify_all();
     return {SupportBundleDownloadDeletionStatus::removed};
 }
 void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesystem::path job_directory) {
@@ -159,6 +162,7 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
     SupportBundleResultValidation validation;
     if (result.succeeded) validation = validate_support_bundle_result(job_directory, probe_i2c);
     bool remove_job_directory = false;
+    bool schedule_expiration = false;
     {
         std::lock_guard lock(mutex_); if (!job_ || job_->id != id || job_->state == SupportBundleJobState::failed) return;
         if (shutting_down_) result = {false, "shutting_down", "Support collection stopped."};
@@ -192,9 +196,69 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
         job_->failure_category = result.succeeded ? "" : (result.failure_category.starts_with("result_") || result.failure_category == "shutting_down" || result.failure_category == "executor_exception" ? result.failure_category : "collector_failed");
         job_->failure_message = result.succeeded ? "" : (job_->failure_category == "shutting_down" ? "Support collection stopped." : "Support collection failed.");
         remove_job_directory = !result.succeeded;
+        if (result.succeeded && !shutting_down_) {
+            expirations_.push_back({id, job_directory,
+                                    std::chrono::steady_clock::now() + retention_});
+            schedule_expiration = true;
+        }
+    }
+    if (schedule_expiration) {
+        expiration_cv_.notify_all();
     }
     if (remove_job_directory) {
         remove_unsuccessful_job_directory(id, job_directory);
+    }
+}
+
+void SupportBundleJobManager::clear_current_download_locked(const std::string &id) {
+    if (!job_ || job_->id != id || job_->state != SupportBundleJobState::succeeded) {
+        return;
+    }
+    job_directory_.clear();
+    validated_archive_filename_.clear();
+    validated_checksum_filename_.clear();
+    validated_sha256_.clear();
+    download_removed_ = true;
+    job_->download_available = false;
+}
+
+void SupportBundleJobManager::cancel_expiration_locked(const std::string &id) {
+    std::erase_if(expirations_, [&id](const ExpirationEntry &entry) {
+        return entry.id == id;
+    });
+}
+
+void SupportBundleJobManager::expiration_loop() {
+    std::unique_lock lock(mutex_);
+    while (!shutting_down_) {
+        if (expirations_.empty()) {
+            expiration_cv_.wait(lock, [this] { return shutting_down_ || !expirations_.empty(); });
+            continue;
+        }
+        const auto earliest = std::min_element(
+            expirations_.begin(), expirations_.end(),
+            [](const ExpirationEntry &left, const ExpirationEntry &right) {
+                return left.deadline < right.deadline;
+            });
+        const auto deadline = earliest->deadline;
+        if (std::chrono::steady_clock::now() < deadline) {
+            expiration_cv_.wait_until(lock, deadline);
+            continue;
+        }
+
+        const ExpirationEntry entry = *earliest;
+        SupportBundleJobDirectoryRemovalResult cleanup_result;
+        try {
+            cleanup_result = remover_(storage_root_, entry.id);
+        } catch (...) {
+            cleanup_result = {SupportBundleJobDirectoryRemovalFailure::removal_failed};
+        }
+        if (cleanup_result.removed()) {
+            expirations_.erase(earliest);
+            clear_current_download_locked(entry.id);
+        } else {
+            earliest->deadline = std::chrono::steady_clock::now() + retry_delay_;
+        }
     }
 }
 
@@ -213,6 +277,8 @@ void SupportBundleJobManager::remove_unsuccessful_job_directory(
 }
 void SupportBundleJobManager::shutdown() {
     { std::lock_guard lock(mutex_); shutting_down_ = true; }
+    expiration_cv_.notify_all();
     executor_->request_stop();
     if (worker_.joinable()) worker_.join();
+    if (expiration_worker_.joinable()) expiration_worker_.join();
 }

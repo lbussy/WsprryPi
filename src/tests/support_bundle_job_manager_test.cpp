@@ -63,6 +63,14 @@ static void wait_removed(const std::filesystem::path &path) {
     }
     assert(false);
 }
+static void wait_for_condition(const std::function<bool()> &condition) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (condition()) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    assert(false);
+}
 static std::string id(char c) { return std::string(32, c); }
 static void assert_no_download_metadata(const SupportBundleDownloadReference &reference) {
     assert(reference.archive_path.empty());
@@ -282,6 +290,114 @@ int main() {
            SupportBundleDownloadDeletionStatus::removed);
     reader.join();
     concurrent.shutdown();
+
+    std::atomic<int> expiry_cleanup_calls = 0;
+    auto expiry_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager expiry(
+        expiry_executor, [] { return id('v'); }, root,
+        [&expiry_cleanup_calls](const std::filesystem::path &storage_root,
+                                const std::string &job_id) {
+            ++expiry_cleanup_calls;
+            return remove_support_bundle_job_directory(storage_root, job_id);
+        }, std::chrono::milliseconds(40), std::chrono::milliseconds(20));
+    const auto expiry_job = expiry.create({}, error);
+    expiry_executor->wait_entered();
+    expiry_executor->release();
+    wait_terminal(expiry, expiry_job->id);
+    assert(expiry.download_reference(expiry_job->id).status ==
+           SupportBundleDownloadReferenceStatus::available);
+    wait_for_condition([&] {
+        return !expiry.lookup(expiry_job->id)->download_available;
+    });
+    assert(expiry_cleanup_calls.load() == 1 &&
+           expiry.lookup(expiry_job->id)->state == SupportBundleJobState::succeeded &&
+           expiry.download_reference(expiry_job->id).status ==
+               SupportBundleDownloadReferenceStatus::no_download &&
+           expiry.delete_download(expiry_job->id).status ==
+               SupportBundleDownloadDeletionStatus::already_removed &&
+           !std::filesystem::exists(root / expiry_job->id));
+    expiry.shutdown();
+
+    std::atomic<int> explicit_cleanup_calls = 0;
+    auto explicit_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager explicit_delete(
+        explicit_executor, [] { return id('w'); }, root,
+        [&explicit_cleanup_calls](const std::filesystem::path &storage_root,
+                                  const std::string &job_id) {
+            ++explicit_cleanup_calls;
+            return remove_support_bundle_job_directory(storage_root, job_id);
+        }, std::chrono::milliseconds(80), std::chrono::milliseconds(20));
+    const auto explicit_job = explicit_delete.create({}, error);
+    explicit_executor->wait_entered();
+    explicit_executor->release();
+    wait_terminal(explicit_delete, explicit_job->id);
+    assert(explicit_delete.delete_download(explicit_job->id).status ==
+           SupportBundleDownloadDeletionStatus::removed);
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    assert(explicit_cleanup_calls.load() == 1 &&
+           explicit_delete.download_reference(explicit_job->id).status ==
+               SupportBundleDownloadReferenceStatus::no_download);
+    explicit_delete.shutdown();
+
+    std::atomic<int> retry_cleanup_calls = 0;
+    auto retry_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager retry_expiry(
+        retry_executor, [] { return id('x'); }, root,
+        [&retry_cleanup_calls](const std::filesystem::path &storage_root,
+                               const std::string &job_id) {
+            if (++retry_cleanup_calls == 1) {
+                return SupportBundleJobDirectoryRemovalResult{
+                    SupportBundleJobDirectoryRemovalFailure::removal_failed};
+            }
+            return remove_support_bundle_job_directory(storage_root, job_id);
+        }, std::chrono::milliseconds(20), std::chrono::milliseconds(120));
+    const auto retry_expiry_job = retry_expiry.create({}, error);
+    retry_executor->wait_entered();
+    retry_executor->release();
+    wait_terminal(retry_expiry, retry_expiry_job->id);
+    wait_for_condition([&] { return retry_cleanup_calls.load() == 1; });
+    assert(retry_expiry.lookup(retry_expiry_job->id)->download_available &&
+           retry_expiry.download_reference(retry_expiry_job->id).status ==
+               SupportBundleDownloadReferenceStatus::available);
+    wait_for_condition([&] {
+        return !retry_expiry.lookup(retry_expiry_job->id)->download_available;
+    });
+    assert(retry_cleanup_calls.load() == 2 &&
+           retry_expiry.download_reference(retry_expiry_job->id).status ==
+               SupportBundleDownloadReferenceStatus::no_download);
+    retry_expiry.shutdown();
+
+    std::atomic<int> active_cleanup_calls = 0;
+    auto active_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager active_expiry(
+        active_executor, [] { return id('y'); }, root,
+        [&active_cleanup_calls](const std::filesystem::path &storage_root,
+                                const std::string &job_id) {
+            ++active_cleanup_calls;
+            return remove_support_bundle_job_directory(storage_root, job_id);
+        }, std::chrono::milliseconds::zero(), std::chrono::milliseconds(20));
+    const auto active_job = active_expiry.create({}, error);
+    active_executor->wait_entered();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    assert(active_cleanup_calls.load() == 0 &&
+           active_expiry.lookup(active_job->id)->state == SupportBundleJobState::running);
+    active_executor->release();
+    wait_terminal(active_expiry, active_job->id);
+    wait_for_condition([&] {
+        return !active_expiry.lookup(active_job->id)->download_available;
+    });
+    assert(active_cleanup_calls.load() == 1);
+    active_expiry.shutdown();
+
+    auto shutdown_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager shutdown_expiry(
+        shutdown_executor, [] { return id('1'); }, root,
+        remove_support_bundle_job_directory, std::chrono::hours(1), std::chrono::minutes(1));
+    const auto shutdown_start = std::chrono::steady_clock::now();
+    shutdown_expiry.shutdown();
+    assert(std::chrono::steady_clock::now() - shutdown_start < std::chrono::seconds(1));
+    shutdown_expiry.shutdown();
+
     assert(std::filesystem::exists(sibling / "keep"));
     std::filesystem::remove_all(root);
     std::cout << "support_bundle_job_manager_test: PASS\n";
