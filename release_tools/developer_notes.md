@@ -1,301 +1,784 @@
 <!-- omit in toc -->
-# Developer Notes
+# Wsprry Pi Developer Guide
 
-I use VS Code installed on my working laptop (Windows or Mac) and the [Visual Studio Code Remote—SSH](https://code.visualstudio.com/docs/remote/ssh) extension to access VS Code's feature set on a Raspberry Pi from a familiar Dev UI on my laptop.
+This guide serves two purposes:
+
+- Walk a new contributor through preparing a Wsprry Pi development environment.
+- Give experienced contributors a concise reference for common development tasks.
+
+Wsprry Pi runs on Raspberry Pi hardware and controls GPIO and radio-transmission
+functions. Source-level tests are not a substitute for installation, service,
+GPIO, timing, or RF qualification on the intended hardware.
 
 <!-- omit in toc -->
 ## Table of Contents
 
-- [Set up SSH to your PI](#set-up-ssh-to-your-pi)
-- [Clone Repo](#clone-repo)
-    - [Windows SSHFS Mount Option](#windows-sshfs-mount-option)
-  - [64-Bit Raspberry Pi (`armhf`)](#64-bit-raspberry-pi-armhf)
-  - [All OS](#all-os)
-- [Local Validation](#local-validation)
-- [Required Devel Libs](#required-devel-libs)
-- [A Note About Submodules](#a-note-about-submodules)
-- [Reboot](#reboot)
+- [Development Model](#development-model)
+- [New Developer Quick Start](#new-developer-quick-start)
+- [Prepare the Raspberry Pi](#prepare-the-raspberry-pi)
+- [Configure SSH From the Workstation](#configure-ssh-from-the-workstation)
+  - [Create an SSH Key](#create-an-ssh-key)
+  - [Verify the Host and Install the Key](#verify-the-host-and-install-the-key)
+  - [Add an SSH Host Alias](#add-an-ssh-host-alias)
+- [Clone the Development Checkout](#clone-the-development-checkout)
+- [Verify the Repository and Submodules](#verify-the-repository-and-submodules)
+- [Choose an Editing Workflow](#choose-an-editing-workflow)
+  - [VS Code Remote SSH on a Supported 64-Bit Pi](#vs-code-remote-ssh-on-a-supported-64-bit-pi)
+  - [macOS SSHFS for a 32-Bit Pi](#macos-sshfs-for-a-32-bit-pi)
+  - [Windows SSHFS for a 32-Bit Pi](#windows-sshfs-for-a-32-bit-pi)
+  - [Other Editors](#other-editors)
+- [Install Development Dependencies](#install-development-dependencies)
+  - [Full Wsprry Pi Installation](#full-wsprry-pi-installation)
+  - [Packages for Source Work](#packages-for-source-work)
+  - [Optional Tools for Codex and Other AI Agents](#optional-tools-for-codex-and-other-ai-agents)
+- [Repository Support for AI Agents](#repository-support-for-ai-agents)
+- [Run Safe Source-Level Validation](#run-safe-source-level-validation)
+- [Manage the Installed Service During Development](#manage-the-installed-service-during-development)
+- [Git and Submodule Reference](#git-and-submodule-reference)
+  - [Understand the Submodules](#understand-the-submodules)
+  - [Restore Missing Submodules Safely](#restore-missing-submodules-safely)
+  - [Interpret Submodule Status](#interpret-submodule-status)
+  - [Update a Submodule Intentionally](#update-a-submodule-intentionally)
+- [Troubleshooting](#troubleshooting)
+- [Reboot and Hardware Considerations](#reboot-and-hardware-considerations)
+- [Experienced Developer Command Reference](#experienced-developer-command-reference)
 
-## Set up SSH to your PI
+## Development Model
 
-Any references to `{hostname}` should be replaced with the hostname of your target Pi.
+The normal development model has two computers:
 
-1. If you are on Windows, have [Open SSH](https://windowsloop.com/install-openssh-server-windows-11/) installed.
+- **Workstation:** Your macOS, Windows, or Linux computer runs your editor and
+  SSH client.
+- **Raspberry Pi:** The Pi owns the checkout and runs Git, builds, validation,
+  the Wsprry Pi program, and any authorized hardware-dependent work.
 
-2. Check that you have an SSH key generated on your system:
+The active development branch is `devel`. The repository contains the
+first-party `WsprryPi-UI` submodule and several dependency submodules under
+`src/`. The parent repository records the exact commit expected for each
+submodule.
 
-    - Linux or Mac (one line):
+Use an SSHFS mount only for editing and source inspection. Run Git commands,
+compilation, tests, service commands, and program execution in an SSH session
+on the Pi. This avoids filesystem, permissions, symlink, filename-case, and
+generated-artifact problems on workstation-side mounts.
 
-        ``` bash
-        [ -d ~/.ssh ] && [ -f ~/.ssh/*.pub ] && echo "SSH keys already exists." || ssh-keygen
-        ```
+## New Developer Quick Start
 
-    - Windows PowerShell:
+This is the shortest safe path to a development checkout. The later sections
+explain each step and provide alternatives.
 
-        ``` PowerShell
-        if (Test-Path "$env:USERPROFILE\.ssh" -and (Test-Path "$env:USERPROFILE\.ssh\*.pub")) {
-            Write-Host "SSH keys already exist."
-        } else {
-            ssh-keygen
-        }
-        ```
+1. Install Raspberry Pi OS and complete its initial setup. Enable SSH, create
+   the intended user, assign a hostname, and confirm that the Pi has network
+   access.
 
-    - Windows Command Line:
+2. From the **workstation**, verify that SSH works:
 
-        ``` cmd
-        @echo off
-        if exist "%USERPROFILE%\\.ssh" (
-            if exist "%USERPROFILE%\.ssh\*.pub" (
-            echo SSH keys already exist.
-            ) else (
-            ssh-keygen
-            )
-        ) else (
-            ssh-keygen
-        )
-      ```
-
-3. `ssh` to your `pi@{hostname}.local` with the target host password to ensure your `ssh` client and name resolution via zeroconf or mDNS. If you see:
-
-    ``` text
-    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
-    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    ```
-
-    - Edit `~/.ssh/known_hosts` and remove any lines beginning with your target hostname
-    - "Yes" to a prompt to continue connecting
-    - Exit back out
-
-4. Copy keys to host with (enter target host password when asked):
-
-    ``` bash
-    ssh-copy-id pi@{hostname}.local
-    ```
-
-5. Edit `~/.ssh/config` (or `$HOME\.ssh` on Windows) and add a stanza like this - be sure to mind the indentation:
-
-    ``` bash
-    Host {hostname}.local
-        HostName {hostname}.local
-        User pi
-        Port 22
-        PreferredAuthentications publickey
-    ```
-
-6. `ssh` to pi@{hostname}.local to ensure your changes allow key exchange (passwords) logins.
-
-## Clone Repo
-
-1. Once done and connected via SSH:
-
-    > [!IMPORTANT]
-    > You MUST clone the repo with `--recurse-submodules` to get all parts.
-
-    Either:
-
-    ``` bash
-    sudo apt install git -y
-    git clone --recurse-submodules -j8 https://github.com/WsprryPi/WsprryPi.git
-    cd ~/WsprryPi/
-    sudo ./scripts/install.sh -l
+   ```bash
+   ssh pi@{hostname}.local
    ```
 
-    (This will allow cloning git first, which you need anyway, then installing, which gets the rest of the libs.)
+   Replace `pi` if the Pi uses a different account. Replace `{hostname}` with
+   the Pi hostname everywhere in this guide.
 
-    Or:
+3. Configure public-key authentication as described in
+   [Configure SSH From the Workstation](#configure-ssh-from-the-workstation).
 
-    ``` bash
-    curl -L installwspr.aa0nt.net | sudo bash
-    git clone --recurse-submodules -j8 https://github.com/WsprryPi/WsprryPi.git
-    cd ~/WsprryPi/
-    ```
+4. On the **Raspberry Pi**, install Git and clone `devel` with all submodules:
 
-    (This lets the installer install everything, but then you clone the repo after.)
+   ```bash
+   sudo apt update
+   sudo apt install -y git
+   cd ~
+   git clone --branch devel --recurse-submodules -j8 \
+       https://github.com/WsprryPi/WsprryPi.git
+   cd ~/WsprryPi
+   ```
 
-2. You should be in your git repo directory. Set up the Git global environment. Replace placeholders with your Git username and email:
+5. Verify the checkout before making changes:
 
-    ``` bash
-    git config --global user.email "you@example.com"
-    git config --global user.name "Your Name"
-    ```
+   ```bash
+   git branch --show-current
+   git status --short --branch
+   git submodule status --recursive
+   ```
 
-## VS Code
+   The branch must be `devel`. A clean new checkout should have no changed-file
+   lines. Submodules should not have a leading `-` or `+`.
 
-I use VS Code to develop this environment and connect my workstation to my Pi via the [VS Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview) option when the target Pi supports it. This tool makes compiling and testing on the Pi very easy as I work from my laptop.
+6. Choose an editing workflow:
 
-### 32-Bit Raspberry Pi (`armhf`)
+   - On a supported 64-bit (`arm64`/`aarch64`) Pi, VS Code Remote SSH is the
+     simplest graphical workflow.
+   - On a 32-bit (`armhf`) Pi, use a workstation-side SSHFS mount or a terminal
+     editor.
 
-For 32-bit/armhf Raspberry Pi work, Microsoft no longer provides VS Code support on armhf. The practical workflow for VS Code-like desktop tooling is to run VS Code on the workstation and edit the Pi-hosted checkout through an SSHFS-style mount.
+7. Install the dependencies needed for your work. The full installer configures
+   a working Wsprry Pi system and changes system state; the package-only path is
+   better when you only need source development. See
+   [Install Development Dependencies](#install-development-dependencies).
 
-Keep builds and compile-dependent validation on the Pi itself. VS Code or Codex access over a workstation-side mount is for editing and source inspection, not native validation, unless you explicitly intend otherwise.
+8. Run safe source-level validation on the **Pi**:
 
-#### macOS SSHFS Mount Option
+   ```bash
+   cd ~/WsprryPi/src
+   make semantics-test
+   ```
 
-On macOS, use macFUSE plus sshfs to mount the Pi checkout. A helper script for mounting a Pi repo using `~/.ssh/config` host aliases is available here:
+   This does not transmit or qualify attached hardware. It does compile test
+   binaries and create build artifacts inside the checkout.
+
+## Prepare the Raspberry Pi
+
+Before cloning the repository, confirm the following on the Pi:
+
+- Raspberry Pi OS is installed and current enough for the target hardware.
+- SSH is enabled.
+- The development account can use `sudo` when installation or service work is
+  intentionally performed.
+- The hostname resolves from the workstation, normally as
+  `{hostname}.local` through mDNS.
+- The Pi has working package-repository and GitHub access.
+- The system architecture is known:
+
+  ```bash
+  uname -m
+  dpkg --print-architecture
+  ```
+
+Common results are `aarch64`/`arm64` for a 64-bit OS and `armv7l`/`armhf` for a
+32-bit OS. The OS architecture, not merely the Pi model, determines whether a
+remote editor server is supported.
+
+## Configure SSH From the Workstation
+
+Run the commands in this section on the **workstation**, not the Pi.
+
+### Create an SSH Key
+
+First check for an existing public key.
+
+On macOS or Linux:
+
+```bash
+find ~/.ssh -maxdepth 1 -name '*.pub' -print -quit 2>/dev/null
+```
+
+On Windows PowerShell:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE\.ssh\*.pub" -ErrorAction SilentlyContinue
+```
+
+If no public key is listed, create an Ed25519 key:
+
+```bash
+ssh-keygen -t ed25519
+```
+
+PowerShell uses the same `ssh-keygen -t ed25519` command when the Windows
+OpenSSH client is installed. Protect the private key and never copy or share it.
+
+### Verify the Host and Install the Key
+
+Test password-based access before installing the public key:
+
+```bash
+ssh pi@{hostname}.local
+```
+
+If SSH reports that the remote host identification changed, first confirm that
+the Pi was intentionally reinstalled, replaced, or assigned a previously used
+hostname. An unexpected key change can indicate that you are connecting to the
+wrong system. After confirming the change, remove only that saved host key:
+
+```bash
+ssh-keygen -R {hostname}.local
+```
+
+On macOS or Linux, install the public key with:
+
+```bash
+ssh-copy-id pi@{hostname}.local
+```
+
+On Windows, add the contents of the `.pub` file to `~/.ssh/authorized_keys` on
+the Pi, or use this PowerShell command once:
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub" |
+    ssh pi@{hostname}.local "umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys"
+```
+
+If the key has a different filename, substitute it in the command. Repeating
+the PowerShell command may add a duplicate public-key line, which is harmless
+but unnecessary.
+
+Verify public-key authentication by opening a new connection:
+
+```bash
+ssh pi@{hostname}.local
+```
+
+The connection may ask for the key's passphrase, but it should no longer ask
+for the Pi account password.
+
+### Add an SSH Host Alias
+
+An alias makes terminal, editor, and mount commands shorter. Edit
+`~/.ssh/config` on macOS or Linux, or
+`$env:USERPROFILE\.ssh\config` on Windows, and add:
+
+```sshconfig
+Host wsprrypi
+    HostName {hostname}.local
+    User pi
+    Port 22
+    PreferredAuthentications publickey
+```
+
+Use the actual Pi username if it is not `pi`. Test the alias:
+
+```bash
+ssh wsprrypi
+```
+
+The rest of this guide uses `wsprrypi` where an SSH alias is convenient.
+
+## Clone the Development Checkout
+
+Run these commands on the **Raspberry Pi**:
+
+```bash
+sudo apt update
+sudo apt install -y git
+cd ~
+git clone --branch devel --recurse-submodules -j8 \
+    https://github.com/WsprryPi/WsprryPi.git
+cd ~/WsprryPi
+```
+
+The command deliberately selects `devel` and initializes the commits recorded
+for all submodules. If `~/WsprryPi` already exists, `git clone` stops rather
+than overwriting it. Inspect the existing checkout instead of deleting it.
+
+Configure the Git identity used for future commits, replacing the examples:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+These settings identify commits; they do not authenticate a GitHub account.
+
+## Verify the Repository and Submodules
+
+From the **repository root on the Pi**:
+
+```bash
+cd ~/WsprryPi
+git branch --show-current
+git status --short --branch
+git submodule status --recursive
+git submodule foreach --recursive 'git status --short --branch'
+```
+
+Confirm the following before editing or building:
+
+- The parent branch is `devel`.
+- Existing parent changes are understood and preserved.
+- Every submodule is initialized at the parent repository's recorded commit.
+- Existing submodule changes are understood and preserved.
+
+A submodule commonly reports `HEAD (no branch)`. This detached `HEAD` is normal
+when Git checks out the exact commit recorded by the parent repository.
+
+## Choose an Editing Workflow
+
+VS Code is convenient but optional. Any editor that preserves Unix text files,
+permissions, symlinks, and repository boundaries is suitable.
+
+### VS Code Remote SSH on a Supported 64-Bit Pi
+
+For a supported 64-bit (`arm64`/`aarch64`) target:
+
+1. Install VS Code on the workstation.
+2. Install the **Remote Development** extension.
+3. Open the Command Palette and select **Remote-SSH: Connect Current Window to
+   Host**.
+4. Select `wsprrypi` or enter `pi@{hostname}.local`.
+5. Open `/home/pi/WsprryPi` in the remote window.
+
+VS Code installs its server on the Pi, so terminals, Git, compilation, and
+validation in that remote window execute on the Pi.
+
+The repository maintains optional editor recommendations in
+`.vscode/extensions.json`. VS Code offers those recommendations when the
+repository opens.
+
+### macOS SSHFS for a 32-Bit Pi
+
+For a 32-bit `armhf` Pi, install macFUSE and SSHFS on macOS, then mount the
+Pi-hosted checkout for editing. A parameterized helper for mounts that use
+`~/.ssh/config` aliases is available at:
 
 <https://gist.github.com/lbussy/4e556402959ff6204144041c1ecb24cb>
 
-Use the mounted checkout for editing and source inspection only. Run builds and validation on the Pi itself:
+For example, if that helper is installed as `mount-pi`:
 
-``` bash
-ssh pi@{hostname}.local
-cd ~/WsprryPi/src
+```bash
+mount-pi wsprrypi ~/WsprryPi /home/pi/WsprryPi
+```
+
+Use the mounted directory only for editing and source inspection. Use a second
+terminal to run Git and validation on the Pi:
+
+```bash
+ssh wsprrypi
+cd ~/WsprryPi
+git status --short --branch
+cd src
 make semantics-test
 ```
 
-macFUSE/sshfs mounts can occasionally become stale. If that happens, force-unmount and re-mount the checkout before continuing.
+Unmount with the helper documented by the mount tool. If a mount becomes stale,
+unmount and recreate it before continuing; do not build through a stale mount.
 
-#### Windows SSHFS Mount Option
+### Windows SSHFS for a 32-Bit Pi
 
-For 32-bit/armhf Raspberry Pi work, Windows users can use [WinFsp](https://winfsp.dev/) plus [SSHFS-Win](https://github.com/winfsp/sshfs-win) to mount the Pi checkout as a Windows drive letter. This provides a workflow similar to macFUSE/sshfs on macOS when VS Code Remote SSH cannot install a supported VS Code Server on the target Pi.
+Windows developers can use [WinFsp](https://winfsp.dev/) and
+[SSHFS-Win](https://github.com/winfsp/sshfs-win) to expose the Pi checkout as a
+drive letter. Install them from an elevated PowerShell prompt:
 
-Install WinFsp and SSHFS-Win from an elevated PowerShell prompt:
-
-``` PowerShell
+```powershell
 winget install WinFsp.WinFsp
 winget install SSHFS-Win.SSHFS-Win
 ```
 
-Map the Wsprry Pi checkout to a drive letter:
+Map the checkout:
 
-``` PowerShell
+```powershell
 net use W: \\sshfs\pi@{hostname}.local\home\pi\WsprryPi
 ```
 
-Open the mounted checkout in VS Code:
+Open it in VS Code if the `code` command is installed:
 
-``` PowerShell
+```powershell
 code W:\
 ```
 
-Unmount the drive when finished:
+Unmount it when finished:
 
-``` PowerShell
+```powershell
 net use W: /delete
 ```
 
-As with macFUSE on macOS, use the mounted drive for editing and source inspection only. Run builds and validation on the Pi itself:
+Use the mapped drive only for editing and inspection. Run Git, builds, and
+tests in a separate SSH session on the Pi. Windows mounts add potential POSIX
+permissions, symlink, filename-case, and generated-artifact problems.
 
-``` bash
-ssh pi@{hostname}.local
-cd ~/WsprryPi/src
-make semantics-test
-```
+### Other Editors
 
-Windows drive-letter mounts can have additional friction with POSIX permissions, symlinks, filename case, and generated build artifacts, so avoid running compile-heavy workflows through the mounted drive.
+Terminal editors on the Pi avoid mount and remote-server compatibility issues.
+Graphical editors other than VS Code are also valid if they edit the Pi-hosted
+files safely. Regardless of editor, run repository operations and compilation
+on the Pi that owns the checkout.
 
-### 64-Bit Raspberry Pi (`armhf`)
+## Install Development Dependencies
 
-If you are going to use VS Code Remote SSH from your workstation on a supported target:
+Choose the full system installation when preparing an operational Wsprry Pi
+system, or package-only preparation for source development.
 
-1. In VS Code, install the `Remote Development` extension.
+### Full Wsprry Pi Installation
 
-2. `View -> Command Palette -> >Remote-SSH:Connect Current Window to Host`
+> [!CAUTION]
+> Run the local installer while the current working directory is inside the
+> Wsprry Pi Git checkout. The installer uses the current working directory to
+> decide whether the repository is a developer checkout that must be preserved.
+> If it is invoked from outside the Git directory structure, even by using the
+> script's absolute path, it treats `~/WsprryPi` as a temporary installation
+> checkout and deletes that repository during cleanup.
 
-3. Select or enter your `{hostname}.local`
-
-4. The local VS Code engine will install the VS Code Server on the Pi.
-
-### All OS
-
-1. Use the "Open Folder" button and select the root of your repo on the Pi (e.g. `~/WsprryPi/`).
-
-2. I use several VS Code extensions. You may note that VS Code will prompt you to install recommended extensions.  This is a configuration I added to the Git repo to make it easier.  You can choose not to use any or all of these extensions.
-
-    You can paste them all in the terminal window at once.  It may seem to hang, even for minutes on a slower Pi, but it will work.
-
-    ``` bash
-    # Extensions installed on SSH: wsprrypi.local:
-    # Generated with:
-    # code --list-extensions | xargs -L 1 echo code --install-extension
-    code --install-extension bmewburn.vscode-intelephense-client
-    code --install-extension davidanson.vscode-markdownlint
-    code --install-extension eamodio.gitlens
-    code --install-extension ecmel.vscode-html-css
-    code --install-extension foxundermoon.shell-format
-    code --install-extension github.copilot
-    code --install-extension github.copilot-chat
-    code --install-extension github.vscode-pull-request-github
-    code --install-extension gruntfuggly.todo-tree
-    code --install-extension mechatroner.rainbow-csv
-    code --install-extension mhutchie.git-graph
-    code --install-extension ms-python.debugpy
-    code --install-extension ms-python.python
-    code --install-extension ms-python.vscode-pylance
-    code --install-extension ms-python.vscode-python-envs
-    code --install-extension ms-vscode.cmake-tools
-    code --install-extension ms-vscode.cpptools
-    code --install-extension njpwerner.autodocstring
-    code --install-extension rifi2k.format-html-in-php
-    code --install-extension streetsidesoftware.code-spell-checker
-    code --install-extension timonwong.shellcheck
-    code --install-extension yzhang.markdown-all-in-one
-    code --install-extension xdebug.php-debug
-    ```
-
-> [!NOTE]
-> If you are working on a mount on your local PC/Mac, remember to keep builds and compile-dependent validation on the Pi itself.  You will experience errors if you try to use VS Code on your workstation through a mount to compile.
-
-3. Do great things. You are now using VS Code on your Pi; all compilation and execution happens there.
-
-> [!IMPORTANT]
-> Remember that the **Wsprry Pi** systemd daemon is running if you ran the installer. If you are executing from your dev environment, you may receive an error that says `wsprrypi` is already running. You can stop and deactivate these with:
->
-> ``` bash
-> sudo systemctl stop wsprrypi
-> sudo systemctl disable wsprrypi
-> ```
-
-## Local Validation
-
-The runtime semantics validation target includes both native regression tests and a Node-based log timestamp display regression. On a fresh Raspberry Pi or local validation environment, install Node.js before running the target or it may fail with `make: node: No such file or directory`.
+Enter the existing checkout first, then invoke the installer with its relative
+path:
 
 ```bash
-sudo apt update
-sudo apt install -y nodejs
+cd ~/WsprryPi
+sudo ./scripts/install.sh
 ```
 
-Run local validation from the Pi checkout, not from the macFUSE mount:
+Running the installer is an operational action, not merely dependency setup.
+It installs packages, builds and installs Wsprry Pi, configures the web service
+unless `--no-web` is selected, manages the system service, changes system
+configuration, and may require a reboot. Review it and use it only when those
+system changes are intended.
 
-```bash
-cd ~/WsprryPi/src
-make semantics-test
-```
+The convenience command `curl -L installwspr.aa0nt.net | sudo bash` is intended
+for installing a Wsprry Pi system, not for creating a controlled `devel`
+checkout. It executes downloaded code as root and follows the installer's
+selected repository branch. Prefer an explicit `devel` clone for development.
 
-## Required Devel Libs
+### Packages for Source Work
 
-If you did not run `install.sh` from within the Wsprry Pi repo or with the WsprryPi curl command, will need some libs to execute the project:
+The installer currently manages these project packages:
 
 - `git`
 - `apache2`
 - `php`
 - `chrony`
-- `nodejs` (required by local validation targets such as `make semantics-test`)
-- `libgpiod-dev` (`libgpiod2` or `libgpiod3` are required, but the installer or `libgpiod-dev` will pull the correct one in)
+- `libgpiod-dev`
+- `libsystemd-dev`
 
-Install these (without running the installer) with:
+The `semantics-test` target also requires Node.js. To install these packages
+without running the full installer:
 
-``` bash
-sudo apt install git apache2 php chrony nodejs libgpiod-dev -y
+```bash
+sudo apt update
+sudo apt install -y \
+    git apache2 php chrony libgpiod-dev libsystemd-dev nodejs
 ```
 
-## A Note About Submodules
+This is a project dependency reference, not a guarantee that every supported
+Raspberry Pi OS image already contains the complete compiler and build
+toolchain. If compilation reports a missing compiler, build utility, header, or
+package, identify that requirement from the current Makefile or installer
+rather than guessing.
 
-I have opted to use submodules to reuse common elements in my projects, as well as to clearly delineate licensing of historic code. When you clone, use the `--recurse-submodules -j8` argument. Should you switch to a branch and find the submodules are no longer present, issue the following from the root of the repo:
+### Optional Tools for Codex and Other AI Agents
 
-``` bash
-git submodule foreach --recursive 'git clean -xfd'
+Codex and other coding agents work more effectively when the development host
+has fast search tools, language runtimes, and repository-specific validators.
+The following packages are useful additions to a Wsprry Pi development system:
+
+| Package | Purpose |
+| --- | --- |
+| `ripgrep` | Fast recursive source search through the `rg` command. |
+| `fd-find` | Fast filename discovery through Debian's `fdfind` command. |
+| `jq` | Inspection and transformation of JSON configuration and test output. |
+| `shellcheck` | Static analysis of the repository's shell scripts. |
+| `build-essential` | Standard compiler, linker, Make, and C/C++ build tools. |
+| `pkg-config` | Discovery of installed compiler and linker dependencies. |
+| `python3` | Execution of Python utilities and test helpers. |
+| `python3-venv` | Isolated Python environments for optional tools. |
+| `npm` | Node package tooling used by some coding-agent and JavaScript workflows. |
+
+Install the optional toolkit on the **development host** with:
+
+```bash
+sudo apt update
+sudo apt install -y \
+    ripgrep fd-find jq shellcheck build-essential pkg-config \
+    python3 python3-venv npm
+```
+
+Node.js is already included in the source-development packages above because
+the repository's `semantics-test` target requires it. On Debian-based systems,
+the executable installed by `fd-find` is named `fdfind`.
+
+This toolkit prepares the host for efficient repository work. Install and
+configure the selected AI agent separately by following its current platform,
+architecture, authentication, and update instructions. For Codex, use the
+[current Codex documentation](https://developers.openai.com/codex/).
+
+## Repository Support for AI Agents
+
+The following tracked files help Codex or other development assistants work in
+this repository:
+
+- `AGENTS.md` is the authoritative repository-wide instruction file for AI
+  coding agents. It defines scope control, dirty-worktree preservation,
+  Raspberry Pi and RF safety, submodule boundaries, validation expectations,
+  and documentation responsibilities. A more deeply nested `AGENTS.md` would
+  take precedence within its directory tree.
+- `.vscode/extensions.json` contains optional VS Code extension
+  recommendations, including GitHub Copilot Chat and developer validation
+  tools. `AGENTS.md` remains the authoritative repository instruction source.
+- `.gitignore` excludes `.codex/`, `.agents/`, `skills-lock.json`, and local
+  Node package metadata used by agent or tool sessions. These are local runtime
+  artifacts rather than project source.
+- `src/WSPR-Reference/.gitignore` separately excludes `.codex/` state within
+  that dependency checkout.
+
+`AGENTS.md` also directs contributors to keep local `.agents/`, `.impeccable/`,
+`.claude/`, and `.codex/` runtime artifacts out of commits unless they are
+explicitly approved as intended repository content.
+
+An AI agent should begin by reading `AGENTS.md`, inspecting the parent and all
+submodule working trees, and confirming the authorized scope. Treat the parent,
+each submodule, and the separate operator-documentation repository as
+independent instruction, change, validation, and commit boundaries.
+
+## Run Safe Source-Level Validation
+
+Run the current aggregate semantics target on the **Raspberry Pi**:
+
+```bash
+cd ~/WsprryPi/src
+make semantics-test
+```
+
+This target builds and runs native runtime-semantics and UI/source regression
+binaries, then runs Node-based log-timestamp and update-comparison regressions.
+It creates build artifacts in the checkout. It does not intentionally start a
+transmission, key transmitter GPIO, install a binary, manage a service, or
+reboot the Pi.
+
+Reserve targets such as `test-tone`, `test-oneshot`, GPIO qualification, and
+live-monitor targets for an explicit hardware test plan and authorization.
+Those targets may use `sudo`, GPIO, a transmitter, or RF-producing paths.
+
+Passing source-level tests does not qualify:
+
+- Installation or upgrade behavior
+- The systemd service lifecycle
+- GPIO selection or electrical behavior
+- Frequency accuracy or RF output
+- Timing on the intended Pi model and OS
+- Attached transmitters, filters, antennas, or loads
+
+## Manage the Installed Service During Development
+
+A full installation normally runs Wsprry Pi through the `wsprrypi` systemd
+service. A second developer-started instance may then report that Wsprry Pi is
+already running.
+
+Inspect the service before changing it:
+
+```bash
+systemctl status wsprrypi
+systemctl is-enabled wsprrypi
+```
+
+For a development session, stopping the service ends the current service
+process but does not alter boot behavior:
+
+```bash
+sudo systemctl stop wsprrypi
+```
+
+Disabling it is a separate, persistent choice that prevents automatic startup
+at boot:
+
+```bash
+sudo systemctl disable wsprrypi
+```
+
+Do not disable the service unless that persistent change is intended. Restore
+normal startup and start the service with:
+
+```bash
+sudo systemctl enable wsprrypi
+sudo systemctl start wsprrypi
+```
+
+Service commands change the operating system and can interrupt active work.
+Confirm that no transmission or other required operation is in progress first.
+
+## Git and Submodule Reference
+
+### Understand the Submodules
+
+Wsprry Pi uses submodules to pin independently versioned components and to keep
+licensing and repository boundaries explicit:
+
+- `WsprryPi-UI` is the editable first-party web interface and a separate Git
+  repository.
+- Submodules under `src/` are dependencies and should be treated as read-only
+  unless a dependency change is explicitly planned.
+
+Each submodule has its own branch or detached `HEAD`, working tree, history,
+tests, commit, and push boundary. A parent-repository commit records only the
+submodule commit ID; it does not contain the submodule's changed files.
+
+### Restore Missing Submodules Safely
+
+After cloning without `--recurse-submodules`, or after moving to a commit with
+new submodules, run this from the **repository root on the Pi**:
+
+```bash
 git submodule update --init --recursive
 ```
 
-Or possibly better/cleaner:
+The command is safe to repeat when submodules are already at their recorded
+commits. The parent repository's recorded commits remain authoritative.
+
+Do not use recursive `git clean`, `git reset`, `git pull`, branch switching, or
+`git submodule update --force` as routine recovery. Those operations can
+discard work or move repositories away from the commits being reviewed.
+
+### Interpret Submodule Status
+
+Inspect status with:
 
 ```bash
-git submodule update --init --recursive --force
+git submodule status --recursive
+git submodule foreach --recursive 'git status --short --branch'
 ```
 
-## Reboot
+In `git submodule status` output:
 
-For all Pi's before the Pi 5, the installer blacklists the onboard snd_bcm2835 device.  Wsprry Pi uses this for generating the signal on the GPIO so sound must be disabled to avoid conflicts. You will need a reboot at some point before expecting Wsprry Pi to work correctly.
-armhf
+- A leading space means the submodule is initialized at the recorded commit.
+- A leading `-` means it is not initialized.
+- A leading `+` means it is checked out at a different commit from the one
+  recorded by the parent.
+- A dirty indication means the submodule contains local changes.
+
+Detached `HEAD` alone is normal. Before changing any submodule state, inspect
+and preserve uncommitted work.
+
+### Update a Submodule Intentionally
+
+A dependency update is not a routine parent-repository refresh. When a planned
+change genuinely belongs in a submodule:
+
+1. Confirm the intended submodule repository, branch, and existing status.
+2. Make and validate the submodule change in that repository.
+3. Review and commit it separately.
+4. Ensure the submodule commit is available on its intended remote before a
+   parent commit refers to it.
+5. Review the parent repository's old and new submodule commit IDs.
+6. Commit the parent pointer update as its own clear review boundary.
+
+Never publish a parent commit that points only to an unavailable local
+submodule commit.
+
+## Troubleshooting
+
+### The Pi hostname does not resolve
+
+Try its IP address to separate SSH from mDNS problems:
+
+```bash
+ssh pi@{ip-address}
+```
+
+Check the Pi hostname with `hostname` in a local Pi terminal. Confirm both
+systems are on reachable networks and that client isolation is not enabled.
+
+### SSH says the host identification changed
+
+Confirm that the Pi was intentionally reinstalled, replaced, or renamed. Then
+remove only the obsolete entry and reconnect:
+
+```bash
+ssh-keygen -R {hostname}.local
+ssh pi@{hostname}.local
+```
+
+### A submodule is missing
+
+From the repository root on the Pi:
+
+```bash
+git submodule update --init --recursive
+```
+
+Do not clean or reset the submodule to solve an initialization problem.
+
+### A submodule has a leading `+`
+
+Inspect its status and recent history before acting:
+
+```bash
+git -C {submodule-path} status --short --branch
+git -C {submodule-path} log -5 --oneline
+git diff --submodule=log
+```
+
+The checkout may contain intentional work. Do not force it back to the parent
+commit without understanding and preserving that work.
+
+### An SSHFS mount is stale
+
+Stop editing, unmount it with the tool that created it, and mount it again.
+Confirm the real checkout through SSH before resuming. Do not clean or rebuild
+the repository through a stale mount.
+
+### `make semantics-test` cannot find Node
+
+Install Node.js on the Pi and retry:
+
+```bash
+sudo apt update
+sudo apt install -y nodejs
+cd ~/WsprryPi/src
+make semantics-test
+```
+
+### Wsprry Pi is already running
+
+Inspect the installed service before starting a development instance:
+
+```bash
+systemctl status wsprrypi
+```
+
+If it is safe and intentional to interrupt it, stop it for the development
+session with `sudo systemctl stop wsprrypi`. Disabling boot-time startup is
+usually unnecessary.
+
+## Reboot and Hardware Considerations
+
+The installer can blacklist the onboard `snd_bcm2835` module so Wsprry Pi can
+use the relevant Raspberry Pi peripheral without an audio-driver conflict. A
+reboot is required when that system configuration changes before the new
+module state takes effect. Follow the installer's final message.
+
+A reboot is not required after every source edit, compilation, or
+`semantics-test` run. Reboot only for a known system-level change and only when
+interrupting the Pi is safe.
+
+Basic environment preparation does not authorize live hardware or RF testing.
+Before any such test, establish the exact Pi, GPIO backend and pin, frequency,
+mode, duration, attached transmitter and load, stopping procedure, and local
+regulatory constraints.
+
+## Experienced Developer Command Reference
+
+Run these commands on the **Pi that owns the checkout**.
+
+Inspect the parent checkout:
+
+```bash
+cd ~/WsprryPi
+git branch --show-current
+git status --short --branch
+```
+
+Inspect every submodule:
+
+```bash
+git submodule status --recursive
+git submodule foreach --recursive 'git status --short --branch'
+```
+
+Initialize missing submodules at recorded commits:
+
+```bash
+git submodule update --init --recursive
+```
+
+Run aggregate source-level validation:
+
+```bash
+cd ~/WsprryPi/src
+make semantics-test
+```
+
+Inspect the installed service without changing it:
+
+```bash
+systemctl status wsprrypi
+systemctl is-enabled wsprrypi
+```
+
+Review changes, including submodule commit movement:
+
+```bash
+cd ~/WsprryPi
+git diff --check
+git diff --submodule=log
+```
+
+Before reporting work complete, state separately what was source-validated and
+what still requires installation, service, GPIO, hardware, timing, or RF
+qualification.
