@@ -31,6 +31,7 @@ GPIO, timing, or RF qualification on the intended hardware.
   - [Full Wsprry Pi Installation](#full-wsprry-pi-installation)
   - [Packages for Source Work](#packages-for-source-work)
   - [Optional Tools for Codex and Other AI Agents](#optional-tools-for-codex-and-other-ai-agents)
+  - [Install Codex CLI on a 64-Bit Pi](#install-codex-cli-on-a-64-bit-pi)
 - [Repository Support for AI Agents](#repository-support-for-ai-agents)
 - [Run Safe Source-Level Validation](#run-safe-source-level-validation)
 - [Manage the Installed Service During Development](#manage-the-installed-service-during-development)
@@ -486,6 +487,73 @@ This toolkit prepares the host for efficient repository work. Install and
 configure the selected AI agent separately by following its current platform,
 architecture, authentication, and update instructions. For Codex, use the
 [current Codex documentation](https://developers.openai.com/codex/).
+
+### Install Codex CLI on a 64-Bit Pi
+
+This optional setup is for a developer who wants to use Codex to assist with
+Wsprry Pi development. Codex is not required to build, test, install, or run
+Wsprry Pi.
+
+First confirm that the Pi is running a 64-bit operating system:
+
+```bash
+uname -m
+```
+
+Continue when the result is `aarch64` or `arm64`. A result such as `armv7l`
+indicates a 32-bit operating system and is not compatible with the Linux ARM64
+Codex CLI binary.
+
+OpenAI's standalone installer is the preferred installation method on Linux:
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
+
+The installer normally places the `codex` command in `~/.local/bin`. Add that
+directory to Bash's persistent `PATH`, reload the shell configuration, and
+verify the installation:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+source "$HOME/.bashrc"
+hash -r
+codex --version
+```
+
+Before appending the line, check whether `~/.bashrc` already adds
+`~/.local/bin` to `PATH` to avoid duplicate entries. If the installer completed
+but `codex` is still not found, test the installed file directly:
+
+```bash
+ls -l "$HOME/.local/bin/codex"
+"$HOME/.local/bin/codex" --version
+```
+
+The official npm package is an alternative when Node.js and npm are available:
+
+```bash
+npm install -g @openai/codex
+codex --version
+```
+
+Do not use `sudo npm install -g` merely to work around npm permissions. Use a
+user-owned npm prefix instead, then ensure the same `~/.local/bin` directory is
+on `PATH`:
+
+```bash
+npm config set prefix "$HOME/.local"
+npm install -g @openai/codex
+export PATH="$HOME/.local/bin:$PATH"
+codex --version
+```
+
+Persist the `PATH` setting in `~/.bashrc` as shown above. Run `codex` from the
+Wsprry Pi checkout, sign in using one of the offered authentication methods,
+and ask it to read `AGENTS.md` before beginning development work. Re-running
+the standalone installer is also the documented way to update Codex. Consult
+the [current Codex CLI documentation](https://developers.openai.com/codex/cli)
+if its platform requirements or installation commands have changed.
 
 ## Repository Support for AI Agents
 
