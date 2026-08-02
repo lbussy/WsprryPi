@@ -32,6 +32,7 @@ GPIO, timing, or RF qualification on the intended hardware.
   - [Packages for Source Work](#packages-for-source-work)
   - [Optional Tools for Codex and Other AI Agents](#optional-tools-for-codex-and-other-ai-agents)
   - [Install Codex CLI on a 64-Bit Pi](#install-codex-cli-on-a-64-bit-pi)
+  - [Install Impeccable for WsprryPi-UI Work](#install-impeccable-for-wsprrypi-ui-work)
 - [Repository Support for AI Agents](#repository-support-for-ai-agents)
 - [Run Safe Source-Level Validation](#run-safe-source-level-validation)
 - [Manage the Installed Service During Development](#manage-the-installed-service-during-development)
@@ -554,6 +555,51 @@ and ask it to read `AGENTS.md` before beginning development work. Re-running
 the standalone installer is also the documented way to update Codex. Consult
 the [current Codex CLI documentation](https://developers.openai.com/codex/cli)
 if its platform requirements or installation commands have changed.
+
+### Install Impeccable for WsprryPi-UI Work
+
+[Impeccable](https://impeccable.style/tutorials/getting-started/) is an
+optional Codex skill used only for work affecting the first-party
+`WsprryPi-UI` submodule. It is not required for ordinary parent-repository C++,
+scheduling, radio, installer, maintenance-script, or unrelated documentation
+work.
+
+The repository's `AGENTS.md` requires Impeccable for UI work, including
+UI-owned PHP, JavaScript, CSS, templates, controls, wording, and interaction
+behavior. A transport-only endpoint such as
+`WsprryPi-UI/data/log_stream.php` still triggers this rule, although visual
+rendering may not apply.
+
+Install Impeccable globally for the Pi user so Codex can discover it without
+adding skill or runtime files to the repository. On the **Raspberry Pi**, first
+check Node.js and `npx`:
+
+```bash
+node --version
+npx --version
+```
+
+The current Impeccable installer requires Node.js 22.12 or newer. Consult the
+[current Impeccable installation documentation](https://impeccable.style/tutorials/getting-started/)
+if that requirement or the installation command changes. Install the Codex
+skill globally for the Pi user with:
+
+```bash
+npx --yes impeccable@latest skills install \
+    -y \
+    --providers=codex \
+    --scope=global
+```
+
+`npx` runs the installer, so a separate global `npm install impeccable` is not
+required. Completely restart Codex after installation, then verify that the
+new session lists or recognizes `$impeccable`.
+
+Global installation controls skill availability, not usage scope. Codex should
+invoke Impeccable only when the authorized task affects `WsprryPi-UI`. Do not
+commit `.agents/`, `.impeccable/`, `.claude/`, `.codex/`, `skills-lock.json`,
+or local Node package artifacts unless they are separately approved as
+intended repository content.
 
 ## Repository Support for AI Agents
 
