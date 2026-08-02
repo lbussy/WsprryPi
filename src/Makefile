@@ -144,6 +144,7 @@ SUPPORT_BUNDLE_DOWNLOAD_FILE_TEST_OUT := support_bundle_download_file_test
 SUPPORT_BUNDLE_CHECKSUM_FILE_TEST_OUT := support_bundle_checksum_file_test
 SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT := support_bundle_archive_digest_test
 SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT := support_bundle_download_preparation_test
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT := support_bundle_job_directory_remover_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -249,6 +250,9 @@ SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_DEPS := $(SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_
 SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_SRC := tests/support_bundle_download_preparation_test.cpp
 SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_download_preparation_test.o
 SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_DEPS := $(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_download_preparation.o $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_SRC := tests/support_bundle_job_directory_remover_test.cpp
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_job_directory_remover_test.o
+SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_DEPS := $(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -617,6 +621,10 @@ $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT): $(SUPPORT_BUNDLE_DOW
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT): $(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 ifeq ($(GPIOD_HAS_V2),1)
 $(GPIO_LOOPBACK_TEST_OBJ): $(GPIO_LOOPBACK_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -670,7 +678,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean release debug test test-tone test-oneshot semantics-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-job-directory-remover-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -745,6 +753,9 @@ support-bundle-archive-digest-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_ARCHIVE_DIGEST_T
 
 support-bundle-download-preparation-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT)
+
+support-bundle-job-directory-remover-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT)
 
 build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 	$(Q)echo "Checking generated header dependency discovery."
