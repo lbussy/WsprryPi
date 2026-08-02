@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPOSITORY_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
+CONFIG="${REPOSITORY_ROOT}/config/wsprrypi.conf"
+INSTALLER="${REPOSITORY_ROOT}/scripts/install.sh"
+
+mapping='ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles'
+reverse_mapping='ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles'
+
+grep -Fqx '    ProxyPreserveHost On' "$CONFIG"
+grep -Fqx "    ${mapping}" "$CONFIG"
+grep -Fqx "    ${reverse_mapping}" "$CONFIG"
+grep -Fqx "    ${mapping}" "$INSTALLER"
+grep -Fqx "    ${reverse_mapping}" "$INSTALLER"
+grep -Fq 'Support bundle API family, including job status, archive download, delete, and OPTIONS.' "$CONFIG"
+grep -Fq 'Support bundle API family, including job status, archive download, delete, and OPTIONS.' "$INSTALLER"
+
+! grep -Eq 'ProxyPass[[:space:]]+/wsprrypi/api([[:space:]]|/)' "$CONFIG"
+! grep -Eq 'ProxyPass[[:space:]]+/wsprrypi/api([[:space:]]|/)' "$INSTALLER"
+! grep -Eq 'RequestHeader[[:space:]].*(Host|Origin)' "$CONFIG"
+! grep -Eq 'RequestHeader[[:space:]].*(Host|Origin)' "$INSTALLER"
+! grep -Eq 'Access-Control-Allow-Origin[[:space:]]+\*|Header[[:space:]]+set[[:space:]]+Access-Control-Allow-Origin' "$CONFIG"
+! grep -Eq 'Access-Control-Allow-Origin[[:space:]]+\*|Header[[:space:]]+set[[:space:]]+Access-Control-Allow-Origin' "$INSTALLER"
+
+grep -Fq 'install_wsprrypi_proxy_block()' "$INSTALLER"
+grep -Fq 'debug_start "$@"' "$INSTALLER"
+grep -Fq 'if [[ "$DRY_RUN" == "true" ]]' "$INSTALLER"
+
+echo "apache proxy configuration tests: PASS"

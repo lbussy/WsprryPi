@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -u
 set -o pipefail
+umask 077
 
 PROJECT_NAME="WsprryPi"
 SERVICE_NAMES=("wsprrypi" "apache2")
@@ -16,14 +17,25 @@ DEFAULT_SOCKET_PORT="31416"
 
 STAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
 HOST="$(hostname -s 2>/dev/null || echo raspberrypi)"
-OUT_ROOT="${TMPDIR:-/tmp}/${PROJECT_NAME}-support-${STAMP}"
-OUT_DIR="${OUT_ROOT}/bundle"
-ARCHIVE="${PWD}/${PROJECT_NAME}-support-${HOST}-${STAMP}.tar.gz"
+HOST="${HOST//[^A-Za-z0-9._-]/_}"
+OUT_ROOT=""
+OUT_DIR=""
+ARCHIVE=""
+ARCHIVE_NAME=""
+SHA256_FILE=""
+RESULT_FILE=""
+ARCHIVE_TMP=""
+SHA256_TMP=""
+OUTPUT_DIR=""
+OUTPUT_DIR_SUPPLIED=0
 
 INCLUDE_CONFIGS=1
 INCLUDE_FULL_LOGS=0
 KEEP_WORKDIR=0
 PROJECT_PATH=""
+PROBE_I2C=0
+I2C_PROBE_STATUS="not_requested"
+PRIVILEGED_DIAGNOSTICS_INCOMPLETE=0
 
 usage() {
   cat <<EOF
@@ -37,8 +49,10 @@ Usage:
 
 Options:
   --path PATH          WsprryPi checkout/install path
+  --output-dir DIR     Write archive, SHA-256, and JSON result to existing private DIR
   --no-configs         Do not include redacted config files
   --full-logs          Include larger journal/log output
+  --probe-i2c          Run the fixed active I2C scan: i2cdetect -y 1
   --keep-workdir       Keep temporary collection directory
   -h, --help           Show this help
 
@@ -46,6 +60,12 @@ Notes:
   - No data is uploaded by this script.
   - Passwords, tokens, upload secrets, and common credential fields are redacted.
   - This script is intended for Raspberry Pi / Linux WsprryPi systems.
+  - Without --output-dir, the archive is created in the current directory (legacy behavior).
+  - The collector writes <archive>.result.json alongside every completed bundle; with --output-dir,
+    it chooses the archive name in that directory without relying on the caller's working directory.
+    The JSON result records completion status, artifact names/digest, UTC timestamp, selected
+    collection options, I2C probe status, and whether privileged diagnostics may be incomplete.
+  - Active I2C scanning is never automatic. --probe-i2c only permits i2cdetect -y 1.
 EOF
 }
 
@@ -55,8 +75,14 @@ while [[ $# -gt 0 ]]; do
       shift
       PROJECT_PATH="${1:-}"
       ;;
+    --output-dir)
+      shift
+      OUTPUT_DIR="${1:-}"
+      OUTPUT_DIR_SUPPLIED=1
+      ;;
     --no-configs) INCLUDE_CONFIGS=0 ;;
     --full-logs) INCLUDE_FULL_LOGS=1 ;;
+    --probe-i2c) PROBE_I2C=1 ;;
     --keep-workdir) KEEP_WORKDIR=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
@@ -68,9 +94,88 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-mkdir -p "$OUT_DIR"/{system,project,logs,configs,hardware,web,network,commands}
+json_bool() {
+  [[ "$1" -eq 1 ]] && printf 'true' || printf 'false'
+}
+
+json_string_or_null() {
+  if [[ -n "$1" ]]; then
+    printf '"%s"' "$1"
+  else
+    printf 'null'
+  fi
+}
+
+publish_result() {
+  local status="$1"
+  local archive_name="$2"
+  local sha_name="$3"
+  local digest="$4"
+  local temporary_result
+
+  [[ -n "$RESULT_FILE" ]] || return 0
+  temporary_result="${RESULT_FILE}.tmp.$$"
+  {
+    printf '{\n'
+    printf '  "schema_version": 1,\n'
+    printf '  "status": "%s",\n' "$status"
+    printf '  "archive_filename": '; json_string_or_null "$archive_name"; printf ',\n'
+    printf '  "sha256_filename": '; json_string_or_null "$sha_name"; printf ',\n'
+    printf '  "sha256": '; json_string_or_null "$digest"; printf ',\n'
+    printf '  "generated_at_utc": "%s",\n' "$STAMP"
+    printf '  "configuration_files_included": '; json_bool "$INCLUDE_CONFIGS"; printf ',\n'
+    printf '  "full_logs_included": '; json_bool "$INCLUDE_FULL_LOGS"; printf ',\n'
+    printf '  "i2c_probe_requested": '; json_bool "$PROBE_I2C"; printf ',\n'
+    printf '  "i2c_probe_status": "%s",\n' "$I2C_PROBE_STATUS"
+    printf '  "privileged_diagnostics_may_be_incomplete": '; json_bool "$PRIVILEGED_DIAGNOSTICS_INCOMPLETE"; printf '\n'
+    printf '}\n'
+  } > "$temporary_result" || return 1
+  chmod 600 "$temporary_result" || return 1
+  ln "$temporary_result" "$RESULT_FILE" || { rm -f "$temporary_result"; return 1; }
+  rm -f "$temporary_result"
+}
+
+fail() {
+  local message="$1"
+  echo "$message" >&2
+  publish_result failure "" "" "" || true
+  exit 1
+}
+
+validate_output_dir() {
+  local mode
+  [[ "$OUTPUT_DIR" == /* ]] || fail "Output directory must be an absolute path."
+  [[ ! -L "$OUTPUT_DIR" && -d "$OUTPUT_DIR" ]] || fail "Output directory must be an existing non-symlink directory."
+  [[ -w "$OUTPUT_DIR" && -x "$OUTPUT_DIR" ]] || fail "Output directory is not writable and searchable by this user."
+  mode="$(stat -c '%a' "$OUTPUT_DIR" 2>/dev/null || true)"
+  [[ "$mode" =~ ^[0-7]{3,4}$ ]] || fail "Unable to determine output directory permissions."
+  (( (8#${mode: -2:1} & 2) == 0 && (8#${mode: -1} & 2) == 0 )) || fail "Output directory must not be group- or world-writable."
+  OUTPUT_DIR="$(cd -P "$OUTPUT_DIR" && pwd -P)" || fail "Unable to resolve output directory."
+}
+
+if [[ "$OUTPUT_DIR_SUPPLIED" -eq 1 ]]; then
+  validate_output_dir
+else
+  OUTPUT_DIR="$PWD"
+fi
+
+ARCHIVE_NAME="${PROJECT_NAME}-support-${HOST}-${STAMP}.tar.gz"
+ARCHIVE="${OUTPUT_DIR}/${ARCHIVE_NAME}"
+SHA256_FILE="${ARCHIVE}.sha256"
+RESULT_FILE="${ARCHIVE}.result.json"
+
+if [[ -e "$ARCHIVE" || -e "$SHA256_FILE" || -e "$RESULT_FILE" ]]; then
+  fail "Refusing to overwrite an existing support-bundle artifact."
+fi
+
+OUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_NAME}-support-${STAMP}.XXXXXX")" || fail "Unable to create private temporary work directory."
+chmod 700 "$OUT_ROOT" || fail "Unable to secure temporary work directory."
+OUT_DIR="${OUT_ROOT}/bundle"
+mkdir -p "$OUT_DIR"/{system,project,logs,configs,hardware,web,network,commands} || fail "Unable to create support-bundle work directory."
 
 cleanup() {
+  [[ -n "$ARCHIVE_TMP" ]] && rm -f "$ARCHIVE_TMP"
+  [[ -n "$SHA256_TMP" ]] && rm -f "$SHA256_TMP"
   if [[ "$KEEP_WORKDIR" -eq 0 ]]; then
     rm -rf "$OUT_ROOT"
   else
@@ -78,6 +183,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
 
 log() {
   printf '[%s] %s\n' "$(date +"%H:%M:%S")" "$*"
@@ -321,6 +427,7 @@ PROJECT_PATH="$(detect_project_path)"
   echo "Hostname: $(hostname 2>/dev/null || true)"
   echo "Generated UTC: $STAMP"
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    PRIVILEGED_DIAGNOSTICS_INCOMPLETE=1
     echo
     echo "Note: collector is not running as root. Some system logs, service details, GPIO debug files, or boot files may be unavailable."
   fi
@@ -544,7 +651,25 @@ fi
 
 if command -v i2cdetect >/dev/null 2>&1; then
   run_cmd i2cdetect_list i2cdetect -l
-  run_cmd i2cdetect_bus_1 i2cdetect -y 1
+  if [[ "$PROBE_I2C" -eq 1 ]]; then
+    if i2cdetect -y 1 > "${OUT_DIR}/commands/i2cdetect_bus_1.txt" 2>&1; then
+      I2C_PROBE_STATUS="succeeded"
+    else
+      I2C_SCAN_EXIT_STATUS=$?
+      I2C_PROBE_STATUS="failed"
+      echo "[command exited with status: $I2C_SCAN_EXIT_STATUS]" >> "${OUT_DIR}/commands/i2cdetect_bus_1.txt"
+    fi
+  else
+    I2C_PROBE_STATUS="skipped_by_user"
+    echo "Active I2C scan was skipped because --probe-i2c was not supplied." > "${OUT_DIR}/commands/i2cdetect_bus_1.txt"
+  fi
+else
+  if [[ "$PROBE_I2C" -eq 1 ]]; then
+    I2C_PROBE_STATUS="unavailable"
+  else
+    I2C_PROBE_STATUS="skipped_by_user"
+  fi
+  echo "i2cdetect is unavailable; no active I2C scan was run." > "${OUT_DIR}/commands/i2cdetect_bus_1.txt"
 fi
 
 if command -v gpioinfo >/dev/null 2>&1; then
@@ -661,28 +786,44 @@ redact_tree
 
 log "Creating archive..."
 
+ARCHIVE_TMP="${ARCHIVE}.tmp.$$"
+SHA256_TMP="${SHA256_FILE}.tmp.$$"
+rm -f "$ARCHIVE_TMP" "$SHA256_TMP"
 (
   cd "$OUT_ROOT" || exit 1
-  tar -czf "$ARCHIVE" bundle
-)
+  tar -czf "$ARCHIVE_TMP" bundle
+) || fail "Failed to create support bundle archive."
 
-if [[ -f "$ARCHIVE" ]]; then
-  sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || true
+[[ -f "$ARCHIVE_TMP" ]] || fail "Failed to create support bundle archive."
+chmod 600 "$ARCHIVE_TMP" || fail "Unable to secure support bundle archive."
 
-  echo
-  echo "Created support bundle:"
-  echo "  $ARCHIVE"
-
-  if [[ -f "${ARCHIVE}.sha256" ]]; then
-    echo
-    echo "SHA256:"
-    cat "${ARCHIVE}.sha256"
-  fi
-
-  echo
-  echo "Share this .tar.gz file with the WsprryPi Support GPT or maintainer if requested."
-  echo "Do not post it publicly unless you have reviewed its contents."
+SHA256_DIGEST=""
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256_DIGEST="$(sha256sum "$ARCHIVE_TMP" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  SHA256_DIGEST="$(shasum -a 256 "$ARCHIVE_TMP" | awk '{print $1}')"
 else
-  echo "Failed to create support bundle." >&2
-  exit 1
+  fail "No SHA-256 command is available."
 fi
+[[ "$SHA256_DIGEST" =~ ^[[:xdigit:]]{64}$ ]] || fail "Unable to calculate support bundle SHA-256."
+printf '%s  %s\n' "$SHA256_DIGEST" "$ARCHIVE_NAME" > "$SHA256_TMP" || fail "Unable to create SHA-256 sidecar."
+chmod 600 "$SHA256_TMP" || fail "Unable to secure SHA-256 sidecar."
+
+ln "$ARCHIVE_TMP" "$ARCHIVE" || fail "Refusing to overwrite an existing support-bundle archive."
+rm -f "$ARCHIVE_TMP"
+ln "$SHA256_TMP" "$SHA256_FILE" || { rm -f "$ARCHIVE"; fail "Refusing to overwrite an existing SHA-256 sidecar."; }
+rm -f "$SHA256_TMP"
+publish_result success "$ARCHIVE_NAME" "$(basename "$SHA256_FILE")" "$SHA256_DIGEST" || {
+  rm -f "$ARCHIVE" "$SHA256_FILE"
+  fail "Unable to publish support bundle result."
+}
+
+echo
+echo "Created support bundle:"
+echo "  $ARCHIVE"
+echo
+echo "SHA256:"
+echo "  $SHA256_DIGEST"
+echo
+echo "Share this .tar.gz file with the WsprryPi Support GPT or maintainer if requested."
+echo "Do not post it publicly unless you have reviewed its contents."

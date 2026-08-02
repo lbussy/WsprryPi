@@ -31,6 +31,9 @@
 #include "config_handler.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
+#include "support_bundle_http.hpp"
+#include "support_bundle_runtime.hpp"
+#include "support_request_guard.hpp"
 #include "version.hpp"
 
 #include <algorithm>
@@ -216,6 +219,14 @@ void WebServer::start(int port)
             return;
         }
         port_ = port;
+        if (!svr)
+        {
+            svr = std::make_unique<httplib::Server>();
+        }
+        if (!supportBundleJobManager_)
+        {
+            supportBundleJobManager_ = SupportBundleRuntime::create_production();
+        }
     }
 
     llog.logS(INFO, "Web server started on port: ", config.web_port);
@@ -223,12 +234,6 @@ void WebServer::start(int port)
     // Launch the server in a separate thread.
     serverThread = std::thread([this]()
                                {
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        running = true;
-        cvStarted.notify_one();  // Notify main thread that startup has begun.
-    }
-
     // PUT and PATCH handler: Accept and print JSON input.
     auto handlePutPatch = [this](const httplib::Request &req,
                                  httplib::Response &res) {
@@ -276,32 +281,41 @@ void WebServer::start(int port)
         }
     };
 
+    if (!supportBundleRoutesRegistered_)
+    {
+        register_support_bundle_http_routes(
+            *svr,
+            *supportBundleJobManager_,
+            [] { return SupportRequestGuard::discover_local_networks(); });
+        supportBundleRoutesRegistered_ = true;
+    }
+
     // Set up OPTIONS handler for CORS preflight requests.
-    svr.Options(R"(/(.*))",
+    svr->Options(R"(/(.*))",
                 [this](const httplib::Request &req, httplib::Response &res) {
                   setCORSHeaders(res);
                   res.set_content("", "text/plain");
                 });
 
     // GET handler: Return a basic JSON response.
-    svr.Get("/",
+    svr->Get("/",
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               res.set_content("Wsprry Pi webserver is running.", "text/plain");
             });
 
     // GET handler: Return a basic JSON response.
-    svr.Get("/config",
+    svr->Get("/config",
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               res.set_content(get_public_config_json().dump(4), "application/json");
             });
 
-    svr.Put("/config", handlePutPatch);
-    svr.Patch("/config", handlePutPatch);
+    svr->Put("/config", handlePutPatch);
+    svr->Patch("/config", handlePutPatch);
 
     // GET handler: Return version
-    svr.Get("/version",
+    svr->Get("/version",
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               // Retrieve the version
@@ -331,7 +345,7 @@ void WebServer::start(int port)
             });
 
     // INI repair handler: Allow repair or restore
-    svr.Post("/config/repair",
+    svr->Post("/config/repair",
             [this](const httplib::Request &req, httplib::Response &res) {
                 try
                 {
@@ -395,7 +409,7 @@ void WebServer::start(int port)
                 }
             });
 
-    svr.Post("/control/stop",
+    svr->Post("/control/stop",
             [this](const httplib::Request &req, httplib::Response &res) {
                 setCORSHeaders(res);
 
@@ -452,8 +466,14 @@ void WebServer::start(int port)
                 }
             });
 
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        running = true;
+        cvStarted.notify_one();  // Notify after all routes are ready.
+    }
+
     // Accept connections from any network interface.
-    svr.listen("0.0.0.0", port_);
+    svr->listen("0.0.0.0", port_);
 
     // Reset running flag once the server stops.
     {
@@ -483,24 +503,34 @@ void WebServer::start(int port)
  */
 void WebServer::stop()
 {
+    bool was_running = false;
     {
         std::lock_guard<std::mutex> lock(mtx);
-        if (!running)
-        {
-            // Server is already stopped.
-            return;
-        }
+        was_running = running;
     }
 
-    // Signal the HTTP server to stop.
-    svr.stop();
+    if (was_running)
+    {
+        // Stop accepting requests before cancelling any support-bundle work.
+        svr->stop();
+    }
 
-    // Wait for the background server thread to exit.
+    // Wait for route handling to finish before the manager can be shut down.
     if (serverThread.joinable())
     {
         serverThread.join();
     }
 
+    if (supportBundleJobManager_)
+    {
+        supportBundleJobManager_->shutdown();
+    }
+
+    // A restart must not retain handlers that captured a shut-down manager.
+    // Destroy the server (and its routes) before releasing the manager.
+    svr.reset();
+    supportBundleJobManager_.reset();
+    supportBundleRoutesRegistered_ = false;
 }
 
 /**

@@ -368,6 +368,12 @@ int main()
 
     const std::string site_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/site.js");
+    const std::string ui_header_source =
+        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/header.php");
+    const std::string apache_proxy_source =
+        read_text_file("/home/pi/WsprryPi/config/wsprrypi.conf");
+    const std::string installer_source =
+        read_text_file("/home/pi/WsprryPi/scripts/install.sh");
     require(
         ui_source.find("let cwDurationPolicyLatched = false;") != std::string::npos &&
             ui_source.find("function updateCwDurationPolicyLatch(options = {})") != std::string::npos &&
@@ -403,6 +409,7 @@ int main()
             site_source.find("const SETTINGS_ENDPOINT = createEndpointDefinition(") != std::string::npos &&
             site_source.find("const VERSION_ENDPOINT = createEndpointDefinition(") != std::string::npos &&
             site_source.find("const REPAIR_ENDPOINT = createEndpointDefinition(") != std::string::npos &&
+            site_source.find("const SUPPORT_BUNDLES_ENDPOINT = createEndpointDefinition(") != std::string::npos &&
             site_source.find("const WEBSOCKET_ENDPOINT = createEndpointDefinition(") != std::string::npos &&
             site_source.find("const SETTINGS_URL = SETTINGS_ENDPOINT.proxyUrl;") != std::string::npos &&
             site_source.find("const VERSION_URL = VERSION_ENDPOINT.proxyUrl;") != std::string::npos &&
@@ -429,6 +436,21 @@ int main()
             site_source.find("const WEBSOCKET_URL = WEBSOCKET_ENDPOINT.proxyUrl;") == std::string::npos &&
             site_source.find("const WEBSOCKET_URL = buildWebSocketUrl(WEBSOCKET_PATH);") == std::string::npos,
         "UI endpoint construction must remain proxy-first, allow direct ports only in centralized fallback helpers, and derive proxy websocket URLs from the current page protocol instead of rebuilding backend host:port origins");
+    require(
+        ui_header_source.find("'supportBundlesPath' => $basePath . '/api/support-bundles'") != std::string::npos &&
+            site_source.find("PATHS.supportBundlesPath") != std::string::npos &&
+            site_source.find("`${APP_BASE_PATH}/api/support-bundles`") != std::string::npos &&
+            site_source.find("buildDirectRestFallbackUrl(\"/api/support-bundles\")") != std::string::npos &&
+            apache_proxy_source.find("ProxyPreserveHost On") != std::string::npos &&
+            apache_proxy_source.find("ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
+            apache_proxy_source.find("ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
+            apache_proxy_source.find("ProxyPass        /wsprrypi/api ") == std::string::npos &&
+            apache_proxy_source.find("Access-Control-Allow-Origin *") == std::string::npos &&
+            apache_proxy_source.find("RequestHeader set Host") == std::string::npos &&
+            apache_proxy_source.find("RequestHeader set Origin") == std::string::npos &&
+            installer_source.find("ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
+            installer_source.find("ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos,
+        "Support Bundle must use the same-origin guarded proxy family without broad API proxying, CORS relaxation, or Host/Origin rewriting");
     require(
         count_occurrences(site_source, ":31415") == 1 &&
             count_occurrences(site_source, ":31416") == 1,
@@ -1438,6 +1460,28 @@ int main()
             maintenance_css_source.find(".maintenance-update-status") != std::string::npos &&
             maintenance_css_source.find(".maintenance-update-technical summary") != std::string::npos,
         "maintenance view must split Utility into side-by-side Test Tone and Update Check panels, keep Test Tone left-aligned, expose update-check panel hooks and controls, show user-facing summary text, and keep technical details collapsed by default");
+    require(
+        maintenance_source.find("id=\"supportBundlePanel\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleModal\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleProbeI2c\"") != std::string::npos &&
+            maintenance_source.find("aria-describedby=\"supportBundleProbeI2cHelp\"") != std::string::npos &&
+            maintenance_source.find("i2cdetect -y 1") != std::string::npos &&
+            maintenance_source.find("supportBundleProbeI2c\"\n                                    class=\"form-check-input\"\n                                    type=\"checkbox\"\n                                    checked") == std::string::npos &&
+            maintenance_source.find("id=\"supportBundleStatus\"") != std::string::npos &&
+            maintenance_source.find("aria-live=\"polite\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleAlert\"") != std::string::npos &&
+            maintenance_script_source.find("JSON.stringify({ probe_i2c: supportBundleProbeI2c.checked })") != std::string::npos &&
+            maintenance_script_source.find("await response.blob();") != std::string::npos &&
+            maintenance_script_source.find("if (blob.size === 0 || jobId !== supportBundleJobId)") != std::string::npos &&
+            maintenance_script_source.find("invokeBrowserDownload(blob, filename);\n            await deleteSupportBundle(jobId, true, filename);") != std::string::npos &&
+            maintenance_script_source.find("safeSupportBundleFilename") != std::string::npos &&
+            maintenance_script_source.find("SUPPORT_BUNDLE_FILENAME_FALLBACK") != std::string::npos &&
+            maintenance_script_source.find("Your browser chose the save location") != std::string::npos &&
+            maintenance_script_source.find("will expire automatically within 24 hours") != std::string::npos &&
+            maintenance_script_source.find("supportBundleDownloadInFlight") != std::string::npos &&
+            maintenance_script_source.find("stopSupportBundlePolling();") != std::string::npos &&
+            maintenance_script_source.find("upload") == std::string::npos,
+        "Support Bundle UI must keep active I2C probing opt-in, receive the full Blob before deletion, avoid path claims or uploads, and retain accessible retry-safe status handling");
 
     const std::string maintenance_test_tone_script_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/maintenance.js");
