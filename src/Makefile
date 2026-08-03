@@ -163,7 +163,11 @@ BIN_DIR         := build/bin
 LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp' ! -name '._*' 2>/dev/null)
 SUBMODULE_CPP_SOURCES := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
 SI5351_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_backend_harness.cpp
-SUBMODULE_CPP_SOURCES := $(filter-out $(SI5351_TEST_SOURCE),$(SUBMODULE_CPP_SOURCES))
+STARTUP_QUIESCE_TEST_SOURCE := ./WSPR-Transmitter/src/startup_quiesce_test.cpp
+SI5351_QUALIFICATION_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification.cpp
+SI5351_QUALIFICATION_MAIN_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification_main.cpp
+SI5351_QUALIFICATION_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification_test.cpp
+SUBMODULE_CPP_SOURCES := $(filter-out $(SI5351_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE),$(SUBMODULE_CPP_SOURCES))
 
 CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(SUBMODULE_CPP_SOURCES)
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
@@ -213,6 +217,9 @@ WSPR_TONE_REGRESSION_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_
 SELECTOR_SHUTDOWN_CLEANUP_TEST_SRC := tests/selector_shutdown_cleanup_test.cpp
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/selector_shutdown_cleanup_test.o
 SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+STARTUP_QUIESCE_PARENT_TEST_SRC := tests/startup_quiesce_parent_test.cpp
+STARTUP_QUIESCE_PARENT_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/startup_quiesce_parent_test.o
+STARTUP_QUIESCE_PARENT_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
 QUALIFICATION_GPIO_TEST_MODE_TEST_SRC := tests/qualification_gpio_test_mode_test.cpp
 QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gpio_test_mode_test.o
 QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
@@ -566,6 +573,15 @@ $(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT): $(SELECTOR_SHUTDOWN_CLEANUP_TE
 	$(Q)echo "Linking debug: $(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(STARTUP_QUIESCE_PARENT_TEST_OBJ): $(STARTUP_QUIESCE_PARENT_TEST_SRC)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/tests/startup_quiesce_parent_test.d -c $< -o $@
+
+$(BIN_DIR)/startup_quiesce_parent_test: $(STARTUP_QUIESCE_PARENT_TEST_OBJ) $(STARTUP_QUIESCE_PARENT_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ): $(QUALIFICATION_GPIO_TEST_MODE_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -790,6 +806,9 @@ band-gpio-rotation-test: $(BIN_DIR)/$(BAND_GPIO_ROTATION_TEST_OUT)
 selector-shutdown-cleanup-test: $(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)
 	$(Q)echo "Running selector shutdown cleanup regression tests."
 	$(Q)./$(BIN_DIR)/$(SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT)
+
+startup-quiesce-parent-test: $(BIN_DIR)/startup_quiesce_parent_test
+	$(Q)./$(BIN_DIR)/startup_quiesce_parent_test
 
 qualification-gpio-test-mode-test: $(BIN_DIR)/$(QUALIFICATION_GPIO_TEST_MODE_TEST_OUT)
 	$(Q)echo "Running qualification GPIO test mode value semantics test."
