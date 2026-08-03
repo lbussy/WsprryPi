@@ -35,6 +35,7 @@
 #ifndef WSPR_BAND_LOOKUP_HPP
 #define WSPR_BAND_LOOKUP_HPP
 
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -45,6 +46,12 @@
 #include <vector>
 
 #include "band_gpio.hpp"
+
+struct WsprBandCatalogEntry
+{
+    std::string band;
+    std::uint64_t dial_frequency_hz;
+};
 
 /**
  * @class WSPRBandLookup
@@ -146,6 +153,15 @@ public:
     double parse_string_to_frequency(
         std::string_view input,
         bool validate = true) const;
+
+    /**
+     * @brief Return canonical WSPR display bands in stable order.
+     *
+     * @return Display names and integral USB dial frequencies.
+     * @throws std::logic_error if an authoritative definition cannot be
+     *         represented as an integral external Hz value.
+     */
+    std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog() const;
 
     /**
      * @brief Detect whether a numeric frequency exactly matches a legacy

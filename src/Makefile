@@ -185,6 +185,10 @@ WEBSOCKET_LIFECYCLE_TEST_SRC := tests/websocket_lifecycle_test.cpp
 WEBSOCKET_LIFECYCLE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/websocket_lifecycle_test.o
 WEBSOCKET_LIFECYCLE_TEST_DEPS := $(WEBSOCKET_LIFECYCLE_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
 WEBSOCKET_LIFECYCLE_TEST_OUT := websocket_lifecycle_test
+WSPR_BAND_CATALOG_TEST_SRC := tests/wspr_band_catalog_test.cpp
+WSPR_BAND_CATALOG_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/wspr_band_catalog_test.o
+WSPR_BAND_CATALOG_TEST_DEPS := $(WSPR_BAND_CATALOG_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+WSPR_BAND_CATALOG_TEST_OUT := wspr_band_catalog_test
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_SRC := tests/guarded_mode_change_persistence_test.cpp
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/guarded_mode_change_persistence_test.o
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
@@ -482,6 +486,17 @@ $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT): $(WEBSOCKET_LIFECYCLE_TEST_DEPS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(WSPR_BAND_CATALOG_TEST_OBJ): $(WSPR_BAND_CATALOG_TEST_SRC)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/tests/wspr_band_catalog_test.d -c $< -o $@
+
+$(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT): $(WSPR_BAND_CATALOG_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug: $(WSPR_BAND_CATALOG_TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(GUARDED_MODE_CHANGE_PERSISTENCE_TEST_OBJ): $(GUARDED_MODE_CHANGE_PERSISTENCE_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -710,7 +725,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test websocket-lifecycle-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean release debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -749,6 +764,9 @@ semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSI
 
 websocket-lifecycle-test: $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
+
+wspr-band-catalog-test: $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
 
 support-request-guard-test: $(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)

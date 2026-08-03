@@ -28,6 +28,7 @@
 
 #include "config_handler.hpp"
 
+#include <atomic>
 #include "arg_parser.hpp"
 #include "ini_file.hpp"
 #include "json.hpp"
@@ -59,7 +60,15 @@ namespace
     constexpr double kManualPpmMax = 200.0;
 
     bool g_patch_all_from_web_runtime_apply_suppressed_for_test = false;
+    std::atomic<double> g_published_wspr_audio_offset_hz{WSPR_AUDIO_OFFSET_HZ};
     std::optional<bool> g_si5351_detection_override;
+
+    void publish_wspr_audio_offset_hz(const ArgParserConfig &source) noexcept
+    {
+        g_published_wspr_audio_offset_hz.store(
+            source.wspr.audio_offset_hz,
+            std::memory_order_release);
+    }
 
     std::string si5351_detection_unavailable_message(
         const std::string &detail = std::string())
@@ -991,6 +1000,12 @@ void init_default_config()
     config.dfcw = DfcwModeConfig{};
 
     set_default_band_gpio_config(config.band_gpio);
+    publish_wspr_audio_offset_hz(config);
+}
+
+double current_wspr_audio_offset_hz() noexcept
+{
+    return g_published_wspr_audio_offset_hz.load(std::memory_order_acquire);
 }
 
 void resolve_backend_specific_config(ArgParserConfig &config) noexcept
@@ -1990,6 +2005,7 @@ void ini_to_json(std::string filename)
 void json_to_config()
 {
     json_to_config_impl(jConfig, config);
+    publish_wspr_audio_offset_hz(config);
 }
 
 nlohmann::json get_public_config_json()
@@ -2246,6 +2262,7 @@ void commit_config_candidate(const PreparedConfigCandidate &candidate)
     }
 
     copy_config(candidate.normalized_config, config);
+    publish_wspr_audio_offset_hz(config);
     jConfig = candidate.normalized_json;
     refresh_logger_level_from_config();
 }
@@ -2253,6 +2270,10 @@ void commit_config_candidate(const PreparedConfigCandidate &candidate)
 void copy_runtime_config(const ArgParserConfig &source, ArgParserConfig &target)
 {
     copy_config(source, target);
+    if (&target == &config)
+    {
+        publish_wspr_audio_offset_hz(config);
+    }
 }
 
 void dump_json(const nlohmann::json &j, std::string tag)
@@ -2345,6 +2366,7 @@ void patch_all_from_web(const nlohmann::json &j)
     }
 
     copy_config(candidate_config, config);
+    publish_wspr_audio_offset_hz(config);
     jConfig = candidate_json;
     refresh_logger_level_from_config();
     json_to_ini();

@@ -38,6 +38,7 @@
 #include <cctype>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -200,6 +201,43 @@ WSPRBandLookup::WSPRBandLookup()
     {
         wsprFrequencies[normalize_key(alias.alias)] = alias.frequency_hz;
     }
+}
+
+std::vector<WsprBandCatalogEntry>
+WSPRBandLookup::canonical_wspr_band_catalog() const
+{
+    std::vector<WsprBandCatalogEntry> catalog;
+    catalog.reserve(BAND_DEFINITIONS.size());
+
+    for (const auto &band : BAND_DEFINITIONS)
+    {
+        const double dial_frequency_hz = band.default_wspr_hz;
+        if (!std::isfinite(dial_frequency_hz) ||
+            dial_frequency_hz <= 0.0 ||
+            std::trunc(dial_frequency_hz) != dial_frequency_hz ||
+            dial_frequency_hz >
+                static_cast<double>(std::numeric_limits<std::uint64_t>::max()))
+        {
+            throw std::logic_error(
+                std::string("Cannot serialize canonical WSPR frequency for ") +
+                band.name);
+        }
+
+        std::string display_name = band.name;
+        std::transform(
+            display_name.begin(),
+            display_name.end(),
+            display_name.begin(),
+            [](unsigned char character)
+            {
+                return static_cast<char>(std::tolower(character));
+            });
+        catalog.push_back({
+            display_name,
+            static_cast<std::uint64_t>(dial_frequency_hz)});
+    }
+
+    return catalog;
 }
 
 long long WSPRBandLookup::parse_frequency_string(const std::string &freq_str) const

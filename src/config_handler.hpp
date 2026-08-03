@@ -512,6 +512,15 @@ private:
 };
 
 void init_default_config();
+
+/**
+ * @brief Returns the most recently published accepted WSPR audio offset.
+ *
+ * This is a read-only snapshot for concurrent catalog/status consumers.  It
+ * must not be used to modify the runtime configuration.
+ */
+double current_wspr_audio_offset_hz() noexcept;
+
 void resolve_backend_specific_config(ArgParserConfig &config) noexcept;
 bool si5351_device_detected(
     int i2c_bus,

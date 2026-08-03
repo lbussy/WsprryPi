@@ -33,6 +33,7 @@
 #include "sha1.hpp"
 #include "scheduling.hpp"
 #include "wspr_band_lookup.hpp"
+#include "wspr_band_catalog_response.hpp"
 #include "wspr_transmit.hpp"
 
 #include <algorithm>
@@ -402,6 +403,23 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             std::ostringstream oss;
             oss << std::put_time(&tm_utc, "%Y-%m-%dT%H:%M:%SZ");
             reply["timestamp"] = oss.str();
+        }
+        else if (cmd == "wspr_band_catalog")
+        {
+            try
+            {
+                const WSPRBandLookup lookup;
+                reply = json::parse(build_wspr_band_catalog_response_json(
+                    lookup,
+                    current_wspr_audio_offset_hz()));
+            }
+            catch (const std::exception &error)
+            {
+                reply["command"] = "wspr_band_catalog";
+                reply["status"] = "error";
+                reply["error"] = "catalog unavailable";
+                reply["message"] = error.what();
+            }
         }
         else if (cmd == "tone_start")
         {
