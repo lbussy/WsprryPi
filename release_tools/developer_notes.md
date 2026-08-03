@@ -437,14 +437,16 @@ The installer currently manages these project packages:
 - `chrony`
 - `libgpiod-dev`
 - `libsystemd-dev`
+- `nodejs`
+- `chromium`
 
-The `semantics-test` target also requires Node.js. To install these packages
-without running the full installer:
+The `semantics-test` target requires Node.js, and browser-based UI qualification
+requires Chromium. To install all source-development packages without running
+the full installer, copy and run this complete command:
 
 ```bash
-sudo apt update
-sudo apt install -y \
-    git apache2 php chrony libgpiod-dev libsystemd-dev nodejs
+sudo apt update && sudo apt install -y \
+    git apache2 php chrony libgpiod-dev libsystemd-dev nodejs chromium
 ```
 
 This is a project dependency reference, not a guarantee that every supported

@@ -395,6 +395,28 @@ static bool validate_pi_io_gpio_assignments(
         reserved_assignments.push_back({candidate.amp_pin, "Amp Control"});
     }
 
+    const bool gpio_rf_output_reserved =
+        candidate.transmit_backend == TransmitBackendKind::GPIO &&
+        is_supported_transmit_gpio(candidate.gpio_tx_pin);
+
+    if (gpio_rf_output_reserved)
+    {
+        for (const ReservedAssignment &reserved : reserved_assignments)
+        {
+            if (reserved.gpio != candidate.gpio_tx_pin)
+            {
+                continue;
+            }
+
+            if (error_message != nullptr)
+            {
+                *error_message = "GPIO" + std::to_string(candidate.gpio_tx_pin) +
+                                 " is reserved by GPIO RF Output.";
+            }
+            return false;
+        }
+    }
+
     for (std::size_t i = 0; i < reserved_assignments.size(); ++i)
     {
         for (std::size_t j = i + 1; j < reserved_assignments.size(); ++j)
@@ -420,6 +442,16 @@ static bool validate_pi_io_gpio_assignments(
         if (!band_config.enabled || band_config.gpio < 0)
         {
             continue;
+        }
+
+        if (gpio_rf_output_reserved && band_config.gpio == candidate.gpio_tx_pin)
+        {
+            if (error_message != nullptr)
+            {
+                *error_message = "GPIO" + std::to_string(band_config.gpio) +
+                                 " is reserved by GPIO RF Output.";
+            }
+            return false;
         }
 
         for (const ReservedAssignment &reserved : reserved_assignments)
