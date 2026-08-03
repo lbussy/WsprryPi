@@ -171,7 +171,7 @@ fi
 OUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_NAME}-support-${STAMP}.XXXXXX")" || fail "Unable to create private temporary work directory."
 chmod 700 "$OUT_ROOT" || fail "Unable to secure temporary work directory."
 OUT_DIR="${OUT_ROOT}/bundle"
-mkdir -p "$OUT_DIR"/{system,project,logs,configs,hardware,web,network,commands} || fail "Unable to create support-bundle work directory."
+mkdir -p "$OUT_DIR"/{system,project,logs,configs,hardware,web,network,commands,processes} || fail "Unable to create support-bundle work directory."
 
 cleanup() {
   [[ -n "$ARCHIVE_TMP" ]] && rm -f "$ARCHIVE_TMP"
@@ -295,6 +295,7 @@ redact_file_in_place() {
     s#([A-Za-z][A-Za-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@#${1}[REDACTED]@#g;
     s#("(?:password|pass|passwd|token|secret|api[_-]?key|access[_-]?key|upload[_-]?key|wsprnet[_-]?password|reporter[_-]?password)"\s*:\s*")[^"]*(")#${1}[REDACTED]${2}#gi;
     s#((?:password|pass|passwd|token|secret|api[_-]?key|access[_-]?key|upload[_-]?key|wsprnet[_-]?password|reporter[_-]?password)\s*[:=]\s*)\S+#${1}[REDACTED]#gi;
+    s#((?:--?)(?:password|pass|passwd|token|secret|api[_-]?key|access[_-]?key|upload[_-]?key|wsprnet[_-]?password|reporter[_-]?password)\s+)\S+#${1}[REDACTED]#gi;
   ' "$file" 2>/dev/null || true
 }
 
@@ -312,6 +313,189 @@ redact_tree() {
     while IFS= read -r -d '' file; do
       redact_file_in_place "$file"
     done
+}
+
+availability_reason() {
+  local error_file="$1"
+  if grep -qi 'permission denied' "$error_file" 2>/dev/null; then
+    printf 'permission denied'
+  elif grep -qiE 'no such file|not found' "$error_file" 2>/dev/null; then
+    printf 'file unavailable'
+  else
+    printf 'unavailable'
+  fi
+}
+
+capture_optional_command() {
+  local output="$1" command_name="$2"
+  shift 2
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    printf 'Collection status: command unavailable (%s)\n' "$command_name" > "$output"
+    return
+  fi
+  "$@" > "$output" 2>&1
+  local status=$?
+  if [[ "$status" -ne 0 ]]; then
+    printf '\nCollection status: command unavailable or failed (exit status %s)\n' "$status" >> "$output"
+  fi
+}
+
+proc_start_time() {
+  sed -E 's/^[0-9]+ \(.*\) //' "$1" 2>/dev/null | awk '{print $20}'
+}
+
+capture_proc_file() {
+  local source="$1" output="$2" error_file
+  error_file="${output}.error"
+  if cat "$source" > "$output" 2> "$error_file"; then
+    rm -f "$error_file"
+    return 0
+  fi
+  local reason
+  reason="$(availability_reason "$error_file")"
+  {
+    printf 'Collection status: %s\n' "$reason"
+    [[ -s "$error_file" ]] && cat "$error_file"
+  } > "$output"
+  rm -f "$error_file"
+  return 1
+}
+
+count_proc_entries() {
+  local directory="$1" output_variable="$2" error_file result
+  error_file="${OUT_DIR}/processes/.count-error.$$"
+  if result="$(find "$directory" -mindepth 1 -maxdepth 1 -printf '.' 2> "$error_file")"; then
+    printf -v "$output_variable" '%s' "${#result}"
+    rm -f "$error_file"
+    return 0
+  fi
+  printf -v "$output_variable" '%s' "unavailable ($(availability_reason "$error_file"))"
+  rm -f "$error_file"
+  return 1
+}
+
+status_value() {
+  local field="$1" file="$2" value
+  value="$(awk -F: -v field="$field" '$1 == field {sub(/^[[:space:]]+/, "", $2); print $2; exit}' "$file" 2>/dev/null)"
+  [[ -n "$value" ]] && printf '%s' "$value" || printf 'unavailable'
+}
+
+smaps_value() {
+  status_value "$1" "$2"
+}
+
+collect_process_snapshot() {
+  local process_dir="${OUT_DIR}/processes"
+  local active_state main_pid initial_start final_start task_count fd_count cmdline_tmp
+  local active_error="${process_dir}/.active-state-error.txt"
+  local main_pid_error="${process_dir}/.main-pid-error.txt"
+  local detailed_status="unavailable"
+
+  capture_optional_command "${process_dir}/all-processes.txt" ps ps -ww -eo pid,ppid,user,stat,etime,rss,vsz,nlwp,comm,args
+  capture_optional_command "${process_dir}/process-tree.txt" pstree pstree -alp
+  capture_optional_command "${process_dir}/systemd-cgroups.txt" systemd-cgls systemd-cgls --all --no-pager
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    active_state="unavailable"
+    main_pid=""
+    detailed_status="systemd command unavailable"
+  else
+    if ! systemctl show wsprrypi --property=ActiveState --value > "${process_dir}/.active-state.txt" 2> "$active_error"; then
+      active_state="unavailable ($(availability_reason "$active_error"))"
+    else
+      active_state="$(cat "${process_dir}/.active-state.txt")"
+    fi
+    if ! systemctl show wsprrypi --property=MainPID --value > "${process_dir}/.main-pid.txt" 2> "$main_pid_error"; then
+      main_pid=""
+      detailed_status="MainPID unavailable ($(availability_reason "$main_pid_error"))"
+    else
+      main_pid="$(cat "${process_dir}/.main-pid.txt")"
+    fi
+    if [[ "$detailed_status" == MainPID\ unavailable* ]]; then
+      :
+    elif [[ ! "$main_pid" =~ ^[0-9]+$ ]]; then
+      detailed_status="invalid or empty MainPID"
+    elif [[ "$main_pid" == "0" ]]; then
+      if [[ "$active_state" == "inactive" || "$active_state" == "failed" ]]; then
+        detailed_status="service not running"
+      else
+        detailed_status="MainPID is zero; no active main process"
+      fi
+    elif [[ ! -d "/proc/${main_pid}" ]]; then
+      detailed_status="process missing before detailed collection"
+    else
+      if capture_proc_file "/proc/${main_pid}/stat" "${process_dir}/wsprrypi-stat.txt"; then
+        initial_start="$(proc_start_time "${process_dir}/wsprrypi-stat.txt")"
+        if [[ ! "$initial_start" =~ ^[0-9]+$ ]]; then
+          detailed_status="process identity unavailable"
+        else
+          capture_proc_file "/proc/${main_pid}/status" "${process_dir}/.status-full.txt" || true
+          if grep -q '^Name:' "${process_dir}/.status-full.txt" 2>/dev/null; then
+            awk -F: '$1 ~ /^(Name|State|Pid|PPid|Uid|Gid|VmPeak|VmSize|VmHWM|VmRSS|RssAnon|RssFile|RssShmem|Threads|voluntary_ctxt_switches|nonvoluntary_ctxt_switches)$/ {print}' \
+              "${process_dir}/.status-full.txt" > "${process_dir}/wsprrypi-status.txt"
+          else
+            cp "${process_dir}/.status-full.txt" "${process_dir}/wsprrypi-status.txt"
+          fi
+          capture_proc_file "/proc/${main_pid}/smaps_rollup" "${process_dir}/wsprrypi-smaps-rollup.txt" || true
+          capture_proc_file "/proc/${main_pid}/statm" "${process_dir}/wsprrypi-statm.txt" || true
+          capture_proc_file "/proc/${main_pid}/limits" "${process_dir}/wsprrypi-limits.txt" || true
+          capture_proc_file "/proc/${main_pid}/cgroup" "${process_dir}/wsprrypi-cgroup.txt" || true
+          cmdline_tmp="${process_dir}/.cmdline-raw.txt"
+          if capture_proc_file "/proc/${main_pid}/cmdline" "$cmdline_tmp"; then
+            tr '\0' ' ' < "$cmdline_tmp" > "${process_dir}/wsprrypi-cmdline.txt"
+            printf '\n' >> "${process_dir}/wsprrypi-cmdline.txt"
+          else
+            cp "$cmdline_tmp" "${process_dir}/wsprrypi-cmdline.txt"
+          fi
+          count_proc_entries "/proc/${main_pid}/task" task_count || true
+          count_proc_entries "/proc/${main_pid}/fd" fd_count || true
+
+          if cat "/proc/${main_pid}/stat" > "${process_dir}/.stat-final.txt" 2>/dev/null; then
+            final_start="$(proc_start_time "${process_dir}/.stat-final.txt")"
+            if [[ "$final_start" != "$initial_start" ]]; then
+              detailed_status="process identity changed; PID may have been reused"
+            else
+              detailed_status="collected successfully"
+            fi
+          else
+            detailed_status="process disappeared during collection"
+          fi
+        fi
+      else
+        detailed_status="process disappeared or stat was unreadable before detailed collection"
+      fi
+    fi
+  fi
+
+  {
+    printf 'Collection status: %s\n' "$detailed_status"
+    printf 'Service ActiveState: %s\n' "${active_state:-unavailable}"
+    printf 'Systemd MainPID: %s\n' "${main_pid:-unavailable}"
+    if [[ "$detailed_status" == "collected successfully" ]]; then
+      printf 'Process start time (clock ticks since boot): %s\n' "$initial_start"
+      printf 'VmRSS: %s\n' "$(status_value VmRSS "${process_dir}/wsprrypi-status.txt")"
+      printf 'VmSize: %s\n' "$(status_value VmSize "${process_dir}/wsprrypi-status.txt")"
+      printf 'PSS: %s\n' "$(smaps_value Pss "${process_dir}/wsprrypi-smaps-rollup.txt")"
+      printf 'Threads (status): %s\n' "$(status_value Threads "${process_dir}/wsprrypi-status.txt")"
+      printf 'Task directory count: %s\n' "${task_count:-unavailable}"
+      printf 'Open file descriptor count: %s\n' "${fd_count:-unavailable}"
+    else
+      printf 'VmRSS: unavailable\nVmSize: unavailable\nPSS: unavailable\n'
+      printf 'Threads (status): unavailable\nTask directory count: unavailable\nOpen file descriptor count: unavailable\n'
+    fi
+  } > "${process_dir}/wsprrypi-summary.txt"
+
+  local artifact
+  for artifact in wsprrypi-status.txt wsprrypi-smaps-rollup.txt wsprrypi-stat.txt \
+    wsprrypi-statm.txt wsprrypi-limits.txt wsprrypi-cgroup.txt wsprrypi-cmdline.txt; do
+    if [[ ! -f "${process_dir}/${artifact}" ]]; then
+      printf 'Collection status: not collected (%s)\n' "$detailed_status" > "${process_dir}/${artifact}"
+    fi
+  done
+
+  rm -f "${process_dir}/.status-full.txt" "${process_dir}/.cmdline-raw.txt" \
+    "${process_dir}/.stat-final.txt" "${process_dir}/.count-error.$$" \
+    "${process_dir}/.active-state.txt" "$active_error" "${process_dir}/.main-pid.txt" "$main_pid_error"
 }
 
 detect_project_path() {
@@ -395,6 +579,7 @@ Bundle contents may include:
 - Installed and project WsprryPi INI files, redacted
 - Installed systemd unit, merged systemctl cat output, and service directive inspection
 - Journald logs for WsprryPi and Apache services
+- A point-in-time system process/tree/cgroup snapshot and WsprryPi memory, task, and file-descriptor counts
 - Installer log if present, usually ~/wsprrypi.log from scripts/install.sh
 - Legacy /var/log/wsprrypi logs only when present
 - GPIO, I2C, Si5351-adjacent, band-switching, boot, and timing diagnostics
@@ -522,7 +707,7 @@ if [[ -n "$PROJECT_PATH" && -d "$PROJECT_PATH" ]]; then
       -name "*.service" \
     \) -print0 2>/dev/null |
       while IFS= read -r -d '' file; do
-        rel="${file#$PROJECT_PATH/}"
+        rel="${file#"$PROJECT_PATH"/}"
         mkdir -p "${OUT_DIR}/configs/project/$(dirname "$rel")"
         cp "$file" "${OUT_DIR}/configs/project/$rel" 2>/dev/null || true
       done
@@ -596,6 +781,10 @@ systemctl show wsprrypi --no-pager --property=Id,Names,LoadState,ActiveState,Sub
 systemctl is-enabled wsprrypi > "${OUT_DIR}/logs/systemd-enabled-wsprrypi.txt" 2>&1 || true
 systemctl is-active wsprrypi > "${OUT_DIR}/logs/systemd-active-wsprrypi.txt" 2>&1 || true
 
+log "Collecting process and resource snapshot..."
+
+collect_process_snapshot
+
 for service in "${SERVICE_NAMES[@]}"; do
   systemctl status "$service" --no-pager > "${OUT_DIR}/logs/systemd-status-${service}.txt" 2>&1 || true
 
@@ -630,7 +819,7 @@ tail_or_copy_log /var/log/messages "${OUT_DIR}/logs/messages"
 if [[ -d "$LEGACY_LOG_DIR" ]]; then
   find "$LEGACY_LOG_DIR" -maxdepth 2 -type f -print0 2>/dev/null |
     while IFS= read -r -d '' file; do
-      rel="${file#$LEGACY_LOG_DIR/}"
+      rel="${file#"$LEGACY_LOG_DIR"/}"
       tail_or_copy_log "$file" "${OUT_DIR}/logs/legacy-wsprrypi/$rel"
     done
 else
