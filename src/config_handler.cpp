@@ -46,6 +46,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -61,10 +62,20 @@ namespace
 
     bool g_patch_all_from_web_runtime_apply_suppressed_for_test = false;
     std::atomic<double> g_published_wspr_audio_offset_hz{WSPR_AUDIO_OFFSET_HZ};
+    std::shared_mutex g_test_tone_planning_snapshot_mutex;
+    TestTonePlanningConfigSnapshot g_test_tone_planning_snapshot{};
     std::optional<bool> g_si5351_detection_override;
 
-    void publish_wspr_audio_offset_hz(const ArgParserConfig &source) noexcept
+    void publish_test_tone_planning_config(const ArgParserConfig &source)
     {
+        TestTonePlanningConfigSnapshot snapshot;
+        snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
+        snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
+        snapshot.band_gpio = source.band_gpio;
+
+        std::unique_lock<std::shared_mutex> lock(
+            g_test_tone_planning_snapshot_mutex);
+        g_test_tone_planning_snapshot = std::move(snapshot);
         g_published_wspr_audio_offset_hz.store(
             source.wspr.audio_offset_hz,
             std::memory_order_release);
@@ -1000,12 +1011,18 @@ void init_default_config()
     config.dfcw = DfcwModeConfig{};
 
     set_default_band_gpio_config(config.band_gpio);
-    publish_wspr_audio_offset_hz(config);
+    publish_test_tone_planning_config(config);
 }
 
 double current_wspr_audio_offset_hz() noexcept
 {
     return g_published_wspr_audio_offset_hz.load(std::memory_order_acquire);
+}
+
+TestTonePlanningConfigSnapshot current_test_tone_planning_config_snapshot()
+{
+    std::shared_lock<std::shared_mutex> lock(g_test_tone_planning_snapshot_mutex);
+    return g_test_tone_planning_snapshot;
 }
 
 void resolve_backend_specific_config(ArgParserConfig &config) noexcept
@@ -2005,7 +2022,7 @@ void ini_to_json(std::string filename)
 void json_to_config()
 {
     json_to_config_impl(jConfig, config);
-    publish_wspr_audio_offset_hz(config);
+    publish_test_tone_planning_config(config);
 }
 
 nlohmann::json get_public_config_json()
@@ -2262,7 +2279,7 @@ void commit_config_candidate(const PreparedConfigCandidate &candidate)
     }
 
     copy_config(candidate.normalized_config, config);
-    publish_wspr_audio_offset_hz(config);
+    publish_test_tone_planning_config(config);
     jConfig = candidate.normalized_json;
     refresh_logger_level_from_config();
 }
@@ -2272,7 +2289,7 @@ void copy_runtime_config(const ArgParserConfig &source, ArgParserConfig &target)
     copy_config(source, target);
     if (&target == &config)
     {
-        publish_wspr_audio_offset_hz(config);
+        publish_test_tone_planning_config(config);
     }
 }
 
@@ -2366,7 +2383,7 @@ void patch_all_from_web(const nlohmann::json &j)
     }
 
     copy_config(candidate_config, config);
-    publish_wspr_audio_offset_hz(config);
+    publish_test_tone_planning_config(config);
     jConfig = candidate_json;
     refresh_logger_level_from_config();
     json_to_ini();

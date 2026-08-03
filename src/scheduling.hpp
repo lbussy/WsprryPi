@@ -45,6 +45,7 @@
 #include "transmission_request.hpp"
 #include "transmission_backend.hpp"
 #include "wspr_transmit_types.hpp"
+#include "test_tone_request.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -200,17 +201,29 @@ bool ppm_init();
  * directly. This is transient runtime behavior; it does not persist tone mode
  * or frequency into configuration files.
  */
+using TestToneFrequencySource = TestToneRequestSource;
+using TestToneRequest = ParsedTestToneRequest;
+
 struct TestToneStartResult
 {
     bool started = false;
     bool already_active = false;
     bool blocked_by_active_transmission = false;
     bool blocked_by_enabled_transmission = false;
+    TestToneFrequencySource source = TestToneFrequencySource::LegacyDefault;
+    std::string band;
+    std::uint64_t dial_frequency_hz = 0;
+    std::uint64_t audio_offset_hz = 0;
+    std::uint64_t actual_rf_frequency_hz = 0;
+    bool selector_gpio_enabled = false;
+    int selector_gpio = -1;
+    bool selector_gpio_active_high = false;
     std::string message;
 };
 
 TestToneStartResult start_test_tone(
     std::optional<std::uint64_t> frequency_hz_override = std::nullopt);
+TestToneStartResult start_test_tone(const TestToneRequest &request);
 
 /**
  * @brief End the transient runtime test tone and restore prior flow.

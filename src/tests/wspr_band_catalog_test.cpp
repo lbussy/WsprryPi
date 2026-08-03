@@ -252,23 +252,57 @@ int main()
 
     const ArgParserConfig original_config = config;
     const nlohmann::json original_json = jConfig;
+    const auto same_band_gpio = [](const auto &left, const auto &right)
+    {
+        for (std::size_t index = 0; index < left.size(); ++index)
+        {
+            if (left[index].gpio != right[index].gpio ||
+                left[index].enabled != right[index].enabled ||
+                left[index].active_high != right[index].active_high)
+            {
+                return false;
+            }
+        }
+        return true;
+    };
     set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
     set_raspberry_pi_generation_override_for_test(4);
     init_default_config();
     config.use_ini = false;
     config_to_json();
+    const TestTonePlanningConfigSnapshot default_snapshot =
+        current_test_tone_planning_config_snapshot();
     require(current_wspr_audio_offset_hz() == WSPR_AUDIO_OFFSET_HZ,
             "default configuration must publish the default catalog offset");
+    require(default_snapshot.wspr_audio_offset_hz == WSPR_AUDIO_OFFSET_HZ &&
+                default_snapshot.wspr_frequency_entries.size() ==
+                    config.wspr_frequency_entries.size() &&
+                same_band_gpio(default_snapshot.band_gpio, config.band_gpio),
+            "default configuration must publish a coherent Test Tone planning snapshot");
 
     PreparedConfigCandidate reloaded_candidate;
     reloaded_candidate.valid = true;
     reloaded_candidate.normalized_config = config;
     reloaded_candidate.normalized_config.wspr_audio_offset_hz = 2750.0;
     reloaded_candidate.normalized_config.wspr.audio_offset_hz = 2750.0;
+    reloaded_candidate.normalized_config.wspr_frequency_entries = {
+        {"20m", 14095600.0, 17, true, false}};
+    reloaded_candidate.normalized_config.band_gpio[
+        ham_band_index(HamBand::BAND_20M)] = {19, true, true};
     reloaded_candidate.normalized_json = jConfig;
     commit_config_candidate(reloaded_candidate);
+    const TestTonePlanningConfigSnapshot reloaded_snapshot =
+        current_test_tone_planning_config_snapshot();
     require(current_wspr_audio_offset_hz() == 2750.0,
             "accepted reload configuration must publish its catalog offset");
+    require(reloaded_snapshot.wspr_audio_offset_hz == 2750.0 &&
+                reloaded_snapshot.wspr_frequency_entries.size() == 1U &&
+                reloaded_snapshot.wspr_frequency_entries.front().selector_gpio == 17 &&
+                reloaded_snapshot.band_gpio[ham_band_index(HamBand::BAND_20M)].gpio == 19 &&
+                reloaded_snapshot.band_gpio[ham_band_index(HamBand::BAND_20M)].active_high &&
+                current_wspr_audio_offset_hz() ==
+                    reloaded_snapshot.wspr_audio_offset_hz,
+            "accepted reload must publish offset, entries, and Band GPIO together");
     require_catalog_response(
         nlohmann::json::parse(build_wspr_band_catalog_response_json(
             lookup,
@@ -278,17 +312,39 @@ int main()
     ArgParserConfig runtime_copy_source = config;
     runtime_copy_source.wspr_audio_offset_hz = 3000.0;
     runtime_copy_source.wspr.audio_offset_hz = 3000.0;
+    runtime_copy_source.wspr_frequency_entries = {
+        {"40m", 7038600.0, 5, false, false}};
+    runtime_copy_source.band_gpio[ham_band_index(HamBand::BAND_40M)] =
+        {6, true, false};
     ArgParserConfig local_copy_target = config;
     copy_runtime_config(runtime_copy_source, local_copy_target);
     require(local_copy_target.wspr.audio_offset_hz == 3000.0 &&
                 current_wspr_audio_offset_hz() == 2750.0,
             "non-global runtime copies must not publish the catalog offset snapshot");
+    require(current_test_tone_planning_config_snapshot().wspr_frequency_entries.front().token == "20m",
+            "non-global runtime copies must not publish Test Tone planning entries");
     copy_runtime_config(runtime_copy_source, config);
+    TestTonePlanningConfigSnapshot runtime_snapshot =
+        current_test_tone_planning_config_snapshot();
     require(config.wspr.audio_offset_hz == 3000.0 &&
                 current_wspr_audio_offset_hz() == 3000.0,
             "global runtime copies must publish the catalog offset snapshot");
+    require(runtime_snapshot.wspr_audio_offset_hz == 3000.0 &&
+                runtime_snapshot.wspr_frequency_entries.size() == 1U &&
+                runtime_snapshot.wspr_frequency_entries.front().token == "40m" &&
+                runtime_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio == 6,
+            "global runtime copies must publish one coherent Test Tone planning snapshot");
+    runtime_snapshot.wspr_frequency_entries.front().token = "mutated-copy";
+    runtime_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio = 27;
+    const TestTonePlanningConfigSnapshot independent_snapshot =
+        current_test_tone_planning_config_snapshot();
+    require(independent_snapshot.wspr_frequency_entries.front().token == "40m" &&
+                independent_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio == 6,
+            "Test Tone planning snapshots must be independent value copies");
 
     const nlohmann::json before_rejected_patch = jConfig;
+    const TestTonePlanningConfigSnapshot before_rejected_snapshot =
+        current_test_tone_planning_config_snapshot();
     bool rejected_web_update = false;
     try
     {
@@ -304,9 +360,21 @@ int main()
                 current_wspr_audio_offset_hz() == 3000.0 &&
                 jConfig == before_rejected_patch,
             "rejected web updates must leave the published catalog offset unchanged");
+    const TestTonePlanningConfigSnapshot after_rejected_snapshot =
+        current_test_tone_planning_config_snapshot();
+    require(after_rejected_snapshot.wspr_audio_offset_hz ==
+                    before_rejected_snapshot.wspr_audio_offset_hz &&
+                after_rejected_snapshot.wspr_frequency_entries.front().token ==
+                    before_rejected_snapshot.wspr_frequency_entries.front().token &&
+                after_rejected_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio ==
+                    before_rejected_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio,
+            "rejected web updates must leave the entire Test Tone planning snapshot unchanged");
 
     patch_all_from_web({{"WSPR", {{"Frequency", "20m"}}}});
-    require(current_wspr_audio_offset_hz() == WSPR_AUDIO_OFFSET_HZ,
+    const TestTonePlanningConfigSnapshot web_snapshot =
+        current_test_tone_planning_config_snapshot();
+    require(current_wspr_audio_offset_hz() == WSPR_AUDIO_OFFSET_HZ &&
+                web_snapshot.wspr_audio_offset_hz == WSPR_AUDIO_OFFSET_HZ,
             "accepted web configuration update must republish the catalog offset");
     copy_runtime_config(original_config, config);
     jConfig = original_json;

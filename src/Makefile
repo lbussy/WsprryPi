@@ -189,6 +189,10 @@ WSPR_BAND_CATALOG_TEST_SRC := tests/wspr_band_catalog_test.cpp
 WSPR_BAND_CATALOG_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/wspr_band_catalog_test.o
 WSPR_BAND_CATALOG_TEST_DEPS := $(WSPR_BAND_CATALOG_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
 WSPR_BAND_CATALOG_TEST_OUT := wspr_band_catalog_test
+TEST_TONE_REQUEST_TEST_OUT := test_tone_request_test
+TEST_TONE_FREQUENCY_PLAN_TEST_OUT := test_tone_frequency_plan_test
+TEST_TONE_SELECTOR_PLAN_TEST_OUT := test_tone_selector_plan_test
+TEST_TONE_RESPONSE_TEST_OUT := test_tone_response_test
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_SRC := tests/guarded_mode_change_persistence_test.cpp
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/guarded_mode_change_persistence_test.o
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
@@ -497,6 +501,20 @@ $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT): $(WSPR_BAND_CATALOG_TEST_DEPS)
 	$(Q)echo "Linking debug: $(WSPR_BAND_CATALOG_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BIN_DIR)/$(TEST_TONE_REQUEST_TEST_OUT): tests/test_tone_request_test.cpp test_tone_request.cpp wspr_band_lookup.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(TEST_TONE_FREQUENCY_PLAN_TEST_OUT): tests/test_tone_frequency_plan_test.cpp test_tone_frequency_plan.cpp wspr_band_lookup.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+$(BIN_DIR)/$(TEST_TONE_SELECTOR_PLAN_TEST_OUT): tests/test_tone_selector_plan_test.cpp test_tone_selector_plan.cpp wspr_band_lookup.cpp INI-Handler/src/ini_file.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+$(BIN_DIR)/$(TEST_TONE_RESPONSE_TEST_OUT): tests/test_tone_response_test.cpp $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(GUARDED_MODE_CHANGE_PERSISTENCE_TEST_OBJ): $(GUARDED_MODE_CHANGE_PERSISTENCE_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -767,6 +785,16 @@ websocket-lifecycle-test: $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
 
 wspr-band-catalog-test: $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
+
+test-tone-request-test: $(BIN_DIR)/$(TEST_TONE_REQUEST_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(TEST_TONE_REQUEST_TEST_OUT)
+
+test-tone-frequency-plan-test: $(BIN_DIR)/$(TEST_TONE_FREQUENCY_PLAN_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(TEST_TONE_FREQUENCY_PLAN_TEST_OUT)
+test-tone-selector-plan-test: $(BIN_DIR)/$(TEST_TONE_SELECTOR_PLAN_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(TEST_TONE_SELECTOR_PLAN_TEST_OUT)
+test-tone-response-test: $(BIN_DIR)/$(TEST_TONE_RESPONSE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(TEST_TONE_RESPONSE_TEST_OUT)
 
 support-request-guard-test: $(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
