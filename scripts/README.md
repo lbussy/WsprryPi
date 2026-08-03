@@ -25,6 +25,14 @@ I2C probe state, and whether unprivileged execution may have omitted privileged
 diagnostics. The JSON and console output intentionally contain no configuration
 secrets.
 
+Every bundle also contains a point-in-time process/resource snapshot: a wide
+system process list, process tree, systemd cgroup view when available, and
+WsprryPi `/proc` evidence resolved from the service's systemd `MainPID`. The
+summary reports current RSS, virtual size, PSS when readable, threads, tasks,
+and open-file-descriptor count. Unavailable, stopped, permission, and process
+race states are labeled explicitly rather than reported as zero. This snapshot
+does not provide historical resource monitoring.
+
 I2C bus scanning is opt-in: `--probe-i2c` permits only `i2cdetect -y 1`.
 Without it, the collector gathers passive I2C details but records that active
 probing was skipped. Running as a non-root user is supported; restricted system

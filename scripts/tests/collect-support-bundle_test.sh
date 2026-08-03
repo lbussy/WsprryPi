@@ -9,6 +9,7 @@ trap 'rm -rf "$TEST_ROOT"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_contains() { grep -Fq -- "$2" "$1" || fail "expected '$2' in $1"; }
 assert_not_contains() { ! grep -Fq -- "$2" "$1" || fail "did not expect '$2' in $1"; }
+assert_file() { [[ -f "$1" ]] || fail "expected file $1"; }
 command -v python3 >/dev/null 2>&1 || fail "python3 is required for JSON result validation"
 
 assert_valid_json() {
@@ -56,25 +57,86 @@ printf '%s\\n' "\$*" >> "\${I2C_CALL_LOG:?}"
 if [[ "\$1" == '-l' ]]; then exit 0; fi
 exit ${probe_exit}
 EOF
-  for command in raspi-config vcgencmd gpioinfo gpiodetect gpiofind pinout gpio curl systemctl journalctl dmesg sh; do
+  for command in raspi-config vcgencmd gpioinfo gpiodetect gpiofind pinout gpio curl journalctl dmesg sh; do
     cat > "$directory/$command" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
   done
+  cat > "$directory/systemctl" <<'EOF'
+#!/usr/bin/bash
+if [[ "$*" == 'show wsprrypi --property=ActiveState --value' ]]; then
+  printf '%s\n' "${MOCK_ACTIVE_STATE:-active}"
+elif [[ "$*" == 'show wsprrypi --property=MainPID --value' ]]; then
+  if [[ "${MOCK_SYSTEMCTL_MAINPID_FAILURE:-0}" == 1 ]]; then printf 'Failed to get properties: Permission denied\n' >&2; exit 1; fi
+  printf '%s' "${MOCK_MAIN_PID-0}"
+  [[ "${MOCK_MAIN_PID_NEWLINE:-1}" == 1 ]] && printf '\n'
+fi
+exit 0
+EOF
+  cat > "$directory/ps" <<'EOF'
+#!/usr/bin/bash
+printf '    PID    PPID USER     STAT     ELAPSED   RSS    VSZ NLWP COMMAND         COMMAND\n'
+printf '   4242       1 wsprrypi Sl         01:23 12345  67890    4 wsprrypi       /usr/local/bin/wsprrypi --token process-secret\n'
+printf '   5000    1000 www-data S          00:42  2048  12000    1 php             php /var/www/worker.php\n'
+EOF
+  cat > "$directory/pstree" <<'EOF'
+#!/usr/bin/bash
+printf 'systemd,1---apache2,1000---php,5000---journalctl,5001\n'
+EOF
+  cat > "$directory/systemd-cgls" <<'EOF'
+#!/usr/bin/bash
+printf 'Control group /: wsprrypi.service apache2.service\n'
+EOF
+  cat > "$directory/cat" <<'EOF'
+#!/usr/bin/bash
+source_path="${1:-}"
+if [[ "$source_path" != "/proc/${MOCK_PROC_PID:-none}/"* ]]; then exec /usr/bin/cat "$@"; fi
+name="${source_path##*/}"
+case "$name" in
+  stat)
+    count_file="${MOCK_STATE_DIR:?}/stat-count"
+    count=0; [[ -f "$count_file" ]] && count="$(/usr/bin/cat "$count_file")"
+    count=$((count + 1)); printf '%s\n' "$count" > "$count_file"
+    if [[ "${MOCK_PROC_SCENARIO:-success}" == disappear && "$count" -gt 1 ]]; then printf 'cat: %s: No such file or directory\n' "$source_path" >&2; exit 1; fi
+    start=777; [[ "${MOCK_PROC_SCENARIO:-success}" == reused && "$count" -gt 1 ]] && start=888
+    printf '%s (wsprrypi worker) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 %s 20 21\n' "${MOCK_PROC_PID}" "$start"
+    ;;
+  status) /usr/bin/cat "${MOCK_FIXTURE_DIR:?}/status" ;;
+  smaps_rollup)
+    if [[ "${MOCK_PROC_SCENARIO:-success}" == unreadable ]]; then printf 'cat: %s: Permission denied\n' "$source_path" >&2; exit 1; fi
+    /usr/bin/cat "${MOCK_FIXTURE_DIR:?}/smaps_rollup"
+    ;;
+  statm|limits|cgroup) /usr/bin/cat "${MOCK_FIXTURE_DIR:?}/$name" ;;
+  cmdline) printf '/usr/local/bin/wsprrypi\0--password\0cmdline-secret\0' ;;
+  *) exec /usr/bin/cat "$@" ;;
+esac
+EOF
+  cat > "$directory/find" <<'EOF'
+#!/usr/bin/bash
+if [[ "${1:-}" == "/proc/${MOCK_PROC_PID:-none}/task" ]]; then
+  [[ "${MOCK_PROC_SCENARIO:-success}" == unreadable ]] && { printf 'find: Permission denied\n' >&2; exit 1; }
+  printf '....'; exit 0
+fi
+if [[ "${1:-}" == "/proc/${MOCK_PROC_PID:-none}/fd" ]]; then
+  [[ "${MOCK_PROC_SCENARIO:-success}" == unreadable ]] && { printf 'find: Permission denied\n' >&2; exit 1; }
+  printf '.....'; exit 0
+fi
+exec /usr/bin/find "$@"
+EOF
   chmod 700 "$directory"/*
 }
 
 make_no_i2c_path() {
   local directory="$1" command
   mkdir -p "$directory"
-  for command in awk basename cat chmod cp cut df dirname file find free getconf getent grep gzip id ldd ln ls mkdir mktemp mount perl readelf rm sha256sum sh sort stat tail tar uname uptime; do
+  for command in awk basename chmod cp cut df dirname file free getconf getent grep gzip id ldd ln ls mkdir mktemp mount perl readelf rm sha256sum sh sort stat tail tar tr uname uptime wc; do
     ln -s "$(command -v "$command")" "$directory/$command"
   done
   rm "$directory/sh"
   cp "$TEST_ROOT/mocks/date" "$directory/date"
   cp "$TEST_ROOT/mocks/hostname" "$directory/hostname"
-  for command in raspi-config vcgencmd gpioinfo gpiodetect gpiofind pinout gpio curl systemctl journalctl dmesg sh; do
+  for command in raspi-config vcgencmd gpioinfo gpiodetect gpiofind pinout gpio curl systemctl journalctl dmesg sh cat find; do
     cp "$TEST_ROOT/mocks/$command" "$directory/$command"
   done
 }
@@ -94,6 +156,49 @@ run_collector_isolated() {
 mkdir -p "$TEST_ROOT/tmp" "$TEST_ROOT/out" "$TEST_ROOT/mocks"
 chmod 700 "$TEST_ROOT/out"
 make_mocks "$TEST_ROOT/mocks" 0
+mkdir -p "$TEST_ROOT/proc-fixture" "$TEST_ROOT/mock-state"
+cat > "$TEST_ROOT/proc-fixture/status" <<'EOF'
+Name:	wsprrypi
+State:	S (sleeping)
+Pid:	4242
+PPid:	1
+Uid:	1000	1000	1000	1000
+Gid:	1000	1000	1000	1000
+VmPeak:	  90000 kB
+VmSize:	  67890 kB
+VmHWM:	   23456 kB
+VmRSS:	   12345 kB
+RssAnon:	10000 kB
+RssFile:	 2345 kB
+RssShmem:	    0 kB
+Threads:	4
+voluntary_ctxt_switches:	99
+nonvoluntary_ctxt_switches:	7
+EOF
+cat > "$TEST_ROOT/proc-fixture/smaps_rollup" <<'EOF'
+00400000-7fffffff ---p 00000000 00:00 0 [rollup]
+Rss:               12345 kB
+Pss:               11223 kB
+EOF
+printf '100 20 10 5 0 3 0\n' > "$TEST_ROOT/proc-fixture/statm"
+printf 'Max open files            1024                 4096                 files\n' > "$TEST_ROOT/proc-fixture/limits"
+printf '0::/system.slice/wsprrypi.service\n' > "$TEST_ROOT/proc-fixture/cgroup"
+
+extract_bundle() {
+  local destination="$1"
+  rm -rf "$destination"
+  mkdir "$destination"
+  tar -xzf "$archive" -C "$destination"
+}
+
+run_process_case() {
+  local scenario="$1" main_pid="$2" active_state="$3" destination="$4"
+  rm -f "$archive" "${archive}.sha256" "$result" "$TEST_ROOT/mock-state/stat-count"
+  export MOCK_PROC_SCENARIO="$scenario" MOCK_MAIN_PID="$main_pid" MOCK_ACTIVE_STATE="$active_state"
+  export MOCK_PROC_PID="$$" MOCK_FIXTURE_DIR="$TEST_ROOT/proc-fixture" MOCK_STATE_DIR="$TEST_ROOT/mock-state"
+  run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/process-i2c.log" > "$TEST_ROOT/process-${scenario}.stdout"
+  extract_bundle "$destination"
+}
 
 # Default: no active bus scan, stable artifacts, and no work tree remains.
 : > "$TEST_ROOT/default-i2c.log"
@@ -109,6 +214,67 @@ assert_contains "$result" '"i2c_probe_status": "skipped_by_user"'
 assert_not_contains "$TEST_ROOT/default-i2c.log" '-y 1'
 assert_no_workdirs
 [[ "$(stat -c %a "$archive")" == 600 ]] || fail "archive permissions are not restrictive"
+
+# Fixed systemd MainPID discovery and fixed /proc paths produce the requested point-in-time evidence.
+run_process_case success "$$" active "$TEST_ROOT/extracted-success"
+process_dir="$TEST_ROOT/extracted-success/bundle/processes"
+for member in all-processes.txt process-tree.txt systemd-cgroups.txt wsprrypi-summary.txt wsprrypi-status.txt wsprrypi-smaps-rollup.txt wsprrypi-stat.txt wsprrypi-statm.txt wsprrypi-limits.txt wsprrypi-cgroup.txt wsprrypi-cmdline.txt; do
+  assert_file "$process_dir/$member"
+done
+assert_contains "$process_dir/wsprrypi-summary.txt" 'Collection status: collected successfully'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'VmRSS: 12345 kB'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'VmSize: 67890 kB'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'PSS: 11223 kB'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'Threads (status): 4'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'Task directory count: 4'
+assert_contains "$process_dir/wsprrypi-summary.txt" 'Open file descriptor count: 5'
+assert_contains "$process_dir/wsprrypi-status.txt" $'voluntary_ctxt_switches:\t99'
+assert_contains "$process_dir/all-processes.txt" 'php /var/www/worker.php'
+assert_contains "$process_dir/process-tree.txt" 'journalctl'
+assert_contains "$process_dir/systemd-cgroups.txt" 'apache2.service'
+assert_not_contains "$process_dir/all-processes.txt" 'process-secret'
+assert_contains "$process_dir/all-processes.txt" '[REDACTED]'
+assert_not_contains "$process_dir/wsprrypi-cmdline.txt" 'cmdline-secret'
+assert_contains "$process_dir/wsprrypi-cmdline.txt" '[REDACTED]'
+! tar -tzf "$archive" | grep -Eq '/fd(/|$)' || fail 'FD inventory or targets were archived'
+
+# Stopped, zero, malformed, missing, disappearing, reused, and unreadable states remain explicit.
+run_process_case success 0 inactive "$TEST_ROOT/extracted-stopped"
+assert_contains "$TEST_ROOT/extracted-stopped/bundle/processes/wsprrypi-summary.txt" 'Collection status: service not running'
+assert_contains "$TEST_ROOT/extracted-stopped/bundle/processes/wsprrypi-summary.txt" 'PSS: unavailable'
+
+run_process_case success 0 active "$TEST_ROOT/extracted-zero"
+assert_contains "$TEST_ROOT/extracted-zero/bundle/processes/wsprrypi-summary.txt" 'Collection status: MainPID is zero; no active main process'
+
+run_process_case success '' active "$TEST_ROOT/extracted-empty"
+assert_contains "$TEST_ROOT/extracted-empty/bundle/processes/wsprrypi-summary.txt" 'Collection status: invalid or empty MainPID'
+
+run_process_case success malformed active "$TEST_ROOT/extracted-malformed"
+assert_contains "$TEST_ROOT/extracted-malformed/bundle/processes/wsprrypi-summary.txt" 'Collection status: invalid or empty MainPID'
+
+export MOCK_SYSTEMCTL_MAINPID_FAILURE=1
+run_process_case success 0 active "$TEST_ROOT/extracted-mainpid-denied"
+assert_contains "$TEST_ROOT/extracted-mainpid-denied/bundle/processes/wsprrypi-summary.txt" 'Collection status: MainPID unavailable (permission denied)'
+unset MOCK_SYSTEMCTL_MAINPID_FAILURE
+
+run_process_case success 99999999 active "$TEST_ROOT/extracted-missing"
+assert_contains "$TEST_ROOT/extracted-missing/bundle/processes/wsprrypi-summary.txt" 'Collection status: process missing before detailed collection'
+
+run_process_case disappear "$$" active "$TEST_ROOT/extracted-disappear"
+assert_contains "$TEST_ROOT/extracted-disappear/bundle/processes/wsprrypi-summary.txt" 'Collection status: process disappeared during collection'
+
+run_process_case reused "$$" active "$TEST_ROOT/extracted-reused"
+assert_contains "$TEST_ROOT/extracted-reused/bundle/processes/wsprrypi-summary.txt" 'Collection status: process identity changed; PID may have been reused'
+
+run_process_case unreadable "$$" active "$TEST_ROOT/extracted-unreadable"
+unreadable_dir="$TEST_ROOT/extracted-unreadable/bundle/processes"
+assert_contains "$unreadable_dir/wsprrypi-summary.txt" 'PSS: unavailable'
+assert_contains "$unreadable_dir/wsprrypi-summary.txt" 'Task directory count: unavailable (permission denied)'
+assert_contains "$unreadable_dir/wsprrypi-summary.txt" 'Open file descriptor count: unavailable (permission denied)'
+assert_not_contains "$unreadable_dir/wsprrypi-summary.txt" 'PSS: 0'
+assert_contains "$unreadable_dir/wsprrypi-smaps-rollup.txt" 'Collection status: permission denied'
+
+unset MOCK_PROC_SCENARIO MOCK_MAIN_PID MOCK_ACTIVE_STATE MOCK_PROC_PID MOCK_FIXTURE_DIR MOCK_STATE_DIR
 
 # The fixed opt-in probe executes exactly one allowed command and records success.
 rm -f "$archive" "${archive}.sha256" "$result"
