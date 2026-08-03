@@ -453,7 +453,7 @@ toolchain. If compilation reports a missing compiler, build utility, header, or
 package, identify that requirement from the current Makefile or installer
 rather than guessing.
 
-### Optional Tools for Codex and Other AI Agents
+### Development and Diagnostic Tools
 
 Codex and other coding agents work more effectively when the development host
 has fast search tools, language runtimes, and repository-specific validators.
@@ -470,6 +470,9 @@ The following packages are useful additions to a Wsprry Pi development system:
 | `python3` | Execution of Python utilities and test helpers. |
 | `python3-venv` | Isolated Python environments for optional tools. |
 | `npm` | Node package tooling used by some coding-agent and JavaScript workflows. |
+| `lsof` | Inspection of process-owned files and sockets during diagnostics. |
+| `tmux` | Preserves long-running tests if an SSH connection drops. |
+| `bubblewrap` | Sandboxed execution support used by development tooling. |
 
 Install the optional toolkit on the **development host** with:
 
@@ -477,7 +480,7 @@ Install the optional toolkit on the **development host** with:
 sudo apt update
 sudo apt install -y \
     ripgrep fd-find jq shellcheck build-essential pkg-config \
-    python3 python3-venv npm
+    python3 python3-venv npm lsof tmux bubblewrap
 ```
 
 Node.js is already included in the source-development packages above because

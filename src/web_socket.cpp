@@ -163,6 +163,10 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
         return false;
     }
 
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        client_registration_closed_ = false;
+    }
     running_ = true;
     server_thread_ = std::thread(&WebSocketServer::serverLoop, this);
     if (keep_alive_secs_ > 0)
@@ -189,7 +193,8 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
  */
 void WebSocketServer::stop()
 {
-    if (!running_)
+    std::lock_guard<std::mutex> stop_lock(stop_mutex_);
+    if (!running_ && !server_thread_.joinable() && !keep_alive_thread_.joinable())
         return;
 
     // Disable the server loop
@@ -206,24 +211,25 @@ void WebSocketServer::stop()
         listen_fd_ = -1;
     }
 
-    // Shut down and close every client socket
+    // Close the registration gate and unblock all sockets owned by the accept
+    // loop or handlers.  Socket owners perform the final close exactly once.
     {
         std::lock_guard<std::mutex> lock(clients_mutex_);
+        client_registration_closed_ = true;
         for (int fd : client_sockets_)
-        {
             shutdown(fd, SHUT_RDWR);
-            close(fd);
-        }
+        for (int fd : handshaking_sockets_)
+            shutdown(fd, SHUT_RDWR);
     }
 
-    // Join all client handler threads
-    for (auto &t : client_threads_)
+    // Detached handlers release their own thread resources on exit.  Do not
+    // destroy server state until every handler has observed shutdown and left.
     {
-        if (t.joinable())
-            t.join();
+        std::unique_lock<std::mutex> lock(clients_mutex_);
+        client_handlers_cv_.wait(lock, [this] { return active_client_handlers_ == 0; });
+        client_sockets_.clear();
+        handshaking_sockets_.clear();
     }
-    client_threads_.clear();
-    client_sockets_.clear();
 
     // Join the main server thread
     if (server_thread_.joinable())
@@ -861,10 +867,26 @@ void WebSocketServer::serverLoop()
         }
 #endif
 
+        // The accept loop owns this descriptor until it becomes a registered
+        // handler.  Publish it before the blocking handshake so stop() can
+        // unblock it without closing concurrently.
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex_);
+            if (client_registration_closed_)
+            {
+                close(client);
+                continue;
+            }
+            handshaking_sockets_.push_back(client);
+            client_handlers_cv_.notify_all();
+        }
+
         // Perform WebSocket handshake
         if (!performHandshake(client))
         {
             llog.logE(WARN, "Handshake failed for new client");
+            std::lock_guard<std::mutex> lock(clients_mutex_);
+            handshaking_sockets_.erase(std::remove(handshaking_sockets_.begin(), handshaking_sockets_.end(), client), handshaking_sockets_.end());
             close(client);
             continue;
         }
@@ -886,11 +908,27 @@ void WebSocketServer::serverLoop()
         // Store and spawn handler thread
         {
             std::lock_guard<std::mutex> lock(clients_mutex_);
+            handshaking_sockets_.erase(std::remove(handshaking_sockets_.begin(), handshaking_sockets_.end(), client), handshaking_sockets_.end());
+            if (client_registration_closed_)
+            {
+                close(client);
+                continue;
+            }
             client_sockets_.push_back(client);
-            client_threads_.emplace_back(
-                &WebSocketServer::clientLoop,
-                this,
-                client);
+            ++active_client_handlers_;
+            try
+            {
+                std::thread(&WebSocketServer::clientLoop, this, client).detach();
+            }
+            catch (const std::system_error &e)
+            {
+                llog.logE(ERROR, "Could not create WebSocket client handler: ", e.what());
+                --active_client_handlers_;
+                client_sockets_.erase(std::remove(client_sockets_.begin(), client_sockets_.end(), client), client_sockets_.end());
+                shutdown(client, SHUT_RDWR);
+                close(client);
+                client_handlers_cv_.notify_all();
+            }
         }
     }
 }
@@ -907,6 +945,20 @@ void WebSocketServer::serverLoop()
  */
 void WebSocketServer::clientLoop(int client_fd)
 {
+    struct HandlerExit
+    {
+        WebSocketServer *server;
+        int fd;
+        ~HandlerExit()
+        {
+            std::lock_guard<std::mutex> lock(server->clients_mutex_);
+            shutdown(fd, SHUT_RDWR);
+            close(fd);
+            server->client_sockets_.erase(std::remove(server->client_sockets_.begin(), server->client_sockets_.end(), fd), server->client_sockets_.end());
+            --server->active_client_handlers_;
+            server->client_handlers_cv_.notify_all();
+        }
+    } handler_exit{this, client_fd};
     char buf[1024];
     bool connection_open = true;
 
@@ -966,18 +1018,6 @@ void WebSocketServer::clientLoop(int client_fd)
                           "from fd: ", client_fd);
             }
         }
-    }
-
-    // Clean up this client
-    {
-        std::lock_guard<std::mutex> lock(clients_mutex_);
-        shutdown(client_fd, SHUT_RDWR);
-        close(client_fd);
-        client_sockets_.erase(
-            std::remove(client_sockets_.begin(),
-                        client_sockets_.end(),
-                        client_fd),
-            client_sockets_.end());
     }
 
     llog.logS(DEBUG, "Client handler thread exiting for fd: ", client_fd);
