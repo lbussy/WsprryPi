@@ -40,6 +40,14 @@ assert_no_workdirs() {
   [[ -z "$leaked" ]] || fail "collector work directory was retained: $leaked"
 }
 
+# Directory prefixes are literal paths, not shell patterns.
+literal_prefix='/tmp/project[*?]\path with spaces'
+literal_file="${literal_prefix}/nested/file.ini"
+literal_relative="${literal_file#"$literal_prefix"/}"
+[[ "$literal_relative" == 'nested/file.ini' ]] || fail "literal path prefix was treated as a pattern"
+assert_contains "$COLLECTOR" "rel=\"\${file#\"\$PROJECT_PATH\"/}\""
+assert_contains "$COLLECTOR" "rel=\"\${file#\"\$LEGACY_LOG_DIR\"/}\""
+
 make_mocks() {
   local directory="$1" probe_exit="$2"
   mkdir -p "$directory"

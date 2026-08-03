@@ -707,7 +707,7 @@ if [[ -n "$PROJECT_PATH" && -d "$PROJECT_PATH" ]]; then
       -name "*.service" \
     \) -print0 2>/dev/null |
       while IFS= read -r -d '' file; do
-        rel="${file#$PROJECT_PATH/}"
+        rel="${file#"$PROJECT_PATH"/}"
         mkdir -p "${OUT_DIR}/configs/project/$(dirname "$rel")"
         cp "$file" "${OUT_DIR}/configs/project/$rel" 2>/dev/null || true
       done
@@ -819,7 +819,7 @@ tail_or_copy_log /var/log/messages "${OUT_DIR}/logs/messages"
 if [[ -d "$LEGACY_LOG_DIR" ]]; then
   find "$LEGACY_LOG_DIR" -maxdepth 2 -type f -print0 2>/dev/null |
     while IFS= read -r -d '' file; do
-      rel="${file#$LEGACY_LOG_DIR/}"
+      rel="${file#"$LEGACY_LOG_DIR"/}"
       tail_or_copy_log "$file" "${OUT_DIR}/logs/legacy-wsprrypi/$rel"
     done
 else
