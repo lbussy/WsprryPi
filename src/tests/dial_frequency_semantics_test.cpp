@@ -710,6 +710,154 @@ int main(int argc, char *argv[])
             validate_config_candidate(config, &validation_error),
             "disabled Pi I/O features must not reserve their retained GPIO values");
 
+        enum class OrdinaryGpioRole
+        {
+            Band,
+            Led,
+            Shutdown,
+            Amp
+        };
+        const auto assign_ordinary_gpio = [](ArgParserConfig &candidate,
+                                             OrdinaryGpioRole role,
+                                             int pin,
+                                             bool enabled) {
+            switch (role)
+            {
+                case OrdinaryGpioRole::Band:
+                    candidate.band_gpio[ham_band_index(HamBand::BAND_20M)] =
+                        BandGPIOConfig{.gpio = pin, .enabled = enabled, .active_high = true};
+                    break;
+                case OrdinaryGpioRole::Led:
+                    candidate.use_led = enabled;
+                    candidate.led_pin = pin;
+                    break;
+                case OrdinaryGpioRole::Shutdown:
+                    candidate.use_shutdown = enabled;
+                    candidate.shutdown_pin = pin;
+                    break;
+                case OrdinaryGpioRole::Amp:
+                    candidate.use_amp = enabled;
+                    candidate.amp_pin = pin;
+                    break;
+            }
+        };
+
+        for (const bool transmit : {false, true})
+        {
+            for (const int transmit_pin : {4, 20})
+            {
+                const int available_pin = transmit_pin == 4 ? 20 : 4;
+                for (const OrdinaryGpioRole role : {
+                         OrdinaryGpioRole::Band,
+                         OrdinaryGpioRole::Led,
+                         OrdinaryGpioRole::Shutdown,
+                         OrdinaryGpioRole::Amp})
+                {
+                    prime_valid_runtime_identity_config();
+                    config.transmit = transmit;
+                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.gpio_tx_pin = transmit_pin;
+                    resolve_backend_specific_config(config);
+                    assign_ordinary_gpio(config, role, transmit_pin, true);
+                    require(
+                        !validate_config_candidate(config, &validation_error) &&
+                            validation_error ==
+                                "GPIO" + std::to_string(transmit_pin) +
+                                    " is reserved by GPIO RF Output.",
+                        "GPIO RF output must reject every enabled ordinary role on its selected pin regardless of transmit state");
+
+                    prime_valid_runtime_identity_config();
+                    config.transmit = transmit;
+                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.gpio_tx_pin = transmit_pin;
+                    resolve_backend_specific_config(config);
+                    assign_ordinary_gpio(config, role, available_pin, true);
+                    require(
+                        validate_config_candidate(config, &validation_error),
+                        "GPIO RF output must leave the other GPCLK0-capable pin available to ordinary roles");
+
+                    prime_valid_runtime_identity_config();
+                    config.transmit = transmit;
+                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.gpio_tx_pin = transmit_pin;
+                    resolve_backend_specific_config(config);
+                    assign_ordinary_gpio(config, role, transmit_pin, false);
+                    require(
+                        validate_config_candidate(config, &validation_error),
+                        "disabled ordinary roles may retain the selected GPIO RF output pin");
+                }
+            }
+        }
+
+        for (const int retained_transmit_pin : {4, 20})
+        {
+            for (const int ordinary_pin : {4, 20})
+            {
+                for (const OrdinaryGpioRole role : {
+                         OrdinaryGpioRole::Band,
+                         OrdinaryGpioRole::Led,
+                         OrdinaryGpioRole::Shutdown,
+                         OrdinaryGpioRole::Amp})
+                {
+                    prime_valid_runtime_identity_config();
+                    config.transmit_backend = TransmitBackendKind::SI5351;
+                    config.gpio_tx_pin = retained_transmit_pin;
+                    resolve_backend_specific_config(config);
+                    assign_ordinary_gpio(config, role, ordinary_pin, true);
+                    require(
+                        validate_config_candidate(config, &validation_error),
+                        "Si5351 backend must not reserve a retained GPIO transmit-pin value");
+                }
+            }
+        }
+
+        prime_valid_runtime_identity_config();
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        config.gpio_tx_pin = 20;
+        config.use_led = true;
+        config.led_pin = 20;
+        config_to_json();
+        json_to_config();
+        require(
+            !validate_config_candidate(config, &validation_error) &&
+                validation_error == "GPIO20 is reserved by GPIO RF Output.",
+            "JSON round trips must preserve and reject a retained GPIO RF-output conflict");
+
+        auto transmit_gpio_conflict_ini =
+            make_managed_ini_data("AA0NT", "EM18", "20m", false);
+        transmit_gpio_conflict_ini["GPIO"]["Transmit Pin"] = "20";
+        transmit_gpio_conflict_ini["Operation"]["Use Shutdown"] = "true";
+        transmit_gpio_conflict_ini["Operation"]["Shutdown Button"] = "20";
+        iniFile.setData(transmit_gpio_conflict_ini);
+        PreparedConfigCandidate transmit_gpio_ini_candidate;
+        prepare_ini_config_candidate(
+            "/tmp/transmit_gpio_conflict.ini",
+            transmit_gpio_ini_candidate);
+        require(
+            !transmit_gpio_ini_candidate.valid &&
+                transmit_gpio_ini_candidate.error_reason ==
+                    "GPIO20 is reserved by GPIO RF Output.",
+            "managed INI load and reload candidates must reject GPIO RF-output conflicts when transmit is off");
+
+        prime_valid_runtime_identity_config();
+        config_to_json();
+        const nlohmann::json before_transmit_gpio_patch = jConfig;
+        bool transmit_gpio_patch_rejected = false;
+        try
+        {
+            patch_all_from_web({
+                {"Operation", {{"Use Amp", true}, {"Amp Pin", 4}}}});
+        }
+        catch (const std::exception &e)
+        {
+            transmit_gpio_patch_rejected =
+                std::string(e.what()).find(
+                    "GPIO4 is reserved by GPIO RF Output.") != std::string::npos;
+        }
+        require(
+            transmit_gpio_patch_rejected && jConfig == before_transmit_gpio_patch,
+            "REST/web patches must reject GPIO RF-output conflicts without changing configuration");
+
         config.use_led = true;
         config.led_pin = 6;
         config.use_shutdown = true;

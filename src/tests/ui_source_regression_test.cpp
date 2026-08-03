@@ -119,6 +119,8 @@ int main()
         read_text_file("/home/pi/WsprryPi/src/main.cpp");
     const std::string config_view_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/config.php");
+    const std::string gpio_dropdown_source =
+        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/gpio_dropdown.php");
     const std::string cw_timing_source =
         read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/cw_timing_state.js");
     const std::string maintenance_script_source =
@@ -140,11 +142,20 @@ int main()
     require(
         ui_source.find("if (!valid && reservedAssignment.field) {") !=
                 std::string::npos &&
-            ui_source.find("setFieldValidationState(reservedAssignment.field, false);") !=
+            ui_source.find("setPinDropdownValidationState(reservedAssignment.field, message);") !=
                 std::string::npos &&
             ui_stylesheet_source.find(".pin-dropdown-btn.is-invalid") !=
                 std::string::npos,
         "Band GPIO conflicts with enabled reserved controls must mark both affected fields invalid");
+    require(
+        gpio_dropdown_source.find("4 => 'Pin 7'") != std::string::npos &&
+            ui_source.find("function getReservedGpioRfOutputPin()") != std::string::npos &&
+            ui_source.find("is reserved by GPIO RF Output.") != std::string::npos &&
+            ui_source.find("function refreshTransmitGpioOptions()") != std::string::npos &&
+            ui_source.find("function setGpioConflictFieldState(field, message)") != std::string::npos &&
+            config_view_source.find("id=\"tx-pin-error\"") != std::string::npos &&
+            config_view_source.find("band-gpio-gpio-") != std::string::npos,
+        "conditional GPIO RF ownership must expose GPIO4, filter both selection directions, and render accessible inline conflict feedback");
     require(
         cw_message_input.find("type=\"text\"") != std::string::npos &&
             cw_message_input.find("step=") == std::string::npos,
