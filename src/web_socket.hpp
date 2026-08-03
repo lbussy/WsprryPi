@@ -59,6 +59,7 @@ extern const uint32_t SOCKET_KEEPALIVE;
  */
 class WebSocketServer
 {
+    friend class WebSocketLifecycleTest;
 public:
     /**
      * @brief Constructs a new WebSocketServer instance.
@@ -129,7 +130,11 @@ private:
     // For each connection:
     std::mutex clients_mutex_;
     std::vector<int> client_sockets_;
-    std::vector<std::thread> client_threads_;
+    std::vector<int> handshaking_sockets_;
+    std::size_t active_client_handlers_{0};
+    bool client_registration_closed_{false};
+    std::condition_variable client_handlers_cv_;
+    std::mutex stop_mutex_;
 
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop
     std::mutex keep_alive_mutex_;           ///< Mutex to control loop break
