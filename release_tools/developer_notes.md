@@ -322,8 +322,15 @@ VS Code remote terminal to configure Todo Tree to use the installed `rg`
 executable:
 
 ```sh
-f="$HOME/.vscode-server/data/Machine/settings.json"; mkdir -p "$(dirname "$f")"; F="$f" RG="$(command -v rg)" python3 -c 'import json,os,pathlib; p=pathlib.Path(os.environ["F"]); d=json.loads(p.read_text()) if p.exists() else {}; d["todo-tree.ripgrep.ripgrep"]=os.environ["RG"]; p.write_text(json.dumps(d,indent=4)+"\n")'
+f="$HOME/.vscode-server/data/Machine/settings.json"
+rg_path="$(command -v rg)" || { echo "ripgrep (rg) is not installed or not in PATH"; exit 1; }
+mkdir -p "$(dirname "$f")"
+F="$f" RG="$rg_path" python3 -c 'import json,os,pathlib; p=pathlib.Path(os.environ["F"]); d=json.loads(p.read_text()) if p.exists() else {}; d["todo-tree.ripgrep.ripgrep"]=os.environ["RG"]; p.write_text(json.dumps(d,indent=4)+"\n")'
 ```
+
+Run this command on the Pi, then use **Developer: Reload Window** in VS Code.
+If the remote settings file contains comments or trailing commas, edit the
+Remote Settings JSON manually instead because the command expects strict JSON.
 
 ### macOS SSHFS for a 32-Bit Pi
 
