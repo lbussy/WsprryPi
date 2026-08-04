@@ -146,8 +146,16 @@ BUILD_METADATA_DIR := build/generated
 BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp
 BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
 BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
+BUILD_METADATA_MAKE_REGRESSION_TEST := ../scripts/tests/build_metadata_make_regression_test.py
+BUILD_METADATA_REPO_ROOT := ..
+BUILD_METADATA_PROJECT := $(PRJ)
+BUILD_METADATA_EXECUTABLE := $(OUT)
 VERSION_RELEASE_OBJECT := $(OBJ_DIR_RELEASE)/./version.o
 VERSION_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./version.o
+
+.DEFAULT_GOAL := release
+
+include ../scripts/build_metadata_rules.mk
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source discovery (C++ only)
@@ -432,18 +440,6 @@ $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
 	$(Q)echo "Compiling (debug) $< into $@"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
-
-# Refresh Git-derived metadata on every build.  The generator replaces its
-# output only when the content changes, so these normal prerequisites rebuild
-# only version.o and relink its consumers when the checkout metadata changes.
-.PHONY: check-build-metadata build-metadata-regression-test
-check-build-metadata:
-	$(Q)python3 $(BUILD_METADATA_GENERATOR) --repo-root .. --output $(BUILD_METADATA_HEADER) --project $(PRJ) --executable $(OUT)
-
-$(BUILD_METADATA_HEADER):
-	$(Q)python3 $(BUILD_METADATA_GENERATOR) --repo-root .. --output $@ --project $(PRJ) --executable $(OUT)
-
-$(VERSION_RELEASE_OBJECT) $(VERSION_DEBUG_OBJECT): $(BUILD_METADATA_HEADER) | check-build-metadata
 
 define MAKE_DEBUG_SUBMOD_RULES
 $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
@@ -739,7 +735,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -749,10 +745,16 @@ clean:
 	$(Q)$(SUDO) rm -rf ../executables
 
 release: $(BIN_DIR)/$(OUT)
+
+ifeq ($(BUILD_METADATA_QUERY),)
 	$(Q)echo "Release build completed successfully."
+endif
 
 build-metadata-regression-test:
 	$(Q)python3 $(BUILD_METADATA_REGRESSION_TEST)
+
+build-metadata-make-regression-test:
+	$(Q)python3 $(BUILD_METADATA_MAKE_REGRESSION_TEST)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."

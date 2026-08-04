@@ -664,7 +664,7 @@ int main()
     require(
             makefile_source.find("BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp") != std::string::npos &&
             makefile_source.find("generate_build_metadata.py") != std::string::npos &&
-            makefile_source.find("$(VERSION_RELEASE_OBJECT) $(VERSION_DEBUG_OBJECT): $(BUILD_METADATA_HEADER) | check-build-metadata") != std::string::npos &&
+            makefile_source.find("include ../scripts/build_metadata_rules.mk") != std::string::npos &&
             build_metadata_generator_source.find("\"rev-parse\", \"--is-inside-work-tree\"") != std::string::npos &&
             build_metadata_generator_source.find("\"symbolic-ref\", \"--quiet\", \"--short\", \"HEAD\"") != std::string::npos &&
             build_metadata_generator_source.find("\"status\", \"--porcelain\", \"--untracked-files=no\"") != std::string::npos &&
