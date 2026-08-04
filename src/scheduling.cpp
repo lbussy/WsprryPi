@@ -40,6 +40,8 @@
 
 // Primary header for this source file
 #include "scheduling.hpp"
+#include "test_tone_frequency_plan.hpp"
+#include "test_tone_selector_plan.hpp"
 
 // Project headers
 #include "arg_parser.hpp"
@@ -3377,10 +3379,10 @@ void reboot_system()
  * frequency and does not receive WSPR dial-frequency offset. Tone mode here is
  * runtime-only behavior.
  */
-TestToneStartResult start_test_tone(
-    std::optional<std::uint64_t> frequency_hz_override)
+TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
 {
     TestToneStartResult result;
+    result.source = tone_request.source;
 
     if (web_test_tone.load())
     {
@@ -3407,6 +3409,45 @@ TestToneStartResult start_test_tone(
         return result;
     }
 
+    // Explicit requests are completely planned from one accepted configuration
+    // snapshot before any runtime mutation.
+    const bool has_explicit_frequency_source =
+        tone_request.source == TestToneFrequencySource::WsprBand ||
+        tone_request.source == TestToneFrequencySource::CustomRf;
+    std::optional<TestTonePlanningConfigSnapshot> explicit_planning_snapshot;
+    std::optional<TestToneFrequencyPlan> explicit_frequency_plan;
+    std::optional<TestToneSelectorPlan> explicit_selector_plan;
+    if (has_explicit_frequency_source)
+    {
+        const TestTonePlanningConfigSnapshot planning_snapshot =
+            current_test_tone_planning_config_snapshot();
+        const auto frequency_plan = plan_explicit_test_tone_frequency(
+            tone_request, planning_snapshot.wspr_audio_offset_hz);
+        if (!frequency_plan)
+        {
+            result.message = frequency_plan.error;
+            return result;
+        }
+        const auto resolved_band = lookup.lookup_ham_band(
+            static_cast<double>(frequency_plan.plan->actual_rf_frequency_hz));
+        if (!resolved_band.has_value())
+        {
+            result.message = "Unable to resolve the planned RF band.";
+            return result;
+        }
+        const auto selector_plan = plan_test_tone_selector(
+            *resolved_band, planning_snapshot.wspr_frequency_entries,
+            planning_snapshot.band_gpio);
+        if (!selector_plan)
+        {
+            result.message = selector_plan.error;
+            return result;
+        }
+        explicit_planning_snapshot = planning_snapshot;
+        explicit_frequency_plan = *frequency_plan.plan;
+        explicit_selector_plan = selector_plan.plan;
+    }
+
     web_test_tone.store(true);
 
     // Save previous mode so we can restore it later.
@@ -3414,19 +3455,46 @@ TestToneStartResult start_test_tone(
 
     wsprTransmitter.stopAndJoin();
 
-    // Pick the first configured scheduler frequency entry, then commit
-    // the resolved RF frequency into the request before execution.
-    const WsprFrequencyEntry entry =
-        next_frequency_entry(/*restart=*/true);
-    const double dial_freq = entry.dial_frequency_hz;
+    ArgParserConfig selector_preparation_cfg;
+    WsprFrequencyEntry entry;
+    double dial_freq = 0.0;
+    double actual_rf_freq = 0.0;
+    if (has_explicit_frequency_source)
+    {
+        const TestToneFrequencyPlan &frequency_plan = *explicit_frequency_plan;
+        const TestToneSelectorPlan &selector_plan = *explicit_selector_plan;
+        dial_freq = frequency_plan.dial_frequency_hz.has_value()
+            ? static_cast<double>(*frequency_plan.dial_frequency_hz)
+            : static_cast<double>(frequency_plan.actual_rf_frequency_hz);
+        actual_rf_freq = static_cast<double>(frequency_plan.actual_rf_frequency_hz);
+        entry = WsprFrequencyEntry{};
+        entry.dial_frequency_hz = dial_freq;
+        entry.token = frequency_plan.band;
+        if (selector_plan.enabled)
+        {
+            entry.selector_gpio = selector_plan.config.gpio;
+            entry.selector_gpio_active_high = selector_plan.config.active_high;
+        }
+        selector_preparation_cfg.band_gpio = explicit_planning_snapshot->band_gpio;
+        result.band = frequency_plan.band;
+        result.dial_frequency_hz = frequency_plan.dial_frequency_hz.value_or(0);
+        result.audio_offset_hz = frequency_plan.audio_offset_hz.value_or(0);
+    }
+    else
+    {
+        // Legacy requests retain their established scheduler behavior.
+        selector_preparation_cfg = config;
+        entry = next_frequency_entry(/*restart=*/true);
+        dial_freq = entry.dial_frequency_hz;
+        const double configured_actual_rf_freq = resolve_actual_rf_frequency_hz(
+            dial_freq,
+            selector_preparation_cfg.wspr.audio_offset_hz,
+            FrequencyPath::WsprDial);
+        actual_rf_freq = tone_request.frequency_hz.has_value()
+            ? static_cast<double>(*tone_request.frequency_hz)
+            : configured_actual_rf_freq;
+    }
     current_frequency_entry = entry;
-    const double configured_actual_rf_freq = resolve_actual_rf_frequency_hz(
-        dial_freq,
-        config.wspr.audio_offset_hz,
-        FrequencyPath::WsprDial);
-    const double actual_rf_freq = frequency_hz_override.has_value()
-        ? static_cast<double>(*frequency_hz_override)
-        : configured_actual_rf_freq;
 
     llog.logS(INFO, "Beginning test tone requested by web UI.");
 
@@ -3438,11 +3506,13 @@ TestToneStartResult start_test_tone(
         "Resolved WSPR dial frequency ",
         lookup.freq_display_string(dial_freq),
         " to actual RF ",
-        lookup.freq_display_string(configured_actual_rf_freq),
+        lookup.freq_display_string(actual_rf_freq),
         " using audio offset ",
-        config.wspr.audio_offset_hz,
+        explicit_frequency_plan.has_value()
+            ? static_cast<double>(explicit_frequency_plan->audio_offset_hz.value_or(0))
+            : selector_preparation_cfg.wspr.audio_offset_hz,
         " Hz.");
-    if (frequency_hz_override.has_value())
+    if (tone_request.frequency_hz.has_value())
     {
         llog.logS(
             INFO,
@@ -3452,19 +3522,41 @@ TestToneStartResult start_test_tone(
     const double committed_ppm = config.ppm;
     TransmissionRequest request =
         make_tone_request(config, committed_ppm, actual_rf_freq, dial_freq, entry);
+    if (explicit_frequency_plan.has_value())
+    {
+        request.applied_offset_hz = explicit_frequency_plan->audio_offset_hz.has_value()
+            ? static_cast<double>(*explicit_frequency_plan->audio_offset_hz)
+            : 0.0;
+    }
     BandGPIOResolution selector_resolution;
     const BandGPIOPrepareStatus selector_status =
         prepare_band_gpio_for_frequency_or_log(
             dial_freq,
             entry,
-            config,
+            selector_preparation_cfg,
             -1,
             &selector_resolution);
     commit_band_gpio_snapshot_to_request(
         request,
         selector_resolution,
         selector_status);
+    if (selector_status == BandGPIOPrepareStatus::Failed)
+    {
+        web_test_tone.store(false);
+        config.mode = lastMode;
+        result.message = "Unable to prepare the requested band selector.";
+        return result;
+    }
     commit_execution_request(request);
+    result.actual_rf_frequency_hz = static_cast<std::uint64_t>(actual_rf_freq);
+    result.selector_gpio_enabled = request.selector_gpio_enabled;
+    result.selector_gpio = request.selector_gpio_enabled
+        ? request.selector_gpio_config.gpio
+        : -1;
+    result.selector_gpio_active_high = request.selector_gpio_enabled
+        ? request.selector_gpio_config.active_high
+        : false;
+    if (result.band.empty()) result.band = ham_band_to_string(*lookup.lookup_ham_band(dial_freq));
 
     if (!suppress_scheduler_execution_for_test)
     {
@@ -3477,6 +3569,17 @@ TestToneStartResult start_test_tone(
     result.started = true;
     result.message = "Test tone started.";
     return result;
+}
+
+TestToneStartResult start_test_tone(
+    std::optional<std::uint64_t> frequency_hz_override)
+{
+    TestToneRequest request;
+    request.source = frequency_hz_override.has_value()
+        ? TestToneFrequencySource::LegacyExactRf
+        : TestToneFrequencySource::LegacyDefault;
+    request.frequency_hz = frequency_hz_override;
+    return start_test_tone(request);
 }
 
 /**

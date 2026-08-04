@@ -481,6 +481,19 @@ struct ArgParserConfig
  */
 extern ArgParserConfig config;
 
+/**
+ * @brief Immutable configuration inputs used to plan an explicit Test Tone.
+ *
+ * Published only after an accepted global configuration update.  Callers get
+ * a value copy so selector/frequency planning cannot observe mixed revisions.
+ */
+struct TestTonePlanningConfigSnapshot
+{
+    double wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
+    std::vector<WsprFrequencyEntry> wspr_frequency_entries{};
+    std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio{};
+};
+
 struct PreparedConfigCandidate
 {
     nlohmann::json normalized_json{};
@@ -512,6 +525,20 @@ private:
 };
 
 void init_default_config();
+
+/**
+ * @brief Returns the most recently published accepted WSPR audio offset.
+ *
+ * This is a read-only snapshot for concurrent catalog/status consumers.  It
+ * must not be used to modify the runtime configuration.
+ */
+double current_wspr_audio_offset_hz() noexcept;
+
+/**
+ * @brief Returns a coherent value copy of accepted Test Tone planning inputs.
+ */
+TestTonePlanningConfigSnapshot current_test_tone_planning_config_snapshot();
+
 void resolve_backend_specific_config(ArgParserConfig &config) noexcept;
 bool si5351_device_detected(
     int i2c_bus,

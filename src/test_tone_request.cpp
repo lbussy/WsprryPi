@@ -1,0 +1,81 @@
+#include "test_tone_request.hpp"
+#include "wspr_band_lookup.hpp"
+#include <limits>
+
+namespace
+{
+std::optional<std::uint64_t> parse_legacy_exact_rf(
+    const nlohmann::json &value,
+    std::string &error)
+{
+    std::uint64_t candidate_frequency_hz = 0;
+    if (value.is_number_unsigned())
+    {
+        candidate_frequency_hz = value.get<std::uint64_t>();
+    }
+    else if (value.is_number_integer())
+    {
+        const auto signed_frequency_hz = value.get<std::int64_t>();
+        if (signed_frequency_hz > 0)
+        {
+            candidate_frequency_hz =
+                static_cast<std::uint64_t>(signed_frequency_hz);
+        }
+    }
+
+    if (candidate_frequency_hz == 0)
+    {
+        error = "frequency_hz must be a positive integer";
+        return std::nullopt;
+    }
+    if (candidate_frequency_hz >
+        static_cast<std::uint64_t>(std::numeric_limits<long long>::max()))
+    {
+        error = "frequency_hz is outside the supported RF range";
+        return std::nullopt;
+    }
+
+    const WSPRBandLookup lookup;
+    const auto validation = lookup.lookup(
+        static_cast<double>(candidate_frequency_hz));
+    const auto *validation_text = std::get_if<std::string>(&validation);
+    if (validation_text == nullptr || *validation_text == "Invalid Frequency")
+    {
+        error = "frequency_hz is outside the supported RF range";
+        return std::nullopt;
+    }
+    return candidate_frequency_hz;
+}
+} // namespace
+
+TestToneRequestParseResult parse_test_tone_request(const nlohmann::json &j)
+{
+    auto fail=[](const char *s){ return TestToneRequestParseResult{{}, s}; };
+    const bool has_source=j.contains("frequency_source"), has_band=j.contains("band"), has_frequency=j.contains("frequency_hz");
+    if (!has_source) {
+        if (has_band) return fail("band requires frequency_source");
+        if (!has_frequency) return {{ParsedTestToneRequest{}}, {}};
+        std::string error;
+        const auto value = parse_legacy_exact_rf(j["frequency_hz"], error);
+        if (!value.has_value()) return fail(error.c_str());
+        return {{ParsedTestToneRequest{TestToneRequestSource::LegacyExactRf,{},*value}}, {}};
+    }
+    if (!j["frequency_source"].is_string()) return fail("frequency_source must be a string");
+    const auto source=j["frequency_source"].get<std::string>();
+    WSPRBandLookup lookup;
+    if (source=="wspr_band") {
+        if (has_frequency || !has_band || !j["band"].is_string()) return fail("wspr_band requires only band");
+        const auto band=j["band"].get<std::string>();
+        for (const auto &entry: lookup.canonical_wspr_band_catalog()) if (entry.band==band)
+            return {{ParsedTestToneRequest{TestToneRequestSource::WsprBand,band,std::nullopt}},{}};
+        return fail("band must be canonical");
+    }
+    if (source=="custom_rf") {
+        if (has_band || !has_frequency || !j["frequency_hz"].is_number_integer()) return fail("custom_rf requires only positive integer frequency_hz");
+        if (!j["frequency_hz"].is_number_unsigned() && j["frequency_hz"].get<std::int64_t>() <= 0) return fail("custom_rf requires only positive integer frequency_hz");
+        const auto value=j["frequency_hz"].get<std::uint64_t>();
+        if (value==0 || value>static_cast<std::uint64_t>(std::numeric_limits<long long>::max()) || !lookup.lookup_ham_band(static_cast<double>(value)).has_value()) return fail("frequency_hz is outside supported amateur bands");
+        return {{ParsedTestToneRequest{TestToneRequestSource::CustomRf,{},value}},{}};
+    }
+    return fail("unknown frequency_source");
+}

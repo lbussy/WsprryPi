@@ -6153,6 +6153,253 @@ int main(int argc, char *argv[])
             "scheduled seconds with transient QRSS startup");
     }
 
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "40m@5";
+        config.wspr.audio_offset_hz = 1500.0;
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && nearly_equal(request.dial_frequency_hz, 14095600.0) &&
+                    nearly_equal(request.actual_rf_frequency_hz, 14097100.0),
+                "explicit 20m tone must commit canonical dial plus offset once");
+        require(!request.selector_gpio_enabled,
+                "different-band first-entry selector must not be inherited");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "20m";
+        config.wspr.audio_offset_hz = 1500.0;
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "22m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && nearly_equal(request.dial_frequency_hz, 13551500.0) &&
+                    nearly_equal(request.actual_rf_frequency_hz, 13553000.0),
+                "explicit 22m tone must commit canonical dial plus 1500 Hz offset");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "20m";
+        config.wspr.audio_offset_hz = 2750.0;
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        // Simulate a later uncommitted mutable write. Explicit planning must
+        // consume the one published snapshot for both RF and result metadata.
+        config.wspr.audio_offset_hz = 1500.0;
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && nearly_equal(request.actual_rf_frequency_hz, 14098350.0) &&
+                    nearly_equal(request.applied_offset_hz, 2750.0) &&
+                    started.audio_offset_hz == 2750U,
+                "one published snapshot must supply explicit RF and committed offset metadata");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "40m";
+        config.wspr.audio_offset_hz = 1500.0;
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        constexpr std::uint64_t custom_rf_hz = 14097123;
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", custom_rf_hz});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && nearly_equal(request.actual_rf_frequency_hz, static_cast<double>(custom_rf_hz)) &&
+                    nearly_equal(request.dial_frequency_hz, static_cast<double>(custom_rf_hz)) &&
+                    started.band == "20m",
+                "explicit custom RF must remain exact and resolve 20m without a WSPR offset");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "40m@5 20m@17";
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && request.selector_gpio_enabled &&
+                    request.selector_gpio_config.gpio == 17 &&
+                    !request.selector_gpio_config.active_high &&
+                    !started.selector_gpio_active_high &&
+                    request.selector_band == HamBand::BAND_20M,
+                "matching same-band active-low selector metadata must match the committed RF-band request");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "40m@5";
+        config.band_gpio[ham_band_index(HamBand::BAND_20M)] = {19, true, true};
+        config.band_gpio[ham_band_index(HamBand::BAND_40M)] = {6, true, false};
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        config.band_gpio[ham_band_index(HamBand::BAND_20M)] = {20, true, false};
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && request.selector_gpio_enabled &&
+                    request.selector_gpio_config.gpio == 19 &&
+                    request.selector_gpio_config.active_high &&
+                    started.selector_gpio_active_high &&
+                    request.selector_band == HamBand::BAND_20M,
+                "active-high metadata must come from the committed selected-band fallback, not a different-band selector");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.frequencies = "40m@5";
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TransmissionRequest request = current_transmission_request_for_test();
+        require(started.started && !request.selector_gpio_enabled &&
+                    !started.selector_gpio_active_high,
+                "selector-disabled Test Tone metadata must remain neutral");
+        end_test_tone();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.mode = ModeType::QRSS;
+        TransmissionRequest sentinel;
+        sentinel.mode = TransmissionMode::WSPR;
+        sentinel.actual_rf_frequency_hz = 1234567.0;
+        set_current_transmission_request_for_test(sentinel);
+        reset_band_gpio_prepare_call_count_for_test();
+        const TestToneStartResult rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "not-a-band", std::nullopt});
+        require(!rejected.started && config.mode == ModeType::QRSS &&
+                    nearly_equal(current_transmission_request_for_test().actual_rf_frequency_hz, 1234567.0) &&
+                    band_gpio_prepare_call_count_for_test() == 0U,
+                "frequency planning failure must leave tone, mode, request, and selector preparation unchanged");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.mode = ModeType::FSKCW;
+        config.frequencies = "20m@17 20m@18";
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        TransmissionRequest sentinel;
+        sentinel.mode = TransmissionMode::WSPR;
+        sentinel.actual_rf_frequency_hz = 7654321.0;
+        set_current_transmission_request_for_test(sentinel);
+        reset_band_gpio_prepare_call_count_for_test();
+        const TestToneStartResult rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        require(!rejected.started && !rejected.message.empty() && config.mode == ModeType::FSKCW &&
+                    nearly_equal(current_transmission_request_for_test().actual_rf_frequency_hz, 7654321.0) &&
+                    band_gpio_prepare_call_count_for_test() == 0U,
+                "selector conflict must reject before tone, mode, request, or selector preparation mutation");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.mode = ModeType::WSPR;
+        config.transmit = true;
+        config.frequencies = "20m";
+        set_frequencies(config);
+        TransmissionRequest sentinel;
+        sentinel.mode = TransmissionMode::WSPR;
+        sentinel.actual_rf_frequency_hz = 1111111.0;
+        set_current_transmission_request_for_test(sentinel);
+        reset_band_gpio_prepare_call_count_for_test();
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::TRANSMITTING);
+
+        const TestToneStartResult rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        const TestToneStopResult inactive_stop = end_test_tone();
+        require(!rejected.started && rejected.blocked_by_active_transmission &&
+                    !rejected.blocked_by_enabled_transmission &&
+                    !inactive_stop.tone_was_active &&
+                    nearly_equal(current_transmission_request_for_test().actual_rf_frequency_hz, 1111111.0) &&
+                    band_gpio_prepare_call_count_for_test() == 0U &&
+                    wsprTransmitter.getState() == WsprTransmitter::State::TRANSMITTING,
+                "explicit WSPR-band request must reject before planning, selector preparation, Test Tone activation, or request mutation while TX is active");
+
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.mode = ModeType::WSPR;
+        config.transmit = true;
+        config.frequencies = "20m";
+        set_frequencies(config);
+        TransmissionRequest sentinel;
+        sentinel.mode = TransmissionMode::WSPR;
+        sentinel.actual_rf_frequency_hz = 2222222.0;
+        set_current_transmission_request_for_test(sentinel);
+        reset_band_gpio_prepare_call_count_for_test();
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::ENABLED);
+
+        const TestToneStartResult rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 14097123});
+        const TestToneStopResult inactive_stop = end_test_tone();
+        require(!rejected.started && !rejected.blocked_by_active_transmission &&
+                    rejected.blocked_by_enabled_transmission && !inactive_stop.tone_was_active &&
+                    nearly_equal(current_transmission_request_for_test().actual_rf_frequency_hz, 2222222.0) &&
+                    band_gpio_prepare_call_count_for_test() == 0U &&
+                    wsprTransmitter.getState() == WsprTransmitter::State::ENABLED,
+                "explicit custom-RF request must reject before planning, selector preparation, Test Tone activation, or request mutation while schedule is enabled");
+
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
     std::cout << "dial_frequency_semantics_test passed" << std::endl;
     return EXIT_SUCCESS;
 }
