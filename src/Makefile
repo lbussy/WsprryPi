@@ -102,19 +102,6 @@ SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 PRJ_RAW := $(strip $(basename $(notdir $(shell git remote get-url origin 2>/dev/null))))
 PRJ := $(if $(PRJ_RAW),$(PRJ_RAW),unknown)
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
-RAW_BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-BRANCH_STATE := $(shell if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo unknown; elif git symbolic-ref --quiet --short HEAD >/dev/null 2>&1; then echo branch; else echo detached; fi)
-BRH := $(shell printf '%s\n' "$(RAW_BRH)" | awk '{ gsub(/[^[:alnum:]]+/, "-"); sub(/-$$/, ""); print }' || echo unknown)
-RAW_TAG := $(strip $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null))
-BASE_VER := $(if $(RAW_TAG),$(patsubst v%,%,$(RAW_TAG)),0.0.0)
-
-PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "-$(BRH)"; fi)
-VER := $(BASE_VER)$(PRE)
-
-COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-FULL_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-GIT_DIRTY := $(shell if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo unknown; elif [ -n "$$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then echo true; else echo false; fi)
-VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
 
 OUT := $(strip $(EXE_NAME))
 TEST_OUT := $(strip $(EXE_NAME)_debug)
@@ -155,6 +142,12 @@ OBJ_DIR_RELEASE := build/obj/release
 OBJ_DIR_DEBUG   := build/obj/debug
 DEP_DIR         := build/dep
 BIN_DIR         := build/bin
+BUILD_METADATA_DIR := build/generated
+BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp
+BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
+BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
+VERSION_RELEASE_OBJECT := $(OBJ_DIR_RELEASE)/./version.o
+VERSION_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./version.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source discovery (C++ only)
@@ -405,18 +398,9 @@ CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
 
 # Include paths
 CXXFLAGS += -I$(abspath .)
+CXXFLAGS += -I$(abspath $(BUILD_METADATA_DIR))
 CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
 CXXFLAGS += -I$(abspath ./WSPR-Reference/src/wspr)
-
-# Build metadata defines
-CXXFLAGS += -DMAKE_TAG=\"$(VER)\" \
-            -DMAKE_BRH=\"$(BRH)\" \
-            -DMAKE_RAW_BRH=\"$(RAW_BRH)\" \
-            -DMAKE_BRANCH_STATE=\"$(BRANCH_STATE)\" \
-            -DMAKE_COMMIT=\"$(FULL_COMMIT)\" \
-            -DMAKE_DIRTY=\"$(GIT_DIRTY)\" \
-            -DMAKE_EXE=\"$(OUT)\" \
-            -DMAKE_PRJ=\"$(PRJ)\"
 
 # Debug/release variants
 CXX_DEBUG_FLAGS   := $(CXXFLAGS) -g $(DEBUG_DEFS)
@@ -448,6 +432,18 @@ $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $*)
 	$(Q)echo "Compiling (debug) $< into $@"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
+
+# Refresh Git-derived metadata on every build.  The generator replaces its
+# output only when the content changes, so these normal prerequisites rebuild
+# only version.o and relink its consumers when the checkout metadata changes.
+.PHONY: check-build-metadata build-metadata-regression-test
+check-build-metadata:
+	$(Q)python3 $(BUILD_METADATA_GENERATOR) --repo-root .. --output $(BUILD_METADATA_HEADER) --project $(PRJ) --executable $(OUT)
+
+$(BUILD_METADATA_HEADER):
+	$(Q)python3 $(BUILD_METADATA_GENERATOR) --repo-root .. --output $@ --project $(PRJ) --executable $(OUT)
+
+$(VERSION_RELEASE_OBJECT) $(VERSION_DEBUG_OBJECT): $(BUILD_METADATA_HEADER) | check-build-metadata
 
 define MAKE_DEBUG_SUBMOD_RULES
 $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
@@ -754,6 +750,9 @@ clean:
 
 release: $(BIN_DIR)/$(OUT)
 	$(Q)echo "Release build completed successfully."
+
+build-metadata-regression-test:
+	$(Q)python3 $(BUILD_METADATA_REGRESSION_TEST)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."
