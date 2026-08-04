@@ -29,6 +29,8 @@
 // Primary header for this source file
 #include "version.hpp"
 
+#include "build_metadata.hpp"
+
 #include "logging.hpp"
 
 // Standard library headers

@@ -75,6 +75,8 @@ int main()
         read_text_file("/home/pi/WsprryPi/src/Makefile");
     const std::string version_source =
         read_text_file("/home/pi/WsprryPi/src/version.cpp");
+    const std::string build_metadata_generator_source =
+        read_text_file("/home/pi/WsprryPi/scripts/generate_build_metadata.py");
     const std::string version_header_source =
         read_text_file("/home/pi/WsprryPi/src/version.hpp");
     require(
@@ -660,18 +662,13 @@ int main()
             version_check_raw_branch == "version_check",
         "test fixture must model a displayed version-check branch, raw version_check branch, and matching GitHub HEAD short SHA");
     require(
-        makefile_source.find("RAW_BRH :=") != std::string::npos &&
-            makefile_source.find("BRANCH_STATE :=") != std::string::npos &&
-            makefile_source.find("git symbolic-ref --quiet --short HEAD") != std::string::npos &&
-            makefile_source.find("BRH := $(shell printf '%s\\n' \"$(RAW_BRH)\"") != std::string::npos &&
-            makefile_source.find("-DMAKE_BRH=\\\"$(BRH)\\\"") != std::string::npos &&
-            makefile_source.find("-DMAKE_RAW_BRH=\\\"$(RAW_BRH)\\\"") != std::string::npos &&
-            makefile_source.find("-DMAKE_BRANCH_STATE=\\\"$(BRANCH_STATE)\\\"") != std::string::npos &&
-            makefile_source.find("-DMAKE_COMMIT=\\\"$(FULL_COMMIT)\\\"") != std::string::npos &&
-            makefile_source.find("GIT_DIRTY :=") != std::string::npos &&
-            makefile_source.find("git rev-parse --is-inside-work-tree") != std::string::npos &&
-            makefile_source.find("git status --porcelain --untracked-files=no") != std::string::npos &&
-            makefile_source.find("-DMAKE_DIRTY=\\\"$(GIT_DIRTY)\\\"") != std::string::npos &&
+            makefile_source.find("BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp") != std::string::npos &&
+            makefile_source.find("generate_build_metadata.py") != std::string::npos &&
+            makefile_source.find("include ../scripts/build_metadata_rules.mk") != std::string::npos &&
+            build_metadata_generator_source.find("\"rev-parse\", \"--is-inside-work-tree\"") != std::string::npos &&
+            build_metadata_generator_source.find("\"symbolic-ref\", \"--quiet\", \"--short\", \"HEAD\"") != std::string::npos &&
+            build_metadata_generator_source.find("\"status\", \"--porcelain\", \"--untracked-files=no\"") != std::string::npos &&
+            version_source.find("#include \"build_metadata.hpp\"") != std::string::npos &&
             version_source.find("#define MAKE_BRANCH_STATE \"unknown\"") != std::string::npos &&
             version_source.find("constexpr std::string_view BRANCH_STATE = to_string_view(MAKE_BRANCH_STATE);") != std::string::npos &&
             version_source.find("std::string get_exe_branch_state()") != std::string::npos &&

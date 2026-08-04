@@ -102,19 +102,6 @@ SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 PRJ_RAW := $(strip $(basename $(notdir $(shell git remote get-url origin 2>/dev/null))))
 PRJ := $(if $(PRJ_RAW),$(PRJ_RAW),unknown)
 EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
-RAW_BRH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-BRANCH_STATE := $(shell if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo unknown; elif git symbolic-ref --quiet --short HEAD >/dev/null 2>&1; then echo branch; else echo detached; fi)
-BRH := $(shell printf '%s\n' "$(RAW_BRH)" | awk '{ gsub(/[^[:alnum:]]+/, "-"); sub(/-$$/, ""); print }' || echo unknown)
-RAW_TAG := $(strip $(shell git describe --tags --match "v[0-9]*" --match "[0-9]*" --abbrev=0 2>/dev/null))
-BASE_VER := $(if $(RAW_TAG),$(patsubst v%,%,$(RAW_TAG)),0.0.0)
-
-PRE := $(shell if [ "$(BRH)" != "main" ] && [ "$(BRH)" != "master" ]; then echo "-$(BRH)"; fi)
-VER := $(BASE_VER)$(PRE)
-
-COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-FULL_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-GIT_DIRTY := $(shell if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo unknown; elif [ -n "$$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then echo true; else echo false; fi)
-VER := $(shell if ! git describe --tags --exact-match >/dev/null 2>&1; then echo "$(VER)+$(COMMIT)"; else echo "$(VER)"; fi)
 
 OUT := $(strip $(EXE_NAME))
 TEST_OUT := $(strip $(EXE_NAME)_debug)
@@ -155,6 +142,20 @@ OBJ_DIR_RELEASE := build/obj/release
 OBJ_DIR_DEBUG   := build/obj/debug
 DEP_DIR         := build/dep
 BIN_DIR         := build/bin
+BUILD_METADATA_DIR := build/generated
+BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp
+BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
+BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
+BUILD_METADATA_MAKE_REGRESSION_TEST := ../scripts/tests/build_metadata_make_regression_test.py
+BUILD_METADATA_REPO_ROOT := ..
+BUILD_METADATA_PROJECT := $(PRJ)
+BUILD_METADATA_EXECUTABLE := $(OUT)
+VERSION_RELEASE_OBJECT := $(OBJ_DIR_RELEASE)/./version.o
+VERSION_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./version.o
+
+.DEFAULT_GOAL := release
+
+include ../scripts/build_metadata_rules.mk
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source discovery (C++ only)
@@ -405,18 +406,9 @@ CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
 
 # Include paths
 CXXFLAGS += -I$(abspath .)
+CXXFLAGS += -I$(abspath $(BUILD_METADATA_DIR))
 CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
 CXXFLAGS += -I$(abspath ./WSPR-Reference/src/wspr)
-
-# Build metadata defines
-CXXFLAGS += -DMAKE_TAG=\"$(VER)\" \
-            -DMAKE_BRH=\"$(BRH)\" \
-            -DMAKE_RAW_BRH=\"$(RAW_BRH)\" \
-            -DMAKE_BRANCH_STATE=\"$(BRANCH_STATE)\" \
-            -DMAKE_COMMIT=\"$(FULL_COMMIT)\" \
-            -DMAKE_DIRTY=\"$(GIT_DIRTY)\" \
-            -DMAKE_EXE=\"$(OUT)\" \
-            -DMAKE_PRJ=\"$(PRJ)\"
 
 # Debug/release variants
 CXX_DEBUG_FLAGS   := $(CXXFLAGS) -g $(DEBUG_DEFS)
@@ -743,7 +735,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean release debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -753,7 +745,16 @@ clean:
 	$(Q)$(SUDO) rm -rf ../executables
 
 release: $(BIN_DIR)/$(OUT)
+
+ifeq ($(BUILD_METADATA_QUERY),)
 	$(Q)echo "Release build completed successfully."
+endif
+
+build-metadata-regression-test:
+	$(Q)python3 $(BUILD_METADATA_REGRESSION_TEST)
+
+build-metadata-make-regression-test:
+	$(Q)python3 $(BUILD_METADATA_MAKE_REGRESSION_TEST)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."
