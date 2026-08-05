@@ -156,6 +156,7 @@ static void commit_band_gpio_snapshot_to_request(
 static void commit_execution_request(
     const wsprrypi::TransmissionRequest &controller_request,
     const TransmissionRequest &legacy_request);
+static void clear_committed_execution_request() noexcept;
 static bool refresh_committed_band_gpio_selection() noexcept;
 static void assert_transmit_gpio_outputs(const char *context) noexcept;
 static void deassert_transmit_gpio_outputs(
@@ -275,6 +276,17 @@ std::atomic<bool> shutdown_flag{false};
  * test tone mode so that the original mode can be restored later.
  */
 ModeType lastMode;
+
+enum class TestToneRestorationOwner
+{
+    Unknown,
+    WsprScheduler,
+    DirectToneStartup,
+    ManagedIdleNonWspr,
+};
+
+TestToneRestorationOwner test_tone_restoration_owner =
+    TestToneRestorationOwner::Unknown;
 
 /**
  * @brief Flag indicating if a web-triggered test tone is active.
@@ -1161,6 +1173,22 @@ static void commit_execution_request(
     }
 
     wsprTransmitter.configureExecution(controller_request, current_transmission_request);
+}
+
+/**
+ * @brief Clear scheduler-owned execution snapshots after a completed stop.
+ *
+ * The transmitter owns a separate execution snapshot.  It is cleared by
+ * WsprTransmitter::clearExecutionStateAfterStop(); the scheduler must also
+ * discard its committed request so a completed transient Test Tone cannot be
+ * reported or reused as live work.
+ */
+static void clear_committed_execution_request() noexcept
+{
+    current_transmission_request = TransmissionRequest{};
+    current_controller_request_for_test_storage.reset();
+    committed_execution_route_for_test_storage =
+        CommittedExecutionRouteForTest::NONE;
 }
 
 static bool resolve_qrss_runtime_request(
@@ -3448,10 +3476,35 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         explicit_selector_plan = selector_plan.plan;
     }
 
+    // Capture restoration ownership before Test Tone changes config.mode.  A
+    // managed, transmit-disabled non-WSPR mode is idle configuration, not a
+    // transient direct-tone startup request.
+    TestToneRestorationOwner restoration_owner = TestToneRestorationOwner::Unknown;
+    if (config.mode == ModeType::WSPR)
+    {
+        restoration_owner = TestToneRestorationOwner::WsprScheduler;
+    }
+    else
+    {
+        WsprFrequencyEntry startup_entry;
+        double startup_rf_frequency_hz = 0.0;
+        if (try_get_direct_tone_startup_request(startup_entry, startup_rf_frequency_hz))
+        {
+            restoration_owner = TestToneRestorationOwner::DirectToneStartup;
+        }
+        else if (config.use_ini && !runtime_transmit_enabled(config) &&
+                 (config.mode == ModeType::FSKCW || config.mode == ModeType::QRSS ||
+                  config.mode == ModeType::DFCW))
+        {
+            restoration_owner = TestToneRestorationOwner::ManagedIdleNonWspr;
+        }
+    }
+
     web_test_tone.store(true);
 
     // Save previous mode so we can restore it later.
     lastMode = config.mode;
+    test_tone_restoration_owner = restoration_owner;
 
     wsprTransmitter.stopAndJoin();
 
@@ -3544,6 +3597,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
     {
         web_test_tone.store(false);
         config.mode = lastMode;
+        test_tone_restoration_owner = TestToneRestorationOwner::Unknown;
         result.message = "Unable to prepare the requested band selector.";
         return result;
     }
@@ -3609,6 +3663,7 @@ TestToneStopResult end_test_tone()
         "test tone stop",
         true,
         true);
+    clear_committed_execution_request();
     llog.logS(
         DEBUG,
         "Post-test-tone stop transmitter snapshot: ",
@@ -3618,11 +3673,18 @@ TestToneStopResult end_test_tone()
     const bool deferred_reload_pending =
         ini_reload_pending.load(std::memory_order_acquire);
 
+    const TestToneRestorationOwner restoration_owner = test_tone_restoration_owner;
+    test_tone_restoration_owner = TestToneRestorationOwner::Unknown;
     web_test_tone.store(false);
     config.mode = lastMode;
 
-    if (config.mode == ModeType::WSPR)
+    if (restoration_owner == TestToneRestorationOwner::WsprScheduler)
     {
+        if (config.mode != ModeType::WSPR)
+        {
+            result.message = "Inconsistent Test Tone scheduler restoration state.";
+            return result;
+        }
         if (!set_config(true))
         {
             result.message = "Unable to restore scheduler state after test tone stop.";
@@ -3644,6 +3706,27 @@ TestToneStopResult end_test_tone()
             deferred_reload_pending &&
             !ini_reload_pending.load(std::memory_order_acquire);
         result.message = "Test tone stopped and scheduler restored.";
+        return result;
+    }
+
+    if (restoration_owner == TestToneRestorationOwner::ManagedIdleNonWspr)
+    {
+        if (!(config.use_ini && !runtime_transmit_enabled(config) &&
+              (config.mode == ModeType::FSKCW || config.mode == ModeType::QRSS ||
+               config.mode == ModeType::DFCW)))
+        {
+            result.message = "Inconsistent managed Test Tone restoration state.";
+            return result;
+        }
+
+        result.stopped = true;
+        result.message = "Test tone stopped; managed mode restored inactive.";
+        return result;
+    }
+
+    if (restoration_owner != TestToneRestorationOwner::DirectToneStartup)
+    {
+        result.message = "Unknown Test Tone restoration state after safe cleanup.";
         return result;
     }
 

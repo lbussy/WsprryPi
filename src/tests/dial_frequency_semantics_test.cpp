@@ -6170,7 +6170,9 @@ int main(int argc, char *argv[])
                 "explicit 20m tone must commit canonical dial plus offset once");
         require(!request.selector_gpio_enabled,
                 "different-band first-entry selector must not be inherited");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "explicit 20m Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6189,7 +6191,9 @@ int main(int argc, char *argv[])
         require(started.started && nearly_equal(request.dial_frequency_hz, 13551500.0) &&
                     nearly_equal(request.actual_rf_frequency_hz, 13553000.0),
                 "explicit 22m tone must commit canonical dial plus 1500 Hz offset");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "explicit 22m Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6212,7 +6216,9 @@ int main(int argc, char *argv[])
                     nearly_equal(request.applied_offset_hz, 2750.0) &&
                     started.audio_offset_hz == 2750U,
                 "one published snapshot must supply explicit RF and committed offset metadata");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "snapshot-backed explicit Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6233,7 +6239,9 @@ int main(int argc, char *argv[])
                     nearly_equal(request.dial_frequency_hz, static_cast<double>(custom_rf_hz)) &&
                     started.band == "20m",
                 "explicit custom RF must remain exact and resolve 20m without a WSPR offset");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "explicit custom-RF Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6254,7 +6262,9 @@ int main(int argc, char *argv[])
                     !started.selector_gpio_active_high &&
                     request.selector_band == HamBand::BAND_20M,
                 "matching same-band active-low selector metadata must match the committed RF-band request");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "selector-backed explicit Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6278,7 +6288,9 @@ int main(int argc, char *argv[])
                     started.selector_gpio_active_high &&
                     request.selector_band == HamBand::BAND_20M,
                 "active-high metadata must come from the committed selected-band fallback, not a different-band selector");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "fallback-selector explicit Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6296,7 +6308,9 @@ int main(int argc, char *argv[])
         require(started.started && !request.selector_gpio_enabled &&
                     !started.selector_gpio_active_high,
                 "selector-disabled Test Tone metadata must remain neutral");
-        end_test_tone();
+        const TestToneStopResult stopped = end_test_tone();
+        require(stopped.tone_was_active && stopped.stopped,
+                "selector-disabled explicit Test Tone End must succeed");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6397,6 +6411,132 @@ int main(int argc, char *argv[])
                 "explicit custom-RF request must reject before planning, selector preparation, Test Tone activation, or request mutation while schedule is enabled");
 
         wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    // Managed INI CW modes are idle owners, never implicit CLI direct tones.
+    const std::array<std::pair<ModeType, TestToneRequest>, 5> managed_idle_cases{{
+        {ModeType::FSKCW, {TestToneFrequencySource::WsprBand, "20m", std::nullopt}},
+        {ModeType::FSKCW, {TestToneFrequencySource::CustomRf, "", 14097123U}},
+        {ModeType::QRSS, {TestToneFrequencySource::WsprBand, "20m", std::nullopt}},
+        {ModeType::DFCW, {TestToneFrequencySource::WsprBand, "20m", std::nullopt}},
+        {ModeType::FSKCW, {TestToneFrequencySource::LegacyExactRf, "", 14097123U}},
+    }};
+    for (const auto &[prior_mode, request] : managed_idle_cases)
+    {
+        init_default_config();
+        clear_direct_tone_startup_request();
+        reset_current_transmission_request_for_test();
+        reset_committed_execution_route_for_test();
+        reset_band_gpio_prepare_call_count_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.use_ini = true;
+        config.transmit = false;
+        config.mode = prior_mode;
+        config.frequencies = "20m";
+        config.wspr.audio_offset_hz = 1500.0;
+        set_frequencies(config);
+        copy_runtime_config(config, config);
+        const WsprTransmitter::State state_before_start =
+            wsprTransmitter.getState();
+        const TestToneStartResult start = start_test_tone(request);
+        const WsprTransmitter::State state_after_suppressed_start =
+            wsprTransmitter.getState();
+        const TransmissionRequest committed = current_transmission_request_for_test();
+        const TestToneStopResult stop = end_test_tone();
+        const TransmissionRequest cleared = current_transmission_request_for_test();
+        const std::size_t prepares = band_gpio_prepare_call_count_for_test();
+        BandGPIOConfig selector_config;
+        std::string selector_band;
+        const bool selector_active = current_band_gpio_selection_for_test(
+            selector_config,
+            selector_band);
+        const ModeType mode_after_first_end = config.mode;
+        const WsprTransmitter::State state_after_first_end =
+            wsprTransmitter.getState();
+        const bool direct_tone_after_first_end =
+            has_direct_tone_startup_request();
+        const TestToneStopResult repeated = end_test_tone();
+        require(start.started && committed.mode == TransmissionMode::TONE,
+                "managed idle non-WSPR Test Tone must start and commit a tone request");
+        require(state_before_start == WsprTransmitter::State::DISABLED &&
+                    state_after_suppressed_start == WsprTransmitter::State::DISABLED,
+                "suppressed managed idle Test Tone setup must leave the transmitter disabled before End cleanup");
+        require(stop.tone_was_active && stop.stopped,
+                "managed idle non-WSPR Test Tone End must report a successful active stop");
+        require(config.mode == prior_mode && !config.transmit,
+                "managed idle non-WSPR Test Tone End must restore the inactive managed mode");
+        require(state_after_first_end == WsprTransmitter::State::DISABLED,
+                "managed idle non-WSPR Test Tone End must leave the transmitter disabled");
+        require(cleared.actual_rf_frequency_hz == 0.0,
+                "managed idle non-WSPR Test Tone End must clear committed execution state");
+        require(!selector_active && prepares <= 1U,
+                "managed idle non-WSPR Test Tone must leave the disabled selector neutral without a restart");
+        require(!direct_tone_after_first_end,
+                "managed idle non-WSPR Test Tone must not create or consume a direct-tone startup request");
+        require(!repeated.tone_was_active && !repeated.stopped &&
+                    config.mode == mode_after_first_end &&
+                    wsprTransmitter.getState() == state_after_first_end &&
+                    current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
+                    band_gpio_prepare_call_count_for_test() == prepares &&
+                    has_direct_tone_startup_request() == direct_tone_after_first_end,
+                "managed idle non-WSPR Test Tone repeated End must remain inert");
+        if (request.source == TestToneFrequencySource::WsprBand)
+            require(nearly_equal(committed.dial_frequency_hz, 14095600.0) &&
+                        nearly_equal(committed.actual_rf_frequency_hz, 14097100.0),
+                    "managed explicit 20m Test Tone must use dial plus 1500 Hz once");
+        if (request.source == TestToneFrequencySource::CustomRf ||
+            request.source == TestToneFrequencySource::LegacyExactRf)
+            require(nearly_equal(committed.actual_rf_frequency_hz, 14097123.0),
+                    "managed exact-RF Test Tone must not apply WSPR offset");
+        clear_direct_tone_startup_request();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        clear_direct_tone_startup_request();
+        reset_current_transmission_request_for_test();
+        reset_committed_execution_route_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.use_ini = false;
+        config.transmit = true;
+        config.mode = ModeType::TONE;
+        require(set_direct_tone_startup_request("730000"),
+                "CLI direct-tone restoration setup must create the production startup request");
+        set_startup_quiesce_invoker_for_test(
+            []()
+            {
+                return wsprrypi::StartupQuiesceResult{
+                    false,
+                    "direct-tone restoration regression inhibition"};
+            });
+        require(!run_startup_quiesce_gate_for_test(config) &&
+                    startup_quiesce_inhibited_for_test(),
+                "CLI direct-tone restoration setup must use the production startup inhibition path");
+        copy_runtime_config(config, config);
+
+        const TestToneStartResult start = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "20m", std::nullopt});
+        require(start.started,
+                "CLI direct-tone restoration regression must begin the web Test Tone");
+        reset_startup_quiesce_for_test();
+        const TestToneStopResult stop = end_test_tone();
+        const TransmissionRequest restored = current_transmission_request_for_test();
+        WsprFrequencyEntry startup_entry;
+        double startup_rf_hz = 0.0;
+        const bool startup_request_preserved =
+            try_get_direct_tone_startup_request(startup_entry, startup_rf_hz);
+
+        require(start.started && stop.tone_was_active && stop.stopped &&
+                    config.mode == ModeType::TONE &&
+                    startup_request_preserved && nearly_equal(startup_rf_hz, 730000.0) &&
+                    restored.mode == TransmissionMode::TONE &&
+                    nearly_equal(restored.actual_rf_frequency_hz, 730000.0),
+                "a genuine CLI direct-tone startup request must restore through the direct-tone path");
+        clear_direct_tone_startup_request();
+        reset_startup_quiesce_for_test();
+        reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(false);
     }
 
