@@ -267,15 +267,17 @@ int main()
         "UI save path must use canonical GPIO.Use NTP only");
     require(
         ui_source.find("const CONFIG_AUTOSAVE_DELAY_MS = 800;") != std::string::npos &&
-            ui_source.find("function buildConfigPayload()") != std::string::npos &&
+            ui_source.find("function buildConfigPayload(options = {})") != std::string::npos &&
             ui_source.find("function scheduleAutosave()") != std::string::npos &&
             ui_source.find("function flushAutosave()") != std::string::npos &&
             ui_source.find("payloadJson === lastSavedConfigPayload") != std::string::npos &&
             ui_source.find("payloadJson === lastFailedConfigPayload") != std::string::npos &&
             ui_source.find("Suppressing autosave retry for unchanged rejected payload.") != std::string::npos &&
-            ui_source.find("setConfigSaveStatus(\"saved\", \"Saved\", \"\");") != std::string::npos &&
+            ui_source.find("persistedStationIdentity") != std::string::npos &&
+            ui_source.find("setInvalidIdentitySaveStatus(\"Other changes saved\");") != std::string::npos &&
+            ui_source.find("setInvalidIdentitySaveStatus(\"Identity change not saved\");") != std::string::npos &&
             ui_source.find("configAutosavePendingAfterFlight") != std::string::npos,
-        "configuration autosave must debounce saves, clear stale invalid state for already-saved payloads, suppress unchanged failed payload retries, and suppress duplicate writes");
+        "configuration autosave must debounce saves, preserve persisted station identity for unrelated changes, report unsaved identity drafts accurately, suppress unchanged failed payload retries, and suppress duplicate writes");
     require(
         ui_source.find("function validateCwMessage()") != std::string::npos &&
             ui_source.find("function validateCwDotSeconds()") != std::string::npos &&
