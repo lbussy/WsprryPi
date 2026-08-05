@@ -499,6 +499,23 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         reply["status"] = "error";
         reply["error"] = "invalid JSON";
     }
+    catch (const std::exception &e)
+    {
+        llog.logE(
+            ERROR,
+            "WebSocket command failed in handleMessage: " +
+                std::string(e.what()));
+        reply["status"] = "error";
+        reply["error"] = "command failure";
+        reply["message"] = "Unable to process the command.";
+    }
+    catch (...)
+    {
+        llog.logE(ERROR, "Unknown WebSocket command failure in handleMessage.");
+        reply["status"] = "error";
+        reply["error"] = "command failure";
+        reply["message"] = "Unable to process the command.";
+    }
 
     // Send the JSON‐formatted reply
     sendJSON(reply);
@@ -930,6 +947,8 @@ void WebSocketServer::clientLoop(int client_fd)
     char buf[1024];
     bool connection_open = true;
 
+    try
+    {
     while (running_ && connection_open)
     {
         ssize_t bytes = recv(client_fd, buf, sizeof(buf), 0);
@@ -986,6 +1005,18 @@ void WebSocketServer::clientLoop(int client_fd)
                           "from fd: ", client_fd);
             }
         }
+    }
+    }
+    catch (const std::exception &error)
+    {
+        llog.logE(
+            ERROR,
+            "WebSocket client handler failed: " +
+                std::string(error.what()));
+    }
+    catch (...)
+    {
+        llog.logE(ERROR, "Unknown WebSocket client handler failure.");
     }
 
     llog.logS(DEBUG, "Client handler thread exiting for fd: ", client_fd);

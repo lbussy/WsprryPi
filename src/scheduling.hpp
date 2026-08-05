@@ -422,6 +422,9 @@ void set_current_transmission_request_for_test(
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test();
 void reset_current_transmission_request_for_test() noexcept;
 void reset_current_controller_request_for_test() noexcept;
+using TestToneCommitInvokerForTest = std::function<void()>;
+void set_test_tone_commit_invoker_for_test(TestToneCommitInvokerForTest invoker);
+void reset_test_tone_commit_invoker_for_test() noexcept;
 
 using StartupQuiesceInvokerForTest =
     std::function<wsprrypi::StartupQuiesceResult()>;

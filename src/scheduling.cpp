@@ -299,6 +299,7 @@ std::atomic<bool> shutdown_after_current_transmission{false};
 std::atomic<bool> shutdown_after_wspr_plan{false};
 static bool managed_reload_tx_inhibited = false;
 static bool suppress_scheduler_execution_for_test = false;
+static TestToneCommitInvokerForTest test_tone_commit_invoker_for_test{};
 static std::atomic<std::uint64_t> non_wspr_schedule_generation{0};
 
 std::uint64_t non_wspr_schedule_generation_for_test() noexcept
@@ -1106,6 +1107,11 @@ static void commit_execution_request(
         current_controller_request_for_test_storage = controller_request;
         committed_execution_route_for_test_storage =
             CommittedExecutionRouteForTest::CONTROLLER_TONE;
+
+        if (test_tone_commit_invoker_for_test)
+        {
+            test_tone_commit_invoker_for_test();
+        }
 
         if (suppress_scheduler_execution_for_test)
         {
@@ -3407,6 +3413,44 @@ void reboot_system()
  * frequency and does not receive WSPR dial-frequency offset. Tone mode here is
  * runtime-only behavior.
  */
+static void rollback_failed_test_tone_start(ModeType previous_mode) noexcept
+{
+    try
+    {
+        wsprTransmitter.stopAndJoin();
+        wsprTransmitter.clearExecutionStateAfterStop();
+        finalize_transmission_stop_cleanup(
+            &config,
+            false,
+            "test tone start rejection",
+            true,
+            true);
+    }
+    catch (const std::exception &error)
+    {
+        llog.logE(
+            ERROR,
+            "Test tone rejection cleanup failed: " +
+                std::string(error.what()));
+    }
+    catch (...)
+    {
+        llog.logE(ERROR, "Test tone rejection cleanup failed.");
+    }
+
+    (void)reconcile_tx_led_after_transmitter_stop(
+        "test tone start rejection");
+    current_transmission_request = TransmissionRequest{};
+    current_controller_request_for_test_storage.reset();
+    committed_execution_route_for_test_storage =
+        CommittedExecutionRouteForTest::NONE;
+    current_dial_frequency = 0.0;
+    current_frequency_entry = WsprFrequencyEntry{};
+    web_test_tone.store(false);
+    config.mode = previous_mode;
+    test_tone_restoration_owner = TestToneRestorationOwner::Unknown;
+}
+
 TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
 {
     TestToneStartResult result;
@@ -3506,6 +3550,8 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
     lastMode = config.mode;
     test_tone_restoration_owner = restoration_owner;
 
+    try
+    {
     wsprTransmitter.stopAndJoin();
 
     ArgParserConfig selector_preparation_cfg;
@@ -3623,6 +3669,28 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
     result.started = true;
     result.message = "Test tone started.";
     return result;
+    }
+    catch (const std::exception &error)
+    {
+        const std::string detail = error.what();
+        llog.logE(
+            ERROR,
+            "Test tone start rejected during configuration: " + detail);
+        rollback_failed_test_tone_start(lastMode);
+        result.message = detail.empty()
+            ? "Unable to configure the requested test tone."
+            : detail;
+        return result;
+    }
+    catch (...)
+    {
+        llog.logE(
+            ERROR,
+            "Test tone start rejected by an unknown configuration error.");
+        rollback_failed_test_tone_start(lastMode);
+        result.message = "Unable to configure the requested test tone.";
+        return result;
+    }
 }
 
 TestToneStartResult start_test_tone(
@@ -5700,6 +5768,17 @@ void reset_current_transmission_request_for_test() noexcept
 void reset_current_controller_request_for_test() noexcept
 {
     current_controller_request_for_test_storage.reset();
+}
+
+void set_test_tone_commit_invoker_for_test(
+    TestToneCommitInvokerForTest invoker)
+{
+    test_tone_commit_invoker_for_test = std::move(invoker);
+}
+
+void reset_test_tone_commit_invoker_for_test() noexcept
+{
+    test_tone_commit_invoker_for_test = {};
 }
 
 void set_startup_quiesce_invoker_for_test(StartupQuiesceInvokerForTest invoker)
