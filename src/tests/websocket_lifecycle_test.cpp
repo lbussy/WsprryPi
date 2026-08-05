@@ -11,6 +11,16 @@
 #include <unistd.h>
 
 class WebSocketLifecycleTest {
+    static void send_text(int fd, const std::string &text) {
+        assert(text.size() < 126U);
+        std::string frame;
+        frame.push_back(static_cast<char>(0x81));
+        frame.push_back(static_cast<char>(0x80U | text.size()));
+        const unsigned char mask[4]={1,2,3,4};
+        frame.append(reinterpret_cast<const char *>(mask),4);
+        for(std::size_t i=0;i<text.size();++i) frame.push_back(static_cast<char>(text[i]^mask[i%4]));
+        assert(send(fd,frame.data(),frame.size(),0)==static_cast<ssize_t>(frame.size()));
+    }
     static int connect_client(unsigned short port) {
         int fd=socket(AF_INET,SOCK_STREAM,0); assert(fd>=0);
         sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(port); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
@@ -59,6 +69,8 @@ public:
         assert(wait_handshake(s)); std::thread incomplete_stopper([&]{s.stop();}); incomplete_stopper.join(); close(raw);
         assert(s.active_client_handlers_==0 && s.client_sockets_.empty());
         assert(s.start(p,0));
+        int invalid=connect_client(p); send_text(invalid,"{\"command\":42}"); char response[512]{}; auto response_size=recv(invalid,response,sizeof(response),0); assert(response_size>0); assert(std::string(response,response_size).find("command failure")!=std::string::npos); close(invalid); assert(wait_zero(s));
+        int survivor=connect_client(p); close(survivor); assert(wait_zero(s));
         for(int i=0;i<8;++i) { int fd=connect_client(p); const unsigned char close_frame[]={0x88,0x80,0,0,0,0}; send(fd,close_frame,sizeof(close_frame),0); close(fd); assert(wait_zero(s)); }
         for(int i=0;i<8;++i) { int fd=connect_client(p); close(fd); assert(wait_zero(s)); }
         int blocked=connect_client(p); std::thread stopper([&]{s.stop();}); stopper.join(); close(blocked);

@@ -6414,6 +6414,47 @@ int main(int argc, char *argv[])
         set_scheduler_execution_suppressed_for_test(false);
     }
 
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        reset_current_controller_request_for_test();
+        reset_committed_execution_route_for_test();
+        reset_tx_led_request_counts_for_test();
+        set_scheduler_execution_suppressed_for_test(false);
+        config.mode = ModeType::QRSS;
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::SI5351;
+        config.frequencies = "20m";
+        set_frequencies(config);
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
+        set_test_tone_commit_invoker_for_test([] {
+            throw std::runtime_error(
+                "Si5351 planner produced unusable frequency data for tone 0.");
+        });
+
+        const TestToneStartResult rejected = start_test_tone(
+            TestToneRequest{
+                TestToneFrequencySource::CustomRf,
+                "",
+                144490500U});
+        reset_test_tone_commit_invoker_for_test();
+        const TestToneStopResult inactive_stop = end_test_tone();
+
+        require(
+            !rejected.started &&
+                rejected.message.find("Si5351 planner produced unusable") !=
+                    std::string::npos &&
+                config.mode == ModeType::QRSS &&
+                !inactive_stop.tone_was_active &&
+                current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
+                !current_controller_request_for_test().has_value() &&
+                committed_execution_route_for_test() ==
+                    CommittedExecutionRouteForTest::NONE &&
+                wsprTransmitter.getState() == WsprTransmitter::State::DISABLED &&
+                !tx_led_active_for_test(),
+            "synchronous test tone configuration failure must reject with its diagnostic and restore inactive runtime state");
+    }
+
     // Managed INI CW modes are idle owners, never implicit CLI direct tones.
     const std::array<std::pair<ModeType, TestToneRequest>, 5> managed_idle_cases{{
         {ModeType::FSKCW, {TestToneFrequencySource::WsprBand, "20m", std::nullopt}},
