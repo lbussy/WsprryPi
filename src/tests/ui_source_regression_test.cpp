@@ -1315,6 +1315,12 @@ int main()
             config_view_source.find("class=\"form-select config-planner-field__select\"") == std::string::npos,
         "WSPR transmission settings must keep TX dBm as a fixed-value select and expose planner_preference in the WSPR planning controls");
     require(
+        ui_stylesheet_source.find("@media (max-width: 991.98px) {\n    .config-wspr-top-row,\n    .config-wspr-secondary-row {\n        grid-template-columns: minmax(0, 1fr);") != std::string::npos &&
+            ui_stylesheet_source.find(".config-wspr-top-row .form-label,\n    .config-wspr-secondary-row .form-label {\n        white-space: normal;") != std::string::npos &&
+            ui_stylesheet_source.find(".config-wspr-top-row__field--toggle {\n        min-height: 0;") != std::string::npos &&
+            ui_stylesheet_source.find(".config-wspr-top-row__toggle") == std::string::npos,
+        "WSPR transmission-plan rows must stack in one column with wrap-safe labels at the established narrow breakpoint");
+    require(
         config_view_source.find("id=\"fsk_offset\"") != std::string::npos &&
             config_view_source.find("value=\"5\"") != std::string::npos &&
             config_view_source.find("id=\"dot_length\"") != std::string::npos &&
