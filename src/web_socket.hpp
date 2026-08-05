@@ -135,6 +135,7 @@ private:
     bool client_registration_closed_{false};
     std::condition_variable client_handlers_cv_;
     std::mutex stop_mutex_;
+    std::mutex test_tone_command_mutex_;
 
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop
     std::mutex keep_alive_mutex_;           ///< Mutex to control loop break

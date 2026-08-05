@@ -69,6 +69,8 @@ int main()
 {
     const std::string websocket_source =
         read_text_file("/home/pi/WsprryPi/src/web_socket.cpp");
+    const std::string websocket_header_source =
+        read_text_file("/home/pi/WsprryPi/src/web_socket.hpp");
     const std::string web_server_source =
         read_text_file("/home/pi/WsprryPi/src/web_server.cpp");
     const std::string makefile_source =
@@ -84,6 +86,14 @@ int main()
             websocket_source.find("stop_transmission_by_user_request(persist_transmit);") !=
                 std::string::npos,
         "websocket stop command must route through stop_transmission_by_user_request() with persistence control");
+    require(
+        websocket_header_source.find("std::mutex test_tone_command_mutex_;") !=
+                std::string::npos &&
+            websocket_source.find("if (cmd == \"tone_start\" || cmd == \"tone_end\")") !=
+                std::string::npos &&
+            websocket_source.find("std::unique_lock<std::mutex>(test_tone_command_mutex_)") !=
+                std::string::npos,
+        "websocket Test Tone Start and End commands must share one transaction lock through their broadcast reply");
 
     const std::string scheduling_source =
         read_text_file("/home/pi/WsprryPi/src/scheduling.cpp");
