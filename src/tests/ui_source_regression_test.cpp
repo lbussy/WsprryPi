@@ -697,7 +697,7 @@ int main()
             web_server_source.find("j[\"wspr_build_dirty_state\"] = build_dirty_metadata(get_exe_build_dirty());") != std::string::npos,
         "build metadata must pass sanitized MAKE_BRH for display, raw MAKE_RAW_BRH and branch-state for update lookup, full commit and build-time dirty state to version.cpp, and expose structured version, branch, commit, and dirty metadata in /version");
     require(
-        site_source.find("const UPDATE_CHECK_CACHE_SCHEMA_VERSION = 6;") != std::string::npos &&
+        site_source.find("const UPDATE_CHECK_CACHE_SCHEMA_VERSION = 7;") != std::string::npos &&
             site_source.find("function updateCheckShaMatches(currentSha, targetHeadSha)") != std::string::npos &&
             site_source.find("return normalizedHead.startsWith(normalizedCurrent);") != std::string::npos &&
             site_source.find("function updateCheckNoUpdateResult()") != std::string::npos &&
@@ -708,7 +708,8 @@ int main()
             site_source.find("? updateCheckCommitComparisonResult(versionInfo.currentSha, selectedBranch.headSha, \"identical\")") != std::string::npos &&
             site_source.find(": await compareGithubCommits(versionInfo.currentSha, selectedBranch.headSha)") != std::string::npos &&
             site_source.find("if (error.status === 404)") != std::string::npos &&
-            site_source.find("updateAvailable: !updateCheckShaMatches(currentSha, headSha)") != std::string::npos &&
+            site_source.find("updateAvailable: !updateCheckShaMatches(currentSha, headSha)") == std::string::npos &&
+            site_source.find("\"comparison_unavailable\",") != std::string::npos &&
             site_source.find("throw error;") != std::string::npos &&
             site_source.find("completed:") == std::string::npos &&
             site_source.find("currentShaLabel") == std::string::npos,
@@ -832,6 +833,8 @@ int main()
             site_source.find("rate_limited: \"Update check failed: GitHub API rate limit reached.\"") != std::string::npos &&
             site_source.find("network: \"Update check failed: GitHub could not be reached.\"") != std::string::npos &&
             site_source.find("malformed_response: \"Update check failed: GitHub returned malformed update data.\"") != std::string::npos &&
+            site_source.find("comparison_unavailable: \"Update check failed: GitHub could not establish the update relationship.\"") != std::string::npos &&
+            site_source.find("unsafe_target: \"Update check failed: no trustworthy update target could be established.\"") != std::string::npos &&
             site_source.find("detached_target_unknown: \"Update check failed: detached or unknown branch state has no safe update target.\"") != std::string::npos &&
             site_source.find("function buildUpdateCheckFailure(code, detail = \"\")") != std::string::npos &&
             site_source.find("function normalizeUpdateCheckFailure(error)") != std::string::npos &&
@@ -861,6 +864,8 @@ int main()
             site_source.find("Local build has modifications. No remote update is being shown.") != std::string::npos &&
             site_source.find("result?.versionComparisonStatus === \"local_ahead\"") != std::string::npos &&
             site_source.find("Local build is newer than the selected remote version. No update is available.") != std::string::npos &&
+            site_source.find("result?.versionComparisonStatus === \"diverged\"") != std::string::npos &&
+            site_source.find("Local and selected branch histories have diverged. No safe branch update is available.") != std::string::npos &&
             site_source.find("function markWsprryPiLocalUpdateState(result)") != std::string::npos &&
             site_source.find("clearWsprryPiUpdateFooter();\n        return;") != std::string::npos &&
             site_source.find("versionElement.classList.remove(\"update-available\");\n        versionElement.classList.remove(\"update-check-failed\");\n        versionElement.title = title;") != std::string::npos &&
@@ -923,7 +928,8 @@ int main()
             site_source.find("function renderUpdateCheckPanelTitle(elements, result = null, overrideText = \"\")") != std::string::npos &&
             site_source.find("title: document.getElementById(\"updateCheckPanelTitle\"),") != std::string::npos &&
             site_source.find("return \"You are on the current version\";") != std::string::npos &&
-            site_source.find("return \"An update is available\";") != std::string::npos &&
+            site_source.find(": \"An update is available\";") != std::string::npos &&
+            site_source.find("? \"A newer branch build is available\"") != std::string::npos &&
             site_source.find("return \"Local build has modifications\";") != std::string::npos &&
             site_source.find("return \"Local build is newer than the latest published version\";") != std::string::npos &&
             site_source.find("elements.title.appendChild(document.createTextNode(\"An update is available: \"));") != std::string::npos &&
@@ -967,6 +973,8 @@ int main()
             site_source.find("Technical details ▼") != std::string::npos &&
             site_source.find("Technical details ▲") != std::string::npos &&
             site_source.find("A newer version is available.") != std::string::npos &&
+            site_source.find("A newer branch build is available.") != std::string::npos &&
+            site_source.find("This build and the selected branch have diverged.") != std::string::npos &&
             site_source.find("You are running the latest version.") != std::string::npos &&
             site_source.find("This build includes local modifications.") != std::string::npos &&
             site_source.find("This build is newer than the latest published version.") != std::string::npos &&
@@ -1015,6 +1023,8 @@ int main()
             site_source.find("if (status === \"ahead\" || status === \"diverged\")") == std::string::npos &&
             site_source.find("function selectedUpdateBranch(branchInfo, reason, fallbackUsed = false)") != std::string::npos &&
             site_source.find("selectionReason: reason") != std::string::npos &&
+            site_source.find("async function selectContainedFallbackBranch(versionInfo, branchInfo, reason)") != std::string::npos &&
+            site_source.find("The running commit is not proven reachable from upstream") != std::string::npos &&
             site_source.find("async function selectGithubUpdateBranch(versionInfo)") != std::string::npos &&
             site_source.find("const currentBranch = versionInfo.currentBranch;") != std::string::npos &&
             site_source.find("Rule 1: local main tracks upstream main directly.") != std::string::npos &&
@@ -1030,7 +1040,7 @@ int main()
             site_source.find("current SHA is not reachable from main") != std::string::npos &&
             site_source.find("main containment probe failed") != std::string::npos &&
             site_source.find("Update check local devel target remains upstream devel.") != std::string::npos &&
-            site_source.find("upstream devel missing; explicit fallback to upstream main") != std::string::npos &&
+            site_source.find("upstream devel missing; containment-gated fallback to upstream main") != std::string::npos &&
             site_source.find("local devel commit reachable from upstream main") != std::string::npos &&
             site_source.find("selectedUpdateBranch(develBranch, \"local devel targets upstream devel\")") != std::string::npos &&
             site_source.find("Rule 3: feature and release local branches target the same-name upstream") != std::string::npos &&
@@ -1038,20 +1048,28 @@ int main()
             site_source.find("await lookupGithubBranch(currentBranch),") != std::string::npos &&
             site_source.find("local branch targets same-name upstream branch") != std::string::npos &&
             site_source.find("Rule 4: if a non-main/non-devel branch is missing upstream,") != std::string::npos &&
-            site_source.find("missing; explicit fallback to upstream devel") != std::string::npos &&
-            site_source.find("missing branch alone does not imply an update") != std::string::npos &&
+            site_source.find("missing; containment-gated fallback to upstream devel") != std::string::npos &&
+            site_source.find("Missing branch or differing SHA") != std::string::npos &&
             site_source.find("fallbackUsed: selectedBranch.fallbackUsed === true,") != std::string::npos &&
             site_source.find("selectionReason: selectedBranch.selectionReason || \"\"") != std::string::npos &&
             site_source.find("? { updateAvailable: true }") == std::string::npos &&
             site_source.find("const selectedBranch = await selectGithubUpdateBranch(versionInfo);") != std::string::npos &&
             site_source.find("reason=${result.selectionReason || \"unspecified\"}") != std::string::npos,
-        "update checker must target upstream main for local main, target upstream devel by default for local devel, switch devel to main only when compare current...main proves reachability, avoid treating ahead/diverged/malformed/404 containment probes as contained, prefer full SHA exact matches, explicitly mark short-SHA containment as uncertain, target same-name upstream branches for feature branches, keep detached/unknown branch-state builds out of same-name branch lookup, and make missing-branch fallback explicit and reasoned without forcing a false update");
+        "update checker must target upstream main for local main, target upstream devel by default for local devel, switch devel to main only when compare current...main proves reachability, avoid treating ahead/diverged/malformed/404 containment probes as contained, prefer full SHA exact matches, explicitly mark short-SHA containment as uncertain, target same-name upstream branches for feature branches, keep detached/unknown branch-state builds out of same-name branch lookup, and require containment before selecting a missing-branch fallback");
     require(
-        site_source.find("local devel falling back to upstream main because upstream devel returned HTTP 404") != std::string::npos &&
+        site_source.find("local devel probing upstream main because upstream devel returned HTTP 404") != std::string::npos &&
             site_source.find("local devel resolved to upstream main because current SHA is reachable from main") != std::string::npos &&
             site_source.find("local devel staying on upstream devel because current SHA is not reachable from main") != std::string::npos &&
             site_source.find("local devel target remains upstream devel") != std::string::npos,
         "update checker must log devel fallback, devel-to-main reachability resolution, and devel-stays-devel decisions");
+    require(
+        site_source.find("versionComparisonStatus: status === \"behind\"") != std::string::npos &&
+            site_source.find("? \"local_ahead\"") != std::string::npos &&
+            site_source.find("? \"diverged\"") != std::string::npos &&
+            site_source.find("\"comparison_unavailable\",") != std::string::npos &&
+            site_source.find("GitHub could not compare running commit") != std::string::npos &&
+            site_source.find("updateAvailable: !updateCheckShaMatches(currentSha, headSha)") == std::string::npos,
+        "commit comparisons must distinguish divergence from local-ahead and must fail unknown when GitHub cannot establish ancestry instead of treating different SHAs as an update");
     require(
         site_source.find("async function resolveReleaseTargetSha(targetCommitish, memo = null)") != std::string::npos &&
             site_source.find("if (memo instanceof Map && memo.has(target))") != std::string::npos &&
@@ -1109,8 +1127,9 @@ int main()
         site_source.find("await lookupGithubBranch(currentBranch),") != std::string::npos &&
             site_source.find("if (error.status !== 404)") != std::string::npos &&
             site_source.find("await lookupGithubBranch(\"devel\"),") != std::string::npos &&
-            site_source.find("same-name upstream branch '${currentBranch}' missing; explicit fallback to upstream devel") != std::string::npos,
-        "update checker must compare existing non-main/non-devel branches against that branch and fall back to devel only on a true 404 with an explicit reason");
+            site_source.find("same-name upstream branch '${currentBranch}' missing; containment-gated fallback to upstream devel") != std::string::npos &&
+            site_source.find("return selectContainedFallbackBranch(") != std::string::npos,
+        "update checker must compare existing non-main/non-devel branches against that branch and select devel after a true 404 only when containment is proven");
     require(
         site_source.find("Update check parsed displayBranch=") != std::string::npos &&
             site_source.find("Update check branch lookup:") != std::string::npos &&
@@ -1482,7 +1501,10 @@ int main()
             maintenance_css_source.find(".maintenance-utility__grid") != std::string::npos &&
             maintenance_css_source.find("grid-template-columns: repeat(2, minmax(0, 1fr));") != std::string::npos &&
             maintenance_css_source.find(".maintenance-update-status") != std::string::npos &&
-            maintenance_css_source.find(".maintenance-update-technical summary") != std::string::npos,
+            maintenance_css_source.find(".maintenance-update-technical summary") != std::string::npos &&
+            maintenance_css_source.find(".maintenance-update-technical-list .maintenance-fact,\n.maintenance-update-technical-list dd") != std::string::npos &&
+            maintenance_css_source.find(".maintenance-update-technical-list dd code,\n.maintenance-update-technical-list dd a") != std::string::npos &&
+            maintenance_css_source.find("overflow-wrap: anywhere;") != std::string::npos,
         "maintenance view must split Utility into side-by-side Test Tone and Update Check panels, keep Test Tone left-aligned, expose update-check panel hooks and controls, show user-facing summary text, and keep technical details collapsed by default");
     require(
         maintenance_source.find("id=\"supportBundlePanel\"") != std::string::npos &&

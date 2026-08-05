@@ -117,6 +117,17 @@ assert.strictEqual(
 );
 assert.strictEqual(comparison.versionComparisonStatus, "local_ahead");
 
+comparison = context.updateCheckCommitComparisonResult(currentSha, targetSha, "diverged");
+assert.strictEqual(
+    comparison.updateAvailable,
+    false,
+    "diverged histories must not report an update"
+);
+assert.strictEqual(comparison.versionComparisonStatus, "diverged");
+
+const compareGithubCommitsUnderTest = context.compareGithubCommits;
+const selectGithubUpdateBranchUnderTest = context.selectGithubUpdateBranch;
+
 vm.runInContext(`
     __semanticUpdateAvailable = false;
     __semanticStatus = "equal";
@@ -177,6 +188,94 @@ async function runBuildPriorityCase({
 (async () => {
     assert.strictEqual(context.branchAllowsCommitUpdate("main"), false);
     assert.strictEqual(context.branchAllowsCommitUpdate("gpio_for_amp"), true);
+
+    const buildHttp404 = () => {
+        const error = new Error("not found");
+        error.status = 404;
+        return error;
+    };
+    const normalFetchGithubJson = context.fetchGithubJson;
+    context.fetchGithubJson = async () => {
+        throw buildHttp404();
+    };
+    await assert.rejects(
+        compareGithubCommitsUnderTest(currentSha, targetSha),
+        (error) => error?.code === "comparison_unavailable" && error?.updateCheckFailed === true,
+        "GitHub compare 404 must be a failed/unknown comparison, not an update"
+    );
+    context.fetchGithubJson = normalFetchGithubJson;
+
+    const normalLookupGithubBranch = context.lookupGithubBranch;
+    const normalReachabilityCheck = context.isCurrentShaReachableFromBranchHead;
+    context.lookupGithubBranch = async (branch) => {
+        if (branch === "deleted_feature") {
+            throw buildHttp404();
+        }
+        return { branch, headSha: targetSha };
+    };
+    context.isCurrentShaReachableFromBranchHead = async () => ({
+        contained: false,
+        status: "diverged",
+        uncertain: false,
+    });
+    await assert.rejects(
+        selectGithubUpdateBranchUnderTest({
+            currentSha,
+            currentBranch: "deleted_feature",
+            branchState: "branch",
+        }),
+        (error) => error?.code === "unsafe_target" && error?.updateCheckFailed === true,
+        "missing same-name branch must not fall back to devel without proven containment"
+    );
+    context.isCurrentShaReachableFromBranchHead = async () => ({
+        contained: true,
+        status: "ahead",
+        uncertain: false,
+    });
+    const containedFallback = await selectGithubUpdateBranchUnderTest({
+        currentSha,
+        currentBranch: "deleted_feature",
+        branchState: "branch",
+    });
+    assert.strictEqual(containedFallback.branch, "devel");
+    assert.strictEqual(containedFallback.fallbackUsed, true);
+    assert.ok(containedFallback.selectionReason.includes("containment-gated fallback"));
+
+    context.lookupGithubBranch = async (branch) => {
+        if (branch === "devel") {
+            throw buildHttp404();
+        }
+        return { branch, headSha: targetSha };
+    };
+    context.isCurrentShaReachableFromBranchHead = async () => ({
+        contained: false,
+        status: "behind",
+        uncertain: false,
+    });
+    await assert.rejects(
+        selectGithubUpdateBranchUnderTest({
+            currentSha,
+            currentBranch: "devel",
+            branchState: "branch",
+        }),
+        (error) => error?.code === "unsafe_target" && error?.updateCheckFailed === true,
+        "missing upstream devel must not fall back to main without proven containment"
+    );
+    context.isCurrentShaReachableFromBranchHead = async () => ({
+        contained: true,
+        status: "ahead",
+        uncertain: false,
+    });
+    const containedMainFallback = await selectGithubUpdateBranchUnderTest({
+        currentSha,
+        currentBranch: "devel",
+        branchState: "branch",
+    });
+    assert.strictEqual(containedMainFallback.branch, "main");
+    assert.strictEqual(containedMainFallback.fallbackUsed, true);
+    assert.ok(containedMainFallback.selectionReason.includes("containment-gated fallback"));
+    context.lookupGithubBranch = normalLookupGithubBranch;
+    context.isCurrentShaReachableFromBranchHead = normalReachabilityCheck;
 
     let result = await runBuildPriorityCase({
         branch: "main",
@@ -433,6 +532,7 @@ async function runBuildPriorityCase({
     const commitModalText = bodyEl.children.map((child) => child.textContent || "").join("");
     assert.ok(commitModalText.includes("gpio_for_amp+30a9baf"));
     assert.ok(commitModalText.includes("Review the update channel given to you for this pre-release version."));
+    assert.strictEqual(labelEl.textContent, "Newer branch build available");
     assert.ok(!commitModalText.includes("GitHub releases"));
     assert.strictEqual(
         bodyEl.children.some((child) => child.tagName === "a"),
@@ -452,6 +552,7 @@ async function runBuildPriorityCase({
         versionComparisonUsed: "semver",
     }));
     const taggedModalText = bodyEl.children.map((child) => child.textContent || "").join("");
+    assert.strictEqual(labelEl.textContent, "Update available");
     assert.ok(taggedModalText.includes("A release is available for this update: "));
     assert.strictEqual(
         bodyEl.children.some((child) => child.tagName === "a" && child.textContent === "WsprryPi 3.0.1"),
