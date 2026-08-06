@@ -4896,6 +4896,7 @@ int main(int argc, char *argv[])
             make_managed_ini_data("AA0NT", "EM18", "20m", false);
         managed_ini["Operation"]["Transmit Backend"] = "si5351";
         managed_ini["Si5351"]["TX Output"] = "CLK2";
+        managed_ini["Calibration"]["PPM"] = "2.409358";
         iniFile.setData(managed_ini);
         require(
             set_config(true),
@@ -4979,6 +4980,94 @@ int main(int argc, char *argv[])
         require(
             wsprTransmitter.getState() == WsprTransmitter::State::DISABLED,
             "test tone stop with transmit disabled must not leave the transmitter busy");
+
+        constexpr std::uint64_t calibrated_2m_hz = 144490498U;
+        const TestToneStartResult calibrated_start = start_test_tone(
+            TestToneRequest{
+                TestToneFrequencySource::CustomRf,
+                "",
+                calibrated_2m_hz});
+        require(
+            calibrated_start.started,
+            "calibrated custom 2 m Test Tone must start through the normal "
+            "disabled-scheduler path");
+        const TransmissionRequest calibrated_tone_request =
+            current_transmission_request_for_test();
+        const auto calibrated_controller_request =
+            current_controller_request_for_test();
+        require(
+            calibrated_tone_request.mode == TransmissionMode::TONE &&
+                nearly_equal(
+                    calibrated_tone_request.actual_rf_frequency_hz,
+                    static_cast<double>(calibrated_2m_hz)) &&
+                nearly_equal(calibrated_tone_request.ppm, 2.409358),
+            "custom 2 m Test Tone must preserve requested RF and committed "
+            "Calibration.PPM in the legacy request");
+        require(
+            calibrated_controller_request.has_value() &&
+                calibrated_controller_request->mode ==
+                    wsprrypi::TransmissionMode::TONE &&
+                calibrated_controller_request->output.backend ==
+                    wsprrypi::BackendKind::SI5351 &&
+                nearly_equal(
+                    calibrated_controller_request->calibration.ppm,
+                    2.409358),
+            "custom 2 m Test Tone must carry committed Calibration.PPM into "
+            "the controller request");
+        const auto *calibrated_payload =
+            calibrated_controller_request.has_value()
+                ? std::get_if<wsprrypi::TonePayload>(
+                      &calibrated_controller_request->payload)
+                : nullptr;
+        require(
+            calibrated_payload != nullptr &&
+                nearly_equal(
+                    calibrated_payload->frequency_hz,
+                    static_cast<double>(calibrated_2m_hz)),
+            "custom 2 m Test Tone must preserve requested RF in the "
+            "controller payload");
+
+        set_raspberry_pi_generation_override_for_test(5);
+        const wsprrypi::ExecutionPlan calibrated_plan =
+            wsprrypi::ExecutionPlanCompiler{}.compile(
+                *calibrated_controller_request);
+        require(
+            calibrated_plan.mode == wsprrypi::TransmissionMode::TONE &&
+                calibrated_plan.backend == wsprrypi::BackendKind::SI5351 &&
+                nearly_equal(calibrated_plan.calibration.ppm, 2.409358) &&
+                calibrated_plan.events.size() == 2 &&
+                nearly_equal(
+                    calibrated_plan.events.front().frequency_hz,
+                    static_cast<double>(calibrated_2m_hz)),
+            "custom 2 m Test Tone must retain requested RF and calibration "
+            "through execution-plan compilation");
+        WsprSi5351Backend calibrated_backend(
+            wsprTransmitter,
+            si5351_config);
+        const wsprrypi::BackendCompileResult calibrated_compile =
+            calibrated_backend.configure(calibrated_plan, inputs);
+        require(
+            calibrated_compile.ok,
+            "calibrated custom 2 m Test Tone must configure through the "
+            "canonical dry-run Si5351 backend");
+        const wsprrypi::ExecutionResult calibrated_execute =
+            calibrated_backend.execute(calibrated_plan);
+        require(
+            calibrated_execute.ok,
+            "calibrated custom 2 m Test Tone must execute through the "
+            "canonical dry-run Si5351 backend");
+        clear_pi_generation_override_for_scope();
+
+        wsprTransmitter.backendSetStateValue(
+            WsprTransmitter::State::TRANSMITTING);
+        const TestToneStopResult calibrated_stop = end_test_tone();
+        require(
+            calibrated_stop.stopped && calibrated_stop.scheduler_restored &&
+                !config.transmit &&
+                wsprTransmitter.getState() ==
+                    WsprTransmitter::State::DISABLED,
+            "calibrated custom 2 m Test Tone stop must restore the disabled "
+            "scheduler and transmitter state");
 
         clear_si5351_detection_override_for_scope();
         set_scheduler_execution_suppressed_for_test(false);
