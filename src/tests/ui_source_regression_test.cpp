@@ -1141,13 +1141,19 @@ int main()
         "update checker must log parsed display branch, raw branch/SHA, branch lookup URL/status/result, selected target branch, fallback state, and target HEAD for debugging");
     require(
         ui_source.find("function isWsprConfigMode()") != std::string::npos &&
-            ui_source.find("const useNtp = isWsprMode && $(\"#use_ntp\").is(\":checked\");") != std::string::npos &&
-            ui_source.find("backend === \"gpio\" && $(\"#use_ntp\").is(\":checked\");") == std::string::npos &&
+            ui_source.find("const si5351Active = selectedTransmitBackend() === \"si5351\";") != std::string::npos &&
+            ui_source.find("const gpioNtpActive = isWsprMode && !si5351Active && $(\"#use_ntp\").is(\":checked\");") != std::string::npos &&
+            ui_source.find("const showNtpControl = isWsprMode && !si5351Active;") != std::string::npos &&
             ui_source.find("$(\"#ntp_calibration_control\")") != std::string::npos &&
-            ui_source.find("$ppm.prop(\"disabled\", !isWsprMode || useNtp);") != std::string::npos &&
+            ui_source.find("$ppm.prop(\"disabled\", !isWsprMode || gpioNtpActive);") != std::string::npos &&
             ui_source.find("$ppmCw.prop(\"disabled\", isWsprMode);") != std::string::npos &&
+            ui_source.find("Applied to the Si5351 reference during synthesis planning.") != std::string::npos &&
+            ui_source.find("$(\"#use_ntp\").prop(\"checked\", false)") == std::string::npos &&
+            ui_source.find("$(\"#ppm\").val(0)") == std::string::npos &&
+            ui_source.find("let use_ntp = parseBool($(\"#use_ntp\").is(\":checked\"));") != std::string::npos &&
+            ui_source.find("let ppm_val = parseFloat(ppmSource) || 0.0;") != std::string::npos &&
             ui_source.find("syncCalibrationControls();") != std::string::npos,
-        "config UI must make calibration controls mode-aware so WSPR follows NTP while CW keeps PPM editable");
+        "config UI must keep Si5351 PPM editable, expose NTP only for GPIO WSPR, and preserve both stored values while switching backends");
 
     require(
         config_view_source.find("id=\"modeChangeGuardModal\"") != std::string::npos &&
