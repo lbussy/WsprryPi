@@ -197,8 +197,9 @@ the slope changes hidden by a single five-minute linear fit.
   condition instead.
 - These results characterize one hardware assembly and receiver chain. They do
   not define guaranteed WsprryPi behavior.
-- This evidence does not test WSPR tone spacing, tone transitions, symbol
-  timing, or a complete decoded WSPR frame.
+- The steady-carrier captures do not by themselves test tone spacing,
+  transitions, symbol timing, or decoding. A separate bounded Si5351 frame
+  test below covers those software-qualification questions.
 - GPIO produced a persistent steady carrier through the valid 294.5-second
   observation. Its fractional-divider modulation required a spectral rather
   than phase-slope estimator, so phase-discontinuity results are not directly
@@ -207,6 +208,37 @@ the slope changes hidden by a single five-minute linear fit.
   be presented as an 80 m versus 2 m/30 m backend benchmark.
 - GPIO's constant +43.4 Hz observation is retained only to identify the tracked
   lobe. It is not an accuracy result and is not a proposed PPM correction.
+
+## Si5351 2 m bounded-frame qualification
+
+One attenuated frame using the valid repository reference identity
+`AA0NT EM18 20` was transmitted on `wspr5` at the standard 2 m WSPR frequency.
+Random offset was disabled. The RSP1B captured the frame at fixed 25 dB gain
+with zero overflows.
+
+The transmitter completed the 162-symbol frame in 110.612 seconds and exited
+successfully after its configured one-iteration bound. Independent WSJT-X
+2.7.0 `wsprd` decoding recovered:
+
+```text
+1816  18  3.7 144.490506  1  AA0NT EM18 20
+```
+
+The decoder's 3.7 Hz/min drift estimate is a hardware observation and was not
+treated as a symbol-spacing error. After separating slow carrier drift, the
+four-tone fit measured 1.4849 Hz spacing against the 1.4648 Hz ideal, an error
+of 0.0200 Hz.
+
+The frame contained 116 boundaries where the tone changed. At 100 us envelope
+resolution, the worst boundary bin was 1.61 dB below the median symbol
+interior. No transition produced a carrier interruption reaching -6 dB. The
+successful independent decode additionally verifies the complete symbol order
+and usable transition timing under the measured drift.
+
+After the bounded frame, Si5351 output-enable register 3 read `0xFF`, both
+normal services were active, and no capture or transmitter process remained.
+This satisfies the Si5351 four-tone, transition, complete-frame decode, bounded
+shutdown, and post-frame RF-silence gates for Issue 379.
 
 ## Retained evidence
 
@@ -224,6 +256,12 @@ machine-readable results beside this document:
 - `gpio-80m-capture.log`: receiver identity, settings, samples, and overflows
 - `gpio-80m-session.log`: transmitter conditions and duration
 - `gpio-80m-quiesce.log`: post-run live hardware audit
+- `si5351-2m-frame-summary.json`: concise frame and acceptance measurements
+- `si5351-2m-transition-analysis.json`: transition-envelope measurements
+- `si5351-2m-frame-session.log`: bounded session conditions and exit status
+- `si5351-2m-frame-transmit.log`: application frame timing and shutdown
+- `si5351-2m-frame-capture.log`: receiver identity, settings, and overflows
+- `si5351-2m-frame-wsprd.log`: independent WSJT-X decode output
 
 The larger working evidence remains outside the repository:
 
@@ -231,6 +269,8 @@ The larger working evidence remains outside the repository:
 - raw IQ on `wspr5`: `/home/pi/issue379-long-stability/`
 - GPIO raw IQ on `wspr5`:
   `/home/pi/issue379-gpio-stability/gpio-80m-300s.cf32`
+- Si5351 decoded-frame raw IQ on `wspr5`:
+  `/home/pi/issue379-si5351-frame-valid/si5351-2m-frame-valid.cf32`
 
-The raw IQ files are 600 MB each and are intentionally not committed to the
-repository.
+The steady-carrier IQ files are 600 MB each and the frame IQ file is 260 MB.
+They are intentionally not committed to the repository.
