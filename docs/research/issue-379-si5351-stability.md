@@ -211,34 +211,42 @@ the slope changes hidden by a single five-minute linear fit.
 
 ## Si5351 2 m bounded-frame qualification
 
-One attenuated frame using the valid repository reference identity
-`AA0NT EM18 20` was transmitted on `wspr5` at the standard 2 m WSPR frequency.
-Random offset was disabled. The RSP1B captured the frame at fixed 25 dB gain
-with zero overflows.
+Three attenuated frames using the valid repository reference identity
+`AA0NT EM18 20` were transmitted on `wspr5` at the standard 2 m WSPR
+frequency. Random offset was disabled. The RSP1B captured the frames at fixed
+25 dB gain with zero overflows.
 
-The transmitter completed the 162-symbol frame in 110.612 seconds and exited
-successfully after its configured one-iteration bound. Independent WSJT-X
-2.7.0 `wsprd` decoding recovered:
+Each frame completed inside its bounded invocation and was decoded separately
+with WSJT-X 2.7.0 `wsprd`:
 
-```text
-1816  18  3.7 144.490506  1  AA0NT EM18 20
-```
+| UTC start | Application duration | Retained decode |
+|---|---:|---|
+| 18:16 | 110.612196 s | `AA0NT EM18 20`, +18 dB |
+| 18:30 | 110.611360 s | `AA0NT EM18 20`, +13 dB |
+| 18:32 | 110.600065 s | `AA0NT EM18 20`, +18 dB |
+
+The second and third frames used consecutive WSPR slots in one process bounded
+to exactly two iterations and one uninterrupted receiver capture. Weak
+companion decodes in the real-audio files are conjugate images from complex-IQ
+conversion, not additional transmissions.
 
 The decoder's 3.7 Hz/min drift estimate is a hardware observation and was not
 treated as a symbol-spacing error. After separating slow carrier drift, the
 four-tone fit measured 1.4849 Hz spacing against the 1.4648 Hz ideal, an error
 of 0.0200 Hz.
 
-The frame contained 116 boundaries where the tone changed. At 100 us envelope
-resolution, the worst boundary bin was 1.61 dB below the median symbol
-interior. No transition produced a carrier interruption reaching -6 dB. The
-successful independent decode additionally verifies the complete symbol order
+The first retained frame contained 116 boundaries where the tone changed. At
+100 us envelope resolution, the worst boundary bin was 1.61 dB below the
+median symbol interior. No transition produced a carrier interruption reaching
+-6 dB. Three successful independent decodes verify the complete symbol order
 and usable transition timing under the measured drift.
 
 After the bounded frame, Si5351 output-enable register 3 read `0xFF`, both
 normal services were active, and no capture or transmitter process remained.
-This satisfies the Si5351 four-tone, transition, complete-frame decode, bounded
-shutdown, and post-frame RF-silence gates for Issue 379.
+This satisfies Issue 379's requirement for three independently decoded bounded
+Si5351 frames, as well as bounded shutdown and post-frame RF silence. The
+issue's separate numerical tone-span and symbol-timing criteria remain subject
+to the final acceptance review.
 
 ## Retained evidence
 
@@ -262,6 +270,12 @@ machine-readable results beside this document:
 - `si5351-2m-frame-transmit.log`: application frame timing and shutdown
 - `si5351-2m-frame-capture.log`: receiver identity, settings, and overflows
 - `si5351-2m-frame-wsprd.log`: independent WSJT-X decode output
+- `si5351-2m-three-frame-summary.json`: all three frame/decode results
+- `si5351-2m-two-more-session.log`: two-frame bounded session evidence
+- `si5351-2m-two-more-transmit.log`: both application frame durations
+- `si5351-2m-two-more-capture.log`: continuous receiver capture result
+- `si5351-2m-frame-1830-wsprd.log`: second independent decode
+- `si5351-2m-frame-1832-wsprd.log`: third independent decode
 
 The larger working evidence remains outside the repository:
 
@@ -271,6 +285,9 @@ The larger working evidence remains outside the repository:
   `/home/pi/issue379-gpio-stability/gpio-80m-300s.cf32`
 - Si5351 decoded-frame raw IQ on `wspr5`:
   `/home/pi/issue379-si5351-frame-valid/si5351-2m-frame-valid.cf32`
+- Two additional decoded-frame raw IQ on `wspr5`:
+  `/home/pi/issue379-si5351-two-more-frames/si5351-2m-two-more.cf32`
 
-The steady-carrier IQ files are 600 MB each and the frame IQ file is 260 MB.
-They are intentionally not committed to the repository.
+The steady-carrier IQ files are 600 MB each, the first frame IQ file is 260 MB,
+and the two-frame IQ file is 500 MB. They are intentionally not committed to
+the repository.
