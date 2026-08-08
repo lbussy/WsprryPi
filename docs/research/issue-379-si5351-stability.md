@@ -3,12 +3,15 @@
 Status: branch-local research evidence, not an operator specification or a
 project default.
 
+The repeatable conducted bench workflow is documented in
+[`issue-379-conducted-qualification-procedure.md`](issue-379-conducted-qualification-procedure.md).
+
 ## Purpose
 
 This document records steady-carrier behavior measured from the physical
-Si5351/ATX-11 TCXO assembly on `wspr5` at 2 m and 30 m, and the GPIO/GPCLK0
-output on `wspr4` at 80 m. It characterizes the two hardware paths and the
-RSP1B measurement chain under the stated loads. It does not establish
+Si5351/ATX-11 TCXO assembly on `wspr5` at 2 m, 4 m, 6 m, and 30 m, and the
+GPIO/GPCLK0 output on `wspr4` at 80 m. It characterizes the two hardware paths
+and the RSP1B measurement chain under the stated loads. It does not establish
 release-wide hardware performance.
 
 Absolute tuning accuracy is intentionally excluded. The installed
@@ -255,6 +258,60 @@ either accept the complete-frame, transition, planner, and decoder evidence
 with the measurement uncertainty stated, or retain the span and symbol-timing
 items as unresolved. This document does not silently convert them into passes.
 
+## Si5351 6 m and 4 m qualification
+
+The 6 m and 4 m paths were tested on `wspr5` with the attenuated Si5351 CLK0
+output at 2 mA and the local RSP1B at fixed 25 dB gain. The final carrier and
+frame tests used the exact Issue 379 branch build at parent commit `93d01ea`
+and WSPR-Transmitter commit `9efb288`.
+
+Both steady tones formed narrow, usable carriers without receiver clipping:
+
+| Band | Requested RF | Best 20 Hz share | RF-on/off contrast | Measured placement |
+|---|---:|---:|---:|---:|
+| 6 m | 50.294500 MHz | 95.95% | 67.81 dB | +5.15 Hz |
+| 4 m | 70.092500 MHz | 99.10% | 66.34 dB | +6.10 Hz |
+
+Three consecutive frames per band were transmitted with random offset disabled
+and decoded independently with WSJT-X 2.7.0 `wsprd`:
+
+| Band | UTC starts | Application durations | Intended decodes |
+|---|---|---|---|
+| 6 m | 17:46, 17:48, 17:50 | 110.624267, 110.599923, 110.599919 s | 3/3, `AA0NT EM18 20`, +18 dB |
+| 4 m | 17:54, 17:56, 17:58 | 110.610520, 110.599832, 110.599894 s | 3/3, `AA0NT EM18 20`, +27 to +28 dB |
+
+Each coherent 370-second receiver capture contained 92,500,000 samples with
+zero overflows. Both transmitter processes and captures exited normally. After
+each run, Si5351 register 3 read `0xFF`, the normal services were active, and
+no transmitter, capture, or decoder process remained.
+
+The first frame from each band recovered all 162 expected symbols without a
+mismatch. Tone and transition measurements were:
+
+| Band | Adjacent spacing error | Three-interval span error | Worst 100 us transition bin | Interruption below -6 dB |
+|---|---:|---:|---:|---:|
+| 6 m | -0.0097 Hz | -0.0290 Hz | -2.95 dB | None |
+| 4 m | +0.0214 Hz | +0.0642 Hz | -1.49 dB | None |
+
+The 4 m adjacent-spacing result is within the issue's +/-0.03 Hz criterion.
+Its derived three-interval span is 0.0142 Hz beyond the earlier provisional
++/-0.05 Hz limit. This measured caveat is retained, but the complete decoded
+frames, correct symbol order, continuous transitions, bounded operation, and
+clean shutdown establish usable software operation. The maintainer therefore
+accepted both 6 m and 4 m as qualified Si5351 bands.
+
+Separate five-minute captures characterized the same hardware and receiver
+chain. Constant frequency placement was removed before calculating stability:
+
+| Band | Peak-to-peak movement | Central 90% movement | Whole-run slope | Detrended RMS |
+|---|---:|---:|---:|---:|
+| 6 m | 1.4606 Hz | 0.7871 Hz | -0.1193 Hz/min | 0.1737 Hz |
+| 4 m | 2.2470 Hz | 1.6751 Hz | -0.2634 Hz/min | 0.4035 Hz |
+
+Neither long capture contained a detected phase discontinuity. These
+measurements characterize the TCXO, Si5351, RSP1B, and thermal state together;
+they are not software pass/fail limits or project-wide frequency guarantees.
+
 ## GPIO VHF spectral-power concentration
 
 Additional conducted GPIO tests on `wspr4` compared RF-on and RF-off spectra
@@ -307,10 +364,17 @@ decision in this table.
 | 80 m | Prior steady-carrier and decoded-operation evidence; not reswept | Not tested | Not tested | Usable |
 | 20 m | Strong carrier; 3/3 intended frames decoded at 5--6 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
 | 15 m | Strong carrier; 3/3 frames decoded at 9--10 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
-| 12 m | No usable requested-frequency carrier; 0/3 decoded | No usable carrier; 0/3 decoded | No usable carrier; 0/3 decoded | Disqualified |
+| 12 m\* | No usable requested-frequency carrier; 0/3 decoded | No usable carrier; 0/3 decoded | No usable carrier; 0/3 decoded | Disqualified |
 | 10 m | Strong carrier; 3/3 frames decoded at 14--15 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
 | 6 m | Severe spectral dispersion; no usable carrier | Not tested | Not tested | Disqualified |
 | 2 m | No usable requested-frequency signal | Not tested | Not tested | Disqualified |
+
+\* On a Raspberry Pi Zero 2 W (`BCM2837`-compatible SoC) running a 32-bit OS,
+one of five complete captured 12 m frames decoded. The other four did not, so
+the result did not satisfy the required three consecutive decodes. On the
+Raspberry Pi 4 (`BCM2711`), none of nine 12 m frames decoded across the 1000-,
+4000-, and 16000-clock test points, including 0/3 at the production 1000-clock
+setting.
 
 The result is not a monotonic frequency ceiling. GPIO works at 15 m, fails at
 12 m, and works again at 10 m. Twelve metres is therefore a band-specific
@@ -392,6 +456,10 @@ frequencies, qualified GPIO bands, and the unaffected Si5351 path.
   preserved the carrier through measured transitions, and restored the
   verified idle state. The accepted criterion separates repeatable software
   operation from hardware-specific oscillator accuracy and settling.
+- The Si5351 backend also produced three independently decoded bounded frames
+  at both 6 m and 4 m, recovered all 162 symbols per analyzed frame, preserved
+  the carrier through every measured transition, and restored the verified
+  idle state. Both bands are qualified with the retained 4 m span caveat.
 - The GPIO backend cannot be qualified for 2 m on the tested supported
   Raspberry Pi path. It did not produce a usable requested-frequency signal,
   so the issue's three-decoded-frame requirement cannot be met. This is a
@@ -440,6 +508,22 @@ machine-readable results beside this document:
 - `si5351-2m-two-more-capture.log`: continuous receiver capture result
 - `si5351-2m-frame-1830-wsprd.log`: second independent decode
 - `si5351-2m-frame-1832-wsprd.log`: third independent decode
+- `si5351-6m-4m-qualification-summary.json`: carrier, frame, spacing,
+  transition, cleanup, and disposition results for both bands
+- `si5351-6m-frame-analysis.json` and `si5351-4m-frame-analysis.json`: symbol
+  recovery and tone-spacing measurements
+- `si5351-6m-transition-analysis.json` and
+  `si5351-4m-transition-analysis.json`: transition-envelope measurements
+- `si5351-6m-three-frame-session.log` and
+  `si5351-4m-three-frame-session.log`: bounded transmitter/capture sessions
+- `si5351-6m-frame-{1746,1748,1750}-wsprd.log`: independent 6 m decodes
+- `si5351-4m-frame-{1754,1756,1758}-wsprd.log`: independent 4 m decodes
+- `si5351-6m-4m-stability-summary.json`: five-minute relative-stability
+  results
+- `si5351-6m-4m-frequency-series.csv` and
+  `si5351-6m-4m-rolling-60s-drift.csv`: retained long-run series
+- `si5351-6m-4m-relative-frequency.png` and
+  `si5351-6m-4m-rolling-drift.png`: long-run comparison plots
 - `gpio-vhf-spectral-utilization.json`: relative 6 m/10 m close-in power budget
 - `gpio-band-cadence-qualification.json`: band disposition and 1000/4000/16000
   pacing results for 10, 12, 15, and 20 m
@@ -456,6 +540,9 @@ The larger working evidence remains outside the repository:
   `/home/pi/issue379-si5351-frame-valid/si5351-2m-frame-valid.cf32`
 - Two additional decoded-frame raw IQ on `wspr5`:
   `/home/pi/issue379-si5351-two-more-frames/si5351-2m-two-more.cf32`
+- Si5351 6 m and 4 m steady-carrier, frame, decode, and analysis artifacts on
+  `wspr5`: `/home/pi/issue379-si5351-6m-4m/` and
+  `/home/pi/issue379-si5351-6m-4m-current/`
 - GPIO cadence-sweep raw IQ and decoder artifacts on `wspr5`:
   `/home/pi/issue379-gpio-{10m,12m,15m,20m}-{tone,3frame}-block*`
 - Same-platform `Legacy_1.2.3` comparison report and tone captures on `wspr5`:

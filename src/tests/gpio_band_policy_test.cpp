@@ -171,7 +171,7 @@ void require_controller_policy(
         require(
             result.error.find("Direct GPIO transmission is blocked") !=
                 std::string::npos &&
-            result.error.find("Si5351") != std::string::npos,
+            result.error.find("separately qualified") != std::string::npos,
             context + " must provide an actionable GPIO-only error");
         require(
             controller.prepared_plan() == nullptr,
@@ -192,7 +192,8 @@ int main()
     for (const auto mode : exercised_modes)
     {
         for (const double blocked_band_frequency :
-             {24950000.0, 51000000.0, 145000000.0})
+             {24950000.0, 51000000.0, 70500000.0, 145000000.0,
+              223500000.0, 435000000.0})
         {
             require_controller_policy(
                 wsprrypi::BackendKind::RPI_CLOCK_GPIO,
@@ -206,7 +207,10 @@ int main()
     for (const double blocked_frequency :
          {24890000.0, 24924600.0, 24950000.0, 24990000.0,
           50000000.0, 50293000.0, 51000000.0, 52000000.0,
-          144000000.0, 144489000.0, 145000000.0, 148000000.0})
+          70000000.0, 70091000.0, 70500000.0, 71000000.0,
+          144000000.0, 144489000.0, 145000000.0, 148000000.0,
+          222000000.0, 223500000.0, 225000000.0,
+          420000000.0, 435000000.0, 450000000.0})
     {
         require_controller_policy(
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
@@ -232,7 +236,8 @@ int main()
 
     for (const double adjacent_frequency :
          {24889999.0, 24990001.0, 49999999.0, 52000001.0,
-          143999999.0, 148000001.0})
+          69999999.0, 71000001.0, 143999999.0, 148000001.0,
+          221999999.0, 225000001.0, 419999999.0, 450000001.0})
     {
         require_controller_policy(
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,

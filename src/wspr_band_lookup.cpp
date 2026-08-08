@@ -51,6 +51,11 @@ namespace
         HamBand ham_band;
         long long lower_hz;
         long long upper_hz;
+    };
+
+    struct CanonicalWsprBandDefinition
+    {
+        const char *name;
         double default_wspr_hz;
     };
 
@@ -92,30 +97,56 @@ namespace
     constexpr double FREQ_6M = 50293000.0;
     constexpr double FREQ_4M = 70091000.0;
     constexpr double FREQ_2M = 144489000.0;
+    constexpr double FREQ_1_25M = 222100000.0;
+    constexpr double FREQ_70CM = 432300000.0;
 
-    constexpr std::array<BandDefinition, 16> BAND_DEFINITIONS = {{
-        {"2200M", HamBand::BAND_2200M, 135700LL, 137800LL, FREQ_2200M},
-        {"630M", HamBand::BAND_630M, 472000LL, 479000LL, FREQ_630M},
-        {"160M", HamBand::BAND_160M, 1800000LL, 2000000LL, FREQ_160M},
-        {"80M", HamBand::BAND_80M, 3500000LL, 3800000LL, FREQ_80M},
-        {"60M", HamBand::BAND_60M, 5250000LL, 5450000LL, FREQ_60M},
-        {"40M", HamBand::BAND_40M, 7000000LL, 7200000LL, FREQ_40M},
-        {"30M", HamBand::BAND_30M, 10100000LL, 10150000LL, FREQ_30M},
-        {"22M", HamBand::BAND_22M, 13000000LL, 13600000LL, FREQ_22M},
-        {"20M", HamBand::BAND_20M, 14000000LL, 14350000LL, FREQ_20M},
-        {"17M", HamBand::BAND_17M, 18068000LL, 18168000LL, FREQ_17M},
-        {"15M", HamBand::BAND_15M, 21000000LL, 21450000LL, FREQ_15M},
-        {"12M", HamBand::BAND_12M, 24890000LL, 24990000LL, FREQ_12M},
-        {"10M", HamBand::BAND_10M, 28000000LL, 29700000LL, FREQ_10M},
-        {"6M", HamBand::BAND_6M, 50000000LL, 52000000LL, FREQ_6M},
-        {"4M", HamBand::BAND_4M, 70000000LL, 71000000LL, FREQ_4M},
-        {"2M", HamBand::BAND_2M, 144000000LL, 148000000LL, FREQ_2M},
+    constexpr std::array<BandDefinition, HAM_BAND_COUNT> BAND_DEFINITIONS = {{
+        {"2200M", HamBand::BAND_2200M, 135700LL, 137800LL},
+        {"630M", HamBand::BAND_630M, 472000LL, 479000LL},
+        {"160M", HamBand::BAND_160M, 1800000LL, 2000000LL},
+        {"80M", HamBand::BAND_80M, 3500000LL, 3800000LL},
+        {"60M", HamBand::BAND_60M, 5250000LL, 5450000LL},
+        {"40M", HamBand::BAND_40M, 7000000LL, 7200000LL},
+        {"30M", HamBand::BAND_30M, 10100000LL, 10150000LL},
+        {"22M", HamBand::BAND_22M, 13000000LL, 13600000LL},
+        {"20M", HamBand::BAND_20M, 14000000LL, 14350000LL},
+        {"17M", HamBand::BAND_17M, 18068000LL, 18168000LL},
+        {"15M", HamBand::BAND_15M, 21000000LL, 21450000LL},
+        {"12M", HamBand::BAND_12M, 24890000LL, 24990000LL},
+        {"10M", HamBand::BAND_10M, 28000000LL, 29700000LL},
+        {"6M", HamBand::BAND_6M, 50000000LL, 52000000LL},
+        {"4M", HamBand::BAND_4M, 70000000LL, 71000000LL},
+        {"2M", HamBand::BAND_2M, 144000000LL, 148000000LL},
+        {"1.25M", HamBand::BAND_1_25M, 222000000LL, 225000000LL},
+        {"70CM", HamBand::BAND_70CM, 420000000LL, 450000000LL},
     }};
 
-    constexpr std::array<GenericBandDefinition, 10> GENERIC_BAND_DEFINITIONS =
+    // A canonical HamBand does not imply an authoritative WSPR dial-frequency
+    // alias.  This table contains only the project's established WSPR defaults.
+    constexpr std::array<CanonicalWsprBandDefinition, 18>
+        CANONICAL_WSPR_BAND_DEFINITIONS = {{
+            {"2200M", FREQ_2200M},
+            {"630M", FREQ_630M},
+            {"160M", FREQ_160M},
+            {"80M", FREQ_80M},
+            {"60M", FREQ_60M},
+            {"40M", FREQ_40M},
+            {"30M", FREQ_30M},
+            {"22M", FREQ_22M},
+            {"20M", FREQ_20M},
+            {"17M", FREQ_17M},
+            {"15M", FREQ_15M},
+            {"12M", FREQ_12M},
+            {"10M", FREQ_10M},
+            {"6M", FREQ_6M},
+            {"4M", FREQ_4M},
+            {"2M", FREQ_2M},
+            {"1.25M", FREQ_1_25M},
+            {"70CM", FREQ_70CM},
+        }};
+
+    constexpr std::array<GenericBandDefinition, 8> GENERIC_BAND_DEFINITIONS =
         {{
-            {"1.25M", 222000000LL, 225000000LL},
-            {"70CM", 420000000LL, 450000000LL},
             {"33CM", 902000000LL, 928000000LL},
             {"23CM", 1240000000LL, 1300000000LL},
             {"13CM", 2300000000LL, 2450000000LL},
@@ -126,7 +157,7 @@ namespace
             {"1MM", 241000000000LL, 250000000000LL},
         }};
 
-    constexpr std::array<WSPRAliasDefinition, 18> WSPR_ALIASES = {{
+    constexpr std::array<WSPRAliasDefinition, 20> WSPR_ALIASES = {{
         {"lf", FREQ_2200M},
         {"2200m", FREQ_2200M},
         {"mf", FREQ_630M},
@@ -145,6 +176,8 @@ namespace
         {"6m", FREQ_6M},
         {"4m", FREQ_4M},
         {"2m", FREQ_2M},
+        {"1.25m", FREQ_1_25M},
+        {"70cm", FREQ_70CM},
     }};
 
     constexpr std::array<LegacyActualWSPRAliasDefinition, 18> LEGACY_ACTUAL_WSPR_ALIASES = {{
@@ -190,9 +223,10 @@ WSPRBandLookup::WSPRBandLookup()
             band.name);
     }
 
-    wsprFrequencies.reserve(BAND_DEFINITIONS.size() + WSPR_ALIASES.size());
+    wsprFrequencies.reserve(
+        CANONICAL_WSPR_BAND_DEFINITIONS.size() + WSPR_ALIASES.size());
 
-    for (const auto &band : BAND_DEFINITIONS)
+    for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
     {
         wsprFrequencies.emplace(normalize_key(band.name), band.default_wspr_hz);
     }
@@ -207,9 +241,9 @@ std::vector<WsprBandCatalogEntry>
 WSPRBandLookup::canonical_wspr_band_catalog() const
 {
     std::vector<WsprBandCatalogEntry> catalog;
-    catalog.reserve(BAND_DEFINITIONS.size());
+    catalog.reserve(CANONICAL_WSPR_BAND_DEFINITIONS.size());
 
-    for (const auto &band : BAND_DEFINITIONS)
+    for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
     {
         const double dial_frequency_hz = band.default_wspr_hz;
         if (!std::isfinite(dial_frequency_hz) ||
@@ -530,6 +564,10 @@ const char *ham_band_to_string(HamBand band)
         return "4m";
     case HamBand::BAND_2M:
         return "2m";
+    case HamBand::BAND_1_25M:
+        return "1.25m";
+    case HamBand::BAND_70CM:
+        return "70cm";
     }
 
     return "unknown";

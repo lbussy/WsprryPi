@@ -784,6 +784,8 @@ namespace
         {HamBand::BAND_6M, "6m"},
         {HamBand::BAND_4M, "4m"},
         {HamBand::BAND_2M, "2m"},
+        {HamBand::BAND_1_25M, "1.25m"},
+        {HamBand::BAND_70CM, "70cm"},
     }};
 
     std::string trim_copy(const std::string &value)

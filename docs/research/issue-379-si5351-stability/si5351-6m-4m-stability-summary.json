@@ -1,0 +1,128 @@
+[
+  {
+    "band": "6 m",
+    "source": "/home/pi/issue379-si5351-6m-4m/si5351-6m-tone-300s-logged.cf32",
+    "sample_rate_hz": 250000.0,
+    "sample_count": 77500000,
+    "capture_duration_s": 310.0,
+    "analyzed_duration_s": 295.99,
+    "requested_rf_hz": 50294500.0,
+    "discovered_baseband_hz": -25117.874145507812,
+    "measured_carrier_median_hz": 50294382.19467623,
+    "constant_offset_hz": -117.8053237721324,
+    "window_s": 2.0,
+    "step_s": 0.25,
+    "frequency_estimates": 1177,
+    "relative_frequency_peak_to_peak_hz": 1.460578814148903,
+    "relative_frequency_p05_p95_hz": 0.7871172830462456,
+    "linear_drift_hz_per_min": -0.11931930604507227,
+    "detrended_frequency_rms_hz": 0.17369614079149143,
+    "detrended_frequency_p05_p95_hz": 0.5525351330637932,
+    "rolling_60s_slope_min_hz_per_min": -0.787014681836397,
+    "rolling_60s_slope_max_hz_per_min": 0.6084121765045339,
+    "median_phase_fit_rms_rad": 0.15809880603348303,
+    "max_adjacent_phase_residual_jump_rad": 0.09818027897470927,
+    "phase_jump_threshold_rad": 1.5707963267948966,
+    "phase_discontinuities": 0,
+    "amplitude_median_dbfs": -60.46149008501574,
+    "amplitude_p05_p95_db": 0.2884209759828593,
+    "amplitude_peak_to_peak_db": 0.7312894915657893,
+    "max_input_component": 0.00311279296875,
+    "clipped_samples": 0,
+    "per_minute": [
+      {
+        "minute": 1,
+        "slope_hz_per_min": 0.6233668262191858,
+        "peak_to_peak_hz": 1.1347835510969162,
+        "p05_p95_hz": 0.758203960955143
+      },
+      {
+        "minute": 2,
+        "slope_hz_per_min": -0.3899811416241271,
+        "peak_to_peak_hz": 0.7182442471385002,
+        "p05_p95_hz": 0.5266164690256119
+      },
+      {
+        "minute": 3,
+        "slope_hz_per_min": 0.017916425624240378,
+        "peak_to_peak_hz": 0.5942160561680794,
+        "p05_p95_hz": 0.37906525284051895
+      },
+      {
+        "minute": 4,
+        "slope_hz_per_min": -0.25726849255899453,
+        "peak_to_peak_hz": 0.6757314801216125,
+        "p05_p95_hz": 0.4398990571498871
+      },
+      {
+        "minute": 5,
+        "slope_hz_per_min": -0.10413341521768159,
+        "peak_to_peak_hz": 0.5478377118706703,
+        "p05_p95_hz": 0.38053181767463684
+      }
+    ]
+  },
+  {
+    "band": "4 m",
+    "source": "/home/pi/issue379-si5351-6m-4m/si5351-4m-tone-300s.cf32",
+    "sample_rate_hz": 250000.0,
+    "sample_count": 77500000,
+    "capture_duration_s": 310.0,
+    "analyzed_duration_s": 295.99,
+    "requested_rf_hz": 70092500.0,
+    "discovered_baseband_hz": -25162.220001220703,
+    "measured_carrier_median_hz": 70092337.36289015,
+    "constant_offset_hz": -162.6371098458767,
+    "window_s": 2.0,
+    "step_s": 0.25,
+    "frequency_estimates": 1177,
+    "relative_frequency_peak_to_peak_hz": 2.247002884745598,
+    "relative_frequency_p05_p95_hz": 1.6751089155673982,
+    "linear_drift_hz_per_min": -0.2633506234903841,
+    "detrended_frequency_rms_hz": 0.40353934051221524,
+    "detrended_frequency_p05_p95_hz": 1.268790411949158,
+    "rolling_60s_slope_min_hz_per_min": -1.0253995608722781,
+    "rolling_60s_slope_max_hz_per_min": 1.0070570340124607,
+    "median_phase_fit_rms_rad": 0.21009051316293595,
+    "max_adjacent_phase_residual_jump_rad": 0.12345427032812495,
+    "phase_jump_threshold_rad": 1.5707963267948966,
+    "phase_discontinuities": 0,
+    "amplitude_median_dbfs": -41.827692582601784,
+    "amplitude_p05_p95_db": 0.6675362933331641,
+    "amplitude_peak_to_peak_db": 1.9685683564389365,
+    "max_input_component": 0.048583984375,
+    "clipped_samples": 0,
+    "per_minute": [
+      {
+        "minute": 1,
+        "slope_hz_per_min": 0.683756795331915,
+        "peak_to_peak_hz": 1.0947459638118744,
+        "p05_p95_hz": 0.7761437594890594
+      },
+      {
+        "minute": 2,
+        "slope_hz_per_min": -0.8477120886666047,
+        "peak_to_peak_hz": 1.576716423034668,
+        "p05_p95_hz": 0.9346596151590347
+      },
+      {
+        "minute": 3,
+        "slope_hz_per_min": -0.1797684658862837,
+        "peak_to_peak_hz": 0.9024922996759415,
+        "p05_p95_hz": 0.5143577605485916
+      },
+      {
+        "minute": 4,
+        "slope_hz_per_min": 0.00944848659110815,
+        "peak_to_peak_hz": 0.7088474184274673,
+        "p05_p95_hz": 0.5090806186199188
+      },
+      {
+        "minute": 5,
+        "slope_hz_per_min": 0.7596970040444676,
+        "peak_to_peak_hz": 1.153942883014679,
+        "p05_p95_hz": 0.7530042082071304
+      }
+    ]
+  }
+]

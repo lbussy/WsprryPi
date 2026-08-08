@@ -1454,6 +1454,13 @@ int main()
             config_view_source.find("id=\"band-gpio-active-high-all\"") != std::string::npos,
         "Band GPIO table must expose bulk-toggle header checkboxes for Enabled and Active High");
     require(
+        config_view_source.find("'2m', '1.25m', '70cm'") != std::string::npos &&
+            site_source.find("\"1.25m\": { required: false, type: \"object\" }") !=
+                std::string::npos &&
+            site_source.find("\"70cm\": { required: false, type: \"object\" }") !=
+                std::string::npos,
+        "Band GPIO UI and schema must include canonical 1.25 m and 70 cm configuration rows");
+    require(
         config_view_source.find("class=\"form-check-input band-gpio-enabled\"") != std::string::npos &&
             config_view_source.find("class=\"form-check-input band-gpio-enabled\"\n                                                                type=\"checkbox\"") != std::string::npos &&
             config_view_source.find("class=\"form-check-input band-gpio-active-high\"") != std::string::npos &&

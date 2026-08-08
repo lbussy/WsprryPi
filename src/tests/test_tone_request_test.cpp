@@ -59,13 +59,18 @@ int main()
                 "canonical WSPR band");
     }
 
-    const auto custom_rf = parse_test_tone_request(
-        json{{"frequency_source", "custom_rf"}, {"frequency_hz", 14097123}});
-    require(custom_rf &&
-                custom_rf.request->source == TestToneRequestSource::CustomRf &&
-                custom_rf.request->frequency_hz == 14097123U &&
-                custom_rf.request->band.empty(),
-            "valid custom RF");
+    for (const std::uint64_t frequency_hz :
+         {std::uint64_t{14097123}, std::uint64_t{223500000},
+          std::uint64_t{435000000}})
+    {
+        const auto custom_rf = parse_test_tone_request(
+            json{{"frequency_source", "custom_rf"}, {"frequency_hz", frequency_hz}});
+        require(custom_rf &&
+                    custom_rf.request->source == TestToneRequestSource::CustomRf &&
+                    custom_rf.request->frequency_hz == frequency_hz &&
+                    custom_rf.request->band.empty(),
+                "valid numeric custom RF");
+    }
 
     const std::vector<RejectionCase> rejected_requests{
         {"null frequency_source", {{"frequency_source", nullptr}}, "frequency_source"},

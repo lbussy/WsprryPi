@@ -37,7 +37,7 @@ namespace
         {"30m", 10138700}, {"22m", 13551500}, {"20m", 14095600},
         {"17m", 18104600}, {"15m", 21094600}, {"12m", 24924600},
         {"10m", 28124600}, {"6m", 50293000}, {"4m", 70091000},
-        {"2m", 144489000},
+        {"2m", 144489000}, {"1.25m", 222100000}, {"70cm", 432300000},
     };
 
     void require_catalog_response(
@@ -99,7 +99,7 @@ int main()
     WSPRBandLookup lookup;
     const auto catalog = lookup.canonical_wspr_band_catalog();
     require(catalog.size() == expected_bands.size(),
-            "lookup catalog must expose exactly 16 canonical display bands");
+            "lookup catalog must expose exactly 18 canonical display bands");
     for (std::size_t index = 0; index < expected_bands.size(); ++index)
     {
         require(catalog.at(index).band == expected_bands.at(index).name,
@@ -111,8 +111,42 @@ int main()
     for (const auto &entry : catalog)
     {
         require(entry.band != "lf" && entry.band != "mf",
-                "lookup catalog must not expose alias display rows");
+                "lookup catalog must expose only authoritative WSPR display rows");
     }
+
+    require(
+        lookup.lookup_ham_band(223500000.0) ==
+            std::optional<HamBand>(HamBand::BAND_1_25M) &&
+            lookup.parse_string_to_frequency("223.5MHz") == 223500000.0 &&
+            std::get<std::string>(lookup.lookup(223500000.0)) == "1.25m",
+        "numeric 1.25 m WSPR input must resolve to the canonical HamBand");
+    require(
+        lookup.lookup_ham_band(222000000.0) ==
+                std::optional<HamBand>(HamBand::BAND_1_25M) &&
+            lookup.lookup_ham_band(225000000.0) ==
+                std::optional<HamBand>(HamBand::BAND_1_25M) &&
+            !lookup.lookup_ham_band(221999999.0).has_value() &&
+            !lookup.lookup_ham_band(225000001.0).has_value(),
+        "1.25 m lookup must use the ordinary 222-225 MHz amateur allocation");
+    require(
+        lookup.lookup_ham_band(435000000.0) ==
+            std::optional<HamBand>(HamBand::BAND_70CM) &&
+            lookup.parse_string_to_frequency("435000000") == 435000000.0 &&
+            std::get<std::string>(lookup.lookup(435000000.0)) == "70cm",
+        "numeric 70 cm WSPR input must resolve to the canonical HamBand");
+    require(
+        lookup.lookup_ham_band(420000000.0) ==
+                std::optional<HamBand>(HamBand::BAND_70CM) &&
+            lookup.lookup_ham_band(450000000.0) ==
+                std::optional<HamBand>(HamBand::BAND_70CM) &&
+            !lookup.lookup_ham_band(419999999.0).has_value() &&
+            !lookup.lookup_ham_band(450000001.0).has_value(),
+        "70 cm lookup must cover the inclusive 420-450 MHz allocation");
+
+    require(
+        lookup.parse_string_to_frequency("1.25m") == 222100000.0 &&
+            lookup.parse_string_to_frequency("70cm") == 432300000.0,
+        "authoritative 1.25 m and 70 cm WSPR aliases must resolve to their dial frequencies");
 
     require(std::get<double>(lookup.lookup(std::string("lf"))) == 136000.0,
             "lf lookup alias must remain accepted");

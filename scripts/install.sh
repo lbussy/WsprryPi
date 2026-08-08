@@ -531,8 +531,11 @@ if [[ -z "${SUPPORTED_MODELS+x}" || ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
         # Supported models
         ["Raspberry Pi 5|5-model-b|bcm2712"]="Supported"
         ["Raspberry Pi 400|400|bcm2711"]="Supported"
+        ["Raspberry Pi Compute Module 4S|4s-compute-module|bcm2711"]="Supported"
         ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Supported"
+        ["Raspberry Pi Compute Module 3+|3-plus-compute-module|bcm2837"]="Supported"
         ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Supported"
+        ["Raspberry Pi Compute Module Zero|0-compute-module|bcm2837"]="Supported"
         ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Supported"
         ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"
         ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"

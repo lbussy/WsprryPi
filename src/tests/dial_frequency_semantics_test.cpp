@@ -1399,6 +1399,35 @@ int main(int argc, char *argv[])
 
     {
         init_config_json();
+        json_to_config();
+        config.transmit = false;
+        config.frequencies = "223.5MHz 435000000";
+        require(
+            set_frequencies(config) &&
+                config.wspr_frequency_entries.size() == 2U &&
+                lookup.lookup_ham_band(
+                    config.wspr_frequency_entries[0].dial_frequency_hz) ==
+                    std::optional<HamBand>(HamBand::BAND_1_25M) &&
+                lookup.lookup_ham_band(
+                    config.wspr_frequency_entries[1].dial_frequency_hz) ==
+                    std::optional<HamBand>(HamBand::BAND_70CM),
+            "numeric WSPR entries in 1.25 m and 70 cm must resolve to canonical HamBands");
+
+        config.frequencies = "1.25m 70cm";
+        require(
+            set_frequencies(config) &&
+                config.wspr_frequency_entries.size() == 2U &&
+                nearly_equal(
+                    config.wspr_frequency_entries[0].dial_frequency_hz,
+                    222100000.0) &&
+                nearly_equal(
+                    config.wspr_frequency_entries[1].dial_frequency_hz,
+                    432300000.0),
+            "authoritative 1.25 m and 70 cm WSPR aliases must parse to their dial frequencies");
+    }
+
+    {
+        init_config_json();
         if (jConfig.contains("CW") && jConfig["CW"].is_object())
         {
             jConfig["CW"].erase("Base Frequency");
@@ -6292,27 +6321,143 @@ int main(int argc, char *argv[])
             TestToneRequest{TestToneFrequencySource::WsprBand, "12m", std::nullopt});
         const TestToneStartResult six_meter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
+        const TestToneStartResult four_meter_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "4m", std::nullopt});
         const TestToneStartResult two_meter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "2m", std::nullopt});
+        const TestToneStartResult one_twenty_five_meter_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "1.25m", std::nullopt});
+        const TestToneStartResult seventy_centimeter_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "70cm", std::nullopt});
         const TestToneStartResult custom_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
+        const TestToneStartResult custom_125m_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 223500000U});
+        const TestToneStartResult custom_70cm_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 435000000U});
 
         require(
             !band_rejected.started && !six_meter_rejected.started &&
-                !two_meter_rejected.started && !custom_rejected.started &&
+                !four_meter_rejected.started && !two_meter_rejected.started &&
+                !one_twenty_five_meter_rejected.started &&
+                !seventy_centimeter_rejected.started &&
+                !custom_rejected.started && !custom_125m_rejected.started &&
+                !custom_70cm_rejected.started &&
                 band_rejected.message.find("Direct GPIO transmission is blocked") !=
                     std::string::npos &&
                 six_meter_rejected.message.find("6 m") != std::string::npos &&
+                four_meter_rejected.message.find("4 m") != std::string::npos &&
                 two_meter_rejected.message.find("2 m") != std::string::npos &&
+                one_twenty_five_meter_rejected.message.find("1.25 m") !=
+                    std::string::npos &&
+                seventy_centimeter_rejected.message.find("70 cm") !=
+                    std::string::npos &&
                 custom_rejected.message.find("Direct GPIO transmission is blocked") !=
                     std::string::npos &&
-                band_rejected.message.find("Si5351") != std::string::npos &&
+                custom_125m_rejected.message.find("1.25 m") != std::string::npos &&
+                custom_70cm_rejected.message.find("70 cm") != std::string::npos &&
+                band_rejected.message.find("separately qualified") !=
+                    std::string::npos &&
                 config.mode == ModeType::QRSS &&
                 nearly_equal(
                     current_transmission_request_for_test().actual_rf_frequency_hz,
                     7654321.0) &&
                 band_gpio_prepare_call_count_for_test() == 0U,
             "named and custom disqualified GPIO Test Tones must reject before runtime or selector mutation");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        reset_getopt_state();
+        std::vector<std::string> args = {
+            "wsprrypi",
+            "--test-tone",
+            "435000000",
+            "--backend",
+            "gpio",
+            "--transmit-gpio",
+            "4"};
+        std::vector<char *> argv = argv_for(args);
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()),
+            "direct CLI 70 cm test-tone parsing must succeed before band policy evaluation");
+
+        WsprFrequencyEntry entry;
+        double actual_rf_frequency_hz = 0.0;
+        require(
+            try_get_direct_tone_startup_request(entry, actual_rf_frequency_hz) &&
+                nearly_equal(actual_rf_frequency_hz, 435000000.0),
+            "direct CLI 70 cm test tone must retain its transient numeric request");
+
+        set_scheduler_execution_suppressed_for_test(true);
+        reset_current_transmission_request_for_test();
+        reset_current_controller_request_for_test();
+        reset_committed_execution_route_for_test();
+        reset_band_gpio_prepare_call_count_for_test();
+        int start_async_calls = 0;
+        set_direct_tone_start_invoker_for_test(
+            [&start_async_calls] { ++start_async_calls; });
+        std::string startup_error;
+        const bool started = start_direct_tone_execution_for_test(
+            config,
+            entry,
+            actual_rf_frequency_hz,
+            &startup_error);
+
+        require(
+            !started && startup_error.find("70 cm") != std::string::npos &&
+                start_async_calls == 0 &&
+                band_gpio_prepare_call_count_for_test() == 0U &&
+                current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
+                !current_controller_request_for_test().has_value() &&
+                committed_execution_route_for_test() ==
+                    CommittedExecutionRouteForTest::NONE,
+            "direct CLI 70 cm GPIO tone must fail before selector preparation, request commit, or startAsync");
+
+        reset_direct_tone_start_invoker_for_test();
+        clear_direct_tone_startup_request();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        set_scheduler_execution_suppressed_for_test(true);
+        reset_current_transmission_request_for_test();
+        reset_current_controller_request_for_test();
+        reset_committed_execution_route_for_test();
+        reset_band_gpio_prepare_call_count_for_test();
+        int start_async_calls = 0;
+        set_direct_tone_start_invoker_for_test(
+            [&start_async_calls] { ++start_async_calls; });
+
+        WsprFrequencyEntry unknown_band_entry;
+        unknown_band_entry.token = "150000000";
+        unknown_band_entry.dial_frequency_hz = 150000000.0;
+        std::string lookup_error;
+        const bool unknown_band_started = start_direct_tone_execution_for_test(
+            config,
+            unknown_band_entry,
+            unknown_band_entry.dial_frequency_hz,
+            &lookup_error);
+        BandGPIOConfig inactive_selector_config;
+        std::string inactive_selector_band;
+        require(
+            !unknown_band_started && !lookup_error.empty() &&
+                start_async_calls == 0 &&
+                band_gpio_prepare_call_count_for_test() == 1U &&
+                current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
+                !current_controller_request_for_test().has_value() &&
+                committed_execution_route_for_test() ==
+                    CommittedExecutionRouteForTest::NONE &&
+                !current_band_gpio_selection_for_test(
+                    inactive_selector_config,
+                    inactive_selector_band),
+            "failed direct CLI band lookup and selector preparation must leave RF and selector state inactive without committing or reaching startAsync");
+
+        reset_direct_tone_start_invoker_for_test();
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6705,7 +6850,7 @@ int main(int argc, char *argv[])
         config.use_ini = false;
         config.transmit = true;
         config.mode = ModeType::TONE;
-        require(set_direct_tone_startup_request("730000"),
+        require(set_direct_tone_startup_request("14097123"),
                 "CLI direct-tone restoration setup must create the production startup request");
         set_startup_quiesce_invoker_for_test(
             []()
@@ -6733,9 +6878,9 @@ int main(int argc, char *argv[])
 
         require(start.started && stop.tone_was_active && stop.stopped &&
                     config.mode == ModeType::TONE &&
-                    startup_request_preserved && nearly_equal(startup_rf_hz, 730000.0) &&
+                    startup_request_preserved && nearly_equal(startup_rf_hz, 14097123.0) &&
                     restored.mode == TransmissionMode::TONE &&
-                    nearly_equal(restored.actual_rf_frequency_hz, 730000.0),
+                    nearly_equal(restored.actual_rf_frequency_hz, 14097123.0),
                 "a genuine CLI direct-tone startup request must restore through the direct-tone path");
         clear_direct_tone_startup_request();
         reset_startup_quiesce_for_test();

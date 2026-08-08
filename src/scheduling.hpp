@@ -426,6 +426,15 @@ using TestToneCommitInvokerForTest = std::function<void()>;
 void set_test_tone_commit_invoker_for_test(TestToneCommitInvokerForTest invoker);
 void reset_test_tone_commit_invoker_for_test() noexcept;
 
+using DirectToneStartInvokerForTest = std::function<void()>;
+void set_direct_tone_start_invoker_for_test(DirectToneStartInvokerForTest invoker);
+void reset_direct_tone_start_invoker_for_test() noexcept;
+bool start_direct_tone_execution_for_test(
+    const ArgParserConfig &cfg,
+    const WsprFrequencyEntry &entry,
+    double actual_rf_frequency_hz,
+    std::string *error_message = nullptr);
+
 using StartupQuiesceInvokerForTest =
     std::function<wsprrypi::StartupQuiesceResult()>;
 void set_startup_quiesce_invoker_for_test(StartupQuiesceInvokerForTest invoker);
