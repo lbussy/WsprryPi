@@ -489,6 +489,7 @@ extern ArgParserConfig config;
  */
 struct TestTonePlanningConfigSnapshot
 {
+    TransmitBackendKind transmit_backend = TransmitBackendKind::GPIO;
     double wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
     std::vector<WsprFrequencyEntry> wspr_frequency_entries{};
     std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio{};

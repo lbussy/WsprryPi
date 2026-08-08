@@ -4901,6 +4901,10 @@ int main(int argc, char *argv[])
         require(
             set_config(true),
             "disabled scheduler tone regression must load a stable WSPR runtime config");
+        require(
+            current_test_tone_planning_config_snapshot().transmit_backend ==
+                TransmitBackendKind::SI5351,
+            "disabled scheduler configuration must publish the accepted Si5351 backend for explicit Test Tone planning");
         reset_tx_led_request_counts_for_test();
 
         const TestToneStartResult tone_start_result = start_test_tone();
@@ -4980,6 +4984,10 @@ int main(int argc, char *argv[])
         require(
             wsprTransmitter.getState() == WsprTransmitter::State::DISABLED,
             "test tone stop with transmit disabled must not leave the transmitter busy");
+        require(
+            current_test_tone_planning_config_snapshot().transmit_backend ==
+                TransmitBackendKind::SI5351,
+            "test tone stop must preserve the accepted Si5351 backend for the next explicit Test Tone plan");
 
         constexpr std::uint64_t calibrated_2m_hz = 144490498U;
         const TestToneStartResult calibrated_start = start_test_tone(
@@ -6244,6 +6252,7 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        reset_managed_reload_runtime_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(true);
         config.transmit = false;
@@ -6262,6 +6271,67 @@ int main(int argc, char *argv[])
         const TestToneStopResult stopped = end_test_tone();
         require(stopped.tone_was_active && stopped.stopped,
                 "explicit 20m Test Tone End must succeed");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        config.mode = ModeType::QRSS;
+        copy_runtime_config(config, config);
+        TransmissionRequest sentinel;
+        sentinel.actual_rf_frequency_hz = 7654321.0;
+        set_current_transmission_request_for_test(sentinel);
+        reset_band_gpio_prepare_call_count_for_test();
+
+        const TestToneStartResult band_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "12m", std::nullopt});
+        const TestToneStartResult six_meter_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
+        const TestToneStartResult two_meter_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "2m", std::nullopt});
+        const TestToneStartResult custom_rejected = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
+
+        require(
+            !band_rejected.started && !six_meter_rejected.started &&
+                !two_meter_rejected.started && !custom_rejected.started &&
+                band_rejected.message.find("Direct GPIO transmission is blocked") !=
+                    std::string::npos &&
+                six_meter_rejected.message.find("6 m") != std::string::npos &&
+                two_meter_rejected.message.find("2 m") != std::string::npos &&
+                custom_rejected.message.find("Direct GPIO transmission is blocked") !=
+                    std::string::npos &&
+                band_rejected.message.find("Si5351") != std::string::npos &&
+                config.mode == ModeType::QRSS &&
+                nearly_equal(
+                    current_transmission_request_for_test().actual_rf_frequency_hz,
+                    7654321.0) &&
+                band_gpio_prepare_call_count_for_test() == 0U,
+            "named and custom disqualified GPIO Test Tones must reject before runtime or selector mutation");
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::SI5351;
+        config.mode = ModeType::QRSS;
+        copy_runtime_config(config, config);
+
+        const TestToneStartResult started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "2m", std::nullopt});
+        const TestToneStopResult stopped = end_test_tone();
+
+        require(
+            started.started && stopped.tone_was_active && stopped.stopped,
+            "the GPIO band restriction must not block a Si5351 2 m Test Tone");
         set_scheduler_execution_suppressed_for_test(false);
     }
 
@@ -6446,6 +6516,7 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        reset_managed_reload_runtime_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(true);
         config.mode = ModeType::WSPR;
@@ -6476,6 +6547,7 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        reset_managed_reload_runtime_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(true);
         config.mode = ModeType::WSPR;
@@ -6515,6 +6587,7 @@ int main(int argc, char *argv[])
         config.transmit_backend = TransmitBackendKind::SI5351;
         config.frequencies = "20m";
         set_frequencies(config);
+        copy_runtime_config(config, config);
         wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
         set_test_tone_commit_invoker_for_test([] {
             throw std::runtime_error(

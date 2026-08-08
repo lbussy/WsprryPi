@@ -117,6 +117,7 @@ GPIO_LINE_RESOLVER_TEST_OUT := gpio_line_resolver_test
 NON_WSPR_REPEAT_POLICY_TEST_OUT := non_wspr_repeat_policy_test
 QRSS_EXECUTION_REGRESSION_TEST_OUT := qrss_execution_regression_test
 WSPR_TONE_REGRESSION_TEST_OUT := wspr_tone_regression_test
+GPIO_BAND_POLICY_TEST_OUT := gpio_band_policy_test
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
 QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
 SUPPORT_REQUEST_GUARD_TEST_OUT := support_request_guard_test
@@ -229,6 +230,12 @@ QRSS_EXECUTION_REGRESSION_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_D
 WSPR_TONE_REGRESSION_TEST_SRC := tests/wspr_tone_regression_test.cpp
 WSPR_TONE_REGRESSION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/wspr_tone_regression_test.o
 WSPR_TONE_REGRESSION_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+GPIO_BAND_POLICY_TEST_SRC := tests/gpio_band_policy_test.cpp
+GPIO_BAND_POLICY_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/gpio_band_policy_test.o
+GPIO_BAND_POLICY_TEST_DEPS := \
+	$(GPIO_BAND_POLICY_TEST_OBJ) \
+	$(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/execution_plan_compiler.o \
+	$(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 SELECTOR_SHUTDOWN_CLEANUP_TEST_SRC := tests/selector_shutdown_cleanup_test.cpp
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/selector_shutdown_cleanup_test.o
 SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
@@ -597,6 +604,17 @@ $(BIN_DIR)/$(WSPR_TONE_REGRESSION_TEST_OUT): $(WSPR_TONE_REGRESSION_TEST_OBJ) $(
 	$(Q)echo "Linking debug: $(WSPR_TONE_REGRESSION_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(GPIO_BAND_POLICY_TEST_OBJ): $(GPIO_BAND_POLICY_TEST_SRC)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/tests/gpio_band_policy_test.d -c $< -o $@
+
+$(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT): $(GPIO_BAND_POLICY_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug: $(GPIO_BAND_POLICY_TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(SELECTOR_SHUTDOWN_CLEANUP_TEST_OBJ): $(SELECTOR_SHUTDOWN_CLEANUP_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -737,7 +755,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 DEBUG: debug
 RELEASE: release
 
@@ -773,11 +791,13 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
+semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running UI/source regression tests."
 	$(Q)./$(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
+	$(Q)echo "Running GPIO band fail-closed policy tests."
+	$(Q)./$(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running log timestamp display regression tests."
 	$(Q)node tests/log_timestamp_display_test.js
 	$(Q)echo "Running update-check comparison tests."
@@ -893,6 +913,10 @@ qrss-execution-regression-test qrss_execution_regression_test: $(BIN_DIR)/$(QRSS
 wspr-tone-regression-test wspr_tone_regression_test: $(BIN_DIR)/$(WSPR_TONE_REGRESSION_TEST_OUT)
 	$(Q)echo "Running WSPR tone regression tests."
 	$(Q)./$(BIN_DIR)/$(WSPR_TONE_REGRESSION_TEST_OUT)
+
+gpio-band-policy-test: $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+	$(Q)echo "Running GPIO band fail-closed policy tests."
+	$(Q)./$(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 
 ifeq ($(GPIOD_HAS_V2),1)
 gpio-loopback-test: $(BIN_DIR)/$(GPIO_LOOPBACK_TEST_OUT)

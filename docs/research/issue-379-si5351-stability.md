@@ -245,8 +245,172 @@ After the bounded frame, Si5351 output-enable register 3 read `0xFF`, both
 normal services were active, and no capture or transmitter process remained.
 This satisfies Issue 379's requirement for three independently decoded bounded
 Si5351 frames, as well as bounded shutdown and post-frame RF silence. The
-issue's separate numerical tone-span and symbol-timing criteria remain subject
-to the final acceptance review.
+measured adjacent-spacing error of 0.0200 Hz is inside the issue's +/-0.03 Hz
+criterion. Multiplying the fitted spacing across three intervals implies a
+4.4547 Hz span, approximately 0.0602 Hz above the 4.39453125 Hz ideal and
+0.0102 Hz beyond the stated +/-0.05 Hz span criterion. The application
+durations include process and shutdown overhead and therefore are not direct
+measurements of the issue's symbol-level timing limits. Final closure must
+either accept the complete-frame, transition, planner, and decoder evidence
+with the measurement uncertainty stated, or retain the span and symbol-timing
+items as unresolved. This document does not silently convert them into passes.
+
+## GPIO VHF spectral-power concentration
+
+Additional conducted GPIO tests on `wspr4` compared RF-on and RF-off spectra
+from the fixed-gain RSP1B on `wspr5`. Transmitter-added power was calculated in
+linear units over the captured +/-100 kHz region. The receiver center +/-1 kHz
+was excluded, and only bins at least 6 dB above the RF-off baseline were
+treated as resolved transmitter power. These are relative spectral-utilization
+measurements, not calibrated watts. Harmonics outside the captured region are
+not included.
+
+| Test | Resolved power in the most useful 20 Hz | Power outside that 20 Hz | Narrow-channel penalty |
+|---|---:|---:|---:|
+| GPIO 6 m continuous output, `PPM=0` | 1.71% | 98.29% | -17.67 dB |
+| GPIO 10 m continuous tone, `PPM=0` | 90.67% | 9.33% | -0.43 dB |
+| GPIO 10 m WSPR, `PPM=0`, measured channel | 99.94% | 0.06% | -0.003 dB |
+| GPIO 10 m WSPR, `PPM=+13.179`, measured channel | 99.95% | 0.05% | -0.002 dB |
+| GPIO 10 m WSPR, `PPM=-13.179`, nominal channel | 99.52% | 0.48% | -0.021 dB |
+
+The 6 m comb is a genuine power-distribution failure: no 20 Hz region contains
+more than 1.71% of the resolved close-in output. The visible 10 m comb teeth
+are different. They are conspicuous in RF-on/RF-off ratio plots because the
+background is quiet, but the decoded WSPR captures retain more than 99.5% of
+resolved close-in power inside one 20 Hz channel. At 10 m, incorrect frequency
+placement was the dominant failure before PPM correction, not loss of useful
+power into the comb.
+
+The `PPM=0` 10 m frame was displaced about +371 Hz but decoded after receiver-
+side translation. Three frames with `PPM=+13.179` moved to about +748 Hz and
+decoded only after translation. Reversing the setting to `PPM=-13.179` placed
+three consecutive frames within approximately -0.3 to +0.6 Hz of nominal, and
+all decoded as `AA0NT EM18 20`. This direction-sensitive result led to Issue
+#388. The measured value is specific to this Pi and receiver-reference
+relationship and must not become a project default.
+
+## GPIO band and pacing qualification
+
+After the 80 m stability reproduction, the hard 80 m LPF was removed and the
+attenuated GPIO 4 output on `wspr4` was measured with the fixed-gain RSP1B on
+`wspr5`. The production `PWM_CLOCKS_PER_ITER_NOMINAL` value is 1000. Additional
+builds at 4000 and 16000 were temporary test points; after every sweep the
+published value 1000 was restored and rebuilt with three jobs. GPIO 4 was
+returned to input and the normal services were restored.
+
+The PPM value was held fixed within each comparison to isolate pacing behavior.
+Absolute carrier placement is hardware-specific and is not the qualification
+decision in this table.
+
+| Band | 1000-clock result | 4000-clock result | 16000-clock result | GPIO disposition |
+|---|---|---|---|---|
+| 80 m | Prior steady-carrier and decoded-operation evidence; not reswept | Not tested | Not tested | Usable |
+| 20 m | Strong carrier; 3/3 intended frames decoded at 5--6 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
+| 15 m | Strong carrier; 3/3 frames decoded at 9--10 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
+| 12 m | No usable requested-frequency carrier; 0/3 decoded | No usable carrier; 0/3 decoded | No usable carrier; 0/3 decoded | Disqualified |
+| 10 m | Strong carrier; 3/3 frames decoded at 14--15 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
+| 6 m | Severe spectral dispersion; no usable carrier | Not tested | Not tested | Disqualified |
+| 2 m | No usable requested-frequency signal | Not tested | Not tested | Disqualified |
+
+The result is not a monotonic frequency ceiling. GPIO works at 15 m, fails at
+12 m, and works again at 10 m. Twelve metres is therefore a band-specific
+integer-divider/dither pathology. Six metres disperses the transmitted power
+across a broad comb, and 2 m also lies beyond the BCM2711 GPCLK documented
+approximate 125 MHz maximum.
+
+At 20, 15, and 10 m, changing the block size had little effect on the
+unmodulated carrier:
+
+| Band | Carrier at 1000 | Carrier at 4000 | Carrier at 16000 |
+|---|---:|---:|---:|
+| 20 m | -80.70 dBFS, +143.86 Hz | -80.72 dBFS, +142.90 Hz | -80.59 dBFS, +142.90 Hz |
+| 15 m | -76.95 dBFS, +230.64 Hz | -76.72 dBFS, +229.69 Hz | -76.85 dBFS, +229.69 Hz |
+| 10 m | -72.05 dBFS, +164.84 Hz | -72.18 dBFS, +161.98 Hz | -72.34 dBFS, +163.89 Hz |
+
+The larger values nevertheless caused every WSPR frame to fail decoding. They
+allow each integer-divider state to persist too long for the receiver to see
+the intended WSPR tone average. A strong steady carrier is therefore not proof
+of usable modulation. The production value 1000 is required by the tested
+implementation; increasing it is not a valid 12 m cleanup strategy.
+
+At 1000 clocks, the decoded center spread was 0.4 Hz over three frames at both
+15 m and 10 m. The intended 20 m signal also decoded in all three frames. Each
+20 m audio conversion produced weak companion decodes approximately 120 Hz on
+either side of the intended decode. These are retained as cadence-related
+spectral replicas, not additional transmissions, and require operator-facing
+filtering guidance.
+
+The uncorrected steady-tone offsets were not proportional to RF frequency:
+approximately +144 Hz at 20 m, +231 Hz at 15 m, and +162 to +165 Hz at 10 m.
+One oscillator PPM term cannot explain that non-monotonic placement. Integer-
+divider selection and dither behavior contribute alongside the hardware clock
+offset. Issue #388 separately tracks the sign convention used when applying
+the Chrony-derived GPIO correction.
+
+### Legacy_1.2.3 comparison on the same platform
+
+The near-original `Legacy_1.2.3` GPIO implementation was also tested on the
+same Raspberry Pi 4 (`BCM2711`) running 64-bit Trixie, using commit
+`d9e4bf77f6b75ed9c82b21ad5516594dcca161de`. The pristine legacy source assumes
+32-bit pointers and would not compile on this platform. Three pointer-width
+compatibility changes were required for error printing and DMA address
+arithmetic; frequency synthesis, modulation, calibration, output power, and
+the production `PWM_CLOCKS_PER_ITER_NOMINAL=1000` value were left unchanged.
+
+The comparison used GPIO 4, power level 7, free-running `PPM=0`, the same
+attenuation, and the same fixed-gain RSP1B capture method. Each band had to
+produce a usable continuous carrier before any WSPR frame would be attempted.
+
+| Band | Legacy best 20 Hz share | Current implementation | Legacy result |
+|---|---:|---:|---|
+| 12 m | 0.0854% (-30.69 dB) | 0.1103% (-29.57 dB) | No usable coalesced carrier |
+| 6 m | 0.1712% (-27.67 dB) | 1.7097% (-17.67 dB) | No usable coalesced carrier |
+
+Both legacy tones failed the carrier gate, so no legacy WSPR frames were
+transmitted. On this platform, 12 m is essentially the same non-coalesced
+failure in the legacy and current implementations. Legacy 6 m was about 10 dB
+worse in best-20-Hz power concentration, although both implementations are
+unusable. This comparison does not support attributing either band failure to
+the current WsprryPi software evolution; the original-era GPIO implementation
+also failed on the tested platform.
+
+### Fail-closed GPIO validation
+
+The resulting policy was built and exercised on `wspr4`, a supported
+Raspberry Pi 4 running 64-bit Trixie. Named WSPR requests and exact-frequency
+Test Tone requests were submitted for 12 m, 6 m, and 2 m with GPIO 4 selected.
+All six requests exited with the band-specific rejection before transmission.
+The live startup-quiesce audit showed DMA and PWM disabled and unchanged before
+and after the requests. GPIO 4 remained in its idle input state, and the normal
+transmit-disabled service was restored successfully. Non-hardware coverage
+also exercises WSPR, QRSS, FSKCW, DFCW, and Test Tone paths, boundary
+frequencies, qualified GPIO bands, and the unaffected Si5351 path.
+
+## Issue 379 closure disposition
+
+- The Si5351 backend produced three independently decoded bounded 2 m frames,
+  preserved the carrier through measured transitions, and restored the
+  verified idle state. The accepted criterion separates repeatable software
+  operation from hardware-specific oscillator accuracy and settling.
+- The GPIO backend cannot be qualified for 2 m on the tested supported
+  Raspberry Pi path. It did not produce a usable requested-frequency signal,
+  so the issue's three-decoded-frame requirement cannot be met. This is a
+  formal backend-specific disqualification, not a failed claim that GPIO 2 m
+  passed.
+- GPIO support is band-specific. The retained evidence supports 80, 20, 15,
+  and 10 m operation with the production pacing value and disqualifies 12, 6,
+  and 2 m on this implementation. The same-platform `Legacy_1.2.3` comparison
+  also failed to produce usable 12 m or 6 m carriers.
+- Direct GPIO requests in the 12 m, 6 m, and 2 m band ranges now fail closed
+  across WSPR, CW, scheduled, command-line, and Test Tone paths. Focused tests,
+  full non-hardware regression, supported-Pi builds, and RF-inhibited live
+  smoke validation passed. The Si5351 path remains available.
+- The remaining closure work is publication of the transmitter, parent, and
+  operator-documentation changes and reconciliation of the GitHub issue body.
+- Hardware-specific absolute frequency, thermal drift, phase noise, spurs,
+  harmonics, power, and RF-chain behavior remain characterization rather than
+  project defaults or generic guarantees. Qualification does not authorize
+  on-air operation.
 
 ## Retained evidence
 
@@ -276,6 +440,11 @@ machine-readable results beside this document:
 - `si5351-2m-two-more-capture.log`: continuous receiver capture result
 - `si5351-2m-frame-1830-wsprd.log`: second independent decode
 - `si5351-2m-frame-1832-wsprd.log`: third independent decode
+- `gpio-vhf-spectral-utilization.json`: relative 6 m/10 m close-in power budget
+- `gpio-band-cadence-qualification.json`: band disposition and 1000/4000/16000
+  pacing results for 10, 12, 15, and 20 m
+- `gpio-fail-closed-validation.json`: supported-Pi build, regression, blocked
+  request, hardware-quiescence, and service-restoration results
 
 The larger working evidence remains outside the repository:
 
@@ -287,6 +456,13 @@ The larger working evidence remains outside the repository:
   `/home/pi/issue379-si5351-frame-valid/si5351-2m-frame-valid.cf32`
 - Two additional decoded-frame raw IQ on `wspr5`:
   `/home/pi/issue379-si5351-two-more-frames/si5351-2m-two-more.cf32`
+- GPIO cadence-sweep raw IQ and decoder artifacts on `wspr5`:
+  `/home/pi/issue379-gpio-{10m,12m,15m,20m}-{tone,3frame}-block*`
+- Same-platform `Legacy_1.2.3` comparison report and tone captures on `wspr5`:
+  `/home/pi/legacy123-gpio-comparison/REPORT.md` and
+  `/home/pi/legacy123-gpio-{12m,6m}-tone-ppm0/`
+- Legacy transmitter session, cleanup, and GPIO-quiesce logs on `wspr4`:
+  `/home/pi/legacy123-gpio-{12m,6m}-tone-ppm0/`
 
 The steady-carrier IQ files are 600 MB each, the first frame IQ file is 260 MB,
 and the two-frame IQ file is 500 MB. They are intentionally not committed to
