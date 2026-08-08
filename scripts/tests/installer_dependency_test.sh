@@ -14,4 +14,15 @@ if ! awk '
     exit 1
 fi
 
+for model in \
+    '["Raspberry Pi Compute Module 4S|4s-compute-module|bcm2711"]="Supported"' \
+    '["Raspberry Pi Compute Module 3+|3-plus-compute-module|bcm2837"]="Supported"' \
+    '["Raspberry Pi Compute Module Zero|0-compute-module|bcm2837"]="Supported"'
+do
+    if ! grep -Fq "$model" "$INSTALLER"; then
+        echo "install.sh must recognize: $model" >&2
+        exit 1
+    fi
+done
+
 echo "installer dependency tests: PASS"
