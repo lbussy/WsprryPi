@@ -301,6 +301,7 @@ std::atomic<bool> shutdown_after_wspr_plan{false};
 static bool managed_reload_tx_inhibited = false;
 static bool suppress_scheduler_execution_for_test = false;
 static TestToneCommitInvokerForTest test_tone_commit_invoker_for_test{};
+static DirectToneStartInvokerForTest direct_tone_start_invoker_for_test{};
 static std::atomic<std::uint64_t> non_wspr_schedule_generation{0};
 
 std::uint64_t non_wspr_schedule_generation_for_test() noexcept
@@ -2010,34 +2011,71 @@ static TransmissionRequest make_tone_request(
 }
 
 /**
- * @brief Build the startup direct-tone request from transient CLI state.
+ * @brief Prepare, commit, and start one transient direct-CLI tone request.
  *
- * Startup tone mode is transient runtime state created by `--test-tone`.
- * It is not persistent configuration.
+ * All fallible band-policy and selector work completes before the execution
+ * request is committed or startAsync() can be reached.  Callers therefore
+ * leave both RF and selector outputs inactive when preparation fails.
  */
-static TransmissionRequest make_direct_tone_request(
+static bool start_direct_tone_execution(
     const ArgParserConfig &cfg,
-    double committed_ppm,
-    double actual_rf_frequency_hz)
+    const WsprFrequencyEntry &entry,
+    double actual_rf_frequency_hz,
+    std::string *error_message)
 {
-    WsprFrequencyEntry entry;
-    double ignored_actual_rf_frequency_hz = 0.0;
-    if (try_get_direct_tone_startup_request(entry, ignored_actual_rf_frequency_hz))
+    const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+        to_controller_backend(cfg.transmit_backend),
+        actual_rf_frequency_hz);
+    if (!gpio_policy.allowed)
     {
-        return make_tone_request(
-            cfg,
-            committed_ppm,
-            actual_rf_frequency_hz,
-            actual_rf_frequency_hz,
-            entry);
+        if (error_message != nullptr)
+        {
+            *error_message = gpio_policy.error;
+        }
+        return false;
     }
 
-    return make_tone_request(
+    TransmissionRequest request = make_tone_request(
         cfg,
-        committed_ppm,
+        cfg.ppm,
         actual_rf_frequency_hz,
         actual_rf_frequency_hz,
-        WsprFrequencyEntry{});
+        entry);
+    BandGPIOResolution selector_resolution;
+    const BandGPIOPrepareStatus selector_status =
+        prepare_band_gpio_for_frequency_or_log(
+            entry.dial_frequency_hz,
+            entry,
+            cfg,
+            -1,
+            &selector_resolution);
+    if (selector_status == BandGPIOPrepareStatus::Failed)
+    {
+        (void)stop_active_transmission_selectors();
+        if (error_message != nullptr)
+        {
+            *error_message =
+                "Unable to resolve or prepare the direct test-tone band selector.";
+        }
+        return false;
+    }
+
+    commit_band_gpio_snapshot_to_request(
+        request,
+        selector_resolution,
+        selector_status);
+    commit_execution_request(request);
+
+    if (direct_tone_start_invoker_for_test)
+    {
+        direct_tone_start_invoker_for_test();
+    }
+    else if (!suppress_scheduler_execution_for_test)
+    {
+        wsprTransmitter.startAsync();
+    }
+
+    return true;
 }
 
 static std::chrono::nanoseconds seconds_to_nanoseconds(double seconds)
@@ -3856,37 +3894,16 @@ TestToneStopResult end_test_tone()
         return result;
     }
 
-    const double committed_ppm = config.ppm;
-    TransmissionRequest request =
-        make_direct_tone_request(
+    std::string restoration_error;
+    if (!start_direct_tone_execution(
             config,
-            committed_ppm,
-            actual_rf_frequency_hz);
-    const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
-        to_controller_backend(config.transmit_backend),
-        actual_rf_frequency_hz);
-    if (!gpio_policy.allowed)
+            entry,
+            actual_rf_frequency_hz,
+            &restoration_error))
     {
         result.stopped = true;
-        result.message = gpio_policy.error;
+        result.message = restoration_error;
         return result;
-    }
-    BandGPIOResolution selector_resolution;
-    const BandGPIOPrepareStatus selector_status =
-        prepare_band_gpio_for_frequency_or_log(
-            entry.dial_frequency_hz,
-            entry,
-            config,
-            -1,
-            &selector_resolution);
-    commit_band_gpio_snapshot_to_request(
-        request,
-        selector_resolution,
-        selector_status);
-    commit_execution_request(request);
-    if (!suppress_scheduler_execution_for_test)
-    {
-        wsprTransmitter.startAsync();
     }
 
     llog.logS(INFO,
@@ -4162,35 +4179,17 @@ bool wspr_loop()
         }
         else
         {
-            const double committed_ppm = config.ppm;
-            TransmissionRequest request =
-                make_direct_tone_request(
+            std::string startup_error;
+            if (!start_direct_tone_execution(
                     config,
-                    committed_ppm,
-                    actual_rf_frequency_hz);
-            const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
-                to_controller_backend(config.transmit_backend),
-                actual_rf_frequency_hz);
-            if (!gpio_policy.allowed)
+                    entry,
+                    actual_rf_frequency_hz,
+                    &startup_error))
             {
-                llog.logS(ERROR, gpio_policy.error);
+                llog.logS(ERROR, startup_error);
                 stop_runtime_components_for_process_exit();
                 return false;
             }
-            BandGPIOResolution selector_resolution;
-            const BandGPIOPrepareStatus selector_status =
-                prepare_band_gpio_for_frequency_or_log(
-                    entry.dial_frequency_hz,
-                    entry,
-                    config,
-                    -1,
-                    &selector_resolution);
-            commit_band_gpio_snapshot_to_request(
-                request,
-                selector_resolution,
-                selector_status);
-            commit_execution_request(request);
-            wsprTransmitter.startAsync();
             llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
         }
     }
@@ -5827,6 +5826,30 @@ void set_test_tone_commit_invoker_for_test(
 void reset_test_tone_commit_invoker_for_test() noexcept
 {
     test_tone_commit_invoker_for_test = {};
+}
+
+void set_direct_tone_start_invoker_for_test(
+    DirectToneStartInvokerForTest invoker)
+{
+    direct_tone_start_invoker_for_test = std::move(invoker);
+}
+
+void reset_direct_tone_start_invoker_for_test() noexcept
+{
+    direct_tone_start_invoker_for_test = {};
+}
+
+bool start_direct_tone_execution_for_test(
+    const ArgParserConfig &cfg,
+    const WsprFrequencyEntry &entry,
+    double actual_rf_frequency_hz,
+    std::string *error_message)
+{
+    return start_direct_tone_execution(
+        cfg,
+        entry,
+        actual_rf_frequency_hz,
+        error_message);
 }
 
 void set_startup_quiesce_invoker_for_test(StartupQuiesceInvokerForTest invoker)
