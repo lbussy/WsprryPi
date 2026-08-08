@@ -310,10 +310,17 @@ decision in this table.
 | 80 m | Prior steady-carrier and decoded-operation evidence; not reswept | Not tested | Not tested | Usable |
 | 20 m | Strong carrier; 3/3 intended frames decoded at 5--6 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
 | 15 m | Strong carrier; 3/3 frames decoded at 9--10 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
-| 12 m | No usable requested-frequency carrier; 0/3 decoded | No usable carrier; 0/3 decoded | No usable carrier; 0/3 decoded | Disqualified |
+| 12 m\* | No usable requested-frequency carrier; 0/3 decoded | No usable carrier; 0/3 decoded | No usable carrier; 0/3 decoded | Disqualified |
 | 10 m | Strong carrier; 3/3 frames decoded at 14--15 dB | Strong carrier; 0/3 decoded | Strong carrier; 0/3 decoded | Qualified at 1000 |
 | 6 m | Severe spectral dispersion; no usable carrier | Not tested | Not tested | Disqualified |
 | 2 m | No usable requested-frequency signal | Not tested | Not tested | Disqualified |
+
+\* On a Raspberry Pi Zero 2 W (`BCM2837`-compatible SoC) running a 32-bit OS,
+one of five complete captured 12 m frames decoded. The other four did not, so
+the result did not satisfy the required three consecutive decodes. On the
+Raspberry Pi 4 (`BCM2711`), none of nine 12 m frames decoded across the 1000-,
+4000-, and 16000-clock test points, including 0/3 at the production 1000-clock
+setting.
 
 The result is not a monotonic frequency ceiling. GPIO works at 15 m, fails at
 12 m, and works again at 10 m. Twelve metres is therefore a band-specific
