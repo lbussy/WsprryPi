@@ -1,0 +1,8 @@
+{
+  "band": "4m",
+  "changed_tone_boundaries": 116,
+  "analysis_bin_us": 100.0,
+  "worst_boundary_bin_relative_db": -1.4865123640849318,
+  "boundary_minimum_p05_relative_db": -1.0616730066304827,
+  "longest_contiguous_below_minus_6db_ms": 0.0
+}

@@ -1,0 +1,69 @@
+{
+  "scope": "Issue 379 conducted Si5351 6 m and 4 m qualification",
+  "date_utc": "2026-08-08",
+  "host": "wspr5",
+  "parent_commit": "93d01ea",
+  "wspr_transmitter_commit": "9efb288",
+  "transmitter": {
+    "backend": "si5351",
+    "i2c_bus": 1,
+    "i2c_address": "0x60",
+    "output": "CLK0",
+    "drive_ma": 2,
+    "reference_hz": 27000000,
+    "calibration_ppm": 2.353615654
+  },
+  "receiver": {
+    "model": "SDRplay RSP1B",
+    "serial": "2404058C60",
+    "sample_rate_hz": 250000,
+    "bandwidth_hz": 200000,
+    "gain_db": 25,
+    "agc": false
+  },
+  "bands": [
+    {
+      "band": "6 m",
+      "dial_hz": 50293000,
+      "requested_rf_hz": 50294500,
+      "carrier_best_20hz_share_percent": 95.954,
+      "carrier_contrast_db": 67.81,
+      "measured_placement_offset_hz": 5.15,
+      "decoded_frames": 3,
+      "attempted_frames": 3,
+      "intended_decode_snr_db": [18, 18, 18],
+      "symbol_mismatches": 0,
+      "adjacent_tone_spacing_error_hz": -0.009677123971658652,
+      "three_interval_span_error_hz": -0.029031371914975956,
+      "worst_transition_bin_relative_db": -2.9473501453329805,
+      "longest_transition_below_minus_6db_ms": 0.0,
+      "disposition": "qualified"
+    },
+    {
+      "band": "4 m",
+      "dial_hz": 70091000,
+      "requested_rf_hz": 70092500,
+      "carrier_best_20hz_share_percent": 99.104,
+      "carrier_contrast_db": 66.34,
+      "measured_placement_offset_hz": 6.10,
+      "decoded_frames": 3,
+      "attempted_frames": 3,
+      "intended_decode_snr_db": [27, 28, 28],
+      "symbol_mismatches": 0,
+      "adjacent_tone_spacing_error_hz": 0.02141466229570521,
+      "three_interval_span_error_hz": 0.06424398688711563,
+      "worst_transition_bin_relative_db": -1.4865123640849318,
+      "longest_transition_below_minus_6db_ms": 0.0,
+      "span_caveat": "The measured three-interval span error is 0.0142 Hz beyond the earlier provisional +/-0.05 Hz limit; the maintainer accepted complete decode, symbol, transition, bounded-operation, and cleanup evidence as the operational qualification criterion.",
+      "disposition": "qualified"
+    }
+  ],
+  "cleanup": {
+    "capture_overflows": 0,
+    "transmitter_exit_codes": [0, 0],
+    "capture_exit_codes": [0, 0],
+    "si5351_output_enable_register": "0xFF",
+    "services_restored": true,
+    "live_test_processes_remaining": false
+  }
+}

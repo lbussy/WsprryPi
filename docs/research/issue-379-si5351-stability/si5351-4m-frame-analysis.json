@@ -1,0 +1,14 @@
+{
+  "band": "4m",
+  "onset_s": 5.249000000000106,
+  "symbol_count": 162,
+  "symbol_mismatch_count": 0,
+  "symbol_mismatch_indices": [],
+  "tone_spacing_hz": 1.4862584122957052,
+  "ideal_tone_spacing_hz": 1.46484375,
+  "tone_spacing_error_hz": 0.02141466229570521,
+  "three_interval_span_hz": 4.458775236887115,
+  "span_error_hz": 0.06424398688711563,
+  "slow_drift_start_to_end_hz": -1.3754382660641564,
+  "model_rms_hz": 0.24317741620893213
+}
