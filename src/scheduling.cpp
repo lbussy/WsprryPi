@@ -48,6 +48,7 @@
 #include "band_gpio_selector.hpp"
 #include "config_handler.hpp"
 #include "frequency_semantics.hpp"
+#include "gpio_band_policy.hpp"
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
 #include "logging.hpp"
@@ -1841,6 +1842,18 @@ static BandGPIOPrepareStatus prepare_band_gpio_for_frequency_or_log(
         *resolution_out = BandGPIOResolution{};
     }
 
+    const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+        to_controller_backend(cfg.transmit_backend),
+        source_frequency_hz);
+    if (!gpio_policy.allowed)
+    {
+        llog.logS(WARN, gpio_policy.error);
+        active_band_gpio_prepare_status.store(
+            BandGPIOPrepareStatus::Failed,
+            std::memory_order_release);
+        return BandGPIOPrepareStatus::Failed;
+    }
+
     const auto band = lookup.lookup_ham_band(source_frequency_hz);
     if (!band.has_value())
     {
@@ -3518,6 +3531,16 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         explicit_planning_snapshot = planning_snapshot;
         explicit_frequency_plan = *frequency_plan.plan;
         explicit_selector_plan = selector_plan.plan;
+
+        const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+            to_controller_backend(planning_snapshot.transmit_backend),
+            static_cast<double>(frequency_plan.plan->actual_rf_frequency_hz));
+        if (!gpio_policy.allowed)
+        {
+            result.message = gpio_policy.error;
+            llog.logS(WARN, result.message);
+            return result;
+        }
     }
 
     // Capture restoration ownership before Test Tone changes config.mode.  A
@@ -3575,6 +3598,8 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             entry.selector_gpio_active_high = selector_plan.config.active_high;
         }
         selector_preparation_cfg.band_gpio = explicit_planning_snapshot->band_gpio;
+        selector_preparation_cfg.transmit_backend =
+            explicit_planning_snapshot->transmit_backend;
         result.band = frequency_plan.band;
         result.dial_frequency_hz = frequency_plan.dial_frequency_hz.value_or(0);
         result.audio_offset_hz = frequency_plan.audio_offset_hz.value_or(0);
@@ -3644,7 +3669,12 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         web_test_tone.store(false);
         config.mode = lastMode;
         test_tone_restoration_owner = TestToneRestorationOwner::Unknown;
-        result.message = "Unable to prepare the requested band selector.";
+        const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+            to_controller_backend(selector_preparation_cfg.transmit_backend),
+            actual_rf_freq);
+        result.message = gpio_policy.allowed
+            ? "Unable to prepare the requested band selector."
+            : gpio_policy.error;
         return result;
     }
     commit_execution_request(request);
@@ -3832,6 +3862,15 @@ TestToneStopResult end_test_tone()
             config,
             committed_ppm,
             actual_rf_frequency_hz);
+    const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+        to_controller_backend(config.transmit_backend),
+        actual_rf_frequency_hz);
+    if (!gpio_policy.allowed)
+    {
+        result.stopped = true;
+        result.message = gpio_policy.error;
+        return result;
+    }
     BandGPIOResolution selector_resolution;
     const BandGPIOPrepareStatus selector_status =
         prepare_band_gpio_for_frequency_or_log(
@@ -4129,6 +4168,15 @@ bool wspr_loop()
                     config,
                     committed_ppm,
                     actual_rf_frequency_hz);
+            const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
+                to_controller_backend(config.transmit_backend),
+                actual_rf_frequency_hz);
+            if (!gpio_policy.allowed)
+            {
+                llog.logS(ERROR, gpio_policy.error);
+                stop_runtime_components_for_process_exit();
+                return false;
+            }
             BandGPIOResolution selector_resolution;
             const BandGPIOPrepareStatus selector_status =
                 prepare_band_gpio_for_frequency_or_log(

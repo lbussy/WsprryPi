@@ -1,0 +1,36 @@
+{
+  "date": "2026-08-07",
+  "host": "wspr4",
+  "platform": "Raspberry Pi 4 Model B Rev 1.1",
+  "operating_system": "Debian GNU/Linux 13 (trixie) 64-bit",
+  "transmit_backend": "gpio",
+  "transmit_gpio": 4,
+  "rf_condition": "conducted attenuation installed; blocked requests only",
+  "build": {
+    "jobs": 3,
+    "debug": "passed",
+    "release": "passed"
+  },
+  "non_hardware_validation": {
+    "semantics_test": "passed",
+    "submodule_unit_and_qualification_harness_tests": "passed"
+  },
+  "blocked_request_smoke": [
+    {"band": "12 m", "path": "named WSPR", "result": "rejected before transmission"},
+    {"band": "12 m", "path": "exact-frequency Test Tone", "result": "rejected before transmission"},
+    {"band": "6 m", "path": "named WSPR", "result": "rejected before transmission"},
+    {"band": "6 m", "path": "exact-frequency Test Tone", "result": "rejected before transmission"},
+    {"band": "2 m", "path": "named WSPR", "result": "rejected before transmission"},
+    {"band": "2 m", "path": "exact-frequency Test Tone", "result": "rejected before transmission"}
+  ],
+  "quiescence": {
+    "before": {"dma_cs": "0x0", "dma_cb": "0x0", "pwm_ctl": "0x0", "pwm_dmac": "0x0", "gpclk0_ctl": "0x606", "gpfsel0": "0x900"},
+    "after": {"dma_cs": "0x0", "dma_cb": "0x0", "pwm_ctl": "0x0", "pwm_dmac": "0x0", "gpclk0_ctl": "0x606", "gpfsel0": "0x900"},
+    "qualification": "passed"
+  },
+  "service_restoration": {
+    "service": "wsprrypi.service",
+    "state": "active",
+    "operation_transmit": false
+  }
+}

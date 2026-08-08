@@ -274,7 +274,8 @@ int main()
         current_test_tone_planning_config_snapshot();
     require(current_wspr_audio_offset_hz() == WSPR_AUDIO_OFFSET_HZ,
             "default configuration must publish the default catalog offset");
-    require(default_snapshot.wspr_audio_offset_hz == WSPR_AUDIO_OFFSET_HZ &&
+    require(default_snapshot.transmit_backend == config.transmit_backend &&
+                default_snapshot.wspr_audio_offset_hz == WSPR_AUDIO_OFFSET_HZ &&
                 default_snapshot.wspr_frequency_entries.size() ==
                     config.wspr_frequency_entries.size() &&
                 same_band_gpio(default_snapshot.band_gpio, config.band_gpio),
@@ -295,7 +296,9 @@ int main()
         current_test_tone_planning_config_snapshot();
     require(current_wspr_audio_offset_hz() == 2750.0,
             "accepted reload configuration must publish its catalog offset");
-    require(reloaded_snapshot.wspr_audio_offset_hz == 2750.0 &&
+    require(reloaded_snapshot.transmit_backend ==
+                    reloaded_candidate.normalized_config.transmit_backend &&
+                reloaded_snapshot.wspr_audio_offset_hz == 2750.0 &&
                 reloaded_snapshot.wspr_frequency_entries.size() == 1U &&
                 reloaded_snapshot.wspr_frequency_entries.front().selector_gpio == 17 &&
                 reloaded_snapshot.band_gpio[ham_band_index(HamBand::BAND_20M)].gpio == 19 &&
@@ -329,7 +332,8 @@ int main()
     require(config.wspr.audio_offset_hz == 3000.0 &&
                 current_wspr_audio_offset_hz() == 3000.0,
             "global runtime copies must publish the catalog offset snapshot");
-    require(runtime_snapshot.wspr_audio_offset_hz == 3000.0 &&
+    require(runtime_snapshot.transmit_backend == runtime_copy_source.transmit_backend &&
+                runtime_snapshot.wspr_audio_offset_hz == 3000.0 &&
                 runtime_snapshot.wspr_frequency_entries.size() == 1U &&
                 runtime_snapshot.wspr_frequency_entries.front().token == "40m" &&
                 runtime_snapshot.band_gpio[ham_band_index(HamBand::BAND_40M)].gpio == 6,
@@ -362,7 +366,9 @@ int main()
             "rejected web updates must leave the published catalog offset unchanged");
     const TestTonePlanningConfigSnapshot after_rejected_snapshot =
         current_test_tone_planning_config_snapshot();
-    require(after_rejected_snapshot.wspr_audio_offset_hz ==
+    require(after_rejected_snapshot.transmit_backend ==
+                    before_rejected_snapshot.transmit_backend &&
+                after_rejected_snapshot.wspr_audio_offset_hz ==
                     before_rejected_snapshot.wspr_audio_offset_hz &&
                 after_rejected_snapshot.wspr_frequency_entries.front().token ==
                     before_rejected_snapshot.wspr_frequency_entries.front().token &&

@@ -69,6 +69,7 @@ namespace
     void publish_test_tone_planning_config(const ArgParserConfig &source)
     {
         TestTonePlanningConfigSnapshot snapshot;
+        snapshot.transmit_backend = source.transmit_backend;
         snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
         snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
         snapshot.band_gpio = source.band_gpio;

@@ -1,0 +1,11 @@
+start_utc=2026-08-07T18:28:42Z
+start_temp=temp=45.0'C
+uptime=up 6 hours, 59 minutes
+branch=research/issue-379-2m-qualification
+commit=9f67036e218dbfe2a9b86c8668f775cd6184ab02
+capture_launch_utc=2026-08-07T18:29:55Z
+expected_frame_start_utc=2026-08-07T18:30:00Z
+tx_rc=0
+capture_rc=0
+end_utc=2026-08-07T18:34:07Z
+end_temp=temp=46.1'C

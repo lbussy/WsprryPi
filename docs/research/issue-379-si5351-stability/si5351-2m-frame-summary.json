@@ -1,0 +1,29 @@
+{
+  "host": "wspr5",
+  "backend": "Si5351 CLK0",
+  "band": "2 m",
+  "identity": "AA0NT EM18 20",
+  "frame_start_utc": "2026-08-07T18:16:00Z",
+  "frame_duration_s": 110.612196,
+  "receiver": "SDRplay RSP1B 2404058C60",
+  "receiver_gain_db": 25.0,
+  "receiver_overflows": 0,
+  "independent_decoder": "wsprd 2.7.0",
+  "decode": "1816 18 3.7 144.490506 1 AA0NT EM18 20",
+  "ideal_tone_spacing_hz": 1.46484375,
+  "measured_drift_separated_tone_spacing_hz": 1.484865125718,
+  "tone_spacing_error_hz": 0.020021375718,
+  "changed_tone_boundaries": 116,
+  "transition_analysis_resolution_us": 100.0,
+  "worst_boundary_bin_relative_db": -1.6096173489,
+  "longest_contiguous_below_minus_6db_ms": 0.0,
+  "post_frame_output_enable_register": "0xff",
+  "transmitter_exit_code": 0,
+  "capture_exit_code": 0,
+  "services_restored": true,
+  "notes": [
+    "Absolute carrier offset and hardware drift are excluded from the tone-spacing criterion.",
+    "The real-audio conversion also produced the expected weak conjugate-image decode; the retained decode is the positive-frequency signal.",
+    "The raw complex-IQ capture remains on wspr5 and is not committed."
+  ]
+}

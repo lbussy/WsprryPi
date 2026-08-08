@@ -1,0 +1,8 @@
+[INFO] devIdx: 0
+[INFO] SerNo: 2404058C60
+[INFO] hwVer: 6
+[INFO] rspDuoMode: 0
+[INFO] tuner: 1
+[INFO] rspDuoSampleFreq: 0.000000
+[INFO] Using format CF32.
+center_hz=144515500.000 sample_rate=250000.000 samples=32500000 overflows=0 agc=off requested_gain_db=25.000 actual_gain_db=25.000 capture_start_monotonic_ns=24433500095180 capture_end_monotonic_ns=24563523769404 output=si5351-2m-frame-valid.cf32

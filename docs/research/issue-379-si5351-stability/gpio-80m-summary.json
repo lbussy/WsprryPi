@@ -1,0 +1,23 @@
+{
+  "backend": "GPIO/GPCLK0",
+  "band": "80 m",
+  "gpio": 4,
+  "estimator": "2 s Hann-window spectral peak, 0.25 s step, 32768-point FFT after 1 ms coherent integration; broad discovery then 40 to 47 Hz carrier lock",
+  "nominal_hz": 3570097.802734375,
+  "sample_count": 75000000,
+  "capture_duration_s": 300.0,
+  "analyzed_duration_s": 294.5,
+  "edge_exclusion": "0.5 s start and 5.0 s end; final carrier windows overlap transmitter shutdown",
+  "frequency_estimates": 1171,
+  "constant_offset_hz_excluded_from_stability": 43.397725368263394,
+  "median_peak_to_local_median_db": 20.476107929178262,
+  "relative_frequency_peak_to_peak_hz": 0.7817107140136699,
+  "relative_frequency_peak_to_peak_ppb": 218.96058797463462,
+  "relative_frequency_p05_p95_hz": 0.21345347679872972,
+  "relative_frequency_p05_p95_ppb": 59.78925188975033,
+  "linear_drift_hz_per_min": -0.012215514113000045,
+  "linear_drift_ppb_per_min": -3.4216188989679934,
+  "detrended_frequency_rms_hz": 0.07831712833342866,
+  "detrended_frequency_rms_ppb": 21.936969982571558,
+  "detrended_frequency_p05_p95_hz": 0.2198810597631109
+}
