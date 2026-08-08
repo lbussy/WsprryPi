@@ -278,7 +278,7 @@ void setupGPIO(int pin = 0)
 
     if (gpio_map == MAP_FAILED)
     {
-        printf("Fail: mmap error %d\n", (int)gpio_map); // errno also set
+        printf("Fail: mmap error %p\n", gpio_map); // errno also set
         exit(-1);
     }
 
@@ -368,8 +368,8 @@ void getRealMemPageFromPool(void **vAddr, void **bAddr)
         exit(-1);
     }
     unsigned offset = mbox.pool_cnt * 4096;
-    *vAddr = (void *)(((unsigned)mbox.virt_addr) + offset);
-    *bAddr = (void *)(((unsigned)mbox.bus_addr) + offset);
+    *vAddr = static_cast<void *>(mbox.virt_addr + offset);
+    *bAddr = reinterpret_cast<void *>(static_cast<uintptr_t>(mbox.bus_addr) + offset);
     // printf("getRealMemoryPageFromPool bus_addr=%x virt_addr=%x\n", (unsigned)*pAddr,(unsigned)*vAddr);
     mbox.pool_cnt++;
 }
