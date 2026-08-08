@@ -3,6 +3,9 @@
 Status: branch-local research evidence, not an operator specification or a
 project default.
 
+The repeatable conducted bench workflow is documented in
+[`issue-379-conducted-qualification-procedure.md`](issue-379-conducted-qualification-procedure.md).
+
 ## Purpose
 
 This document records steady-carrier behavior measured from the physical
