@@ -1,0 +1,20 @@
+{
+  "band": "160m",
+  "backend": "si5351",
+  "iq_path": "/home/pi/issue390/si5351-160m-tone.cf32",
+  "sha256_command": "sha256sum /home/pi/issue390/si5351-160m-tone.cf32",
+  "sample_count": 7500000,
+  "duration_s": 30.0,
+  "sample_rate": 250000.0,
+  "center_hz": 1863100.0,
+  "requested_hz": 1838100.0,
+  "strongest_transmitter_added_hz": 1882072.396850586,
+  "strongest_offset_hz": 43972.39685058594,
+  "strongest_on_off_contrast_db": 8.642786979675293,
+  "requested_bin_on_off_contrast_db": 9.609344482421875,
+  "best_20hz_resolved_power_share": 0.45473337173461914,
+  "on_fft_averages": 14,
+  "off_fft_averages": 4,
+  "carrier_gate": false,
+  "carrier_gate_rule": "strongest transmitter-added feature within 100 Hz of requested and at least 50% of resolved close-in power in best 20 Hz"
+}

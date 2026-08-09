@@ -1,0 +1,43 @@
+{
+  "slug": "si5351-12m-valid",
+  "iq": "/home/pi/issue390/si5351-12m-valid-3frame.cf32",
+  "sample_count": 92500000,
+  "sample_rate": 250000,
+  "center_hz": 24951100.0,
+  "carrier_hz": 24926100.0,
+  "mix_hz": -26500.0,
+  "frames": [
+    {
+      "index": 1,
+      "utc_slot": "2026-08-09T01:44:00+00:00",
+      "wav": "/home/pi/issue390/si5351-12m-valid-decode/260809_0144/260809_0144.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [
+        "0144  -5 -0.8   0.001501  0  AA0NT EM18 20 "
+      ],
+      "decoded_expected_message": true
+    },
+    {
+      "index": 2,
+      "utc_slot": "2026-08-09T01:46:00+00:00",
+      "wav": "/home/pi/issue390/si5351-12m-valid-decode/260809_0146/260809_0146.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [
+        "0146  -5 -0.9   0.001501  0  AA0NT EM18 20 "
+      ],
+      "decoded_expected_message": true
+    },
+    {
+      "index": 3,
+      "utc_slot": "2026-08-09T01:48:00+00:00",
+      "wav": "/home/pi/issue390/si5351-12m-valid-decode/260809_0148/260809_0148.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [
+        "0148  -5 -0.9   0.001501  0  AA0NT EM18 20 "
+      ],
+      "decoded_expected_message": true
+    }
+  ],
+  "correct_decodes": 3,
+  "qualified_decode_gate": true
+}
