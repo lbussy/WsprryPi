@@ -172,8 +172,11 @@ retained in
 [`issue-390-transmitter-qualification/`](issue-390-transmitter-qualification/).
 The later clock-profile results are in its
 [`gpio-profile-followup/`](issue-390-transmitter-qualification/gpio-profile-followup/)
-subdirectory. Temporary complex-IQ and decoder WAV captures were removed from
-the test systems after the reviewed summaries and capture hashes were retained.
+subdirectory. That directory also preserves the exact uncommitted diffs from
+the superseded maintained-validation prototype and the rejected fixed-source
+oscillator experiment. Temporary complex-IQ and decoder WAV captures were
+removed from the test systems after the reviewed summaries and capture hashes
+were retained.
 
 Successful WSPR decoding does not establish antenna-ready spectral compliance.
 Filtering, harmonics, spurs, absolute output power, and the assembled station
