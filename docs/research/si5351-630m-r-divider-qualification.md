@@ -91,6 +91,24 @@ or power levels by inference.
 It does not qualify 2200 m. R/8 and R/16 2200 m carrier tests both failed the
 same SDR carrier gate, so no 2200 m WSPR frames were transmitted.
 
+QRP Labs provides useful precedent for the synthesis calculation, but not for
+a bare Si5351 output. Its published low-frequency Si5351 example generates
+136 kHz by programming 1.088 MHz and applying R/8. WsprryPi's retained 2200 m
+plan similarly programs an internal frequency above 1 MHz and applies R/8.
+The QRP Labs Ultimate3S then uses a defined Si5351 load, BS170 buffering and
+power amplification, impedance transformation in the output network, and a
+band-specific seven-element low-pass filter. Those additional RF stages can
+materially change the signal delivered to an antenna. They explain why the
+commercial implementation is evidence that the complete approach is viable,
+while the failed bare-radiator tests remain insufficient to qualify WsprryPi
+on 2200 m.
+
+References:
+
+- [QRP Labs Si5351A synthesizer demo](https://qrp-labs.com/synth/si5351ademo.html)
+- [QRP Labs Ultimate3S](https://qrp-labs.com/ultimate3/u3s.html)
+- [Ultimate3S assembly manual](https://qrp-labs.com/images/ultimate3s/assembly_u3s.pdf)
+
 Raw IQ, transmitter and capture logs, analyses, WAV files, decoder results,
 and SHA-256 manifests remain on `wspr5` under:
 
