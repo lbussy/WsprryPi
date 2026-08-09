@@ -1,0 +1,37 @@
+{
+  "slug": "wspr2-2200m-qualified",
+  "iq": "/tmp/issue390-wspr2-2200m-qualified.cf32",
+  "sample_count": 112500000,
+  "sample_rate": 250000,
+  "center_hz": 162500.0,
+  "carrier_hz": 137500.0,
+  "mix_hz": -26500.0,
+  "frames": [
+    {
+      "index": 1,
+      "utc_slot": "2026-08-09T17:24:00+00:00",
+      "wav": "/tmp/wspr2-2200m-qualified-decode/260809_1724/260809_1724.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [],
+      "decoded_expected_message": false
+    },
+    {
+      "index": 2,
+      "utc_slot": "2026-08-09T17:26:00+00:00",
+      "wav": "/tmp/wspr2-2200m-qualified-decode/260809_1726/260809_1726.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [],
+      "decoded_expected_message": false
+    },
+    {
+      "index": 3,
+      "utc_slot": "2026-08-09T17:28:00+00:00",
+      "wav": "/tmp/wspr2-2200m-qualified-decode/260809_1728/260809_1728.wav",
+      "decoder_returncode": 0,
+      "expected_decode_lines": [],
+      "decoded_expected_message": false
+    }
+  ],
+  "correct_decodes": 0,
+  "qualified_decode_gate": false
+}
