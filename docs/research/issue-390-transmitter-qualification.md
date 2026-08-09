@@ -3,9 +3,9 @@
 ## Disposition
 
 The initial conducted qualification completed all eight cells from Issue 390.
-Three cells qualified and five did not meet the carrier gate. Later GPIO clock
-profile work superseded the initial 2200 m GPIO result for BCM2711 systems, as
-described below.
+Three cells qualified and five did not meet the carrier gate. Later work
+superseded the initial 2200 m GPIO result for BCM2711 systems and the initial
+160 m Si5351 result, as described below.
 
 | Band | Backend | Carrier gate | WSPR decode gate | Disposition |
 |---|---|---:|---:|---|
@@ -14,7 +14,7 @@ described below.
 | 630 m | GPIO | Passed | 3 of 3 | Qualified |
 | 630 m | Si5351 | Failed twice | Not run | Unqualified |
 | 160 m | GPIO | Passed | 3 of 3 | Qualified |
-| 160 m | Si5351 | Failed twice | Not run | Unqualified |
+| 160 m | Si5351 | Failed twice | Not run | Initially unqualified; superseded by radiated follow-up |
 | 12 m | Si5351 | Passed | 3 of 3 | Qualified |
 | 1.25 m | Si5351 | Planner rejected before RF | Not run | Unqualified |
 
@@ -48,6 +48,42 @@ experimental oscillator change was not retained. The 12 m repeat also decoded
 runs; it remains insufficient for qualification. These results support
 profile-specific qualification but do not prove that processor type alone is
 the cause.
+
+## Si5351 160 m follow-up
+
+A radiated SDR follow-up on `wspr5` showed that the earlier conducted result
+did not represent the Si5351 output. With the existing bare radiator in
+parallel with the RSP1B antenna, eleven of twelve combinations of receiver gain
+and center frequency passed the carrier gate. All captures at 10, 20, and
+30 dB gain passed. At 40 dB, two of three passed; the deliberately unfavorable
+capture with the carrier 75 kHz from center failed the resolved-power-share
+threshold. Moving the receiver center did not move the carrier's absolute RF
+frequency, and all four CLK0 drive strengths passed.
+
+The final carrier and decode gates used the exact feature-branch build:
+
+- WsprryPi: `fc1a60440c3431a35c005ffc57f4ac238f369041`;
+- WSPR-Transmitter: `abfedbefc780516085b087499b67da0e19017f2c`;
+- requested frequency: 1,838,100 Hz;
+- Si5351 output: CLK0 at minimum 2 mA drive, R/1;
+- SDR center: 1,863,100 Hz, 250 ksps, 200 kHz bandwidth, AGC off, 10 dB gain;
+- measured carrier: 1,838,100.381 Hz, +0.381 Hz from the request;
+- RF-on/RF-off contrast: 13.30 dB;
+- best-20-Hz resolved-power share: 99.17%; and
+- carrier gate: passed.
+
+One coherent 370-second capture contained 92,500,000 samples with zero
+overflows. Three independent UTC slots at 21:00, 21:02, and 21:04 on
+2026-08-09 decoded `AA0NT EM18 20` at +2 dB, -0.9 seconds, and zero drift.
+Transmitter and capture return codes were zero. Cleanup restored Si5351
+register 3=`0xff` and both managed services to active.
+
+This evidence qualifies the Si5351 CLK0 production path on 160 m for the exact
+recorded configuration. It indicates that the earlier displaced features were
+introduced by the conducted receiver arrangement or receiver overload rather
+than by the WsprryPi synthesis plan. Raw IQ, logs, analyses, decoder output,
+and manifests remain on `wspr5` under
+`/home/pi/si5351-160m-diagnostic/`.
 
 ## Synchronized source boundary
 
