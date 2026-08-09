@@ -1,0 +1,11 @@
+[INFO ] WsprryPi version 3.2.0-devel+ea3e875 (devel).
+[INFO ] Platform: Raspberry Pi 5 Model B Rev 1.0.
+[INFO ] OS: Debian GNU/Linux 13 (trixie) 64-bit.
+[INFO ] Transmit backend: si5351
+[INFO ] Web UI disabled via CLI (--no-web)
+[INFO ] WSPR loop running.
+[INFO ] PPM value to be used for tone generation: 2.35
+[INFO ] A direct RF test tone will be generated at: 222.101500 MHz
+[INFO ] Scheduling path selected: TONE.
+[ERROR] Si5351 planner produced unusable frequency data for tone 0.
+[ERROR] Unhandled exception in main(): Si5351 planner produced unusable frequency data for tone 0.

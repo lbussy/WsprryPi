@@ -1,0 +1,11 @@
+capture_launch_utc=2026-08-09T01:43:55Z
+expected_frame_start_utc=2026-08-09T01:44:00Z
+branch=devel
+commit=ea3e875a0237ed4550e3ac27931b021f7c484c25
+center_hz=24951100
+tx_rc=0
+capture_rc=0
+cleanup_utc=2026-08-09T01:50:07Z
+register3=0xff
+wsprrypi_service=active
+soapy_service=active
