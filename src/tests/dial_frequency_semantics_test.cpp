@@ -1975,6 +1975,26 @@ int main(int argc, char *argv[])
 
 
     {
+        reset_getopt_state();
+        set_si5351_detection_override_for_test(true);
+        std::vector<std::string> args = {
+            "wsprrypi",
+            "--backend", "si5351",
+            "--si5351-reference-source", "crystal",
+            "--si5351-crystal-load-capacitance", "6",
+            "AA0NT", "EM18", "20", "20m"};
+        std::vector<char *> argv = argv_for(args);
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()),
+            "Si5351 reference-source CLI settings must parse");
+        require(
+            config.si5351_reference_source == "crystal" &&
+                config.si5351_crystal_load_capacitance_pf == 6,
+            "Si5351 reference-source CLI settings must reach canonical runtime config");
+        clear_si5351_detection_override_for_scope();
+    }
+
+    {
         const std::string help_output = capture_print_usage_output(0);
         require(
             help_output.find("--use-system-clock-frequency-estimate") != std::string::npos &&
@@ -1982,6 +2002,8 @@ int main(int argc, char *argv[])
                 help_output.find("--gpio-manual-ppm") != std::string::npos &&
                 help_output.find("--gpio-frequency-residual-ppm") != std::string::npos &&
                 help_output.find("--si5351-ppm") != std::string::npos &&
+                help_output.find("--si5351-reference-source") != std::string::npos &&
+                help_output.find("--si5351-crystal-load-capacitance") != std::string::npos &&
                 help_output.find("--repeat") != std::string::npos &&
                 help_output.find("--offset") != std::string::npos &&
                 help_output.find("--journald") != std::string::npos &&
@@ -4351,6 +4373,40 @@ int main(int argc, char *argv[])
         require(
             si5351_it->second.at("TX Output") == "CLK2",
             "json_to_ini must persist Si5351 TX Output");
+
+        require(
+            jConfig["Si5351"].value("Reference Source", "") == "external_tcxo" &&
+                jConfig["Si5351"].value("Crystal Load Capacitance", 0) == 10,
+            "legacy missing Si5351 reference settings must use TCXO and 10 pF defaults");
+
+        jConfig["Si5351"]["Reference Source"] = "crystal";
+        jConfig["Si5351"]["Crystal Load Capacitance"] = 8;
+        json_to_config();
+        require(
+            config.si5351_reference_source == "crystal" &&
+                config.si5351_crystal_load_capacitance_pf == 8,
+            "JSON parsing must carry crystal reference settings into runtime config");
+        config_to_json();
+        json_to_ini();
+        const auto crystal_ini = iniFile.getData().at("Si5351");
+        require(
+            crystal_ini.at("Reference Source") == "crystal" &&
+                crystal_ini.at("Crystal Load Capacitance") == "8",
+            "crystal reference settings must round-trip through canonical JSON and INI");
+
+        for (const int invalid : {0, 7, 9, 12})
+        {
+            ArgParserConfig invalid_config = config;
+            invalid_config.transmit_backend = TransmitBackendKind::SI5351;
+            invalid_config.transmit = false;
+            invalid_config.use_ini = true;
+            invalid_config.si5351_crystal_load_capacitance_pf = invalid;
+            std::string validation_error;
+            require(
+                !validate_config_candidate(invalid_config, &validation_error) &&
+                    validation_error.find("crystal load capacitance") != std::string::npos,
+                "invalid Si5351 crystal load capacitance must be rejected");
+        }
         clear_si5351_detection_override_for_scope();
     }
 

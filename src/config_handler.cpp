@@ -508,6 +508,16 @@ namespace
             "Invalid Si5351.TX Output. Expected CLK0, CLK1, CLK2, 0, 1, or 2.");
     }
 
+    std::string parse_si5351_reference_source(const nlohmann::json &source)
+    {
+        std::string value = trim_copy(source.get<std::string>());
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (value == "external_tcxo" || value == "crystal") return value;
+        throw std::runtime_error(
+            "Invalid Si5351.Reference Source. Expected external_tcxo or crystal.");
+    }
+
     std::string format_si5351_i2c_address(int address)
     {
         static constexpr char kHexDigits[] = "0123456789ABCDEF";
@@ -1027,6 +1037,8 @@ void init_default_config()
     config.si5351_i2c_bus = kDefaultSi5351I2cBus;
     config.si5351_i2c_address = kDefaultSi5351I2cAddress;
     config.si5351_reference_hz = kDefaultSi5351ReferenceHz;
+    config.si5351_reference_source = kDefaultSi5351ReferenceSource;
+    config.si5351_crystal_load_capacitance_pf = kDefaultSi5351CrystalLoadCapacitancePf;
     config.si5351_tx_output = kDefaultSi5351TxOutput;
     config.si5351_power_level = 1;
     resolve_backend_specific_config(config);
@@ -1302,6 +1314,8 @@ namespace
                 (key == "I2C Bus" ||
                  key == "I2C Address" ||
                  key == "Reference Frequency" ||
+                 key == "Reference Source" ||
+                 key == "Crystal Load Capacitance" ||
                  key == "TX Output" ||
                  key == "Power Level")) ||
                (section == "CW" &&
@@ -1437,6 +1451,8 @@ namespace
             {"I2C Bus", kDefaultSi5351I2cBus},
             {"I2C Address", format_si5351_i2c_address(kDefaultSi5351I2cAddress)},
             {"Reference Frequency", kDefaultSi5351ReferenceHz},
+            {"Reference Source", kDefaultSi5351ReferenceSource},
+            {"Crystal Load Capacitance", kDefaultSi5351CrystalLoadCapacitancePf},
             {"TX Output", "CLK0"},
             {"Power Level", 1}};
 
@@ -1540,6 +1556,14 @@ namespace
                       si5351.at("Reference Frequency"),
                       "Si5351.Reference Frequency")
                 : kDefaultSi5351ReferenceHz;
+        target.si5351_reference_source = si5351.contains("Reference Source")
+            ? parse_si5351_reference_source(si5351.at("Reference Source"))
+            : kDefaultSi5351ReferenceSource;
+        target.si5351_crystal_load_capacitance_pf =
+            si5351.contains("Crystal Load Capacitance")
+                ? parse_integer_config_value(si5351.at("Crystal Load Capacitance"),
+                                             "Si5351.Crystal Load Capacitance")
+                : kDefaultSi5351CrystalLoadCapacitancePf;
         target.si5351_tx_output =
             si5351.contains("TX Output")
                 ? parse_si5351_tx_output(si5351.at("TX Output"))
@@ -1773,6 +1797,9 @@ namespace
         target["Si5351"]["I2C Address"] =
             format_si5351_i2c_address(source.si5351_i2c_address);
         target["Si5351"]["Reference Frequency"] = source.si5351_reference_hz;
+        target["Si5351"]["Reference Source"] = source.si5351_reference_source;
+        target["Si5351"]["Crystal Load Capacitance"] =
+            source.si5351_crystal_load_capacitance_pf;
         target["Si5351"]["TX Output"] =
             std::string("CLK") + std::to_string(source.si5351_tx_output);
         target["Si5351"]["Power Level"] = source.si5351_power_level;
@@ -1856,6 +1883,8 @@ namespace
         target.si5351_i2c_bus = source.si5351_i2c_bus;
         target.si5351_i2c_address = source.si5351_i2c_address;
         target.si5351_reference_hz = source.si5351_reference_hz;
+        target.si5351_reference_source = source.si5351_reference_source;
+        target.si5351_crystal_load_capacitance_pf = source.si5351_crystal_load_capacitance_pf;
         target.si5351_tx_output = source.si5351_tx_output;
         target.si5351_power_level = source.si5351_power_level;
         target.use_led = source.use_led;
@@ -2282,6 +2311,8 @@ build_persistent_ini_data(const nlohmann::json &source)
                  (key == "I2C Bus" ||
                   key == "I2C Address" ||
                   key == "Reference Frequency" ||
+                  key == "Reference Source" ||
+                  key == "Crystal Load Capacitance" ||
                   key == "TX Output" ||
                   key == "Power Level")) ||
                 (section_name == "WSPR" &&
