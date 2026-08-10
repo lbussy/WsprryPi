@@ -54,6 +54,8 @@ inline constexpr int kDefaultSi5351I2cBus = 1;
 inline constexpr int kDefaultSi5351I2cAddress = 0x60;
 inline constexpr int kDefaultSi5351ReferenceHz = 27000000;
 inline constexpr int kDefaultSi5351TxOutput = 0;
+inline constexpr const char *kDefaultSi5351ReferenceSource = "external_tcxo";
+inline constexpr int kDefaultSi5351CrystalLoadCapacitancePf = 10;
 inline constexpr double kDefaultDfcwIntraElementGap = 0.333333;
 inline constexpr double kDefaultDfcwInterCharacterGap = 1.0;
 inline constexpr double kDefaultDfcwInterWordGap = 3.0;
@@ -273,6 +275,8 @@ struct ArgParserConfig
     int si5351_i2c_bus; ///< Si5351 I2C bus number.
     int si5351_i2c_address; ///< Si5351 I2C slave address.
     int si5351_reference_hz; ///< Si5351 reference frequency in Hz.
+    std::string si5351_reference_source; ///< external_tcxo or crystal.
+    int si5351_crystal_load_capacitance_pf; ///< Crystal load capacitance in pF.
     int si5351_tx_output; ///< Si5351 output clock index (0=CLK0).
     int si5351_power_level; ///< Si5351 drive-strength level (1-4).
     bool use_led;    ///< Enable TX LED indicator.
@@ -351,6 +355,8 @@ struct ArgParserConfig
           si5351_i2c_bus(kDefaultSi5351I2cBus),
           si5351_i2c_address(kDefaultSi5351I2cAddress),
           si5351_reference_hz(kDefaultSi5351ReferenceHz),
+          si5351_reference_source(kDefaultSi5351ReferenceSource),
+          si5351_crystal_load_capacitance_pf(kDefaultSi5351CrystalLoadCapacitancePf),
           si5351_tx_output(kDefaultSi5351TxOutput),
           si5351_power_level(1),
           use_led(false),
@@ -433,6 +439,8 @@ struct ArgParserConfig
         si5351_i2c_bus = other.si5351_i2c_bus;
         si5351_i2c_address = other.si5351_i2c_address;
         si5351_reference_hz = other.si5351_reference_hz;
+        si5351_reference_source = other.si5351_reference_source;
+        si5351_crystal_load_capacitance_pf = other.si5351_crystal_load_capacitance_pf;
         si5351_tx_output = other.si5351_tx_output;
         si5351_power_level = other.si5351_power_level;
         use_led = other.use_led;

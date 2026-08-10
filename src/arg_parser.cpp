@@ -804,6 +804,16 @@ static int parse_si5351_tx_output_option(const char *raw_value)
         "Invalid Si5351 TX output. Expected CLK0, CLK1, CLK2, 0, 1, or 2.");
 }
 
+static std::string parse_si5351_reference_source_option(const char *raw_value)
+{
+    std::string value = raw_value == nullptr ? "" : raw_value;
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (value == "external_tcxo" || value == "crystal") return value;
+    throw std::invalid_argument(
+        "--si5351-reference-source must be external_tcxo or crystal.");
+}
+
 static WsprPlannerPreference parse_planner_preference_option(const char *raw_value)
 {
     std::string value = trim_copy_string(raw_value == nullptr ? "" : raw_value);
@@ -1411,6 +1421,8 @@ void print_usage(const std::string &message, int exit_code)
               << "  --si5351-i2c-bus <bus>             Linux I2C bus number. Default: 1.\n"
               << "  --si5351-i2c-address <addr>        I2C address, decimal or 0x-prefixed hex. Valid: 0x03 through 0x77.\n"
               << "  --si5351-reference-frequency <hz>  Reference oscillator frequency in Hz.\n"
+              << "  --si5351-reference-source <source> external_tcxo or crystal.\n"
+              << "  --si5351-crystal-load-capacitance <pf>  Crystal load: 6, 8, or 10 pF.\n"
               << "  --si5351-tx-output <CLK0|CLK1|CLK2>\n"
               << "                                     Transmit clock output. CLI/INI only; not exposed in the Web UI.\n\n"
               << "CW, QRSS, FSKCW, And DFCW:\n"
@@ -1507,6 +1519,9 @@ void show_config_values(bool reload)
         llog.logS(DEBUG, "Si5351 I2C Address: ", address.str());
         llog.logS(DEBUG, "Si5351 Reference Frequency Hz: ",
                   config.si5351_reference_hz);
+        llog.logS(DEBUG, "Si5351 Reference Source: ", config.si5351_reference_source);
+        llog.logS(DEBUG, "Si5351 Crystal Load Capacitance pF: ",
+                  config.si5351_crystal_load_capacitance_pf);
         llog.logS(DEBUG, "Si5351 TX Output: ",
                   std::string("CLK") + std::to_string(config.si5351_tx_output));
     }
@@ -1781,6 +1796,22 @@ bool validate_config_candidate(
             return false;
         }
 
+        if (candidate.si5351_reference_source != "external_tcxo" &&
+            candidate.si5351_reference_source != "crystal")
+        {
+            if (error_message != nullptr)
+                *error_message = "Invalid Si5351 reference source. Expected external_tcxo or crystal.";
+            return false;
+        }
+        if (candidate.si5351_crystal_load_capacitance_pf != 6 &&
+            candidate.si5351_crystal_load_capacitance_pf != 8 &&
+            candidate.si5351_crystal_load_capacitance_pf != 10)
+        {
+            if (error_message != nullptr)
+                *error_message = "Invalid Si5351 crystal load capacitance. Expected 6, 8, or 10 pF.";
+            return false;
+        }
+
         if (candidate.si5351_tx_output < 0 ||
             candidate.si5351_tx_output > 2)
         {
@@ -1969,6 +2000,11 @@ void apply_runtime_config_side_effects()
     si5351_config.i2c_bus = config.si5351_i2c_bus;
     si5351_config.i2c_address = config.si5351_i2c_address;
     si5351_config.reference_hz = config.si5351_reference_hz;
+    si5351_config.reference_source = config.si5351_reference_source == "crystal"
+        ? WsprTransmitter::Si5351RuntimeConfig::ReferenceSource::CRYSTAL
+        : WsprTransmitter::Si5351RuntimeConfig::ReferenceSource::EXTERNAL_TCXO;
+    si5351_config.crystal_load_capacitance_pf =
+        config.si5351_crystal_load_capacitance_pf;
     si5351_config.tx_output = config.si5351_tx_output;
     si5351_config.power_level = config.power_level;
     si5351_config.app_managed = config.use_ini;
@@ -1987,6 +2023,9 @@ void apply_runtime_config_side_effects()
         llog.logS(DEBUG, "Si5351 I2C address: ", address.str());
         llog.logS(DEBUG, "Si5351 reference frequency Hz: ",
                   config.si5351_reference_hz);
+        llog.logS(DEBUG, "Si5351 reference source: ", config.si5351_reference_source);
+        llog.logS(DEBUG, "Si5351 crystal load capacitance pF: ",
+                  config.si5351_crystal_load_capacitance_pf);
         llog.logS(DEBUG, "Si5351 TX output: ",
                   std::string("CLK") +
                       std::to_string(config.si5351_tx_output));
@@ -2472,6 +2511,19 @@ bool validate_config_data()
             {
                 llog.logE(ERROR,
                           " - Invalid Si5351 reference frequency. Expected a positive frequency in Hz.");
+            }
+            if (config.si5351_reference_source != "external_tcxo" &&
+                config.si5351_reference_source != "crystal")
+            {
+                llog.logE(ERROR,
+                          " - Invalid Si5351 reference source. Expected external_tcxo or crystal.");
+            }
+            if (config.si5351_crystal_load_capacitance_pf != 6 &&
+                config.si5351_crystal_load_capacitance_pf != 8 &&
+                config.si5351_crystal_load_capacitance_pf != 10)
+            {
+                llog.logE(ERROR,
+                          " - Invalid Si5351 crystal load capacitance. Expected 6, 8, or 10 pF.");
             }
             if (config.si5351_tx_output < 0 ||
                 config.si5351_tx_output > 2)
@@ -2987,10 +3039,14 @@ bool parse_command_line(int argc, char *argv[])
         {"si5351-i2c-bus", required_argument, nullptr, 1014},
         {"si5351-i2c-address", required_argument, nullptr, 1015},
         {"si5351-reference-frequency", required_argument, nullptr, 1016},
+        {"si5351-reference-source", required_argument, nullptr, 1053},
+        {"si5351-crystal-load-capacitance", required_argument, nullptr, 1054},
         {"si5351-tx-output", required_argument, nullptr, 1017},
         {"si5351_i2c_bus", required_argument, nullptr, 1014},
         {"si5351_i2c_address", required_argument, nullptr, 1015},
         {"si5351_reference_frequency", required_argument, nullptr, 1016},
+        {"si5351_reference_source", required_argument, nullptr, 1053},
+        {"si5351_crystal_load_capacitance", required_argument, nullptr, 1054},
         {"si5351_tx_output", required_argument, nullptr, 1017},
         // Required arguments
         {"terminate", required_argument, nullptr, 'x'}, // Global: config.tx_iterations
@@ -3622,6 +3678,32 @@ bool parse_command_line(int argc, char *argv[])
             {
                 config.si5351_reference_hz =
                     parse_integer_option(optarg, "--si5351-reference-frequency");
+            }
+            catch (const std::exception &e)
+            {
+                print_usage(e.what(), EXIT_FAILURE);
+            }
+            break;
+        }
+        case 1053:
+        {
+            try
+            {
+                config.si5351_reference_source =
+                    parse_si5351_reference_source_option(optarg);
+            }
+            catch (const std::exception &e)
+            {
+                print_usage(e.what(), EXIT_FAILURE);
+            }
+            break;
+        }
+        case 1054:
+        {
+            try
+            {
+                config.si5351_crystal_load_capacitance_pf =
+                    parse_integer_option(optarg, "--si5351-crystal-load-capacitance");
             }
             catch (const std::exception &e)
             {

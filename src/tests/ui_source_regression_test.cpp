@@ -428,6 +428,19 @@ int main()
     const std::string installer_source =
         read_repo_text_file("/scripts/install.sh");
     require(
+        config_view_source.find("id=\"si5351_reference_source\"") != std::string::npos &&
+            config_view_source.find("value=\"external_tcxo\"") != std::string::npos &&
+            config_view_source.find("value=\"crystal\"") != std::string::npos &&
+            config_view_source.find("id=\"si5351_crystal_load_capacitance\"") != std::string::npos &&
+            config_view_source.find("value=\"6\"") != std::string::npos &&
+            config_view_source.find("value=\"8\"") != std::string::npos &&
+            config_view_source.find("value=\"10\"") != std::string::npos &&
+            ui_source.find("function syncSi5351ReferenceControls()") != std::string::npos &&
+            ui_source.find("\"Reference Source\": si5351_reference_source") != std::string::npos &&
+            ui_source.find("\"Crystal Load Capacitance\": si5351_crystal_load_capacitance") != std::string::npos &&
+            site_source.find("\"external_tcxo\"") != std::string::npos,
+        "Si5351 WebUI must expose bounded conditional crystal reference controls and persist both canonical settings");
+    require(
         ui_source.find("let cwDurationPolicyLatched = false;") != std::string::npos &&
             ui_source.find("function updateCwDurationPolicyLatch(options = {})") != std::string::npos &&
             ui_source.find("overLimit: estimate.seconds > repeatSeconds") != std::string::npos &&
