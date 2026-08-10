@@ -54,6 +54,7 @@
 #include "logging.hpp"
 #include "ppm_manager.hpp"
 #include "signal_handler.hpp"
+#include "system_clock_frequency_estimate.hpp"
 #include "execution_plan_compiler.hpp"
 #include "wspr_reference_adapter.hpp"
 #include "web_server.hpp"
@@ -123,6 +124,51 @@ enum class BandGPIOPrepareStatus
 
 namespace
 {
+    std::mutex frequency_estimate_mutex;
+    FrequencyEstimateQualifier frequency_estimate_qualifier;
+    SystemClockFrequencyEstimate current_frequency_estimate{};
+    GpioFrequencyCorrection current_gpio_correction{};
+
+    SystemClockFrequencyEstimate qualify_provider_snapshot(
+        const PPMProviderSnapshot &provider)
+    {
+        SystemClockFrequencyEstimate sample;
+        sample.provider_name = provider.provider_name;
+        sample.frequency_ppm = provider.frequency_ppm;
+        sample.synchronized = provider.synchronized;
+        sample.age_seconds = provider.age_seconds;
+        sample.residual_frequency_ppm = provider.residual_frequency_ppm;
+        sample.skew_ppm = provider.skew_ppm;
+        sample.selected_source = provider.selected_source;
+        sample.combined_sources = provider.combined_sources;
+        sample.leap_normal = provider.leap_normal;
+        sample.source_provenance = provider.source_provenance;
+        sample.source_signature = provider.source_signature;
+        sample.retained_source_samples = provider.retained_source_samples;
+        sample.source_stability_span_seconds = provider.source_stability_span_seconds;
+        sample.reason = provider.error_reason;
+        return frequency_estimate_qualifier.evaluate(std::move(sample));
+    }
+
+    GpioFrequencyCorrection select_and_publish_gpio_correction(
+        const ArgParserConfig &cfg)
+    {
+        std::lock_guard<std::mutex> lock(frequency_estimate_mutex);
+        current_gpio_correction = select_gpio_frequency_correction(
+            cfg.use_system_clock_frequency_estimate,
+            cfg.gpio_frequency_residual_ppm,
+            cfg.gpio_manual_ppm,
+            current_frequency_estimate);
+        return current_gpio_correction;
+    }
+
+    void refresh_frequency_estimate()
+    {
+        const PPMProviderSnapshot provider = ppmManager.getProviderSnapshot();
+        std::lock_guard<std::mutex> lock(frequency_estimate_mutex);
+        current_frequency_estimate = qualify_provider_snapshot(provider);
+    }
+
     std::string get_active_gpio_suffix()
     {
         const BandGPIOConfig *cfg = bandGPIOSelector.currentConfig();
@@ -3289,22 +3335,23 @@ void transmitter_cb(WsprTransmitter::TransmissionCallbackEvent event,
  *
  * @details
  * Sets the `ppm_reload_pending` flag so that downstream consumers
- * will pick up the new PPM, and marks NTP as “good” once Chrony
- * has delivered a real clock‐drift measurement.
+ * will pick up the new value and marks the provider estimate as available
+ * after the adapter has delivered a measurement.
  *
  * @param new_ppm  The latest PPM correction value (ignored here; reload
  *                 logic will pull it from PPMManager when needed).
  */
 void ppm_callback(double /*new_ppm*/)
 {
+    refresh_frequency_estimate();
     // Notify other subsystems to reload/recalibrate with the fresh PPM.
     ppm_reload_pending.store(true, std::memory_order_relaxed);
 
-    // Now that Chrony has produced a PPM value, we know time is valid.
-    if (!config.ntp_good)
+    // Record that the provider adapter has produced a value.
+    if (!config.frequency_estimate_good)
     {
-        llog.logS(DEBUG, "Chrony service has updated its initial value.");
-        config.ntp_good = true;
+        llog.logS(DEBUG, "The system-clock frequency estimate provider has updated its value.");
+        config.frequency_estimate_good = true;
     }
 }
 
@@ -3312,28 +3359,21 @@ void ppm_callback(double /*new_ppm*/)
  * @brief   Initialize the PPM subsystem.
  *
  * Registers the PPM callback, initializes the PPMManager, and handles
- * any returned status.  If the Chrony daemon is running, we assume
- * synchronization and never treat unsynchronized time as fatal.
+ * any returned status. Qualification remains a soft gate; unavailable or
+ * converging provider state is handled by deterministic correction fallback.
  *
  * @return  true if initialization is considered successful;
  *          false only on a fatal PPM error (e.g. excessive drift).
  */
 bool ppm_init()
 {
-    bool retval = false;
+    bool retval = true;
 
     // Register the PPM update callback
     ppmManager.setPPMCallback(ppm_callback);
 
     // Perform the normal initialization
     PPMStatus status = ppmManager.initialize();
-
-    // If Chrony is active, assume time is synced
-    if (ppmManager.isChronyAlive())
-    {
-        llog.logS(DEBUG, "Chrony service is active.");
-        retval = true;
-    }
 
     switch (status)
     {
@@ -3347,12 +3387,11 @@ bool ppm_init()
 
     case PPMStatus::ERROR_CHRONY_NOT_FOUND:
         llog.logE(WARN,
-                  "Chrony not found; falling back to clock-drift measurement.");
+                  "chrony estimate unavailable; GPIO correction fallback policy will apply.");
         break;
 
     case PPMStatus::ERROR_UNSYNCHRONIZED_TIME:
-        // Chrony wasn’t yet reporting sync—but if the daemon is running,
-        // assume chrony is configured and proceed.
+        llog.logE(WARN, "System-clock frequency estimate provider is not synchronized; fallback policy will apply.");
         break;
 
     default:
@@ -4390,6 +4429,7 @@ void send_ws_message(
             snapshot.tx_state);
         j["tx_state"] = tx_state;
         j["runtime_mode"] = snapshot.runtime_mode;
+        j["transmit_backend"] = snapshot.transmit_backend;
         j["next_transmission_at"] = snapshot.next_transmission_at;
         j["frequency_hz"] = snapshot.frequency_hz;
         j["offset_hz"] = snapshot.offset_hz;
@@ -4410,6 +4450,17 @@ void send_ws_message(
         j["cw_message"] = snapshot.cw_message;
         j["cw_active_char_index"] =
             cw_active_char_index_override.value_or(snapshot.cw_active_char_index);
+        j["frequency_estimate_qualification"] = snapshot.frequency_estimate_qualification;
+        j["frequency_estimate_provider"] = snapshot.frequency_estimate_provider;
+        j["frequency_estimate_provenance"] = snapshot.frequency_estimate_provenance;
+        j["frequency_correction_mode"] = snapshot.frequency_correction_mode;
+        j["frequency_estimate_reason"] = snapshot.frequency_estimate_reason;
+        j["frequency_estimate_ppm"] = snapshot.frequency_estimate_ppm_available
+            ? nlohmann::json(snapshot.frequency_estimate_ppm)
+            : nlohmann::json(nullptr);
+        j["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
+        j["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
+        j["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
     }
 
     if (!message.empty())
@@ -4528,6 +4579,20 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
     std::lock_guard<std::mutex> lk(set_config_mtx);
 
     WsprRuntimeStatusSnapshot snapshot;
+    snapshot.transmit_backend = transmit_backend_kind_to_string(config.transmit_backend);
+    {
+        std::lock_guard<std::mutex> correction_lock(frequency_estimate_mutex);
+        snapshot.frequency_estimate_qualification = to_string(current_gpio_correction.qualification);
+        snapshot.frequency_estimate_provider = current_gpio_correction.provider_name;
+        snapshot.frequency_estimate_provenance = current_gpio_correction.source_provenance;
+        snapshot.frequency_correction_mode = to_string(current_gpio_correction.mode);
+        snapshot.frequency_estimate_reason = current_gpio_correction.reason;
+        snapshot.frequency_estimate_ppm_available = current_gpio_correction.estimate_ppm.has_value();
+        snapshot.frequency_estimate_ppm = current_gpio_correction.estimate_ppm.value_or(0.0);
+        snapshot.gpio_frequency_residual_ppm = current_gpio_correction.residual_ppm;
+        snapshot.effective_gpio_ppm = current_gpio_correction.effective_ppm;
+        snapshot.frequency_estimate_age_seconds = current_gpio_correction.estimate_age_seconds;
+    }
     snapshot.tx_state = wsprTransmitter.stateToStringLower(
         wsprTransmitter.getState());
     const auto runtime_status = wsprTransmitter.runtimeExecutionStatusSnapshot();
@@ -4845,7 +4910,7 @@ bool set_config(bool force)
         }
 
         bool ppm_running = ppmManager.isRunning();
-        bool should_start_ppm = working_config.use_ntp && !ppm_running;
+        bool should_start_ppm = working_config.use_system_clock_frequency_estimate && !ppm_running;
         if (should_start_ppm)
         {
             ppm_init();
@@ -4853,9 +4918,9 @@ bool set_config(bool force)
             ppm_running = ppmManager.isRunning();
             should_start_ppm = false;
         }
-        const bool should_stop_ppm = !working_config.use_ntp && ppm_running;
+        const bool should_stop_ppm = !working_config.use_system_clock_frequency_estimate && ppm_running;
         const bool should_log_ppm_disabled =
-            force && !working_config.use_ntp && !ppm_running;
+            force && !working_config.use_system_clock_frequency_estimate && !ppm_running;
 
         if (reload_requested)
         {
@@ -4865,19 +4930,43 @@ bool set_config(bool force)
         const bool ppm_update_pending =
             ppm_reload_pending.load(std::memory_order_acquire);
         const bool ppm_manager_authoritative =
-            working_config.use_ntp && ppm_running;
+            working_config.use_system_clock_frequency_estimate && ppm_running;
         bool runtime_ppm_changed = false;
         double committed_ppm = working_config.ppm;
-        if (ppm_update_pending || ppm_manager_authoritative)
+        if (working_config.transmit_backend == TransmitBackendKind::GPIO)
         {
-            committed_ppm = ppmManager.getCurrentPPM();
+            if (ppm_update_pending || ppm_manager_authoritative)
+            {
+                refresh_frequency_estimate();
+            }
+            const GpioFrequencyCorrection selected_correction =
+                select_and_publish_gpio_correction(working_config);
+            committed_ppm = selected_correction.effective_ppm;
             working_config.ppm = committed_ppm;
+            if (ppm_update_pending)
+            {
+                llog.logS(
+                    INFO,
+                    "GPIO frequency correction updated: mode=",
+                    to_string(selected_correction.mode),
+                    ", provider=",
+                    selected_correction.provider_name,
+                    ", estimate_ppm=",
+                    selected_correction.estimate_ppm.value_or(0.0),
+                    ", residual_ppm=",
+                    selected_correction.residual_ppm,
+                    ", effective_ppm=",
+                    selected_correction.effective_ppm,
+                    ", qualification=",
+                    to_string(selected_correction.qualification));
+                runtime_ppm_changed = true;
+                do_config = true;
+            }
         }
-        if (ppm_update_pending)
+        else
         {
-            llog.logS(INFO, "PPM updated: ", committed_ppm);
-            runtime_ppm_changed = true;
-            do_config = true;
+            committed_ppm = working_config.si5351_ppm;
+            working_config.ppm = committed_ppm;
         }
 
         if (!suppress_scheduler_execution_for_test)

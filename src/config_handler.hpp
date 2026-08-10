@@ -259,14 +259,17 @@ struct ArgParserConfig
     int tx_pin; ///< Active GPIO pin number for RF transmit control.
 
     // Runtime
-    double ppm;      ///< PPM frequency calibration.
-    bool use_ntp;    ///< Active backend NTP correction setting.
+    double ppm;      ///< Active backend PPM frequency correction.
+    bool use_system_clock_frequency_estimate; ///< Active GPIO provider-estimate setting.
     bool use_offset; ///< Enable WSPR random frequency offset.
     int power_level; ///< Active backend RF power level.
     TransmitBackendKind transmit_backend; ///< RF hardware backend.
     int gpio_tx_pin; ///< GPIO backend transmit pin.
     int gpio_power_level; ///< GPIO backend power level (0-7).
-    bool gpio_use_ntp; ///< GPIO backend NTP correction setting.
+    bool gpio_use_system_clock_frequency_estimate; ///< Enable the GPIO system-clock estimate.
+    double gpio_frequency_residual_ppm; ///< RF residual added to a usable provider estimate.
+    double gpio_manual_ppm; ///< Fixed GPIO correction and final configured fallback.
+    double si5351_ppm; ///< Persisted Si5351 reference-oscillator correction.
     int si5351_i2c_bus; ///< Si5351 I2C bus number.
     int si5351_i2c_address; ///< Si5351 I2C slave address.
     int si5351_reference_hz; ///< Si5351 reference frequency in Hz.
@@ -320,7 +323,7 @@ struct ArgParserConfig
     std::vector<double> wspr_dial_freq_set; ///< Parsed WSPR dial frequencies.
     std::vector<WsprFrequencyEntry>
         wspr_frequency_entries; ///< Parsed entries with optional GPIO/polarity metadata.
-    bool ntp_good;                       ///< A more qualitative measurement of NTP vs simply running
+    bool frequency_estimate_good;                       ///< A more qualitative measurement of NTP vs simply running
     std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio; ///< Per-band GPIO assignment.
 
     /**
@@ -335,13 +338,16 @@ struct ArgParserConfig
           frequencies(""),
           tx_pin(kTransmitGpioUnset),
           ppm(0.0),
-          use_ntp(false),
+          use_system_clock_frequency_estimate(false),
           use_offset(false),
           power_level(7),
           transmit_backend(TransmitBackendKind::GPIO),
           gpio_tx_pin(kTransmitGpioUnset),
           gpio_power_level(7),
-          gpio_use_ntp(false),
+          gpio_use_system_clock_frequency_estimate(false),
+          gpio_frequency_residual_ppm(0.0),
+          gpio_manual_ppm(0.0),
+          si5351_ppm(0.0),
           si5351_i2c_bus(kDefaultSi5351I2cBus),
           si5351_i2c_address(kDefaultSi5351I2cAddress),
           si5351_reference_hz(kDefaultSi5351ReferenceHz),
@@ -388,7 +394,7 @@ struct ArgParserConfig
           ini_filename(""),
           wspr_dial_freq_set({}),
           wspr_frequency_entries({}),
-          ntp_good(false),
+          frequency_estimate_good(false),
           band_gpio({})
     {
     }
@@ -414,13 +420,16 @@ struct ArgParserConfig
         frequencies = other.frequencies;
         tx_pin = other.tx_pin;
         ppm = other.ppm;
-        use_ntp = other.use_ntp;
+        use_system_clock_frequency_estimate = other.use_system_clock_frequency_estimate;
         use_offset = other.use_offset;
         power_level = other.power_level;
         transmit_backend = other.transmit_backend;
         gpio_tx_pin = other.gpio_tx_pin;
         gpio_power_level = other.gpio_power_level;
-        gpio_use_ntp = other.gpio_use_ntp;
+        gpio_use_system_clock_frequency_estimate = other.gpio_use_system_clock_frequency_estimate;
+        gpio_frequency_residual_ppm = other.gpio_frequency_residual_ppm;
+        gpio_manual_ppm = other.gpio_manual_ppm;
+        si5351_ppm = other.si5351_ppm;
         si5351_i2c_bus = other.si5351_i2c_bus;
         si5351_i2c_address = other.si5351_i2c_address;
         si5351_reference_hz = other.si5351_reference_hz;
@@ -467,7 +476,7 @@ struct ArgParserConfig
         ini_filename = other.ini_filename;
         wspr_dial_freq_set = other.wspr_dial_freq_set;
         wspr_frequency_entries = other.wspr_frequency_entries;
-        ntp_good = other.ntp_good;
+        frequency_estimate_good = other.frequency_estimate_good;
         band_gpio = other.band_gpio;
         return *this;
     }
@@ -504,6 +513,7 @@ struct PreparedConfigCandidate
     std::string error_reason{};
     nlohmann::json error_details{};
     std::vector<std::string> warnings{};
+    bool migration_required = false;
 };
 
 class ConfigValidationError : public std::runtime_error
@@ -607,7 +617,7 @@ void ini_to_json(std::string filename);
  *   "GPIO": {
  *       "Transmit Pin": 4,
  *       "Power Level": 7,
- *       "Use NTP": true
+ *       "Use System Clock Frequency Estimate": true
  *   },
  *   "Si5351": {
  *       "I2C Bus": 1,

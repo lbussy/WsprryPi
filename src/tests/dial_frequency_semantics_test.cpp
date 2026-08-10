@@ -4,10 +4,13 @@
 #include "frequency_semantics.hpp"
 #include "gpio_output.hpp"
 #include "scheduling.hpp"
+#include "system_clock_frequency_estimate.hpp"
+#include "ppm_manager.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_transmit_backend_si5351.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <getopt.h>
@@ -278,7 +281,9 @@ namespace
             {"GPIO",
              {{"Transmit Pin", "4"},
               {"Power Level", "7"},
-              {"Use NTP", "false"}}},
+              {"Use System Clock Frequency Estimate", "false"},
+              {"Frequency Residual PPM", "0"},
+              {"Manual PPM", "0"}}},
             {"Calibration",
              {{"PPM", "0"}}},
             {"Si5351",
@@ -350,7 +355,7 @@ namespace
         config.transmit_backend = TransmitBackendKind::GPIO;
         config.gpio_tx_pin = 4;
         config.gpio_power_level = 7;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         config.wspr_planner_preference = WsprPlannerPreference::Auto;
         config.wspr.callsign = config.callsign;
         config.wspr.grid_square = config.grid_square;
@@ -614,6 +619,40 @@ int main(int argc, char *argv[])
                     !jConfig["Band GPIO"][band_name].value("Active High", true),
                 "config_to_json must persist disabled Band GPIO defaults for " + band_name);
         }
+    }
+
+    {
+        ScopedTemporaryFile conflict_ini("/tmp/wsprrypi-gpio-migration-conflict-XXXXXX");
+        iniFile.set_filename(conflict_ini.path());
+        auto conflict_data = make_managed_ini_data("AA0NT", "EM18", "20m", false);
+        conflict_data["GPIO"]["Use System Clock Frequency Estimate"] = "true";
+        conflict_data["GPIO"]["Use NTP"] = "false";
+        iniFile.setData(conflict_data);
+        iniFile.save();
+
+        PreparedConfigCandidate conflict_candidate;
+        prepare_ini_config_candidate(conflict_ini.path(), conflict_candidate);
+        const bool conflict_warning = std::any_of(
+            conflict_candidate.warnings.begin(),
+            conflict_candidate.warnings.end(),
+            [](const std::string &warning)
+            {
+                return warning.find("conflicts with GPIO.Use System Clock Frequency Estimate") !=
+                    std::string::npos;
+            });
+        require(
+            conflict_candidate.valid && conflict_candidate.migration_required &&
+                conflict_candidate.normalized_config.gpio_use_system_clock_frequency_estimate &&
+                conflict_warning,
+            "the canonical GPIO estimate key must win a legacy conflict and produce a clear warning");
+        commit_config_candidate(conflict_candidate);
+        std::ifstream conflict_file(conflict_ini.path());
+        const std::string conflict_text(
+            (std::istreambuf_iterator<char>(conflict_file)),
+            std::istreambuf_iterator<char>());
+        require(
+            conflict_text.find("Use NTP =") == std::string::npos,
+            "conflict migration must remove the retired key after retaining the canonical value");
     }
 
     {
@@ -1518,7 +1557,7 @@ int main(int argc, char *argv[])
             config.ini_filename,
             "[Meta]\nUse INI=true\nDate Time Log=false\ndebug_logging=false\nLoop TX=false\nTX Iterations=0\n"
             "[Operation]\nMode=QRSS\nTransmit=false\nTransmit Backend=si5351\nEnable on Boot=Never\nUse LED=false\nLED Pin=-1\nUse Amp=false\nAmp Pin=-1\nAmp Pin Active High=false\nWeb Port=31415\nSocket Port=31416\nUse Shutdown=false\nShutdown Button=-1\n"
-            "[GPIO]\nTransmit Pin=4\nPower Level=7\nUse NTP=false\n"
+            "[GPIO]\nTransmit Pin=4\nPower Level=7\nUse System Clock Frequency Estimate=false\nFrequency Residual PPM=0\nManual PPM=0\n"
             "[Calibration]\nPPM=0\n"
             "[Si5351]\nI2C Bus=1\nI2C Address=96\nReference Frequency=27000000\nTX Output=CLK0\nPower Level=1\n"
             "[WSPR]\nCall Sign=AA0NT\nGrid Square=EM18\nTX Power=20\nFrequency=20m\nPlanner Preference=auto\nUse Random Offset=false\n"
@@ -1938,7 +1977,11 @@ int main(int argc, char *argv[])
     {
         const std::string help_output = capture_print_usage_output(0);
         require(
-            help_output.find("--use-ntp") != std::string::npos &&
+            help_output.find("--use-system-clock-frequency-estimate") != std::string::npos &&
+                help_output.find("--no-system-clock-frequency-estimate") != std::string::npos &&
+                help_output.find("--gpio-manual-ppm") != std::string::npos &&
+                help_output.find("--gpio-frequency-residual-ppm") != std::string::npos &&
+                help_output.find("--si5351-ppm") != std::string::npos &&
                 help_output.find("--repeat") != std::string::npos &&
                 help_output.find("--offset") != std::string::npos &&
                 help_output.find("--journald") != std::string::npos &&
@@ -2152,7 +2195,7 @@ int main(int argc, char *argv[])
         config.frequencies = "0,20m@17H";
         config.use_offset = false;
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         resolve_backend_specific_config(config);
 
         require(
@@ -2226,8 +2269,8 @@ int main(int argc, char *argv[])
         config.frequencies = "30m@17H,0,0,0";
         config.use_offset = false;
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
-        config.ppm = 12.5;
+        config.gpio_use_system_clock_frequency_estimate = false;
+        config.gpio_manual_ppm = 12.5;
         resolve_backend_specific_config(config);
 
         require(
@@ -2374,7 +2417,7 @@ int main(int argc, char *argv[])
         config.frequencies = "30m,30m,20m";
         config.use_offset = false;
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         resolve_backend_specific_config(config);
 
         require(
@@ -2467,7 +2510,7 @@ int main(int argc, char *argv[])
         config.frequencies = "20m,20m,0";
         config.use_offset = false;
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         resolve_backend_specific_config(config);
 
         require(
@@ -2561,7 +2604,7 @@ int main(int argc, char *argv[])
         config.frequencies = "20m,30m,0";
         config.use_offset = false;
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         resolve_backend_specific_config(config);
 
         require(
@@ -3307,19 +3350,20 @@ int main(int argc, char *argv[])
         config.power_dbm = 20;
         config.frequencies = "20m";
         config.gpio_tx_pin = 4;
+        config.gpio_use_system_clock_frequency_estimate = false;
+        config.gpio_manual_ppm = 12.5;
         resolve_backend_specific_config(config);
-        config.ppm = 12.5;
         set_frequencies(config);
 
         ppm_reload_pending.store(true, std::memory_order_relaxed);
-        const double expected_ppm = ppmManager.getCurrentPPM();
+        const double expected_ppm = 12.5;
 
         require(
             set_config(true),
             "pending runtime PPM update must be consumable during scheduler commit");
         require(
             nearly_equal(current_transmission_request_for_test().ppm, expected_ppm),
-            "committed request must consume the current PPM manager value");
+            "committed request must consume the selected GPIO correction value");
         require(
             nearly_equal(config.ppm, current_transmission_request_for_test().ppm),
             "live runtime config must retain the committed PPM for later requests");
@@ -3913,7 +3957,7 @@ int main(int argc, char *argv[])
             "Enable on Boot=Never\n"
             "Use LED=false\nLED Pin=-1\nUse Amp=false\nAmp Pin=-1\nAmp Pin Active High=false\nWeb Port=31415\nSocket Port=31416\n"
             "Use Shutdown=false\nShutdown Button=-1\n"
-            "[GPIO]\nTransmit Pin=4\nPower Level=7\nUse NTP=false\n"
+            "[GPIO]\nTransmit Pin=4\nPower Level=7\nUse System Clock Frequency Estimate=false\nFrequency Residual PPM=0\nManual PPM=0\n"
             "[Calibration]\nPPM=0\n"
             "[Si5351]\nI2C Bus=1\nI2C Address=96\nReference Frequency=27000000\n"
             "TX Output=CLK0\nPower Level=1\n"
@@ -5381,7 +5425,7 @@ int main(int argc, char *argv[])
     {
         init_default_config();
         config.use_ini = true;
-        config.ini_filename = "/tmp/mode_ntp_patch.ini";
+        config.ini_filename = "/tmp/mode_clock_estimate_patch.ini";
         config.mode = ModeType::QRSS;
         config.transmit = false;
         config.callsign = "AA0NT";
@@ -5389,35 +5433,43 @@ int main(int argc, char *argv[])
         config.power_dbm = 20;
         config.frequencies = "20m";
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         config.transmit_backend = TransmitBackendKind::GPIO;
         resolve_backend_specific_config(config);
         config_to_json();
 
         patch_all_from_web(nlohmann::json{
             {"Operation", {{"Mode", "WSPR"}}},
-            {"GPIO", {{"Use NTP", true}}}});
+            {"GPIO", {{"Use System Clock Frequency Estimate", true},
+                      {"Frequency Residual PPM", -0.125},
+                      {"Manual PPM", 3.5}}}});
 
         require(
             config.mode == ModeType::WSPR,
             "web patch must update canonical Operation.Mode immediately");
         require(
-            config.gpio_use_ntp && config.use_ntp,
-            "web patch must update canonical GPIO.Use NTP immediately");
+            config.gpio_use_system_clock_frequency_estimate && config.use_system_clock_frequency_estimate,
+            "web patch must update canonical GPIO system-clock estimate setting immediately");
+        require(
+            nearly_equal(config.gpio_frequency_residual_ppm, -0.125) &&
+                nearly_equal(config.gpio_manual_ppm, 3.5),
+            "web patch must update canonical GPIO residual and manual PPM values");
         require(
             jConfig["Operation"].value("Mode", std::string()) == "WSPR",
             "web patch must persist canonical Operation.Mode in JSON");
         require(
-            jConfig["GPIO"].value("Use NTP", false),
-            "web patch must persist canonical GPIO.Use NTP in JSON");
+            jConfig["GPIO"].value("Use System Clock Frequency Estimate", false),
+            "web patch must persist canonical GPIO estimate setting in JSON");
 
         const auto persisted_ini = iniFile.getData();
         require(
             persisted_ini.at("Operation").at("Mode") == "WSPR",
             "web patch must persist canonical Operation.Mode in INI");
         require(
-            persisted_ini.at("GPIO").at("Use NTP") == "true",
-            "web patch must persist canonical GPIO.Use NTP in INI");
+            persisted_ini.at("GPIO").at("Use System Clock Frequency Estimate") == "true" &&
+                nearly_equal(std::stod(persisted_ini.at("GPIO").at("Frequency Residual PPM")), -0.125) &&
+                nearly_equal(std::stod(persisted_ini.at("GPIO").at("Manual PPM")), 3.5),
+            "web patch must persist all canonical GPIO correction settings in INI");
     }
 
     {
@@ -5425,16 +5477,81 @@ int main(int argc, char *argv[])
         jConfig["Operation"]["Transmit Backend"] = "gpio";
         if (jConfig.contains("GPIO") && jConfig["GPIO"].is_object())
         {
-            jConfig["GPIO"].erase("Use NTP");
+            jConfig["GPIO"].erase("Use System Clock Frequency Estimate");
         }
         json_to_config();
 
         require(
-            config.gpio_use_ntp,
-            "missing GPIO.Use NTP must default true in backend normalization");
+            config.gpio_use_system_clock_frequency_estimate,
+            "missing GPIO estimate setting must default true in backend normalization");
         require(
-            config.use_ntp,
-            "missing GPIO.Use NTP must enable the active GPIO runtime NTP path");
+            config.use_system_clock_frequency_estimate,
+            "missing GPIO estimate setting must enable the active GPIO provider path");
+    }
+
+    {
+        init_default_config();
+        config.use_ini = true;
+        config.ini_filename = "/tmp/retired_gpio_key_patch.ini";
+        config_to_json();
+        const nlohmann::json before_retired_patch = jConfig;
+        bool retired_patch_rejected = false;
+        try
+        {
+            patch_all_from_web({{"GPIO", {{"Use NTP", false}}}});
+        }
+        catch (const std::exception &e)
+        {
+            retired_patch_rejected =
+                std::string(e.what()).find("accepted only during INI migration") !=
+                std::string::npos;
+        }
+        require(
+            retired_patch_rejected && jConfig == before_retired_patch,
+            "public patches must reject the retired GPIO.Use NTP key without changing configuration");
+    }
+
+    {
+        ScopedTemporaryFile migrated_ini("/tmp/wsprrypi-gpio-migration-XXXXXX");
+        iniFile.set_filename(migrated_ini.path());
+        auto legacy_ini = make_managed_ini_data("AA0NT", "EM18", "20m", false);
+        legacy_ini["GPIO"].erase("Use System Clock Frequency Estimate");
+        legacy_ini["GPIO"].erase("Frequency Residual PPM");
+        legacy_ini["GPIO"].erase("Manual PPM");
+        legacy_ini["GPIO"]["Use NTP"] = "false";
+        legacy_ini["Calibration"]["PPM"] = "4.25";
+        iniFile.setData(legacy_ini);
+        iniFile.save();
+        iniFile.set_filename(migrated_ini.path());
+
+        PreparedConfigCandidate migrated_candidate;
+        prepare_ini_config_candidate(migrated_ini.path(), migrated_candidate);
+        require(
+            migrated_candidate.valid && migrated_candidate.migration_required,
+            "legacy GPIO.Use NTP must produce a valid migration candidate");
+        require(
+            !migrated_candidate.normalized_config.gpio_use_system_clock_frequency_estimate &&
+                nearly_equal(migrated_candidate.normalized_config.gpio_manual_ppm, 4.25) &&
+                nearly_equal(migrated_candidate.normalized_config.gpio_frequency_residual_ppm, 0.0),
+            "legacy fixed GPIO correction must migrate to canonical manual PPM with zero residual");
+
+        commit_config_candidate(migrated_candidate);
+        std::ifstream migrated_file(migrated_ini.path());
+        const std::string migrated_text(
+            (std::istreambuf_iterator<char>(migrated_file)),
+            std::istreambuf_iterator<char>());
+        require(
+            migrated_text.find("Use NTP =") == std::string::npos &&
+                migrated_text.find("Use System Clock Frequency Estimate = false") != std::string::npos &&
+                migrated_text.find("Frequency Residual PPM = 0.0") != std::string::npos &&
+                migrated_text.find("Manual PPM = 4.25") != std::string::npos,
+            "migration persistence must remove the retired key and write all canonical GPIO keys");
+
+        PreparedConfigCandidate second_candidate;
+        prepare_ini_config_candidate(migrated_ini.path(), second_candidate);
+        require(
+            second_candidate.valid && !second_candidate.migration_required,
+            "loading an already migrated GPIO configuration must be idempotent");
     }
 
     {
@@ -5443,8 +5560,8 @@ int main(int argc, char *argv[])
         json_to_config();
 
         require(
-            nearly_equal(config.ppm, 200.0),
-            "backend normalization must clamp manual Calibration.PPM to the shared upper bound");
+            nearly_equal(config.si5351_ppm, 200.0) && nearly_equal(config.ppm, 0.0),
+            "backend normalization must clamp Si5351 Calibration.PPM without changing active GPIO correction");
 
         config_to_json();
         require(
@@ -5463,7 +5580,7 @@ int main(int argc, char *argv[])
         config.power_dbm = 20;
         config.frequencies = "20m";
         config.gpio_tx_pin = 4;
-        config.gpio_use_ntp = false;
+        config.gpio_use_system_clock_frequency_estimate = false;
         config.transmit_backend = TransmitBackendKind::GPIO;
         resolve_backend_specific_config(config);
         config_to_json();
@@ -5471,8 +5588,8 @@ int main(int argc, char *argv[])
         patch_all_from_web({{"Calibration", {{"PPM", -275.5}}}});
 
         require(
-            nearly_equal(config.ppm, -200.0),
-            "web patch path must clamp manual Calibration.PPM to the shared lower bound");
+            nearly_equal(config.si5351_ppm, -200.0) && nearly_equal(config.ppm, 0.0),
+            "web patch path must clamp Si5351 Calibration.PPM without changing active GPIO correction");
         require(
             nearly_equal(jConfig["Calibration"].at("PPM").get<double>(), -200.0),
             "web patch path must persist the clamped manual Calibration.PPM in JSON");
@@ -6886,6 +7003,92 @@ int main(int argc, char *argv[])
         reset_startup_quiesce_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        FrequencyEstimateQualifier qualifier;
+        SystemClockFrequencyEstimate sample;
+        sample.provider_name = "chrony";
+        sample.frequency_ppm = 1.25;
+        sample.synchronized = true;
+        sample.age_seconds = 2.0;
+        sample.residual_frequency_ppm = 0.05;
+        sample.skew_ppm = 0.2;
+        sample.selected_source = true;
+        sample.leap_normal = true;
+        sample.source_provenance = "Network NTP";
+        sample.source_signature = "ntp.example";
+        sample.retained_source_samples = 8;
+        sample.source_stability_span_seconds = 512.0;
+        require(
+            qualifier.evaluate(sample).qualification == FrequencyEstimateQualification::Converging &&
+                qualifier.evaluate(sample).qualification == FrequencyEstimateQualification::Converging,
+            "a provider estimate must remain converging until its stability window is complete");
+        const SystemClockFrequencyEstimate qualified = qualifier.evaluate(sample);
+        require(
+            qualified.qualification == FrequencyEstimateQualification::Qualified,
+            "a stable synchronized provider estimate within quality limits must qualify");
+        const GpioFrequencyCorrection combined = select_gpio_frequency_correction(
+            true, -0.20, 8.0, qualified);
+        require(
+            combined.mode == GpioCorrectionMode::QualifiedEstimate &&
+                nearly_equal(combined.effective_ppm, 1.05),
+            "effective GPIO PPM must equal the qualified provider estimate plus RF residual with the same sign convention");
+
+        sample.source_signature = "PPS0,ntp.example";
+        sample.source_provenance = "Mixed";
+        const SystemClockFrequencyEstimate changed_source = qualifier.evaluate(sample);
+        const GpioFrequencyCorrection stale_fallback = select_gpio_frequency_correction(
+            true, -0.20, 8.0, changed_source);
+        require(
+            changed_source.qualification == FrequencyEstimateQualification::Converging &&
+                stale_fallback.mode == GpioCorrectionMode::StaleEstimate &&
+                nearly_equal(stale_fallback.effective_ppm, 1.05),
+            "a source-composition change must reset convergence while retaining a visible last-qualified fallback");
+
+        SystemClockFrequencyEstimate unavailable;
+        unavailable.qualification = FrequencyEstimateQualification::Unavailable;
+        unavailable.reason = "provider unavailable";
+        const GpioFrequencyCorrection manual = select_gpio_frequency_correction(
+            true, 0.3, -2.5, unavailable);
+        require(
+            manual.mode == GpioCorrectionMode::FixedManual &&
+                nearly_equal(manual.effective_ppm, -2.5),
+            "an unavailable estimate without a stale value must fall back to fixed manual GPIO correction");
+        const GpioFrequencyCorrection uncalibrated = select_gpio_frequency_correction(
+            true, 0.3, 0.0, unavailable);
+        require(
+            uncalibrated.mode == GpioCorrectionMode::Uncalibrated &&
+                nearly_equal(uncalibrated.effective_ppm, 0.0),
+            "an unavailable estimate with no configured fallback must use zero PPM and report uncalibrated");
+    }
+
+    {
+        const std::string tracking =
+            "REF,2,0,0,0,0,0,1.25,0.05,0.20,0,0,16,Normal\n";
+        const PPMProviderSnapshot network = PPMManager::parseChronyReports(
+            tracking,
+            "^,*,ntp.example,2,6,377,4,0,0,0\n",
+            "ntp.example,8,5,512,1.25,0.20,0,0\n");
+        const PPMProviderSnapshot local = PPMManager::parseChronyReports(
+            tracking,
+            "#,*,PPS0,0,4,377,1,0,0,0\n",
+            "PPS0,8,5,64,1.25,0.20,0,0\n");
+        const PPMProviderSnapshot mixed = PPMManager::parseChronyReports(
+            tracking,
+            "#,*,PPS0,0,4,377,1,0,0,0\n^,+,ntp.example,2,6,377,4,0,0,0\n",
+            "PPS0,8,5,64,1.25,0.20,0,0\nntp.example,8,5,512,1.24,0.25,0,0\n");
+        const PPMProviderSnapshot reselected = PPMManager::parseChronyReports(
+            tracking,
+            "#,+,PPS0,0,4,377,1,0,0,0\n^,*,ntp.example,2,6,377,4,0,0,0\n",
+            "PPS0,8,5,64,1.25,0.20,0,0\nntp.example,8,5,512,1.24,0.25,0,0\n");
+        require(
+            network.synchronized && network.source_provenance == "Network NTP" &&
+                local.synchronized && local.source_provenance.find("local reference") != std::string::npos &&
+                mixed.synchronized && mixed.combined_sources && mixed.source_provenance == "Mixed" &&
+                network.source_signature != mixed.source_signature &&
+                mixed.source_signature != reselected.source_signature,
+            "fake chrony reports must distinguish network, local-reference, mixed composition, and selected-source changes");
     }
 
     std::cout << "dial_frequency_semantics_test passed" << std::endl;

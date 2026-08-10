@@ -296,6 +296,48 @@ namespace
         return clamped_ppm;
     }
 
+    double parse_gpio_ppm_value(
+        const nlohmann::json &source,
+        const std::string &context)
+    {
+        double ppm = 0.0;
+        if (source.is_number())
+        {
+            ppm = source.get<double>();
+        }
+        else if (source.is_string())
+        {
+            const std::string raw = trim_copy(source.get<std::string>());
+            std::size_t consumed = 0;
+            try
+            {
+                ppm = std::stod(raw, &consumed);
+            }
+            catch (const std::exception &)
+            {
+                throw std::runtime_error(context + " must be a number.");
+            }
+            if (consumed != raw.size())
+            {
+                throw std::runtime_error(context + " must be a number.");
+            }
+        }
+        else
+        {
+            throw std::runtime_error(context + " must be a number.");
+        }
+
+        if (!std::isfinite(ppm))
+        {
+            throw std::runtime_error(context + " must be a finite number.");
+        }
+        if (ppm < kManualPpmMin || ppm > kManualPpmMax)
+        {
+            throw std::runtime_error(context + " must be within -200 to 200 PPM.");
+        }
+        return ppm;
+    }
+
     double parse_cw_base_frequency_value(
         const nlohmann::json &source,
         const std::string &context)
@@ -667,7 +709,16 @@ namespace
         }
 
         if (public_json.contains("GPIO"))
+        {
+            if (public_json.at("GPIO").is_object() &&
+                public_json.at("GPIO").contains("Use NTP"))
+            {
+                throw std::runtime_error(
+                    "GPIO.Use NTP is retired and accepted only during INI migration; "
+                    "use GPIO.Use System Clock Frequency Estimate.");
+            }
             internal_json["GPIO"] = public_json.at("GPIO");
+        }
         if (public_json.contains("Calibration"))
             internal_json["Calibration"] = public_json.at("Calibration");
         if (public_json.contains("Si5351"))
@@ -969,7 +1020,10 @@ void init_default_config()
     config.amp_pin_active_high = false;
     config.gpio_tx_pin = kDefaultTransmitGpio;
     config.gpio_power_level = 7;
-    config.gpio_use_ntp = true;
+    config.gpio_use_system_clock_frequency_estimate = true;
+    config.gpio_frequency_residual_ppm = 0.0;
+    config.gpio_manual_ppm = 0.0;
+    config.si5351_ppm = 0.0;
     config.si5351_i2c_bus = kDefaultSi5351I2cBus;
     config.si5351_i2c_address = kDefaultSi5351I2cAddress;
     config.si5351_reference_hz = kDefaultSi5351ReferenceHz;
@@ -1034,12 +1088,14 @@ void resolve_backend_specific_config(ArgParserConfig &config) noexcept
     if (config.transmit_backend == TransmitBackendKind::SI5351)
     {
         config.power_level = config.si5351_power_level;
-        config.use_ntp = false;
+        config.use_system_clock_frequency_estimate = false;
+        config.ppm = config.si5351_ppm;
         return;
     }
 
     config.power_level = config.gpio_power_level;
-    config.use_ntp = config.gpio_use_ntp;
+    config.use_system_clock_frequency_estimate = config.gpio_use_system_clock_frequency_estimate;
+    config.ppm = config.gpio_manual_ppm;
 }
 
 bool si5351_device_detected(
@@ -1230,7 +1286,9 @@ namespace
                (section == "GPIO" &&
                 (key == "Transmit Pin" ||
                  key == "Power Level" ||
-                 key == "Use NTP")) ||
+                 key == "Use System Clock Frequency Estimate" ||
+                 key == "Frequency Residual PPM" ||
+                 key == "Manual PPM")) ||
                (section == "WSPR" &&
                 (key == "Call Sign" ||
                  key == "Grid Square" ||
@@ -1368,7 +1426,9 @@ namespace
         target["GPIO"] = {
             {"Transmit Pin", kDefaultTransmitGpio},
             {"Power Level", 7},
-            {"Use NTP", true}};
+            {"Use System Clock Frequency Estimate", true},
+            {"Frequency Residual PPM", 0.0},
+            {"Manual PPM", 0.0}};
 
         target["Calibration"] = {
             {"PPM", 0.0}};
@@ -1454,10 +1514,16 @@ namespace
             gpio.contains("Power Level")
                 ? gpio.at("Power Level").get<int>()
                 : 7;
-        target.gpio_use_ntp =
-            gpio.contains("Use NTP")
-                ? gpio.at("Use NTP").get<bool>()
+        target.gpio_use_system_clock_frequency_estimate =
+            gpio.contains("Use System Clock Frequency Estimate")
+                ? gpio.at("Use System Clock Frequency Estimate").get<bool>()
                 : true;
+        target.gpio_frequency_residual_ppm = parse_gpio_ppm_value(
+            gpio.value("Frequency Residual PPM", 0.0),
+            "GPIO.Frequency Residual PPM");
+        target.gpio_manual_ppm = parse_gpio_ppm_value(
+            gpio.value("Manual PPM", 0.0),
+            "GPIO.Manual PPM");
         const nlohmann::json si5351 =
             source.contains("Si5351") ? source.at("Si5351") : nlohmann::json::object();
         target.si5351_i2c_bus =
@@ -1482,10 +1548,10 @@ namespace
             si5351.contains("Power Level")
                 ? si5351.at("Power Level").get<int>()
                 : 1;
-        resolve_backend_specific_config(target);
-        target.ppm = parse_manual_ppm_value(
+        target.si5351_ppm = parse_manual_ppm_value(
             source.at("Calibration").at("PPM"),
             "Calibration.PPM");
+        resolve_backend_specific_config(target);
         target.use_offset = source.at("WSPR").at("Use Random Offset").get<bool>();
         target.modulation_dot_seconds =
             source.contains("CW") &&
@@ -1695,9 +1761,13 @@ namespace
         target["GPIO"]["Transmit Pin"] =
             normalize_gpio_transmit_pin(source.gpio_tx_pin);
         target["GPIO"]["Power Level"] = source.gpio_power_level;
-        target["GPIO"]["Use NTP"] = source.gpio_use_ntp;
+        target["GPIO"]["Use System Clock Frequency Estimate"] =
+            source.gpio_use_system_clock_frequency_estimate;
+        target["GPIO"]["Frequency Residual PPM"] =
+            source.gpio_frequency_residual_ppm;
+        target["GPIO"]["Manual PPM"] = source.gpio_manual_ppm;
 
-        target["Calibration"]["PPM"] = source.ppm;
+        target["Calibration"]["PPM"] = source.si5351_ppm;
 
         target["Si5351"]["I2C Bus"] = source.si5351_i2c_bus;
         target["Si5351"]["I2C Address"] =
@@ -1773,13 +1843,16 @@ namespace
         target.frequencies = source.frequencies;
         target.tx_pin = source.tx_pin;
         target.ppm = source.ppm;
-        target.use_ntp = source.use_ntp;
+        target.use_system_clock_frequency_estimate = source.use_system_clock_frequency_estimate;
         target.use_offset = source.use_offset;
         target.power_level = source.power_level;
         target.transmit_backend = source.transmit_backend;
         target.gpio_tx_pin = source.gpio_tx_pin;
         target.gpio_power_level = source.gpio_power_level;
-        target.gpio_use_ntp = source.gpio_use_ntp;
+        target.gpio_use_system_clock_frequency_estimate = source.gpio_use_system_clock_frequency_estimate;
+        target.gpio_frequency_residual_ppm = source.gpio_frequency_residual_ppm;
+        target.gpio_manual_ppm = source.gpio_manual_ppm;
+        target.si5351_ppm = source.si5351_ppm;
         target.si5351_i2c_bus = source.si5351_i2c_bus;
         target.si5351_i2c_address = source.si5351_i2c_address;
         target.si5351_reference_hz = source.si5351_reference_hz;
@@ -1826,14 +1899,92 @@ namespace
         target.ini_filename = source.ini_filename;
         target.wspr_dial_freq_set = source.wspr_dial_freq_set;
         target.wspr_frequency_entries = source.wspr_frequency_entries;
-        target.ntp_good = source.ntp_good;
+        target.frequency_estimate_good = source.frequency_estimate_good;
         target.band_gpio = source.band_gpio;
     }
 
-    void ini_to_json_impl(const std::string &filename, nlohmann::json &target)
+    bool migrate_legacy_gpio_keys(
+        std::map<std::string, std::unordered_map<std::string, std::string>> &ini_data,
+        std::vector<std::string> &warnings)
+    {
+        auto gpio_it = ini_data.find("GPIO");
+        if (gpio_it == ini_data.end())
+        {
+            return false;
+        }
+
+        auto &gpio = gpio_it->second;
+        const auto legacy_it = gpio.find("Use NTP");
+        if (legacy_it == gpio.end())
+        {
+            return false;
+        }
+
+        const bool legacy_enabled = parse_ini_bool_strict(
+            legacy_it->second,
+            "GPIO.Use NTP");
+        const auto canonical_it =
+            gpio.find("Use System Clock Frequency Estimate");
+
+        bool canonical_enabled = legacy_enabled;
+        if (canonical_it != gpio.end())
+        {
+            canonical_enabled = parse_ini_bool_strict(
+                canonical_it->second,
+                "GPIO.Use System Clock Frequency Estimate");
+            if (canonical_enabled != legacy_enabled)
+            {
+                warnings.push_back(
+                    "GPIO.Use NTP conflicts with GPIO.Use System Clock Frequency Estimate; "
+                    "the canonical value was retained and the retired key was removed.");
+            }
+        }
+        else
+        {
+            gpio["Use System Clock Frequency Estimate"] =
+                legacy_enabled ? "true" : "false";
+        }
+
+        if (gpio.find("Frequency Residual PPM") == gpio.end())
+        {
+            gpio["Frequency Residual PPM"] = "0.0";
+        }
+
+        if (gpio.find("Manual PPM") == gpio.end())
+        {
+            std::string manual_ppm = "0.0";
+            if (!legacy_enabled)
+            {
+                const auto calibration_it = ini_data.find("Calibration");
+                if (calibration_it != ini_data.end())
+                {
+                    const auto ppm_it = calibration_it->second.find("PPM");
+                    if (ppm_it != calibration_it->second.end() &&
+                        !trim_copy(ppm_it->second).empty())
+                    {
+                        manual_ppm = ppm_it->second;
+                    }
+                }
+            }
+            gpio["Manual PPM"] = manual_ppm;
+        }
+
+        gpio.erase(legacy_it);
+        warnings.push_back(
+            std::string("Migrated retired GPIO.Use NTP=") +
+            (legacy_enabled ? "true" : "false") +
+            " to GPIO.Use System Clock Frequency Estimate=" +
+            (canonical_enabled ? "true" : "false") +
+            "; the retired key will be removed from the persisted configuration.");
+        return true;
+    }
+
+    void ini_to_json_impl(
+        const std::string &filename,
+        const std::map<std::string, std::unordered_map<std::string, std::string>> &ini_data,
+        nlohmann::json &target)
     {
         nlohmann::json patch;
-        const auto ini_data = iniFile.getData();
 
         if (ini_data.find("Operation") == ini_data.end())
         {
@@ -1936,7 +2087,9 @@ namespace
 
             std::vector<std::string> local_warnings;
             bool missing_required_tx_item = false;
-            const auto ini_data = iniFile.getData();
+            auto ini_data = iniFile.getData();
+            const bool migration_required =
+                migrate_legacy_gpio_keys(ini_data, local_warnings);
 
             collect_ini_warnings(
                 candidate_json,
@@ -1944,7 +2097,7 @@ namespace
                 local_warnings,
                 missing_required_tx_item);
 
-            ini_to_json_impl(filename, candidate_json);
+            ini_to_json_impl(filename, ini_data, candidate_json);
             json_to_config_impl(candidate_json, candidate_config);
             candidate_config.enable_web = config.enable_web;
 
@@ -1998,6 +2151,11 @@ namespace
                 *warning_messages = local_warnings;
             }
 
+            if (migration_required)
+            {
+                candidate_json["Meta"]["Legacy GPIO Migration Required"] = true;
+            }
+
             config_to_json_impl(candidate_config, candidate_json);
             return true;
         }
@@ -2019,7 +2177,7 @@ void init_config_json()
 
 void ini_to_json(std::string filename)
 {
-    ini_to_json_impl(filename, jConfig);
+    ini_to_json_impl(filename, iniFile.getData(), jConfig);
 }
 
 void json_to_config()
@@ -2038,16 +2196,14 @@ void config_to_json()
     config_to_json_impl(config, jConfig);
 }
 
-void json_to_ini()
+namespace
 {
-    if (!config.use_ini)
-    {
-        return;
-    }
-
+std::map<std::string, std::unordered_map<std::string, std::string>>
+build_persistent_ini_data(const nlohmann::json &source)
+{
     std::map<std::string, std::unordered_map<std::string, std::string>> new_data;
 
-    for (auto &section : jConfig.items())
+    for (const auto &section : source.items())
     {
         const std::string section_name = section.key();
 
@@ -2094,7 +2250,7 @@ void json_to_ini()
             continue;
         }
 
-        for (auto &kv : section.value().items())
+        for (const auto &kv : section.value().items())
         {
             const std::string &key = kv.key();
             const bool persist_key =
@@ -2117,7 +2273,9 @@ void json_to_ini()
                 (section_name == "GPIO" &&
                  (key == "Transmit Pin" ||
                   key == "Power Level" ||
-                  key == "Use NTP")) ||
+                  key == "Use System Clock Frequency Estimate" ||
+                  key == "Frequency Residual PPM" ||
+                  key == "Manual PPM")) ||
                 (section_name == "Calibration" &&
                  key == "PPM") ||
                 (section_name == "Si5351" &&
@@ -2182,8 +2340,40 @@ void json_to_ini()
         }
     }
 
-    iniFile.setData(new_data);
-    iniFile.save();
+    return new_data;
+}
+
+void persist_config_json(const nlohmann::json &source)
+{
+    const auto previous_data = iniFile.getData();
+    try
+    {
+        iniFile.setData(build_persistent_ini_data(source));
+        iniFile.save();
+    }
+    catch (...)
+    {
+        iniFile.setData(previous_data);
+        try
+        {
+            iniFile.load();
+        }
+        catch (...)
+        {
+        }
+        throw;
+    }
+}
+} // namespace
+
+void json_to_ini()
+{
+    if (!config.use_ini)
+    {
+        return;
+    }
+
+    persist_config_json(jConfig);
 }
 
 bool apply_enable_on_boot_startup_policy()
@@ -2269,6 +2459,19 @@ void prepare_ini_config_candidate(
         return;
     }
 
+    candidate_out.migration_required =
+        candidate_out.normalized_json.contains("Meta") &&
+        candidate_out.normalized_json.at("Meta").is_object() &&
+        candidate_out.normalized_json.at("Meta").value(
+            "Legacy GPIO Migration Required",
+            false);
+    if (candidate_out.normalized_json.contains("Meta") &&
+        candidate_out.normalized_json.at("Meta").is_object())
+    {
+        candidate_out.normalized_json["Meta"].erase(
+            "Legacy GPIO Migration Required");
+    }
+
     candidate_out.valid = true;
     candidate_out.transmit_enabled = candidate_out.normalized_config.transmit;
 }
@@ -2279,6 +2482,13 @@ void commit_config_candidate(const PreparedConfigCandidate &candidate)
     {
         throw std::invalid_argument(
             "Cannot commit an invalid configuration candidate.");
+    }
+
+    if (candidate.migration_required)
+    {
+        iniFile.set_filename(candidate.normalized_config.ini_filename);
+        iniFile.erase_value("GPIO", "Use NTP");
+        persist_config_json(candidate.normalized_json);
     }
 
     copy_config(candidate.normalized_config, config);

@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <string>
@@ -22,6 +23,30 @@ namespace
         return std::string(
             std::istreambuf_iterator<char>(in),
             std::istreambuf_iterator<char>());
+    }
+
+    std::string repository_root()
+    {
+        if (const char *configured = std::getenv("WSPRRYPI_REPO_ROOT"))
+        {
+            return configured;
+        }
+
+        const std::filesystem::path current = std::filesystem::current_path();
+        if (std::filesystem::exists(current / "src" / "web_socket.cpp"))
+        {
+            return current.string();
+        }
+        if (std::filesystem::exists(current / "web_socket.cpp"))
+        {
+            return current.parent_path().string();
+        }
+        return "/home/pi/WsprryPi";
+    }
+
+    std::string read_repo_text_file(const std::string &relative_path)
+    {
+        return read_text_file(repository_root() + relative_path);
     }
 
     std::string extract_input_tag_by_id(
@@ -68,19 +93,19 @@ namespace
 int main()
 {
     const std::string websocket_source =
-        read_text_file("/home/pi/WsprryPi/src/web_socket.cpp");
+        read_repo_text_file("/src/web_socket.cpp");
     const std::string websocket_header_source =
-        read_text_file("/home/pi/WsprryPi/src/web_socket.hpp");
+        read_repo_text_file("/src/web_socket.hpp");
     const std::string web_server_source =
-        read_text_file("/home/pi/WsprryPi/src/web_server.cpp");
+        read_repo_text_file("/src/web_server.cpp");
     const std::string makefile_source =
-        read_text_file("/home/pi/WsprryPi/src/Makefile");
+        read_repo_text_file("/src/Makefile");
     const std::string version_source =
-        read_text_file("/home/pi/WsprryPi/src/version.cpp");
+        read_repo_text_file("/src/version.cpp");
     const std::string build_metadata_generator_source =
-        read_text_file("/home/pi/WsprryPi/scripts/generate_build_metadata.py");
+        read_repo_text_file("/scripts/generate_build_metadata.py");
     const std::string version_header_source =
-        read_text_file("/home/pi/WsprryPi/src/version.hpp");
+        read_repo_text_file("/src/version.hpp");
     require(
         websocket_source.find("else if (cmd == \"stop\")") != std::string::npos &&
             websocket_source.find("stop_transmission_by_user_request(persist_transmit);") !=
@@ -96,7 +121,7 @@ int main()
         "websocket Test Tone Start and End commands must share one transaction lock through their broadcast reply");
 
     const std::string scheduling_source =
-        read_text_file("/home/pi/WsprryPi/src/scheduling.cpp");
+        read_repo_text_file("/src/scheduling.cpp");
     require(
         scheduling_source.find("suppress_cancelled_ws_event_for_user_stop.store(true") != std::string::npos &&
             scheduling_source.find("Suppressing websocket canceled event because an explicit user stop will publish stopped.") !=
@@ -124,21 +149,21 @@ int main()
         "WSPR test tone stop recovery must route through shared stop cleanup and explicitly re-arm the committed scheduler wait path");
 
     const std::string ui_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.js");
+        read_repo_text_file("/WsprryPi-UI/data/index.js");
     const std::string ui_stylesheet_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.css");
+        read_repo_text_file("/WsprryPi-UI/data/index.css");
     const std::string main_source =
-        read_text_file("/home/pi/WsprryPi/src/main.cpp");
+        read_repo_text_file("/src/main.cpp");
     const std::string config_view_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/config.php");
+        read_repo_text_file("/WsprryPi-UI/data/views/config.php");
     const std::string gpio_dropdown_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/gpio_dropdown.php");
+        read_repo_text_file("/WsprryPi-UI/data/gpio_dropdown.php");
     const std::string cw_timing_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/cw_timing_state.js");
+        read_repo_text_file("/WsprryPi-UI/data/cw_timing_state.js");
     const std::string maintenance_script_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/maintenance.js");
+        read_repo_text_file("/WsprryPi-UI/data/maintenance.js");
     const std::string operation_script_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/operation.js");
+        read_repo_text_file("/WsprryPi-UI/data/operation.js");
     const std::string cw_message_input =
         extract_input_tag_by_id(config_view_source, "qrss_message");
     require(
@@ -260,11 +285,14 @@ int main()
                 std::string::npos,
         "UI save path must use canonical Operation.Mode only");
     require(
-        ui_source.find("var GPIO = {\n        \"Power Level\": transmit_power,\n        \"Use NTP\": use_ntp,") !=
+        ui_source.find("var GPIO = {\n        \"Power Level\": transmit_power,\n        \"Use System Clock Frequency Estimate\": use_system_clock_frequency_estimate,") !=
                 std::string::npos &&
-            ui_source.find("var Calibration = {\n        \"PPM\": ppm_val,\n        \"Use NTP\": use_ntp,") ==
+            ui_source.find("\"Frequency Residual PPM\": gpio_frequency_residual_ppm,") != std::string::npos &&
+            ui_source.find("\"Manual PPM\": gpio_manual_ppm,") != std::string::npos &&
+            ui_source.find("Use NTP") == std::string::npos &&
+            ui_source.find("var Calibration = {\n        \"PPM\": ppm_val,") !=
                 std::string::npos,
-        "UI save path must use canonical GPIO.Use NTP only");
+        "UI save path must use only canonical backend-specific calibration keys");
     require(
         ui_source.find("const CONFIG_AUTOSAVE_DELAY_MS = 800;") != std::string::npos &&
             ui_source.find("function buildConfigPayload(options = {})") != std::string::npos &&
@@ -392,13 +420,13 @@ int main()
         "paired planning save failures must collapse to a short setup-card message with a More dialog trigger that preserves full diagnostic line breaks");
 
     const std::string site_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/site.js");
+        read_repo_text_file("/WsprryPi-UI/data/site.js");
     const std::string ui_header_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/header.php");
+        read_repo_text_file("/WsprryPi-UI/data/header.php");
     const std::string apache_proxy_source =
-        read_text_file("/home/pi/WsprryPi/config/wsprrypi.conf");
+        read_repo_text_file("/config/wsprrypi.conf");
     const std::string installer_source =
-        read_text_file("/home/pi/WsprryPi/scripts/install.sh");
+        read_repo_text_file("/scripts/install.sh");
     require(
         ui_source.find("let cwDurationPolicyLatched = false;") != std::string::npos &&
             ui_source.find("function updateCwDurationPolicyLatch(options = {})") != std::string::npos &&
@@ -414,7 +442,7 @@ int main()
             site_source.find("title: \"Configuration Reload Failed\"") != std::string::npos,
         "Setup must latch CW duration failures inline, suppress overlong autosaves and mapped reload modals, preserve field validity semantics, and retain the modal fallback for unrelated reload failures");
     const std::string stock_ini_source =
-        read_text_file("/home/pi/WsprryPi/config/wsprrypi.ini");
+        read_repo_text_file("/config/wsprrypi.ini");
     const std::string transmit_branch = "if (msg.type === \"transmit\")";
     const std::string tx_state_branch = "if (msg.tx_state !== undefined)";
     require(
@@ -490,10 +518,11 @@ int main()
         site_source.find("Frequency Control GPIO Polarity") == std::string::npos,
         "UI config schema must not require the obsolete GPIO.Frequency Control GPIO Polarity key");
     require(
-        site_source.find("let use_ntp = getConfigBoolValue(") != std::string::npos &&
-            site_source.find("\"GPIO\",\n                    \"Use NTP\",\n                    true") != std::string::npos &&
-            site_source.find("\"GPIO\",\n                    \"Use NTP\",\n                    false") == std::string::npos,
-        "UI config loader must default GPIO.Use NTP to true to match backend normalization");
+        site_source.find("let use_system_clock_frequency_estimate = getConfigBoolValue(") != std::string::npos &&
+            site_source.find("\"GPIO\",\n                    \"Use System Clock Frequency Estimate\",\n                    true") != std::string::npos &&
+            site_source.find("let gpio_frequency_residual_ppm = getConfigFloatValue(") != std::string::npos &&
+            site_source.find("let gpio_manual_ppm = getConfigFloatValue(") != std::string::npos,
+        "UI config loader must load all canonical GPIO calibration values and default estimation to true");
     require(
         site_source.find("let cw_base_frequency = getConfigFloatValue(cw, \"CW\", \"Base Frequency\", 14096900.0);") != std::string::npos &&
             site_source.find("let cw_base_frequency = getConfigFloatValue(cw, \"CW\", \"Base Frequency\", 3572000.0);") == std::string::npos,
@@ -567,6 +596,8 @@ int main()
             websocket_source.find("reply[\"selector_gpio\"] = snapshot.selector_gpio;") != std::string::npos &&
             websocket_source.find("reply[\"selector_gpio_active_high\"] = snapshot.selector_gpio_active_high;") != std::string::npos &&
             websocket_source.find("reply[\"power_dbm\"] = snapshot.power_dbm;") != std::string::npos &&
+            websocket_source.find("reply[\"frequency_estimate_qualification\"] = snapshot.frequency_estimate_qualification;") != std::string::npos &&
+            websocket_source.find("reply[\"effective_gpio_ppm\"] = snapshot.effective_gpio_ppm;") != std::string::npos &&
             scheduling_source.find("j[\"frequency_hz\"] = snapshot.frequency_hz;") != std::string::npos &&
             scheduling_source.find("j[\"offset_hz\"] = snapshot.offset_hz;") != std::string::npos &&
             scheduling_source.find("j[\"frequency_is_skip\"] = snapshot.frequency_is_skip;") != std::string::npos &&
@@ -574,6 +605,8 @@ int main()
             scheduling_source.find("j[\"selector_gpio\"] = snapshot.selector_gpio;") != std::string::npos &&
             scheduling_source.find("j[\"selector_gpio_active_high\"] = snapshot.selector_gpio_active_high;") != std::string::npos &&
             scheduling_source.find("j[\"power_dbm\"] = snapshot.power_dbm;") != std::string::npos &&
+            scheduling_source.find("j[\"frequency_correction_mode\"] = snapshot.frequency_correction_mode;") != std::string::npos &&
+            scheduling_source.find("j[\"effective_gpio_ppm\"] = snapshot.effective_gpio_ppm;") != std::string::npos &&
             scheduling_source.find("snapshot.selector_gpio_enabled =\n        current_transmission_request.hasSelectorGPIO();") != std::string::npos &&
             scheduling_source.find("snapshot.power_dbm = plan.power_dbm;") != std::string::npos &&
             scheduling_source.find("if (snapshot.tx_state == \"transmitting\")") != std::string::npos &&
@@ -1140,20 +1173,14 @@ int main()
             site_source.find("Update check selected targetBranch=") != std::string::npos,
         "update checker must log parsed display branch, raw branch/SHA, branch lookup URL/status/result, selected target branch, fallback state, and target HEAD for debugging");
     require(
-        ui_source.find("function isWsprConfigMode()") != std::string::npos &&
-            ui_source.find("const si5351Active = selectedTransmitBackend() === \"si5351\";") != std::string::npos &&
-            ui_source.find("const gpioNtpActive = isWsprMode && !si5351Active && $(\"#use_ntp\").is(\":checked\");") != std::string::npos &&
-            ui_source.find("const showNtpControl = isWsprMode && !si5351Active;") != std::string::npos &&
-            ui_source.find("$(\"#ntp_calibration_control\")") != std::string::npos &&
-            ui_source.find("$ppm.prop(\"disabled\", !isWsprMode || gpioNtpActive);") != std::string::npos &&
-            ui_source.find("$ppmCw.prop(\"disabled\", isWsprMode);") != std::string::npos &&
-            ui_source.find("Applied to the Si5351 reference during synthesis planning.") != std::string::npos &&
-            ui_source.find("$(\"#use_ntp\").prop(\"checked\", false)") == std::string::npos &&
-            ui_source.find("$(\"#ppm\").val(0)") == std::string::npos &&
-            ui_source.find("let use_ntp = parseBool($(\"#use_ntp\").is(\":checked\"));") != std::string::npos &&
-            ui_source.find("let ppm_val = parseFloat(ppmSource) || 0.0;") != std::string::npos &&
+        ui_source.find("const si5351Active = selectedTransmitBackend() === \"si5351\";") != std::string::npos &&
+            ui_source.find("const estimateEnabled = $(\"#use_system_clock_frequency_estimate\").is(\":checked\");") != std::string::npos &&
+            ui_source.find("$residual.prop(\"disabled\", si5351Active || !estimateEnabled);") != std::string::npos &&
+            ui_source.find("let use_system_clock_frequency_estimate = parseBool($(\"#use_system_clock_frequency_estimate\").is(\":checked\"));") != std::string::npos &&
+            ui_source.find("let gpio_frequency_residual_ppm = Number($(\"#gpio_frequency_residual_ppm\").val());") != std::string::npos &&
+            ui_source.find("let gpio_manual_ppm = Number($(\"#gpio_manual_ppm\").val());") != std::string::npos &&
             ui_source.find("syncCalibrationControls();") != std::string::npos,
-        "config UI must keep Si5351 PPM editable, expose NTP only for GPIO WSPR, and preserve both stored values while switching backends");
+        "config UI must preserve independent GPIO and Si5351 calibration values while switching familiar backend panels");
 
     require(
         config_view_source.find("id=\"modeChangeGuardModal\"") != std::string::npos &&
@@ -1200,27 +1227,27 @@ int main()
             std::string::npos,
         "Band GPIO pin and polarity changes must schedule autosave after revalidation");
     const std::string footer_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/footer.php");
+        read_repo_text_file("/WsprryPi-UI/data/footer.php");
     const std::string site_css_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/site.css");
+        read_repo_text_file("/WsprryPi-UI/data/site.css");
     const std::string header_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/header.php");
+        read_repo_text_file("/WsprryPi-UI/data/header.php");
     const std::string index_page_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/index.php");
+        read_repo_text_file("/WsprryPi-UI/data/index.php");
     const std::string script_include_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/site.js.includes.php");
+        read_repo_text_file("/WsprryPi-UI/data/site.js.includes.php");
     const std::string ui_version_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/ui_version.php");
+        read_repo_text_file("/WsprryPi-UI/data/ui_version.php");
     const std::string html_cache_headers_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/html_cache_headers.php");
+        read_repo_text_file("/WsprryPi-UI/data/html_cache_headers.php");
     const std::string version_endpoint_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/version.php");
+        read_repo_text_file("/WsprryPi-UI/data/version.php");
     const std::string fetch_spots_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/fetch_spots.php");
+        read_repo_text_file("/WsprryPi-UI/data/fetch_spots.php");
     const std::string log_stream_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/log_stream.php");
+        read_repo_text_file("/WsprryPi-UI/data/log_stream.php");
     const std::string diagnostic_logs_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/view_diag_logs.php");
+        read_repo_text_file("/WsprryPi-UI/data/view_diag_logs.php");
     require(
         footer_source.find("<details class=\"footer-meta\">") != std::string::npos &&
             footer_source.find("<summary>About</summary>") != std::string::npos &&
@@ -1256,7 +1283,7 @@ int main()
             index_page_source.find("<?php require_once __DIR__ . '/html_cache_headers.php'; ?>") == 0 &&
             diagnostic_logs_source.find("require_once __DIR__ . '/html_cache_headers.php';") != std::string::npos &&
             diagnostic_logs_source.find("require_once __DIR__ . '/html_cache_headers.php';") < diagnostic_logs_source.find("<!doctype html>") &&
-            read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/template.php").find("<?php require_once __DIR__ . '/html_cache_headers.php'; ?>") == 0 &&
+            read_repo_text_file("/WsprryPi-UI/data/template.php").find("<?php require_once __DIR__ . '/html_cache_headers.php'; ?>") == 0 &&
             version_endpoint_source.find("html_cache_headers.php") == std::string::npos &&
             fetch_spots_source.find("html_cache_headers.php") == std::string::npos &&
             log_stream_source.find("html_cache_headers.php") == std::string::npos,
@@ -1274,7 +1301,7 @@ int main()
         "spot lookup must normalize compound configured callsigns into shared downloader and clickhouse lookup candidates without changing non-lookup callsign handling");
 
     const std::string operation_view_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/operation.php");
+        read_repo_text_file("/WsprryPi-UI/data/views/operation.php");
     require(
         operation_view_source.find("class=\"btn btn-danger operation-stop-button\"") != std::string::npos &&
             operation_view_source.find("id=\"stop_transmit\"") != std::string::npos &&
@@ -1304,7 +1331,7 @@ int main()
         "Operation view must place the Frequency pane between the Current mode and mode-specific runtime panes");
 
     const std::string operation_css_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/operation.css");
+        read_repo_text_file("/WsprryPi-UI/data/operation.css");
     require(
         operation_css_source.find("grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1.25fr);") != std::string::npos &&
             operation_css_source.find(".operation-panel__stack") != std::string::npos &&
@@ -1316,9 +1343,19 @@ int main()
         config_view_source.find("config-runtime-item config-runtime-item--action") == std::string::npos,
         "Runtime state grid must no longer dedicate a large action tile to Stop transmission");
     require(
-        config_view_source.find("id=\"ntp_calibration_control\"") != std::string::npos &&
-            config_view_source.find("id=\"use_ntp\"") != std::string::npos,
-        "Configuration view must expose the dedicated NTP calibration control wrapper without changing the existing field binding");
+        config_view_source.find("id=\"gpio-calibration-heading\"") != std::string::npos &&
+            config_view_source.find("id=\"si5351-calibration-heading\"") != std::string::npos &&
+            config_view_source.find("id=\"use_system_clock_frequency_estimate\"") != std::string::npos &&
+            config_view_source.find("id=\"gpio_frequency_residual_ppm\"") != std::string::npos &&
+            config_view_source.find("id=\"gpio_manual_ppm\"") != std::string::npos,
+        "Configuration view must place familiar backend-specific frequency calibration sections in both transmitter panels");
+    require(
+        operation_view_source.find("id=\"gpio_frequency_correction_panel\"") != std::string::npos &&
+            operation_view_source.find("id=\"gpio_frequency_correction_value\"") != std::string::npos &&
+            site_source.find("function renderGpioFrequencyCorrection(status)") != std::string::npos &&
+            site_source.find("frequencyEstimateQualification") != std::string::npos &&
+            site_source.find("effectiveGpioPpm") != std::string::npos,
+        "Operation view must show read-only GPIO provider qualification and effective-correction status");
     require(
         config_view_source.find("config-runtime-item config-runtime-item--switch") == std::string::npos,
         "Runtime state body must no longer dedicate a body tile to the Transmit enabled control");
@@ -1342,7 +1379,7 @@ int main()
             config_view_source.find("id=\"ppm\"") != std::string::npos &&
             config_view_source.find("min=\"-200\"") != std::string::npos &&
             config_view_source.find("max=\"200\"") != std::string::npos &&
-            config_view_source.find("id=\"use_ntp\"") != std::string::npos &&
+            config_view_source.find("id=\"use_system_clock_frequency_estimate\"") != std::string::npos &&
             config_view_source.find("id=\"planner_preference\"") != std::string::npos &&
             config_view_source.find("id=\"dbm\"") != std::string::npos &&
             config_view_source.find("<option value=\"60\">60</option>") != std::string::npos &&
@@ -1476,9 +1513,9 @@ int main()
         "Configuration tab list must opt into reload-scoped persisted sub-tab state");
 
     const std::string maintenance_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/views/maintenance.php");
+        read_repo_text_file("/WsprryPi-UI/data/views/maintenance.php");
     const std::string maintenance_css_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/maintenance.css");
+        read_repo_text_file("/WsprryPi-UI/data/maintenance.css");
     require(
         maintenance_source.find("id=\"test_tone\"") != std::string::npos &&
             maintenance_source.find("id=\"testToneModal\"") != std::string::npos &&
@@ -1545,7 +1582,7 @@ int main()
         "Support Bundle UI must keep active I2C probing opt-in, receive the full Blob before deletion, avoid path claims or uploads, and retain accessible retry-safe status handling");
 
     const std::string maintenance_test_tone_script_source =
-        read_text_file("/home/pi/WsprryPi/WsprryPi-UI/data/maintenance.js");
+        read_repo_text_file("/WsprryPi-UI/data/maintenance.js");
     require(
         maintenance_test_tone_script_source.find("bindTestToneControls();") != std::string::npos,
         "maintenance view must bind the shared Test Tone controls");

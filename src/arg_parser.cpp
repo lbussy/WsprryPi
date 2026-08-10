@@ -1398,11 +1398,16 @@ void print_usage(const std::string &message, int exit_code)
               << "GPIO Backend:\n"
               << "  -a, --transmit-gpio <4|20>         Select the RF transmit GPIO.\n"
               << "      --transmit-pin <4|20>          Legacy alias for --transmit-gpio.\n"
-              << "  -n, --use-ntp                      Enable GPIO-backed NTP/PPM calibration.\n"
-              << "      --no-use-ntp                   Disable GPIO NTP calibration and use manual PPM.\n"
-              << "  -p, --ppm <value>                  Set the GPIO source-clock estimate (-200 through 200) and disable --use-ntp.\n"
+              << "  -n, --use-system-clock-frequency-estimate\n"
+              << "                                     Enable the system-clock frequency estimate for GPIO.\n"
+              << "      --no-system-clock-frequency-estimate\n"
+              << "                                     Disable the estimate and use GPIO manual PPM.\n"
+              << "  -p, --gpio-manual-ppm <value>      Set GPIO manual correction (-200 through 200) and disable the estimate.\n"
+              << "      --gpio-frequency-residual-ppm <value>\n"
+              << "                                     Set residual correction added to the system-clock estimate.\n"
               << "                                     Positive means fast; negative means slow.\n\n"
               << "Si5351 Backend:\n"
+              << "  --si5351-ppm <value>              Set Si5351 reference-oscillator correction (-200 through 200).\n"
               << "  --si5351-i2c-bus <bus>             Linux I2C bus number. Default: 1.\n"
               << "  --si5351-i2c-address <addr>        I2C address, decimal or 0x-prefixed hex. Valid: 0x03 through 0x77.\n"
               << "  --si5351-reference-frequency <hz>  Reference oscillator frequency in Hz.\n"
@@ -2011,7 +2016,7 @@ void apply_runtime_config_side_effects()
     {
         llog.logS(INFO, "Transmit GPIO: ", config.tx_pin);
     }
-    if (!config.use_ntp && config.ppm != 0.0)
+    if (!config.use_system_clock_frequency_estimate && config.ppm != 0.0)
     {
         log_startup_config_message(INFO,
                                    "PPM value to be used for tone generation: ",
@@ -2019,10 +2024,9 @@ void apply_runtime_config_side_effects()
                                    std::setprecision(2),
                                    config.ppm);
     }
-    else if (!config.use_ntp && config.ppm != 0.0)
+    else if (!config.use_system_clock_frequency_estimate && config.ppm == 0.0)
     {
-        config.ppm = 0.0;
-        log_startup_config_message(WARN, "NTP disabled and PPM not set.");
+        log_startup_config_message(WARN, "System-clock frequency estimate disabled and manual GPIO PPM is zero.");
     }
 
     if (config.use_led && (config.led_pin >= 0 && config.led_pin <= 27))
@@ -2925,7 +2929,7 @@ bool parse_command_line(int argc, char *argv[])
     static struct option long_options[] = {
         {"help", no_argument, nullptr, 'h'},
         {"version", no_argument, nullptr, 'v'},
-        {"use-ntp", no_argument, nullptr, 'n'},         // Via: [GPIO] Use NTP = True
+        {"use-system-clock-frequency-estimate", no_argument, nullptr, 'n'},
         {"repeat", no_argument, nullptr, 'r'},          // Global: config.loop_tx
         {"offset", no_argument, nullptr, 'o'},          // Via: [Extended] Offset = True
         {"journald", no_argument, nullptr, 'J'},        // Global: config.use_journald
@@ -2934,7 +2938,11 @@ bool parse_command_line(int argc, char *argv[])
         {"no-debug-logging", no_argument, nullptr, 1019},
         {"no-web", no_argument, nullptr, 1020},
         {"no-offset", no_argument, nullptr, 1021},
-        {"no-use-ntp", no_argument, nullptr, 1022},
+        {"no-system-clock-frequency-estimate", no_argument, nullptr, 1022},
+        {"gpio-frequency-residual-ppm", required_argument, nullptr, 1051},
+        {"gpio-manual-ppm", required_argument, nullptr, 'p'},
+        {"ppm", required_argument, nullptr, 'p'}, // Compatibility alias for GPIO manual PPM.
+        {"si5351-ppm", required_argument, nullptr, 1052},
         {"mode", required_argument, nullptr, 1023},
         {"cw-message", required_argument, nullptr, 1024},
         {"cw-base-frequency", required_argument, nullptr, 1025},
@@ -2985,7 +2993,6 @@ bool parse_command_line(int argc, char *argv[])
         {"si5351_reference_frequency", required_argument, nullptr, 1016},
         {"si5351_tx_output", required_argument, nullptr, 1017},
         // Required arguments
-        {"ppm", required_argument, nullptr, 'p'},       // Via: [Extended] PPM = 0.0
         {"terminate", required_argument, nullptr, 'x'}, // Global: config.tx_iterations
         {"test-tone", required_argument, nullptr, 't'},
         {"transmit-gpio", required_argument, nullptr, 'a'}, // Via: [GPIO] Transmit Pin = 4
@@ -3026,9 +3033,9 @@ bool parse_command_line(int argc, char *argv[])
             std::cout << get_version_string() << std::endl;
             std::exit(EXIT_SUCCESS);
         }
-        case 'n': // Use NTP
+        case 'n': // Use system-clock frequency estimate
         {
-            config.gpio_use_ntp = true;
+            config.gpio_use_system_clock_frequency_estimate = true;
             resolve_backend_specific_config(config);
             break;
         }
@@ -3074,8 +3081,44 @@ bool parse_command_line(int argc, char *argv[])
         }
         case 1022:
         {
-            config.gpio_use_ntp = false;
+            config.gpio_use_system_clock_frequency_estimate = false;
             resolve_backend_specific_config(config);
+            break;
+        }
+        case 1051:
+        {
+            try
+            {
+                const double ppm = std::stod(optarg);
+                if (!std::isfinite(ppm) || ppm < -200.0 || ppm > 200.0)
+                {
+                    print_usage("GPIO frequency residual PPM must be a finite number from -200 through 200.", EXIT_FAILURE);
+                }
+                config.gpio_frequency_residual_ppm = ppm;
+                resolve_backend_specific_config(config);
+            }
+            catch (const std::exception &)
+            {
+                print_usage("GPIO frequency residual PPM must be a number.", EXIT_FAILURE);
+            }
+            break;
+        }
+        case 1052:
+        {
+            try
+            {
+                const double ppm = std::stod(optarg);
+                if (!std::isfinite(ppm) || ppm < -200.0 || ppm > 200.0)
+                {
+                    print_usage("Si5351 PPM must be a finite number from -200 through 200.", EXIT_FAILURE);
+                }
+                config.si5351_ppm = ppm;
+                resolve_backend_specific_config(config);
+            }
+            catch (const std::exception &)
+            {
+                print_usage("Si5351 PPM must be a number.", EXIT_FAILURE);
+            }
             break;
         }
         case 1023:
@@ -3600,14 +3643,14 @@ bool parse_command_line(int argc, char *argv[])
             break;
         }
         // Required arguments
-        case 'p': // Apply PPM
+        case 'p': // Apply GPIO manual PPM
         {
             try
             {
                 double ppm = std::stod(optarg);
                 if (!std::isfinite(ppm))
                 {
-                    print_usage("Calibration.PPM must be a finite number.", EXIT_FAILURE);
+                    print_usage("GPIO manual PPM must be a finite number.", EXIT_FAILURE);
                 }
                 double clamped_ppm = std::clamp(ppm, -200.0, 200.0);
 
@@ -3617,15 +3660,15 @@ bool parse_command_line(int argc, char *argv[])
                 }
 
                 // Apply the clamped value
-                config.ppm = clamped_ppm;
-                config.gpio_use_ntp = false;
+                config.gpio_manual_ppm = clamped_ppm;
+                config.gpio_use_system_clock_frequency_estimate = false;
                 resolve_backend_specific_config(config);
             }
             catch (const std::exception &)
             {
-                config.gpio_use_ntp = true;
+                config.gpio_use_system_clock_frequency_estimate = true;
                 resolve_backend_specific_config(config);
-                print_usage("Calibration.PPM must be a number.", EXIT_FAILURE);
+                print_usage("GPIO manual PPM must be a number.", EXIT_FAILURE);
             }
             break;
         }

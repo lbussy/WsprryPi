@@ -389,6 +389,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                 current_tx_runtime_status_snapshot();
             reply["tx_state"] = snapshot.tx_state;
             reply["runtime_mode"] = snapshot.runtime_mode;
+            reply["transmit_backend"] = snapshot.transmit_backend;
             reply["next_transmission_at"] = snapshot.next_transmission_at;
             reply["frequency_hz"] = snapshot.frequency_hz;
             reply["offset_hz"] = snapshot.offset_hz;
@@ -408,6 +409,17 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             reply["frame_locator"] = snapshot.frame_locator;
             reply["cw_message"] = snapshot.cw_message;
             reply["cw_active_char_index"] = snapshot.cw_active_char_index;
+            reply["frequency_estimate_qualification"] = snapshot.frequency_estimate_qualification;
+            reply["frequency_estimate_provider"] = snapshot.frequency_estimate_provider;
+            reply["frequency_estimate_provenance"] = snapshot.frequency_estimate_provenance;
+            reply["frequency_correction_mode"] = snapshot.frequency_correction_mode;
+            reply["frequency_estimate_reason"] = snapshot.frequency_estimate_reason;
+            reply["frequency_estimate_ppm"] = snapshot.frequency_estimate_ppm_available
+                ? json(snapshot.frequency_estimate_ppm)
+                : json(nullptr);
+            reply["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
+            reply["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
+            reply["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
             auto now = std::chrono::system_clock::now();
             auto now_t = std::chrono::system_clock::to_time_t(now);
             std::tm tm_utc{};

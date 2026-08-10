@@ -250,7 +250,7 @@ TestToneStopResult end_test_tone();
  * @details
  * Coordinates all core runtime components:
  * - Validates startup configuration.
- * - Initializes optional NTP/PPM drift correction.
+ * - Initializes optional system-clock frequency-estimate correction.
  * - Starts the TCP command server and sets its priority.
  * - Commits the initial execution request for WSPR or direct tone.
  * - Launches the transmitter using only committed requests.
@@ -315,6 +315,7 @@ struct WsprRuntimeStatusSnapshot
 {
     std::string tx_state;
     std::string runtime_mode;
+    std::string transmit_backend;
     std::string next_transmission_at;
     double frequency_hz = 0.0;
     double offset_hz = 0.0;
@@ -334,6 +335,16 @@ struct WsprRuntimeStatusSnapshot
     std::string frame_locator;
     std::string cw_message;
     int cw_active_char_index = -1;
+    std::string frequency_estimate_qualification;
+    std::string frequency_estimate_provider;
+    std::string frequency_estimate_provenance;
+    std::string frequency_correction_mode;
+    std::string frequency_estimate_reason;
+    double frequency_estimate_ppm = 0.0;
+    bool frequency_estimate_ppm_available = false;
+    double gpio_frequency_residual_ppm = 0.0;
+    double effective_gpio_ppm = 0.0;
+    double frequency_estimate_age_seconds = 0.0;
 };
 
 WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot();
@@ -341,7 +352,7 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot();
 /**
  * @brief Apply updated transmission parameters and reinitialize DMA.
  *
- * Retrieves the current PPM value if NTP calibration is enabled, captures
+ * Retrieves the current system-clock frequency estimate when enabled, captures
  * the latest configuration settings, and reconfigures the WSPR transmitter
  * with the specified frequency and parameters.
  *
