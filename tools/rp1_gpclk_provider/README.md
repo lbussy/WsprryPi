@@ -5,9 +5,13 @@ core for the version 1 RP1 GPCLK provider UAPI. It deliberately contains no RP1
 register address. The provider validates logical divider words and owns their
 conversion to the RP1 `DIV_FRAC` register representation.
 
-The core is suitable for inclusion in the eventual in-kernel provider after the
-RP1 clock driver exposes a supported exclusive divider/DMA lease. It is not a
-loadable driver and cannot enable, mux, or manipulate GPCLK hardware.
+The `kernel/` directory contains the Phase 6G in-tree lease patch, provider
+driver, KUnit contract tests, static ownership test, and an uninstalled overlay
+that supplies only tick/DMA resources. The overlay intentionally contains no
+GPCLK divider address; that address is derived and leased inside `clk-rp1`.
+
+The portable core remains independently testable and cannot enable, mux, or
+manipulate GPCLK hardware.
 
 Run its contract tests with:
 
@@ -15,9 +19,8 @@ Run its contract tests with:
 make test
 ```
 
-The running Raspberry Pi 6.18 clock driver provides ordinary common-clock
-operations but no interface for an external DMA client to lease the GP0 divider
-register while remaining synchronized with its regmap lock. Reusing the Phase
-6D device-tree address would violate the provider-ownership requirement. The
-missing clock-provider lease must therefore be implemented and reviewed before
-this core is connected to tick-paced DMA.
+Phase 6G adds the missing clock-provider lease as a patch against the recorded
+Raspberry Pi 6.18 source revision. It blocks GP0 enable, parent, and rate changes
+while leased, holds a common-clock exclusive-rate claim, and keeps the DMA target
+out of userspace and device tree. These artifacts are engineering candidates;
+they must be reviewed and installed only in a separately authorized phase.
