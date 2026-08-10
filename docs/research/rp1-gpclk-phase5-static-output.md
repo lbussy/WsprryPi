@@ -2,17 +2,28 @@
 
 ## Disposition
 
-**Failed the bounded-duration gate.**
+**Passed on the authorized retry.**
 
 The first kernel-owned RP1 GPCLK0 output on GPIO4 produced a strong, stable
 signal in the attached SDR capture and cleaned up to the required clock and
 pin state. The kernel delayed-work watchdog disabled the clock 5.247271
 seconds after enablement, however, exceeding the authorized five-second
-maximum by about 247 ms. No second live-output attempt was made.
+maximum by about 247 ms.
 
-The uncalibrated SDR measurement also placed the strongest captured feature
-at 14,096,512 Hz, 586 Hz below the 14,097,098 Hz common-clock readback. That
-disagreement is unresolved and does not qualify absolute frequency placement.
+The retry replaced delayed work with an absolute high-resolution timer whose
+callback disables the prepared clock through the atomic clock API. Twenty
+clock-only trials under four-core CPU load showed 0--1 us timer lateness. The
+live retry then disabled output after 3.999999 seconds with 1 us measured timer
+lateness and restored every clock and pin state.
+
+The retry again measured the carrier near 14,096,513 Hz. The common-clock
+readback is a nominal divider result, not an independent frequency
+measurement. A preceding RSP1B/Si5351 reference capture differed by only
++2.29 Hz at 24.9261 MHz, while both RP1 captures were about -41.6 PPM from the
+nominal result. The repeatability resolves the apparent 586 Hz readback
+disagreement as predominantly reference error in the RP1 50 MHz `xosc` path;
+it is not evidence of a divider-planning error. No calibrated power conclusion
+is made.
 
 ## Scope and physical arrangement
 
@@ -21,11 +32,13 @@ connected to a shielded, 50-ohm terminated and attenuated SDR measurement
 chain with no antenna or unshielded radiator path. The numeric attenuation
 was not supplied, so amplitude is reported in dBFS rather than RF power.
 
-The authorized live output was one static GPCLK0 interval at a requested
+Each authorized live output was one static GPCLK0 interval at a requested
 14,097,100 Hz, the lowest configured 2 mA drive, and no more than five
 seconds. No WSPR symbols, divider transitions while enabled, WSPR frame,
-service change, installation, reboot, persistent overlay, `/dev/mem` access,
-or direct register write was authorized or performed.
+installation, reboot, persistent overlay, `/dev/mem` access, or direct register
+write was performed. The retry temporarily stopped the local
+`soapyremote-server.service` while the capture process owned the RSP1B and
+restored it afterward.
 
 ## System and source revisions
 
@@ -171,34 +184,88 @@ After the watchdog, runtime-overlay removal, and module unload:
 
 The kernel taint value remained 4096. No reboot was authorized or performed.
 
+## Authorized retry
+
+The retry used the same Pi, GPIO4 output, RSP1B, sample rate, receiver center,
+bandwidth, fixed receiver gain, and relative-only measurement policy. Power
+was not calibrated. WsprryPi was at
+`d8e1b38570513f8954820d7a25f4bc8fe2743aff`; WSPR-Transmitter remained at
+`6da56219d33a46a45984b93db99d8eb187d898b6`. The revised probe used separate
+`clk_prepare()` and
+`clk_enable()` calls so the high-resolution timer callback could invoke the
+non-sleeping `clk_disable()` path. Deferred work then unprepared the clock,
+selected the input-safe pin state, restored the original rate, and released
+exclusive ownership.
+
+Before live output, 20 clock-only 100 ms trials ran while four SHA-256 workers
+saturated the four CPU cores. GPIO4 remained input/pull-up. All 20 trials
+reported 99.998--100.000 ms active time and 0--1 us deadline lateness. A
+separate cancellation test removed the overlay about 100 ms into a four-second
+clock-only interval; no later timer callback occurred and cleanup completed.
+
+The live retry reported:
+
+```text
+enabled_ns=180971067770091
+deadline_ns=180975067767517
+cutoff_ns=180975067769173
+active_us=3999999
+deadline_late_us=1
+```
+
+The 8-second CF32 capture contained 2,000,000 samples and zero overflows.
+Averaged on/off spectra placed the transmitter-added feature at approximately
+14,096,513 Hz, -587 Hz relative to the 14,097,100 Hz request, with 64.99 dB
+on/off contrast and 64.59 dB above the analyzed-band median. Half-second
+windows during output ranged from approximately -54.78 to -54.58 dBFS. These
+are relative receiver measurements, not RF power readings.
+
+After the timer cutoff, overlay removal, and module unload:
+
+- runtime overlays: none;
+- GPIO4: input, pull-up, high;
+- `clk_gp0`: 50,000,000 Hz from `xosc`;
+- enable, prepare, and rate-protection counts: 0; and
+- `soapyremote-server.service`: active.
+
+Retry evidence is retained on `wspr5` in
+`/home/pi/rp1-phase5-retry-validation/`. Key SHA-256 digests are:
+
+```text
+2531097b4445591a86d62f9b45210eb3cc26d2738a45e6b4d2adc7ec5add0b06  rp1-phase5-retry-capture.cf32
+b87ea125c80c41df585a58939849dcad01eeffb7970d03c0ea09c06c71790ecb  rp1-phase5-retry-kernel.log
+494ddd746dc83888ef52a44fbdb19e7d3442dd487f30a032cfec9058709a72c2  rp1_phase5_probe.c
+```
+
 ## Supported conclusions
 
-This probe establishes only that the tested kernel-owned design can:
+These probes establish only that the tested kernel-owned design can:
 
 - acquire RP1 GPCLK0 and GPIO4 through Linux resource APIs;
 - select GPCLK0 on GPIO4 at the configured 2 mA drive;
 - enable and disable the clock;
 - produce a strong static feature in the attached SDR;
 - return GPIO4 to an input-safe state; and
-- restore the clock rate, parent, and ownership state.
+- restore the clock rate, parent, and ownership state; and
+- enforce the tested static-output interval with the revised high-resolution
+  cutoff under the measured conditions.
 
-It does not establish compliance with the five-second bound, absolute
-frequency placement, RF power, spectral purity, divider-transition
+It does not establish calibrated absolute frequency placement, RF power,
+spectral purity, divider-transition
 atomicity, modulation timing, WSPR tone spacing, WSPR decode performance,
 2 m support, or production readiness.
 
-## Required work before another live-output phase
+## Required work before Phase 6
 
-1. Replace delayed work on a general workqueue with a hard maximum-duration
-   mechanism whose worst-case disable latency is demonstrated below the
-   authorized bound, such as an hrtimer-triggered fail-closed path with
-   measured scheduling margin.
-2. Test the revised watchdog without output, including CPU-load and
-   cancellation cases.
-3. Define and record the SDR reference calibration or use a calibrated
-   frequency counter/spectrum analyzer to resolve the 586 Hz discrepancy.
-4. Record the numeric attenuation and conducted RF chain so power can be
-   reported safely.
-5. Obtain separate authorization before another GPIO4 output interval.
+1. Promote the demonstrated high-resolution cutoff and lifecycle into a
+   maintainable RP1 resource adapter rather than the temporary probe.
+2. Define the four-divider transition mechanism and prove fail-closed
+   cancellation before enabling transitions.
+3. Keep frequency and amplitude findings relative unless a later test
+   explicitly requires calibrated instrumentation.
+4. Preserve 2 mA as the safe default; a later backend phase must expose RP1's
+   supported 2, 4, 8, and 12 mA drive-strength choices.
 
-Phase 6 divider-transition testing was not started.
+Phase 6 clock-only divider-transition testing subsequently started but failed
+its timing gate. See `rp1-gpclk-phase6-clock-only-transitions.md`. No live
+divider transition was attempted.
