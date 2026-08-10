@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/rp1-gpclk-lease.h>
 #include <linux/uaccess.h>
@@ -25,12 +26,19 @@
 #define DMA_TICK_FINISH_CLEAR BIT(0)
 #define DMA_TICK_DWELL (19U << 4)
 
+static bool live_output;
+module_param(live_output, bool, 0444);
+MODULE_PARM_DESC(live_output, "Permit provider-owned GPCLK0 output activation");
+
 struct rp1_gpclk_provider {
 	struct device *dev;
 	struct miscdevice misc;
 	struct clk *clk;
 	struct dma_chan *dma;
 	struct rp1_gpclk_dma_lease lease;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *safe_state;
+	struct pinctrl_state *drive_states[4];
 	void __iomem *ticks;
 	void __iomem *dma_tick;
 	u32 *words;
@@ -40,11 +48,37 @@ struct rp1_gpclk_provider {
 	u64 generation;
 	u32 state;
 	u32 expected_final;
+	u32 drive_index;
 	bool lease_held;
 	bool submitted;
+	bool output_active;
 	bool release_pending;
 	struct delayed_work verify_work;
 };
+
+static int drive_index(u32 drive_ma)
+{
+	switch (drive_ma) {
+	case 2: return 0;
+	case 4: return 1;
+	case 8: return 2;
+	case 12: return 3;
+	default: return -EINVAL;
+	}
+}
+
+static int deactivate_output(struct rp1_gpclk_provider *provider)
+{
+	int ret = 0;
+
+	if (provider->output_active) {
+		rp1_gpclk_dma_lease_disable(provider->clk, &provider->lease);
+		provider->output_active = false;
+	}
+	if (pinctrl_select_state(provider->pinctrl, provider->safe_state))
+		ret = -EIO;
+	return ret;
+}
 
 static void stop_tick(struct rp1_gpclk_provider *provider)
 {
@@ -63,6 +97,7 @@ static void verify_completion(struct work_struct *work)
 	ret = rp1_gpclk_dma_lease_read(&provider->lease, &div_int, &div_frac);
 	mutex_lock(&provider->lock);
 	provider->submitted = false;
+	ret = ret ?: deactivate_output(provider);
 	provider->state = ret || div_int != 3 ||
 		div_frac != provider->expected_final ?
 		RP1_GPCLK_STATE_FAILED : RP1_GPCLK_STATE_COMPLETE;
@@ -113,7 +148,8 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 			provider->words[i] = upper;
 		}
 	}
-	ret = rp1_gpclk_dma_lease_configure(&provider->lease, 3);
+	ret = rp1_gpclk_dma_lease_configure(&provider->lease, 3,
+		provider->words[0]);
 	if (ret)
 		return ret;
 	config.direction = DMA_MEM_TO_DEV;
@@ -139,6 +175,19 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	provider->expected_final = provider->words[RP1_GPCLK_WRITES_PER_SYMBOL - 1];
 	provider->state = RP1_GPCLK_STATE_RUNNING;
 	provider->submitted = true;
+	if (!live_output)
+		goto start_dma;
+	ret = pinctrl_select_state(provider->pinctrl,
+		provider->drive_states[provider->drive_index]);
+	if (ret)
+		goto terminate;
+	ret = rp1_gpclk_dma_lease_enable(provider->clk, &provider->lease);
+	if (ret) {
+		pinctrl_select_state(provider->pinctrl, provider->safe_state);
+		goto terminate;
+	}
+	provider->output_active = true;
+start_dma:
 	writel(RP1_GPCLK_TICK_DIVIDER, provider->ticks + TICKS_DMA0_CYCLES);
 	writel(DMA_TICK_FINISH_CLEAR | DMA_TICK_DWELL,
 		provider->dma_tick + DMA_TICK0_CTRL);
@@ -147,6 +196,12 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 		provider->dma_tick + DMA_TICK0_EN);
 	writel(1, provider->ticks + TICKS_DMA0_CTRL);
 	return 0;
+
+terminate:
+	dmaengine_terminate_sync(provider->dma);
+	provider->submitted = false;
+	provider->state = RP1_GPCLK_STATE_FAILED;
+	return ret;
 }
 
 static long provider_ioctl(struct file *file, unsigned int command,
@@ -167,7 +222,11 @@ static long provider_ioctl(struct file *file, unsigned int command,
 		if (acquire.flags || acquire.reserved || !rp1_gpclk_valid_drive(acquire.drive_ma)) { ret = -EINVAL; break; }
 		if (provider->owner) { ret = -EBUSY; break; }
 		ret = rp1_gpclk_dma_lease_get(provider->clk, &provider->lease);
-		if (!ret) { provider->owner = file; provider->lease_held = true; provider->state = RP1_GPCLK_STATE_IDLE; }
+		if (!ret) {
+			provider->drive_index = drive_index(acquire.drive_ma);
+			provider->owner = file; provider->lease_held = true;
+			provider->state = RP1_GPCLK_STATE_IDLE;
+		}
 		break;
 	case RP1_GPCLK_IOC_SUBMIT:
 		if (provider->owner != file) { ret = -EPERM; break; }
@@ -236,6 +295,18 @@ static int rp1_gpclk_provider_probe(struct platform_device *pdev)
 	if (!provider) return -ENOMEM;
 	provider->dev = &pdev->dev; mutex_init(&provider->lock);
 	INIT_DELAYED_WORK(&provider->verify_work, verify_completion);
+	provider->pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(provider->pinctrl)) return PTR_ERR(provider->pinctrl);
+	provider->safe_state = pinctrl_lookup_state(provider->pinctrl, "safe");
+	provider->drive_states[0] = pinctrl_lookup_state(provider->pinctrl, "drive-2ma");
+	provider->drive_states[1] = pinctrl_lookup_state(provider->pinctrl, "drive-4ma");
+	provider->drive_states[2] = pinctrl_lookup_state(provider->pinctrl, "drive-8ma");
+	provider->drive_states[3] = pinctrl_lookup_state(provider->pinctrl, "drive-12ma");
+	if (IS_ERR(provider->safe_state) || IS_ERR(provider->drive_states[0]) ||
+		IS_ERR(provider->drive_states[1]) || IS_ERR(provider->drive_states[2]) ||
+		IS_ERR(provider->drive_states[3])) return -EINVAL;
+	ret = pinctrl_select_state(provider->pinctrl, provider->safe_state);
+	if (ret) return ret;
 	provider->clk = devm_clk_get(&pdev->dev, "gpclk");
 	if (IS_ERR(provider->clk)) return PTR_ERR(provider->clk);
 	provider->ticks = devm_platform_ioremap_resource(pdev, 0);
@@ -266,7 +337,11 @@ static void rp1_gpclk_provider_remove(struct platform_device *pdev)
 	struct rp1_gpclk_provider *provider = platform_get_drvdata(pdev);
 	misc_deregister(&provider->misc); cancel_delayed_work_sync(&provider->verify_work);
 	stop_tick(provider);
-	if (provider->submitted) dmaengine_terminate_sync(provider->dma);
+	if (provider->submitted) {
+		dmaengine_terminate_sync(provider->dma);
+		provider->submitted = false;
+	}
+	deactivate_output(provider);
 	if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
 	dma_free_coherent(provider->dma->device->dev,
 		RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32), provider->words, provider->words_dma);

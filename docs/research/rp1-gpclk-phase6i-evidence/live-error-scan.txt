@@ -1,0 +1,1 @@
+[   59.392178] # rp1-gpclk-provider-contract: pass:2 fail:0 skip:0 total:2

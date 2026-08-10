@@ -1,0 +1,13 @@
+ACQUIRED drive_ma=2 mode=cancel ns=405504437399
+START generation=5 tone=0 ns=406504530104 stop_delay_us=10000
+STOP generation=5 ns=406524817366
+END generation=5 tone=0 state=3 ns=407260456235
+START generation=6 tone=1 ns=407510529957 stop_delay_us=300000
+STOP generation=6 ns=407822221185
+END generation=6 tone=1 state=3 ns=408269706494
+START generation=7 tone=2 ns=408519785661 stop_delay_us=620000
+STOP generation=7 ns=409140103691
+END generation=7 tone=2 state=3 ns=409256536041
+START generation=8 tone=3 ns=409506616985 stop_delay_us=0
+END generation=8 tone=3 state=3 ns=410245541278
+RELEASED ns=411246656550

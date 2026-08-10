@@ -14,8 +14,8 @@ if grep -Eq 'divider_dma_addr|DIV_FRAC' "$client" "$uapi"; then
 	echo "userspace exposes provider register representation" >&2
 	exit 1
 fi
-if grep -Eq 'clk_prepare|clk_enable|clk_prepare_enable|pinctrl|gpio.*drive' "$provider"; then
-	echo "clock-disabled provider contains output-enabling code" >&2
+if grep -Eq '(^|[^_])clk_(prepare|enable|prepare_enable)[[:space:]]*\(' "$provider"; then
+	echo "provider bypasses the clk-rp1 lease for clock activation" >&2
 	exit 1
 fi
 if grep -Eq 'divider-dma-address|of_property_read.*divider' "$provider"; then
@@ -23,6 +23,9 @@ if grep -Eq 'divider-dma-address|of_property_read.*divider' "$provider"; then
 	exit 1
 fi
 grep -q 'rp1_gpclk_dma_lease_get' "$provider"
+grep -q 'rp1_gpclk_dma_lease_enable' "$provider"
+grep -q 'rp1_gpclk_dma_lease_disable' "$provider"
+grep -q 'pinctrl_select_state' "$provider"
 grep -q 'RP1_GPCLK_WRITES_PER_SYMBOL' "$provider"
 grep -q 'RP1_GPCLK_TICK_DIVIDER' "$provider"
 echo "RP1 GPCLK kernel static contract tests passed"

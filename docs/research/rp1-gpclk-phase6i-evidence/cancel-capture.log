@@ -1,0 +1,8 @@
+[INFO] devIdx: 0
+[INFO] SerNo: 2404058C60
+[INFO] hwVer: 6
+[INFO] rspDuoMode: 0
+[INFO] tuner: 1
+[INFO] rspDuoSampleFreq: 0.000000
+[INFO] Using format CF32.
+samples=2000000 overflows=0 sample_rate=250000 center_hz=1.41221e+07

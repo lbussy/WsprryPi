@@ -1,0 +1,32 @@
+PASS reject-version errno=71
+PASS reject-size errno=71
+PASS reject-drive errno=22
+PASS reject-flags errno=22
+PASS acquire-owner
+PASS reject-second-owner errno=16
+PASS idle-state
+PASS reject-bad-tick errno=22
+PASS reject-nonmonotonic-generation errno=22
+PASS cancel-early
+PASS cancel-early initial-state=RUNNING
+PASS stop
+INFO cancel-early stop-state=0
+PASS cancel-early terminal=COMPLETE
+PASS cancel-mid
+PASS cancel-mid initial-state=RUNNING
+PASS stop
+INFO cancel-mid stop-state=0
+PASS cancel-mid terminal=COMPLETE
+PASS cancel-near
+PASS cancel-near initial-state=RUNNING
+PASS stop
+INFO cancel-near stop-state=0
+PASS cancel-near terminal=COMPLETE
+PASS release-owner
+PASS reacquire-before-close-active
+PASS submit-before-close-active
+PASS reacquire-after-close-active
+PASS repeat-submit
+PASS repeat-terminal=COMPLETE
+PASS final-release
+RESULT failures=0
