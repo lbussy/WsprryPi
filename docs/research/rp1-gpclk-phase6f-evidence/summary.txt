@@ -1,0 +1,25 @@
+Phase: 6F versioned provider UAPI and clock-disabled client integration
+Host: wspr5
+Kernel: 6.18.34+rpt-rpi-2712
+Official source inspected: raspberrypi/linux rpi-6.18.y 89586905b8603e545cce9089a81f5f35d65bc998
+Parent base: d4db49e94a1ceb1af5d774c1142ffb099f93ec8d
+WSPR-Transmitter base: 0c34387c1e124f23dab20e080cc03f7caa62582a
+
+PASS: logical divider words cross the UAPI without addresses or packed register data
+PASS: provider-owned upper-16-bit DIV_FRAC packing
+PASS: UAPI version and size rejection
+PASS: supported 2/4/8/12 mA transport and invalid drive rejection
+PASS: exclusive acquisition and busy rejection
+PASS: monotonic generations and stale stop rejection
+PASS: finite cancellation/draining state and release refusal while active
+PASS: all four 20 m tone profiles and exact 66792/511 invariants
+PASS: Linux concrete client error and state mapping
+PASS: Mac backend, client, planner, transition, lifecycle, and provider-core tests
+PASS: wspr5 backend, client, and provider-core tests with -Werror
+PASS: GPIO4 remained input
+PASS: clk_gp0 prepare_count=0 enable_count=0 rate=50000000
+PASS: /dev/rp1-gpclk0 absent; no provider was installed or loaded
+
+Gate: exact RP1 clock source has no supported divider-DMA lease hook. No direct
+register-address fallback was added. Kernel clock-provider integration remains
+unbuilt and uninstalled pending that hook and a reboot-authorized kernel phase.
