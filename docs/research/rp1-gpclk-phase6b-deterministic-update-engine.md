@@ -192,3 +192,14 @@ Phase 6B does not make the research probe a backend or prove DMA access to
 
 No live-output prompt should be executed from this result. The immediate next
 prompt is an RP1 clock-driver-owned, clock-disabled DMA write/readback proof.
+
+## Phase 6C resolution
+
+Phase 6C established that the Phase 6B zero readback was caused by incorrect
+register packing, not a lack of DMA access. RP1 stores the 16-bit GPCLK
+fractional divider in bits 31:16 of `DIV_FRAC`; Phase 6B wrote the logical
+fraction into bits 15:0, which hardware masks to zero. Correctly shifted DMA
+words were subsequently confirmed by exact DMA readback and by the existing
+RP1 provider's raw regmap reads. See
+`rp1-gpclk-phase6c-provider-dma-proof.md` for the separate cancellation failure
+that now gates production work.

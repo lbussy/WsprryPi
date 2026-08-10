@@ -1,12 +1,16 @@
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <linux/completion.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-direct.h>
 #include <linux/dma-mapping.h>
+#include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 
 #define PROFILE_LENGTH 66792U
 #define TICKS_DMA0_CTRL 0x0
@@ -23,6 +27,10 @@ static uint dwell = 19;
 module_param(dwell, uint, 0444);
 static uint tone = 2;
 module_param(tone, uint, 0444);
+static uint cancel_ms;
+module_param(cancel_ms, uint, 0444);
+static bool fail_after_dma;
+module_param(fail_after_dma, bool, 0444);
 
 struct tone_profile {
 	u32 lower_word;
@@ -45,12 +53,103 @@ struct dma_probe {
 	u32 *words;
 	dma_addr_t words_dma;
 	struct completion done;
+	struct delayed_work cancel_work;
 	unsigned long original_rate;
 	u64 start_ns;
 	u64 finish_ns;
 	bool exclusive;
 	bool submitted;
+	bool cancelled;
 };
+
+struct captured_regmap_read {
+	u32 *value;
+};
+
+static struct task_struct *capture_task;
+static u32 captured_values[4];
+static unsigned int captured_count;
+
+static int regmap_read_entry(struct kretprobe_instance *instance,
+	struct pt_regs *regs)
+{
+	struct captured_regmap_read *data =
+		(struct captured_regmap_read *)instance->data;
+
+	if (current != READ_ONCE(capture_task))
+		return 1;
+	data->value = (u32 *)regs_get_kernel_argument(regs, 2);
+	return 0;
+}
+
+static int regmap_read_return(struct kretprobe_instance *instance,
+	struct pt_regs *regs)
+{
+	struct captured_regmap_read *data =
+		(struct captured_regmap_read *)instance->data;
+	unsigned int index;
+
+	if (current != READ_ONCE(capture_task) || regs_return_value(regs))
+		return 0;
+	index = captured_count;
+	if (index < ARRAY_SIZE(captured_values)) {
+		captured_values[index] = READ_ONCE(*data->value);
+		captured_count = index + 1;
+	}
+	return 0;
+}
+
+static int provider_raw_readback(struct dma_probe *probe, u32 *div_int,
+	u32 *div_frac, unsigned long *rate)
+{
+	static struct kretprobe read_probe = {
+		.kp.symbol_name = "regmap_read",
+		.entry_handler = regmap_read_entry,
+		.handler = regmap_read_return,
+		.data_size = sizeof(struct captured_regmap_read),
+		.maxactive = 8,
+	};
+	struct kprobe recalc_probe = {
+		.symbol_name = "rp1_clock_recalc_rate",
+	};
+	unsigned long (*recalc)(struct clk_hw *, unsigned long);
+	struct clk *parent;
+	struct clk_hw *hw;
+	unsigned long parent_rate;
+	int ret;
+
+	ret = register_kprobe(&recalc_probe);
+	if (ret)
+		return ret;
+	recalc = (void *)recalc_probe.addr;
+	unregister_kprobe(&recalc_probe);
+
+	ret = register_kretprobe(&read_probe);
+	if (ret)
+		return ret;
+	hw = __clk_get_hw(probe->clk);
+	parent = clk_get_parent(probe->clk);
+	if (!hw || !parent) {
+		ret = -ENODEV;
+		goto out;
+	}
+	parent_rate = clk_get_rate(parent);
+	captured_count = 0;
+	WRITE_ONCE(capture_task, current);
+	barrier();
+	*rate = recalc(hw, parent_rate);
+	barrier();
+	WRITE_ONCE(capture_task, NULL);
+	if (captured_count != 2) {
+		ret = -EIO;
+		goto out;
+	}
+	*div_int = captured_values[0];
+	*div_frac = captured_values[1];
+	out:
+	unregister_kretprobe(&read_probe);
+	return ret;
+}
 
 static void transfer_done(void *arg)
 {
@@ -72,11 +171,23 @@ static void stop_engine(struct dma_probe *probe)
 	}
 }
 
+static void cancel_transfer(struct work_struct *work)
+{
+	struct dma_probe *probe = container_of(to_delayed_work(work),
+		struct dma_probe, cancel_work);
+
+	stop_engine(probe);
+	probe->finish_ns = ktime_get_ns();
+	probe->cancelled = true;
+	complete(&probe->done);
+}
+
 static void release_resources(struct dma_probe *probe)
 {
 	int ret;
 
 	stop_engine(probe);
+	cancel_delayed_work_sync(&probe->cancel_work);
 	if (probe->clk && probe->exclusive) {
 		ret = clk_set_rate(probe->clk, probe->original_rate);
 		pr_info("rp1_gpclk_dma_probe: restore requested=%lu observed=%lu result=%d\n",
@@ -104,19 +215,32 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	u64 accumulator = 0;
 	u64 elapsed_ns;
 	u32 expected_fraction;
+	u32 provider_div_int;
+	u32 provider_div_frac;
+	u32 stable_div_int;
+	u32 stable_div_frac;
+	unsigned long provider_rate;
+	unsigned long stable_rate;
 	unsigned long timeout;
 	unsigned int i;
 	int ret;
 	struct dma_probe *probe;
 
-	if (cycles == 0 || cycles > 511 || dwell > 31 || tone >= ARRAY_SIZE(profiles))
+	if (cycles == 0 || cycles > 511 || dwell > 31 ||
+		tone >= ARRAY_SIZE(profiles) || cancel_ms > 1000)
 		return -EINVAL;
+	if (cancel_ms) {
+		dev_err(&pdev->dev,
+			"cancel_ms is disabled: tick-first termination left the DW AXI DMA channel non-idle\n");
+		return -EOPNOTSUPP;
+	}
 
 	probe = devm_kzalloc(&pdev->dev, sizeof(*probe), GFP_KERNEL);
 	if (!probe)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, probe);
 	init_completion(&probe->done);
+	INIT_DELAYED_WORK(&probe->cancel_work, cancel_transfer);
 
 	probe->clk = devm_clk_get(&pdev->dev, "gpclk");
 	if (IS_ERR(probe->clk))
@@ -171,10 +295,10 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	for (i = 0; i < PROFILE_LENGTH; ++i) {
 		accumulator += profile->lower_count;
 		if (accumulator >= PROFILE_LENGTH) {
-			probe->words[i] = profile->lower_word & 0xffff;
+			probe->words[i] = (profile->lower_word & 0xffff) << 16;
 			accumulator -= PROFILE_LENGTH;
 		} else {
-			probe->words[i] = profile->upper_word & 0xffff;
+			probe->words[i] = (profile->upper_word & 0xffff) << 16;
 		}
 	}
 
@@ -208,13 +332,45 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	probe->start_ns = ktime_get_ns();
 	writel(DMA_TICK_REQ | DMA_TICK_SINGLE, probe->dma_tick + DMA_TICK0_EN);
 	writel(1, probe->ticks + TICKS_DMA0_CTRL);
+	if (cancel_ms)
+		schedule_delayed_work(&probe->cancel_work,
+			msecs_to_jiffies(cancel_ms));
 	timeout = wait_for_completion_timeout(&probe->done, msecs_to_jiffies(2000));
 	stop_engine(probe);
+	cancel_delayed_work_sync(&probe->cancel_work);
 	if (!timeout) {
 		ret = -ETIMEDOUT;
 		goto fail;
 	}
 	elapsed_ns = probe->finish_ns - probe->start_ns;
+	if (probe->cancelled) {
+		ret = provider_raw_readback(probe, &provider_div_int,
+			&provider_div_frac, &provider_rate);
+		if (ret)
+			goto fail;
+		msleep(50);
+		ret = provider_raw_readback(probe, &stable_div_int,
+			&stable_div_frac, &stable_rate);
+		if (ret || provider_div_int != stable_div_int ||
+			provider_div_frac != stable_div_frac ||
+			provider_rate != stable_rate) {
+			dev_err(&pdev->dev,
+				"stale write after cancellation: ret=%d before=%u:%u:%lu after=%u:%u:%lu\n",
+				ret, provider_div_int, provider_div_frac, provider_rate,
+				stable_div_int, stable_div_frac, stable_rate);
+			ret = ret ?: -EIO;
+			goto fail;
+		}
+		pr_info("rp1_gpclk_dma_probe: cancelled tone=%u elapsed_ns=%llu stable_int=%u stable_frac=%u stable_rate=%lu\n",
+			tone, elapsed_ns, stable_div_int, stable_div_frac, stable_rate);
+		release_resources(probe);
+		return 0;
+	}
+	if (fail_after_dma) {
+		dev_err(&pdev->dev, "injected failure after DMA completion\n");
+		ret = -EIO;
+		goto fail;
+	}
 	expected_fraction = probe->words[PROFILE_LENGTH - 1];
 
 	/* Read the register back through the same DMA-owned path. */
@@ -255,10 +411,20 @@ static int rp1_dma_probe(struct platform_device *pdev)
 		ret = -EIO;
 		goto fail;
 	}
-	pr_info("rp1_gpclk_dma_probe: complete tone=%u words=%u cycles=%u dwell=%u elapsed_ns=%llu final_fraction=%u readback=%u clk_rate=%lu\n",
+	ret = provider_raw_readback(probe, &provider_div_int, &provider_div_frac,
+		&provider_rate);
+	if (ret || provider_div_int != 3 || provider_div_frac != expected_fraction) {
+		dev_err(&pdev->dev,
+			"provider readback failed: ret=%d int=%u frac=%u expected_frac=%u rate=%lu\n",
+			ret, provider_div_int, provider_div_frac, expected_fraction,
+			provider_rate);
+		ret = ret ?: -EIO;
+		goto fail;
+	}
+	pr_info("rp1_gpclk_dma_probe: complete tone=%u words=%u cycles=%u dwell=%u elapsed_ns=%llu final_fraction=%u dma_readback=%u provider_int=%u provider_frac=%u provider_rate=%lu\n",
 		tone, PROFILE_LENGTH, cycles, dwell,
 		elapsed_ns, expected_fraction, probe->words[0],
-		clk_get_rate(probe->clk));
+		provider_div_int, provider_div_frac, provider_rate);
 	release_resources(probe);
 	return 0;
 

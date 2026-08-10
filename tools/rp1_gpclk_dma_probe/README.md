@@ -10,8 +10,15 @@ move DMA setup and divider-register ownership into the RP1 clock provider so
 that DMA writes participate in that driver's locking and lifecycle contract.
 
 The checked-in fixture uses 66,792 transfers at the slowest 511-cycle DMA tick.
-That hardware-sized descriptor completed within 4.2 us of one WSPR symbol in
-four clock-disabled runs on `wspr5`. A subsequent DMA readback returned zero
-after a known nonzero divider was set through the clock framework, so the
-prototype intentionally fails closed and does not claim that divider writes
-were accepted. The next proof belongs inside the RP1 clock provider.
+Phase 6C completed all four clock-disabled descriptors within 4.8 us of one
+WSPR symbol. It also corrected the register packing: RP1 expects the logical 16-bit
+fraction in bits 31:16 of `DIV_FRAC`. With that shift, exact DMA readback and
+the existing provider's raw regmap reads both matched all four final words.
+
+The optional `cancel_ms` research path must not be reused on a running harness.
+Its first test disabled the tick before generic DMA termination, leaving the
+DW AXI DMA channel non-idle. The checked-in probe now rejects nonzero
+`cancel_ms` with `-EOPNOTSUPP`; the failed implementation remains visible only
+to preserve the engineering evidence. Recover the controller under an
+authorized reboot, then redesign termination before running another
+cancellation test.
