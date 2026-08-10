@@ -31,6 +31,8 @@ static uint cancel_ms;
 module_param(cancel_ms, uint, 0444);
 static bool fail_after_dma;
 module_param(fail_after_dma, bool, 0444);
+static uint initial_wait_ms = 2000;
+module_param(initial_wait_ms, uint, 0444);
 
 struct tone_profile {
 	u32 lower_word;
@@ -57,9 +59,15 @@ struct dma_probe {
 	unsigned long original_rate;
 	u64 start_ns;
 	u64 finish_ns;
+	dma_cookie_t cookie;
+	u32 writes_at_request;
+	u32 writes_at_pause;
+	int cancel_result;
 	bool exclusive;
 	bool submitted;
+	bool cancel_requested;
 	bool cancelled;
+	bool timed_out;
 };
 
 struct captured_regmap_read {
@@ -156,6 +164,10 @@ static void transfer_done(void *arg)
 	struct dma_probe *probe = arg;
 
 	probe->finish_ns = ktime_get_ns();
+	if (READ_ONCE(probe->cancel_requested)) {
+		probe->writes_at_pause = PROFILE_LENGTH;
+		probe->cancelled = true;
+	}
 	complete(&probe->done);
 }
 
@@ -175,11 +187,23 @@ static void cancel_transfer(struct work_struct *work)
 {
 	struct dma_probe *probe = container_of(to_delayed_work(work),
 		struct dma_probe, cancel_work);
+	struct dma_tx_state state;
+	enum dma_status status;
 
-	stop_engine(probe);
-	probe->finish_ns = ktime_get_ns();
-	probe->cancelled = true;
-	complete(&probe->done);
+	status = dmaengine_tx_status(probe->chan, probe->cookie, &state);
+	if (status == DMA_IN_PROGRESS && state.residue <=
+		PROFILE_LENGTH * sizeof(*probe->words))
+		probe->writes_at_request = PROFILE_LENGTH -
+			state.residue / sizeof(*probe->words);
+	if (!probe->writes_at_request) {
+		u64 elapsed_ns = ktime_get_ns() - probe->start_ns;
+		u64 estimated = div64_u64(elapsed_ns * 50000000ULL,
+			511ULL * NSEC_PER_SEC);
+		probe->writes_at_request = min_t(u64, estimated, PROFILE_LENGTH);
+	}
+	WRITE_ONCE(probe->cancel_requested, true);
+	pr_info("rp1_gpclk_dma_probe: cancellation requested after approximately %u writes; draining the finite descriptor\n",
+		probe->writes_at_request);
 }
 
 static void release_resources(struct dma_probe *probe)
@@ -227,13 +251,9 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	struct dma_probe *probe;
 
 	if (cycles == 0 || cycles > 511 || dwell > 31 ||
-		tone >= ARRAY_SIZE(profiles) || cancel_ms > 1000)
+		tone >= ARRAY_SIZE(profiles) || cancel_ms > 1000 ||
+		initial_wait_ms == 0 || initial_wait_ms > 5000)
 		return -EINVAL;
-	if (cancel_ms) {
-		dev_err(&pdev->dev,
-			"cancel_ms is disabled: tick-first termination left the DW AXI DMA channel non-idle\n");
-		return -EOPNOTSUPP;
-	}
 
 	probe = devm_kzalloc(&pdev->dev, sizeof(*probe), GFP_KERNEL);
 	if (!probe)
@@ -322,6 +342,7 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	ret = dma_submit_error(cookie);
 	if (ret)
 		goto fail;
+	probe->cookie = cookie;
 	probe->submitted = true;
 
 	/* GPCLK0 is deliberately neither prepared nor enabled. */
@@ -335,7 +356,20 @@ static int rp1_dma_probe(struct platform_device *pdev)
 	if (cancel_ms)
 		schedule_delayed_work(&probe->cancel_work,
 			msecs_to_jiffies(cancel_ms));
-	timeout = wait_for_completion_timeout(&probe->done, msecs_to_jiffies(2000));
+	timeout = wait_for_completion_timeout(&probe->done,
+		msecs_to_jiffies(initial_wait_ms));
+	if (!timeout) {
+		u64 elapsed_ns = ktime_get_ns() - probe->start_ns;
+		u64 estimated = div64_u64(elapsed_ns * 50000000ULL,
+			511ULL * NSEC_PER_SEC);
+		probe->writes_at_request = min_t(u64, estimated, PROFILE_LENGTH);
+		probe->timed_out = true;
+		WRITE_ONCE(probe->cancel_requested, true);
+		pr_info("rp1_gpclk_dma_probe: initial wait timed out after %u ms; draining finite descriptor\n",
+			initial_wait_ms);
+		timeout = wait_for_completion_timeout(&probe->done,
+			msecs_to_jiffies(1000));
+	}
 	stop_engine(probe);
 	cancel_delayed_work_sync(&probe->cancel_work);
 	if (!timeout) {
@@ -343,26 +377,25 @@ static int rp1_dma_probe(struct platform_device *pdev)
 		goto fail;
 	}
 	elapsed_ns = probe->finish_ns - probe->start_ns;
+	expected_fraction = probe->words[PROFILE_LENGTH - 1];
 	if (probe->cancelled) {
-		ret = provider_raw_readback(probe, &provider_div_int,
-			&provider_div_frac, &provider_rate);
-		if (ret)
-			goto fail;
 		msleep(50);
 		ret = provider_raw_readback(probe, &stable_div_int,
 			&stable_div_frac, &stable_rate);
-		if (ret || provider_div_int != stable_div_int ||
-			provider_div_frac != stable_div_frac ||
-			provider_rate != stable_rate) {
+		if (ret || stable_div_int != 3 ||
+			stable_div_frac != expected_fraction) {
 			dev_err(&pdev->dev,
-				"stale write after cancellation: ret=%d before=%u:%u:%lu after=%u:%u:%lu\n",
-				ret, provider_div_int, provider_div_frac, provider_rate,
-				stable_div_int, stable_div_frac, stable_rate);
+				"post-cancellation stability failed: ret=%d observed=%u:%u:%lu expected=3:%u\n",
+				ret, stable_div_int, stable_div_frac, stable_rate,
+				expected_fraction);
 			ret = ret ?: -EIO;
 			goto fail;
 		}
-		pr_info("rp1_gpclk_dma_probe: cancelled tone=%u elapsed_ns=%llu stable_int=%u stable_frac=%u stable_rate=%lu\n",
-			tone, elapsed_ns, stable_div_int, stable_div_frac, stable_rate);
+		pr_info("rp1_gpclk_dma_probe: cancelled tone=%u elapsed_ns=%llu timed_out=%u result=%d request_writes=%u paused_writes=%u additional_writes=%u stable_int=%u stable_frac=%u stable_rate=%lu\n",
+			tone, elapsed_ns, probe->timed_out, probe->cancel_result,
+			probe->writes_at_request, probe->writes_at_pause,
+			probe->writes_at_pause - probe->writes_at_request,
+			stable_div_int, stable_div_frac, stable_rate);
 		release_resources(probe);
 		return 0;
 	}
@@ -371,8 +404,6 @@ static int rp1_dma_probe(struct platform_device *pdev)
 		ret = -EIO;
 		goto fail;
 	}
-	expected_fraction = probe->words[PROFILE_LENGTH - 1];
-
 	/* Read the register back through the same DMA-owned path. */
 	reinit_completion(&probe->done);
 	config.direction = DMA_DEV_TO_MEM;

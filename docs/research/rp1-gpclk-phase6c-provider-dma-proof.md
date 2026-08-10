@@ -206,3 +206,12 @@ The next gate requires an authorized reboot of `wspr5` to recover the DMA
 controller, followed by a strictly clock-disabled Phase 6D investigation of
 RP1/DW AXI DMA suspension, finish, abort, and no-stale-write semantics. No live
 output phase should be rendered or executed before that lifecycle gate passes.
+
+## Phase 6D resolution
+
+One authorized reboot recovered the DMA channel. Hardware pause did not obtain
+acknowledgment, so immediate active-descriptor abort was rejected. Phase 6D
+instead validated bounded finite completion: cancellation drains at most the
+current 66,792-write WSPR-symbol descriptor, schedules no successor, verifies
+the stable final raw divider, restores 50 MHz, and leaves the channel reusable.
+See `rp1-gpclk-phase6d-bounded-cancellation.md`.

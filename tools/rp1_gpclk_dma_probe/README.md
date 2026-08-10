@@ -15,10 +15,9 @@ WSPR symbol. It also corrected the register packing: RP1 expects the logical 16-
 fraction in bits 31:16 of `DIV_FRAC`. With that shift, exact DMA readback and
 the existing provider's raw regmap reads both matched all four final words.
 
-The optional `cancel_ms` research path must not be reused on a running harness.
-Its first test disabled the tick before generic DMA termination, leaving the
-DW AXI DMA channel non-idle. The checked-in probe now rejects nonzero
-`cancel_ms` with `-EOPNOTSUPP`; the failed implementation remains visible only
-to preserve the engineering evidence. Recover the controller under an
-authorized reboot, then redesign termination before running another
-cancellation test.
+Phase 6D uses bounded finite completion for cancellation. Once a symbol
+descriptor has started, cancellation prevents future work but drains that one
+finite descriptor to its normal hardware-idle completion before disabling the
+tick/DREQ and restoring the divider. The hard bound is the remainder of one
+0.682667-second WSPR symbol. The earlier tick-first abort ordering is documented
+in the Phase 6C report and must not be restored.
