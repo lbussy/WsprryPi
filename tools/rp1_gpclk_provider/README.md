@@ -10,6 +10,11 @@ driver, KUnit contract tests, static ownership test, and an uninstalled overlay
 that supplies only tick/DMA resources. The overlay intentionally contains no
 GPCLK divider address; that address is derived and leased inside `clk-rp1`.
 
+The lease carries the CPU physical divider-resource address. This is the form
+required by the RP1 DW AXI DMA engine interface; the DMA driver performs the
+RP1 bus-address translation when it prepares the hardware descriptor. Passing
+an already translated DMA address would translate it twice and is invalid.
+
 The portable core remains independently testable and cannot enable, mux, or
 manipulate GPCLK hardware.
 

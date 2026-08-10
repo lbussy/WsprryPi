@@ -1,14 +1,13 @@
 diff --git a/drivers/clk/clk-rp1.c b/drivers/clk/clk-rp1.c
-index 5ac4aea..3de23d1 100644
+index 5ac4aeade..79d7d251b 100644
 --- a/drivers/clk/clk-rp1.c
 +++ b/drivers/clk/clk-rp1.c
-@@ -6,12 +6,16 @@
+@@ -6,12 +6,15 @@
   */
  
  #include <linux/bitfield.h>
 +#include <linux/clk.h>
  #include <linux/clk-provider.h>
-+#include <linux/dma-direct.h>
  #include <linux/regmap.h>
  #include <linux/math64.h>
 +#include <linux/mutex.h>
@@ -19,7 +18,7 @@ index 5ac4aea..3de23d1 100644
  
  #include <dt-bindings/clock/raspberrypi,rp1-clocks.h>
  
-@@ -315,6 +319,9 @@ struct rp1_clockman {
+@@ -315,6 +318,9 @@ struct rp1_clockman {
  	void __iomem *regs;
  	struct regmap *regmap;
  	spinlock_t regs_lock; /* spinlock for all clocks */
@@ -29,13 +28,13 @@ index 5ac4aea..3de23d1 100644
  
  	/* Must be last */
  	struct clk_hw_onecell_data onecell;
-@@ -373,6 +380,94 @@ static struct rp1_clk_desc *clk_audio_core;
+@@ -373,6 +379,94 @@ static struct rp1_clk_desc *clk_audio_core;
  static struct rp1_clk_desc *clk_audio;
  static struct rp1_clk_desc *clk_i2s;
  static struct clk_hw *clk_xosc;
 +static struct rp1_clk_desc clk_gp0_desc;
 +
-+int rp1_gpclk_dma_lease_get(struct clk *clk, struct device *dma_dev,
++int rp1_gpclk_dma_lease_get(struct clk *clk,
 +	struct rp1_gpclk_dma_lease *lease)
 +{
 +	struct clk_hw *hw;
@@ -43,7 +42,7 @@ index 5ac4aea..3de23d1 100644
 +	phys_addr_t divider_phys;
 +	int ret;
 +
-+	if (!clk || !dma_dev || !lease)
++	if (!clk || !lease)
 +		return -EINVAL;
 +	hw = __clk_get_hw(clk);
 +	if (hw != &clk_gp0_desc.hw)
@@ -61,7 +60,7 @@ index 5ac4aea..3de23d1 100644
 +		goto rate_put;
 +	}
 +	divider_phys = clockman->regs_phys + CLK_GP0_DIV_FRAC;
-+	lease->divider_dma_addr = phys_to_dma(dma_dev, divider_phys);
++	lease->divider_phys_addr = divider_phys;
 +	lease->provider_private = clockman;
 +	WRITE_ONCE(clockman->gp0_dma_leased, true);
 +	return 0;
@@ -84,7 +83,7 @@ index 5ac4aea..3de23d1 100644
 +	clockman = lease->provider_private;
 +	WRITE_ONCE(clockman->gp0_dma_leased, false);
 +	lease->provider_private = NULL;
-+	lease->divider_dma_addr = 0;
++	lease->divider_phys_addr = 0;
 +	clk_rate_exclusive_put(clk);
 +	mutex_unlock(&clockman->gp0_dma_lock);
 +}
@@ -124,7 +123,7 @@ index 5ac4aea..3de23d1 100644
  
  static inline
  void clockman_write(struct rp1_clockman *clockman, u32 reg, u32 val)
-@@ -815,6 +910,9 @@ static int rp1_clock_on(struct clk_hw *hw)
+@@ -815,6 +909,9 @@ static int rp1_clock_on(struct clk_hw *hw)
  	struct rp1_clockman *clockman = clock->clockman;
  	const struct rp1_clock_data *data = clock->data;
  
@@ -134,7 +133,7 @@ index 5ac4aea..3de23d1 100644
  	spin_lock(&clockman->regs_lock);
  	clockman_write(clockman, data->ctrl_reg,
  		       clockman_read(clockman, data->ctrl_reg) | CLK_CTRL_ENABLE);
-@@ -916,6 +1014,9 @@ static int rp1_clock_set_parent(struct clk_hw *hw, u8 index)
+@@ -916,6 +1013,9 @@ static int rp1_clock_set_parent(struct clk_hw *hw, u8 index)
  	const struct rp1_clock_data *data = clock->data;
  	u32 ctrl, sel;
  
@@ -144,7 +143,7 @@ index 5ac4aea..3de23d1 100644
  	spin_lock(&clockman->regs_lock);
  	ctrl = clockman_read(clockman, data->ctrl_reg);
  
-@@ -957,6 +1058,9 @@ static int rp1_clock_set_rate_and_parent(struct clk_hw *hw,
+@@ -957,6 +1057,9 @@ static int rp1_clock_set_rate_and_parent(struct clk_hw *hw,
  	const struct rp1_clock_data *data = clock->data;
  	u32 div = rp1_clock_choose_div(rate, parent_rate, data);
  
@@ -154,7 +153,7 @@ index 5ac4aea..3de23d1 100644
  	spin_lock(&clockman->regs_lock);
  
  	clockman_write(clockman, data->div_int_reg, div >> CLK_DIV_FRAC_BITS);
-@@ -2400,6 +2504,7 @@ static int rp1_clk_probe(struct platform_device *pdev)
+@@ -2400,6 +2503,7 @@ static int rp1_clk_probe(struct platform_device *pdev)
  	struct rp1_clockman *clockman;
  	struct clk_hw **hws;
  	unsigned int i;
@@ -162,7 +161,7 @@ index 5ac4aea..3de23d1 100644
  
  	clockman = devm_kzalloc(dev, struct_size(clockman, onecell.hws, asize),
  				GFP_KERNEL);
-@@ -2407,7 +2512,12 @@ static int rp1_clk_probe(struct platform_device *pdev)
+@@ -2407,7 +2511,12 @@ static int rp1_clk_probe(struct platform_device *pdev)
  		return -ENOMEM;
  
  	spin_lock_init(&clockman->regs_lock);
@@ -177,7 +176,7 @@ index 5ac4aea..3de23d1 100644
  	if (IS_ERR(clockman->regs))
 diff --git a/include/linux/rp1-gpclk-lease.h b/include/linux/rp1-gpclk-lease.h
 new file mode 100644
-index 0000000..6a7d25b
+index 000000000..f54c53f20
 --- /dev/null
 +++ b/include/linux/rp1-gpclk-lease.h
 @@ -0,0 +1,23 @@
@@ -185,17 +184,17 @@ index 0000000..6a7d25b
 +#ifndef _LINUX_RP1_GPCLK_LEASE_H
 +#define _LINUX_RP1_GPCLK_LEASE_H
 +
-+#include <linux/dma-mapping.h>
++#include <linux/types.h>
 +
 +struct clk;
 +
 +struct rp1_gpclk_dma_lease {
-+	dma_addr_t divider_dma_addr;
++	phys_addr_t divider_phys_addr;
 +	void *provider_private;
 +};
 +
 +int rp1_gpclk_dma_lease_get(struct clk *clk,
-+	struct device *dma_dev, struct rp1_gpclk_dma_lease *lease);
++	struct rp1_gpclk_dma_lease *lease);
 +void rp1_gpclk_dma_lease_put(struct clk *clk,
 +	struct rp1_gpclk_dma_lease *lease);
 +int rp1_gpclk_dma_lease_configure(struct rp1_gpclk_dma_lease *lease,

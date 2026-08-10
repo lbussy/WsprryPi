@@ -117,7 +117,8 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	if (ret)
 		return ret;
 	config.direction = DMA_MEM_TO_DEV;
-	config.dst_addr = provider->lease.divider_dma_addr;
+	/* The DMA engine translates this CPU physical peripheral address. */
+	config.dst_addr = provider->lease.divider_phys_addr;
 	config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	config.dst_maxburst = 1;
 	ret = dmaengine_slave_config(provider->dma, &config);
@@ -165,8 +166,7 @@ static long provider_ioctl(struct file *file, unsigned int command,
 		if (!rp1_gpclk_valid_header(acquire.version, acquire.size, sizeof(acquire))) { ret = -EPROTO; break; }
 		if (acquire.flags || acquire.reserved || !rp1_gpclk_valid_drive(acquire.drive_ma)) { ret = -EINVAL; break; }
 		if (provider->owner) { ret = -EBUSY; break; }
-		ret = rp1_gpclk_dma_lease_get(provider->clk, provider->dma->device->dev,
-			&provider->lease);
+		ret = rp1_gpclk_dma_lease_get(provider->clk, &provider->lease);
 		if (!ret) { provider->owner = file; provider->lease_held = true; provider->state = RP1_GPCLK_STATE_IDLE; }
 		break;
 	case RP1_GPCLK_IOC_SUBMIT:

@@ -1,5 +1,5 @@
 diff --git a/drivers/clk/Kconfig b/drivers/clk/Kconfig
-index 60b4546..a03c516 100644
+index 60b454677..a03c51667 100644
 --- a/drivers/clk/Kconfig
 +++ b/drivers/clk/Kconfig
 @@ -97,6 +97,20 @@ config COMMON_CLK_RP1
@@ -24,7 +24,7 @@ index 60b4546..a03c516 100644
  	tristate "Clock driver for the RP1 SDIO interfaces"
  	depends on MFD_RP1
 diff --git a/drivers/clk/Makefile b/drivers/clk/Makefile
-index 29b2c68..42b05f4 100644
+index 29b2c6838..42b05f4e5 100644
 --- a/drivers/clk/Makefile
 +++ b/drivers/clk/Makefile
 @@ -88,6 +88,8 @@ obj-$(CONFIG_COMMON_CLK_PWM)		+= clk-pwm.o
@@ -36,9 +36,108 @@ index 29b2c68..42b05f4 100644
  obj-$(CONFIG_COMMON_CLK_RP1_SDIO)	+= clk-rp1-sdio.o
  obj-$(CONFIG_COMMON_CLK_RPMI)		+= clk-rpmi.o
  obj-$(CONFIG_COMMON_CLK_HI655X)		+= clk-hi655x.o
+diff --git a/drivers/clk/rp1-gpclk-contract.h b/drivers/clk/rp1-gpclk-contract.h
+new file mode 100644
+index 000000000..a4810c5d5
+--- /dev/null
++++ b/drivers/clk/rp1-gpclk-contract.h
+@@ -0,0 +1,36 @@
++#ifndef RP1_GPCLK_CONTRACT_H
++#define RP1_GPCLK_CONTRACT_H
++
++#include <linux/rp1_gpclk.h>
++
++static inline bool rp1_gpclk_valid_header(u16 version, u16 size,
++	size_t expected)
++{
++	return version == RP1_GPCLK_UAPI_VERSION && size == expected;
++}
++
++static inline bool rp1_gpclk_valid_drive(u32 drive)
++{
++	return drive == 2 || drive == 4 || drive == 8 || drive == 12;
++}
++
++static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
++{
++	return (divider_word & 0xffffU) << 16;
++}
++
++static inline bool rp1_gpclk_valid_program(
++	const struct rp1_gpclk_program *request, u64 previous_generation)
++{
++	return rp1_gpclk_valid_header(request->version, request->size,
++			sizeof(*request)) && request->fractional_bits == 16 &&
++		request->generation > previous_generation &&
++		request->writes_per_symbol == RP1_GPCLK_WRITES_PER_SYMBOL &&
++		request->tick_divider == RP1_GPCLK_TICK_DIVIDER &&
++		request->lower_count + request->upper_count ==
++			RP1_GPCLK_WRITES_PER_SYMBOL &&
++		(request->lower_divider_word >> 16) == 3 &&
++		(request->upper_divider_word >> 16) == 3;
++}
++
++#endif
+diff --git a/drivers/clk/rp1-gpclk-provider-kunit.c b/drivers/clk/rp1-gpclk-provider-kunit.c
+new file mode 100644
+index 000000000..db2d0cd22
+--- /dev/null
++++ b/drivers/clk/rp1-gpclk-provider-kunit.c
+@@ -0,0 +1,51 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <kunit/test.h>
++
++#include "rp1-gpclk-contract.h"
++
++static struct rp1_gpclk_program valid_program(u64 generation)
++{
++	return (struct rp1_gpclk_program) {
++		.version = 1, .size = sizeof(struct rp1_gpclk_program),
++		.fractional_bits = 16, .lower_divider_word = 232445,
++		.upper_divider_word = 232446, .lower_count = 66312,
++		.upper_count = 480, .writes_per_symbol = 66792,
++		.tick_divider = 511, .generation = generation,
++	};
++}
++
++static void header_and_drive_test(struct kunit *test)
++{
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_header(1, 16, 16));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(2, 16, 16));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(1, 15, 16));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(2));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(4));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(8));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(12));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_drive(6));
++}
++
++static void program_and_packing_test(struct kunit *test)
++{
++	struct rp1_gpclk_program program = valid_program(2);
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(&program, 1));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 2));
++	KUNIT_EXPECT_EQ(test, rp1_gpclk_pack_fraction(232445), 0x8bfd0000U);
++	program.tick_divider = 510;
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 1));
++}
++
++static struct kunit_case provider_cases[] = {
++	KUNIT_CASE(header_and_drive_test),
++	KUNIT_CASE(program_and_packing_test),
++	{}
++};
++
++static struct kunit_suite provider_suite = {
++	.name = "rp1-gpclk-provider-contract",
++	.test_cases = provider_cases,
++};
++kunit_test_suite(provider_suite);
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("RP1 GPCLK provider contract KUnit tests");
 diff --git a/drivers/clk/rp1-gpclk-provider.c b/drivers/clk/rp1-gpclk-provider.c
 new file mode 100644
-index 0000000..ec2bee9
+index 000000000..2c78c86ef
 --- /dev/null
 +++ b/drivers/clk/rp1-gpclk-provider.c
 @@ -0,0 +1,286 @@
@@ -161,7 +260,8 @@ index 0000000..ec2bee9
 +	if (ret)
 +		return ret;
 +	config.direction = DMA_MEM_TO_DEV;
-+	config.dst_addr = provider->lease.divider_dma_addr;
++	/* The DMA engine translates this CPU physical peripheral address. */
++	config.dst_addr = provider->lease.divider_phys_addr;
 +	config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 +	config.dst_maxburst = 1;
 +	ret = dmaengine_slave_config(provider->dma, &config);
@@ -209,8 +309,7 @@ index 0000000..ec2bee9
 +		if (!rp1_gpclk_valid_header(acquire.version, acquire.size, sizeof(acquire))) { ret = -EPROTO; break; }
 +		if (acquire.flags || acquire.reserved || !rp1_gpclk_valid_drive(acquire.drive_ma)) { ret = -EINVAL; break; }
 +		if (provider->owner) { ret = -EBUSY; break; }
-+		ret = rp1_gpclk_dma_lease_get(provider->clk, provider->dma->device->dev,
-+			&provider->lease);
++		ret = rp1_gpclk_dma_lease_get(provider->clk, &provider->lease);
 +		if (!ret) { provider->owner = file; provider->lease_held = true; provider->state = RP1_GPCLK_STATE_IDLE; }
 +		break;
 +	case RP1_GPCLK_IOC_SUBMIT:
@@ -328,108 +427,9 @@ index 0000000..ec2bee9
 +module_platform_driver(provider_driver);
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION("RP1 GPCLK provider-owned tick DMA UAPI");
-diff --git a/drivers/clk/rp1-gpclk-provider-kunit.c b/drivers/clk/rp1-gpclk-provider-kunit.c
-new file mode 100644
-index 0000000..db2d0cd
---- /dev/null
-+++ b/drivers/clk/rp1-gpclk-provider-kunit.c
-@@ -0,0 +1,51 @@
-+// SPDX-License-Identifier: GPL-2.0
-+#include <kunit/test.h>
-+
-+#include "rp1-gpclk-contract.h"
-+
-+static struct rp1_gpclk_program valid_program(u64 generation)
-+{
-+	return (struct rp1_gpclk_program) {
-+		.version = 1, .size = sizeof(struct rp1_gpclk_program),
-+		.fractional_bits = 16, .lower_divider_word = 232445,
-+		.upper_divider_word = 232446, .lower_count = 66312,
-+		.upper_count = 480, .writes_per_symbol = 66792,
-+		.tick_divider = 511, .generation = generation,
-+	};
-+}
-+
-+static void header_and_drive_test(struct kunit *test)
-+{
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_header(1, 16, 16));
-+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(2, 16, 16));
-+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(1, 15, 16));
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(2));
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(4));
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(8));
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(12));
-+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_drive(6));
-+}
-+
-+static void program_and_packing_test(struct kunit *test)
-+{
-+	struct rp1_gpclk_program program = valid_program(2);
-+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(&program, 1));
-+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 2));
-+	KUNIT_EXPECT_EQ(test, rp1_gpclk_pack_fraction(232445), 0x8bfd0000U);
-+	program.tick_divider = 510;
-+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 1));
-+}
-+
-+static struct kunit_case provider_cases[] = {
-+	KUNIT_CASE(header_and_drive_test),
-+	KUNIT_CASE(program_and_packing_test),
-+	{}
-+};
-+
-+static struct kunit_suite provider_suite = {
-+	.name = "rp1-gpclk-provider-contract",
-+	.test_cases = provider_cases,
-+};
-+kunit_test_suite(provider_suite);
-+MODULE_LICENSE("GPL");
-+MODULE_DESCRIPTION("RP1 GPCLK provider contract KUnit tests");
-diff --git a/drivers/clk/rp1-gpclk-contract.h b/drivers/clk/rp1-gpclk-contract.h
-new file mode 100644
-index 0000000..a4810c5
---- /dev/null
-+++ b/drivers/clk/rp1-gpclk-contract.h
-@@ -0,0 +1,36 @@
-+#ifndef RP1_GPCLK_CONTRACT_H
-+#define RP1_GPCLK_CONTRACT_H
-+
-+#include <linux/rp1_gpclk.h>
-+
-+static inline bool rp1_gpclk_valid_header(u16 version, u16 size,
-+	size_t expected)
-+{
-+	return version == RP1_GPCLK_UAPI_VERSION && size == expected;
-+}
-+
-+static inline bool rp1_gpclk_valid_drive(u32 drive)
-+{
-+	return drive == 2 || drive == 4 || drive == 8 || drive == 12;
-+}
-+
-+static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
-+{
-+	return (divider_word & 0xffffU) << 16;
-+}
-+
-+static inline bool rp1_gpclk_valid_program(
-+	const struct rp1_gpclk_program *request, u64 previous_generation)
-+{
-+	return rp1_gpclk_valid_header(request->version, request->size,
-+			sizeof(*request)) && request->fractional_bits == 16 &&
-+		request->generation > previous_generation &&
-+		request->writes_per_symbol == RP1_GPCLK_WRITES_PER_SYMBOL &&
-+		request->tick_divider == RP1_GPCLK_TICK_DIVIDER &&
-+		request->lower_count + request->upper_count ==
-+			RP1_GPCLK_WRITES_PER_SYMBOL &&
-+		(request->lower_divider_word >> 16) == 3 &&
-+		(request->upper_divider_word >> 16) == 3;
-+}
-+
-+#endif
 diff --git a/include/uapi/linux/rp1_gpclk.h b/include/uapi/linux/rp1_gpclk.h
 new file mode 100644
-index 0000000..13f2518
+index 000000000..13f251845
 --- /dev/null
 +++ b/include/uapi/linux/rp1_gpclk.h
 @@ -0,0 +1,62 @@
