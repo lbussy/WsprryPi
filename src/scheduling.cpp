@@ -60,6 +60,7 @@
 #include "web_server.hpp"
 #include "web_socket.hpp"
 #include "wspr_transmit.hpp"
+#include "version.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -1538,9 +1539,11 @@ bool websocket_server_start_enabled(const ArgParserConfig &cfg) noexcept
 static wsprrypi::BackendKind to_controller_backend(
     TransmitBackendKind backend) noexcept
 {
-    return backend == TransmitBackendKind::SI5351
-               ? wsprrypi::BackendKind::SI5351
-               : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
+    if (backend == TransmitBackendKind::SI5351)
+        return wsprrypi::BackendKind::SI5351;
+    return get_raspberry_pi_generation() == 5
+        ? wsprrypi::BackendKind::RP1_GPCLK
+        : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
 }
 
 static wsprrypi::ClockSource to_controller_clock_source(
@@ -1642,6 +1645,8 @@ std::string transmitter_reload_defer_debug_snapshot()
         {
         case wsprrypi::BackendKind::RPI_CLOCK_GPIO:
             return "GPIO";
+        case wsprrypi::BackendKind::RP1_GPCLK:
+            return "RP1 GPCLK";
         case wsprrypi::BackendKind::SI5351:
             return "SI5351";
         default:

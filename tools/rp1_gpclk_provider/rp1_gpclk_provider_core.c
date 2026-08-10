@@ -30,6 +30,8 @@ int rp1_gpclk_core_acquire(struct rp1_gpclk_provider_core *core,
 int rp1_gpclk_core_submit(struct rp1_gpclk_provider_core *core,
 	const struct rp1_gpclk_program *request)
 {
+	__u32 i;
+
 	if (!valid_header(request->version, request->size, sizeof(*request)))
 		return -EPROTO;
 	if (!core->owned || core->state == RP1_GPCLK_STATE_RUNNING ||
@@ -37,16 +39,31 @@ int rp1_gpclk_core_submit(struct rp1_gpclk_provider_core *core,
 		return -EBUSY;
 	if (request->fractional_bits != 16 || !request->generation ||
 		request->generation <= core->generation ||
+		request->reserved ||
 		request->writes_per_symbol != RP1_GPCLK_WRITES_PER_SYMBOL ||
 		request->tick_divider != RP1_GPCLK_TICK_DIVIDER ||
-		request->lower_count + request->upper_count !=
-			RP1_GPCLK_WRITES_PER_SYMBOL ||
-		(request->lower_divider_word >> 16) != 3 ||
-		(request->upper_divider_word >> 16) != 3)
+		request->symbol_count != RP1_GPCLK_WSPR_SYMBOL_COUNT ||
+		request->tone_count != 4)
 		return -EINVAL;
+	for (i = 0; i < request->tone_count; ++i) {
+		const struct rp1_gpclk_symbol *symbol = &request->tones[i];
+
+		if (symbol->lower_count + symbol->upper_count !=
+				RP1_GPCLK_WRITES_PER_SYMBOL ||
+			(symbol->lower_divider_word >> 16) != 3 ||
+			(symbol->upper_divider_word >> 16) != 3)
+			return -EINVAL;
+	}
+	for (i = 0; i < request->symbol_count; ++i)
+		if (request->symbols[i] >= request->tone_count)
+			return -EINVAL;
 	/* Packing is provider-owned; the UAPI never exposes this representation. */
-	core->lower_div_frac = (request->lower_divider_word & 0xffffU) << 16;
-	core->upper_div_frac = (request->upper_divider_word & 0xffffU) << 16;
+	core->lower_div_frac =
+		(request->tones[request->symbols[0]].lower_divider_word & 0xffffU) << 16;
+	core->upper_div_frac =
+		(request->tones[request->symbols[request->symbol_count - 1]].upper_divider_word &
+			0xffffU) << 16;
+	core->symbol_count = request->symbol_count;
 	core->generation = request->generation;
 	core->state = RP1_GPCLK_STATE_RUNNING;
 	return 0;

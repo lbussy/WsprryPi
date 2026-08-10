@@ -25,6 +25,14 @@ GPCLK0 to disabled on every terminal path. The provider uses pinctrl and the
 common-clock lease rather than exposing or directly accessing RP1 register
 addresses.
 
+UAPI version 1 accepts exactly one complete 162-symbol WSPR frame. Userspace
+submits four logical divider plans and the ordered 162-entry tone-index array;
+the provider expands that bounded request into one contiguous DMA buffer and
+prepares it as one finite DMA-engine submission. STOP changes the observable
+state to draining but does not truncate the already-linked frame. Closing the
+owner while active defers lease release until that same finite drain and
+provider-owned cleanup complete.
+
 The portable core remains independently testable and cannot enable, mux, or
 manipulate GPCLK hardware.
 

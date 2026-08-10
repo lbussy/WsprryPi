@@ -9,6 +9,7 @@ struct rp1_gpclk_provider_core {
 	__u32 drive_ma;
 	__u32 lower_div_frac;
 	__u32 upper_div_frac;
+	__u32 symbol_count;
 	int owned;
 };
 

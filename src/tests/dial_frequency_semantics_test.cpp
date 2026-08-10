@@ -1044,7 +1044,7 @@ int main(int argc, char *argv[])
             "GPIO backend must be rejected on Raspberry Pi 5");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "GPIO backend rejection on Raspberry Pi 5 must explain the unsupported platform");
 
@@ -1056,7 +1056,7 @@ int main(int argc, char *argv[])
             "managed GPIO configuration must be rejected on Raspberry Pi 5");
         require(
             candidate.error_reason.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "managed GPIO rejection on Raspberry Pi 5 must preserve the platform error");
 
@@ -1074,7 +1074,7 @@ int main(int argc, char *argv[])
             "GPIO backend must remain invalid on Raspberry Pi 5 even when transmit is off");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "GPIO backend invalidity on Raspberry Pi 5 must not depend on transmit state");
 
@@ -1167,7 +1167,7 @@ int main(int argc, char *argv[])
             "CLI startup validation must fail for GPIO on Raspberry Pi 5");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "CLI startup validation on Raspberry Pi 5 must report the GPIO platform error");
         require(
@@ -1283,7 +1283,8 @@ int main(int argc, char *argv[])
             backend.configure(plan, inputs);
         require(
             compile_result.ok,
-            "Si5351 backend configure path must remain allowed on Raspberry Pi 5");
+            "Si5351 backend configure path must remain allowed on Raspberry Pi 5: " +
+                compile_result.error);
 
         const wsprrypi::ExecutionResult execute_result = backend.execute(plan);
         require(

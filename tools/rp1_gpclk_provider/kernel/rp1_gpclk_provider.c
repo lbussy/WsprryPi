@@ -12,6 +12,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/rp1-gpclk-lease.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 
@@ -23,8 +24,12 @@
 #define DMA_TICK0_CTRL 0x4
 #define DMA_TICK_REQ BIT(0)
 #define DMA_TICK_SINGLE BIT(1)
-#define DMA_TICK_FINISH_CLEAR BIT(0)
 #define DMA_TICK_DWELL (19U << 4)
+#define RP1_GPCLK_BUFFER_WRITES \
+	((size_t)RP1_GPCLK_WRITES_PER_SYMBOL * RP1_GPCLK_WSPR_SYMBOL_COUNT)
+#define RP1_GPCLK_BUFFER_BYTES (RP1_GPCLK_BUFFER_WRITES * sizeof(u32))
+#define RP1_GPCLK_SYMBOL_BYTES \
+	((size_t)RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32))
 
 static bool live_output;
 module_param(live_output, bool, 0444);
@@ -126,7 +131,8 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	u64 accumulator = 0;
 	dma_cookie_t cookie;
 	u32 lower, upper;
-	unsigned int i;
+	unsigned int i, symbol_index;
+	size_t word_index = 0;
 	int ret;
 
 	if (!rp1_gpclk_valid_header(request->version, request->size,
@@ -137,15 +143,23 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	if (provider->state == RP1_GPCLK_STATE_RUNNING ||
 		provider->state == RP1_GPCLK_STATE_DRAINING)
 		return -EBUSY;
-	lower = rp1_gpclk_pack_fraction(request->lower_divider_word);
-	upper = rp1_gpclk_pack_fraction(request->upper_divider_word);
-	for (i = 0; i < RP1_GPCLK_WRITES_PER_SYMBOL; ++i) {
-		accumulator += request->lower_count;
-		if (accumulator >= RP1_GPCLK_WRITES_PER_SYMBOL) {
-			provider->words[i] = lower;
-			accumulator -= RP1_GPCLK_WRITES_PER_SYMBOL;
-		} else {
-			provider->words[i] = upper;
+	for (symbol_index = 0;
+			symbol_index < request->symbol_count;
+			++symbol_index) {
+		const struct rp1_gpclk_symbol *symbol =
+			&request->tones[request->symbols[symbol_index]];
+
+		lower = rp1_gpclk_pack_fraction(symbol->lower_divider_word);
+		upper = rp1_gpclk_pack_fraction(symbol->upper_divider_word);
+		accumulator = 0;
+		for (i = 0; i < RP1_GPCLK_WRITES_PER_SYMBOL; ++i) {
+			accumulator += symbol->lower_count;
+			if (accumulator >= RP1_GPCLK_WRITES_PER_SYMBOL) {
+				provider->words[word_index++] = lower;
+				accumulator -= RP1_GPCLK_WRITES_PER_SYMBOL;
+			} else {
+				provider->words[word_index++] = upper;
+			}
 		}
 	}
 	ret = rp1_gpclk_dma_lease_configure(&provider->lease, 3,
@@ -161,7 +175,8 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	if (ret)
 		return ret;
 	descriptor = dmaengine_prep_slave_single(provider->dma,
-		provider->words_dma, RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32),
+		provider->words_dma,
+		(size_t)request->symbol_count * RP1_GPCLK_SYMBOL_BYTES,
 		DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!descriptor)
 		return -EIO;
@@ -172,7 +187,8 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	if (ret)
 		return ret;
 	provider->generation = request->generation;
-	provider->expected_final = provider->words[RP1_GPCLK_WRITES_PER_SYMBOL - 1];
+	provider->expected_final = provider->words[
+		(size_t)request->symbol_count * RP1_GPCLK_WRITES_PER_SYMBOL - 1];
 	provider->state = RP1_GPCLK_STATE_RUNNING;
 	provider->submitted = true;
 	if (!live_output)
@@ -189,7 +205,7 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 	provider->output_active = true;
 start_dma:
 	writel(RP1_GPCLK_TICK_DIVIDER, provider->ticks + TICKS_DMA0_CYCLES);
-	writel(DMA_TICK_FINISH_CLEAR | DMA_TICK_DWELL,
+	writel(DMA_TICK_DWELL,
 		provider->dma_tick + DMA_TICK0_CTRL);
 	dma_async_issue_pending(provider->dma);
 	writel(DMA_TICK_REQ | DMA_TICK_SINGLE,
@@ -211,7 +227,7 @@ static long provider_ioctl(struct file *file, unsigned int command,
 	void __user *user = (void __user *)argument;
 	struct rp1_gpclk_generation generation;
 	struct rp1_gpclk_acquire acquire;
-	struct rp1_gpclk_program program;
+	struct rp1_gpclk_program *program;
 	long ret = 0;
 
 	mutex_lock(&provider->lock);
@@ -230,8 +246,10 @@ static long provider_ioctl(struct file *file, unsigned int command,
 		break;
 	case RP1_GPCLK_IOC_SUBMIT:
 		if (provider->owner != file) { ret = -EPERM; break; }
-		if (copy_from_user(&program, user, sizeof(program))) { ret = -EFAULT; break; }
-		ret = submit_program(provider, &program);
+		program = memdup_user(user, sizeof(*program));
+		if (IS_ERR(program)) { ret = PTR_ERR(program); break; }
+		ret = submit_program(provider, program);
+		kfree(program);
 		break;
 	case RP1_GPCLK_IOC_STOP:
 	case RP1_GPCLK_IOC_STATE:
@@ -316,7 +334,7 @@ static int rp1_gpclk_provider_probe(struct platform_device *pdev)
 	provider->dma = dma_request_chan(&pdev->dev, "tick0");
 	if (IS_ERR(provider->dma)) return PTR_ERR(provider->dma);
 	provider->words = dma_alloc_coherent(provider->dma->device->dev,
-		RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32), &provider->words_dma, GFP_KERNEL);
+		RP1_GPCLK_BUFFER_BYTES, &provider->words_dma, GFP_KERNEL);
 	if (!provider->words) { ret = -ENOMEM; goto release_dma; }
 	provider->misc.minor = MISC_DYNAMIC_MINOR; provider->misc.name = "rp1-gpclk0";
 	provider->misc.fops = &provider_fops; provider->misc.parent = &pdev->dev;
@@ -326,7 +344,7 @@ static int rp1_gpclk_provider_probe(struct platform_device *pdev)
 	return 0;
 free_words:
 	dma_free_coherent(provider->dma->device->dev,
-		RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32), provider->words, provider->words_dma);
+		RP1_GPCLK_BUFFER_BYTES, provider->words, provider->words_dma);
 release_dma:
 	dma_release_channel(provider->dma);
 	return ret;
@@ -344,7 +362,7 @@ static void rp1_gpclk_provider_remove(struct platform_device *pdev)
 	deactivate_output(provider);
 	if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
 	dma_free_coherent(provider->dma->device->dev,
-		RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32), provider->words, provider->words_dma);
+		RP1_GPCLK_BUFFER_BYTES, provider->words, provider->words_dma);
 	dma_release_channel(provider->dma);
 }
 

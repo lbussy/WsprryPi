@@ -38,6 +38,7 @@
 #include "signal_handler.hpp"
 #include "wspr_band_lookup.hpp"
 #include "wspr_transmit.hpp"
+#include "version.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -1398,12 +1399,14 @@ void print_usage(const std::string &message, int exit_code)
               << "  --no-offset                        Disable random WSPR transmit offset.\n\n"
               << "Backend Selection:\n"
               << "  --backend <gpio|si5351>            Select the RF transmit backend. Default: gpio.\n"
-              << "                                     GPIO RF is supported only on Raspberry Pi 1 through 4.\n"
+              << "                                     GPIO uses the RP1 provider on Raspberry Pi 5.\n"
               << "  --power-level <level>\n"
               << "    Set transmit power level for the active backend:\n"
               << "      GPIO: 0-7\n"
+              << "      RP1 GPIO: 2, 4, 8, or 12 mA\n"
               << "      Si5351: 1-4\n"
               << "  --gpio-power-level <0-7>           Set GPIO backend RF power level.\n"
+              << "  --rp1-gpio-drive-ma <2|4|8|12>    Set Raspberry Pi 5 RP1 pad drive. Default: 2 mA.\n"
               << "  --si5351-power-level <1-4>         Set Si5351 drive-strength level.\n\n"
               << "GPIO Backend:\n"
               << "  -a, --transmit-gpio <4|20>         Select the RF transmit GPIO.\n"
@@ -1537,7 +1540,9 @@ void show_config_values(bool reload)
         DEBUG,
         config.transmit_backend == TransmitBackendKind::SI5351
             ? "Si5351 Drive Level: "
-            : "GPIO Power Level: ",
+            : get_raspberry_pi_generation() == 5
+                ? "RP1 GPIO Drive mA: "
+                : "GPIO Power Level: ",
         config.power_level);
     llog.logS(DEBUG, "Use LED: ", config.use_led ? "true" : "false");
     llog.logS(DEBUG, "LED on GPIO", config.led_pin);
@@ -1749,7 +1754,29 @@ bool validate_config_candidate(
             return false;
         }
 
-        if (candidate.gpio_power_level < 0 || candidate.gpio_power_level > 7)
+        if (get_raspberry_pi_generation() == 5 && candidate.gpio_tx_pin != 4)
+        {
+            if (error_message != nullptr)
+            {
+                *error_message =
+                    "The RP1 GPCLK backend currently supports GPIO4 only.";
+            }
+            return false;
+        }
+
+        if (get_raspberry_pi_generation() == 5 &&
+            !is_supported_rp1_gpio_drive_ma(candidate.rp1_gpio_drive_ma))
+        {
+            if (error_message != nullptr)
+            {
+                *error_message =
+                    "Invalid RP1 GPIO drive. Expected 2, 4, 8, or 12 mA.";
+            }
+            return false;
+        }
+
+        if (get_raspberry_pi_generation() != 5 &&
+            (candidate.gpio_power_level < 0 || candidate.gpio_power_level > 7))
         {
             if (error_message != nullptr)
             {
@@ -1995,7 +2022,9 @@ void apply_runtime_config_side_effects()
     const wsprrypi::BackendKind backend_kind =
         config.transmit_backend == TransmitBackendKind::SI5351
             ? wsprrypi::BackendKind::SI5351
-            : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
+            : get_raspberry_pi_generation() == 5
+                ? wsprrypi::BackendKind::RP1_GPCLK
+                : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
     WsprTransmitter::Si5351RuntimeConfig si5351_config;
     si5351_config.i2c_bus = config.si5351_i2c_bus;
     si5351_config.i2c_address = config.si5351_i2c_address;
@@ -2178,8 +2207,10 @@ void apply_runtime_config_side_effects()
         {
             log_startup_config_message(
                 INFO,
-                "- GPIO Transmit Power: ",
-                config.gpio_power_level);
+                get_raspberry_pi_generation() == 5
+                    ? "- RP1 GPIO Drive mA: "
+                    : "- GPIO Transmit Power: ",
+                config.power_level);
         }
         else if (config.transmit_backend == TransmitBackendKind::SI5351)
         {
@@ -2230,8 +2261,10 @@ void apply_runtime_config_side_effects()
         {
             log_startup_config_message(
                 INFO,
-                "- GPIO Transmit Power: ",
-                config.gpio_power_level);
+                get_raspberry_pi_generation() == 5
+                    ? "- RP1 GPIO Drive mA: "
+                    : "- GPIO Transmit Power: ",
+                config.power_level);
         }
         else if (config.transmit_backend == TransmitBackendKind::SI5351)
         {
@@ -2282,8 +2315,10 @@ void apply_runtime_config_side_effects()
         {
             log_startup_config_message(
                 INFO,
-                "- GPIO Transmit Power: ",
-                config.gpio_power_level);
+                get_raspberry_pi_generation() == 5
+                    ? "- RP1 GPIO Drive mA: "
+                    : "- GPIO Transmit Power: ",
+                config.power_level);
         }
         else if (config.transmit_backend == TransmitBackendKind::SI5351)
         {
@@ -2310,8 +2345,10 @@ void apply_runtime_config_side_effects()
         {
             log_startup_config_message(
                 INFO,
-                "- GPIO Transmit Power: ",
-                config.gpio_power_level);
+                get_raspberry_pi_generation() == 5
+                    ? "- RP1 GPIO Drive mA: "
+                    : "- GPIO Transmit Power: ",
+                config.power_level);
         }
         else if (config.transmit_backend == TransmitBackendKind::SI5351)
         {
@@ -3015,6 +3052,7 @@ bool parse_command_line(int argc, char *argv[])
         {"use-shutdown", no_argument, nullptr, 1039},
         {"no-shutdown", no_argument, nullptr, 1040},
         {"gpio-power-level", required_argument, nullptr, 1041},
+        {"rp1-gpio-drive-ma", required_argument, nullptr, 1055},
         {"si5351-power-level", required_argument, nullptr, 1042},
         {"amp-pin", required_argument, nullptr, 1043},
         {"amp-pin-active-high", no_argument, nullptr, 1044},
@@ -3514,6 +3552,28 @@ bool parse_command_line(int argc, char *argv[])
             }
             break;
         }
+        case 1055:
+        {
+            try
+            {
+                const int drive =
+                    parse_integer_option(optarg, "--rp1-gpio-drive-ma");
+                if (!is_supported_rp1_gpio_drive_ma(drive))
+                {
+                    print_usage(
+                        "Invalid RP1 GPIO drive. Expected 2, 4, 8, or 12 mA.",
+                        EXIT_FAILURE);
+                }
+                config.rp1_gpio_drive_ma = drive;
+                resolve_backend_specific_config(config);
+                explicit_power_level = true;
+            }
+            catch (const std::exception &e)
+            {
+                print_usage(e.what(), EXIT_FAILURE);
+            }
+            break;
+        }
         case 1043:
         {
             try
@@ -3876,6 +3936,13 @@ bool parse_command_line(int argc, char *argv[])
                         config.si5351_power_level = power;
                     }
                 }
+                else if (get_raspberry_pi_generation() == 5)
+                {
+                    config.rp1_gpio_drive_ma =
+                        is_supported_rp1_gpio_drive_ma(power)
+                            ? power
+                            : kDefaultRp1GpioDriveMa;
+                }
                 else if (power < 0 or power > 7)
                 {
                     config.gpio_power_level = 7;
@@ -3893,6 +3960,11 @@ bool parse_command_line(int argc, char *argv[])
                 {
                     llog.logE(WARN, "Invalid Si5351 power level, defaulting to 1.");
                     config.si5351_power_level = 1;
+                }
+                else if (get_raspberry_pi_generation() == 5)
+                {
+                    llog.logE(WARN, "Invalid RP1 GPIO drive, defaulting to 2 mA.");
+                    config.rp1_gpio_drive_ma = kDefaultRp1GpioDriveMa;
                 }
                 else
                 {

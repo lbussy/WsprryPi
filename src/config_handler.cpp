@@ -1106,7 +1106,9 @@ void resolve_backend_specific_config(ArgParserConfig &config) noexcept
         return;
     }
 
-    config.power_level = config.gpio_power_level;
+    config.power_level = get_raspberry_pi_generation() == 5
+        ? config.rp1_gpio_drive_ma
+        : config.gpio_power_level;
     config.use_system_clock_frequency_estimate = config.gpio_use_system_clock_frequency_estimate;
     config.ppm = config.gpio_manual_ppm;
 }

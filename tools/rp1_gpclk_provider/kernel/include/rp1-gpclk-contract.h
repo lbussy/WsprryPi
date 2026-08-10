@@ -22,15 +22,30 @@ static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
 static inline bool rp1_gpclk_valid_program(
 	const struct rp1_gpclk_program *request, u64 previous_generation)
 {
-	return rp1_gpclk_valid_header(request->version, request->size,
-			sizeof(*request)) && request->fractional_bits == 16 &&
-		request->generation > previous_generation &&
-		request->writes_per_symbol == RP1_GPCLK_WRITES_PER_SYMBOL &&
-		request->tick_divider == RP1_GPCLK_TICK_DIVIDER &&
-		request->lower_count + request->upper_count ==
-			RP1_GPCLK_WRITES_PER_SYMBOL &&
-		(request->lower_divider_word >> 16) == 3 &&
-		(request->upper_divider_word >> 16) == 3;
+	u32 i;
+
+	if (!rp1_gpclk_valid_header(request->version, request->size,
+			sizeof(*request)) || request->fractional_bits != 16 ||
+		request->generation <= previous_generation || request->reserved ||
+		request->writes_per_symbol != RP1_GPCLK_WRITES_PER_SYMBOL ||
+		request->tick_divider != RP1_GPCLK_TICK_DIVIDER ||
+		request->symbol_count != RP1_GPCLK_WSPR_SYMBOL_COUNT ||
+		request->tone_count != 4)
+		return false;
+
+	for (i = 0; i < request->tone_count; ++i) {
+		const struct rp1_gpclk_symbol *symbol = &request->tones[i];
+
+		if (symbol->lower_count + symbol->upper_count !=
+				RP1_GPCLK_WRITES_PER_SYMBOL ||
+			(symbol->lower_divider_word >> 16) != 3 ||
+			(symbol->upper_divider_word >> 16) != 3)
+			return false;
+	}
+	for (i = 0; i < RP1_GPCLK_WSPR_SYMBOL_COUNT; ++i)
+		if (request->symbols[i] >= request->tone_count)
+			return false;
+	return true;
 }
 
 #endif

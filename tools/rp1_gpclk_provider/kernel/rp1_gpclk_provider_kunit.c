@@ -3,15 +3,32 @@
 
 #include "rp1-gpclk-contract.h"
 
-static struct rp1_gpclk_program valid_program(u64 generation)
+static struct rp1_gpclk_program *valid_program(
+	struct kunit *test, u64 generation)
 {
-	return (struct rp1_gpclk_program) {
-		.version = 1, .size = sizeof(struct rp1_gpclk_program),
-		.fractional_bits = 16, .lower_divider_word = 232445,
-		.upper_divider_word = 232446, .lower_count = 66312,
-		.upper_count = 480, .writes_per_symbol = 66792,
-		.tick_divider = 511, .generation = generation,
-	};
+	struct rp1_gpclk_program *program = kunit_kzalloc(
+		test, sizeof(*program), GFP_KERNEL);
+	u32 i;
+
+	if (!program)
+		return NULL;
+	program->version = 1;
+	program->size = sizeof(*program);
+	program->fractional_bits = 16;
+	program->writes_per_symbol = 66792;
+	program->tick_divider = 511;
+	program->symbol_count = 162;
+	program->tone_count = 4;
+	program->generation = generation;
+	for (i = 0; i < 4; ++i)
+		program->tones[i] = (struct rp1_gpclk_symbol) {
+			.lower_divider_word = 232445 + (i & 1),
+			.upper_divider_word = 232446,
+			.lower_count = 66312, .upper_count = 480,
+		};
+	for (i = 0; i < RP1_GPCLK_WSPR_SYMBOL_COUNT; ++i)
+		program->symbols[i] = i % 4;
+	return program;
 }
 
 static void header_and_drive_test(struct kunit *test)
@@ -28,12 +45,25 @@ static void header_and_drive_test(struct kunit *test)
 
 static void program_and_packing_test(struct kunit *test)
 {
-	struct rp1_gpclk_program program = valid_program(2);
-	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(&program, 1));
-	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 2));
+	struct rp1_gpclk_program *program = valid_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 1));
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 2));
 	KUNIT_EXPECT_EQ(test, rp1_gpclk_pack_fraction(232445), 0x8bfd0000U);
-	program.tick_divider = 510;
-	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(&program, 1));
+	program->tick_divider = 510;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
+	program = valid_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->symbol_count = 161;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
+	program = valid_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->tones[2].upper_count--;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
+	program = valid_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->symbols[81] = 4;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
 }
 
 static struct kunit_case provider_cases[] = {
