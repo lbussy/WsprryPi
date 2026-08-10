@@ -3720,7 +3720,14 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             "Using web UI test tone RF frequency override: ",
             lookup.freq_display_string(actual_rf_freq));
     }
-    const double committed_ppm = config.ppm;
+    double committed_ppm = config.ppm;
+    if (config.transmit_backend == TransmitBackendKind::GPIO)
+    {
+        const GpioFrequencyCorrection selected_correction =
+            select_and_publish_gpio_correction(config);
+        committed_ppm = selected_correction.effective_ppm;
+        config.ppm = committed_ppm;
+    }
     TransmissionRequest request =
         make_tone_request(config, committed_ppm, actual_rf_freq, dial_freq, entry);
     if (explicit_frequency_plan.has_value())
@@ -5899,6 +5906,14 @@ void clear_current_wspr_runtime_state_for_test() noexcept
 void reset_current_transmission_request_for_test() noexcept
 {
     current_transmission_request = TransmissionRequest{};
+}
+
+void set_current_frequency_estimate_for_test(
+    const SystemClockFrequencyEstimate &estimate)
+{
+    std::lock_guard<std::mutex> lock(frequency_estimate_mutex);
+    current_frequency_estimate = estimate;
+    current_gpio_correction = GpioFrequencyCorrection{};
 }
 
 void reset_current_controller_request_for_test() noexcept

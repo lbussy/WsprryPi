@@ -42,6 +42,7 @@
 // Project headers
 #include "arg_parser.hpp"
 #include "ppm_manager.hpp"
+#include "system_clock_frequency_estimate.hpp"
 #include "transmission_request.hpp"
 #include "transmission_backend.hpp"
 #include "wspr_transmit_types.hpp"
@@ -432,6 +433,8 @@ void set_current_transmission_request_for_test(
     const TransmissionRequest &request) noexcept;
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test();
 void reset_current_transmission_request_for_test() noexcept;
+void set_current_frequency_estimate_for_test(
+    const SystemClockFrequencyEstimate &estimate);
 void reset_current_controller_request_for_test() noexcept;
 using TestToneCommitInvokerForTest = std::function<void()>;
 void set_test_tone_commit_invoker_for_test(TestToneCommitInvokerForTest invoker);

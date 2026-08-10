@@ -4934,6 +4934,36 @@ int main(int argc, char *argv[])
         require(
             tone_stop_result.stopped,
             "test tone override regression must stop the transient tone cleanly");
+
+        SystemClockFrequencyEstimate qualified_estimate;
+        qualified_estimate.provider_name = "chrony";
+        qualified_estimate.qualification = FrequencyEstimateQualification::Qualified;
+        qualified_estimate.frequency_ppm = 10.763;
+        qualified_estimate.synchronized = true;
+        qualified_estimate.selected_source = true;
+        qualified_estimate.leap_normal = true;
+        config.gpio_use_system_clock_frequency_estimate = true;
+        config.use_system_clock_frequency_estimate = true;
+        config.gpio_frequency_residual_ppm = 1.310;
+        config.gpio_manual_ppm = 0.0;
+        config.ppm = 10.763;
+        set_current_frequency_estimate_for_test(qualified_estimate);
+
+        const TestToneStartResult residual_tone_start =
+            start_test_tone(override_frequency_hz);
+        require(
+            residual_tone_start.started,
+            "GPIO test tone must start with a qualified system-clock estimate and residual");
+        const TransmissionRequest residual_tone_request =
+            current_transmission_request_for_test();
+        require(
+            nearly_equal(residual_tone_request.ppm, 12.073) &&
+                nearly_equal(config.ppm, 12.073),
+            "GPIO test tone commit must select the current estimate plus residual instead of a stale cached PPM");
+        require(
+            end_test_tone().stopped,
+            "GPIO estimate-plus-residual test tone must stop cleanly");
+        set_current_frequency_estimate_for_test(SystemClockFrequencyEstimate{});
         set_scheduler_execution_suppressed_for_test(false);
     }
 
