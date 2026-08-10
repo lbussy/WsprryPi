@@ -1360,7 +1360,9 @@ int main()
             config_view_source.find("id=\"si5351-calibration-heading\"") != std::string::npos &&
             config_view_source.find("id=\"use_system_clock_frequency_estimate\"") != std::string::npos &&
             config_view_source.find("id=\"gpio_frequency_residual_ppm\"") != std::string::npos &&
-            config_view_source.find("id=\"gpio_manual_ppm\"") != std::string::npos,
+            config_view_source.find("id=\"gpio_manual_ppm\"") != std::string::npos &&
+            config_view_source.find(">Fallback PPM</label>") != std::string::npos &&
+            config_view_source.find("Used only when the system clock estimate is disabled or unavailable.") != std::string::npos,
         "Configuration view must place familiar backend-specific frequency calibration sections in both transmitter panels");
     require(
         operation_view_source.find("id=\"gpio_frequency_correction_panel\"") != std::string::npos &&
