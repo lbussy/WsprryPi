@@ -1030,6 +1030,7 @@ void init_default_config()
     config.amp_pin_active_high = false;
     config.gpio_tx_pin = kDefaultTransmitGpio;
     config.gpio_power_level = 7;
+    config.rp1_gpio_drive_ma = kDefaultRp1GpioDriveMa;
     config.gpio_use_system_clock_frequency_estimate = true;
     config.gpio_frequency_residual_ppm = 0.0;
     config.gpio_manual_ppm = 0.0;
@@ -1530,6 +1531,15 @@ namespace
             gpio.contains("Power Level")
                 ? gpio.at("Power Level").get<int>()
                 : 7;
+        target.rp1_gpio_drive_ma =
+            gpio.contains("RP1 Drive mA")
+                ? gpio.at("RP1 Drive mA").get<int>()
+                : kDefaultRp1GpioDriveMa;
+        if (!is_supported_rp1_gpio_drive_ma(target.rp1_gpio_drive_ma))
+        {
+            throw std::runtime_error(
+                "GPIO.RP1 Drive mA must be 2, 4, 8, or 12.");
+        }
         target.gpio_use_system_clock_frequency_estimate =
             gpio.contains("Use System Clock Frequency Estimate")
                 ? gpio.at("Use System Clock Frequency Estimate").get<bool>()
@@ -1785,6 +1795,7 @@ namespace
         target["GPIO"]["Transmit Pin"] =
             normalize_gpio_transmit_pin(source.gpio_tx_pin);
         target["GPIO"]["Power Level"] = source.gpio_power_level;
+        target["GPIO"]["RP1 Drive mA"] = source.rp1_gpio_drive_ma;
         target["GPIO"]["Use System Clock Frequency Estimate"] =
             source.gpio_use_system_clock_frequency_estimate;
         target["GPIO"]["Frequency Residual PPM"] =
@@ -1876,6 +1887,7 @@ namespace
         target.transmit_backend = source.transmit_backend;
         target.gpio_tx_pin = source.gpio_tx_pin;
         target.gpio_power_level = source.gpio_power_level;
+        target.rp1_gpio_drive_ma = source.rp1_gpio_drive_ma;
         target.gpio_use_system_clock_frequency_estimate = source.gpio_use_system_clock_frequency_estimate;
         target.gpio_frequency_residual_ppm = source.gpio_frequency_residual_ppm;
         target.gpio_manual_ppm = source.gpio_manual_ppm;

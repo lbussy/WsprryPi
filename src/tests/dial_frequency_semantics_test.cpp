@@ -578,6 +578,37 @@ int main(int argc, char *argv[])
     set_si5351_detection_override_for_test(true);
     set_raspberry_pi_generation_override_for_test(4);
 
+    init_default_config();
+    require(
+        config.rp1_gpio_drive_ma == 2,
+        "RP1 GPIO drive must default to the minimum 2 mA profile");
+    for (const int drive_ma : {2, 4, 8, 12})
+    {
+        config.rp1_gpio_drive_ma = drive_ma;
+        config_to_json();
+        config.rp1_gpio_drive_ma = 2;
+        json_to_config();
+        require(
+            config.rp1_gpio_drive_ma == drive_ma,
+            "each supported RP1 GPIO drive must survive JSON persistence");
+    }
+    jConfig["GPIO"]["RP1 Drive mA"] = 6;
+    bool invalid_rp1_drive_rejected = false;
+    try
+    {
+        json_to_config();
+    }
+    catch (const std::exception& error)
+    {
+        invalid_rp1_drive_rejected =
+            std::string(error.what()).find("2, 4, 8, or 12") !=
+            std::string::npos;
+    }
+    require(
+        invalid_rp1_drive_rejected,
+        "unsupported RP1 GPIO drive values must be rejected while loading JSON");
+    init_default_config();
+
     WSPRBandLookup lookup;
 
     require(

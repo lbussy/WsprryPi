@@ -47,6 +47,7 @@
 
 inline constexpr int kTransmitGpioUnset = -1;
 inline constexpr int kDefaultTransmitGpio = 4;
+inline constexpr int kDefaultRp1GpioDriveMa = 2;
 inline constexpr std::array<int, 2> kSupportedTransmitGpio = {4, 20};
 inline constexpr int kSelectorGpioUnset = -1;
 inline constexpr double WSPR_AUDIO_OFFSET_HZ = 1500.0;
@@ -76,6 +77,11 @@ inline constexpr bool is_supported_transmit_gpio(int gpio) noexcept
 inline constexpr bool is_valid_selector_gpio(int gpio) noexcept
 {
     return gpio >= 0 && gpio <= 27;
+}
+
+inline constexpr bool is_supported_rp1_gpio_drive_ma(int drive_ma) noexcept
+{
+    return drive_ma == 2 || drive_ma == 4 || drive_ma == 8 || drive_ma == 12;
 }
 
 struct WsprFrequencyEntry
@@ -268,6 +274,7 @@ struct ArgParserConfig
     TransmitBackendKind transmit_backend; ///< RF hardware backend.
     int gpio_tx_pin; ///< GPIO backend transmit pin.
     int gpio_power_level; ///< GPIO backend power level (0-7).
+    int rp1_gpio_drive_ma; ///< RP1 GPIO pad drive selection in mA.
     bool gpio_use_system_clock_frequency_estimate; ///< Enable the GPIO system-clock estimate.
     double gpio_frequency_residual_ppm; ///< RF residual added to a usable provider estimate.
     double gpio_manual_ppm; ///< Fixed GPIO correction and final configured fallback.
@@ -348,6 +355,7 @@ struct ArgParserConfig
           transmit_backend(TransmitBackendKind::GPIO),
           gpio_tx_pin(kTransmitGpioUnset),
           gpio_power_level(7),
+          rp1_gpio_drive_ma(kDefaultRp1GpioDriveMa),
           gpio_use_system_clock_frequency_estimate(false),
           gpio_frequency_residual_ppm(0.0),
           gpio_manual_ppm(0.0),
@@ -432,6 +440,7 @@ struct ArgParserConfig
         transmit_backend = other.transmit_backend;
         gpio_tx_pin = other.gpio_tx_pin;
         gpio_power_level = other.gpio_power_level;
+        rp1_gpio_drive_ma = other.rp1_gpio_drive_ma;
         gpio_use_system_clock_frequency_estimate = other.gpio_use_system_clock_frequency_estimate;
         gpio_frequency_residual_ppm = other.gpio_frequency_residual_ppm;
         gpio_manual_ppm = other.gpio_manual_ppm;
