@@ -56,7 +56,8 @@ sha256sum /boot/config-"$(uname -r)"
 Copy the target system's `rpi-2712` configuration to `.config`, apply
 `kernel/0001-clk-rp1-add-gp0-dma-lease.patch` followed by
 `kernel/0002-clk-rp1-add-gpclk-provider.patch` and
-`kernel/0003-rp1-gpclk-add-finite-event-executor.patch`, in that order, and
+`kernel/0003-rp1-gpclk-add-finite-event-executor.patch`, followed by
+`kernel/0004-rp1-gpclk-enable-live-finite-events.patch`, in that order, and
 enable:
 
 ```text
@@ -101,9 +102,36 @@ These tests do not qualify GPIO, DMA timing, RF output, or a kernel
 installation. KUnit execution requires the exact matching kernel and module;
 building KUnit is not equivalent to loading it.
 
-The third patch packages the version-2 finite-event request and executor
-contract. Its live-output path remains disabled until the executor has been
-separately installed and qualified on the matching kernel and hardware.
+The third patch packages the version-2 finite-event request and clock-disabled
+executor contract. The fourth patch precomputes one bounded divider DMA stream
+and uses an absolute soft-hrtimer deadline chain only for start/event-boundary
+gating and state. While the exclusive GPCLK0 DMA lease is active, the boundary
+gate reads and writes only GPCLK0's dedicated control register through raw MMIO.
+It does not use regmap, the clock manager's shared `regs_lock`, the shared GPCLK
+output-enable register, pinctrl, or the common-clock API. The normal clock path
+keeps the shared output-enable bit prepared until process-context cleanup
+disables the lease clock and restores the safe GPIO pin state.
+
+Submission leaves tick requests disabled, prepares the clock behind the safe
+input pin, forces the hardware gate off, selects the transmitting pin state,
+and arms a start epoch one millisecond in the future. The start callback alone
+applies the first event gate, executes a write barrier, and then enables tick
+requests. The RF gate therefore precedes possible consumption of divider word
+zero, but the writes are not claimed to be simultaneous hardware edges. The
+callback then advances the same timer to `start_epoch + first_event_duration`.
+Later deadlines add durations to
+that absolute chain rather than to callback arrival time. STOP, owner close,
+and provider removal cancel an armed start before it can enable DMA or RF.
+
+DMA boundaries use cumulative duration mapped onto the fixed WSPR tick grid.
+Each accepted event advances by at least one tick, total duration is bounded by
+the existing 110.592-second coherent buffer, and cumulative flooring bounds
+representation error below one tick without per-event rounding accumulation.
+Any observable gate failure at start, a later boundary, or terminal shutdown
+produces a failed state, stops tick generation, schedules safe process-context
+cleanup, and preserves an earlier terminal failure such as a missed deadline.
+The live-output path remains unqualified until that exact executor has been
+separately installed and exercised on matching hardware.
 
 ## Installation contract
 

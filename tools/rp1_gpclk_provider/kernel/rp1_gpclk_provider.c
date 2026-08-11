@@ -33,6 +33,7 @@
 #define RP1_GPCLK_SYMBOL_BYTES \
 		((size_t)RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32))
 #define RP1_GPCLK_EVENT_DEADLINE_SLACK_NS 5000000ULL
+#define RP1_GPCLK_EVENT_START_LEAD_NS 1000000ULL
 
 static bool live_output;
 module_param(live_output, bool, 0444);
@@ -71,9 +72,40 @@ struct rp1_gpclk_provider {
 	u32 terminal_reason;
 	ktime_t event_deadline;
 	bool event_submitted;
+	bool event_armed;
+	bool event_live;
+	size_t event_write_count;
+	struct work_struct event_cleanup_work;
 };
 
 static int deactivate_output(struct rp1_gpclk_provider *provider);
+static void stop_tick(struct rp1_gpclk_provider *provider);
+
+static void fail_event_locked(struct rp1_gpclk_provider *provider, u32 reason)
+{
+	rp1_gpclk_mark_event_failed(&provider->state,
+		&provider->terminal_reason, &provider->event_submitted,
+		&provider->event_armed, reason);
+}
+
+static int gate_event_output(struct rp1_gpclk_provider *provider, bool enabled)
+{
+	if (!provider->event_live)
+		return 0;
+	return rp1_gpclk_dma_lease_set_output(&provider->lease, enabled);
+}
+
+static enum hrtimer_restart fail_event_boundary(
+	struct rp1_gpclk_provider *provider, unsigned long flags, u32 reason)
+{
+	fail_event_locked(provider, reason);
+	stop_tick(provider);
+	/* Best effort only: preserve the triggering failure if shutdown fails. */
+	gate_event_output(provider, false);
+	spin_unlock_irqrestore(&provider->event_lock, flags);
+	schedule_work(&provider->event_cleanup_work);
+	return HRTIMER_NORESTART;
+}
 
 static enum hrtimer_restart event_deadline(struct hrtimer *timer)
 {
@@ -84,25 +116,59 @@ static enum hrtimer_restart event_deadline(struct hrtimer *timer)
 
 	spin_lock_irqsave(&provider->event_lock, flags);
 	if (!provider->event_submitted ||
-		provider->state != RP1_GPCLK_STATE_RUNNING) {
+		(!provider->event_armed &&
+		 provider->state != RP1_GPCLK_STATE_RUNNING)) {
 		spin_unlock_irqrestore(&provider->event_lock, flags);
 		return HRTIMER_NORESTART;
 	}
 	if (ktime_after(now, ktime_add_ns(provider->event_deadline,
 			RP1_GPCLK_EVENT_DEADLINE_SLACK_NS))) {
-		provider->state = RP1_GPCLK_STATE_FAILED;
-		provider->terminal_reason = RP1_GPCLK_TERMINAL_DEADLINE_MISSED;
-		provider->event_submitted = false;
+		return fail_event_boundary(provider, flags,
+			RP1_GPCLK_TERMINAL_DEADLINE_MISSED);
+	}
+	if (provider->event_armed) {
+		int ret = 0;
+
+		provider->event_armed = false;
+		if (provider->event_live) {
+			ret = gate_event_output(provider,
+				provider->event_program->events[0].flags &
+					RP1_GPCLK_EVENT_RF_ON);
+			if (!ret) {
+				/* Publish the GPCLK gate before DMA can consume word zero. */
+				wmb();
+				writel(DMA_TICK_REQ | DMA_TICK_SINGLE,
+					provider->dma_tick + DMA_TICK0_EN);
+				writel(1, provider->ticks + TICKS_DMA0_CTRL);
+			}
+		}
+		if (ret)
+			return fail_event_boundary(provider, flags,
+				RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+		provider->state = RP1_GPCLK_STATE_RUNNING;
+		provider->event_deadline = ktime_add_ns(provider->event_deadline,
+			provider->event_program->events[0].duration_ns);
+		hrtimer_set_expires(timer, provider->event_deadline);
 		spin_unlock_irqrestore(&provider->event_lock, flags);
-		return HRTIMER_NORESTART;
+		return HRTIMER_RESTART;
 	}
 	if (++provider->current_event == provider->event_program->event_count) {
+		stop_tick(provider);
+		if (gate_event_output(provider, false))
+			return fail_event_boundary(provider, flags,
+				RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
 		provider->state = RP1_GPCLK_STATE_COMPLETE;
 		provider->terminal_reason = RP1_GPCLK_TERMINAL_COMPLETE;
 		provider->event_submitted = false;
 		spin_unlock_irqrestore(&provider->event_lock, flags);
+		schedule_work(&provider->event_cleanup_work);
 		return HRTIMER_NORESTART;
 	}
+	if (gate_event_output(provider,
+		provider->event_program->events[provider->current_event].flags &
+			RP1_GPCLK_EVENT_RF_ON))
+		return fail_event_boundary(provider, flags,
+			RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
 	provider->event_deadline = ktime_add_ns(provider->event_deadline,
 		provider->event_program->events[provider->current_event].duration_ns);
 	hrtimer_set_expires(timer, provider->event_deadline);
@@ -110,47 +176,176 @@ static enum hrtimer_restart event_deadline(struct hrtimer *timer)
 	return HRTIMER_RESTART;
 }
 
+static int prepare_event_words(struct rp1_gpclk_provider *provider,
+	const struct rp1_gpclk_event_program *request)
+{
+	u64 accumulators[RP1_GPCLK_EVENT_MAX_TONES] = {};
+	u64 elapsed_ns = 0, previous_writes = 0;
+	size_t word_index = 0;
+	u32 last_word = 0;
+	u32 i;
+
+	for (i = 0; i < request->event_count; ++i) {
+		const struct rp1_gpclk_event *event = &request->events[i];
+		u64 cumulative_writes, writes, j;
+
+		elapsed_ns += event->duration_ns;
+		cumulative_writes = rp1_gpclk_event_cumulative_writes(elapsed_ns);
+		writes = cumulative_writes - previous_writes;
+		previous_writes = cumulative_writes;
+		for (j = 0; j < writes; ++j) {
+			if (event->flags & RP1_GPCLK_EVENT_RF_ON) {
+				const struct rp1_gpclk_symbol *tone =
+					&request->tones[event->tone_index];
+				u64 period = (u64)tone->lower_count + tone->upper_count;
+
+				accumulators[event->tone_index] += tone->lower_count;
+				if (accumulators[event->tone_index] >= period) {
+					last_word = rp1_gpclk_pack_fraction(
+						tone->lower_divider_word);
+					accumulators[event->tone_index] -= period;
+				} else {
+					last_word = rp1_gpclk_pack_fraction(
+						tone->upper_divider_word);
+				}
+			}
+			provider->words[word_index++] = last_word;
+		}
+	}
+	provider->event_write_count = word_index;
+	return word_index ? 0 : -EINVAL;
+}
+
 static int submit_event_program(struct rp1_gpclk_provider *provider,
 	const struct rp1_gpclk_event_program *request)
 {
+	struct dma_slave_config config = {};
+	struct dma_async_tx_descriptor *descriptor;
 	unsigned long flags;
+	dma_cookie_t cookie;
+	int ret;
 
-	if (live_output)
-		return -EOPNOTSUPP;
 	if (!rp1_gpclk_valid_event_program(request, provider->generation))
 		return -EINVAL;
 	if (provider->state == RP1_GPCLK_STATE_RUNNING ||
 		provider->state == RP1_GPCLK_STATE_DRAINING)
 		return -EBUSY;
+	if (live_output) {
+		ret = prepare_event_words(provider, request);
+		if (ret)
+			return ret;
+		ret = rp1_gpclk_dma_lease_configure(&provider->lease, 3,
+			provider->words[0]);
+		if (ret)
+			return ret;
+		config.direction = DMA_MEM_TO_DEV;
+		config.dst_addr = provider->lease.divider_phys_addr;
+		config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+		config.dst_maxburst = 1;
+		ret = dmaengine_slave_config(provider->dma, &config);
+		if (ret)
+			return ret;
+		descriptor = dmaengine_prep_slave_single(provider->dma,
+			provider->words_dma, provider->event_write_count * sizeof(u32),
+			DMA_MEM_TO_DEV, DMA_CTRL_ACK);
+		if (!descriptor)
+			return -EIO;
+		cookie = dmaengine_submit(descriptor);
+		ret = dma_submit_error(cookie);
+		if (ret)
+			return ret;
+		ret = pinctrl_select_state(provider->pinctrl, provider->safe_state);
+		if (ret)
+			goto terminate;
+		ret = rp1_gpclk_dma_lease_enable(provider->clk, &provider->lease);
+		if (ret)
+			goto terminate;
+		provider->output_active = true;
+		ret = rp1_gpclk_dma_lease_set_output(&provider->lease, false);
+		if (ret)
+			goto deactivate;
+		ret = pinctrl_select_state(provider->pinctrl,
+			provider->drive_states[provider->drive_index]);
+		if (ret)
+			goto deactivate;
+	}
 	memcpy(provider->event_program, request, sizeof(*request));
 	spin_lock_irqsave(&provider->event_lock, flags);
 	provider->generation = request->generation;
 	provider->current_event = 0;
 	provider->terminal_reason = RP1_GPCLK_TERMINAL_NONE;
-	provider->state = RP1_GPCLK_STATE_RUNNING;
 	provider->event_submitted = true;
+	provider->event_armed = true;
+	provider->event_live = live_output;
+	provider->state = RP1_GPCLK_STATE_IDLE;
 	provider->event_deadline = ktime_add_ns(ktime_get(),
-		request->events[0].duration_ns);
+		RP1_GPCLK_EVENT_START_LEAD_NS);
 	spin_unlock_irqrestore(&provider->event_lock, flags);
+	if (live_output) {
+		writel(RP1_GPCLK_TICK_DIVIDER, provider->ticks + TICKS_DMA0_CYCLES);
+		writel(DMA_TICK_DWELL, provider->dma_tick + DMA_TICK0_CTRL);
+		dma_async_issue_pending(provider->dma);
+	}
 	hrtimer_start(&provider->event_timer, provider->event_deadline,
-		HRTIMER_MODE_ABS);
+		HRTIMER_MODE_ABS_SOFT);
 	return 0;
+deactivate:
+	deactivate_output(provider);
+terminate:
+	dmaengine_terminate_sync(provider->dma);
+	return ret;
 }
 
 static void stop_event_program(struct rp1_gpclk_provider *provider, u32 reason)
 {
 	unsigned long flags;
+	int gate_ret = 0;
 
 	hrtimer_cancel(&provider->event_timer);
+	stop_tick(provider);
+	if (provider->event_live) {
+		gate_ret = gate_event_output(provider, false);
+		dmaengine_terminate_sync(provider->dma);
+	}
 	spin_lock_irqsave(&provider->event_lock, flags);
 	if (provider->event_submitted) {
 		provider->state = RP1_GPCLK_STATE_DRAINING;
 		provider->event_submitted = false;
-		provider->terminal_reason = reason;
-		provider->state = RP1_GPCLK_STATE_COMPLETE;
+		provider->event_armed = false;
+		provider->event_live = false;
+		if (gate_ret)
+			fail_event_locked(provider,
+				RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+		else {
+			provider->terminal_reason = reason;
+			provider->state = RP1_GPCLK_STATE_COMPLETE;
+		}
 	}
 	spin_unlock_irqrestore(&provider->event_lock, flags);
 	deactivate_output(provider);
+}
+
+static void cleanup_event_program(struct work_struct *work)
+{
+	struct rp1_gpclk_provider *provider = container_of(work,
+		struct rp1_gpclk_provider, event_cleanup_work);
+	unsigned long flags;
+	int gate_ret;
+
+	mutex_lock(&provider->lock);
+	if (provider->event_live && !provider->event_submitted) {
+		gate_ret = gate_event_output(provider, false);
+		if (gate_ret) {
+			spin_lock_irqsave(&provider->event_lock, flags);
+			fail_event_locked(provider,
+				RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+			spin_unlock_irqrestore(&provider->event_lock, flags);
+		}
+		dmaengine_terminate_sync(provider->dma);
+		deactivate_output(provider);
+		provider->event_live = false;
+	}
+	mutex_unlock(&provider->lock);
 }
 
 static int drive_index(u32 drive_ma)
@@ -344,6 +539,7 @@ static long provider_ioctl(struct file *file, unsigned int command,
 			provider->current_event = 0;
 			provider->terminal_reason = RP1_GPCLK_TERMINAL_NONE;
 			provider->event_submitted = false;
+			provider->event_armed = false;
 		}
 		break;
 	case RP1_GPCLK_IOC_SUBMIT:
@@ -387,7 +583,14 @@ static long provider_ioctl(struct file *file, unsigned int command,
 		break;
 	case RP1_GPCLK_IOC_RELEASE:
 		if (provider->owner != file) { ret = -EPERM; break; }
-		if (provider->state == RP1_GPCLK_STATE_RUNNING || provider->state == RP1_GPCLK_STATE_DRAINING) { ret = -EBUSY; break; }
+		if (provider->event_submitted ||
+			provider->state == RP1_GPCLK_STATE_RUNNING ||
+			provider->state == RP1_GPCLK_STATE_DRAINING) { ret = -EBUSY; break; }
+		if (provider->event_live) {
+			dmaengine_terminate_sync(provider->dma);
+			deactivate_output(provider);
+			provider->event_live = false;
+		}
 		if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
 		provider->lease_held = false; provider->owner = NULL; provider->state = RP1_GPCLK_STATE_IDLE;
 		provider->current_event = 0; provider->terminal_reason = RP1_GPCLK_TERMINAL_NONE;
@@ -410,20 +613,23 @@ static int provider_release_file(struct inode *inode, struct file *file)
 {
 	struct rp1_gpclk_provider *provider = file->private_data;
 	mutex_lock(&provider->lock);
-	if (provider->owner == file && provider->state != RP1_GPCLK_STATE_RUNNING &&
+	if (provider->owner == file && provider->event_submitted) {
+		stop_event_program(provider, RP1_GPCLK_TERMINAL_OWNER_CLOSED);
+		if (provider->lease_held)
+			rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
+		provider->lease_held = false; provider->owner = NULL;
+	} else if (provider->owner == file && provider->state != RP1_GPCLK_STATE_RUNNING &&
 		provider->state != RP1_GPCLK_STATE_DRAINING) {
+		if (provider->event_live) {
+			dmaengine_terminate_sync(provider->dma);
+			deactivate_output(provider);
+			provider->event_live = false;
+		}
 		if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
 		provider->lease_held = false; provider->owner = NULL;
 	} else if (provider->owner == file) {
-		if (provider->event_submitted) {
-			stop_event_program(provider, RP1_GPCLK_TERMINAL_OWNER_CLOSED);
-			if (provider->lease_held)
-				rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
-			provider->lease_held = false; provider->owner = NULL;
-		} else {
-			provider->release_pending = true;
-			provider->state = RP1_GPCLK_STATE_DRAINING;
-		}
+		provider->release_pending = true;
+		provider->state = RP1_GPCLK_STATE_DRAINING;
 	}
 	mutex_unlock(&provider->lock);
 	return 0;
@@ -445,8 +651,9 @@ static int rp1_gpclk_provider_probe(struct platform_device *pdev)
 	provider->dev = &pdev->dev; mutex_init(&provider->lock);
 	spin_lock_init(&provider->event_lock);
 	hrtimer_setup(&provider->event_timer, event_deadline,
-		CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+		CLOCK_MONOTONIC, HRTIMER_MODE_ABS_SOFT);
 	INIT_DELAYED_WORK(&provider->verify_work, verify_completion);
+	INIT_WORK(&provider->event_cleanup_work, cleanup_event_program);
 	provider->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(provider->pinctrl)) return PTR_ERR(provider->pinctrl);
 	provider->safe_state = pinctrl_lookup_state(provider->pinctrl, "safe");
@@ -492,6 +699,7 @@ static void rp1_gpclk_provider_remove(struct platform_device *pdev)
 	struct rp1_gpclk_provider *provider = platform_get_drvdata(pdev);
 	misc_deregister(&provider->misc); cancel_delayed_work_sync(&provider->verify_work);
 	stop_event_program(provider, RP1_GPCLK_TERMINAL_PROVIDER_REMOVED);
+	cancel_work_sync(&provider->event_cleanup_work);
 	stop_tick(provider);
 	if (provider->submitted) {
 		dmaengine_terminate_sync(provider->dma);

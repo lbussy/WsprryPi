@@ -46,7 +46,7 @@ static struct rp1_gpclk_event_program *valid_event_program(
 	program->tone_count = 2;
 	program->event_count = 3;
 	program->generation = generation;
-	program->total_duration_ns = 60;
+	program->total_duration_ns = 60000000;
 	program->tones[0] = (struct rp1_gpclk_symbol) {
 		.lower_divider_word = 232445, .upper_divider_word = 232446,
 		.lower_count = 12, .upper_count = 13,
@@ -56,14 +56,14 @@ static struct rp1_gpclk_event_program *valid_event_program(
 		.lower_count = 11, .upper_count = 14,
 	};
 	program->events[0] = (struct rp1_gpclk_event) {
-		.duration_ns = 10, .tone_index = 0,
+		.duration_ns = 10000000, .tone_index = 0,
 		.flags = RP1_GPCLK_EVENT_RF_ON,
 	};
 	program->events[1] = (struct rp1_gpclk_event) {
-		.duration_ns = 20, .tone_index = 1,
+		.duration_ns = 20000000, .tone_index = 1,
 		.flags = RP1_GPCLK_EVENT_RF_ON,
 	};
-	program->events[2].duration_ns = 30;
+	program->events[2].duration_ns = 30000000;
 	return program;
 }
 
@@ -135,6 +135,67 @@ static void event_program_test(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, program);
 	program->total_duration_ns--;
 	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+	program = valid_event_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->events[0].duration_ns = 1;
+	program->total_duration_ns = 50000001;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+	program = valid_event_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->events[2].duration_ns = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS;
+	program->total_duration_ns = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS + 30000000;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+	KUNIT_EXPECT_EQ(test, rp1_gpclk_event_cumulative_writes(0), 0ULL);
+	KUNIT_EXPECT_EQ(test,
+		rp1_gpclk_event_cumulative_writes(
+			RP1_GPCLK_WSPR_FRAME_NOMINAL_NS),
+		RP1_GPCLK_EVENT_MAX_WRITES);
+	KUNIT_EXPECT_LT(test,
+		rp1_gpclk_event_cumulative_writes(10000000ULL),
+		rp1_gpclk_event_cumulative_writes(30000000ULL));
+}
+
+static void terminal_failure_preservation_test(struct kunit *test)
+{
+	u32 state = RP1_GPCLK_STATE_RUNNING;
+	u32 reason = RP1_GPCLK_TERMINAL_NONE;
+	bool submitted = true;
+	bool armed = true;
+
+	rp1_gpclk_mark_event_failed(&state, &reason, &submitted, &armed,
+		RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+	KUNIT_EXPECT_EQ(test, state, RP1_GPCLK_STATE_FAILED);
+	KUNIT_EXPECT_EQ(test, reason, RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+	KUNIT_EXPECT_FALSE(test, submitted);
+	KUNIT_EXPECT_FALSE(test, armed);
+
+	KUNIT_EXPECT_EQ(test,
+		rp1_gpclk_preserve_terminal_reason(RP1_GPCLK_TERMINAL_NONE,
+			RP1_GPCLK_TERMINAL_ADAPTER_FAILED),
+		RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+	KUNIT_EXPECT_EQ(test,
+		rp1_gpclk_preserve_terminal_reason(RP1_GPCLK_TERMINAL_COMPLETE,
+			RP1_GPCLK_TERMINAL_ADAPTER_FAILED),
+		RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+	state = RP1_GPCLK_STATE_RUNNING;
+	reason = RP1_GPCLK_TERMINAL_DEADLINE_MISSED;
+	submitted = true;
+	armed = false;
+	rp1_gpclk_mark_event_failed(&state, &reason, &submitted, &armed,
+		RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
+	KUNIT_EXPECT_EQ(test, state, RP1_GPCLK_STATE_FAILED);
+	KUNIT_EXPECT_EQ(test, reason, RP1_GPCLK_TERMINAL_DEADLINE_MISSED);
+	KUNIT_EXPECT_FALSE(test, submitted);
+	KUNIT_EXPECT_EQ(test,
+		rp1_gpclk_preserve_terminal_reason(
+			RP1_GPCLK_TERMINAL_DEADLINE_MISSED,
+			RP1_GPCLK_TERMINAL_ADAPTER_FAILED),
+		RP1_GPCLK_TERMINAL_DEADLINE_MISSED);
+	KUNIT_EXPECT_EQ(test,
+		rp1_gpclk_preserve_terminal_reason(
+			RP1_GPCLK_TERMINAL_ADAPTER_FAILED,
+			RP1_GPCLK_TERMINAL_COMPLETE),
+		RP1_GPCLK_TERMINAL_ADAPTER_FAILED);
 }
 
 static struct kunit_case provider_cases[] = {
@@ -142,6 +203,7 @@ static struct kunit_case provider_cases[] = {
 	KUNIT_CASE(program_and_packing_test),
 	KUNIT_CASE(lease_generation_test),
 	KUNIT_CASE(event_program_test),
+	KUNIT_CASE(terminal_failure_preservation_test),
 	{}
 };
 

@@ -2,7 +2,33 @@
 #define RP1_GPCLK_CONTRACT_H
 
 #include <linux/rp1_gpclk.h>
+#include <linux/math64.h>
 #include <linux/overflow.h>
+
+#define RP1_GPCLK_EVENT_MAX_WRITES \
+	((u64)RP1_GPCLK_WRITES_PER_SYMBOL * RP1_GPCLK_WSPR_SYMBOL_COUNT)
+
+static inline u64 rp1_gpclk_event_cumulative_writes(u64 duration_ns)
+{
+	return mul_u64_u64_div_u64(duration_ns,
+		RP1_GPCLK_EVENT_MAX_WRITES,
+		RP1_GPCLK_WSPR_FRAME_NOMINAL_NS);
+}
+
+static inline u32 rp1_gpclk_preserve_terminal_reason(u32 existing, u32 next)
+{
+	return existing == RP1_GPCLK_TERMINAL_DEADLINE_MISSED ||
+		existing == RP1_GPCLK_TERMINAL_ADAPTER_FAILED ? existing : next;
+}
+
+static inline void rp1_gpclk_mark_event_failed(u32 *state, u32 *reason,
+	bool *submitted, bool *armed, u32 failure_reason)
+{
+	*state = RP1_GPCLK_STATE_FAILED;
+	*reason = rp1_gpclk_preserve_terminal_reason(*reason, failure_reason);
+	*submitted = false;
+	*armed = false;
+}
 
 static inline bool rp1_gpclk_valid_header(u16 version, u16 size,
 	size_t expected)
@@ -94,7 +120,20 @@ static inline bool rp1_gpclk_valid_event_program(
 			check_add_overflow(total, event->duration_ns, &total))
 			return false;
 	}
-	return total == request->total_duration_ns;
+	if (total != request->total_duration_ns ||
+		rp1_gpclk_event_cumulative_writes(total) >
+			RP1_GPCLK_EVENT_MAX_WRITES)
+		return false;
+	total = 0;
+	for (i = 0; i < request->event_count; ++i) {
+		u64 next = total + request->events[i].duration_ns;
+
+		if (rp1_gpclk_event_cumulative_writes(next) ==
+			rp1_gpclk_event_cumulative_writes(total))
+			return false;
+		total = next;
+	}
+	return true;
 }
 
 #endif
