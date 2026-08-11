@@ -444,8 +444,8 @@ static int rp1_gpclk_provider_probe(struct platform_device *pdev)
 	if (!provider) return -ENOMEM;
 	provider->dev = &pdev->dev; mutex_init(&provider->lock);
 	spin_lock_init(&provider->event_lock);
-	hrtimer_init(&provider->event_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
-	provider->event_timer.function = event_deadline;
+	hrtimer_setup(&provider->event_timer, event_deadline,
+		CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
 	INIT_DELAYED_WORK(&provider->verify_work, verify_completion);
 	provider->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(provider->pinctrl)) return PTR_ERR(provider->pinctrl);

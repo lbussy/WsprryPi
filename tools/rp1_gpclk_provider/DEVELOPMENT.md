@@ -55,7 +55,9 @@ sha256sum /boot/config-"$(uname -r)"
 
 Copy the target system's `rpi-2712` configuration to `.config`, apply
 `kernel/0001-clk-rp1-add-gp0-dma-lease.patch` followed by
-`kernel/0002-clk-rp1-add-gpclk-provider.patch`, and enable:
+`kernel/0002-clk-rp1-add-gpclk-provider.patch` and
+`kernel/0003-rp1-gpclk-add-finite-event-executor.patch`, in that order, and
+enable:
 
 ```text
 CONFIG_KUNIT=y
@@ -98,6 +100,10 @@ make -C src -j"$(nproc)" \
 These tests do not qualify GPIO, DMA timing, RF output, or a kernel
 installation. KUnit execution requires the exact matching kernel and module;
 building KUnit is not equivalent to loading it.
+
+The third patch packages the version-2 finite-event request and executor
+contract. Its live-output path remains disabled until the executor has been
+separately installed and qualified on the matching kernel and hardware.
 
 ## Installation contract
 
