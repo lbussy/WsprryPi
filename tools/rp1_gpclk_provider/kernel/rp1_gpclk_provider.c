@@ -248,6 +248,7 @@ static long provider_ioctl(struct file *file, unsigned int command,
 		if (!ret) {
 			provider->drive_index = drive_index(acquire.drive_ma);
 			provider->owner = file; provider->lease_held = true;
+			provider->generation = 0;
 			provider->state = RP1_GPCLK_STATE_IDLE;
 		}
 		break;

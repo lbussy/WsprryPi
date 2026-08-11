@@ -71,9 +71,21 @@ static void program_and_packing_test(struct kunit *test)
 	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
 }
 
+static void lease_generation_test(struct kunit *test)
+{
+	struct rp1_gpclk_program *program = valid_program(test, 1);
+
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 0));
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
+	/* A new, exclusive lease resets its previous generation to zero. */
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 0));
+}
+
 static struct kunit_case provider_cases[] = {
 	KUNIT_CASE(header_and_drive_test),
 	KUNIT_CASE(program_and_packing_test),
+	KUNIT_CASE(lease_generation_test),
 	{}
 };
 

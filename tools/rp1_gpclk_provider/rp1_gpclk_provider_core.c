@@ -32,6 +32,7 @@ int rp1_gpclk_core_acquire(struct rp1_gpclk_provider_core *core,
 		return -EBUSY;
 	core->owned = 1;
 	core->drive_ma = request->drive_ma;
+	core->generation = 0;
 	core->state = RP1_GPCLK_STATE_IDLE;
 	return 0;
 }

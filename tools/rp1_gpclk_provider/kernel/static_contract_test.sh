@@ -23,6 +23,7 @@ if grep -Eq 'divider-dma-address|of_property_read.*divider' "$provider"; then
 	exit 1
 fi
 grep -q 'rp1_gpclk_dma_lease_get' "$provider"
+grep -q 'provider->generation = 0' "$provider"
 grep -q 'rp1_gpclk_dma_lease_enable' "$provider"
 grep -q 'rp1_gpclk_dma_lease_disable' "$provider"
 grep -q 'pinctrl_select_state' "$provider"
