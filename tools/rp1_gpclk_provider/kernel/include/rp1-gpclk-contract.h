@@ -19,6 +19,15 @@ static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
 	return (divider_word & 0xffffU) << 16;
 }
 
+static inline bool rp1_gpclk_valid_frame_elapsed(u64 elapsed_ns)
+{
+	const u64 nominal = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS;
+	const u64 tolerance = RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS;
+
+	return elapsed_ns >= nominal - tolerance &&
+		elapsed_ns <= nominal + tolerance;
+}
+
 static inline bool rp1_gpclk_valid_program(
 	const struct rp1_gpclk_program *request, u64 previous_generation)
 {

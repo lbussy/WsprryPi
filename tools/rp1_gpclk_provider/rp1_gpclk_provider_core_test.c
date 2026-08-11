@@ -30,6 +30,11 @@ static struct rp1_gpclk_program program(unsigned long long generation)
 int main(void)
 {
 	unsigned drive; struct rp1_gpclk_provider_core core = {0};
+	EXPECT(rp1_gpclk_core_valid_frame_elapsed(110592000000ULL), "nominal cadence");
+	EXPECT(rp1_gpclk_core_valid_frame_elapsed(110585250000ULL), "lower cadence bound");
+	EXPECT(rp1_gpclk_core_valid_frame_elapsed(110598750000ULL), "upper cadence bound");
+	EXPECT(!rp1_gpclk_core_valid_frame_elapsed(110585249999ULL), "below cadence bound");
+	EXPECT(!rp1_gpclk_core_valid_frame_elapsed(110598750001ULL), "above cadence bound");
 	for (drive=2; drive<=12; drive += drive==2?2:4) { struct rp1_gpclk_acquire a=acquire_request(drive); EXPECT(!rp1_gpclk_core_acquire(&core,&a),"drive acquire"); EXPECT(!rp1_gpclk_core_release(&core),"idle release"); }
 	for (drive=0; drive<=16; drive+=2) if (drive!=2&&drive!=4&&drive!=8&&drive!=12) { struct rp1_gpclk_acquire a=acquire_request(drive); EXPECT(rp1_gpclk_core_acquire(&core,&a)==-EINVAL,"invalid drive rejection"); }
 	{ struct rp1_gpclk_acquire a=acquire_request(2); a.version=2; EXPECT(rp1_gpclk_core_acquire(&core,&a)==-EPROTO,"version rejection"); a.version=1;a.size--;EXPECT(rp1_gpclk_core_acquire(&core,&a)==-EPROTO,"size rejection"); }

@@ -1,5 +1,11 @@
 # Phase 6K: minimum-drive live full-frame qualification
 
+> Phase 6L correction: the 110.699-second value below was terminal UAPI
+> observation latency, not DMA cadence. Direct tick-enable-to-DMA-callback
+> instrumentation measured 110.58857 seconds, approximately -31 ppm from
+> nominal and inside the subsequently enforced +/-6.75 ms timing window. See
+> `rp1-gpclk-phase6l-cadence-verification.md`.
+
 ## Outcome
 
 One scheduler-originated 162-symbol WSPR frame completed on `wspr5.local`

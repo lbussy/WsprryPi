@@ -1,4 +1,7 @@
 Phase 6K minimum-drive live full-frame summary
+Phase 6L correction: 110.699024 s was terminal state-observation latency, not
+the DMA interval. Direct kernel instrumentation later measured approximately
+110.58857 s (-31 ppm), within the enforced +/-6.75 ms frame tolerance.
 Date: 2026-08-10
 Host: wspr5.local / Raspberry Pi 5 / BCM2712
 Kernel: 6.18.44-v8-16k+ #3

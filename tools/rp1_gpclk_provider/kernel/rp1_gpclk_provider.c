@@ -5,6 +5,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/io.h>
+#include <linux/ktime.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -58,6 +59,8 @@ struct rp1_gpclk_provider {
 	bool submitted;
 	bool output_active;
 	bool release_pending;
+	u64 started_ns;
+	bool timing_failed;
 	struct delayed_work verify_work;
 };
 
@@ -103,7 +106,7 @@ static void verify_completion(struct work_struct *work)
 	mutex_lock(&provider->lock);
 	provider->submitted = false;
 	ret = ret ?: deactivate_output(provider);
-	provider->state = ret || div_int != 3 ||
+	provider->state = ret || provider->timing_failed || div_int != 3 ||
 		div_frac != provider->expected_final ?
 		RP1_GPCLK_STATE_FAILED : RP1_GPCLK_STATE_COMPLETE;
 	if (provider->release_pending) {
@@ -118,8 +121,10 @@ static void verify_completion(struct work_struct *work)
 static void transfer_done(void *argument)
 {
 	struct rp1_gpclk_provider *provider = argument;
+	u64 elapsed_ns = ktime_get_ns() - provider->started_ns;
 
 	stop_tick(provider);
+	provider->timing_failed = !rp1_gpclk_valid_frame_elapsed(elapsed_ns);
 	schedule_delayed_work(&provider->verify_work, msecs_to_jiffies(50));
 }
 
@@ -191,6 +196,7 @@ static int submit_program(struct rp1_gpclk_provider *provider,
 		(size_t)request->symbol_count * RP1_GPCLK_WRITES_PER_SYMBOL - 1];
 	provider->state = RP1_GPCLK_STATE_RUNNING;
 	provider->submitted = true;
+	provider->timing_failed = false;
 	if (!live_output)
 		goto start_dma;
 	ret = pinctrl_select_state(provider->pinctrl,
@@ -208,6 +214,7 @@ start_dma:
 	writel(DMA_TICK_DWELL,
 		provider->dma_tick + DMA_TICK0_CTRL);
 	dma_async_issue_pending(provider->dma);
+	provider->started_ns = ktime_get_ns();
 	writel(DMA_TICK_REQ | DMA_TICK_SINGLE,
 		provider->dma_tick + DMA_TICK0_EN);
 	writel(1, provider->ticks + TICKS_DMA0_CTRL);

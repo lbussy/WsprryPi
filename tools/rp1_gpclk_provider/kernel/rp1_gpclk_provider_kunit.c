@@ -41,6 +41,11 @@ static void header_and_drive_test(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(8));
 	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(12));
 	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_drive(6));
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110592000000ULL));
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110585250000ULL));
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110598750000ULL));
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110585249999ULL));
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110598750001ULL));
 }
 
 static void program_and_packing_test(struct kunit *test)

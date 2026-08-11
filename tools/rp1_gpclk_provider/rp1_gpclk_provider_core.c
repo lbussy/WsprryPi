@@ -12,6 +12,15 @@ static int valid_drive(__u32 drive)
 	return drive == 2 || drive == 4 || drive == 8 || drive == 12;
 }
 
+int rp1_gpclk_core_valid_frame_elapsed(__u64 elapsed_ns)
+{
+	const __u64 nominal = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS;
+	const __u64 tolerance = RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS;
+
+	return elapsed_ns >= nominal - tolerance &&
+		elapsed_ns <= nominal + tolerance;
+}
+
 int rp1_gpclk_core_acquire(struct rp1_gpclk_provider_core *core,
 	const struct rp1_gpclk_acquire *request)
 {

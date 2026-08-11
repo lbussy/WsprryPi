@@ -33,6 +33,13 @@ state to draining but does not truncate the already-linked frame. Closing the
 owner while active defers lease release until that same finite drain and
 provider-owned cleanup complete.
 
+The provider measures the interval from tick enable to the DMA completion
+callback and fails the generation if it falls outside 110.592 seconds plus or
+minus 6.75 ms. That bound is half of one 12 kHz WSPR reference sample per
+symbol across the 162-symbol frame. Terminal UAPI observation occurs later
+because final-divider verification is deliberately delayed; it must not be
+used as the DMA cadence measurement.
+
 The portable core remains independently testable and cannot enable, mux, or
 manipulate GPCLK hardware.
 

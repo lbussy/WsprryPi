@@ -29,6 +29,7 @@ grep -q 'pinctrl_select_state' "$provider"
 grep -q 'RP1_GPCLK_WRITES_PER_SYMBOL' "$provider"
 grep -q 'RP1_GPCLK_TICK_DIVIDER' "$provider"
 grep -q 'RP1_GPCLK_WSPR_SYMBOL_COUNT' "$provider"
+grep -q 'rp1_gpclk_valid_frame_elapsed' "$provider"
 grep -q 'dmaengine_prep_slave_single' "$provider"
 if grep -q 'dmaengine_prep_slave_sg' "$provider"; then
 	echo "provider splits the WSPR frame into scheduler-dependent submissions" >&2

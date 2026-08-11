@@ -21,5 +21,6 @@ int rp1_gpclk_core_stop(struct rp1_gpclk_provider_core *, __u64 generation);
 int rp1_gpclk_core_complete(struct rp1_gpclk_provider_core *, __u64 generation,
 	int failed);
 int rp1_gpclk_core_release(struct rp1_gpclk_provider_core *);
+int rp1_gpclk_core_valid_frame_elapsed(__u64 elapsed_ns);
 
 #endif

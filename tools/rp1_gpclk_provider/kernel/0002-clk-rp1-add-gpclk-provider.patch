@@ -40,10 +40,10 @@ index 29b2c6838..42b05f4e5 100644
  obj-$(CONFIG_COMMON_CLK_HI655X)		+= clk-hi655x.o
 diff --git a/drivers/clk/rp1-gpclk-contract.h b/drivers/clk/rp1-gpclk-contract.h
 new file mode 100644
-index 000000000..48c19e7b9
+index 000000000..aee149b8b
 --- /dev/null
 +++ b/drivers/clk/rp1-gpclk-contract.h
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,60 @@
 +#ifndef RP1_GPCLK_CONTRACT_H
 +#define RP1_GPCLK_CONTRACT_H
 +
@@ -63,6 +63,15 @@ index 000000000..48c19e7b9
 +static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
 +{
 +	return (divider_word & 0xffffU) << 16;
++}
++
++static inline bool rp1_gpclk_valid_frame_elapsed(u64 elapsed_ns)
++{
++	const u64 nominal = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS;
++	const u64 tolerance = RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS;
++
++	return elapsed_ns >= nominal - tolerance &&
++		elapsed_ns <= nominal + tolerance;
 +}
 +
 +static inline bool rp1_gpclk_valid_program(
@@ -97,10 +106,10 @@ index 000000000..48c19e7b9
 +#endif
 diff --git a/drivers/clk/rp1-gpclk-provider-kunit.c b/drivers/clk/rp1-gpclk-provider-kunit.c
 new file mode 100644
-index 000000000..a92a3b21b
+index 000000000..842f2dbaf
 --- /dev/null
 +++ b/drivers/clk/rp1-gpclk-provider-kunit.c
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,86 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <kunit/test.h>
 +
@@ -144,6 +153,11 @@ index 000000000..a92a3b21b
 +	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(8));
 +	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(12));
 +	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_drive(6));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110592000000ULL));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110585250000ULL));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110598750000ULL));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110585249999ULL));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110598750001ULL));
 +}
 +
 +static void program_and_packing_test(struct kunit *test)
@@ -184,10 +198,10 @@ index 000000000..a92a3b21b
 +MODULE_DESCRIPTION("RP1 GPCLK provider contract KUnit tests");
 diff --git a/drivers/clk/rp1-gpclk-provider.c b/drivers/clk/rp1-gpclk-provider.c
 new file mode 100644
-index 000000000..f818182e8
+index 000000000..059708fae
 --- /dev/null
 +++ b/drivers/clk/rp1-gpclk-provider.c
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,386 @@
 +// SPDX-License-Identifier: GPL-2.0
 +#include <linux/clk.h>
 +#include <linux/completion.h>
@@ -195,6 +209,7 @@ index 000000000..f818182e8
 +#include <linux/dma-mapping.h>
 +#include <linux/fs.h>
 +#include <linux/io.h>
++#include <linux/ktime.h>
 +#include <linux/miscdevice.h>
 +#include <linux/module.h>
 +#include <linux/mutex.h>
@@ -248,6 +263,8 @@ index 000000000..f818182e8
 +	bool submitted;
 +	bool output_active;
 +	bool release_pending;
++	u64 started_ns;
++	bool timing_failed;
 +	struct delayed_work verify_work;
 +};
 +
@@ -293,7 +310,7 @@ index 000000000..f818182e8
 +	mutex_lock(&provider->lock);
 +	provider->submitted = false;
 +	ret = ret ?: deactivate_output(provider);
-+	provider->state = ret || div_int != 3 ||
++	provider->state = ret || provider->timing_failed || div_int != 3 ||
 +		div_frac != provider->expected_final ?
 +		RP1_GPCLK_STATE_FAILED : RP1_GPCLK_STATE_COMPLETE;
 +	if (provider->release_pending) {
@@ -308,8 +325,10 @@ index 000000000..f818182e8
 +static void transfer_done(void *argument)
 +{
 +	struct rp1_gpclk_provider *provider = argument;
++	u64 elapsed_ns = ktime_get_ns() - provider->started_ns;
 +
 +	stop_tick(provider);
++	provider->timing_failed = !rp1_gpclk_valid_frame_elapsed(elapsed_ns);
 +	schedule_delayed_work(&provider->verify_work, msecs_to_jiffies(50));
 +}
 +
@@ -381,6 +400,7 @@ index 000000000..f818182e8
 +		(size_t)request->symbol_count * RP1_GPCLK_WRITES_PER_SYMBOL - 1];
 +	provider->state = RP1_GPCLK_STATE_RUNNING;
 +	provider->submitted = true;
++	provider->timing_failed = false;
 +	if (!live_output)
 +		goto start_dma;
 +	ret = pinctrl_select_state(provider->pinctrl,
@@ -398,6 +418,7 @@ index 000000000..f818182e8
 +	writel(DMA_TICK_DWELL,
 +		provider->dma_tick + DMA_TICK0_CTRL);
 +	dma_async_issue_pending(provider->dma);
++	provider->started_ns = ktime_get_ns();
 +	writel(DMA_TICK_REQ | DMA_TICK_SINGLE,
 +		provider->dma_tick + DMA_TICK0_EN);
 +	writel(1, provider->ticks + TICKS_DMA0_CTRL);
@@ -569,10 +590,10 @@ index 000000000..f818182e8
 +MODULE_DESCRIPTION("RP1 GPCLK provider-owned tick DMA UAPI");
 diff --git a/include/uapi/linux/rp1_gpclk.h b/include/uapi/linux/rp1_gpclk.h
 new file mode 100644
-index 000000000..19fb2cb85
+index 000000000..4c3e71912
 --- /dev/null
 +++ b/include/uapi/linux/rp1_gpclk.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,75 @@
 +#ifndef WSPRRYPI_RP1_GPCLK_UAPI_H
 +#define WSPRRYPI_RP1_GPCLK_UAPI_H
 +
@@ -593,6 +614,8 @@ index 000000000..19fb2cb85
 +#define RP1_GPCLK_WRITES_PER_SYMBOL 66792U
 +#define RP1_GPCLK_WSPR_SYMBOL_COUNT 162U
 +#define RP1_GPCLK_TICK_DIVIDER 511U
++#define RP1_GPCLK_WSPR_FRAME_NOMINAL_NS 110592000000ULL
++#define RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS 6750000ULL
 +
 +enum rp1_gpclk_state {
 +	RP1_GPCLK_STATE_IDLE = 0,
