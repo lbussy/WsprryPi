@@ -2,6 +2,7 @@
 #define RP1_GPCLK_CONTRACT_H
 
 #include <linux/rp1_gpclk.h>
+#include <linux/overflow.h>
 
 static inline bool rp1_gpclk_valid_header(u16 version, u16 size,
 	size_t expected)
@@ -55,6 +56,45 @@ static inline bool rp1_gpclk_valid_program(
 		if (request->symbols[i] >= request->tone_count)
 			return false;
 	return true;
+}
+
+static inline bool rp1_gpclk_valid_event_program(
+	const struct rp1_gpclk_event_program *request, u64 previous_generation)
+{
+	u64 total = 0;
+	u32 i;
+
+	if (request->version != RP1_GPCLK_EVENT_UAPI_VERSION ||
+		request->size != sizeof(*request) || request->fractional_bits != 16 ||
+		request->tick_divider != RP1_GPCLK_TICK_DIVIDER ||
+		!request->generation || request->generation <= previous_generation ||
+		request->flags || request->reserved || !request->tone_count ||
+		request->tone_count > RP1_GPCLK_EVENT_MAX_TONES ||
+		!request->event_count ||
+		request->event_count > RP1_GPCLK_EVENT_MAX_EVENTS)
+		return false;
+	for (i = 0; i < request->tone_count; ++i) {
+		const struct rp1_gpclk_symbol *tone = &request->tones[i];
+		u32 count;
+
+		if (!tone->lower_divider_word || !tone->upper_divider_word ||
+			(!tone->lower_count && !tone->upper_count) ||
+			check_add_overflow(tone->lower_count, tone->upper_count, &count) ||
+			(tone->lower_divider_word >> 16) != 3 ||
+			(tone->upper_divider_word >> 16) != 3)
+			return false;
+	}
+	for (i = 0; i < request->event_count; ++i) {
+		const struct rp1_gpclk_event *event = &request->events[i];
+
+		if (!event->duration_ns || event->reserved ||
+			(event->flags & ~RP1_GPCLK_EVENT_RF_ON) ||
+			((event->flags & RP1_GPCLK_EVENT_RF_ON) &&
+			 event->tone_index >= request->tone_count) ||
+			check_add_overflow(total, event->duration_ns, &total))
+			return false;
+	}
+	return total == request->total_duration_ns;
 }
 
 #endif

@@ -31,6 +31,42 @@ static struct rp1_gpclk_program *valid_program(
 	return program;
 }
 
+static struct rp1_gpclk_event_program *valid_event_program(
+	struct kunit *test, u64 generation)
+{
+	struct rp1_gpclk_event_program *program = kunit_kzalloc(
+		test, sizeof(*program), GFP_KERNEL);
+
+	if (!program)
+		return NULL;
+	program->version = RP1_GPCLK_EVENT_UAPI_VERSION;
+	program->size = sizeof(*program);
+	program->fractional_bits = 16;
+	program->tick_divider = RP1_GPCLK_TICK_DIVIDER;
+	program->tone_count = 2;
+	program->event_count = 3;
+	program->generation = generation;
+	program->total_duration_ns = 60;
+	program->tones[0] = (struct rp1_gpclk_symbol) {
+		.lower_divider_word = 232445, .upper_divider_word = 232446,
+		.lower_count = 12, .upper_count = 13,
+	};
+	program->tones[1] = (struct rp1_gpclk_symbol) {
+		.lower_divider_word = 232444, .upper_divider_word = 232445,
+		.lower_count = 11, .upper_count = 14,
+	};
+	program->events[0] = (struct rp1_gpclk_event) {
+		.duration_ns = 10, .tone_index = 0,
+		.flags = RP1_GPCLK_EVENT_RF_ON,
+	};
+	program->events[1] = (struct rp1_gpclk_event) {
+		.duration_ns = 20, .tone_index = 1,
+		.flags = RP1_GPCLK_EVENT_RF_ON,
+	};
+	program->events[2].duration_ns = 30;
+	return program;
+}
+
 static void header_and_drive_test(struct kunit *test)
 {
 	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_header(1, 16, 16));
@@ -82,10 +118,30 @@ static void lease_generation_test(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 0));
 }
 
+static void event_program_test(struct kunit *test)
+{
+	struct rp1_gpclk_event_program *program = valid_event_program(test, 2);
+
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_event_program(program, 1));
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 2));
+	program->events[0].duration_ns = 0;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+	program = valid_event_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->events[1].tone_index = 2;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+	program = valid_event_program(test, 2);
+	KUNIT_ASSERT_NOT_NULL(test, program);
+	program->total_duration_ns--;
+	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_event_program(program, 1));
+}
+
 static struct kunit_case provider_cases[] = {
 	KUNIT_CASE(header_and_drive_test),
 	KUNIT_CASE(program_and_packing_test),
 	KUNIT_CASE(lease_generation_test),
+	KUNIT_CASE(event_program_test),
 	{}
 };
 

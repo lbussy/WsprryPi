@@ -32,6 +32,11 @@ grep -q 'RP1_GPCLK_TICK_DIVIDER' "$provider"
 grep -q 'RP1_GPCLK_WSPR_SYMBOL_COUNT' "$provider"
 grep -q 'rp1_gpclk_valid_frame_elapsed' "$provider"
 grep -q 'dmaengine_prep_slave_single' "$provider"
+grep -q 'RP1_GPCLK_IOC_SUBMIT_EVENTS' "$provider"
+grep -q 'RP1_GPCLK_IOC_EVENT_STATE' "$provider"
+grep -q 'hrtimer_start' "$provider"
+grep -q 'HRTIMER_MODE_ABS' "$provider"
+grep -q 'RP1_GPCLK_TERMINAL_DEADLINE_MISSED' "$provider"
 if grep -q 'dmaengine_prep_slave_sg' "$provider"; then
 	echo "provider splits the WSPR frame into scheduler-dependent submissions" >&2
 	exit 1
