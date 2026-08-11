@@ -4475,6 +4475,35 @@ int main(int argc, char *argv[])
     {
         GPIOOutput::setTestMode(true);
         init_default_config();
+        ini_reload_pending.store(false, std::memory_order_relaxed);
+        exiting_wspr.store(false, std::memory_order_relaxed);
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+
+        config.use_ini = true;
+        config.mode = ModeType::WSPR;
+        config.transmit = true;
+
+        transmitter_cb(
+            WsprTransmissionCallbackEvent::FAILED,
+            WsprTransmitLogLevel::ERROR,
+            "injected managed backend failure",
+            0.0);
+
+        require(
+            managed_reload_tx_inhibited_for_test(),
+            "managed backend failure must inhibit future transmissions");
+        require(
+            !exiting_wspr.load(std::memory_order_relaxed),
+            "managed backend failure must not request process shutdown");
+
+        cleanup_scheduler_regression_test_state();
+        GPIOOutput::setTestMode(false);
+    }
+
+    {
+        GPIOOutput::setTestMode(true);
+        init_default_config();
         config.use_led = false;
         config.led_pin = -1;
         reset_tx_led_request_counts_for_test();

@@ -345,6 +345,7 @@ TestToneRestorationOwner test_tone_restoration_owner =
 std::atomic<bool> web_test_tone{false};
 std::atomic<bool> shutdown_after_current_transmission{false};
 std::atomic<bool> shutdown_after_wspr_plan{false};
+static std::atomic<bool> transmission_runtime_failed{false};
 static bool managed_reload_tx_inhibited = false;
 static bool suppress_scheduler_execution_for_test = false;
 static TestToneCommitInvokerForTest test_tone_commit_invoker_for_test{};
@@ -3256,6 +3257,36 @@ void transmitter_cb(WsprTransmitter::TransmissionCallbackEvent event,
         break;
     }
 
+    case WsprTransmitter::TransmissionCallbackEvent::FAILED:
+    {
+        transmission_runtime_failed.store(true, std::memory_order_release);
+        const std::string reason = msg.empty()
+            ? "Transmission backend execution failed."
+            : msg;
+        llog.logS(ERROR, "Transmission failed: ", reason);
+
+        finalize_transmission_stop_cleanup(
+            &config,
+            false,
+            "transmission failure",
+            true,
+            true);
+        send_ws_message("transmit", "failed", reason);
+
+        if (config.use_ini)
+        {
+            set_managed_reload_tx_inhibited(true);
+            llog.logS(
+                ERROR,
+                "Transmit is inhibited until configuration is reloaded or the service is restarted.");
+        }
+        else
+        {
+            request_wspr_shutdown("transmission backend failure");
+        }
+        break;
+    }
+
     case WsprTransmitter::TransmissionCallbackEvent::CANCELLED:
     {
         const double elapsed = value;
@@ -4094,6 +4125,7 @@ static void stop_runtime_components_for_process_exit() noexcept
  */
 bool wspr_loop()
 {
+    transmission_runtime_failed.store(false, std::memory_order_release);
     const bool any_selector_gpio_configured =
         has_configured_selector_gpios(config);
 
@@ -4368,7 +4400,7 @@ bool wspr_loop()
     // Flush all file system buffers to disk
     sync();
 
-    return true;
+    return !transmission_runtime_failed.load(std::memory_order_acquire);
 }
 
 /**
