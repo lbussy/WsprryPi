@@ -1,0 +1,38 @@
+Phase 6N provider termination and scheduler false-success diagnosis
+
+Outcome: ROOT CAUSES CONFIRMED; NO RF TRANSMITTED
+
+Provider cause
+- current userspace SUBMIT command: 0x4130b701, program size 0x130/304
+- boot-installed module command: 0x4030b701, program size 0x30/48
+- ACQUIRE: success
+- SUBMIT: rc -1, errno 25 ENOTTY
+- failure precedes validation, DMA preparation/submission, callback, and timing
+- retained current module recognizes 0x4130b701
+- Phase 6L current temporary module was not persisted as the boot module
+
+Scheduler cause
+- RP1 prepare/emit failure returns ok=false, faulted=false, with error text
+- WSPR path checks only !ok && faulted
+- failed submission is therefore labeled COMPLETE
+- reproduced duration: 0.011444 seconds
+- reproduced process result: 0
+
+Runtime identity
+- parent: ad25d2a2744fc8984d7a919928213cfa12319a3c
+- transmitter: 7c234796cf523657ea3c7d1806d3c6f70ee84ef2
+- kernel: 6.18.44-v8-16k+ #3
+- installed module srcversion: C09AA574CBFF079D4B5A6FA
+- current retained module srcversion: E2B807F9BED056FF0867C9B
+
+Final state
+- live_output=N
+- GPIO4 input, provider safe 2 mA state
+- GPCLK0 prepare count 0, enable count 0
+- wsprrypi.service active
+- soapyremote-server.service active
+- temporary diagnostics removed
+- parent and transmitter worktrees clean and synchronized
+
+Raw evidence and SHA-256 manifest:
+/home/pi/phase6n-evidence
