@@ -52,7 +52,9 @@ The available controls depend on how the simulator is constructed:
 | `WsprTransmitter::selectBackend()` | `SimulatedRuntimeConfig::virtual_time` | All simulator fault fields | `SimulatedRuntimeConfig::trace_path` |
 | Direct `SimulatedTransmitBackend` construction | `SimulatedBackendConfig::virtual_time` | All simulator fault fields | `SimulatedBackendConfig::trace_path` |
 
-The CLI selection is transient, is never persisted, and is never selected automatically after hardware initialization fails. The application calls the public three-argument `WsprTransmitter::selectBackend()` overload internally with default simulator settings; no CLI option currently selects real-time simulation, changes the trace path, or injects a fault.
+`--backend simulated` is intentionally the only simulator control exposed by the production application CLI. Simulation timing, trace-path overrides, and lifecycle fault injection are transient typed C++ test/developer APIs. They are not parsed from CLI arguments, INI configuration, environment variables, or the UI, and they never apply to physical backends. Additional shell-facing controls require a separately reviewed developer-harness use case.
+
+The CLI selection is transient, is never persisted, and is never selected automatically after hardware initialization fails. The application calls the public three-argument `WsprTransmitter::selectBackend()` overload internally with default simulator settings.
 
 `WsprTransmitter` owns a small private construction switch rather than a dynamic plugin system. Tests that need the application lifecycle can inject typed settings through the public overload:
 
