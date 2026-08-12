@@ -289,6 +289,7 @@ int main()
                 std::string::npos &&
             ui_source.find("function validateRp1GpioDrive()") != std::string::npos &&
             ui_source.find("function syncGpioDriveControls()") != std::string::npos &&
+            ui_source.find("function rp1GpioOperatorVisible()") != std::string::npos &&
             ui_source.find("\"Frequency Residual PPM\": gpio_frequency_residual_ppm,") != std::string::npos &&
             ui_source.find("\"Manual PPM\": gpio_manual_ppm,") != std::string::npos &&
             ui_source.find("Use NTP") == std::string::npos &&

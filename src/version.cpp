@@ -587,6 +587,11 @@ bool platform_supports_gpio_clock_transmission(
     return false;
 }
 
+bool operator_exposes_rp1_gpio() noexcept
+{
+    return false;
+}
+
 void set_raspberry_pi_generation_override_for_test(int generation) noexcept
 {
     g_pi_generation_override = generation;

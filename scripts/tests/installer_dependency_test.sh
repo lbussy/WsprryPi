@@ -25,4 +25,9 @@ do
     fi
 done
 
+if grep -Eiq 'rp1[-_]gpclk|live_output|kernel_2712_phase|dtoverlay=rp1' "$INSTALLER"; then
+    echo "standard installer must not deploy the experimental RP1 GPCLK kernel/provider path" >&2
+    exit 1
+fi
+
 echo "installer dependency tests: PASS"

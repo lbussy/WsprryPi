@@ -4399,6 +4399,40 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
+        config.rp1_gpio_drive_ma = 12;
+        config_to_json();
+        require(
+            platform_supports_gpio_clock_transmission(),
+            "operator visibility must not disable the explicit Pi 5 RP1 runtime path");
+        const nlohmann::json hidden_rp1_public_config = get_public_config_json();
+        require(
+            !hidden_rp1_public_config["Platform"]
+                 ["GPIO Clock Transmission Supported"].get<bool>() &&
+                !hidden_rp1_public_config["Platform"]
+                  ["RP1 GPIO Operator Visible"].get<bool>(),
+            "public capability JSON must keep Pi 5 RP1 GPIO hidden by default");
+        require(
+            hidden_rp1_public_config["GPIO"]["RP1 Drive mA"].get<int>() == 12,
+            "operator visibility must preserve retained RP1 configuration");
+        set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
+        patch_all_from_web({
+            {"Meta", {{"debug_logging", true}}},
+            {"GPIO", {
+                {"Transmit Pin", 20},
+                {"RP1 Drive mA", 6}}}});
+        require(
+            jConfig["Meta"]["debug_logging"].get<bool>(),
+            "operator-hidden RP1 state must not block unrelated web patches");
+        require(
+            jConfig["GPIO"]["Transmit Pin"].get<int>() == 4 &&
+                jConfig["GPIO"]["RP1 Drive mA"].get<int>() == 12,
+            "web patches must preserve operator-hidden RP1 GPIO configuration");
+        clear_rp1_gpclk_provider_available_override_for_test();
+        clear_raspberry_pi_generation_override_for_test();
+
+        init_default_config();
         set_si5351_detection_override_for_test(false);
         config.si5351_tx_output = 2;
         config_to_json();

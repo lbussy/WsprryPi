@@ -607,8 +607,18 @@ namespace
     nlohmann::json public_config_from_internal(const nlohmann::json &source)
     {
         std::string gpio_support_error;
-        const bool gpio_clock_transmission_supported =
+        const bool runtime_gpio_clock_transmission_supported =
             platform_supports_gpio_clock_transmission(&gpio_support_error);
+        const bool rp1_gpio_operator_visible = operator_exposes_rp1_gpio();
+        const bool gpio_clock_transmission_supported =
+            runtime_gpio_clock_transmission_supported &&
+            (get_raspberry_pi_generation() != 5 || rp1_gpio_operator_visible);
+        if (runtime_gpio_clock_transmission_supported &&
+            !gpio_clock_transmission_supported)
+        {
+            gpio_support_error =
+                "GPIO transmission is supported only on Raspberry Pi 1 through 4.";
+        }
         bool si5351_detected = true;
         std::string si5351_detection_error;
         if (source.contains("Si5351") && source.at("Si5351").is_object())
@@ -660,6 +670,7 @@ namespace
             {"GPIO Clock Transmission Error",
              gpio_clock_transmission_supported ? std::string()
                                                : gpio_support_error},
+            {"RP1 GPIO Operator Visible", rp1_gpio_operator_visible},
             {"Si5351 Detected", si5351_detected},
             {"Si5351 Detection Error",
              si5351_detected ? std::string() : si5351_detection_error}};
@@ -727,7 +738,13 @@ namespace
                     "GPIO.Use NTP is retired and accepted only during INI migration; "
                     "use GPIO.Use System Clock Frequency Estimate.");
             }
-            internal_json["GPIO"] = public_json.at("GPIO");
+            const bool rp1_gpio_hidden_from_operator =
+                get_raspberry_pi_generation() == 5 &&
+                !operator_exposes_rp1_gpio();
+            if (!rp1_gpio_hidden_from_operator)
+            {
+                internal_json["GPIO"] = public_json.at("GPIO");
+            }
         }
         if (public_json.contains("Calibration"))
             internal_json["Calibration"] = public_json.at("Calibration");
