@@ -16,6 +16,7 @@ concurrency:
 jobs:
   non-hardware-validation:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:trixie-slim
     env:
       WSPRRYPI_DISABLE_HARDWARE_ACCESS: "1"
@@ -68,8 +69,13 @@ jobs:
         working-directory: src
         run: ../scripts/ci/verify-simulated-backend.sh
 
+      - name: Verify complete application-planned WSPR simulation
+        working-directory: src
+        run: ../scripts/ci/verify-simulated-wspr.sh
+
       - name: Reject transmitter hardware access
         run: scripts/ci/assert-no-transmitter-hardware.sh \
           /tmp/wsprrypi-semantics.strace \
           /tmp/wsprrypi-rp1.strace \
-          /tmp/wsprrypi-simulator.strace
+          /tmp/wsprrypi-simulator.strace \
+          /tmp/wsprrypi-wspr-simulator.strace
