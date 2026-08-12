@@ -149,6 +149,27 @@ void test_cancellation_cleanup_failure_prevents_false_cancel_success()
     expect(transmitter.getState() == WsprTransmitter::State::FAILED,
            "cancellation cleanup failure must remain a failed lifecycle");
 }
+
+void test_startup_quiesce_failure_propagates_without_arming_cleanup()
+{
+    WsprTransmitter transmitter;
+    WsprTransmitter::SimulatedRuntimeConfig config;
+    config.trace_path = "/tmp/wsprrypi-startup-quiesce-lifecycle-trace.json";
+    config.fail_startup_quiesce = true;
+    config.fail_cleanup = true;
+    transmitter.selectBackend(wsprrypi::BackendKind::SIMULATED, {}, config);
+
+    const auto first = transmitter.quiesceForStartup();
+    const auto second = transmitter.quiesceForStartup();
+    expect(!first.ok && first.error == "Injected simulated startup quiesce failure.",
+           "startup quiesce failure must propagate through WsprTransmitter");
+    expect(!second.ok && second.error == first.error,
+           "repeated startup quiesce failure must remain deterministic");
+
+    transmitter.stopAndJoin();
+    expect(transmitter.lastCleanupResult().ok,
+           "startup quiesce failure must not arm injected execution cleanup failure");
+}
 }
 
 int main()
@@ -159,6 +180,7 @@ try
     test_configuration_and_cleanup_failure_preserve_both_errors();
     test_execution_cleanup_failure_prevents_completion();
     test_cancellation_cleanup_failure_prevents_false_cancel_success();
+    test_startup_quiesce_failure_propagates_without_arming_cleanup();
     std::cout << "cleanup lifecycle tests passed\n";
     return EXIT_SUCCESS;
 }

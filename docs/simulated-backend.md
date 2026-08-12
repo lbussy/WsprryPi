@@ -137,14 +137,30 @@ These fields exist with the same names and defaults in `SimulatedBackendConfig` 
 | --- | --- | --- | --- | --- |
 | `virtual_time` | `bool`, `true` | `false` enables interruptible per-event waits | Ordinary lifecycle events | No |
 | `trace_path` | `std::string`; empty for direct backend config, `/tmp/wsprrypi-simulated-trace.json` for application runtime config | Nonempty path is replaced whenever the trace is rendered | JSON document at the selected path | No |
+| `fail_startup_quiesce` | `bool`, `false` | `quiesceForStartup()` returns `ok == false` | `startup_quiesce_failure`, detail `injected` | No |
 | `fail_configure` | `bool`, `false` | `configure()` returns `ok == false` | `configure_failure`, detail `injected` | No |
 | `fail_event` | `long`, `-1` | Matching zero-based event index returns `faulted == true` | `execution_failure`, detail `injected` | No |
 | `cancel_event` | `long`, `-1` | Matching zero-based event index returns `stopped == true` | `cancelled`, detail `injected` | No |
 | `fail_cleanup` | `bool`, `false` | Armed cleanup returns `ok == false` | `cleanup_failure`, detail `injected` | No |
 
-A negative index disables index-based execution and cancellation injection. Configure failure occurs after the initial `configure` record. `TransmissionController::prepare()` then attempts cleanup; if cleanup also fails, both error messages are preserved. Execution failure and cancellation likewise remain observable if the subsequent cleanup fails, and cleanup failure forces the combined lifecycle result to remain failed rather than reporting false completion or cancellation success.
+A negative index disables index-based execution and cancellation injection. Startup-quiescence failure is injected before configuration or execution state is armed. It returns `Injected simulated startup quiesce failure.`, and every call appends one deterministic `startup_quiesce_failure` record. Repeated calls return the same failure; explicit cleanup remains safe and is distinct from the unarmed `fail_cleanup` execution fault. The application startup gate retains the error and inhibits later preparation, scheduling, and transmission.
+
+Configure failure occurs after the initial `configure` record. `TransmissionController::prepare()` then attempts cleanup; if cleanup also fails, both error messages are preserved. Execution failure and cancellation likewise remain observable if the subsequent cleanup fails, and cleanup failure forces the combined lifecycle result to remain failed rather than reporting false completion or cancellation success.
 
 External cancellation is distinct from `cancel_event`: `stopRequested()`, `stop()`, or an interrupted real-time wait records `cancelled` without the `injected` detail. The focused simulator test covers `fail_event`, `cancel_event`, context stop observation, and `fail_cleanup`. `src/tests/cleanup_lifecycle_test.cpp` covers application-level configure-plus-cleanup failure, execution cleanup failure, cancellation cleanup failure, backend replacement, repeated cleanup, and destructor-safe reporting.
+
+Tests inject startup-quiescence failure through either typed configuration surface before selecting or constructing the backend:
+
+```cpp
+WsprTransmitter::SimulatedRuntimeConfig simulation;
+simulation.fail_startup_quiesce = true;
+transmitter.selectBackend(
+    wsprrypi::BackendKind::SIMULATED,
+    WsprTransmitter::Si5351RuntimeConfig{},
+    simulation);
+```
+
+Direct backend tests use `SimulatedBackendConfig::fail_startup_quiesce` in the same way. This validates software propagation and inhibition only; it does not qualify physical startup quiescence, GPIO, I2C, MMIO, DMA, mailbox, services, scheduling accuracy, or RF behavior.
 
 ## Repeated execution and state reset
 

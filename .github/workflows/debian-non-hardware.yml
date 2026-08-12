@@ -49,6 +49,9 @@ jobs:
           strace -f -e trace=openat,open \
             -o /tmp/wsprrypi-semantics.strace \
             make semantics-test SUDO=
+          strace -f -e trace=openat,open \
+            -o /tmp/wsprrypi-startup-quiesce-parent.strace \
+            make startup-quiesce-parent-test SUDO=
 
       - name: Run RP1 non-hardware regression
         working-directory: src
@@ -78,6 +81,7 @@ jobs:
       - name: Reject transmitter hardware access
         run: scripts/ci/assert-no-transmitter-hardware.sh \
           /tmp/wsprrypi-semantics.strace \
+          /tmp/wsprrypi-startup-quiesce-parent.strace \
           /tmp/wsprrypi-rp1.strace \
           /tmp/wsprrypi-simulator.strace \
           /tmp/wsprrypi-wspr-simulator.strace
