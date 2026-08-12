@@ -14,7 +14,7 @@ run_wspr() {
         --no-offset \
         --no-system-clock-frequency-estimate \
         --terminate 1 \
-        K1ABC FN42 30 20m
+        AA0NT EM18 20 20m
 }
 
 run_wspr
@@ -28,7 +28,7 @@ strace -f -e trace=openat,open \
         --no-offset \
         --no-system-clock-frequency-estimate \
         --terminate 1 \
-        K1ABC FN42 30 20m
+        AA0NT EM18 20 20m
 cp "$trace" "$final"
 
 cmp "$first" "$final"
@@ -46,6 +46,7 @@ assert trace["schema_version"] == 1
 assert trace["backend"] == "simulated"
 assert trace["mode"] == "WSPR"
 assert trace["plan_id"] == 1
+assert trace["request_id"] == 1
 
 events = trace["events"]
 kinds = [event["kind"] for event in events]
@@ -81,6 +82,19 @@ assert all(math.isfinite(tone) and tone > 0 for tone in tones)
 spacings = [later - earlier for earlier, later in zip(tones, tones[1:])]
 assert max(spacings) - min(spacings) < 1e-6, spacings
 assert all(1.4 < spacing < 1.5 for spacing in spacings), spacings
+
+# TYPE1 AA0NT / EM18 / 20 dBm from the pinned
+# WSPR-Reference/test_vectors/wspr_golden_vectors.json.
+expected_symbols = (
+    "132000023020111000302321113000022230012300222012112033210003103022"
+    "213010303230030032332021321030223220203223221310310213010221110002"
+    "210302110200222310303320011002"
+)
+actual_symbols = "".join(
+    str(min(range(4), key=lambda index: abs(tones[index] - event["frequency_hz"])))
+    for event in symbols
+)
+assert actual_symbols == expected_symbols, actual_symbols
 
 print(
     "Complete simulated WSPR trace is deterministic: "

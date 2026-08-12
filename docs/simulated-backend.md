@@ -44,7 +44,7 @@ make build/bin/cleanup_lifecycle_test
 
 ## Complete WSPR integration check
 
-The hardware-free CI suite also runs a complete WSPR request through the normal application CLI, WSPR reference preparation, execution-plan compiler, scheduler, simulated backend, completion, and cleanup paths. Run the same check from `src` after building the debug executable:
+The hardware-free CI suite also runs a complete WSPR request through the normal application CLI, WSPR reference preparation, execution-plan compiler, controller preparation, immediate virtual-time dispatch, simulated backend, completion, and cleanup paths. Run the same check from `src` after building the debug executable:
 
 ```sh
 ../scripts/ci/verify-simulated-wspr.sh
@@ -54,10 +54,14 @@ The script runs this unprivileged request twice with virtual time and compares t
 
 ```sh
 ./build/bin/wsprrypi_debug --backend simulated --no-web --no-offset \
-  --no-system-clock-frequency-estimate --terminate 1 K1ABC FN42 30 20m
+  --no-system-clock-frequency-estimate --terminate 1 AA0NT EM18 20 20m
 ```
 
-It verifies the WSPR mode and plan identity, 162 ordered symbol events, monotonic logical timestamps, four evenly spaced tones, RF state, one completion, one cleanup, and the absence of cancellation or injected failure. A complete frame represents approximately 110.592 logical seconds but finishes without waiting for that wall-clock duration. Independent processes must produce byte-identical traces, demonstrating that simulator state does not leak between runs.
+It verifies the WSPR mode, distinct request and plan identities, all 162 ordered tone indexes against the pinned WSPR-Reference golden vector, monotonic logical timestamps, four evenly spaced tones, RF state, one completion, one cleanup, and the absence of cancellation or injected failure. A complete frame represents approximately 110.592 logical seconds but finishes without waiting for that wall-clock duration. Independent processes must produce byte-identical traces, demonstrating cross-process reproducibility. The simulator backend contract test separately repeats configure, execute, and cleanup on the same backend instance and verifies that trace state is reset.
+
+The simulated WSPR run intentionally selects immediate virtual-time dispatch. It does not exercise or qualify the normal wall-clock WSPR window scheduler.
+
+The trace keeps schema version 1 because `request_id` is an additive identity field and existing fields retain their names and semantics. Consumers must continue to tolerate additional JSON fields.
 
 The final JSON trace is `/tmp/wsprrypi-wspr-trace.json`. The second run's file-access trace is `/tmp/wsprrypi-wspr-simulator.strace`; the CI hardware audit checks it together with the other non-hardware traces.
 
