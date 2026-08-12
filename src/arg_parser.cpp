@@ -2044,6 +2044,7 @@ void apply_runtime_config_side_effects()
     si5351_config.power_level = config.power_level;
     si5351_config.app_managed = config.use_ini;
     wsprTransmitter.selectBackend(backend_kind, si5351_config);
+    wsprTransmitter.setTransmitNow(backend_kind == wsprrypi::BackendKind::SIMULATED);
 
     llog.logS(INFO,
               "Transmit backend: ",
