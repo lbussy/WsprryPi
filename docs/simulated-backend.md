@@ -35,4 +35,3 @@ make simulated-backend-test transmission-controller-contract-test
 ```
 
 Focused physical-backend tests remain separate and must continue to pass. Simulator results demonstrate application and backend-contract behavior only; they do not qualify GPIO timing, I2C hardware, RF output, installation, services, or any physical transmitter.
-
