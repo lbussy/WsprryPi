@@ -16,6 +16,7 @@ concurrency:
 jobs:
   non-hardware-validation:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:trixie-slim
     env:
       WSPRRYPI_DISABLE_HARDWARE_ACCESS: "1"

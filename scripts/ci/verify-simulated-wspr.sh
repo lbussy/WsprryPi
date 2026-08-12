@@ -6,9 +6,24 @@ trace=/tmp/wsprrypi-simulated-trace.json
 first=/tmp/wsprrypi-wspr-trace-first.json
 final=/tmp/wsprrypi-wspr-trace.json
 syscall_trace=/tmp/wsprrypi-wspr-simulator.strace
+wall_clock_limit=10s
+
+run_with_timeout() {
+    label=$1
+    shift
+    if timeout --signal=TERM --kill-after=2s "$wall_clock_limit" "$@"; then
+        return 0
+    else
+        status=$?
+    fi
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+        echo "Accelerated virtual-time $label execution exceeded the $wall_clock_limit wall-clock limit." >&2
+    fi
+    return "$status"
+}
 
 run_wspr() {
-    "$binary" \
+    run_with_timeout "WSPR" "$binary" \
         --backend simulated \
         --no-web \
         --no-offset \
@@ -17,10 +32,13 @@ run_wspr() {
         AA0NT EM18 20 20m
 }
 
+rm -f "$trace" "$first" "$final" "$syscall_trace"
 run_wspr
+[ -s "$trace" ]
 cp "$trace" "$first"
 
-strace -f -e trace=openat,open \
+rm -f "$trace"
+run_with_timeout "strace-wrapped WSPR" strace -f -e trace=openat,open \
     -o "$syscall_trace" \
     "$binary" \
         --backend simulated \
@@ -29,6 +47,7 @@ strace -f -e trace=openat,open \
         --no-system-clock-frequency-estimate \
         --terminate 1 \
         AA0NT EM18 20 20m
+[ -s "$trace" ]
 cp "$trace" "$final"
 
 cmp "$first" "$final"
@@ -62,6 +81,12 @@ assert len(symbols) == 162, len(symbols)
 assert [event["event_index"] for event in symbols] == list(range(162))
 assert all(event["rf_on"] is True for event in symbols)
 
+initial_lifecycle = events[:3]
+final_lifecycle = events[-2:]
+assert all(event["event_index"] == -1 for event in initial_lifecycle + final_lifecycle)
+assert all(event["rf_on"] is False for event in initial_lifecycle + final_lifecycle)
+assert all(event["detail"] == "" for event in initial_lifecycle + final_lifecycle)
+
 symbol_period_ns = 682_666_666
 frame_duration_ns = 110_591_999_892
 logical_times = [event["logical_ns"] for event in symbols]
@@ -92,6 +117,17 @@ rf_center_hz = 14_097_100.0
 tone_spacing_hz = 12_000.0 / 8_192.0
 frequency_tolerance_hz = 1e-6
 assert dial_frequency_hz + audio_offset_hz == rf_center_hz
+assert all(
+    math.isclose(
+        event["frequency_hz"],
+        rf_center_hz,
+        rel_tol=0.0,
+        abs_tol=frequency_tolerance_hz,
+    )
+    for event in initial_lifecycle
+)
+assert complete["frequency_hz"] == 0
+assert cleanup["frequency_hz"] == 0
 expected_tones = [
     rf_center_hz + (tone_index - 1.5) * tone_spacing_hz
     for tone_index in range(4)
