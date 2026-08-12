@@ -14,4 +14,3 @@ if grep -En "$pattern" "$@"; then
 fi
 
 echo "No prohibited transmitter hardware access observed."
-
