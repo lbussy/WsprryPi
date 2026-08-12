@@ -739,7 +739,7 @@ int main(int argc, char *argv[])
 
     {
         const std::string stock_ini =
-            read_text_file("/home/pi/WsprryPi/config/wsprrypi.ini");
+            read_text_file("../config/wsprrypi.ini");
         require(
             stock_ini.find("2200m = \n2200m Active High = false") != std::string::npos &&
                 stock_ini.find("20m = \n20m Active High = false") != std::string::npos &&

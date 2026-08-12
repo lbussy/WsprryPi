@@ -1542,6 +1542,8 @@ static wsprrypi::BackendKind to_controller_backend(
 {
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::BackendKind::SI5351;
+    if (backend == TransmitBackendKind::SIMULATED)
+        return wsprrypi::BackendKind::SIMULATED;
     return get_raspberry_pi_generation() == 5
         ? wsprrypi::BackendKind::RP1_GPCLK
         : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
@@ -1650,6 +1652,8 @@ std::string transmitter_reload_defer_debug_snapshot()
             return "RP1 GPCLK";
         case wsprrypi::BackendKind::SI5351:
             return "SI5351";
+        case wsprrypi::BackendKind::SIMULATED:
+            return "simulated";
         default:
             return "UNKNOWN";
         }

@@ -151,9 +151,12 @@ namespace
             return TransmitBackendKind::GPIO;
         if (lowered == "si5351")
             return TransmitBackendKind::SI5351;
+        if (lowered == "simulated")
+            throw std::runtime_error(
+                "Operation.Transmit Backend 'simulated' is transient and cannot be persisted.");
 
         throw std::runtime_error(
-            "Invalid Operation.Transmit Backend. Expected 'gpio' or 'si5351'.");
+            "Invalid Operation.Transmit Backend. Expected 'gpio' or 'si5351'; simulated is CLI-only.");
     }
 
     EnableOnBootBehavior parse_enable_on_boot_behavior(
@@ -1797,8 +1800,11 @@ namespace
             mode_type_to_string(
                 source.mode == ModeType::TONE ? ModeType::WSPR : source.mode);
         target["Operation"]["Transmit"] = source.transmit;
-        target["Operation"]["Transmit Backend"] =
-            transmit_backend_kind_to_string(source.transmit_backend);
+        if (source.transmit_backend != TransmitBackendKind::SIMULATED)
+            target["Operation"]["Transmit Backend"] =
+                transmit_backend_kind_to_string(source.transmit_backend);
+        else if (!target["Operation"].contains("Transmit Backend"))
+            target["Operation"]["Transmit Backend"] = "gpio";
         target["Operation"]["Enable on Boot"] =
             enable_on_boot_behavior_to_string(source.enable_on_boot);
         target["Operation"]["Use LED"] = source.use_led;

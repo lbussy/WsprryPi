@@ -1,8 +1,10 @@
 const assert = require("assert");
 const fs = require("fs");
+const path = require("path");
 const vm = require("vm");
 
-const siteSource = fs.readFileSync("/home/pi/WsprryPi/WsprryPi-UI/data/site.js", "utf8");
+const sitePath = path.resolve(__dirname, "..", "..", "WsprryPi-UI", "data", "site.js");
+const siteSource = fs.readFileSync(sitePath, "utf8");
 
 function jqueryStub() {
     const chain = {};

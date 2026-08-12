@@ -1,0 +1,75 @@
+name: Debian non-hardware validation
+
+on:
+  pull_request:
+    branches: [devel]
+  push:
+    branches: [devel]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  non-hardware-validation:
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim
+    env:
+      WSPRRYPI_DISABLE_HARDWARE_ACCESS: "1"
+    steps:
+      - name: Install build and audit dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential ca-certificates git libgpiod-dev libssl-dev \
+            libsystemd-dev nodejs pkg-config python3 strace
+
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Trust container checkout ownership
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule foreach --recursive \
+            'git config --global --add safe.directory "$PWD"'
+
+      - name: Build parent debug executable
+        working-directory: src
+        run: make debug SUDO=
+
+      - name: Run parent semantics and cleanup lifecycle tests
+        working-directory: src
+        run: |
+          strace -f -e trace=openat,open \
+            -o /tmp/wsprrypi-semantics.strace \
+            make semantics-test SUDO=
+
+      - name: Run RP1 non-hardware regression
+        working-directory: src
+        run: |
+          strace -f -e trace=openat,open \
+            -o /tmp/wsprrypi-rp1.strace \
+            make rp1-gpclk-transmit-backend-test SUDO=
+
+      - name: Run pinned transmitter contract regressions
+        working-directory: src/WSPR-Transmitter/src
+        run: |
+          make simulated-backend-test
+          make transmission-controller-contract-test
+          make startup-quiesce-test
+          make si5351-transition-test
+
+      - name: Verify deterministic hardware-free simulation
+        working-directory: src
+        run: ../scripts/ci/verify-simulated-backend.sh
+
+      - name: Reject transmitter hardware access
+        run: scripts/ci/assert-no-transmitter-hardware.sh \
+          /tmp/wsprrypi-semantics.strace \
+          /tmp/wsprrypi-rp1.strace \
+          /tmp/wsprrypi-simulator.strace

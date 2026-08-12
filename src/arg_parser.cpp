@@ -633,8 +633,11 @@ static TransmitBackendKind parse_transmit_backend_option(
         return TransmitBackendKind::SI5351;
     }
 
+    if (lowered == "simulated")
+        return TransmitBackendKind::SIMULATED;
+
     throw std::invalid_argument(
-        "Invalid backend. Expected 'gpio' or 'si5351'.");
+        "Invalid backend. Expected 'gpio', 'si5351', or 'simulated'.");
 }
 
 static int parse_integer_option(
@@ -1398,7 +1401,8 @@ void print_usage(const std::string &message, int exit_code)
               << "  -o, --offset                       Enable random WSPR transmit offset.\n"
               << "  --no-offset                        Disable random WSPR transmit offset.\n\n"
               << "Backend Selection:\n"
-              << "  --backend <gpio|si5351>            Select the RF transmit backend. Default: gpio.\n"
+              << "  --backend <gpio|si5351|simulated>  Select the backend. Default: gpio.\n"
+              << "                                     simulated is transient, non-RF, and never persisted.\n"
               << "                                     GPIO uses the RP1 provider on Raspberry Pi 5.\n"
               << "  --power-level <level>\n"
               << "    Set transmit power level for the active backend:\n"
@@ -2020,11 +2024,13 @@ static bool validation_error_is_missing_required(
 void apply_runtime_config_side_effects()
 {
     const wsprrypi::BackendKind backend_kind =
-        config.transmit_backend == TransmitBackendKind::SI5351
-            ? wsprrypi::BackendKind::SI5351
-            : get_raspberry_pi_generation() == 5
-                ? wsprrypi::BackendKind::RP1_GPCLK
-                : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
+        config.transmit_backend == TransmitBackendKind::SIMULATED
+            ? wsprrypi::BackendKind::SIMULATED
+            : config.transmit_backend == TransmitBackendKind::SI5351
+                ? wsprrypi::BackendKind::SI5351
+                : get_raspberry_pi_generation() == 5
+                    ? wsprrypi::BackendKind::RP1_GPCLK
+                    : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
     WsprTransmitter::Si5351RuntimeConfig si5351_config;
     si5351_config.i2c_bus = config.si5351_i2c_bus;
     si5351_config.i2c_address = config.si5351_i2c_address;
