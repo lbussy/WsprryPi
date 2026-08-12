@@ -56,6 +56,36 @@ Never claim that hardware, RF output, GPIO timing, service lifecycle, or install
 
 Before any authorized live transmission, confirm the exact frequency, mode, duration, output path, attached hardware, and stopping procedure.
 
+## Raspberry Pi Kernel Build Worker
+
+Maintainer kernel work can use the Debian ARM64 build worker prepared outside
+the WsprryPi repositories. Agents working on kernel source, configuration,
+builds, staging, or deployment planning must discover and read these documents
+before operating the worker:
+
+- `docs/raspberry-pi-kernel-build-worker-setup.md` is the canonical handoff.
+  It defines VM requirements, package installation, workspace creation, exact
+  source pinning, target-config import and normalization, stock validation,
+  staging, checksums, acceptance criteria, repeat runs, cleanup, and the
+  validated safety boundary.
+- `docs/research/raspberry-pi-kernel-build-worker.md` records the worker's
+  demonstrated functionality, reference custom-kernel reproduction, retained
+  evidence, limitations, and preservation boundary. Read it when deciding
+  whether existing worker capability is sufficient for a new kernel issue.
+
+`docs/research/raspberry-pi-kernel-build-worker-bootstrap-research.md` is the
+research specification that preceded the validated setup guide. It is retained
+for audit context, but it is not the operational handoff and must not override
+the canonical guide.
+
+The worker contract is build-and-stage only. Keep kernel source, out-of-tree
+build output, staged artifacts, and WsprryPi repositories separate. Never
+install a built kernel into the worker's `/boot` or `/lib/modules`. Target-Pi
+access, copying, installation, boot configuration, `depmod`, reboot, service
+operation, GPIO, transmission, and RF activity require separate explicit
+authorization. A successful build or manifest verification is not target
+hardware qualification.
+
 ## User Interface Work: Impeccable Is Required
 
 Any task affecting a user interface must use the Impeccable skill.

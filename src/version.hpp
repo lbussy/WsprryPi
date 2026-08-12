@@ -137,8 +137,11 @@ extern std::string get_pi_model();
 int get_raspberry_pi_generation();
 bool platform_supports_gpio_clock_transmission(
     std::string *error_message = nullptr);
+bool operator_exposes_rp1_gpio() noexcept;
 void set_raspberry_pi_generation_override_for_test(int generation) noexcept;
 void clear_raspberry_pi_generation_override_for_test() noexcept;
+void set_rp1_gpclk_provider_available_override_for_test(bool available) noexcept;
+void clear_rp1_gpclk_provider_available_override_for_test() noexcept;
 
 /**
  * @brief Return the operating system version name.

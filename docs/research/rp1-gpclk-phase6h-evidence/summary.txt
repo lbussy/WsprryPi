@@ -1,0 +1,88 @@
+Phase 6H install and clock-disabled provider validation
+Date: 2026-08-10
+Host: wspr5.local
+Target: Raspberry Pi OS 64-bit BCM2712 rpi-2712 kernel only
+
+Installed test kernel
+  release: 6.18.44-v8-16k+
+  running build: #2 SMP PREEMPT Mon Aug 10 15:38:22 CDT 2026
+  boot image: /boot/firmware/kernel_2712_phase6h.img
+  boot image sha256: d709ceb2a7ffd303d8c27bcd849326f7e4755b226ccc20479432e53482a84538
+  modules: /lib/modules/6.18.44-v8-16k+
+  provider module source artifact sha256: 91de91d8e874d62e7314c380b81e7db3de651c8f3b1266fcd8dcbcd22fa0a36f
+
+Installed overlay
+  path: /boot/firmware/overlays/rp1-gpclk-provider.dtbo
+  sha256: af77824356edd553209d92ef6d927b72704fd56697807dcda944e10def00c37d
+  divider address in overlay: none
+
+Recoverable boot layout
+  normal config.txt sha256 before/after: 5f01521f9a0f34ea16f87f86baab5c0bae0a2a3f962b39a634f0fe376ec4253f
+  one-shot file: /boot/firmware/tryboot.txt
+  tryboot.txt sha256: c06b262332c145a0cfea594e020fced762a02eef269e4026fe84de71fb152b0a
+  normal packaged kernel retained: /boot/firmware/kernel_2712.img
+  normal packaged initramfs retained: /boot/firmware/initramfs_2712
+  rollback: ordinary reboot selects unchanged config.txt and packaged kernel
+  rollback execution: not required and not exercised after the passing run
+
+Initial runtime finding
+  provider probe: PASS
+  KUnit: PASS, 2 tests, 0 failures
+  header/size/drive/flags/ownership validation: PASS
+  descriptor terminal state: FAILED
+  kernel evidence: DW AXI DMA destination 0xffffffffffffffff
+  root cause: lease supplied a pretranslated DMA address and DW AXI translated it again
+
+Bounded fix
+  lease field changed from divider_dma_addr to divider_phys_addr
+  clk-rp1 derives the CPU physical DIV_FRAC address from its own resource
+  provider passes that physical address to dmaengine_slave_config
+  DW AXI remains the sole translator to the RP1 DMA bus address
+  userspace and device tree still receive no divider address
+  clean patch application and exact passing-source reproduction: PASS
+  rebuilt command: make -j4 Image modules
+  job policy: explicit Pi 5 full-processor exception; nproc=4
+
+Fixed runtime validation
+  KUnit: PASS, 2 tests, 0 failures
+  valid version/size acquire: PASS
+  invalid version: EPROTO
+  invalid size: EPROTO
+  invalid drive and flags: EINVAL
+  single-owner exclusion: EBUSY
+  invalid tick and nonmonotonic generation: EINVAL
+  early STOP/drain: COMPLETE
+  mid STOP/drain: COMPLETE
+  near-end STOP/drain: COMPLETE
+  close during active descriptor and deferred cleanup: PASS
+  reacquire and repeat descriptor: COMPLETE
+  harness result: failures=0, exit=0
+
+Clock-provider lease exclusion
+  conflicting clk_set_rate while leased: -EBUSY
+  conflicting clk_prepare_enable while leased: -EBUSY
+  temporary validation module unloaded after test
+  note: loading the temporary out-of-tree validation module tainted the test kernel
+
+Final safety state
+  GPIO4: input
+  clk_gp0 prepare count: 0
+  clk_gp0 enable count: 0
+  clk_gp0 rate: 50000000
+  provider device: /dev/rp1-gpclk0
+  provider and KUnit modules loaded
+  no bad DMA descriptor messages after the fixed reboot
+  no GPIO4 alternate-function selection
+  no pad-drive application
+  no GPCLK output
+  no RF transmission
+
+System and repository changes
+  wspr5 WsprryPi checkout fast-forwarded to c86d5ebf11d32c9c7f118ac9db300ca5beacd4ea
+  kmod was checked and was already installed; no package change resulted
+  kernel modules, side-by-side image, overlay, and tryboot.txt installed
+  two one-shot tryboot reboots performed: initial finding and fixed validation
+  detailed host evidence retained in /home/pi/phase6h-install-evidence
+  Mac repository has uncommitted Phase 6H source and documentation changes
+  no submodule changed
+  nothing committed or pushed in Phase 6H

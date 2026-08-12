@@ -1,0 +1,91 @@
+RP1 GPCLK Phase 6I evidence summary
+===================================
+
+Scope
+-----
+Host: wspr5.local (Raspberry Pi 5)
+Parent branch/tip: codex/issue-399-rp1-gpclk at cc82893a245c7708a396bef90f62deac4d3a8381
+Kernel source base: 89586905b8603e545cce9089a81f5f35d65bc998
+Running test kernel: 6.18.44-v8-16k+ #3 SMP PREEMPT Mon Aug 10 16:19:21 CDT 2026
+SDR: SDRplay RSP1B serial 2404058C60, SoapySDR, 250000 sample/s CF32,
+     center 14122100 Hz, 200 kHz bandwidth, fixed gain 25
+Live drive request: 2 mA (minimum selectable level)
+
+Build and patch reproduction
+----------------------------
+Native build: make -j4 Image modules (permitted full Pi 5 processor count), PASS
+Overlay cpp/dtc build: PASS
+Provider module build/install: PASS
+Clean-base patch application and exact source comparison: PATCH_REPRODUCTION_PASS
+Installed custom image SHA-256:
+  9851d1cb28482b5edfc18c4d887d5704f780d1bc10adcd233607126b2221eda1
+Installed provider module source artifact SHA-256:
+  70cca0d28daf34c2d59c86fcfeac341f5359ae8c5f11161f8ea9e3e4e2813faa
+Installed overlay SHA-256:
+  d3d42232d3bbd43b9bf376ceb130b5c3607639e57d6569131c09fc4a37b83e30
+/boot/firmware/config.txt final SHA-256:
+  5f01521f9a0f34ea16f87f86baab5c0bae0a2a3f962b39a634f0fe376ec4253f
+/boot/firmware/tryboot.txt final SHA-256:
+  c06b262332c145a0cfea594e020fced762a02eef269e4026fe84de71fb152b0a
+
+Clock-disabled gate (live_output=N)
+----------------------------------
+KUnit: 2 passed, 0 failed, 0 skipped.
+UAPI/ownership/cancellation/close/repeat harness: RESULT failures=0.
+Lease conflict: clk_set_rate=-16 and clk_prepare_enable=-16 while held.
+GPIO4 after gate: input.
+GPCLK0 prepare/enable/protect counts after gate: 0/0/0.
+
+Four-divider live run
+---------------------
+Generations 1-4: COMPLETE.
+Provider active intervals (monotonic ns):
+  1 278382836359 - 279126298249
+  2 279226363290 - 279964649962
+  3 280064716225 - 280803055266
+  4 280903124288 - 281653344850
+State monitor: active function gpclk0, requested drive 2 mA, counts 1/1/1;
+               safe gaps function gpio, drive 2 mA, counts 0/0/0.
+All 350 captured drive-state observations were 2 mA.
+Final GPIO4: input. Final GPCLK0 counts: 0/0/0.
+
+Uncalibrated SDR findings:
+  baseline capture SHA-256 47a6ace4bed19d13d7c24c2f43eb95cda972a08a4f595c15ed5c9782ff35c088
+  tones capture SHA-256    230c1f958a88e04a7acd372816fe10bbe94b1520bc527dde37310229d2e2191e
+  whole-capture live peak  ~14096464.375 Hz, -63.77 dBFS
+  baseline at peak         ~-143.67 dBFS
+  relative on/off contrast ~79.90 dB
+  per-interval phase estimates (Hz):
+    14096466.2749, 14096467.8291, 14096469.2394, 14096470.9823
+  relative steps (Hz): 1.5542, 1.4103, 1.7429
+  per-interval amplitudes: approximately -55.22 to -55.17 dBFS
+These values are relative observations, not calibrated power or frequency.
+
+STOP, close-active, and repeat live runs
+----------------------------------------
+STOP generations 5/6/7: early/middle/near-end requests all COMPLETE after drain.
+Repeat generation 8: COMPLETE.
+Observed SDR output intervals: approximately 0.740-0.751 seconds each.
+Cancel capture SHA-256:
+  acaf4ab871ea483dfb8983b469c93d982e591211ac4f6b2d665ce4d5d090c763
+Close-active generation 9: descriptor drained and cleanup completed.
+Post-close reacquisition/repeat generation 10: COMPLETE.
+All cases ended with GPIO4 input and GPCLK0 counts 0/0/0.
+
+Final restoration
+-----------------
+Provider removed safely, then reloaded with live_output=N.
+GPIO4: input.
+GPCLK0 prepare/enable/protect: 0/0/0.
+SoapyRemote service: active.
+wspr5 parent checkout: clean and synchronized at cc82893a245c7708a396bef90f62deac4d3a8381.
+Kernel error scan found no bad descriptor, BUG, or WARNING. The only fail text
+was the expected KUnit summary field fail:0. The custom kernel remains tainted
+from the temporary out-of-tree lease-conflict test module.
+
+Raw evidence retained on wspr5
+------------------------------
+/home/pi/phase6i-evidence (including three 16 MB CF32 captures and full state monitors)
+Compact test, provider, capture, final-state, and removal logs are copied beside
+this summary. Large raw captures and state monitors are identified by hashes and
+remain on wspr5 rather than being committed to the source repository.

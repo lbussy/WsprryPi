@@ -1,0 +1,66 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/rp1.h>
+#include <dt-bindings/mfd/rp1.h>
+
+&rp1_gpio {
+	rp1_gpclk0_safe_gpio4: rp1-gpclk0-safe-gpio4 {
+		function = "gpio";
+		pins = "gpio4";
+		input-enable;
+		bias-disable;
+		drive-strength = <2>;
+	};
+
+	rp1_gpclk0_2ma_gpio4: rp1-gpclk0-2ma-gpio4 {
+		function = "gpclk0";
+		pins = "gpio4";
+		bias-disable;
+		drive-strength = <2>;
+	};
+
+	rp1_gpclk0_4ma_gpio4: rp1-gpclk0-4ma-gpio4 {
+		function = "gpclk0";
+		pins = "gpio4";
+		bias-disable;
+		drive-strength = <4>;
+	};
+
+	rp1_gpclk0_8ma_gpio4: rp1-gpclk0-8ma-gpio4 {
+		function = "gpclk0";
+		pins = "gpio4";
+		bias-disable;
+		drive-strength = <8>;
+	};
+
+	rp1_gpclk0_12ma_gpio4: rp1-gpclk0-12ma-gpio4 {
+		function = "gpclk0";
+		pins = "gpio4";
+		bias-disable;
+		drive-strength = <12>;
+	};
+};
+
+&rp1 {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	rp1_gpclk_provider: rp1-gpclk-provider@174024 {
+		compatible = "raspberrypi,rp1-gpclk-provider";
+		reg = <0xc0 0x40174024 0x0 0x8>,
+		      <0xc0 0x40158000 0x0 0x8>;
+		reg-names = "tick-dma0", "dma-tick0";
+		clocks = <&rp1_clocks RP1_CLK_GP0>;
+		clock-names = "gpclk";
+		pinctrl-names = "safe", "drive-2ma", "drive-4ma", "drive-8ma", "drive-12ma";
+		pinctrl-0 = <&rp1_gpclk0_safe_gpio4>;
+		pinctrl-1 = <&rp1_gpclk0_2ma_gpio4>;
+		pinctrl-2 = <&rp1_gpclk0_4ma_gpio4>;
+		pinctrl-3 = <&rp1_gpclk0_8ma_gpio4>;
+		pinctrl-4 = <&rp1_gpclk0_12ma_gpio4>;
+		dmas = <&rp1_dma RP1_DMA_DMA_TICK_TICK0>;
+		dma-names = "tick0";
+		status = "okay";
+	};
+};

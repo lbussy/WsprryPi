@@ -578,6 +578,74 @@ int main(int argc, char *argv[])
     set_si5351_detection_override_for_test(true);
     set_raspberry_pi_generation_override_for_test(4);
 
+    init_default_config();
+    require(
+        config.rp1_gpio_drive_ma == 2,
+        "RP1 GPIO drive must default to the minimum 2 mA profile");
+    init_config_json();
+    require(
+        jConfig.at("GPIO").at("RP1 Drive mA").get<int>() == 2,
+        "canonical default JSON must publish the minimum 2 mA RP1 drive");
+    for (const int drive_ma : {2, 4, 8, 12})
+    {
+        config.rp1_gpio_drive_ma = drive_ma;
+        config_to_json();
+        config.rp1_gpio_drive_ma = 2;
+        json_to_config();
+        require(
+            config.rp1_gpio_drive_ma == drive_ma,
+            "each supported RP1 GPIO drive must survive JSON persistence");
+    }
+    jConfig["GPIO"]["RP1 Drive mA"] = 6;
+    bool invalid_rp1_drive_rejected = false;
+    try
+    {
+        json_to_config();
+    }
+    catch (const std::exception& error)
+    {
+        invalid_rp1_drive_rejected =
+            std::string(error.what()).find("2, 4, 8, or 12") !=
+            std::string::npos;
+    }
+    require(
+        invalid_rp1_drive_rejected,
+        "unsupported RP1 GPIO drive values must be rejected while loading JSON");
+    init_default_config();
+    config.use_ini = true;
+    config.ini_filename = "/tmp/rp1_drive_persistence.ini";
+    config.rp1_gpio_drive_ma = 12;
+    config_to_json();
+    write_text_file(config.ini_filename, "");
+    iniFile.set_filename(config.ini_filename);
+    json_to_ini();
+    require(
+        iniFile.getData().at("GPIO").at("RP1 Drive mA") == "12",
+        "RP1 GPIO drive must be included in managed INI persistence");
+    config.rp1_gpio_drive_ma = 2;
+    ini_to_json(config.ini_filename);
+    json_to_config();
+    require(
+        config.rp1_gpio_drive_ma == 12,
+        "RP1 GPIO drive must survive managed INI reload");
+    set_raspberry_pi_generation_override_for_test(5);
+    config.transmit_backend = TransmitBackendKind::GPIO;
+    for (const int drive_ma : {2, 4, 8, 12})
+    {
+        config.rp1_gpio_drive_ma = drive_ma;
+        resolve_backend_specific_config(config);
+        require(
+            config.power_level == drive_ma,
+            "Pi 5 runtime resolution must consume each committed RP1 drive unchanged");
+    }
+    set_raspberry_pi_generation_override_for_test(4);
+    config.gpio_power_level = 7;
+    resolve_backend_specific_config(config);
+    require(
+        config.power_level == 7,
+        "Pi 4 runtime resolution must preserve the legacy GPIO power level");
+    init_default_config();
+
     WSPRBandLookup lookup;
 
     require(
@@ -1013,7 +1081,7 @@ int main(int argc, char *argv[])
             "GPIO backend must be rejected on Raspberry Pi 5");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "GPIO backend rejection on Raspberry Pi 5 must explain the unsupported platform");
 
@@ -1025,7 +1093,7 @@ int main(int argc, char *argv[])
             "managed GPIO configuration must be rejected on Raspberry Pi 5");
         require(
             candidate.error_reason.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "managed GPIO rejection on Raspberry Pi 5 must preserve the platform error");
 
@@ -1043,7 +1111,7 @@ int main(int argc, char *argv[])
             "GPIO backend must remain invalid on Raspberry Pi 5 even when transmit is off");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "GPIO backend invalidity on Raspberry Pi 5 must not depend on transmit state");
 
@@ -1136,7 +1204,7 @@ int main(int argc, char *argv[])
             "CLI startup validation must fail for GPIO on Raspberry Pi 5");
         require(
             validation_error.find(
-                "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.") !=
+                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
                 std::string::npos,
             "CLI startup validation on Raspberry Pi 5 must report the GPIO platform error");
         require(
@@ -1252,7 +1320,8 @@ int main(int argc, char *argv[])
             backend.configure(plan, inputs);
         require(
             compile_result.ok,
-            "Si5351 backend configure path must remain allowed on Raspberry Pi 5");
+            "Si5351 backend configure path must remain allowed on Raspberry Pi 5: " +
+                compile_result.error);
 
         const wsprrypi::ExecutionResult execute_result = backend.execute(plan);
         require(
@@ -4330,6 +4399,40 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
+        config.rp1_gpio_drive_ma = 12;
+        config_to_json();
+        require(
+            platform_supports_gpio_clock_transmission(),
+            "operator visibility must not disable the explicit Pi 5 RP1 runtime path");
+        const nlohmann::json hidden_rp1_public_config = get_public_config_json();
+        require(
+            !hidden_rp1_public_config["Platform"]
+                 ["GPIO Clock Transmission Supported"].get<bool>() &&
+                !hidden_rp1_public_config["Platform"]
+                  ["RP1 GPIO Operator Visible"].get<bool>(),
+            "public capability JSON must keep Pi 5 RP1 GPIO hidden by default");
+        require(
+            hidden_rp1_public_config["GPIO"]["RP1 Drive mA"].get<int>() == 12,
+            "operator visibility must preserve retained RP1 configuration");
+        set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
+        patch_all_from_web({
+            {"Meta", {{"debug_logging", true}}},
+            {"GPIO", {
+                {"Transmit Pin", 20},
+                {"RP1 Drive mA", 6}}}});
+        require(
+            jConfig["Meta"]["debug_logging"].get<bool>(),
+            "operator-hidden RP1 state must not block unrelated web patches");
+        require(
+            jConfig["GPIO"]["Transmit Pin"].get<int>() == 4 &&
+                jConfig["GPIO"]["RP1 Drive mA"].get<int>() == 12,
+            "web patches must preserve operator-hidden RP1 GPIO configuration");
+        clear_rp1_gpclk_provider_available_override_for_test();
+        clear_raspberry_pi_generation_override_for_test();
+
+        init_default_config();
         set_si5351_detection_override_for_test(false);
         config.si5351_tx_output = 2;
         config_to_json();
@@ -4438,6 +4541,35 @@ int main(int argc, char *argv[])
         require(
             config.use_shutdown && config.shutdown_pin == 19,
             "managed config candidate commit must update shutdown GPIO settings");
+    }
+
+    {
+        GPIOOutput::setTestMode(true);
+        init_default_config();
+        ini_reload_pending.store(false, std::memory_order_relaxed);
+        exiting_wspr.store(false, std::memory_order_relaxed);
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+
+        config.use_ini = true;
+        config.mode = ModeType::WSPR;
+        config.transmit = true;
+
+        transmitter_cb(
+            WsprTransmissionCallbackEvent::FAILED,
+            WsprTransmitLogLevel::ERROR,
+            "injected managed backend failure",
+            0.0);
+
+        require(
+            managed_reload_tx_inhibited_for_test(),
+            "managed backend failure must inhibit future transmissions");
+        require(
+            !exiting_wspr.load(std::memory_order_relaxed),
+            "managed backend failure must not request process shutdown");
+
+        cleanup_scheduler_regression_test_state();
+        GPIOOutput::setTestMode(false);
     }
 
     {

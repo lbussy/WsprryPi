@@ -1,0 +1,74 @@
+Phase 6G in-tree RP1 GPCLK provider evidence
+Date: 2026-08-10
+Host: wspr5.local
+Target: Raspberry Pi OS 64-bit BCM2712 rpi-2712 kernel only
+
+Installed kernel
+  release: 6.18.34+rpt-rpi-2712
+  installed config sha256: d5ba966d17d456a6f29e53baf53464e1fd53f9f8e31481da18f2221f1da2593d
+
+Official source
+  repository: raspberrypi/linux
+  branch: rpi-6.18.y
+  commit: 89586905b8603e545cce9089a81f5f35d65bc998
+  build tree: /home/pi/rpi-linux-phase6g
+
+Phase 6G build configuration
+  CONFIG_KUNIT=y
+  CONFIG_RP1_GPCLK_PROVIDER=m
+  CONFIG_RP1_GPCLK_PROVIDER_KUNIT_TEST=m
+  config sha256: 0e06e43ff262adad8074d8fa3fb607cbd151b834ed49d37ef9743518dfdfb8f7
+
+Toolchain and generated-parser dependencies
+  gcc: Debian 14.2.0-19
+  binutils: 2.44
+  flex: 2.6.4-8.2+b4
+  bison: 3.8.2+dfsg-1+b2
+  m4: 1.4.19-8
+  libfl-dev: 2.6.4-8.2+b4
+
+Full native build
+  nproc: 4
+  command: make -j4 Image modules
+  job policy: explicit Pi 5 full-processor exception
+  result: PASS
+  confirmation: incremental rerun exited 0
+  output observed: CALL scripts/checksyscalls.sh
+
+Artifacts
+  arch/arm64/boot/Image
+    size: 25872896 bytes
+    sha256: 12871300c195444b43b6cff46722f1e0fa714ebd86f4679952627e40670e8c57
+    type: Linux kernel ARM64 boot executable Image, little-endian, 16K pages
+  drivers/clk/rp1-gpclk-provider.ko
+    size: 17152 bytes
+    sha256: e50669aa155243e6fd44fb9937802ce9ae43a4daafda1060b6c6259ed32147f7
+    type: ELF 64-bit ARM aarch64 relocatable
+  drivers/clk/rp1-gpclk-provider-kunit.ko
+    size: 6816 bytes
+    sha256: e309aefd94243041555b3048df071d57f9bcfe88dbb44ecec8fdcb89865c223f
+    type: ELF 64-bit ARM aarch64 relocatable
+
+Additional validation
+  portable provider contract tests: PASS
+  static provider-ownership contract test: PASS
+  provider overlay compile: PASS; uninstalled dtbo size 866 bytes
+  clean patch application to the recorded official source commit: PASS
+  focused in-tree clk-rp1, provider, and KUnit object compilation: PASS
+  exact-installed-header external module compilation: PASS
+  source-tree git diff --check: PASS
+  repository git diff --check: PASS
+
+Final clock-disabled state
+  GPIO4: input
+  clk_gp0 prepare count: 0
+  clk_gp0 enable count: 0
+  clk_gp0 rate: 50000000
+  /dev/rp1-gpclk0: absent
+  rp1_gpclk modules loaded: none
+
+Qualification boundaries
+  No kernel, module, or overlay was installed.
+  No module was loaded and KUnit was not executed in-kernel.
+  No pin mux, pad drive, GPCLK enable, GPIO output, or RF transmission occurred.
+  This is a source/build gate, not runtime or RF qualification.

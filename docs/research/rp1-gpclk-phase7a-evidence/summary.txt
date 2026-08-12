@@ -1,0 +1,53 @@
+Phase 7A evidence summary
+========================
+
+Outcome: PASS; CLOCK-DISABLED KEYED-MODE APPLICATION INTEGRATION
+
+Identity:
+- parent commit dbfb9b3d0b41a864dcae923ef3dce0c9b508562d
+- WSPR-Transmitter commit fe8a03b17a817175553968f91508fccd48c78bdf
+- exact clean Pi worktree /home/pi/phase7a-gitwork
+- binary SHA-256 70f42dbefe6fdb40468499096696727e42af898f50b92f44eeba695bac0fbc11
+- kernel 6.18.44-v8-16k+
+- provider srcversion D33AD651DB5EA8776DE0AAF
+
+Build and portable tests:
+- RP1 planner, lifecycle, transition, backend, Linux-provider, and transmit-backend: pass
+- QRSS execution regression: pass on Pi
+- non-WSPR repeat policy: pass on Pi
+- full debug build: pass on Pi
+- Mac limitation: pre-existing AppleClang -fmax-errors=10 incompatibility
+
+Real application, live_output=N:
+- QRSS EE, 0.7 s dot: rc=0, completed 3.525336 s
+- FSKCW EE, 0.7 s dot: rc=0, completed 3.511640 s
+- DFCW EE, 0.7 s dot: rc=0, completed 2.119715 s
+- application progress and finished callbacks observed for every mode
+
+Lifecycle:
+- STOP during QRSS keyed interval: canceled, rc=0, immediate reacquire pass
+- STOP during QRSS RF-off character gap: canceled, rc=0, immediate reacquire pass
+- actual owner process SIGKILL: provider close cleanup and reacquire pass
+- direct v2 lifecycle harness: all ownership, STOP, close, generation, repeat, and release checks pass; failures=0
+- invalid wrapper-only kill attempt retained and labeled; it is not acceptance evidence
+
+Final state:
+- live_output=N
+- GPIO4=input
+- GPCLK0 prepare count=0
+- GPCLK0 enable count=0
+- wsprrypi.service=active
+- soapyremote-server.service=active
+
+Qualified:
+- exact Raspberry Pi 5 / RP1 build
+- clock-disabled production QRSS, FSKCW, and DFCW integration
+- normal completion, progress, STOP in keyed/gap intervals, owner close, and reuse
+
+Not qualified:
+- live GPIO or RF output, waveform/readability, spectral behavior, power
+- GPIO20, other bands, higher drive, canonical CW, other Pi/kernel builds
+
+Raw evidence:
+/home/pi/phase7a-evidence
+- verified 47-entry SHA256SUMS manifest

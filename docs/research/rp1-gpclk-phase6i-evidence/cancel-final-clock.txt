@@ -1,0 +1,1 @@
+    clk_gp0                          0       0        0        50000000    0          0     50000      Y      1f00174024.rp1-gpclk-provider   gpclk

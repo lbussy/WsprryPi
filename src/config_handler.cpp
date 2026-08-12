@@ -607,8 +607,18 @@ namespace
     nlohmann::json public_config_from_internal(const nlohmann::json &source)
     {
         std::string gpio_support_error;
-        const bool gpio_clock_transmission_supported =
+        const bool runtime_gpio_clock_transmission_supported =
             platform_supports_gpio_clock_transmission(&gpio_support_error);
+        const bool rp1_gpio_operator_visible = operator_exposes_rp1_gpio();
+        const bool gpio_clock_transmission_supported =
+            runtime_gpio_clock_transmission_supported &&
+            (get_raspberry_pi_generation() != 5 || rp1_gpio_operator_visible);
+        if (runtime_gpio_clock_transmission_supported &&
+            !gpio_clock_transmission_supported)
+        {
+            gpio_support_error =
+                "GPIO transmission is supported only on Raspberry Pi 1 through 4.";
+        }
         bool si5351_detected = true;
         std::string si5351_detection_error;
         if (source.contains("Si5351") && source.at("Si5351").is_object())
@@ -660,6 +670,7 @@ namespace
             {"GPIO Clock Transmission Error",
              gpio_clock_transmission_supported ? std::string()
                                                : gpio_support_error},
+            {"RP1 GPIO Operator Visible", rp1_gpio_operator_visible},
             {"Si5351 Detected", si5351_detected},
             {"Si5351 Detection Error",
              si5351_detected ? std::string() : si5351_detection_error}};
@@ -727,7 +738,13 @@ namespace
                     "GPIO.Use NTP is retired and accepted only during INI migration; "
                     "use GPIO.Use System Clock Frequency Estimate.");
             }
-            internal_json["GPIO"] = public_json.at("GPIO");
+            const bool rp1_gpio_hidden_from_operator =
+                get_raspberry_pi_generation() == 5 &&
+                !operator_exposes_rp1_gpio();
+            if (!rp1_gpio_hidden_from_operator)
+            {
+                internal_json["GPIO"] = public_json.at("GPIO");
+            }
         }
         if (public_json.contains("Calibration"))
             internal_json["Calibration"] = public_json.at("Calibration");
@@ -1030,6 +1047,7 @@ void init_default_config()
     config.amp_pin_active_high = false;
     config.gpio_tx_pin = kDefaultTransmitGpio;
     config.gpio_power_level = 7;
+    config.rp1_gpio_drive_ma = kDefaultRp1GpioDriveMa;
     config.gpio_use_system_clock_frequency_estimate = true;
     config.gpio_frequency_residual_ppm = 0.0;
     config.gpio_manual_ppm = 0.0;
@@ -1105,7 +1123,9 @@ void resolve_backend_specific_config(ArgParserConfig &config) noexcept
         return;
     }
 
-    config.power_level = config.gpio_power_level;
+    config.power_level = get_raspberry_pi_generation() == 5
+        ? config.rp1_gpio_drive_ma
+        : config.gpio_power_level;
     config.use_system_clock_frequency_estimate = config.gpio_use_system_clock_frequency_estimate;
     config.ppm = config.gpio_manual_ppm;
 }
@@ -1298,6 +1318,7 @@ namespace
                (section == "GPIO" &&
                 (key == "Transmit Pin" ||
                  key == "Power Level" ||
+                 key == "RP1 Drive mA" ||
                  key == "Use System Clock Frequency Estimate" ||
                  key == "Frequency Residual PPM" ||
                  key == "Manual PPM")) ||
@@ -1440,6 +1461,7 @@ namespace
         target["GPIO"] = {
             {"Transmit Pin", kDefaultTransmitGpio},
             {"Power Level", 7},
+            {"RP1 Drive mA", kDefaultRp1GpioDriveMa},
             {"Use System Clock Frequency Estimate", true},
             {"Frequency Residual PPM", 0.0},
             {"Manual PPM", 0.0}};
@@ -1530,6 +1552,15 @@ namespace
             gpio.contains("Power Level")
                 ? gpio.at("Power Level").get<int>()
                 : 7;
+        target.rp1_gpio_drive_ma =
+            gpio.contains("RP1 Drive mA")
+                ? gpio.at("RP1 Drive mA").get<int>()
+                : kDefaultRp1GpioDriveMa;
+        if (!is_supported_rp1_gpio_drive_ma(target.rp1_gpio_drive_ma))
+        {
+            throw std::runtime_error(
+                "GPIO.RP1 Drive mA must be 2, 4, 8, or 12.");
+        }
         target.gpio_use_system_clock_frequency_estimate =
             gpio.contains("Use System Clock Frequency Estimate")
                 ? gpio.at("Use System Clock Frequency Estimate").get<bool>()
@@ -1785,6 +1816,7 @@ namespace
         target["GPIO"]["Transmit Pin"] =
             normalize_gpio_transmit_pin(source.gpio_tx_pin);
         target["GPIO"]["Power Level"] = source.gpio_power_level;
+        target["GPIO"]["RP1 Drive mA"] = source.rp1_gpio_drive_ma;
         target["GPIO"]["Use System Clock Frequency Estimate"] =
             source.gpio_use_system_clock_frequency_estimate;
         target["GPIO"]["Frequency Residual PPM"] =
@@ -1876,6 +1908,7 @@ namespace
         target.transmit_backend = source.transmit_backend;
         target.gpio_tx_pin = source.gpio_tx_pin;
         target.gpio_power_level = source.gpio_power_level;
+        target.rp1_gpio_drive_ma = source.rp1_gpio_drive_ma;
         target.gpio_use_system_clock_frequency_estimate = source.gpio_use_system_clock_frequency_estimate;
         target.gpio_frequency_residual_ppm = source.gpio_frequency_residual_ppm;
         target.gpio_manual_ppm = source.gpio_manual_ppm;
@@ -2302,6 +2335,7 @@ build_persistent_ini_data(const nlohmann::json &source)
                 (section_name == "GPIO" &&
                  (key == "Transmit Pin" ||
                   key == "Power Level" ||
+                  key == "RP1 Drive mA" ||
                   key == "Use System Clock Frequency Estimate" ||
                   key == "Frequency Residual PPM" ||
                   key == "Manual PPM")) ||

@@ -44,6 +44,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unistd.h>
 
 #ifdef DEBUG_WSPR
 constexpr bool kDebugWspr = true;
@@ -54,6 +55,7 @@ constexpr bool kDebugWspr = false;
 namespace
 {
     std::optional<int> g_pi_generation_override;
+    std::optional<bool> g_rp1_gpclk_provider_available_override;
 
     std::optional<int> parse_generation_from_pi_model(
         const std::string &model)
@@ -541,8 +543,18 @@ bool platform_supports_gpio_clock_transmission(
 
     if (generation >= 5)
     {
-        std::string message =
-            "GPIO transmission mode is unsupported on Raspberry Pi 5 and newer.";
+        const bool rp1_provider_available =
+            g_rp1_gpclk_provider_available_override.value_or(
+                !g_pi_generation_override.has_value() &&
+                ::access("/dev/rp1-gpclk0", R_OK | W_OK) == 0);
+        if (generation == 5 && rp1_provider_available)
+        {
+            return true;
+        }
+
+        std::string message = generation == 5
+            ? "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider at /dev/rp1-gpclk0."
+            : "GPIO transmission mode is unsupported beyond Raspberry Pi 5.";
         const std::string model = get_pi_model();
         if (!model.empty())
         {
@@ -575,6 +587,11 @@ bool platform_supports_gpio_clock_transmission(
     return false;
 }
 
+bool operator_exposes_rp1_gpio() noexcept
+{
+    return false;
+}
+
 void set_raspberry_pi_generation_override_for_test(int generation) noexcept
 {
     g_pi_generation_override = generation;
@@ -583,6 +600,16 @@ void set_raspberry_pi_generation_override_for_test(int generation) noexcept
 void clear_raspberry_pi_generation_override_for_test() noexcept
 {
     g_pi_generation_override.reset();
+}
+
+void set_rp1_gpclk_provider_available_override_for_test(bool available) noexcept
+{
+    g_rp1_gpclk_provider_available_override = available;
+}
+
+void clear_rp1_gpclk_provider_available_override_for_test() noexcept
+{
+    g_rp1_gpclk_provider_available_override.reset();
 }
 
 /**

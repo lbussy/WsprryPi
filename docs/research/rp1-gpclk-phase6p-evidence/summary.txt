@@ -1,0 +1,43 @@
+Phase 6P evidence summary
+========================
+
+Outcome: STOPPED AT CLOCK-DISABLED PREFLIGHT; NO RF TRANSMITTED
+
+Parent committed tip: 830154fc517a7f42b44f953e3709e6f220c7c43f
+Transmitter committed tip: d6eb8bb6568d612483b48c6ccf7181449cfaa06e
+Kernel: 6.18.44-v8-16k+ #3
+Provider srcversion: E2B807F9BED056FF0867C9B
+Provider submit ioctl: 0x4130b701
+
+Passing checks:
+- pushed implementation/test files match the preserved wspr5 worktree
+- debug build and focused RP1 userspace tests
+- portable provider core
+- static kernel provider contract
+- KUnit: pass 2, fail 0, skip 0
+- fail-closed scheduler propagation
+
+Blocking result:
+- provider SUBMIT returned EINVAL
+- no completed-transmission callback
+- direct CLI return code 1
+- provider generation retained 1 from Phase 6O
+- new userspace process submitted its initial generation 1
+- strict generation increase validation rejected the cross-process reuse
+
+Qualification:
+- live frames attempted: 0/3
+- SDR captures attempted: 0/3
+- independent WSPR decodes attempted: 0/3
+- three-independent-decode gate: NOT MET
+
+Final state:
+- live_output=N
+- GPIO4=input
+- GPCLK0 prepare count=0
+- GPCLK0 enable count=0
+- wsprrypi.service=active
+- soapyremote-server.service=active
+
+Raw evidence and SHA-256 manifest:
+/home/pi/phase6p-evidence

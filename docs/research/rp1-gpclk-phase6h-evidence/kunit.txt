@@ -1,0 +1,11 @@
+[   43.909164] KTAP version 1
+[   43.909174] 1..1
+[   43.909540]     KTAP version 1
+[   43.909543]     # Subtest: rp1-gpclk-provider-contract
+[   43.909546]     # module: rp1_gpclk_provider_kunit
+[   43.909551]     1..2
+[   43.909625]     ok 1 header_and_drive_test
+[   43.909666]     ok 2 program_and_packing_test
+[   43.909671] # rp1-gpclk-provider-contract: pass:2 fail:0 skip:0 total:2
+[   43.909675] # Totals: pass:2 fail:0 skip:0 total:2
+[   43.909678] ok 1 rp1-gpclk-provider-contract

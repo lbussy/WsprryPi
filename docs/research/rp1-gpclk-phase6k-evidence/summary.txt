@@ -1,0 +1,61 @@
+Phase 6K minimum-drive live full-frame summary
+Phase 6L correction: 110.699024 s was terminal state-observation latency, not
+the DMA interval. Direct kernel instrumentation later measured approximately
+110.58857 s (-31 ppm), within the enforced +/-6.75 ms frame tolerance.
+Date: 2026-08-10
+Host: wspr5.local / Raspberry Pi 5 / BCM2712
+Kernel: 6.18.44-v8-16k+ #3
+Parent: 984e66325e4f5275251b0fe83d8c76ba60334808
+WSPR-Transmitter: 3d28b204e386d66fe080274fe107c23fae2f189c
+
+Preflight:
+- parent and submodule clean, synchronized, and at intended tips
+- portable provider core: pass
+- static provider ownership/single-submission contract: pass
+- fresh KUnit provider contract: 2 pass, 0 fail, 0 skip
+- provider source hash matched the built module source
+- initial live_output=N, GPIO4 input, GPCLK counts 0/0/0
+
+Authorized live frame:
+- scheduler-originated one-frame WSPR execution
+- GPIO4, minimum 2 mA RP1 pad drive
+- SDRplay RSP1B serial 2404058C60
+- CF32, 250000 samples/s, center 14122100 Hz, fixed gain 25
+- 30000000 samples, 0 overflows
+- scheduler return code 0, reported completion 110.718523 s
+- raw capture remains on wspr5:
+  /home/pi/phase6k-evidence-live/frame.cf32
+- raw capture SHA-256:
+  ed37e4adad8c3e503a9e4126647b155d3f983c3fccd9a24daeef47729d612f7c
+
+Relative SDR analysis:
+- 161/161 boundaries analyzed with no detected amplitude gap
+- worst 20 ms boundary minimum: -0.2848 dB
+- boundary fifth percentile: -0.1975 dB
+- symbol amplitude spread: 0.1382 dB
+- tone steps: 1.5187, 1.4306, 1.4883 Hz
+- equal-window live/baseline spectral contrast: 65.7314 dB
+- largest other in-band feature outside 20 Hz: -44.8644 dBc
+- common-mode SDR drift over frame: approximately -2.4448 Hz
+- drift-separated reference fit tone spacing: 1.4090 Hz
+- reference-fit RMS residual after initial three symbols: 0.3560 Hz
+
+Timing gate:
+- nominal WSPR frame: 110.592000 s
+- measured provider DMA frame: 110.699024 s
+- error: +107.024 ms, approximately +967.74 ppm
+- continuous cadence passes, nominal WSPR pacing does not yet pass
+- correct tick pacing and repeat one live frame before decode qualification
+
+Final restoration:
+- live_output=N
+- GPIO4 input, safe 2 mA pinctrl state
+- clk_gp0 prepare/enable counts 0/0
+- WsprryPi service active
+- SoapyRemote service active
+- no source commits or pushes in Phase 6K
+
+Qualification boundary:
+- relative observations only; no calibrated power or absolute-frequency claim
+- no WSPR decode claim
+- no three-frame or product RF qualification

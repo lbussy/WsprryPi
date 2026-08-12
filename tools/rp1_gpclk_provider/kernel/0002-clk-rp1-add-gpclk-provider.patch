@@ -1,0 +1,684 @@
+diff --git a/drivers/clk/Kconfig b/drivers/clk/Kconfig
+index 60b454677..1de9f4cd2 100644
+--- a/drivers/clk/Kconfig
++++ b/drivers/clk/Kconfig
+@@ -97,6 +97,22 @@ config COMMON_CLK_RP1
+ 	  This multi-function device has 3 main PLLs and several clock
+ 	  generators to drive the internal sub-peripherals.
+ 
++config RP1_GPCLK_PROVIDER
++	tristate "RP1 GPCLK provider-owned tick DMA"
++	depends on COMMON_CLK_RP1 && DMA_ENGINE
++	select MISC_DEVICES
++	help
++	  Expose a versioned, address-independent userspace interface for one
++	  complete 162-symbol WSPR divider sequence. The provider owns the finite
++	  tick-paced DMA submission, GPCLK0 lease, GPIO4 pinctrl selection, pad
++	  drive, and restoration to the safe input state. Live output remains
++	  disabled unless the read-only live_output module parameter is enabled.
++
++config RP1_GPCLK_PROVIDER_KUNIT_TEST
++	tristate "RP1 GPCLK provider contract tests" if !KUNIT_ALL_TESTS
++	depends on KUNIT
++	default KUNIT_ALL_TESTS
++
+ config COMMON_CLK_RP1_SDIO
+ 	tristate "Clock driver for the RP1 SDIO interfaces"
+ 	depends on MFD_RP1
+diff --git a/drivers/clk/Makefile b/drivers/clk/Makefile
+index 29b2c6838..42b05f4e5 100644
+--- a/drivers/clk/Makefile
++++ b/drivers/clk/Makefile
+@@ -88,6 +88,8 @@ obj-$(CONFIG_COMMON_CLK_PWM)		+= clk-pwm.o
+ obj-$(CONFIG_CLK_QORIQ)			+= clk-qoriq.o
+ obj-$(CONFIG_COMMON_CLK_RK808)		+= clk-rk808.o
+ obj-$(CONFIG_COMMON_CLK_RP1)            += clk-rp1.o
++obj-$(CONFIG_RP1_GPCLK_PROVIDER)         += rp1-gpclk-provider.o
++obj-$(CONFIG_RP1_GPCLK_PROVIDER_KUNIT_TEST) += rp1-gpclk-provider-kunit.o
+ obj-$(CONFIG_COMMON_CLK_RP1_SDIO)	+= clk-rp1-sdio.o
+ obj-$(CONFIG_COMMON_CLK_RPMI)		+= clk-rpmi.o
+ obj-$(CONFIG_COMMON_CLK_HI655X)		+= clk-hi655x.o
+diff --git a/drivers/clk/rp1-gpclk-contract.h b/drivers/clk/rp1-gpclk-contract.h
+new file mode 100644
+index 000000000..aee149b8b
+--- /dev/null
++++ b/drivers/clk/rp1-gpclk-contract.h
+@@ -0,0 +1,60 @@
++#ifndef RP1_GPCLK_CONTRACT_H
++#define RP1_GPCLK_CONTRACT_H
++
++#include <linux/rp1_gpclk.h>
++
++static inline bool rp1_gpclk_valid_header(u16 version, u16 size,
++	size_t expected)
++{
++	return version == RP1_GPCLK_UAPI_VERSION && size == expected;
++}
++
++static inline bool rp1_gpclk_valid_drive(u32 drive)
++{
++	return drive == 2 || drive == 4 || drive == 8 || drive == 12;
++}
++
++static inline u32 rp1_gpclk_pack_fraction(u64 divider_word)
++{
++	return (divider_word & 0xffffU) << 16;
++}
++
++static inline bool rp1_gpclk_valid_frame_elapsed(u64 elapsed_ns)
++{
++	const u64 nominal = RP1_GPCLK_WSPR_FRAME_NOMINAL_NS;
++	const u64 tolerance = RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS;
++
++	return elapsed_ns >= nominal - tolerance &&
++		elapsed_ns <= nominal + tolerance;
++}
++
++static inline bool rp1_gpclk_valid_program(
++	const struct rp1_gpclk_program *request, u64 previous_generation)
++{
++	u32 i;
++
++	if (!rp1_gpclk_valid_header(request->version, request->size,
++			sizeof(*request)) || request->fractional_bits != 16 ||
++		request->generation <= previous_generation || request->reserved ||
++		request->writes_per_symbol != RP1_GPCLK_WRITES_PER_SYMBOL ||
++		request->tick_divider != RP1_GPCLK_TICK_DIVIDER ||
++		request->symbol_count != RP1_GPCLK_WSPR_SYMBOL_COUNT ||
++		request->tone_count != 4)
++		return false;
++
++	for (i = 0; i < request->tone_count; ++i) {
++		const struct rp1_gpclk_symbol *symbol = &request->tones[i];
++
++		if (symbol->lower_count + symbol->upper_count !=
++				RP1_GPCLK_WRITES_PER_SYMBOL ||
++			(symbol->lower_divider_word >> 16) != 3 ||
++			(symbol->upper_divider_word >> 16) != 3)
++			return false;
++	}
++	for (i = 0; i < RP1_GPCLK_WSPR_SYMBOL_COUNT; ++i)
++		if (request->symbols[i] >= request->tone_count)
++			return false;
++	return true;
++}
++
++#endif
+diff --git a/drivers/clk/rp1-gpclk-provider-kunit.c b/drivers/clk/rp1-gpclk-provider-kunit.c
+new file mode 100644
+index 000000000..842f2dbaf
+--- /dev/null
++++ b/drivers/clk/rp1-gpclk-provider-kunit.c
+@@ -0,0 +1,86 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <kunit/test.h>
++
++#include "rp1-gpclk-contract.h"
++
++static struct rp1_gpclk_program *valid_program(
++	struct kunit *test, u64 generation)
++{
++	struct rp1_gpclk_program *program = kunit_kzalloc(
++		test, sizeof(*program), GFP_KERNEL);
++	u32 i;
++
++	if (!program)
++		return NULL;
++	program->version = 1;
++	program->size = sizeof(*program);
++	program->fractional_bits = 16;
++	program->writes_per_symbol = 66792;
++	program->tick_divider = 511;
++	program->symbol_count = 162;
++	program->tone_count = 4;
++	program->generation = generation;
++	for (i = 0; i < 4; ++i)
++		program->tones[i] = (struct rp1_gpclk_symbol) {
++			.lower_divider_word = 232445 + (i & 1),
++			.upper_divider_word = 232446,
++			.lower_count = 66312, .upper_count = 480,
++		};
++	for (i = 0; i < RP1_GPCLK_WSPR_SYMBOL_COUNT; ++i)
++		program->symbols[i] = i % 4;
++	return program;
++}
++
++static void header_and_drive_test(struct kunit *test)
++{
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_header(1, 16, 16));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(2, 16, 16));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_header(1, 15, 16));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(2));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(4));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(8));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_drive(12));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_drive(6));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110592000000ULL));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110585250000ULL));
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_frame_elapsed(110598750000ULL));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110585249999ULL));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_frame_elapsed(110598750001ULL));
++}
++
++static void program_and_packing_test(struct kunit *test)
++{
++	struct rp1_gpclk_program *program = valid_program(test, 2);
++	KUNIT_ASSERT_NOT_NULL(test, program);
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 1));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 2));
++	KUNIT_EXPECT_EQ(test, rp1_gpclk_pack_fraction(232445), 0x8bfd0000U);
++	program->tick_divider = 510;
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
++	program = valid_program(test, 2);
++	KUNIT_ASSERT_NOT_NULL(test, program);
++	program->symbol_count = 161;
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
++	program = valid_program(test, 2);
++	KUNIT_ASSERT_NOT_NULL(test, program);
++	program->tones[2].upper_count--;
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
++	program = valid_program(test, 2);
++	KUNIT_ASSERT_NOT_NULL(test, program);
++	program->symbols[81] = 4;
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
++}
++
++static void lease_generation_test(struct kunit *test)
++{
++	struct rp1_gpclk_program *program = valid_program(test, 1);
++
++	KUNIT_ASSERT_NOT_NULL(test, program);
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 0));
++	KUNIT_EXPECT_FALSE(test, rp1_gpclk_valid_program(program, 1));
++	/* A new, exclusive lease resets its previous generation to zero. */
++	KUNIT_EXPECT_TRUE(test, rp1_gpclk_valid_program(program, 0));
++}
++
++static struct kunit_case provider_cases[] = {
++	KUNIT_CASE(header_and_drive_test),
++	KUNIT_CASE(program_and_packing_test),
++	KUNIT_CASE(lease_generation_test),
++	{}
++};
++
++static struct kunit_suite provider_suite = {
++	.name = "rp1-gpclk-provider-contract",
++	.test_cases = provider_cases,
++};
++kunit_test_suite(provider_suite);
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("RP1 GPCLK provider contract KUnit tests");
+diff --git a/drivers/clk/rp1-gpclk-provider.c b/drivers/clk/rp1-gpclk-provider.c
+new file mode 100644
+index 000000000..059708fae
+--- /dev/null
++++ b/drivers/clk/rp1-gpclk-provider.c
+@@ -0,0 +1,386 @@
++// SPDX-License-Identifier: GPL-2.0
++#include <linux/clk.h>
++#include <linux/completion.h>
++#include <linux/dmaengine.h>
++#include <linux/dma-mapping.h>
++#include <linux/fs.h>
++#include <linux/io.h>
++#include <linux/ktime.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/pinctrl/consumer.h>
++#include <linux/platform_device.h>
++#include <linux/rp1-gpclk-lease.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/workqueue.h>
++
++#include "rp1-gpclk-contract.h"
++
++#define TICKS_DMA0_CTRL 0x0
++#define TICKS_DMA0_CYCLES 0x4
++#define DMA_TICK0_EN 0x0
++#define DMA_TICK0_CTRL 0x4
++#define DMA_TICK_REQ BIT(0)
++#define DMA_TICK_SINGLE BIT(1)
++#define DMA_TICK_DWELL (19U << 4)
++#define RP1_GPCLK_BUFFER_WRITES \
++	((size_t)RP1_GPCLK_WRITES_PER_SYMBOL * RP1_GPCLK_WSPR_SYMBOL_COUNT)
++#define RP1_GPCLK_BUFFER_BYTES (RP1_GPCLK_BUFFER_WRITES * sizeof(u32))
++#define RP1_GPCLK_SYMBOL_BYTES \
++	((size_t)RP1_GPCLK_WRITES_PER_SYMBOL * sizeof(u32))
++
++static bool live_output;
++module_param(live_output, bool, 0444);
++MODULE_PARM_DESC(live_output, "Permit provider-owned GPCLK0 output activation");
++
++struct rp1_gpclk_provider {
++	struct device *dev;
++	struct miscdevice misc;
++	struct clk *clk;
++	struct dma_chan *dma;
++	struct rp1_gpclk_dma_lease lease;
++	struct pinctrl *pinctrl;
++	struct pinctrl_state *safe_state;
++	struct pinctrl_state *drive_states[4];
++	void __iomem *ticks;
++	void __iomem *dma_tick;
++	u32 *words;
++	dma_addr_t words_dma;
++	struct mutex lock;
++	struct file *owner;
++	u64 generation;
++	u32 state;
++	u32 expected_final;
++	u32 drive_index;
++	bool lease_held;
++	bool submitted;
++	bool output_active;
++	bool release_pending;
++	u64 started_ns;
++	bool timing_failed;
++	struct delayed_work verify_work;
++};
++
++static int drive_index(u32 drive_ma)
++{
++	switch (drive_ma) {
++	case 2: return 0;
++	case 4: return 1;
++	case 8: return 2;
++	case 12: return 3;
++	default: return -EINVAL;
++	}
++}
++
++static int deactivate_output(struct rp1_gpclk_provider *provider)
++{
++	int ret = 0;
++
++	if (provider->output_active) {
++		rp1_gpclk_dma_lease_disable(provider->clk, &provider->lease);
++		provider->output_active = false;
++	}
++	if (pinctrl_select_state(provider->pinctrl, provider->safe_state))
++		ret = -EIO;
++	return ret;
++}
++
++static void stop_tick(struct rp1_gpclk_provider *provider)
++{
++	writel(0, provider->dma_tick + DMA_TICK0_EN);
++	writel(0, provider->ticks + TICKS_DMA0_CTRL);
++}
++
++static void verify_completion(struct work_struct *work)
++{
++	struct rp1_gpclk_provider *provider = container_of(to_delayed_work(work),
++		struct rp1_gpclk_provider, verify_work);
++	u32 div_int, div_frac;
++	int ret;
++
++	stop_tick(provider);
++	ret = rp1_gpclk_dma_lease_read(&provider->lease, &div_int, &div_frac);
++	mutex_lock(&provider->lock);
++	provider->submitted = false;
++	ret = ret ?: deactivate_output(provider);
++	provider->state = ret || provider->timing_failed || div_int != 3 ||
++		div_frac != provider->expected_final ?
++		RP1_GPCLK_STATE_FAILED : RP1_GPCLK_STATE_COMPLETE;
++	if (provider->release_pending) {
++		rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
++		provider->lease_held = false;
++		provider->release_pending = false;
++		provider->owner = NULL;
++	}
++	mutex_unlock(&provider->lock);
++}
++
++static void transfer_done(void *argument)
++{
++	struct rp1_gpclk_provider *provider = argument;
++	u64 elapsed_ns = ktime_get_ns() - provider->started_ns;
++
++	stop_tick(provider);
++	provider->timing_failed = !rp1_gpclk_valid_frame_elapsed(elapsed_ns);
++	schedule_delayed_work(&provider->verify_work, msecs_to_jiffies(50));
++}
++
++static int submit_program(struct rp1_gpclk_provider *provider,
++	const struct rp1_gpclk_program *request)
++{
++	struct dma_slave_config config = {};
++	struct dma_async_tx_descriptor *descriptor;
++	u64 accumulator = 0;
++	dma_cookie_t cookie;
++	u32 lower, upper;
++	unsigned int i, symbol_index;
++	size_t word_index = 0;
++	int ret;
++
++	if (!rp1_gpclk_valid_header(request->version, request->size,
++			sizeof(*request)))
++		return -EPROTO;
++	if (!rp1_gpclk_valid_program(request, provider->generation))
++		return -EINVAL;
++	if (provider->state == RP1_GPCLK_STATE_RUNNING ||
++		provider->state == RP1_GPCLK_STATE_DRAINING)
++		return -EBUSY;
++	for (symbol_index = 0;
++			symbol_index < request->symbol_count;
++			++symbol_index) {
++		const struct rp1_gpclk_symbol *symbol =
++			&request->tones[request->symbols[symbol_index]];
++
++		lower = rp1_gpclk_pack_fraction(symbol->lower_divider_word);
++		upper = rp1_gpclk_pack_fraction(symbol->upper_divider_word);
++		accumulator = 0;
++		for (i = 0; i < RP1_GPCLK_WRITES_PER_SYMBOL; ++i) {
++			accumulator += symbol->lower_count;
++			if (accumulator >= RP1_GPCLK_WRITES_PER_SYMBOL) {
++				provider->words[word_index++] = lower;
++				accumulator -= RP1_GPCLK_WRITES_PER_SYMBOL;
++			} else {
++				provider->words[word_index++] = upper;
++			}
++		}
++	}
++	ret = rp1_gpclk_dma_lease_configure(&provider->lease, 3,
++		provider->words[0]);
++	if (ret)
++		return ret;
++	config.direction = DMA_MEM_TO_DEV;
++	/* The DMA engine translates this CPU physical peripheral address. */
++	config.dst_addr = provider->lease.divider_phys_addr;
++	config.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++	config.dst_maxburst = 1;
++	ret = dmaengine_slave_config(provider->dma, &config);
++	if (ret)
++		return ret;
++	descriptor = dmaengine_prep_slave_single(provider->dma,
++		provider->words_dma,
++		(size_t)request->symbol_count * RP1_GPCLK_SYMBOL_BYTES,
++		DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
++	if (!descriptor)
++		return -EIO;
++	descriptor->callback = transfer_done;
++	descriptor->callback_param = provider;
++	cookie = dmaengine_submit(descriptor);
++	ret = dma_submit_error(cookie);
++	if (ret)
++		return ret;
++	provider->generation = request->generation;
++	provider->expected_final = provider->words[
++		(size_t)request->symbol_count * RP1_GPCLK_WRITES_PER_SYMBOL - 1];
++	provider->state = RP1_GPCLK_STATE_RUNNING;
++	provider->submitted = true;
++	provider->timing_failed = false;
++	if (!live_output)
++		goto start_dma;
++	ret = pinctrl_select_state(provider->pinctrl,
++		provider->drive_states[provider->drive_index]);
++	if (ret)
++		goto terminate;
++	ret = rp1_gpclk_dma_lease_enable(provider->clk, &provider->lease);
++	if (ret) {
++		pinctrl_select_state(provider->pinctrl, provider->safe_state);
++		goto terminate;
++	}
++	provider->output_active = true;
++start_dma:
++	writel(RP1_GPCLK_TICK_DIVIDER, provider->ticks + TICKS_DMA0_CYCLES);
++	writel(DMA_TICK_DWELL,
++		provider->dma_tick + DMA_TICK0_CTRL);
++	dma_async_issue_pending(provider->dma);
++	provider->started_ns = ktime_get_ns();
++	writel(DMA_TICK_REQ | DMA_TICK_SINGLE,
++		provider->dma_tick + DMA_TICK0_EN);
++	writel(1, provider->ticks + TICKS_DMA0_CTRL);
++	return 0;
++
++terminate:
++	dmaengine_terminate_sync(provider->dma);
++	provider->submitted = false;
++	provider->state = RP1_GPCLK_STATE_FAILED;
++	return ret;
++}
++
++static long provider_ioctl(struct file *file, unsigned int command,
++	unsigned long argument)
++{
++	struct rp1_gpclk_provider *provider = file->private_data;
++	void __user *user = (void __user *)argument;
++	struct rp1_gpclk_generation generation;
++	struct rp1_gpclk_acquire acquire;
++	struct rp1_gpclk_program *program;
++	long ret = 0;
++
++	mutex_lock(&provider->lock);
++	switch (command) {
++	case RP1_GPCLK_IOC_ACQUIRE:
++		if (copy_from_user(&acquire, user, sizeof(acquire))) { ret = -EFAULT; break; }
++		if (!rp1_gpclk_valid_header(acquire.version, acquire.size, sizeof(acquire))) { ret = -EPROTO; break; }
++		if (acquire.flags || acquire.reserved || !rp1_gpclk_valid_drive(acquire.drive_ma)) { ret = -EINVAL; break; }
++		if (provider->owner) { ret = -EBUSY; break; }
++		ret = rp1_gpclk_dma_lease_get(provider->clk, &provider->lease);
++		if (!ret) {
++			provider->drive_index = drive_index(acquire.drive_ma);
++			provider->owner = file; provider->lease_held = true;
++			provider->generation = 0;
++			provider->state = RP1_GPCLK_STATE_IDLE;
++		}
++		break;
++	case RP1_GPCLK_IOC_SUBMIT:
++		if (provider->owner != file) { ret = -EPERM; break; }
++		program = memdup_user(user, sizeof(*program));
++		if (IS_ERR(program)) { ret = PTR_ERR(program); break; }
++		ret = submit_program(provider, program);
++		kfree(program);
++		break;
++	case RP1_GPCLK_IOC_STOP:
++	case RP1_GPCLK_IOC_STATE:
++		if (provider->owner != file) { ret = -EPERM; break; }
++		if (copy_from_user(&generation, user, sizeof(generation))) { ret = -EFAULT; break; }
++		if (!rp1_gpclk_valid_header(generation.version, generation.size, sizeof(generation))) { ret = -EPROTO; break; }
++		if (generation.generation != provider->generation) { ret = -ESTALE; break; }
++		if (command == RP1_GPCLK_IOC_STOP && provider->state == RP1_GPCLK_STATE_RUNNING)
++			provider->state = RP1_GPCLK_STATE_DRAINING;
++		generation.state = provider->state;
++		if (command == RP1_GPCLK_IOC_STATE && copy_to_user(user, &generation, sizeof(generation))) ret = -EFAULT;
++		break;
++	case RP1_GPCLK_IOC_RELEASE:
++		if (provider->owner != file) { ret = -EPERM; break; }
++		if (provider->state == RP1_GPCLK_STATE_RUNNING || provider->state == RP1_GPCLK_STATE_DRAINING) { ret = -EBUSY; break; }
++		if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
++		provider->lease_held = false; provider->owner = NULL; provider->state = RP1_GPCLK_STATE_IDLE;
++		break;
++	default:
++		ret = -ENOTTY;
++	}
++	mutex_unlock(&provider->lock);
++	return ret;
++}
++
++static int provider_open(struct inode *inode, struct file *file)
++{
++	struct miscdevice *misc = file->private_data;
++	file->private_data = container_of(misc, struct rp1_gpclk_provider, misc);
++	return nonseekable_open(inode, file);
++}
++
++static int provider_release_file(struct inode *inode, struct file *file)
++{
++	struct rp1_gpclk_provider *provider = file->private_data;
++	mutex_lock(&provider->lock);
++	if (provider->owner == file && provider->state != RP1_GPCLK_STATE_RUNNING &&
++		provider->state != RP1_GPCLK_STATE_DRAINING) {
++		if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
++		provider->lease_held = false; provider->owner = NULL;
++	} else if (provider->owner == file) {
++		provider->release_pending = true;
++		provider->state = RP1_GPCLK_STATE_DRAINING;
++	}
++	mutex_unlock(&provider->lock);
++	return 0;
++}
++
++static const struct file_operations provider_fops = {
++	.owner = THIS_MODULE, .open = provider_open, .release = provider_release_file,
++	.unlocked_ioctl = provider_ioctl, .compat_ioctl = compat_ptr_ioctl,
++	.llseek = noop_llseek,
++};
++
++static int rp1_gpclk_provider_probe(struct platform_device *pdev)
++{
++	struct rp1_gpclk_provider *provider;
++	int ret;
++
++	provider = devm_kzalloc(&pdev->dev, sizeof(*provider), GFP_KERNEL);
++	if (!provider) return -ENOMEM;
++	provider->dev = &pdev->dev; mutex_init(&provider->lock);
++	INIT_DELAYED_WORK(&provider->verify_work, verify_completion);
++	provider->pinctrl = devm_pinctrl_get(&pdev->dev);
++	if (IS_ERR(provider->pinctrl)) return PTR_ERR(provider->pinctrl);
++	provider->safe_state = pinctrl_lookup_state(provider->pinctrl, "safe");
++	provider->drive_states[0] = pinctrl_lookup_state(provider->pinctrl, "drive-2ma");
++	provider->drive_states[1] = pinctrl_lookup_state(provider->pinctrl, "drive-4ma");
++	provider->drive_states[2] = pinctrl_lookup_state(provider->pinctrl, "drive-8ma");
++	provider->drive_states[3] = pinctrl_lookup_state(provider->pinctrl, "drive-12ma");
++	if (IS_ERR(provider->safe_state) || IS_ERR(provider->drive_states[0]) ||
++		IS_ERR(provider->drive_states[1]) || IS_ERR(provider->drive_states[2]) ||
++		IS_ERR(provider->drive_states[3])) return -EINVAL;
++	ret = pinctrl_select_state(provider->pinctrl, provider->safe_state);
++	if (ret) return ret;
++	provider->clk = devm_clk_get(&pdev->dev, "gpclk");
++	if (IS_ERR(provider->clk)) return PTR_ERR(provider->clk);
++	provider->ticks = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(provider->ticks)) return PTR_ERR(provider->ticks);
++	provider->dma_tick = devm_platform_ioremap_resource(pdev, 1);
++	if (IS_ERR(provider->dma_tick)) return PTR_ERR(provider->dma_tick);
++	provider->dma = dma_request_chan(&pdev->dev, "tick0");
++	if (IS_ERR(provider->dma)) return PTR_ERR(provider->dma);
++	provider->words = dma_alloc_coherent(provider->dma->device->dev,
++		RP1_GPCLK_BUFFER_BYTES, &provider->words_dma, GFP_KERNEL);
++	if (!provider->words) { ret = -ENOMEM; goto release_dma; }
++	provider->misc.minor = MISC_DYNAMIC_MINOR; provider->misc.name = "rp1-gpclk0";
++	provider->misc.fops = &provider_fops; provider->misc.parent = &pdev->dev;
++	ret = misc_register(&provider->misc);
++	if (ret) goto free_words;
++	platform_set_drvdata(pdev, provider);
++	return 0;
++free_words:
++	dma_free_coherent(provider->dma->device->dev,
++		RP1_GPCLK_BUFFER_BYTES, provider->words, provider->words_dma);
++release_dma:
++	dma_release_channel(provider->dma);
++	return ret;
++}
++
++static void rp1_gpclk_provider_remove(struct platform_device *pdev)
++{
++	struct rp1_gpclk_provider *provider = platform_get_drvdata(pdev);
++	misc_deregister(&provider->misc); cancel_delayed_work_sync(&provider->verify_work);
++	stop_tick(provider);
++	if (provider->submitted) {
++		dmaengine_terminate_sync(provider->dma);
++		provider->submitted = false;
++	}
++	deactivate_output(provider);
++	if (provider->lease_held) rp1_gpclk_dma_lease_put(provider->clk, &provider->lease);
++	dma_free_coherent(provider->dma->device->dev,
++		RP1_GPCLK_BUFFER_BYTES, provider->words, provider->words_dma);
++	dma_release_channel(provider->dma);
++}
++
++static const struct of_device_id provider_of_match[] = {
++	{ .compatible = "raspberrypi,rp1-gpclk-provider" }, {}
++};
++MODULE_DEVICE_TABLE(of, provider_of_match);
++static struct platform_driver provider_driver = {
++	.probe = rp1_gpclk_provider_probe, .remove = rp1_gpclk_provider_remove,
++	.driver = { .name = "rp1-gpclk-provider", .of_match_table = provider_of_match },
++};
++module_platform_driver(provider_driver);
++MODULE_LICENSE("GPL");
++MODULE_DESCRIPTION("RP1 GPCLK provider-owned tick DMA UAPI");
+diff --git a/include/uapi/linux/rp1_gpclk.h b/include/uapi/linux/rp1_gpclk.h
+new file mode 100644
+index 000000000..4c3e71912
+--- /dev/null
++++ b/include/uapi/linux/rp1_gpclk.h
+@@ -0,0 +1,75 @@
++#ifndef WSPRRYPI_RP1_GPCLK_UAPI_H
++#define WSPRRYPI_RP1_GPCLK_UAPI_H
++
++#ifdef __linux__
++#include <linux/ioctl.h>
++#include <linux/types.h>
++#else
++#include <stdint.h>
++#include <sys/ioctl.h>
++typedef uint16_t __u16;
++typedef uint32_t __u32;
++typedef uint64_t __u64;
++typedef uint8_t __u8;
++#endif
++
++#define RP1_GPCLK_UAPI_VERSION 1U
++#define RP1_GPCLK_IOC_MAGIC 0xb7
++#define RP1_GPCLK_WRITES_PER_SYMBOL 66792U
++#define RP1_GPCLK_WSPR_SYMBOL_COUNT 162U
++#define RP1_GPCLK_TICK_DIVIDER 511U
++#define RP1_GPCLK_WSPR_FRAME_NOMINAL_NS 110592000000ULL
++#define RP1_GPCLK_WSPR_FRAME_TOLERANCE_NS 6750000ULL
++
++enum rp1_gpclk_state {
++	RP1_GPCLK_STATE_IDLE = 0,
++	RP1_GPCLK_STATE_RUNNING = 1,
++	RP1_GPCLK_STATE_DRAINING = 2,
++	RP1_GPCLK_STATE_COMPLETE = 3,
++	RP1_GPCLK_STATE_FAILED = 4,
++};
++
++struct rp1_gpclk_acquire {
++	__u16 version;
++	__u16 size;
++	__u32 drive_ma;
++	__u32 flags;
++	__u32 reserved;
++};
++
++struct rp1_gpclk_symbol {
++	__u64 lower_divider_word;
++	__u64 upper_divider_word;
++	__u32 lower_count;
++	__u32 upper_count;
++};
++
++struct rp1_gpclk_program {
++	__u16 version;
++	__u16 size;
++	__u32 fractional_bits;
++	__u32 writes_per_symbol;
++	__u32 tick_divider;
++	__u32 symbol_count;
++	__u32 tone_count;
++	__u32 reserved;
++	__u64 generation;
++	struct rp1_gpclk_symbol tones[4];
++	__u8 symbols[RP1_GPCLK_WSPR_SYMBOL_COUNT];
++	__u8 reserved_tail[6];
++};
++
++struct rp1_gpclk_generation {
++	__u16 version;
++	__u16 size;
++	__u32 state;
++	__u64 generation;
++};
++
++#define RP1_GPCLK_IOC_ACQUIRE _IOW(RP1_GPCLK_IOC_MAGIC, 0x00, struct rp1_gpclk_acquire)
++#define RP1_GPCLK_IOC_SUBMIT _IOW(RP1_GPCLK_IOC_MAGIC, 0x01, struct rp1_gpclk_program)
++#define RP1_GPCLK_IOC_STOP _IOW(RP1_GPCLK_IOC_MAGIC, 0x02, struct rp1_gpclk_generation)
++#define RP1_GPCLK_IOC_STATE _IOWR(RP1_GPCLK_IOC_MAGIC, 0x03, struct rp1_gpclk_generation)
++#define RP1_GPCLK_IOC_RELEASE _IO(RP1_GPCLK_IOC_MAGIC, 0x04)
++
++#endif

@@ -1,0 +1,57 @@
+Phase 6J clock-disabled evidence summary
+Date: 2026-08-10
+Host: wspr5.local
+Platform: Raspberry Pi 5 / BCM2712, Raspberry Pi OS 64-bit rpi-2712 kernel
+Kernel: 6.18.44-v8-16k+ #3
+Provider gate: live_output=N throughout
+
+Exact contract:
+- symbol count: exactly 162
+- tone count: exactly 4
+- writes per symbol: 66792
+- coherent frame bytes: 43,281,216
+- DMA preparation: one dmaengine_prep_slave_single call
+- short frame: EINVAL
+- malformed divider counts: EINVAL
+
+Clock-disabled elapsed time:
+- 1 diagnostic symbol: 0.801596 s
+- 4 diagnostic symbols: 2.802672 s
+- 32 diagnostic symbols: 21.920965 s
+- 64 diagnostic symbols: 43.839789 s
+- 128 diagnostic symbols: 87.481968 s
+- 162 diagnostic symbols: 110.699024 s
+
+Exact 162-symbol lifecycle:
+- normal terminal: COMPLETE
+- early STOP: requested 0.146518 s; COMPLETE 110.709789 s
+- middle STOP: requested 55.078396 s; COMPLETE 110.709876 s
+- near-end STOP: requested 109.099095 s; COMPLETE 110.699995 s
+- close active: close 1.029954 s; deferred cleanup completed; subsequent
+  acquire succeeded and deliberately short submit returned EINVAL
+
+Kernel and source checks:
+- KUnit rp1-gpclk-provider-contract: pass 2, fail 0, skip 0
+- portable provider core tests: pass
+- static ownership/single-submission contract: pass
+- 0001 then regenerated 0002 apply cleanly to kernel base
+  89586905b8603e545cce9089a81f5f35d65bc998
+- exact provider and UAPI sources matched the loaded test build
+
+Application checks:
+- RP1 planner/backend test: pass
+- RP1 Linux provider client test: pass
+- RP1 scheduler backend test: pass
+- clean native Pi semantics/source regression suite: pass
+- clean native Pi build: recorded separately in command output
+
+Final safe state:
+- GPIO4: input, 2 mA safe pinctrl state
+- clk_gp0 prepare count: 0
+- clk_gp0 enable count: 0
+- SoapyRemote: retained; no service changes
+
+Qualification boundary:
+- No live output or RF transmission occurred in Phase 6J.
+- DMA completion timing is not proof of on-pin symbol-boundary continuity.
+- No calibrated power claim is made.
