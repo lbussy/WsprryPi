@@ -197,6 +197,10 @@ MAIN_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./main.o
 SEMANTICS_TEST_SRC := tests/dial_frequency_semantics_test.cpp
 SEMANTICS_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/dial_frequency_semantics_test.o
 SEMANTICS_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+CLEANUP_LIFECYCLE_TEST_SRC := tests/cleanup_lifecycle_test.cpp
+CLEANUP_LIFECYCLE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/cleanup_lifecycle_test.o
+CLEANUP_LIFECYCLE_TEST_DEPS := $(CLEANUP_LIFECYCLE_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+CLEANUP_LIFECYCLE_TEST_OUT := cleanup_lifecycle_test
 UI_SOURCE_REGRESSION_TEST_SRC := tests/ui_source_regression_test.cpp
 UI_SOURCE_REGRESSION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/ui_source_regression_test.o
 UI_SOURCE_REGRESSION_TEST_DEPS := $(UI_SOURCE_REGRESSION_TEST_OBJ)
@@ -489,6 +493,17 @@ $(SEMANTICS_TEST_OBJ): $(SEMANTICS_TEST_SRC)
 $(BIN_DIR)/$(SEMANTICS_TEST_OUT): $(SEMANTICS_TEST_OBJ) $(SEMANTICS_TEST_DEPS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)echo "Linking debug: $(SEMANTICS_TEST_OUT)"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(CLEANUP_LIFECYCLE_TEST_OBJ): $(CLEANUP_LIFECYCLE_TEST_SRC)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)echo "Compiling (debug) $< into $@"
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/tests/cleanup_lifecycle_test.d -c $< -o $@
+
+$(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT): $(CLEANUP_LIFECYCLE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)echo "Linking debug: $(CLEANUP_LIFECYCLE_TEST_OUT)"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
 $(UI_SOURCE_REGRESSION_TEST_OBJ): $(UI_SOURCE_REGRESSION_TEST_SRC)
@@ -807,9 +822,11 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
+	$(Q)echo "Running cleanup lifecycle tests."
+	$(Q)./$(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT)
 	$(Q)echo "Running UI/source regression tests."
 	$(Q)./$(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
 	$(Q)echo "Running GPIO band fail-closed policy tests."

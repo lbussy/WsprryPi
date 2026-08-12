@@ -34,4 +34,12 @@ cd WSPR-Transmitter/src
 make simulated-backend-test transmission-controller-contract-test
 ```
 
+The parent regression suite also exercises configuration failure, backend replacement, explicit shutdown, execution, cancellation, repeated cleanup, and destructor-safe cleanup handling:
+
+```sh
+cd ../..
+make build/bin/cleanup_lifecycle_test
+./build/bin/cleanup_lifecycle_test
+```
+
 Focused physical-backend tests remain separate and must continue to pass. Simulator results demonstrate application and backend-contract behavior only; they do not qualify GPIO timing, I2C hardware, RF output, installation, services, or any physical transmitter.
