@@ -1301,6 +1301,7 @@ namespace
                (section == "GPIO" &&
                 (key == "Transmit Pin" ||
                  key == "Power Level" ||
+                 key == "RP1 Drive mA" ||
                  key == "Use System Clock Frequency Estimate" ||
                  key == "Frequency Residual PPM" ||
                  key == "Manual PPM")) ||
@@ -1443,6 +1444,7 @@ namespace
         target["GPIO"] = {
             {"Transmit Pin", kDefaultTransmitGpio},
             {"Power Level", 7},
+            {"RP1 Drive mA", kDefaultRp1GpioDriveMa},
             {"Use System Clock Frequency Estimate", true},
             {"Frequency Residual PPM", 0.0},
             {"Manual PPM", 0.0}};
@@ -2316,6 +2318,7 @@ build_persistent_ini_data(const nlohmann::json &source)
                 (section_name == "GPIO" &&
                  (key == "Transmit Pin" ||
                   key == "Power Level" ||
+                  key == "RP1 Drive mA" ||
                   key == "Use System Clock Frequency Estimate" ||
                   key == "Frequency Residual PPM" ||
                   key == "Manual PPM")) ||

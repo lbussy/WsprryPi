@@ -582,6 +582,10 @@ int main(int argc, char *argv[])
     require(
         config.rp1_gpio_drive_ma == 2,
         "RP1 GPIO drive must default to the minimum 2 mA profile");
+    init_config_json();
+    require(
+        jConfig.at("GPIO").at("RP1 Drive mA").get<int>() == 2,
+        "canonical default JSON must publish the minimum 2 mA RP1 drive");
     for (const int drive_ma : {2, 4, 8, 12})
     {
         config.rp1_gpio_drive_ma = drive_ma;
@@ -607,6 +611,39 @@ int main(int argc, char *argv[])
     require(
         invalid_rp1_drive_rejected,
         "unsupported RP1 GPIO drive values must be rejected while loading JSON");
+    init_default_config();
+    config.use_ini = true;
+    config.ini_filename = "/tmp/rp1_drive_persistence.ini";
+    config.rp1_gpio_drive_ma = 12;
+    config_to_json();
+    write_text_file(config.ini_filename, "");
+    iniFile.set_filename(config.ini_filename);
+    json_to_ini();
+    require(
+        iniFile.getData().at("GPIO").at("RP1 Drive mA") == "12",
+        "RP1 GPIO drive must be included in managed INI persistence");
+    config.rp1_gpio_drive_ma = 2;
+    ini_to_json(config.ini_filename);
+    json_to_config();
+    require(
+        config.rp1_gpio_drive_ma == 12,
+        "RP1 GPIO drive must survive managed INI reload");
+    set_raspberry_pi_generation_override_for_test(5);
+    config.transmit_backend = TransmitBackendKind::GPIO;
+    for (const int drive_ma : {2, 4, 8, 12})
+    {
+        config.rp1_gpio_drive_ma = drive_ma;
+        resolve_backend_specific_config(config);
+        require(
+            config.power_level == drive_ma,
+            "Pi 5 runtime resolution must consume each committed RP1 drive unchanged");
+    }
+    set_raspberry_pi_generation_override_for_test(4);
+    config.gpio_power_level = 7;
+    resolve_backend_specific_config(config);
+    require(
+        config.power_level == 7,
+        "Pi 4 runtime resolution must preserve the legacy GPIO power level");
     init_default_config();
 
     WSPRBandLookup lookup;

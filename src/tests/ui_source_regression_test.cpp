@@ -285,8 +285,10 @@ int main()
                 std::string::npos,
         "UI save path must use canonical Operation.Mode only");
     require(
-        ui_source.find("var GPIO = {\n        \"Power Level\": transmit_power,\n        \"Use System Clock Frequency Estimate\": use_system_clock_frequency_estimate,") !=
+        ui_source.find("var GPIO = {\n        \"Power Level\": transmit_power,\n        \"RP1 Drive mA\": rp1_gpio_drive_ma,\n        \"Use System Clock Frequency Estimate\": use_system_clock_frequency_estimate,") !=
                 std::string::npos &&
+            ui_source.find("function validateRp1GpioDrive()") != std::string::npos &&
+            ui_source.find("function syncGpioDriveControls()") != std::string::npos &&
             ui_source.find("\"Frequency Residual PPM\": gpio_frequency_residual_ppm,") != std::string::npos &&
             ui_source.find("\"Manual PPM\": gpio_manual_ppm,") != std::string::npos &&
             ui_source.find("Use NTP") == std::string::npos &&

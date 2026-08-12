@@ -1,0 +1,45 @@
+Phase 8 operator-selectable RP1 GPIO drive strength evidence
+Date: 2026-08-12
+Host: wspr5.local, Raspberry Pi 5 Model B Rev 1.0
+Branch: codex/issue-399-rp1-gpclk
+Base parent commit: c2a598534c0a94b9abbab750ff1e3927a94f3877
+
+Supported values: 2, 4, 8, 12 mA
+Safe default: 2 mA
+Calibrated RF power claim: none
+
+PASS: make -j$(nproc) semantics-test rp1-gpclk-linux-provider-test
+  - dial_frequency_semantics_test passed
+  - ui_source_regression_test passed
+  - RP1 Linux provider exercised 2, 4, 8, and 12 mA unchanged
+
+PASS: conditional_transmit_gpio_integration_test.js assertions
+  - Pi 5 shows RP1 selector and hides legacy 0-7 control
+  - Pi 4 shows legacy control and hides RP1 selector
+  - 2, 4, 8, and 12 mA populate, persist, and serialize
+  - invalid 6 mA remains retained, is identified in adjacent guidance, and is not normalized
+  - backend switching preserves the inactive RP1 selection
+
+PASS: clock-disabled real-application matrix
+  drive=2 mA:  rc=0, logged RP1 GPIO Drive mA: 2
+  drive=4 mA:  rc=0, logged RP1 GPIO Drive mA: 4
+  drive=8 mA:  rc=0, logged RP1 GPIO Drive mA: 8
+  drive=12 mA: rc=0, logged RP1 GPIO Drive mA: 12
+
+Final wspr5 state:
+  live_output=N
+  GPIO4=input
+  clk_gp0 prepare_count=0 enable_count=0
+  wsprrypi.service=active
+
+Visual review:
+  PASS desktop light
+  PASS desktop dark
+  PASS mobile light
+  PASS mobile dark
+  Impeccable: no Phase 8 finding; four unchanged site.js color advisories
+
+Limitations:
+  Browser screenshot assertions passed before an intermittent temporary-profile
+  teardown ENOTEMPTY error. A separate pre-existing CW browser test exceeded
+  its bounded window. No live RF or calibrated-power measurement was performed.
