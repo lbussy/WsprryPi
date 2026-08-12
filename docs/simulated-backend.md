@@ -42,6 +42,120 @@ make build/bin/cleanup_lifecycle_test
 ./build/bin/cleanup_lifecycle_test
 ```
 
+## Selection and injection surfaces
+
+The available controls depend on how the simulator is constructed:
+
+| Surface | Time mode | Fault injection | Trace path |
+| --- | --- | --- | --- |
+| Application CLI | Explicit `--backend simulated`; virtual time only | Not exposed | `/tmp/wsprrypi-simulated-trace.json` |
+| `WsprTransmitter::selectBackend()` | `SimulatedRuntimeConfig::virtual_time` | All simulator fault fields | `SimulatedRuntimeConfig::trace_path` |
+| Direct `SimulatedTransmitBackend` construction | `SimulatedBackendConfig::virtual_time` | All simulator fault fields | `SimulatedBackendConfig::trace_path` |
+
+The CLI selection is transient, is never persisted, and is never selected automatically after hardware initialization fails. The application calls the public three-argument `WsprTransmitter::selectBackend()` overload internally with default simulator settings; no CLI option currently selects real-time simulation, changes the trace path, or injects a fault.
+
+`WsprTransmitter` owns a small private construction switch rather than a dynamic plugin system. Tests that need the application lifecycle can inject typed settings through the public overload:
+
+```cpp
+WsprTransmitter transmitter;
+WsprTransmitter::SimulatedRuntimeConfig simulation;
+simulation.virtual_time = false;
+simulation.trace_path = "/tmp/wsprrypi-real-time-trace.json";
+
+transmitter.selectBackend(
+    wsprrypi::BackendKind::SIMULATED,
+    WsprTransmitter::Si5351RuntimeConfig{},
+    simulation);
+```
+
+There is no general backend-factory callback or registry to replace `createBackend()`. Fault-focused backend contract tests normally construct `SimulatedTransmitBackend` directly, while parent lifecycle tests use the typed `selectBackend()` seam.
+
+## Direct backend construction
+
+Direct construction requires an `IExecutionContext`. The context supplies stop observation, interruptible waiting, and progress reporting. `logicalNow()` is part of the reusable context contract, but the current simulator trace takes logical timestamps from each `ExecutionPlan` event rather than calling `logicalNow()`.
+
+This abbreviated pattern shows the canonical lifecycle; see `src/WSPR-Transmitter/src/simulated_transmit_backend_test.cpp` for a complete focused test and `src/WSPR-Transmitter/src/transmission_controller_contract_test.cpp` for controller-owned preparation and cleanup:
+
+```cpp
+class TestContext final : public wsprrypi::IExecutionContext {
+public:
+    bool stop_requested = false;
+
+    bool stopRequested() const noexcept override { return stop_requested; }
+    bool waitInterruptibleFor(std::chrono::nanoseconds) override {
+        return !stop_requested;
+    }
+    void reportExecutionProgress(std::size_t) noexcept override {}
+    std::chrono::nanoseconds logicalNow() const noexcept override { return {}; }
+};
+
+TestContext context;
+wsprrypi::SimulatedBackendConfig config;
+config.virtual_time = true;
+config.trace_path = "/tmp/example-simulation.json";
+wsprrypi::SimulatedTransmitBackend backend(context, config);
+
+wsprrypi::ExecutionPlan plan;
+plan.id.value = 1;
+plan.request_id.value = 400;
+plan.backend = wsprrypi::BackendKind::SIMULATED;
+plan.mode = wsprrypi::TransmissionMode::QRSS;
+plan.reference_frequency_hz = 14097100.0;
+plan.events.push_back({
+    std::chrono::nanoseconds{0},
+    std::chrono::milliseconds{10},
+    wsprrypi::RfEventType::RF_ON,
+    14097100.0,
+    true});
+plan.summary.total_duration = std::chrono::milliseconds{10};
+
+const auto configured = backend.configure(plan, {});
+if (!configured.ok)
+    throw std::runtime_error(configured.error);
+const auto execution = backend.execute(plan);
+const auto cleanup = backend.cleanup();
+```
+
+Application and most integration code should use `TransmissionController`, which compiles a `TransmissionRequest`, assigns a controller-owned plan identity, calls `configure()`, and always attempts cleanup after execution. Direct lifecycle calls are appropriate for focused backend-contract tests, not as a second application architecture.
+
+## Virtual and real-time execution
+
+Both configuration types default `virtual_time` to `true`.
+
+- In virtual time, the simulator walks the existing execution plan without waiting for event durations. Event offsets and completion time remain the plan's logical nanosecond values. Current QRSS and complete-WSPR CI exercise this mode and enforce accelerated wall-clock completion.
+- With `virtual_time = false`, the simulator calls `IExecutionContext::waitInterruptibleFor(event.duration)` before reporting and tracing each event. A `false` wait result returns a stopped `ExecutionResult` and records `cancelled` at that event.
+- `stopRequested()` and the backend's `stop()` state are checked before every event in both modes. Virtual-time cancellation is therefore observed between events. Real-time contexts can additionally interrupt an in-progress wait.
+- The application bridge implements interruptible waits with the transmitter stop condition. A direct test double decides how waiting and cancellation behave.
+
+The checked-in CI and simulator contract test cover virtual-time execution, injected cancellation, and context stop observation. They do not currently contain a successful real-time-duration test. Real-time mode is available to C++ tests through the typed configuration, but it is not CLI-selectable and is not hardware, RF, scheduler, or timing qualification.
+
+## Fault-injection reference
+
+These fields exist with the same names and defaults in `SimulatedBackendConfig` and `WsprTransmitter::SimulatedRuntimeConfig`:
+
+| Field | Type and default | Trigger and result | Trace evidence | CLI |
+| --- | --- | --- | --- | --- |
+| `virtual_time` | `bool`, `true` | `false` enables interruptible per-event waits | Ordinary lifecycle events | No |
+| `trace_path` | `std::string`; empty for direct backend config, `/tmp/wsprrypi-simulated-trace.json` for application runtime config | Nonempty path is replaced whenever the trace is rendered | JSON document at the selected path | No |
+| `fail_configure` | `bool`, `false` | `configure()` returns `ok == false` | `configure_failure`, detail `injected` | No |
+| `fail_event` | `long`, `-1` | Matching zero-based event index returns `faulted == true` | `execution_failure`, detail `injected` | No |
+| `cancel_event` | `long`, `-1` | Matching zero-based event index returns `stopped == true` | `cancelled`, detail `injected` | No |
+| `fail_cleanup` | `bool`, `false` | Armed cleanup returns `ok == false` | `cleanup_failure`, detail `injected` | No |
+
+A negative index disables index-based execution and cancellation injection. Configure failure occurs after the initial `configure` record. `TransmissionController::prepare()` then attempts cleanup; if cleanup also fails, both error messages are preserved. Execution failure and cancellation likewise remain observable if the subsequent cleanup fails, and cleanup failure forces the combined lifecycle result to remain failed rather than reporting false completion or cancellation success.
+
+External cancellation is distinct from `cancel_event`: `stopRequested()`, `stop()`, or an interrupted real-time wait records `cancelled` without the `injected` detail. The focused simulator test covers `fail_event`, `cancel_event`, context stop observation, and `fail_cleanup`. `src/tests/cleanup_lifecycle_test.cpp` covers application-level configure-plus-cleanup failure, execution cleanup failure, cancellation cleanup failure, backend replacement, repeated cleanup, and destructor-safe reporting.
+
+## Repeated execution and state reset
+
+A simulator instance supports the repeated lifecycle `configure -> execute -> cleanup -> configure -> execute -> cleanup`. Each `configure()` starts a new run by clearing prior trace items and rendered JSON, clearing the stop state, arming cleanup, clearing the cleanup-recorded flag, and capturing the new plan ID, request ID, and mode. The immutable construction configuration—including selected time mode, trace path, and injected faults—remains attached to the backend instance.
+
+Cleanup clears configured and stop state. Its trace record is idempotent: the first cleanup for a run appends exactly one `cleanup` or `cleanup_failure` record, while later cleanup calls do not append duplicates. When `fail_cleanup` is enabled, repeated armed cleanup calls continue to return the deterministic failure even though only one failure record is present.
+
+The same-instance simulator test demonstrates trace reset through a second configure and execute and separately checks repeated-cleanup trace idempotence. Parent cleanup-lifecycle tests cover repeated cleanup outcome preservation. Independent application processes producing byte-identical traces demonstrate cross-process reproducibility; they do not by themselves prove same-instance reset.
+
+`TransmissionController` preserves `TransmissionRequest::id` as `ExecutionPlan::request_id` and assigns plan IDs starting at 1 for each controller instance, incrementing after each successful compile (including plans later rejected by capability checks or backend configuration). Reconstructing a controller restarts that local plan sequence. Direct backend tests provide their own plan and request identities.
+
 ## Complete WSPR integration check
 
 The hardware-free CI suite also runs a complete WSPR request through the normal application CLI, WSPR reference preparation, execution-plan compiler, controller preparation, immediate virtual-time dispatch, simulated backend, completion, and cleanup paths. Run the same check from `src` after building the debug executable:
