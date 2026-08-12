@@ -61,6 +61,7 @@ jobs:
         working-directory: src/WSPR-Transmitter/src
         run: |
           make simulated-backend-test
+          timeout 5s make simulated-backend-realtime-test
           make transmission-controller-contract-test
           make startup-quiesce-test
           make si5351-transition-test
