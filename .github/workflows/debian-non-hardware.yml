@@ -32,6 +32,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Trust container checkout ownership
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule foreach --recursive \
+            'git config --global --add safe.directory "$PWD"'
+
       - name: Build parent debug executable
         working-directory: src
         run: make debug SUDO=
