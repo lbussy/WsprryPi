@@ -55,6 +55,7 @@ constexpr bool kDebugWspr = false;
 namespace
 {
     std::optional<int> g_pi_generation_override;
+    bool g_hardware_platform_detection_enabled = true;
     std::optional<bool> g_rp1_gpclk_provider_available_override;
 
     std::optional<int> parse_generation_from_pi_model(
@@ -510,6 +511,9 @@ std::string get_pi_model()
 
 int get_raspberry_pi_generation()
 {
+    if (!g_hardware_platform_detection_enabled)
+        return -1;
+
     if (g_pi_generation_override.has_value())
     {
         return *g_pi_generation_override;
@@ -530,6 +534,11 @@ int get_raspberry_pi_generation()
     }
 
     return -1;
+}
+
+void set_hardware_platform_detection_enabled(bool enabled) noexcept
+{
+    g_hardware_platform_detection_enabled = enabled;
 }
 
 bool platform_supports_gpio_clock_transmission(

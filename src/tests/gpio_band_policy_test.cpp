@@ -34,7 +34,13 @@ public:
 
     wsprrypi::BackendCapabilities capabilities() const override
     {
-        return {};
+        wsprrypi::BackendCapabilities capabilities;
+        capabilities.output_class =
+            kind_ == wsprrypi::BackendKind::SI5351
+                ? wsprrypi::BackendOutputClass::EXTERNAL_CLOCK_RF
+                : wsprrypi::BackendOutputClass::PHYSICAL_GPIO_RF;
+        capabilities.supported_modes = 0xffffffffu;
+        return capabilities;
     }
 
     wsprrypi::BackendCompileResult configure(
@@ -57,7 +63,7 @@ public:
     }
 
     void stop() noexcept override {}
-    void cleanup() noexcept override {}
+    wsprrypi::CleanupResult cleanup() noexcept override { return {true, {}}; }
 
     int configure_calls{0};
 

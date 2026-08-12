@@ -286,14 +286,29 @@ int main(int argc, char *argv[])
     signalHandler.start();
     signalHandler.setPriority(SCHED_RR, 40);
 
+    bool simulated_backend = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string option(argv[i]);
+        if ((option == "--backend" && i + 1 < argc &&
+             std::string(argv[i + 1]) == "simulated") ||
+            option == "--backend=simulated")
+        {
+            simulated_backend = true;
+        }
+    }
+
+    if (simulated_backend)
+        set_hardware_platform_detection_enabled(false);
+
     // Sets up logger based on DEBUG flag: INFO or DEBUG
     initialize_logger();
 
     // Parse command line first allowing calls for -h or -v
     handle_early_cli_options(argc, argv);
 
-    // Make sure we are running as root
-    if (getuid() != 0)
+    // Physical backends require elevated device access; simulation does not.
+    if (getuid() != 0 && !simulated_backend)
     {
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }

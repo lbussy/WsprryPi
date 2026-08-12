@@ -135,6 +135,7 @@ extern std::string get_debug_state();
  */
 extern std::string get_pi_model();
 int get_raspberry_pi_generation();
+void set_hardware_platform_detection_enabled(bool enabled) noexcept;
 bool platform_supports_gpio_clock_transmission(
     std::string *error_message = nullptr);
 bool operator_exposes_rp1_gpio() noexcept;
