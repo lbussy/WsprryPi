@@ -10,11 +10,26 @@ wall_clock_limit=10s
 
 run_with_timeout() {
     label=$1
-    shift
-    if timeout --signal=TERM --kill-after=2s "$wall_clock_limit" "$@"; then
-        return 0
+    syscall_trace_path=$2
+    shift 2
+
+    # Use the foreground mode supported by GNU and uutils timeout so this
+    # application behaves consistently across both implementations.
+    # When tracing, keep strace outside timeout so timeout still supervises the
+    # application directly and its TERM/KILL escalation cannot orphan it.
+    if [ "$syscall_trace_path" = "-" ]; then
+        if timeout --foreground --signal=TERM --kill-after=2s "$wall_clock_limit" "$@"; then
+            return 0
+        else
+            status=$?
+        fi
     else
-        status=$?
+        if strace -f -e trace=openat,open -o "$syscall_trace_path" \
+            timeout --foreground --signal=TERM --kill-after=2s "$wall_clock_limit" "$@"; then
+            return 0
+        else
+            status=$?
+        fi
     fi
     if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
         echo "Accelerated virtual-time $label execution exceeded the $wall_clock_limit wall-clock limit." >&2
@@ -23,7 +38,7 @@ run_with_timeout() {
 }
 
 run_wspr() {
-    run_with_timeout "WSPR" "$binary" \
+    run_with_timeout "WSPR" - "$binary" \
         --backend simulated \
         --no-web \
         --no-offset \
@@ -38,15 +53,13 @@ run_wspr
 cp "$trace" "$first"
 
 rm -f "$trace"
-run_with_timeout "strace-wrapped WSPR" strace -f -e trace=openat,open \
-    -o "$syscall_trace" \
-    "$binary" \
-        --backend simulated \
-        --no-web \
-        --no-offset \
-        --no-system-clock-frequency-estimate \
-        --terminate 1 \
-        AA0NT EM18 20 20m
+run_with_timeout "strace-wrapped WSPR" "$syscall_trace" "$binary" \
+    --backend simulated \
+    --no-web \
+    --no-offset \
+    --no-system-clock-frequency-estimate \
+    --terminate 1 \
+    AA0NT EM18 20 20m
 [ -s "$trace" ]
 cp "$trace" "$final"
 
