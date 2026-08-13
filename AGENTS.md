@@ -56,6 +56,23 @@ Never claim that hardware, RF output, GPIO timing, service lifecycle, or install
 
 Before any authorized live transmission, confirm the exact frequency, mode, duration, output path, attached hardware, and stopping procedure.
 
+### Authorized Installation Monitoring
+
+When the user explicitly authorizes an installation, keep its completion marker
+outside the Git checkout. Before starting, always remove any stale marker from
+the invoking user's home directory. Create the marker only if the installer
+succeeds:
+
+```sh
+rm -f ~/finished
+sudo ./scripts/install.sh && touch ~/finished
+```
+
+For an installation running in an existing terminal session, monitor
+`~/finished`; never create or monitor `finished` relative to the repository
+working directory. The marker belongs to the invoking command, not to
+`scripts/install.sh`.
+
 ## Hardware-Free Simulated Backend
 
 WsprryPi provides a canonical hardware-free simulated transmission backend for
