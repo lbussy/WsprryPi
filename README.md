@@ -10,6 +10,7 @@
 
 - [License](#license)
 - [Origins](#origins)
+- [Development and testing](#development-and-testing)
 - [Installation](#installation)
 
 ## License
@@ -27,6 +28,16 @@ After a conversation with Bruce Raymond of TAPR; I forked @threeme3's repo and p
 In late 2024, George [K9TRV] of TAPR reached out to me about some questions related to using WsprryPi on the Pi 5.  While I have not yet made that jump, the conversation spurred me to discard the original code in favor of a more modern, extensible, and maintainable base.
 
 Version 2.x+ is re-written from scratch, is no longer a derivative work, and is released under the MIT license.
+
+## Development and testing
+
+Developers can exercise WsprryPi's application planning, scheduling,
+cancellation, status, failure, and cleanup paths on an ordinary Debian machine
+without GPIO, MMIO, mailbox, DMA, I2C, transmitter device nodes, or RF hardware.
+See the [hardware-free simulated backend guide](docs/simulated-backend.md) for
+building, explicit selection, deterministic virtual-time traces, bounded
+real-time tests, fault injection, repeated execution, Debian CI, and the limits
+of simulation evidence.
 
 ## Installation
 

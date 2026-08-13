@@ -56,6 +56,30 @@ Never claim that hardware, RF output, GPIO timing, service lifecycle, or install
 
 Before any authorized live transmission, confirm the exact frequency, mode, duration, output path, attached hardware, and stopping procedure.
 
+## Hardware-Free Simulated Backend
+
+WsprryPi provides a canonical hardware-free simulated transmission backend for
+ordinary Debian development, automated tests, and CI. Read
+`docs/simulated-backend.md` before planning or running application-level
+transmission tests that do not require physical hardware.
+
+- Prefer the explicit `--backend simulated` selection when exercising the real
+  application planning, scheduling, cancellation, status, failure, and cleanup
+  paths without GPIO, MMIO, mailbox, DMA, I2C, transmitter device nodes, or RF.
+- Use `.github/workflows/debian-non-hardware.yml` as the checked-in reference
+  for the canonical unprivileged Debian validation suite.
+- Simulation must never be selected automatically because hardware is absent or
+  initialization fails, and it must not weaken safety policy for physical
+  backends.
+- Timing-mode selection, trace-path overrides, and lifecycle fault injection are
+  transient typed C++ test/developer APIs, not production CLI, INI, environment,
+  or UI controls. Additional shell-facing controls require a separately reviewed
+  developer-harness use case.
+- Simulator evidence qualifies software contracts only. It does not qualify
+  Raspberry Pi timing, GPIO, MMIO, DMA, mailbox, I2C electrical behavior,
+  Si5351 output, installation, services, RF output, frequency accuracy, or a
+  physical transmitter chain.
+
 ## Raspberry Pi Kernel Build Worker
 
 Maintainer kernel work can use the Debian ARM64 build worker prepared outside
