@@ -1,0 +1,384 @@
+# Submodule Absorption Contract
+
+Status: Proposed
+
+Implementation state: Not implemented
+
+Repository affected: `WsprryPi`
+
+History strategy: Snapshot import
+
+## Purpose
+
+Absorb every Git submodule currently recorded by `WsprryPi` into the parent
+repository as ordinary tracked content. Preserve the identity, provenance,
+licensing, documentation, buildability, and reusable boundaries of each
+component while eliminating gitlinks and submodule-management mechanics.
+
+This is a repository-organization migration only. It must not change application
+behavior, public interfaces, build behavior, generated output, installation
+layout, runtime configuration, UI behavior, RF behavior, GPIO behavior,
+scheduling, or operator workflow.
+
+This document records the reviewed migration contract. Its presence does not by
+itself authorize implementation, staging, committing, pushing, remote-repository
+changes, deployment, or hardware operation. Those actions require explicit task
+authorization.
+
+## Authoritative Baseline
+
+The implementation task must treat the selected parent checkout and its recorded
+gitlinks as authoritative. Reinspect `.gitmodules`, the parent index, recursive
+submodule status, and every component revision immediately before acting.
+
+The expected inventory is:
+
+- `WsprryPi-UI`
+- `src/INI-Handler`
+- `src/LCBLog`
+- `src/Mailbox`
+- `src/MonitorFile`
+- `src/PPM-Manager`
+- `src/Signal-Handler`
+- `src/Singleton`
+- `src/WSPR-Transmitter`
+- `src/WSPR-Reference`
+
+This inventory and any previously recorded commit IDs are historical context
+only. Stop if the actual repository structure materially differs.
+
+## Initial Gate
+
+Read the current root `AGENTS.md` and all applicable nested instructions before
+acting. Inspect and record:
+
+- current directory and repository identity;
+- parent branch, HEAD, upstream, and ahead/behind state;
+- parent working-tree and index state;
+- `.gitmodules`;
+- `git submodule status --recursive`;
+- every submodule's working-tree status, HEAD, remote URL, and parent-recorded
+  gitlink;
+- ignored and untracked files inside each component;
+- nested submodules, if any;
+- applicable licenses;
+- existing user changes anywhere in the parent or submodules.
+
+Stop without changing anything if:
+
+- the parent or any submodule is dirty;
+- a submodule is uninitialized or unavailable;
+- a checked-out component differs from its parent-recorded gitlink;
+- a nested submodule exists but is not covered by the implementation task;
+- existing changes overlap the migration;
+- the actual structure materially differs from the expected inventory.
+
+Detached submodule HEADs are normal and are not themselves blockers. Never
+reset, clean, stash, rebase, overwrite, or discard repository state to satisfy
+the gate.
+
+## Target Organization
+
+Preserve every component at its current path:
+
+```text
+WsprryPi/
+├── WsprryPi-UI/
+│   ├── data/
+│   ├── tests/
+│   ├── README.md
+│   ├── LICENSE.md
+│   ├── DESIGN.md
+│   └── PRODUCT.md
+└── src/
+    ├── INI-Handler/
+    ├── LCBLog/
+    ├── Mailbox/
+    ├── MonitorFile/
+    ├── PPM-Manager/
+    ├── Signal-Handler/
+    ├── Singleton/
+    ├── WSPR-Transmitter/
+    └── WSPR-Reference/
+```
+
+Do not flatten directories, rename components, move headers, combine source
+trees, normalize names, or reorganize nested `src/` directories. Each imported
+component must remain an obvious, coherent unit that can be diagnosed
+independently and extracted for later reuse.
+
+Retain, where present:
+
+- component source hierarchy;
+- README, design, API, and component documentation;
+- license, copyright, and attribution files;
+- standalone Makefiles or CMake entry points;
+- standalone `main.cpp` or demonstration programs;
+- tests, examples, test vectors, golden vectors, and test data;
+- packaging files and relevant component-specific documentation.
+
+Exclude:
+
+- nested `.git` files or directories;
+- generated build products;
+- ignored local artifacts;
+- editor state;
+- `.codex`, `.agents`, `.claude`, `.impeccable`, and similar local tool state,
+  unless already intentional tracked product content required by current
+  instructions.
+
+Document every exclusion.
+
+## Component Reuse Requirements
+
+### `LCBLog`
+
+`LCBLog` is used by other projects and must retain a strong reusable boundary:
+
+- keep `src/lcblog.cpp`, `src/lcblog.hpp`, and `src/lcblog.tpp` together;
+- preserve its README, license, Makefile, and test or demonstration entry point;
+- do not introduce dependencies on WsprryPi headers, globals, configuration,
+  runtime services, or directory layout;
+- keep WsprryPi-specific integration outside the component directory where
+  practical;
+- document its original URL, imported revision, license, and future extraction
+  procedure;
+- do not modify the former remote or attempt bidirectional synchronization.
+
+### `WSPR-Reference`
+
+Preserve `WSPR-Reference` as an independently understandable and buildable
+component:
+
+- preserve its standalone `CMakeLists.txt`;
+- preserve the `wspr_ref_lib` API and package structure;
+- preserve CLI programs, examples, tests, golden vectors, and test data;
+- keep it buildable and testable from its component root;
+- do not introduce dependencies on WsprryPi application internals;
+- record its original repository, imported revision, and relevant version or tag
+  provenance.
+
+### Other source components
+
+Preserve each remaining component's named root, README, license, source
+hierarchy, and available standalone build, test, or demonstration assets. Do not
+refactor, format, modernize, or otherwise change component contents during
+absorption.
+
+### `WsprryPi-UI`
+
+Keep `WsprryPi-UI` at its existing path as a coherent first-party UI component.
+Preserve:
+
+- the `data/` deployment tree;
+- UI tests;
+- README, license, design, product, and API documentation;
+- installed web-root layout;
+- parent/UI integration behavior.
+
+Do not change UI appearance, wording, navigation, validation, persistence, or
+behavior. The migration is not a UI design task.
+
+## Provenance Record
+
+Create `docs/components/provenance.md` as part of the migration. For every
+imported component, record:
+
+- component name and retained path;
+- original repository URL;
+- exact parent-recorded import SHA;
+- checked-out SHA;
+- branch or detached state observed during migration;
+- most recent commit date and subject;
+- license path;
+- relevant tags or version provenance;
+- whether the former remote was left untouched;
+- files deliberately excluded from import;
+- standalone build or test entry points;
+- special reuse requirements;
+- extraction guidance where applicable.
+
+Use snapshot import. Do not merge unrelated repository histories into the parent
+or rewrite history. Former repositories remain untouched historical references
+unless a later task separately authorizes another disposition.
+
+## Per-Component Conversion Procedure
+
+Process components individually and verify each one before continuing:
+
+1. Record the parent gitlink, checked-out HEAD, remote, status, license, tags,
+   commit metadata, and tracked-file inventory.
+2. Create a safe temporary snapshot of the exact tracked tree at the recorded
+   revision.
+3. Remove the gitlink from the parent index without losing reviewed files.
+4. Remove only the component Git administrative link or metadata needed to end
+   submodule status.
+5. Restore the exact tracked component tree at the same path as ordinary parent
+   content.
+6. Stage the ordinary files when staging is explicitly authorized.
+7. Compare the staged ordinary tree with the former component tree.
+8. Confirm that differences are limited to Git administrative metadata and
+   documented exclusions.
+9. Confirm that no user, ignored, generated, or local-tool artifacts were
+   imported.
+10. Continue only after the comparison passes.
+
+After all components pass:
+
+- remove all obsolete entries from `.gitmodules`;
+- remove `.gitmodules` if no submodules remain;
+- stage that removal when staging is authorized;
+- do not perform optional destructive cleanup of former remotes or unrelated
+  local Git metadata.
+
+The review diff for each component must clearly show deletion of a mode `160000`
+gitlink and addition of its ordinary files.
+
+## Required Integration Updates
+
+Inspect the entire repository for active assumptions about submodules. At
+minimum inspect:
+
+- root `AGENTS.md` and `README.md`;
+- `src/Makefile`;
+- `scripts/sync_all_branches.sh`;
+- `scripts/install.sh`;
+- `scripts/copy_ui.py`;
+- support and research scripts that record submodule revisions;
+- release and update scripts;
+- CI workflows;
+- `release_tools/developer_notes.md`;
+- `release_tools/Wsprry Pi Codebase Map.md`;
+- active plans containing submodule instructions.
+
+Update only what is required to make the repository truthful and functional
+after absorption. This may include:
+
+- removing `--recurse-submodules` requirements;
+- removing initialization and pointer-management workflows;
+- replacing submodule-state diagnostics with component and provenance checks;
+- describing one parent repository in active instructions;
+- renaming misleading build variables such as `SUBMODULE_SRCDIRS` where needed.
+
+Script and build-file edits must be behavior-neutral apart from removing
+obsolete submodule mechanics. Historical documents may retain the word
+"submodule" when clearly describing past state. Do not rewrite unrelated
+historical material merely for terminology cleanup.
+
+`Wsprry_Pi_Docs` remains a separate sibling repository. Do not modify it without
+explicit cross-repository authorization. Report any required follow-up there.
+
+## Non-Goals
+
+The migration does not authorize:
+
+- application or component source refactoring or formatting;
+- modernization or warning cleanup;
+- header, API, or component renaming;
+- flattened component directories;
+- parent-build redesign or replacement of Make with CMake;
+- a package manager or changed linkage architecture;
+- changed installation, deployment, or runtime paths;
+- changed configuration, UI, RF, GPIO, MMIO, DMA, mailbox, I2C, Si5351,
+  scheduling, or transmission behavior;
+- remote deletion, archival, transfer, visibility changes, or synchronization;
+- an automated `LCBLog` export workflow;
+- changes to `Wsprry_Pi_Docs`;
+- hardware, service, installation, deployment, GPIO, or RF operations.
+
+## Validation
+
+### Repository validation
+
+Confirm:
+
+- `.gitmodules` is absent unless an unexpected, separately approved submodule
+  remains;
+- `git submodule status --recursive` reports no registered submodules;
+- all ten paths contain ordinary tracked files;
+- no component contains nested Git administrative metadata;
+- every imported tree matches its recorded source revision;
+- every provenance record matches observed evidence;
+- no generated, ignored, or local-tool artifacts are staged;
+- `git diff --cached --check` passes before an authorized commit;
+- the complete diff contains no unexplained source-content changes.
+
+### Build and test validation
+
+Inspect test targets before running them. Run safe, supported, non-hardware
+validation where available, including:
+
+- ordinary WsprryPi build;
+- parent non-hardware regression tests;
+- canonical unprivileged Debian validation from
+  `.github/workflows/debian-non-hardware.yml` where applicable;
+- existing UI tests and parent UI/source integration tests;
+- standalone `WSPR-Reference` configure, build, and tests;
+- standalone `LCBLog` build or test entry point;
+- other safe standalone component builds or tests.
+
+Read `docs/simulated-backend.md` before application-level simulated transmission
+tests. Simulator evidence qualifies software contracts only. It does not qualify
+physical backend or hardware behavior.
+
+Use documented build commands and an appropriate job count. Do not invoke
+installation targets, `sudo`, services, GPIO, MMIO, DMA, mailbox, I2C, Si5351,
+RF, or attached devices. If the validation host cannot execute a
+Raspberry-Pi-specific build or test, report the limitation precisely rather than
+substituting source inspection for Pi qualification.
+
+### Checkout validation
+
+Before a migration commit exists, perform the safest equivalent export or
+staged-tree completeness check available. A literal fresh clone cannot contain
+an uncommitted staged migration. Defer and explicitly report true fresh-clone
+verification until an authorized migration commit exists.
+
+Do not claim fresh-clone acceptance before that post-commit test passes.
+
+### Hardware boundary
+
+Do not perform hardware validation without separate explicit authorization.
+Build, unit-test, and simulator results do not qualify RF output, GPIO timing,
+MMIO, DMA, mailbox, I2C, Si5351, installation, service lifecycle, frequency
+accuracy, or Raspberry Pi runtime behavior.
+
+## Acceptance Criteria
+
+The migration is accepted only when:
+
+- all ten former submodule trees are ordinary parent content;
+- every imported tree is traceable to its exact original URL and revision;
+- component boundaries, documentation, licenses, and tests remain recognizable;
+- `LCBLog` remains decoupled and practically extractable;
+- `WSPR-Reference` remains independently buildable and testable;
+- `WsprryPi-UI` remains coherent with unchanged behavior and layout;
+- active workflows require no submodule initialization or pointer management;
+- parent, component, UI, and applicable non-hardware checks pass;
+- a post-commit fresh clone is complete without `--recurse-submodules`;
+- no generated files, local-tool state, or nested Git metadata are committed;
+- documentation accurately describes the resulting organization;
+- no behavioral or public contract changes are introduced;
+- former remote repositories remain untouched unless separately authorized.
+
+## Final Review and Handoff
+
+The implementation report must state:
+
+- parent branch, starting HEAD, upstream, and ahead/behind state;
+- initial parent and submodule cleanliness;
+- every imported component;
+- exact source URL and SHA for every import;
+- excluded files and reasons;
+- all documentation, build, script, CI, and policy files changed;
+- diff summary and tree-equivalence results;
+- tests and builds run with exact outcomes;
+- validation not run and why;
+- `Wsprry_Pi_Docs` follow-up identified but not performed;
+- whether hardware, RF, services, deployment, remotes, commits, or pushes were
+  touched or performed;
+- remaining qualification gates, especially true fresh-clone testing after an
+  authorized commit.
+
+Do not describe the migration as fully accepted while any required validation
+remains unavailable.
