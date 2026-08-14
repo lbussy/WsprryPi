@@ -2,6 +2,7 @@
 #include "config_handler.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
+#include "gpio_band_policy.hpp"
 #include "gpio_output.hpp"
 #include "scheduling.hpp"
 #include "system_clock_frequency_estimate.hpp"
@@ -746,6 +747,11 @@ int main(int argc, char *argv[])
                 stock_ini.find("2m =\n2m Active High = false") != std::string::npos &&
                 stock_ini.find("Active High = true") == std::string::npos,
             "stock INI must declare explicit disabled Band GPIO defaults for every band");
+        require(
+            stock_ini.find("[Experimental]") != std::string::npos &&
+                stock_ini.find("Allow Unqualified Frequency = false") != std::string::npos &&
+                stock_ini.find("Allow Non-Amateur Frequency = false") != std::string::npos,
+            "stock INI must expose both experimental frequency controls as default deny");
     }
 
     {
@@ -1067,6 +1073,72 @@ int main(int argc, char *argv[])
             current_transmission_request_for_test().mode == TransmissionMode::WSPR,
             "scheduler must commit a normal WSPR request for GPIO on Raspberry Pi 4");
 
+        finish_runtime_planning_state_for_identity_test();
+        clear_pi_generation_override_for_scope();
+    }
+
+    {
+        set_raspberry_pi_generation_override_for_test(4);
+        prime_valid_runtime_identity_config();
+        config.frequencies = "2200m";
+        config.allow_unqualified_frequency = false;
+        config.allow_non_amateur_frequency = false;
+        sync_wspr_fields_for_test();
+        require(
+            set_frequencies(config),
+            "BCM2711 2200 m WSPR regression must resolve its dial frequency");
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "BCM2711 2200 m WSPR regression must plan a scheduler request");
+        const auto bcm2711_legacy_request = current_transmission_request_for_test();
+        auto bcm2711_request = controller_request_from_legacy_for_test(
+            bcm2711_legacy_request,
+            wsprrypi::TransmissionMode::WSPR);
+        wsprrypi::WsprPayload bcm2711_payload;
+        bcm2711_payload.prepared = bcm2711_legacy_request.payload;
+        bcm2711_payload.base_frequency_hz =
+            bcm2711_legacy_request.actual_rf_frequency_hz;
+        bcm2711_request.payload = bcm2711_payload;
+        require(
+            !bcm2711_request.policy.allow_unqualified_frequency &&
+                !bcm2711_request.policy.allow_non_amateur_frequency &&
+                bcm2711_request.policy.hardware_profile ==
+                    wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD &&
+                wsprrypi::evaluate_gpio_band_policy(
+                    wsprrypi::ExecutionPlanCompiler{}.compile(bcm2711_request)).allowed,
+            "direct WSPR controller requests must preserve the qualified BCM2711 2200 m profile");
+        finish_runtime_planning_state_for_identity_test();
+
+        set_raspberry_pi_generation_override_for_test(3);
+        prime_valid_runtime_identity_config();
+        config.frequencies = "2200m";
+        config.allow_unqualified_frequency = true;
+        config.allow_non_amateur_frequency = false;
+        sync_wspr_fields_for_test();
+        require(
+            set_frequencies(config),
+            "legacy 2200 m WSPR override regression must resolve its dial frequency");
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "legacy 2200 m WSPR override regression must plan a scheduler request");
+        const auto legacy_request = current_transmission_request_for_test();
+        auto legacy_override_request = controller_request_from_legacy_for_test(
+            legacy_request,
+            wsprrypi::TransmissionMode::WSPR);
+        wsprrypi::WsprPayload legacy_payload;
+        legacy_payload.prepared = legacy_request.payload;
+        legacy_payload.base_frequency_hz = legacy_request.actual_rf_frequency_hz;
+        legacy_override_request.payload = legacy_payload;
+        require(
+            legacy_override_request.policy.allow_unqualified_frequency &&
+                !legacy_override_request.policy.allow_non_amateur_frequency &&
+                legacy_override_request.policy.hardware_profile ==
+                    wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD &&
+                wsprrypi::evaluate_gpio_band_policy(
+                    wsprrypi::ExecutionPlanCompiler{}.compile(legacy_override_request)).allowed,
+            "direct WSPR controller requests must preserve the legacy unqualified-frequency override");
         finish_runtime_planning_state_for_identity_test();
         clear_pi_generation_override_for_scope();
     }

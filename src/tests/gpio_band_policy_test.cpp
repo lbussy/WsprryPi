@@ -278,6 +278,18 @@ int main()
         wsprrypi::TransmissionMode::WSPR,
         137500.0, false, "legacy 2200 m profile", false, false,
         wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+    for (const auto mode : {
+             wsprrypi::TransmissionMode::TONE,
+             wsprrypi::TransmissionMode::QRSS,
+             wsprrypi::TransmissionMode::FSKCW,
+             wsprrypi::TransmissionMode::DFCW})
+    {
+        require_controller_policy(
+            wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+            mode,
+            137500.0, true, "legacy 2200 m CW profile", false, false,
+            wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+    }
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::WSPR,

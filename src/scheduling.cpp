@@ -1111,6 +1111,28 @@ static wsprrypi::BackendKind to_controller_backend(
 static wsprrypi::ClockSource to_controller_clock_source(
     const ArgParserConfig &cfg) noexcept;
 
+static wsprrypi::TransmissionRequest build_controller_request_from_legacy(
+    const TransmissionRequest &legacy_request,
+    wsprrypi::TransmissionMode mode)
+{
+    wsprrypi::TransmissionRequest controller_request;
+    controller_request.mode = mode;
+    controller_request.output.backend =
+        to_controller_backend(config.transmit_backend);
+    controller_request.output.output = to_controller_clock_source(config);
+    controller_request.output.gpio = legacy_request.tx_gpio;
+    controller_request.calibration.ppm = legacy_request.ppm;
+    controller_request.policy.allow_unqualified_frequency =
+        legacy_request.allow_unqualified_frequency;
+    controller_request.policy.allow_non_amateur_frequency =
+        legacy_request.allow_non_amateur_frequency;
+    controller_request.policy.hardware_profile = legacy_request.hardware_profile;
+    controller_request.id.value = 1;
+    controller_request.metadata.label = legacy_request.frequency_entry_label;
+    controller_request.metadata.origin = "scheduler";
+    return controller_request;
+}
+
 /**
  * @brief Commit the single execution request consumed by the transmitter.
  *
@@ -1128,29 +1150,13 @@ static void commit_execution_request(
     committed_execution_route_for_test_storage =
         CommittedExecutionRouteForTest::NONE;
 
-    auto build_controller_request =
-        [&](wsprrypi::TransmissionMode mode) -> wsprrypi::TransmissionRequest
-    {
-        wsprrypi::TransmissionRequest controller_request;
-        controller_request.mode = mode;
-        controller_request.output.backend =
-            to_controller_backend(config.transmit_backend);
-        controller_request.output.output =
-            to_controller_clock_source(config);
-        controller_request.output.gpio = current_transmission_request.tx_gpio;
-        controller_request.calibration.ppm = current_transmission_request.ppm;
-        controller_request.id.value = 1;
-        controller_request.metadata.label =
-            current_transmission_request.frequency_entry_label;
-        controller_request.metadata.origin = "scheduler";
-        return controller_request;
-    };
-
     if (current_transmission_request.isTone() &&
         config.transmit_backend == TransmitBackendKind::SI5351)
     {
         wsprrypi::TransmissionRequest controller_request =
-            build_controller_request(wsprrypi::TransmissionMode::TONE);
+            build_controller_request_from_legacy(
+                current_transmission_request,
+                wsprrypi::TransmissionMode::TONE);
         wsprrypi::TonePayload payload;
         payload.frequency_hz =
             current_transmission_request.actual_rf_frequency_hz;
@@ -1193,10 +1199,13 @@ static void commit_execution_request(
     {
         return;
     }
+
     if (!current_transmission_request.isSkipWindow())
     {
         wsprrypi::TransmissionRequest controller_request =
-            build_controller_request(wsprrypi::TransmissionMode::WSPR);
+            build_controller_request_from_legacy(
+                current_transmission_request,
+                wsprrypi::TransmissionMode::WSPR);
 
         wsprrypi::WsprPayload payload;
         payload.prepared = current_transmission_request.payload;
@@ -5969,6 +5978,13 @@ void set_current_transmission_request_for_test(
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test()
 {
     return current_controller_request_for_test_storage;
+}
+
+wsprrypi::TransmissionRequest controller_request_from_legacy_for_test(
+    const TransmissionRequest &request,
+    wsprrypi::TransmissionMode mode)
+{
+    return build_controller_request_from_legacy(request, mode);
 }
 
 std::vector<BandGPIOConfig> selector_shutdown_cleanup_targets_for_test()
