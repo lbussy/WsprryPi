@@ -70,6 +70,8 @@ namespace
     {
         TestTonePlanningConfigSnapshot snapshot;
         snapshot.transmit_backend = source.transmit_backend;
+        snapshot.allow_unqualified_frequency = source.allow_unqualified_frequency;
+        snapshot.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
         snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
         snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
         snapshot.band_gpio = source.band_gpio;
@@ -1460,6 +1462,9 @@ namespace
             {"Socket Port", 31416},
             {"Use Shutdown", false},
             {"Shutdown Button", 19}};
+        target["Experimental"] = {
+            {"Allow Unqualified Frequency", false},
+            {"Allow Non-Amateur Frequency", false}};
 
         target["GPIO"] = {
             {"Transmit Pin", kDefaultTransmitGpio},
@@ -1752,6 +1757,12 @@ namespace
         target.use_shutdown = source.at("Operation").at("Use Shutdown").get<bool>();
         target.shutdown_pin = source.at("Operation").at("Shutdown Button").get<int>();
         target.use_journald = false;
+        const auto experimental =
+            source.value("Experimental", nlohmann::json::object());
+        target.allow_unqualified_frequency =
+            experimental.value("Allow Unqualified Frequency", false);
+        target.allow_non_amateur_frequency =
+            experimental.value("Allow Non-Amateur Frequency", false);
 
         // Missing Band GPIO data is allowed; explicit disabled defaults stay in place.
         const auto band_gpio_section_it = source.find("Band GPIO");
@@ -1818,6 +1829,10 @@ namespace
         target["Operation"]["Socket Port"] = source.socket_port;
         target["Operation"]["Use Shutdown"] = source.use_shutdown;
         target["Operation"]["Shutdown Button"] = source.shutdown_pin;
+        target["Experimental"]["Allow Unqualified Frequency"] =
+            source.allow_unqualified_frequency;
+        target["Experimental"]["Allow Non-Amateur Frequency"] =
+            source.allow_non_amateur_frequency;
 
         target["GPIO"]["Transmit Pin"] =
             normalize_gpio_transmit_pin(source.gpio_tx_pin);
@@ -1939,6 +1954,8 @@ namespace
         target.use_journald = source.use_journald;
         target.date_time_log = source.date_time_log;
         target.debug_logging = source.debug_logging;
+        target.allow_unqualified_frequency = source.allow_unqualified_frequency;
+        target.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
         target.wspr_planner_preference = source.wspr_planner_preference;
         target.loop_tx = source.loop_tx;
         target.tx_iterations.store(source.tx_iterations.load());
@@ -2083,7 +2100,8 @@ namespace
                 section != "Calibration" &&
                 section != "Si5351" &&
                 section != "WSPR" &&
-                section != "CW")
+                section != "CW" &&
+                section != "Experimental")
             {
                 continue;
             }
@@ -2287,6 +2305,7 @@ build_persistent_ini_data(const nlohmann::json &source)
             section_name != "Si5351" &&
             section_name != "WSPR" &&
             section_name != "CW" &&
+            section_name != "Experimental" &&
             section_name != "Band GPIO")
         {
             continue;
@@ -2379,7 +2398,10 @@ build_persistent_ini_data(const nlohmann::json &source)
                   key == "Fade Slice Ms" ||
                   key == "Start Minute" ||
                   key == "Start Second" ||
-                  key == "Repeat Minutes"));
+                  key == "Repeat Minutes")) ||
+                (section_name == "Experimental" &&
+                 (key == "Allow Unqualified Frequency" ||
+                  key == "Allow Non-Amateur Frequency"));
 
             if (!persist_key)
             {

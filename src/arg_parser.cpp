@@ -1391,6 +1391,12 @@ void print_usage(const std::string &message, int exit_code)
               << "  -D, --date-time-log                Prefix stream log output with date/time stamps.\n"
               << "  --debug-logging, --no-debug-logging\n"
               << "                                     Enable or disable DEBUG-level application logging.\n\n"
+              << "Experimental Frequency Policy (CLI/INI only):\n"
+              << "  --allow-unqualified-frequency, --no-allow-unqualified-frequency\n"
+              << "                                     Allow or deny unqualified backend/mode combinations.\n"
+              << "  --allow-non-amateur-frequency, --no-allow-non-amateur-frequency\n"
+              << "                                     Allow or deny frequencies outside recognized amateur bands.\n"
+              << "                                     Outside-band transmission requires both allow flags.\n\n"
               << "WSPR Identity And Frequency:\n"
               << "  Positional CALLSIGN GRID POWER FREQ [FREQ...]\n"
               << "                                     Transmit WSPR directly from CLI. POWER is rounded to a standard WSPR dBm value.\n"
@@ -3032,6 +3038,10 @@ bool parse_command_line(int argc, char *argv[])
         {"date-time-log", no_argument, nullptr, 'D'},   // Global: config.date_time_log
         {"debug-logging", no_argument, nullptr, 1018},  // Global: config.debug_logging
         {"no-debug-logging", no_argument, nullptr, 1019},
+        {"allow-unqualified-frequency", no_argument, nullptr, 1056},
+        {"no-allow-unqualified-frequency", no_argument, nullptr, 1057},
+        {"allow-non-amateur-frequency", no_argument, nullptr, 1058},
+        {"no-allow-non-amateur-frequency", no_argument, nullptr, 1059},
         {"no-web", no_argument, nullptr, 1020},
         {"no-offset", no_argument, nullptr, 1021},
         {"no-system-clock-frequency-estimate", no_argument, nullptr, 1022},
@@ -3168,6 +3178,26 @@ bool parse_command_line(int argc, char *argv[])
         case 1019:
         {
             config.debug_logging = false;
+            break;
+        }
+        case 1056:
+        {
+            config.allow_unqualified_frequency = true;
+            break;
+        }
+        case 1057:
+        {
+            config.allow_unqualified_frequency = false;
+            break;
+        }
+        case 1058:
+        {
+            config.allow_non_amateur_frequency = true;
+            break;
+        }
+        case 1059:
+        {
+            config.allow_non_amateur_frequency = false;
             break;
         }
         case 1020:

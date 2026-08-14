@@ -306,6 +306,8 @@ struct ArgParserConfig
     bool use_journald;              ///< Route logs to journald instead of streams.
     bool date_time_log;             ///< Prefix logs with timestamp.
     bool debug_logging;             ///< Enable DEBUG-level application logging.
+    bool allow_unqualified_frequency; ///< Permit unqualified backend/mode combinations.
+    bool allow_non_amateur_frequency; ///< Permit frequencies outside recognized amateur allocations when combined with the unqualified override.
     WsprPlannerPreference wspr_planner_preference; ///< Preferred planner behavior for Type 2/3 pairing.
     bool loop_tx;                   ///< Repeat transmission cycle.
     std::atomic<int> tx_iterations; ///< Number of transmission iterations (0 = infinite).
@@ -383,6 +385,8 @@ struct ArgParserConfig
           use_journald(false),
           date_time_log(false),
           debug_logging(false),
+          allow_unqualified_frequency(false),
+          allow_non_amateur_frequency(false),
           wspr_planner_preference(WsprPlannerPreference::Auto),
           loop_tx(false),
           tx_iterations(0),
@@ -468,6 +472,8 @@ struct ArgParserConfig
         use_journald = other.use_journald;
         date_time_log = other.date_time_log;
         debug_logging = other.debug_logging;
+        allow_unqualified_frequency = other.allow_unqualified_frequency;
+        allow_non_amateur_frequency = other.allow_non_amateur_frequency;
         wspr_planner_preference = other.wspr_planner_preference;
         loop_tx = other.loop_tx;
         tx_iterations.store(other.tx_iterations.load());
@@ -519,6 +525,8 @@ extern ArgParserConfig config;
 struct TestTonePlanningConfigSnapshot
 {
     TransmitBackendKind transmit_backend = TransmitBackendKind::GPIO;
+    bool allow_unqualified_frequency = false;
+    bool allow_non_amateur_frequency = false;
     double wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
     std::vector<WsprFrequencyEntry> wspr_frequency_entries{};
     std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio{};

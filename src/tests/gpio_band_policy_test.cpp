@@ -158,13 +158,19 @@ void require_controller_policy(
     wsprrypi::TransmissionMode mode,
     double frequency_hz,
     bool expected_allowed,
-    const std::string& context)
+    const std::string& context,
+    bool allow_unqualified = false,
+    bool allow_non_amateur = false,
+    wsprrypi::HardwareProfile profile = wsprrypi::HardwareProfile::UNSPECIFIED)
 {
     wsprrypi::ExecutionPlanCompiler compiler;
     ProbeBackend backend(backend_kind);
     wsprrypi::TransmissionController controller(compiler, backend);
-    const auto result = controller.prepare(
-        request_for_mode(backend_kind, mode, frequency_hz));
+    auto request = request_for_mode(backend_kind, mode, frequency_hz);
+    request.policy.allow_unqualified_frequency = allow_unqualified;
+    request.policy.allow_non_amateur_frequency = allow_non_amateur;
+    request.policy.hardware_profile = profile;
+    const auto result = controller.prepare(request);
 
     require(
         result.ok == expected_allowed,
@@ -175,10 +181,8 @@ void require_controller_policy(
     if (!expected_allowed)
     {
         require(
-            result.error.find("Direct GPIO transmission is blocked") !=
-                std::string::npos &&
-            result.error.find("separately qualified") != std::string::npos,
-            context + " must provide an actionable GPIO-only error");
+            result.error.find("Transmission") != std::string::npos,
+            context + " must provide an actionable policy error");
         require(
             controller.prepared_plan() == nullptr,
             context + " must not retain a rejected execution plan");
@@ -249,9 +253,36 @@ int main()
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
             wsprrypi::TransmissionMode::TONE,
             adjacent_frequency,
-            true,
+            false,
             "frequency adjacent to a disqualified band");
     }
+
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::QRSS,
+        50293000.0, true, "unqualified override", true, false);
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::TONE,
+        30000000.0, false, "outside-band single override", true, false);
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::TONE,
+        30000000.0, true, "outside-band dual override", true, true);
+    require_controller_policy(
+        wsprrypi::BackendKind::SI5351,
+        wsprrypi::TransmissionMode::TONE,
+        223500000.0, false, "unavailable cannot be overridden", true, true);
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::WSPR,
+        137500.0, false, "legacy 2200 m profile", false, false,
+        wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::WSPR,
+        137500.0, true, "BCM2711 2200 m profile", false, false,
+        wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
 
     for (const auto mode : exercised_modes)
     {
