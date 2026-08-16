@@ -523,3 +523,85 @@ parent-wide regression/CI, final staged export, and post-migration fresh-clone
 acceptance remain deferred. No signal was sent after the build failure, and no
 scheduler-priority, service, installation, device, GPIO, I2C, RF, hardware, or
 external-process operation occurred.
+
+## Singleton
+
+| Field | Recorded value |
+| --- | --- |
+| Component | Singleton |
+| Retained path | `src/Singleton` |
+| Original repository | `https://github.com/WsprryPi/Singleton.git` |
+| Parent-recorded import SHA | `f4badd58699c3ba645d5ab537d50888c2881c95d` |
+| Checked-out SHA | `f4badd58699c3ba645d5ab537d50888c2881c95d` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-07-06T09:55:40-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | No repository tags contain or point at the imported revision; short revision `f4badd5` |
+| Raw source tree | `17dfa91cc556c42db7895542e6168c8ca9667a11` |
+| Expected and staged Phase A tree | `17dfa91cc556c42db7895542e6168c8ca9667a11` |
+| Staged tree after Phase B | `1a3dbf35f567823e68adf811b424efc338051d85` |
+| Phase A archive | SHA-256 `85d4701141d1bc78eb6b707b0e28c4ab31b24f567efb673876f246713ea5201d`; 7 tracked files and 2 directory entries |
+| Former component license | `src/Singleton/LICENSE.md` at raw import; MIT, copyright 2024 Lee Bussy; blob `30c1bcce2f7b31d2420d0e94aa0c9c67d1e9a216` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed after the ownership audit found only Lee Bussy contributor identities and no third-party obligation. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`52aa0d1627ef8a2447c241896d7d240a11dd7f4a24e472fba58ac3580ccf080d`.
+The object-derived archive contained the exact recorded tree and component
+license before adaptation. Its ordinary staged Phase A subtree OID equaled the
+source tree OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored or untracked files, nested submodules, nested
+Git administration, or other exclusions.
+
+### Phase B adaptations
+
+- Retained the existing fixed `singleton` and `singleton_test` naming; no
+  Git-derived project naming required correction.
+- Preserved the historical fixed-port, child-process, and restricted-port
+  program in `main.cpp`, but moved ordinary validation to a new deterministic
+  `test.cpp`. It selects an available loopback UDP port, checks first/second
+  acquisition, and confirms release and reacquisition.
+- Guarded the historical program behind `make demo SINGLETON_DEMO=YES`; it was
+  compiled to `singleton_demo` for guard validation but was not executed.
+- Excluded standalone `test.cpp` from parent source discovery so it cannot add
+  a second `main()` to the WsprryPi application.
+- Removed GNU-only `-fmax-errors` and replaced Linux-only `nproc` discovery with
+  `getconf _NPROCESSORS_ONLN`, allowing the documented default test command to
+  work with both Apple Clang and GNU toolchains without changing test meaning.
+- Replaced component-license and standalone instructions with monorepo build,
+  safe testing, integration, and extraction guidance. Removed the redundant
+  component license and redirected source comments to the root license.
+
+The header-only singleton socket acquisition and release implementation is
+unchanged apart from its license comment.
+
+### Standalone build, validation, and extraction
+
+From `src/Singleton/src`, `make test` builds and runs `singleton_test` using an
+ephemeral loopback UDP port. `make demo SINGLETON_DEMO=YES` opts into the
+historical demonstration and its fixed-port and child-process assumptions.
+
+To extract Singleton, copy `src/Singleton`, add repository metadata and a
+license file, and retain `singleton.hpp`, the Makefile, deterministic test,
+historical demonstration, and README. The header has no dependency on WsprryPi
+application internals.
+
+### Slice validation
+
+The default `make test` compiled and passed outside the filesystem sandbox. The
+sandbox itself denied loopback socket binding, so the identical bounded command
+was rerun with loopback permission. It acquired an operating-system-selected
+port, rejected a simultaneous second instance, released the socket, and
+reacquired it. The demo compiled, then its explicit opt-in guard refused
+execution as intended. Generated objects, dependency files, and binaries were
+removed afterward.
+
+A Git-free staged export, parent source-discovery check, production-header
+comparison, and staged whitespace/scope review are performed in this slice.
+Authoritative Debian and synchronized `wspr4` validation, parent-wide
+regression/CI, final staged export, and post-migration fresh-clone acceptance
+remain deferred. No fixed or privileged port, unrelated process, service,
+installation, device, GPIO, I2C, RF, or hardware operation occurred.
