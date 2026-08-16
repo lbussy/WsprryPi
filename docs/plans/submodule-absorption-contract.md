@@ -57,6 +57,10 @@ The implementation task must treat the selected parent checkout and its recorded
 gitlinks as authoritative. Reinspect `.gitmodules`, the parent index, recursive
 submodule status, and every component revision immediately before acting.
 
+The reviewed pre-migration identities and reproducible inventory digests are in
+[`docs/components/submodule-absorption-baseline.md`](../components/submodule-absorption-baseline.md).
+They are comparison evidence, not a substitute for the mandatory fresh gate.
+
 The expected inventory is:
 
 - `WsprryPi-UI`
