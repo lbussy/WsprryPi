@@ -57,7 +57,10 @@ jobs:
 
       - name: Build parent debug executable
         working-directory: src
-        run: make debug SUDO=
+        run: |
+          make backend-capabilities-regression-test SUDO=
+          make backend-capabilities-make-regression-test SUDO=
+          make debug SUDO=
 
       - name: Run parent semantics and cleanup lifecycle tests
         working-directory: src

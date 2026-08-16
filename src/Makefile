@@ -80,6 +80,11 @@ TEST_FREQ := 14095600
 # line: make PREFIX=/usr/local/bin install
 PREFIX ?= /usr/local/bin
 
+# Compile-time transmission backend set. Reduced profiles remain fail-closed
+# until their factory and lifecycle integration is implemented.
+DEFAULT_BACKENDS := rpi-gpio,rp1-gpclk,si5351,simulated
+BACKENDS ?= $(DEFAULT_BACKENDS)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Components
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +157,10 @@ DEP_DIR         := build/dep
 BIN_DIR         := build/bin
 BUILD_METADATA_DIR := build/generated
 BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp
+BACKEND_CAPABILITIES_HEADER := $(BUILD_METADATA_DIR)/backend_capabilities.hpp
+BACKEND_CAPABILITIES_GENERATOR := ../scripts/generate_backend_capabilities.py
+BACKEND_CAPABILITIES_REGRESSION_TEST := ../scripts/tests/backend_capabilities_regression_test.py
+BACKEND_CAPABILITIES_MAKE_REGRESSION_TEST := ../scripts/tests/backend_capabilities_make_regression_test.py
 BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
 BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
 BUILD_METADATA_MAKE_REGRESSION_TEST := ../scripts/tests/build_metadata_make_regression_test.py
@@ -164,6 +173,7 @@ VERSION_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./version.o
 .DEFAULT_GOAL := release
 
 include ../scripts/build_metadata_rules.mk
+include ../scripts/backend_capability_rules.mk
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source discovery (C++ only)
@@ -171,6 +181,33 @@ include ../scripts/build_metadata_rules.mk
 
 LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp' ! -name '._*' 2>/dev/null)
 COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
+TRANSMITTER_SHARED_CPP_SOURCES := \
+	./WSPR-Transmitter/src/execution_plan_compiler.cpp \
+	./WSPR-Transmitter/src/transmission_controller.cpp \
+	./WSPR-Transmitter/src/wspr_reference_adapter.cpp \
+	./WSPR-Transmitter/src/wspr_transmit.cpp
+RPI_GPIO_BACKEND_CPP_SOURCES := \
+	./Mailbox/src/mailbox.cpp \
+	./WSPR-Transmitter/src/wspr_transmit_backend_rpi.cpp
+RP1_GPCLK_BACKEND_CPP_SOURCES := \
+	./WSPR-Transmitter/src/rp1_gpclk_backend.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_event_program.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_lifecycle.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_planner.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_transition.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp
+SI5351_BACKEND_CPP_SOURCES := \
+	./WSPR-Transmitter/src/si5351_device.cpp \
+	./WSPR-Transmitter/src/si5351_planner.cpp \
+	./WSPR-Transmitter/src/wspr_transmit_backend_si5351.cpp
+SIMULATED_BACKEND_CPP_SOURCES := \
+	./WSPR-Transmitter/src/simulated_transmit_backend.cpp
+TRANSMITTER_BACKEND_CPP_SOURCES := \
+	$(RPI_GPIO_BACKEND_CPP_SOURCES) \
+	$(RP1_GPCLK_BACKEND_CPP_SOURCES) \
+	$(SI5351_BACKEND_CPP_SOURCES) \
+	$(SIMULATED_BACKEND_CPP_SOURCES)
 PPM_MANAGER_TEST_SOURCE := ./PPM-Manager/src/test.cpp
 SIGNAL_HANDLER_TEST_SOURCE := ./Signal-Handler/src/test.cpp
 SINGLETON_TEST_SOURCE := ./Singleton/src/test.cpp
@@ -191,12 +228,14 @@ SIMULATED_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backe
 SIMULATED_BACKEND_REALTIME_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_realtime_test.cpp
 TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./WSPR-Transmitter/src/transmission_controller_contract_test.cpp
 COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
+COMPONENT_CPP_SOURCES := $(filter-out $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES),$(COMPONENT_CPP_SOURCES))
 
-CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES)
+CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES)
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
 CPP_OBJECTS       := $(patsubst %.cpp, $(OBJ_DIR_RELEASE)/%.o,$(REL_CPP_SOURCES))
 CPP_DEBUG_OBJECTS := $(patsubst %.cpp, $(OBJ_DIR_DEBUG)/%.o,$(REL_CPP_SOURCES))
+$(CPP_OBJECTS) $(CPP_DEBUG_OBJECTS): $(BACKEND_CAPABILITIES_HEADER)
 MAIN_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./main.o
 SEMANTICS_TEST_SRC := tests/dial_frequency_semantics_test.cpp
 SEMANTICS_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/dial_frequency_semantics_test.o
@@ -789,7 +828,7 @@ $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
 DEBUG: debug
 RELEASE: release
@@ -810,6 +849,12 @@ build-metadata-regression-test:
 
 build-metadata-make-regression-test:
 	$(Q)python3 $(BUILD_METADATA_MAKE_REGRESSION_TEST)
+
+backend-capabilities-regression-test:
+	$(Q)python3 $(BACKEND_CAPABILITIES_REGRESSION_TEST)
+
+backend-capabilities-make-regression-test:
+	$(Q)python3 $(BACKEND_CAPABILITIES_MAKE_REGRESSION_TEST)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."
