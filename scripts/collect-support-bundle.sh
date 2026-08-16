@@ -36,6 +36,15 @@ PROJECT_PATH=""
 PROBE_I2C=0
 I2C_PROBE_STATUS="not_requested"
 PRIVILEGED_DIAGNOSTICS_INCOMPLETE=0
+CASE_ID=""
+CONTEXT_KIND=""
+GITHUB_ISSUE_URL=""
+PROBLEM_DESCRIPTION_FILE=""
+CONTACT_FILE=""
+PROBLEM_DESCRIPTION=""
+CONTACT_VALUE=""
+MANIFEST_INCLUDED=0
+SYMLINKS_OMITTED=0
 
 usage() {
   cat <<EOF
@@ -53,6 +62,11 @@ Options:
   --no-configs         Do not include redacted config files
   --full-logs          Include larger journal/log output
   --probe-i2c          Run the fixed active I2C scan: i2cdetect -y 1
+  --case-id ID         Private-intake case ID (requires one support context path)
+  --github-issue URL   Existing WsprryPi issue for private intake
+  --context-kind KIND  new_github_issue or no_github
+  --problem-description-file FILE  Private bounded description file
+  --contact-file FILE  Private bounded contact file
   --keep-workdir       Keep temporary collection directory
   -h, --help           Show this help
 
@@ -83,6 +97,26 @@ while [[ $# -gt 0 ]]; do
     --no-configs) INCLUDE_CONFIGS=0 ;;
     --full-logs) INCLUDE_FULL_LOGS=1 ;;
     --probe-i2c) PROBE_I2C=1 ;;
+    --case-id)
+      shift
+      CASE_ID="${1:-}"
+      ;;
+    --github-issue)
+      shift
+      GITHUB_ISSUE_URL="${1:-}"
+      ;;
+    --context-kind)
+      shift
+      CONTEXT_KIND="${1:-}"
+      ;;
+    --problem-description-file)
+      shift
+      PROBLEM_DESCRIPTION_FILE="${1:-}"
+      ;;
+    --contact-file)
+      shift
+      CONTACT_FILE="${1:-}"
+      ;;
     --keep-workdir) KEEP_WORKDIR=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
@@ -103,6 +137,51 @@ json_string_or_null() {
     printf '"%s"' "$1"
   else
     printf 'null'
+  fi
+}
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
+}
+
+valid_case_id() {
+  [[ "$1" =~ ^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$ ]]
+}
+
+read_private_context_file() {
+  local path="$1" maximum="$2" label="$3" size value mode owner
+  [[ "$path" == /* && ! -L "$path" && -f "$path" ]] || fail "$label must be an absolute regular non-symlink file."
+  owner="$(stat -c '%u' "$path" 2>/dev/null || true)"
+  mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+  size="$(stat -c '%s' "$path" 2>/dev/null || true)"
+  [[ "$owner" == "$(id -u)" && "$mode" =~ ^[0-7]{3,4}$ && "$size" =~ ^[0-9]+$ ]] || fail "$label metadata is unavailable."
+  (( (8#${mode: -2:1} & 2) == 0 && (8#${mode: -1} & 2) == 0 )) || fail "$label must not be group- or world-writable."
+  (( size > 0 && size <= maximum )) || fail "$label is empty or too large."
+  if LC_ALL=C grep -q '[[:cntrl:]]' "$path" 2>/dev/null; then fail "$label contains unsupported control characters."; fi
+  perl -MEncode -e 'use Encode qw(decode FB_CROAK); local $/; my $value = <>; eval { decode("UTF-8", $value, FB_CROAK) }; exit($@ ? 1 : 0)' "$path" || fail "$label is not valid UTF-8."
+  value="$(cat "$path")" || fail "Unable to read $label."
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *$'\t'* ]] || fail "$label must contain one line of text."
+  [[ -n "${value//[[:space:]]/}" ]] || fail "$label must contain meaningful text."
+  printf '%s' "$value"
+}
+
+validate_private_metadata() {
+  local any_private=0
+  [[ -n "$CASE_ID$CONTEXT_KIND$GITHUB_ISSUE_URL$PROBLEM_DESCRIPTION_FILE$CONTACT_FILE" ]] && any_private=1
+  [[ "$any_private" -eq 1 ]] || return 0
+  valid_case_id "$CASE_ID" || fail "Private intake requires a valid case ID."
+  if [[ -n "$GITHUB_ISSUE_URL" ]]; then
+    [[ -z "$CONTEXT_KIND$PROBLEM_DESCRIPTION_FILE$CONTACT_FILE" ]] || fail "Private intake support context is conflicting."
+    [[ "$GITHUB_ISSUE_URL" =~ ^https://github\.com/WsprryPi/WsprryPi/issues/[1-9][0-9]{0,9}$ ]] || fail "GitHub issue URL is invalid."
+    CONTEXT_KIND="existing_github_issue"
+  else
+    [[ "$CONTEXT_KIND" == "new_github_issue" || "$CONTEXT_KIND" == "no_github" ]] || fail "Private intake context kind is invalid."
+    [[ -n "$PROBLEM_DESCRIPTION_FILE" && -n "$CONTACT_FILE" ]] || fail "Private intake description and contact files are required."
+    PROBLEM_DESCRIPTION="$(read_private_context_file "$PROBLEM_DESCRIPTION_FILE" 4096 "Problem description file")" || exit 1
+    CONTACT_VALUE="$(read_private_context_file "$CONTACT_FILE" 512 "Contact file")" || exit 1
   fi
 }
 
@@ -127,7 +206,9 @@ publish_result() {
     printf '  "full_logs_included": '; json_bool "$INCLUDE_FULL_LOGS"; printf ',\n'
     printf '  "i2c_probe_requested": '; json_bool "$PROBE_I2C"; printf ',\n'
     printf '  "i2c_probe_status": "%s",\n' "$I2C_PROBE_STATUS"
-    printf '  "privileged_diagnostics_may_be_incomplete": '; json_bool "$PRIVILEGED_DIAGNOSTICS_INCOMPLETE"; printf '\n'
+    printf '  "privileged_diagnostics_may_be_incomplete": '; json_bool "$PRIVILEGED_DIAGNOSTICS_INCOMPLETE"; printf ',\n'
+    printf '  "case_id": '; json_string_or_null "$CASE_ID"; printf ',\n'
+    printf '  "manifest_included": '; json_bool "$MANIFEST_INCLUDED"; printf '\n'
     printf '}\n'
   } > "$temporary_result" || return 1
   chmod 600 "$temporary_result" || return 1
@@ -163,6 +244,8 @@ ARCHIVE_NAME="${PROJECT_NAME}-support-${HOST}-${STAMP}.tar.gz"
 ARCHIVE="${OUTPUT_DIR}/${ARCHIVE_NAME}"
 SHA256_FILE="${ARCHIVE}.sha256"
 RESULT_FILE="${ARCHIVE}.result.json"
+
+validate_private_metadata
 
 if [[ -e "$ARCHIVE" || -e "$SHA256_FILE" || -e "$RESULT_FILE" ]]; then
   fail "Refusing to overwrite an existing support-bundle artifact."
@@ -602,6 +685,30 @@ Do not post this archive publicly unless you have reviewed it and are comfortabl
 No data has been uploaded automatically by this script.
 EOF
 
+if [[ -n "$CASE_ID" ]]; then
+  cat >> "${OUT_DIR}/README.txt" <<EOF
+
+Private intake case: ${CASE_ID}
+
+This .tar.gz is the readable review copy. Do not attach it to a public issue or
+upload it through the private intake channel. After review and explicit
+approval, WsprryPi will encrypt these exact archive bytes for private upload.
+EOF
+  cat > "${OUT_DIR}/NEXT-STEPS.txt" <<EOF
+${PROJECT_NAME} Private Support Candidate Created
+
+Case ID: ${CASE_ID}
+
+1. Download and inspect this readable .tar.gz candidate.
+2. Reject and recollect if its contents or collection choices are unsuitable.
+3. Approve it only when you are comfortable sharing the reviewed contents.
+4. Upload only the later encrypted .age artifact through private intake.
+
+Do not attach this readable archive to a public GitHub issue.
+No data has been uploaded automatically by this script.
+EOF
+fi
+
 PROJECT_PATH="$(detect_project_path)"
 
 {
@@ -972,6 +1079,85 @@ fi
 log "Redacting sensitive fields..."
 
 redact_tree
+
+create_private_manifest() {
+  local manifest="${OUT_DIR}/manifest.json" manifest_tmp="${OUT_ROOT}/manifest.json.tmp" created path relative size digest first=1
+  [[ -n "$CASE_ID" ]] || return 0
+  if find "$OUT_DIR" -type l -print -quit | grep -q .; then
+    find "$OUT_DIR" -type l -delete || fail "Unable to omit support-bundle symbolic links."
+    SYMLINKS_OMITTED=1
+  fi
+  if find "$OUT_DIR" -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
+    fail "Support bundle contains an unsupported filesystem node."
+  fi
+  if find "$OUT_DIR" -type f -links +1 -print -quit | grep -q .; then
+    fail "Support bundle contains a multiply linked file."
+  fi
+  created="${STAMP:0:4}-${STAMP:4:2}-${STAMP:6:2}T${STAMP:9:2}:${STAMP:11:2}:${STAMP:13:2}Z"
+  {
+    printf '{\n'
+    printf '  "schema_version": 1,\n'
+    printf '  "contract_version": 1,\n'
+    printf '  "project_id": "wsprrypi",\n'
+    printf '  "project_version": "unknown",\n'
+    printf '  "case_id": "%s",\n' "$CASE_ID"
+    printf '  "created_at_utc": "%s",\n' "$created"
+    printf '  "collection_options": {\n'
+    printf '    "configuration_files_included": '; json_bool "$INCLUDE_CONFIGS"; printf ',\n'
+    printf '    "full_logs_included": '; json_bool "$INCLUDE_FULL_LOGS"; printf ',\n'
+    printf '    "i2c_probe_requested": '; json_bool "$PROBE_I2C"; printf '\n'
+    printf '  },\n'
+    printf '  "privacy_categories": ["callsign", "locator", "internal_ip", "logs"],\n'
+    printf '  "support_context": {\n'
+    printf '    "kind": "%s",\n' "$CONTEXT_KIND"
+    if [[ "$CONTEXT_KIND" == "existing_github_issue" ]]; then
+      printf '    "issue_url": "%s",\n' "$GITHUB_ISSUE_URL"
+      printf '    "problem_description": null,\n'
+      printf '    "contact": null\n'
+    else
+      printf '    "issue_url": null,\n'
+      printf '    "problem_description": "'; json_escape "$PROBLEM_DESCRIPTION"; printf '",\n'
+      printf '    "contact": "'; json_escape "$CONTACT_VALUE"; printf '"\n'
+    fi
+    printf '  },\n'
+    printf '  "collection_warnings": ['
+    first=1
+    if [[ "$PRIVILEGED_DIAGNOSTICS_INCOMPLETE" -eq 1 ]]; then
+      printf '"privileged_diagnostics_may_be_incomplete"'; first=0
+    fi
+    if [[ "$SYMLINKS_OMITTED" -eq 1 ]]; then
+      [[ "$first" -eq 1 ]] || printf ', '
+      printf '"symlinks_omitted"'
+    fi
+    printf '],\n'
+    first=1
+    printf '  "files": [\n'
+    while IFS= read -r -d '' path; do
+      [[ "$path" == "$manifest" ]] && continue
+      relative="${path#"$OUT_DIR"/}"
+      [[ -n "$relative" && "$relative" != "$path" && "$relative" != *\\* &&
+         "$relative" != ".." && "$relative" != ../* && "$relative" != */../* &&
+         "$relative" != */.. ]] || exit 1
+      size="$(stat -c '%s' "$path")" || exit 1
+      if command -v sha256sum >/dev/null 2>&1; then
+        digest="$(sha256sum "$path" | awk '{print $1}')"
+      else
+        digest="$(shasum -a 256 "$path" | awk '{print $1}')"
+      fi
+      [[ "$size" =~ ^[0-9]+$ && "$digest" =~ ^[0-9a-f]{64}$ ]] || exit 1
+      [[ "$first" -eq 1 ]] || printf ',\n'
+      first=0
+      printf '    {"path": "'; json_escape "$relative"; printf '", "size": %s, "sha256": "%s"}' "$size" "$digest"
+    done < <(LC_ALL=C find "$OUT_DIR" -type f -print0 | LC_ALL=C sort -z)
+    printf '\n  ]\n}\n'
+  } > "$manifest_tmp" || { rm -f "$manifest_tmp"; fail "Unable to create private support manifest."; }
+  chmod 600 "$manifest_tmp" || { rm -f "$manifest_tmp"; fail "Unable to secure private support manifest."; }
+  ln "$manifest_tmp" "$manifest" || { rm -f "$manifest_tmp"; fail "Unable to publish private support manifest."; }
+  rm -f "$manifest_tmp"
+  MANIFEST_INCLUDED=1
+}
+
+create_private_manifest
 
 log "Creating archive..."
 

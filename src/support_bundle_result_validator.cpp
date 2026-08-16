@@ -2,6 +2,7 @@
 #include "json.hpp"
 #include <algorithm>
 #include <fstream>
+#include <string_view>
 
 namespace fs = std::filesystem;
 namespace {
@@ -15,6 +16,15 @@ bool safe_basename(const std::string &value) {
         std::none_of(value.begin(), value.end(), [](unsigned char c) { return c < 32 || c == 127; });
 }
 bool result_name(const std::string &name) { return name.starts_with("WsprryPi-support-") && name.ends_with(".tar.gz.result.json"); }
+bool valid_case_id(const std::string &value) {
+    if (value.size() != 14 || value[4] != '-' || value[9] != '-') return false;
+    constexpr std::string_view alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        if (index == 4 || index == 9) continue;
+        if (alphabet.find(value[index]) == alphabet.npos) return false;
+    }
+    return true;
+}
 }
 
 SupportBundleResultValidation validate_support_bundle_result(const fs::path &directory, bool expected_probe) {
@@ -44,6 +54,28 @@ SupportBundleResultValidation validate_support_bundle_result(const fs::path &dir
     const auto expected_archive = result_path.filename().string().substr(0, result_path.filename().string().size() - std::string(".result.json").size());
     if (!safe_basename(archive) || !safe_basename(checksum) || !ascii_hex(digest) || archive != expected_archive || !archive.starts_with("WsprryPi-support-") || !archive.ends_with(".tar.gz") || checksum != archive + ".sha256") { output.failure = SupportBundleResultFailure::invalid; return output; }
     if (json["i2c_probe_requested"].get<bool>() != expected_probe || (!expected_probe && i2c != "skipped_by_user") || (expected_probe && i2c != "succeeded" && i2c != "failed" && i2c != "unavailable")) { output.failure = SupportBundleResultFailure::inconsistent; return output; }
+    const bool has_case_id = json.contains("case_id");
+    const bool has_manifest = json.contains("manifest_included");
+    std::string case_id;
+    bool manifest_included = false;
+    if (has_case_id || has_manifest) {
+        if (!has_case_id || !has_manifest || !json["manifest_included"].is_boolean()) {
+            output.failure = SupportBundleResultFailure::invalid; return output;
+        }
+        manifest_included = json["manifest_included"].get<bool>();
+        if (json["case_id"].is_null()) {
+            if (manifest_included) { output.failure = SupportBundleResultFailure::inconsistent; return output; }
+        } else {
+            if (!json["case_id"].is_string()) {
+                output.failure = SupportBundleResultFailure::inconsistent; return output;
+            }
+            case_id = json["case_id"].get<std::string>();
+            if (!valid_case_id(case_id) || !manifest_included) {
+                output.failure = SupportBundleResultFailure::inconsistent; return output;
+            }
+        }
+    }
     std::transform(digest.begin(), digest.end(), digest.begin(), [](unsigned char c) { return static_cast<char>(c >= 'A' && c <= 'F' ? c + ('a' - 'A') : c); });
-    return {true, SupportBundleResultFailure::none, archive, checksum, digest, i2c};
+    return {true, SupportBundleResultFailure::none, archive, checksum, digest, i2c,
+            case_id, manifest_included};
 }

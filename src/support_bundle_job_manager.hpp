@@ -14,6 +14,7 @@
 #include <vector>
 
 enum class SupportBundleJobState { queued, running, succeeded, failed };
+enum class SupportBundlePrivateLifecycle { none, candidate_ready };
 struct SupportBundleJobRequest { bool probe_i2c = false; };
 struct SupportBundleJobSnapshot {
     std::string id;
@@ -23,6 +24,8 @@ struct SupportBundleJobSnapshot {
     std::string failure_category;
     std::string failure_message;
     bool download_available = false;
+    std::string case_id;
+    SupportBundlePrivateLifecycle private_lifecycle = SupportBundlePrivateLifecycle::none;
 };
 enum class SupportBundleDownloadReferenceStatus {
     available,

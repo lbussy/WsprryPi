@@ -369,7 +369,8 @@ SupportBundleEncryptionResult encrypt_support_bundle(
     if (encrypted_fd < 0 || fstat(encrypted_fd, &encrypted_info) != 0 ||
         !S_ISREG(encrypted_info.st_mode) || encrypted_info.st_uid != geteuid() ||
         (encrypted_info.st_mode & 0777) != 0600) {
-        if (encrypted_fd >= 0) close(encrypted_fd); unlink(temporary.c_str());
+        if (encrypted_fd >= 0) close(encrypted_fd);
+        unlink(temporary.c_str());
         return {SupportBundleEncryptionFailure::unsafe_output, {}};
     }
     if (encrypted_info.st_size <= 0) {

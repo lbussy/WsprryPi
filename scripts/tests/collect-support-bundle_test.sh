@@ -219,9 +219,108 @@ assert_contains "$result" '"status": "success"'
 assert_contains "$result" '"configuration_files_included": true'
 assert_contains "$result" '"full_logs_included": false'
 assert_contains "$result" '"i2c_probe_status": "skipped_by_user"'
+assert_contains "$result" '"case_id": null'
+assert_contains "$result" '"manifest_included": false'
 assert_not_contains "$TEST_ROOT/default-i2c.log" '-y 1'
 assert_no_workdirs
 [[ "$(stat -c %a "$archive")" == 600 ]] || fail "archive permissions are not restrictive"
+
+# Private mode places validated support context and a complete file inventory in the archive.
+rm -f "$archive" "${archive}.sha256" "$result"
+printf 'Scheduling stops after saving "QRSS".\\path' > "$TEST_ROOT/description.txt"
+printf 'operator@example.test' > "$TEST_ROOT/contact.txt"
+chmod 600 "$TEST_ROOT/description.txt" "$TEST_ROOT/contact.txt"
+run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/private-i2c.log" \
+  --case-id 7K3M-9QFX-2DPA --context-kind no_github \
+  --problem-description-file "$TEST_ROOT/description.txt" \
+  --contact-file "$TEST_ROOT/contact.txt" > "$TEST_ROOT/private.stdout"
+extract_bundle "$TEST_ROOT/extracted-private"
+assert_file "$TEST_ROOT/extracted-private/bundle/manifest.json"
+assert_contains "$TEST_ROOT/extracted-private/bundle/README.txt" 'This .tar.gz is the readable review copy.'
+assert_contains "$TEST_ROOT/extracted-private/bundle/NEXT-STEPS.txt" 'Upload only the later encrypted .age artifact'
+assert_not_contains "$TEST_ROOT/extracted-private/bundle/NEXT-STEPS.txt" 'Upload this .tar.gz archive'
+assert_contains "$result" '"case_id": "7K3M-9QFX-2DPA"'
+assert_contains "$result" '"manifest_included": true'
+python3 - "$TEST_ROOT/extracted-private/bundle" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+root = pathlib.Path(sys.argv[1])
+manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+assert manifest["schema_version"] == 1
+assert manifest["contract_version"] == 1
+assert manifest["project_id"] == "wsprrypi"
+assert manifest["case_id"] == "7K3M-9QFX-2DPA"
+assert manifest["created_at_utc"] == "2026-01-02T03:04:05Z"
+assert manifest["support_context"] == {
+    "kind": "no_github", "issue_url": None,
+    "problem_description": 'Scheduling stops after saving "QRSS".\\path',
+    "contact": "operator@example.test",
+}
+entries = manifest["files"]
+assert [entry["path"] for entry in entries] == sorted(entry["path"] for entry in entries)
+actual = sorted(str(path.relative_to(root)) for path in root.rglob("*")
+                if path.is_file() and path.name != "manifest.json")
+assert [entry["path"] for entry in entries] == actual
+for entry in entries:
+    payload = (root / entry["path"]).read_bytes()
+    assert entry["size"] == len(payload)
+    assert entry["sha256"] == hashlib.sha256(payload).hexdigest()
+PY
+! tar -tzf "$archive" | grep -Fq 'description.txt' || fail 'description staging file leaked into archive'
+! tar -tzf "$archive" | grep -Fq 'contact.txt' || fail 'contact staging file leaked into archive'
+
+# Existing-issue context is normalized and does not add description/contact values.
+rm -f "$archive" "${archive}.sha256" "$result"
+run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/github-i2c.log" \
+  --case-id ABCD-EFGH-JKMP \
+  --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 > "$TEST_ROOT/github.stdout"
+extract_bundle "$TEST_ROOT/extracted-github"
+python3 - "$TEST_ROOT/extracted-github/bundle/manifest.json" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    context = json.load(source)["support_context"]
+assert context == {"kind": "existing_github_issue",
+                   "issue_url": "https://github.com/WsprryPi/WsprryPi/issues/352",
+                   "problem_description": None, "contact": None}
+PY
+
+# Invalid or conflicting private metadata fails closed without a successful archive.
+rm -f "$archive" "${archive}.sha256" "$result"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/invalid-private.log" \
+  --case-id bad --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 >/dev/null 2>&1; then
+  fail "invalid private case ID succeeded"
+fi
+[[ ! -e "$archive" && ! -e "${archive}.sha256" ]] || fail "invalid private metadata published artifacts"
+assert_failure_result "$result"
+rm -f "$result"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/conflicting-private.log" \
+  --case-id ABCD-EFGH-JKMP --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 \
+  --context-kind no_github --problem-description-file "$TEST_ROOT/description.txt" \
+  --contact-file "$TEST_ROOT/contact.txt" >/dev/null 2>&1; then
+  fail "conflicting private context succeeded"
+fi
+assert_failure_result "$result"
+rm -f "$result"
+printf 'line one\nline two' > "$TEST_ROOT/multiline-description.txt"
+chmod 600 "$TEST_ROOT/multiline-description.txt"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/multiline-private.log" \
+  --case-id ABCD-EFGH-JKMP --context-kind no_github \
+  --problem-description-file "$TEST_ROOT/multiline-description.txt" \
+  --contact-file "$TEST_ROOT/contact.txt" >/dev/null 2>&1; then
+  fail "multiline private description succeeded"
+fi
+assert_failure_result "$result"
+rm -f "$result"
+ln -s "$TEST_ROOT/description.txt" "$TEST_ROOT/description-link.txt"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/symlink-private.log" \
+  --case-id ABCD-EFGH-JKMP --context-kind no_github \
+  --problem-description-file "$TEST_ROOT/description-link.txt" \
+  --contact-file "$TEST_ROOT/contact.txt" >/dev/null 2>&1; then
+  fail "symlink private description succeeded"
+fi
+assert_failure_result "$result"
 
 # Fixed systemd MainPID discovery and fixed /proc paths produce the requested point-in-time evidence.
 run_process_case success "$$" active "$TEST_ROOT/extracted-success"

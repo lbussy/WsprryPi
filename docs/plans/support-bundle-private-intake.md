@@ -12,6 +12,8 @@ Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-prot
 
 Local artifact implementation: [Issue 414 Slice 2](../research/issue-414-slice-2-local-artifacts.md)
 
+Candidate manifest and lifecycle: [Issue 414 Slice 3](../research/issue-414-slice-3-candidate-lifecycle.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

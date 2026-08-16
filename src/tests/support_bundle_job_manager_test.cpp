@@ -18,6 +18,8 @@ public:
     ResultMode mode = ResultMode::valid;
     std::filesystem::path directory;
     std::filesystem::path symlink_target;
+    std::string case_id;
+    bool manifest_included = false;
     SupportBundleExecutionResult run(const SupportBundleExecutionContext &context) override {
         const bool requested = context.probe_i2c; directory = context.job_directory;
         std::unique_lock lock(mutex); ++calls; probe=requested; entered=true; cv.notify_all();
@@ -26,6 +28,10 @@ public:
         if (cancelled) return {true, {}, {}}; // Manager must preserve cancellation over this late success.
         if (!fail && !throw_exception && mode != ResultMode::none) {
             nlohmann::json result={{"schema_version",1},{"status","success"},{"archive_filename","WsprryPi-support-test.tar.gz"},{"sha256_filename","WsprryPi-support-test.tar.gz.sha256"},{"sha256",std::string(64,'A')},{"generated_at_utc","20260101T000000Z"},{"configuration_files_included",true},{"full_logs_included",false},{"i2c_probe_requested",probe},{"i2c_probe_status",probe?"succeeded":"skipped_by_user"},{"privileged_diagnostics_may_be_incomplete",false}};
+            if (!case_id.empty() || manifest_included) {
+                result["case_id"] = case_id.empty() ? nlohmann::json(nullptr) : nlohmann::json(case_id);
+                result["manifest_included"] = manifest_included;
+            }
             if (mode == ResultMode::schema_invalid) result["schema_version"] = 2;
             if (mode == ResultMode::inconsistent) result["i2c_probe_status"] = probe ? "skipped_by_user" : "succeeded";
             const auto path = context.job_directory / "WsprryPi-support-test.tar.gz.result.json";
@@ -126,6 +132,8 @@ int main() {
     for (const mode_t mode : {0750, 0070, 0770, 0777}) { const auto invalid = root / ("mode-" + std::to_string(mode)); assert(std::filesystem::create_directory(invalid)); assert(chmod(invalid.c_str(), mode) == 0); expect_storage_failure(invalid, "storage_unavailable"); assert(chmod(invalid.c_str(), 0700) == 0); }
     std::string error;
     auto success = std::make_shared<FakeExecutor>();
+    success->case_id = "7K3M-9QFX-2DPA";
+    success->manifest_included = true;
     int generated = 0; SupportBundleJobManager manager(success, [&] { return id(generated++ == 0 ? 'a' : 'g'); }, root);
     const auto first = manager.create({true}, error); assert(first && error.empty() && !first->download_available);
     const auto queued_reference = manager.download_reference(first->id);
@@ -148,7 +156,7 @@ int main() {
     assert(ready.checksum_path == root / first->id / "WsprryPi-support-test.tar.gz.sha256");
     assert(ready.checksum_basename == "WsprryPi-support-test.tar.gz.sha256");
     assert(ready.expected_sha256 == std::string(64, 'a'));
-    const auto public_snapshot = manager.lookup(first->id); assert(public_snapshot->failure_message.find("WsprryPi-support-test.tar.gz") == std::string::npos && public_snapshot->failure_message.find(root.string()) == std::string::npos && public_snapshot->i2c_probe_status == "succeeded");
+    const auto public_snapshot = manager.lookup(first->id); assert(public_snapshot->failure_message.find("WsprryPi-support-test.tar.gz") == std::string::npos && public_snapshot->failure_message.find(root.string()) == std::string::npos && public_snapshot->i2c_probe_status == "succeeded" && public_snapshot->case_id == "7K3M-9QFX-2DPA" && public_snapshot->private_lifecycle == SupportBundlePrivateLifecycle::candidate_ready);
     assert(manager.delete_download(id('q')).status ==
            SupportBundleDownloadDeletionStatus::malformed_or_unknown_id);
     assert(manager.delete_download(first->id).status ==
@@ -156,6 +164,8 @@ int main() {
     const auto deleted_snapshot = manager.lookup(first->id);
     assert(deleted_snapshot->state == SupportBundleJobState::succeeded &&
            !deleted_snapshot->download_available &&
+           deleted_snapshot->case_id.empty() &&
+           deleted_snapshot->private_lifecycle == SupportBundlePrivateLifecycle::none &&
            deleted_snapshot->failure_category.empty() && deleted_snapshot->failure_message.empty() &&
            !std::filesystem::exists(root / first->id));
     const auto deleted_reference = manager.download_reference(first->id);
@@ -169,7 +179,7 @@ int main() {
     const auto unknown_reference = manager.download_reference(id('q'));
     assert(unknown_reference.status == SupportBundleDownloadReferenceStatus::malformed_or_unknown_id);
     assert_no_download_metadata(unknown_reference);
-    success->reset(); const auto next = manager.create({false}, error); assert(next); success->wait_entered(); assert(!success->probe); success->release(); wait_terminal(manager,next->id); assert(manager.lookup(next->id)->i2c_probe_status == "skipped_by_user" && manager.lookup(next->id)->download_available); manager.shutdown();
+    success->reset(); success->case_id.clear(); success->manifest_included = false; const auto next = manager.create({false}, error); assert(next); success->wait_entered(); assert(!success->probe); success->release(); wait_terminal(manager,next->id); assert(manager.lookup(next->id)->i2c_probe_status == "skipped_by_user" && manager.lookup(next->id)->download_available && manager.lookup(next->id)->case_id.empty() && manager.lookup(next->id)->private_lifecycle == SupportBundlePrivateLifecycle::none); manager.shutdown();
 
     const auto existing_dir = root / id('z'); assert(std::filesystem::create_directory(existing_dir)); expect_storage_failure(root, "job_setup_failed"); std::filesystem::remove(existing_dir);
     const auto existing_file = root / id('z'); { std::ofstream output(existing_file); output << "x"; } expect_storage_failure(root, "job_setup_failed"); std::filesystem::remove(existing_file);

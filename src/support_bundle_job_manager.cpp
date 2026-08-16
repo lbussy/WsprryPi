@@ -189,6 +189,10 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
         job_->state = result.succeeded ? SupportBundleJobState::succeeded : SupportBundleJobState::failed;
         job_->i2c_probe_status = result.succeeded ? validation.i2c_probe_status : "";
         job_->download_available = result.succeeded;
+        job_->case_id = result.succeeded ? validation.case_id : "";
+        job_->private_lifecycle = result.succeeded && validation.manifest_included
+                                      ? SupportBundlePrivateLifecycle::candidate_ready
+                                      : SupportBundlePrivateLifecycle::none;
         validated_archive_filename_ = result.succeeded ? validation.archive_filename : "";
         validated_checksum_filename_ = result.succeeded ? validation.checksum_filename : "";
         validated_sha256_ = result.succeeded ? validation.sha256 : "";
@@ -220,6 +224,8 @@ void SupportBundleJobManager::clear_current_download_locked(const std::string &i
     validated_sha256_.clear();
     download_removed_ = true;
     job_->download_available = false;
+    job_->case_id.clear();
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::none;
 }
 
 void SupportBundleJobManager::cancel_expiration_locked(const std::string &id) {
