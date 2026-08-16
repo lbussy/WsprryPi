@@ -25,6 +25,32 @@ itself authorize implementation, staging, committing, pushing, remote-repository
 changes, deployment, or hardware operation. Those actions require explicit task
 authorization.
 
+## Execution Roles
+
+Use one active writer throughout the migration:
+
+- the local macOS checkout at `/Users/lbussy/GitHub/WsprryPi` is the sole
+  workspace for migration edits, staging, review, and any separately authorized
+  commits or pushes;
+- `wspr4`, using `/home/pi/WsprryPi`, is the Raspberry Pi build and test
+  validation target for Issue 415, not a second migration writer;
+- `origin/codex/issue-415-submodule-absorption` is the synchronization point
+  between the two checkouts.
+
+Before each validation slice delegated to `wspr4`, confirm that both checkouts
+are clean, use the Issue 415 branch, track the synchronization branch, have zero
+ahead/behind divergence, and resolve to the same parent commit. Stop if any of
+those conditions fails.
+
+Do not edit, stage, commit, or push from `wspr4` during this migration unless a
+later task explicitly changes its role. Validation on `wspr4` remains subject to
+the repository hardware boundary: do not install software, operate services,
+use `sudo` for mutation, access GPIO, MMIO, DMA, mailbox, I2C, or Si5351 devices,
+or generate RF. Copying uncommitted migration content to the target is not part
+of the default workflow; target validation begins only from a synchronized,
+reviewable Git revision unless a later task authorizes and defines a different
+transfer method.
+
 ## Authoritative Baseline
 
 The implementation task must treat the selected parent checkout and its recorded
