@@ -372,6 +372,45 @@ for the current tree absent contrary evidence discovered during the required
 audit. Update active Mailbox documentation so it does not imply current Broadcom
 code provenance.
 
+### Verified ownership and third-party dispositions
+
+The universal ownership audit at the recorded Issue 415 revisions found only
+Lee Bussy contributor identities in the ten component histories. The ordinary
+component implementation in `INI-Handler`, `LCBLog`, `Mailbox`, `MonitorFile`,
+`PPM-Manager`, `Signal-Handler`, `Singleton`, and `WSPR-Transmitter` is therefore
+eligible for parent-license consolidation. The files under
+`WSPR-Transmitter/external/` are Lee-authored minimal parent-project stubs, not a
+vendored third-party library. Mailbox source history and current file headers
+confirm the established conclusion above: the current tree contains no
+Broadcom-authored code.
+
+Two components contain third-party product content that must not be relicensed
+solely under the parent license:
+
+- `WsprryPi-UI/data/vendor/` contains Bootswatch Zephyr 5.3.8, Bootstrap 5.3.8,
+  Bootstrap Icons 1.11.3, Font Awesome Free 6.5.0, jQuery 3.7.1, Barlow Semi
+  Condensed font files, and Source Sans 3 font files. Preserve all embedded
+  attribution comments. During Phase B, add or retain a distributable
+  third-party notice and license set covering the applicable MIT, SIL Open Font
+  License 1.1, and any applicable Font Awesome icon-license terms. The component
+  `LICENSE.md` may still be consolidated into the parent license because it
+  covers the WsprryPi-authored UI, but it is not a substitute for these vendor
+  notices.
+- `src/WSPR-Reference/include/nlohmann/json.hpp` is an exact copy of the
+  `nlohmann/json` single header at upstream commit
+  `f8eee1bb7953c6a4bff384d45052d5acc3d69698` (SHA-256
+  `acaa0c0e8cb75bbb2001ef3312549140f0ede093cf6f772683b612db75ecd004`). It
+  declares version 3.12.0 but is not byte-identical to the v3.12.0 release
+  artifact. Preserve its embedded SPDX and copyright notices. During Phase B,
+  add or retain the upstream license texts needed for the MIT-licensed header
+  and its identified CC0-1.0 and Apache-2.0 portions. The component
+  `LICENSE.md` may be consolidated into the parent license only for the
+  WsprryPi-authored component code; it does not replace the upstream notices.
+
+Record these exact dispositions in `docs/components/provenance.md`. Recheck the
+tracked trees immediately before import and treat any newly introduced
+contributor, vendor file, or changed third-party revision as a new audit gate.
+
 ## Per-Component Conversion Procedure
 
 Process components individually in two explicit phases and verify each one
