@@ -2,7 +2,8 @@
 
 Status: Proposed  
 Implementation state: Not implemented  
-Repositories affected: `WsprryPi`, `WsprryPi-UI`, and `Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
+Repositories affected: `WsprryPi` (including its `WsprryPi-UI` component) and
+`Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
 
 ## Purpose
 
@@ -782,7 +783,7 @@ Do not commit `.agents/`, `.impeccable/`, `.codex/`, or other local runtime stat
 
 ### `WsprryPi-UI`
 
-UI work belongs in the root `WsprryPi-UI` submodule, including:
+UI work belongs in the root `WsprryPi-UI` component, including:
 
 - timing-control markup;
 - labels and help text;
@@ -796,7 +797,8 @@ UI work belongs in the root `WsprryPi-UI` submodule, including:
 - UI validation;
 - behavioral UI tests.
 
-Inspect the submodule at the exact commit recorded by the parent repository before making changes.
+Inspect the complete parent working tree and the `WsprryPi-UI` path before
+making changes. Preserve unrelated staged, unstaged, and untracked work.
 
 ### `WsprryPi`
 
@@ -808,13 +810,16 @@ Parent-repository work may include:
 - mode-specific message-duration coverage;
 - repeat-policy regression coverage;
 - documentation or planning references;
-- a reviewed `WsprryPi-UI` submodule-pointer update.
+- the reviewed `WsprryPi-UI` component changes.
 
 The backend configuration schema should not require modification for the initial implementation.
 
 Existing backend source may require no functional change if the UI can preserve its current seven-value timing contract. Do not modify backend code merely to make the change appear symmetrical.
 
-The engineering implementation contract remains at `WsprryPi/docs/plans/cw-timing-presets.md`. Operator-facing documentation does not belong in this repository; it belongs in the separate sibling `Wsprry_Pi_Docs` repository.
+The engineering implementation contract remains at
+`docs/plans/cw-timing-presets.md`. Operator-facing documentation does not belong
+in this repository; it belongs in the separate sibling `Wsprry_Pi_Docs`
+repository.
 
 ### `Wsprry_Pi_Docs`
 
@@ -828,22 +833,22 @@ Before working there:
 - build and render the documentation using that repository's documented workflow;
 - use Impeccable to review affected rendered HTML;
 - replace screenshots only when the implemented interface makes an existing image materially inaccurate; and
-- keep its diff, review, commit, and push boundary separate from `WsprryPi` and `WsprryPi-UI`.
+- keep its diff, review, commit, and push boundary separate from `WsprryPi`.
 
 If cross-repository documentation changes are not authorized, inspect documentation impact and provide a follow-up report without modifying `Wsprry_Pi_Docs`.
 
-### `src/` Dependency Submodules
+### `src/` Components
 
-No changes to dependency submodules under `src/` are expected.
+No changes to components under `src/` are expected.
 
 If implementation appears to require such a change, stop and report:
 
-- the affected submodule;
-- why parent or UI changes are insufficient;
-- the proposed dependency modification;
+- the affected component path;
+- why changes elsewhere in the parent or UI component are insufficient;
+- the proposed component modification;
 - required validation.
 
-Do not modify a dependency without explicit approval.
+Do not modify an affected `src/` component without explicit approval.
 
 ## Expected Implementation Seams
 
@@ -1089,7 +1094,8 @@ make non-wspr-repeat-policy-test
 make qrss-execution-regression-test
 ```
 
-Also run the new UI behavioral test target from the appropriate UI repository location.
+Also run the new UI behavioral test target from the `WsprryPi-UI` component
+root.
 
 Do not run:
 
@@ -1106,11 +1112,15 @@ Final static checks must include:
 ```sh
 git diff --check
 git status --short --branch
-git submodule status --recursive
-git submodule foreach --recursive 'git status --short --branch'
+test -f docs/components/provenance.md
+for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+    src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
+    src/WSPR-Transmitter src/WSPR-Reference; do
+    test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
+done
 ```
 
-Report parent and submodule state separately.
+Report complete parent state and any path-scoped component changes.
 
 ## Acceptance Criteria
 
@@ -1146,8 +1156,9 @@ The feature is acceptable when:
 - Documentation impact has been reviewed.
 - When cross-repository documentation changes are authorized, required operator documentation in `Wsprry_Pi_Docs` is updated, rendered using that repository's workflow, and reviewed with Impeccable.
 - When cross-repository documentation changes are not authorized, the required `Wsprry_Pi_Docs` follow-up is reported without implying that a documentation write was required or completed.
-- No `src/` dependency submodule changes are required.
-- UI, parent-repository, and operator-documentation changes remain separately reviewable.
+- No `src/` component changes are required.
+- UI/application changes in `WsprryPi` and operator-documentation changes remain
+  separately reviewable.
 - Hardware or live-transmission validation is not claimed unless separately authorized and performed.
 
 ## Non-Goals
@@ -1173,7 +1184,7 @@ This initial feature does not:
 - alter scheduling semantics outside recalculation from existing timing;
 - redesign the entire Setup page;
 - modify transmitter hardware behavior;
-- modify dependency submodules under `src/`;
+- modify components under `src/`;
 - authorize live RF, GPIO, service, installation, or hardware testing;
 - commit or push any repository.
 
@@ -1227,31 +1238,35 @@ Replace screenshots only when the changed interface makes an existing image mate
 
 Do not include internal test or refactoring details in operator documentation unless they materially help the operator.
 
-## Submodule and Commit Boundaries
+## Repository and Commit Boundaries
 
-The implementation may involve three independent Git repository boundaries:
+The implementation may involve two independent Git repository boundaries:
 
-1. the `WsprryPi-UI` submodule for UI implementation;
-2. the parent `WsprryPi` repository for tests, the reviewed UI pointer, and this engineering plan; and
-3. the separate sibling `Wsprry_Pi_Docs` repository for operator documentation when cross-repository writes are explicitly authorized.
+1. the `WsprryPi` repository for `WsprryPi-UI` implementation, application and
+   integration tests, and this engineering plan; and
+2. the separate sibling `Wsprry_Pi_Docs` repository for operator documentation
+   when cross-repository writes are explicitly authorized.
 
 If commits are later authorized:
 
-1. Review the complete UI submodule diff.
+1. Review the `WsprryPi-UI` portion of the parent diff.
 2. Run UI behavioral and Impeccable validation.
-3. Commit the UI change inside `WsprryPi-UI`.
-4. Ensure the UI commit is pushed to its intended remote before publishing a parent commit that points to it.
-5. Review parent integration tests, the exact old and new UI submodule commit IDs, the pointer update, and the engineering-plan change.
-6. Commit the parent submodule-pointer update, tests, and plan separately or as an explicitly reviewed parent change.
-7. In `Wsprry_Pi_Docs`, independently review the authorized operator-documentation diff, render the documentation using that repository's workflow, and complete Impeccable review of affected rendered HTML.
-8. Commit documentation changes independently in `Wsprry_Pi_Docs`.
-9. Push only the repositories explicitly authorized, preserving the three separate publication boundaries.
+3. Run applicable parent integration and configuration-compatibility tests.
+4. Review the complete parent diff, including UI, tests, and the engineering-plan
+   change.
+5. Commit the reviewed work through the authorized `WsprryPi` branch.
+6. In `Wsprry_Pi_Docs`, independently review the authorized
+   operator-documentation diff, render the documentation using that repository's
+   workflow, and complete Impeccable review of affected rendered HTML.
+7. Commit documentation changes independently in `Wsprry_Pi_Docs`.
+8. Push only the repositories explicitly authorized, preserving the two
+   separate publication boundaries.
 
-Do not modify or advance unrelated `src/` submodules.
+Do not modify unrelated `src/` components.
 
 ## Implementation Sequence
 
-1. Reconfirm the current parent and recursive submodule state.
+1. Reconfirm the complete parent and retained-component state.
 2. Confirm the seven-key timing inventory and exact key spelling.
 3. Confirm the current QRSS, FSKCW, and DFCW runtime timing constructors.
 4. Confirm Impeccable availability and load the UI product/design context.
@@ -1268,7 +1283,8 @@ Do not modify or advance unrelated `src/` submodules.
 15. Only with explicit cross-repository authorization, update the required operator documentation in `Wsprry_Pi_Docs`.
 16. Render the authorized documentation changes using that repository's workflow and review affected rendered HTML with Impeccable; replace screenshots only if materially inaccurate.
 17. If documentation writes are not authorized, report the required `Wsprry_Pi_Docs` follow-up instead.
-18. Review complete UI submodule, parent, and authorized documentation diffs separately.
+18. Review the path-scoped UI diff, complete parent diff, and authorized
+    documentation diff separately.
 19. Report remaining hardware or runtime qualification separately.
 20. Commit or push only if explicitly requested for each repository boundary.
 
@@ -1278,8 +1294,8 @@ This document is an implementation contract, not authorization to modify code.
 
 Before implementation:
 
-1. Inspect the current parent repository and recursive submodule state.
-2. Confirm the exact `WsprryPi-UI` revision.
+1. Inspect the complete parent repository and retained-component state.
+2. Confirm the parent revision and current `WsprryPi-UI` path state.
 3. Confirm the exact timing-key inventory.
 4. Confirm current mode-specific runtime construction.
 5. Confirm that Impeccable is available.
