@@ -422,6 +422,10 @@ before continuing.
 
 ### Phase A: raw snapshot import
 
+Use the proven object-derived procedure in
+[`docs/components/submodule-absorption-snapshot-method.md`](../components/submodule-absorption-snapshot-method.md).
+Its tree-OID comparison and preservation rules are required Phase A evidence.
+
 1. Record the parent gitlink, checked-out HEAD, remote, status, license, tags,
    commit metadata, and tracked-file inventory.
 2. Create a safe temporary snapshot of the exact tracked tree at the recorded
