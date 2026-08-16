@@ -3,8 +3,8 @@
 
 """
 @file copy_ui.py
-@brief Deploys the WsprryPi-UI submodule to a web directory.
-@details This script verifies the existence of the WsprryPi-UI submodule
+@brief Deploys the WsprryPi-UI component to a web directory.
+@details This script verifies the existence of the WsprryPi-UI component
          in a Git repository, then copies its data to the /var/www/html/wsprrypi directory.
          It ensures correct ownership (www-data) and permissions for all copied files.
 
@@ -12,7 +12,7 @@
 
 @dependencies
 - Requires `sudo` privileges for file operations in `/var/www/html/`
-- Requires Git installed to check submodules
+- Requires Git installed to locate the repository root
 - Must be run inside a Git repository containing `WsprryPi-UI`
 """
 
@@ -30,7 +30,7 @@ def get_git_root():
 
     try:
         # Run git rev-parse from the script's folder, so you always
-        # climb up to the main repo rather than the submodule.
+        # climb up to the repository root rather than the UI component.
         return subprocess.check_output(
             ['git', 'rev-parse', '--show-toplevel'],
             cwd=script_dir,
@@ -39,15 +39,15 @@ def get_git_root():
     except subprocess.CalledProcessError:
         return None  # Not in a Git repository
 
-def submodule_exists(git_root, submodule_name):
+def component_exists(git_root, component_name):
     """
-    @brief Check if a specified submodule exists in the Git repository.
+    @brief Check if a specified component exists in the Git repository.
     @param git_root The root directory of the Git repository.
-    @param submodule_name The name of the submodule to check.
-    @return True if the submodule exists, otherwise False.
+    @param component_name The name of the component to check.
+    @return True if the component exists, otherwise False.
     """
-    submodule_path = os.path.join(git_root, submodule_name)
-    return os.path.exists(submodule_path)
+    component_path = os.path.join(git_root, component_name)
+    return os.path.exists(component_path)
 
 def remove_existing_web_directory(web_path):
     """
@@ -121,21 +121,21 @@ def set_permissions(dest):
 
 def main():
     """
-    @brief Main function to check submodule existence and deploy files.
+    @brief Main function to check component existence and deploy files.
     """
     git_root = get_git_root()
     if not git_root:
         print("Error: Not inside a Git repository.")
         sys.exit(1)
 
-    submodule_name = "WsprryPi-UI"
+    component_name = "WsprryPi-UI"
     web_path = "/var/www/html/wsprrypi"
-    submodule_data_path = os.path.join(git_root, submodule_name, "data")
-    print(submodule_data_path)
+    component_data_path = os.path.join(git_root, component_name, "data")
+    print(component_data_path)
 
-    # Check if WsprryPi-UI submodule is present
-    if not submodule_exists(git_root, submodule_name):
-        print(f"Error: Required submodule '{submodule_name}' not found in {git_root}.")
+    # Check if the WsprryPi-UI component is present
+    if not component_exists(git_root, component_name):
+        print(f"Error: Required component '{component_name}' not found in {git_root}.")
         sys.exit(1)
 
     # Remove existing directory
@@ -143,7 +143,7 @@ def main():
         sys.exit(1)
 
     # Copy files
-    if not copy_files(submodule_data_path, web_path):
+    if not copy_files(component_data_path, web_path):
         sys.exit(1)
 
     # Set permissions
