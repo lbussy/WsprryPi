@@ -21,7 +21,7 @@ GPIO, timing, or RF qualification on the intended hardware.
   - [Verify the Host and Install the Key](#verify-the-host-and-install-the-key)
   - [Add an SSH Host Alias](#add-an-ssh-host-alias)
 - [Clone the Development Checkout](#clone-the-development-checkout)
-- [Verify the Repository and Submodules](#verify-the-repository-and-submodules)
+- [Verify the Repository and Components](#verify-the-repository-and-components)
 - [Choose an Editing Workflow](#choose-an-editing-workflow)
   - [VS Code Remote SSH on a Supported 64-Bit Pi](#vs-code-remote-ssh-on-a-supported-64-bit-pi)
   - [macOS SSHFS for a 32-Bit Pi](#macos-sshfs-for-a-32-bit-pi)
@@ -30,17 +30,16 @@ GPIO, timing, or RF qualification on the intended hardware.
 - [Install Development Dependencies](#install-development-dependencies)
   - [Full Wsprry Pi Installation](#full-wsprry-pi-installation)
   - [Packages for Source Work](#packages-for-source-work)
-  - [Optional Tools for Codex and Other AI Agents](#optional-tools-for-codex-and-other-ai-agents)
+  - [Development and Diagnostic Tools](#development-and-diagnostic-tools)
   - [Install Codex CLI on a 64-Bit Pi](#install-codex-cli-on-a-64-bit-pi)
   - [Install Impeccable for WsprryPi-UI Work](#install-impeccable-for-wsprrypi-ui-work)
 - [Repository Support for AI Agents](#repository-support-for-ai-agents)
 - [Run Safe Source-Level Validation](#run-safe-source-level-validation)
 - [Manage the Installed Service During Development](#manage-the-installed-service-during-development)
-- [Git and Submodule Reference](#git-and-submodule-reference)
-  - [Understand the Submodules](#understand-the-submodules)
-  - [Restore Missing Submodules Safely](#restore-missing-submodules-safely)
-  - [Interpret Submodule Status](#interpret-submodule-status)
-  - [Update a Submodule Intentionally](#update-a-submodule-intentionally)
+- [Git and Component Reference](#git-and-component-reference)
+  - [Understand the Component Layout](#understand-the-component-layout)
+  - [Inspect Component State](#inspect-component-state)
+  - [Change a Component Intentionally](#change-a-component-intentionally)
 - [Troubleshooting](#troubleshooting)
 - [Reboot and Hardware Considerations](#reboot-and-hardware-considerations)
 - [Experienced Developer Command Reference](#experienced-developer-command-reference)
@@ -54,10 +53,11 @@ The normal development model has two computers:
 - **Raspberry Pi:** The Pi owns the checkout and runs Git, builds, validation,
   the Wsprry Pi program, and any authorized hardware-dependent work.
 
-The active development branch is `devel`. The repository contains the
-first-party `WsprryPi-UI` submodule and several dependency submodules under
-`src/`. The parent repository records the exact commit expected for each
-submodule.
+The active development branch is `devel`. One repository tracks the
+first-party `WsprryPi-UI` component and the named reusable components under
+`src/` as ordinary directories. A normal clone contains the complete source
+tree. `docs/components/provenance.md` records the historical repositories and
+exact revisions from which those components were imported.
 
 Use an SSHFS mount only for editing and source inspection. Run Git commands,
 compilation, tests, service commands, and program execution in an SSH session
@@ -85,14 +85,13 @@ explain each step and provide alternatives.
 3. Configure public-key authentication as described in
    [Configure SSH From the Workstation](#configure-ssh-from-the-workstation).
 
-4. On the **Raspberry Pi**, install Git and clone `devel` with all submodules:
+4. On the **Raspberry Pi**, install Git and clone `devel`:
 
    ```bash
    sudo apt update
    sudo apt install -y git
    cd ~
-   git clone --branch devel --recurse-submodules -j8 \
-       https://github.com/WsprryPi/WsprryPi.git
+   git clone --branch devel https://github.com/WsprryPi/WsprryPi.git
    cd ~/WsprryPi
    ```
 
@@ -101,11 +100,11 @@ explain each step and provide alternatives.
    ```bash
    git branch --show-current
    git status --short --branch
-   git submodule status --recursive
+   test -f docs/components/provenance.md
    ```
 
    The branch must be `devel`. A clean new checkout should have no changed-file
-   lines. Submodules should not have a leading `-` or `+`.
+   lines. The provenance check should return successfully.
 
 6. Choose an editing workflow:
 
@@ -254,14 +253,14 @@ Run these commands on the **Raspberry Pi**:
 sudo apt update
 sudo apt install -y git
 cd ~
-git clone --branch devel --recurse-submodules -j8 \
-    https://github.com/WsprryPi/WsprryPi.git
+git clone --branch devel https://github.com/WsprryPi/WsprryPi.git
 cd ~/WsprryPi
 ```
 
-The command deliberately selects `devel` and initializes the commits recorded
-for all submodules. If `~/WsprryPi` already exists, `git clone` stops rather
-than overwriting it. Inspect the existing checkout instead of deleting it.
+The command deliberately selects `devel`. The ordinary clone includes the UI
+and all reusable component trees. If `~/WsprryPi` already exists, `git clone`
+stops rather than overwriting it. Inspect the existing checkout instead of
+deleting it.
 
 Configure the Git identity used for future commits, replacing the examples:
 
@@ -272,7 +271,7 @@ git config --global user.email "you@example.com"
 
 These settings identify commits; they do not authenticate a GitHub account.
 
-## Verify the Repository and Submodules
+## Verify the Repository and Components
 
 From the **repository root on the Pi**:
 
@@ -280,19 +279,23 @@ From the **repository root on the Pi**:
 cd ~/WsprryPi
 git branch --show-current
 git status --short --branch
-git submodule status --recursive
-git submodule foreach --recursive 'git status --short --branch'
+test -f docs/components/provenance.md
+for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+    src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
+    src/WSPR-Transmitter src/WSPR-Reference; do
+    test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
+done
 ```
 
 Confirm the following before editing or building:
 
-- The parent branch is `devel`.
-- Existing parent changes are understood and preserved.
-- Every submodule is initialized at the parent repository's recorded commit.
-- Existing submodule changes are understood and preserved.
+- The branch is `devel`.
+- Existing staged, unstaged, and untracked changes are understood and
+  preserved.
+- All ten component directories and the provenance record are present.
 
-A submodule commonly reports `HEAD (no branch)`. This detached `HEAD` is normal
-when Git checks out the exact commit recorded by the parent repository.
+Component files participate directly in the parent working tree and index, so
+they require no separate repository initialization or state checks.
 
 ## Choose an Editing Workflow
 
@@ -436,7 +439,7 @@ selected repository branch. Prefer an explicit `devel` clone for development.
 
 ### Packages for Source Work
 
-The installer currently manages these project packages:
+The operational installer manages these runtime and installation packages:
 
 - `git`
 - `apache2`
@@ -444,23 +447,43 @@ The installer currently manages these project packages:
 - `chrony`
 - `libgpiod-dev`
 - `libsystemd-dev`
-- `nodejs`
-- `chromium`
+- `libssl-dev`
 
-The `semantics-test` target requires Node.js, and browser-based UI qualification
-requires Chromium. To install all source-development packages without running
-the full installer, copy and run this complete command:
+Source development additionally needs the compiler/build toolchain, Python,
+Node.js, npm, PHP CLI, and—when running the browser integration suite—Chromium.
+These development-only packages are intentionally separate from the operational
+installer's package list. To prepare a Debian-based development host without
+running the full installer:
 
 ```bash
 sudo apt update && sudo apt install -y \
-    git apache2 php chrony libgpiod-dev libsystemd-dev nodejs chromium
+    git build-essential cmake pkg-config python3 \
+    libgpiod-dev libsystemd-dev libssl-dev \
+    nodejs npm php-cli chromium
 ```
 
-This is a project dependency reference, not a guarantee that every supported
-Raspberry Pi OS image already contains the complete compiler and build
-toolchain. If compilation reports a missing compiler, build utility, header, or
-package, identify that requirement from the current Makefile or installer
-rather than guessing.
+The parent `semantics-test` target uses Node.js for source regressions. UI
+development uses the tracked private manifests at `WsprryPi-UI/package.json`
+and `WsprryPi-UI/package-lock.json`. Install their exact development dependency
+set and run the ordinary UI suite with:
+
+```bash
+cd ~/WsprryPi/WsprryPi-UI
+npm ci --ignore-scripts
+npm test
+```
+
+The pinned `ws` package is a test-only development dependency for mocked
+WebSocket integration; it is not a Wsprry Pi production or browser-runtime
+dependency. Chromium is required for the hardware-free browser integration
+suite:
+
+```bash
+npm run test:browser
+```
+
+The active Debian CI workflow installs Chromium and runs both npm suites. Do
+not commit `node_modules/`; it is generated locally and ignored.
 
 ### Development and Diagnostic Tools
 
@@ -478,7 +501,7 @@ The following packages are useful additions to a Wsprry Pi development system:
 | `pkg-config` | Discovery of installed compiler and linker dependencies. |
 | `python3` | Execution of Python utilities and test helpers. |
 | `python3-venv` | Isolated Python environments for optional tools. |
-| `npm` | Node package tooling used by some coding-agent and JavaScript workflows. |
+| `npm` | Installs the tracked WsprryPi-UI development and test dependencies. |
 | `lsof` | Inspection of process-owned files and sockets during diagnostics. |
 | `tmux` | Preserves long-running tests if an SSH connection drops. |
 | `bubblewrap` | Sandboxed execution support used by development tooling. |
@@ -492,9 +515,9 @@ sudo apt install -y \
     python3 python3-venv npm lsof tmux bubblewrap
 ```
 
-Node.js is already included in the source-development packages above because
-the repository's `semantics-test` target requires it. On Debian-based systems,
-the executable installed by `fd-find` is named `fdfind`.
+Node.js and npm are already included in the source-development packages above.
+On Debian-based systems, the executable installed by `fd-find` is named
+`fdfind`.
 
 This toolkit prepares the host for efficient repository work. Install and
 configure the selected AI agent separately by following its current platform,
@@ -572,7 +595,7 @@ if its platform requirements or installation commands have changed.
 
 [Impeccable](https://impeccable.style/tutorials/getting-started/) is an
 optional Codex skill used only for work affecting the first-party
-`WsprryPi-UI` submodule. It is not required for ordinary parent-repository C++,
+`WsprryPi-UI` component. It is not required for ordinary parent-repository C++,
 scheduling, radio, installer, maintenance-script, or unrelated documentation
 work.
 
@@ -620,26 +643,28 @@ this repository:
 
 - `AGENTS.md` is the authoritative repository-wide instruction file for AI
   coding agents. It defines scope control, dirty-worktree preservation,
-  Raspberry Pi and RF safety, submodule boundaries, validation expectations,
+  Raspberry Pi and RF safety, component boundaries, validation expectations,
   and documentation responsibilities. A more deeply nested `AGENTS.md` would
   take precedence within its directory tree.
 - `.vscode/extensions.json` contains optional VS Code extension
   recommendations, including GitHub Copilot Chat and developer validation
   tools. `AGENTS.md` remains the authoritative repository instruction source.
-- `.gitignore` excludes `.codex/`, `.agents/`, `skills-lock.json`, and local
-  Node package metadata used by agent or tool sessions. These are local runtime
-  artifacts rather than project source.
+- `.gitignore` excludes `.codex/`, `.agents/`, `skills-lock.json`, and root-level
+  Node package metadata used by agent or tool sessions. The private
+  `WsprryPi-UI/package.json` and lockfile are intentional tracked development
+  manifests; `WsprryPi-UI/node_modules/` remains ignored generated content.
 - `src/WSPR-Reference/.gitignore` separately excludes `.codex/` state within
-  that dependency checkout.
+  that component directory.
 
 `AGENTS.md` also directs contributors to keep local `.agents/`, `.impeccable/`,
 `.claude/`, and `.codex/` runtime artifacts out of commits unless they are
 explicitly approved as intended repository content.
 
-An AI agent should begin by reading `AGENTS.md`, inspecting the parent and all
-submodule working trees, and confirming the authorized scope. Treat the parent,
-each submodule, and the separate operator-documentation repository as
-independent instruction, change, validation, and commit boundaries.
+An AI agent should begin by reading `AGENTS.md`, inspecting the complete parent
+working tree and affected component paths, and confirming the authorized scope.
+Component changes are reviewed and committed through the parent repository.
+The separate operator-documentation repository remains its own instruction,
+change, validation, commit, and push boundary.
 
 ## Run Safe Source-Level Validation
 
@@ -707,73 +732,64 @@ sudo systemctl start wsprrypi
 Service commands change the operating system and can interrupt active work.
 Confirm that no transmission or other required operation is in progress first.
 
-## Git and Submodule Reference
+## Git and Component Reference
 
-### Understand the Submodules
+### Understand the Component Layout
 
-Wsprry Pi uses submodules to pin independently versioned components and to keep
-licensing and repository boundaries explicit:
+Wsprry Pi tracks the application and all ten components in one repository:
 
-- `WsprryPi-UI` is the editable first-party web interface and a separate Git
-  repository.
-- Submodules under `src/` are dependencies and should be treated as read-only
-  unless a dependency change is explicitly planned.
+- `WsprryPi-UI` is the editable first-party web interface.
+- `src/INI-Handler`, `src/LCBLog`, `src/Mailbox`, `src/MonitorFile`,
+  `src/PPM-Manager`, `src/Signal-Handler`, `src/Singleton`,
+  `src/WSPR-Transmitter`, and `src/WSPR-Reference` are coherent reusable or
+  supporting components.
 
-Each submodule has its own branch or detached `HEAD`, working tree, history,
-tests, commit, and push boundary. A parent-repository commit records only the
-submodule commit ID; it does not contain the submodule's changed files.
+Component files are ordinary parent-repository content. Preserve each named
+root, public interface, standalone build/test entry points, attribution, and
+extraction potential. `LCBLog` and `WSPR-Reference` in particular must remain
+independently understandable and free of new WsprryPi-internal dependencies.
+The former component repositories are untouched historical references, not
+active synchronization or publication targets.
 
-### Restore Missing Submodules Safely
+### Inspect Component State
 
-After cloning without `--recurse-submodules`, or after moving to a commit with
-new submodules, run this from the **repository root on the Pi**:
-
-```bash
-git submodule update --init --recursive
-```
-
-The command is safe to repeat when submodules are already at their recorded
-commits. The parent repository's recorded commits remain authoritative.
-
-Do not use recursive `git clean`, `git reset`, `git pull`, branch switching, or
-`git submodule update --force` as routine recovery. Those operations can
-discard work or move repositories away from the commits being reviewed.
-
-### Interpret Submodule Status
-
-Inspect status with:
+The parent status covers every component:
 
 ```bash
-git submodule status --recursive
-git submodule foreach --recursive 'git status --short --branch'
+cd ~/WsprryPi
+git status --short --branch
+git diff --check
+git diff --cached --check
 ```
 
-In `git submodule status` output:
+Use path-limited commands when reviewing a component portion of the parent
+diff:
 
-- A leading space means the submodule is initialized at the recorded commit.
-- A leading `-` means it is not initialized.
-- A leading `+` means it is checked out at a different commit from the one
-  recorded by the parent.
-- A dirty indication means the submodule contains local changes.
+```bash
+git status --short -- src/LCBLog
+git diff -- src/LCBLog
+git diff --cached -- src/LCBLog
+```
 
-Detached `HEAD` alone is normal. Before changing any submodule state, inspect
-and preserve uncommitted work.
+Use `docs/components/provenance.md` for original repository URLs, imported
+revisions, licensing disposition, exclusions, standalone entry points, and
+extraction guidance. Do not initialize nested Git repositories or copy files
+from former remotes to repair an ordinary component directory.
 
-### Update a Submodule Intentionally
+### Change a Component Intentionally
 
-A dependency update is not a routine parent-repository refresh. When a planned
-change genuinely belongs in a submodule:
+When an approved change belongs in a component:
 
-1. Confirm the intended submodule repository, branch, and existing status.
-2. Make and validate the submodule change in that repository.
-3. Review and commit it separately.
-4. Ensure the submodule commit is available on its intended remote before a
-   parent commit refers to it.
-5. Review the parent repository's old and new submodule commit IDs.
-6. Commit the parent pointer update as its own clear review boundary.
+1. Inspect the complete parent status and the affected component path.
+2. Preserve existing staged, unstaged, and untracked work.
+3. Keep the change within the component's public and reuse boundaries.
+4. Run its safe standalone tests where available.
+5. Run applicable parent integration tests.
+6. Review the component portion and complete staged parent diff.
+7. Commit and push through only the authorized parent branch and remote.
 
-Never publish a parent commit that points only to an unavailable local
-submodule commit.
+Do not commit or push to a former component repository. Future extraction or
+publication requires a separate reviewed workflow and authorization.
 
 ## Troubleshooting
 
@@ -798,28 +814,36 @@ ssh-keygen -R {hostname}.local
 ssh pi@{hostname}.local
 ```
 
-### A submodule is missing
+### A component directory is missing
 
-From the repository root on the Pi:
-
-```bash
-git submodule update --init --recursive
-```
-
-Do not clean or reset the submodule to solve an initialization problem.
-
-### A submodule has a leading `+`
-
-Inspect its status and recent history before acting:
+An ordinary clone should contain all ten component directories. First preserve
+and inspect the current parent state:
 
 ```bash
-git -C {submodule-path} status --short --branch
-git -C {submodule-path} log -5 --oneline
-git diff --submodule=log
+cd ~/WsprryPi
+git status --short --branch
+git log -5 --oneline
+git ls-tree HEAD -- WsprryPi-UI src
 ```
 
-The checkout may contain intentional work. Do not force it back to the parent
-commit without understanding and preserving that work.
+Do not copy a replacement from an installed system or former component remote,
+and do not clean or reset a checkout that contains unexplained work. If the
+directory is absent from `HEAD`, confirm that the intended branch and commit are
+checked out. If it is tracked at `HEAD` but absent from disk, stop and determine
+why before choosing a recovery operation.
+
+### A component contains unexpected changes
+
+Inspect the component through the parent repository before acting:
+
+```bash
+git status --short -- {component-path}
+git diff -- {component-path}
+git diff --cached -- {component-path}
+```
+
+The changes may be intentional user work. Do not reset, clean, stash, overwrite,
+or discard them without explicit authorization.
 
 ### An SSHFS mount is stale
 
@@ -837,6 +861,20 @@ sudo apt install -y nodejs
 cd ~/WsprryPi/src
 make semantics-test
 ```
+
+### UI tests cannot find `ws` or Chromium
+
+Install the exact tracked UI development dependencies:
+
+```bash
+cd ~/WsprryPi/WsprryPi-UI
+npm ci --ignore-scripts
+npm test
+```
+
+If `npm run test:browser` reports that Chromium is missing, install the
+development-host Chromium package and retry. The `ws` package remains test-only
+and should come from the tracked lockfile rather than a global installation.
 
 ### Wsprry Pi is already running
 
@@ -878,17 +916,15 @@ git branch --show-current
 git status --short --branch
 ```
 
-Inspect every submodule:
+Confirm the retained component inventory and provenance:
 
 ```bash
-git submodule status --recursive
-git submodule foreach --recursive 'git status --short --branch'
-```
-
-Initialize missing submodules at recorded commits:
-
-```bash
-git submodule update --init --recursive
+test -f docs/components/provenance.md
+for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+    src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
+    src/WSPR-Transmitter src/WSPR-Reference; do
+    test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
+done
 ```
 
 Run aggregate source-level validation:
@@ -905,12 +941,14 @@ systemctl status wsprrypi
 systemctl is-enabled wsprrypi
 ```
 
-Review changes, including submodule commit movement:
+Review all parent and component changes:
 
 ```bash
 cd ~/WsprryPi
 git diff --check
-git diff --submodule=log
+git diff
+git diff --cached --check
+git diff --cached
 ```
 
 Before reporting work complete, state separately what was source-validated and
