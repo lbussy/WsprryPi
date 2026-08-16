@@ -25,7 +25,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential ca-certificates git libgpiod-dev libssl-dev \
+            build-essential ca-certificates cmake git libgpiod-dev libssl-dev \
             libsystemd-dev nodejs pkg-config python3 strace
 
       - name: Check out source and pinned submodules
@@ -69,6 +69,24 @@ jobs:
           make transmission-controller-contract-test
           make startup-quiesce-test
           make si5351-transition-test
+
+      - name: Build and test WSPR reference component
+        working-directory: src/WSPR-Reference
+        run: |
+          cmake -S . -B /tmp/wspr-reference-build
+          cmake --build /tmp/wspr-reference-build --parallel 2
+          WSPR_REFERENCE_BUILD_DIR=/tmp/wspr-reference-build \
+            ./tests/run_major_regressions.sh
+
+      - name: Verify WSPR reference package consumer
+        working-directory: src/WSPR-Reference
+        run: |
+          cmake --install /tmp/wspr-reference-build \
+            --prefix /tmp/wspr-reference-install
+          cmake -S examples/consumer -B /tmp/wspr-reference-consumer \
+            -DCMAKE_PREFIX_PATH=/tmp/wspr-reference-install
+          cmake --build /tmp/wspr-reference-consumer --parallel 2
+          /tmp/wspr-reference-consumer/consumer
 
       - name: Verify deterministic hardware-free simulation
         working-directory: src

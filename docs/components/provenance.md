@@ -607,3 +607,96 @@ Authoritative Debian and synchronized `wspr4` validation, parent-wide
 regression/CI, final staged export, and post-migration fresh-clone acceptance
 remain deferred. No fixed or privileged port, unrelated process, service,
 installation, device, GPIO, I2C, RF, or hardware operation occurred.
+
+## WSPR-Reference
+
+| Field | Recorded value |
+| --- | --- |
+| Component | WSPR-Reference |
+| Retained path | `src/WSPR-Reference` |
+| Original repository | `https://github.com/WsprryPi/WSPR-Reference.git` |
+| Parent-recorded import SHA | `2814fee75d394c404edd0e89ebd568b7e8b5e2d7` |
+| Checked-out SHA | `2814fee75d394c404edd0e89ebd568b7e8b5e2d7` |
+| Observed state | detached HEAD; `git submodule status` described the revision as `v0.18.3-17-g2814fee` |
+| Most recent commit | `2026-07-06T09:55:49-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | `git describe` reported `v0.18.3-17-g2814fee`; no tag points at or contains the imported revision. The retained CMake package-version declaration is `0.14.1`. |
+| Raw source tree | `32e05082087a58140bd33738e654128c58c7f813` |
+| Expected and staged Phase A tree | `32e05082087a58140bd33738e654128c58c7f813` |
+| Staged tree after Phase B | `f52c783c4a1c09d89d480442a8ca45273101033f` |
+| Phase A archive | SHA-256 `78723eeedd18d53b086dba54e8152311165fd044241338606cf39733509a4297`; 71 tracked files and 17 directory entries |
+| Former component license | `src/WSPR-Reference/LICENSE.md` at raw import; MIT, copyright 2026 Lee Bussy; blob `6584c5f4f63a8cfbeb0a1a2c642992e5e24af859` |
+| License after absorption | Parent `LICENSE.md` (MIT) for WsprryPi-authored code. The redundant component license was removed after the contribution audit found only Lee Bussy identities. Bundled nlohmann/json obligations remain separately preserved. |
+| Third-party content | `include/nlohmann/json.hpp`, upstream commit `f8eee1bb7953c6a4bff384d45052d5acc3d69698`, declared version 3.12.0, SHA-256 `acaa0c0e8cb75bbb2001ef3312549140f0ede093cf6f772683b612db75ecd004`; embedded SPDX/copyright notices retained byte-for-byte. Full MIT, CC0-1.0, and Apache-2.0 texts are under `docs/licenses/nlohmann-json/`. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`17d46d9c3c0d90ac3a21e7b7f552b5d7442a71a9b3747177287896dc03c45fa9`.
+The object-derived archive contained the exact recorded tree, including CMake
+package files, CLI tools, examples, tests, vectors, bundled JSON header,
+historical nested workflow, component license, and the intentionally tracked
+`install/` package snapshot. Its ordinary staged Phase A subtree OID equaled
+the source tree OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored or untracked files, nested submodules, nested
+Git administration, or other raw-tree exclusions. The tracked `install/`
+snapshot was retained as authoritative package/export evidence; all validation
+outputs for this slice were instead written under `/private/tmp`.
+
+### Phase B adaptations
+
+- Preserved project `wspr_ref`, library `wspr_ref_lib`, alias
+  `wspr::wspr_ref_lib`, CLI targets, examples, tests, golden vectors, package
+  configuration, installed-header layout, and source hierarchy.
+- Removed the obsolete former-repository CI badge and described active parent
+  Debian coverage, monorepo location, licensing, and extraction.
+- Ported the former component build/regression/install/consumer job into the
+  parent `debian-non-hardware.yml` workflow and added CMake to that workflow's
+  build dependencies. The historical nested workflow remains component
+  documentation but is no longer represented as active parent CI.
+- Made `run_major_regressions.sh` accept an explicit out-of-tree build path and
+  portable parallel count while preserving its default component-root build.
+- Made CMake copy the immutable golden-vector JSON into the build tree so
+  `verify_vectors` works from arbitrary out-of-tree build locations. The source
+  vector was not modified or regenerated.
+- Removed the redundant Lee Bussy component MIT license and added the required
+  distributable nlohmann/json MIT, CC0-1.0, and Apache-2.0 license texts without
+  altering the bundled header.
+
+Production encoding, decoding, correlation, Fano, unpacking, planning, public
+headers, APIs, algorithms, CLI behavior, and golden expected data are unchanged.
+
+### Standalone build, validation, and extraction
+
+From the component root, configure and build with `cmake -S . -B <build>` and
+`cmake --build <build>`. Run the complete safe suite with
+`WSPR_REFERENCE_BUILD_DIR=<build> ./tests/run_major_regressions.sh`. Install to
+a disposable prefix with `cmake --install`, configure `examples/consumer`
+against that prefix, build it, and run `consumer`.
+
+To extract WSPR-Reference, copy `src/WSPR-Reference`, add repository metadata
+and a license for the WSPR-Reference-authored code, and retain the nlohmann/json
+header, embedded notices, and corresponding third-party license set. The CMake
+project remains independent of WsprryPi application internals.
+
+### Slice validation
+
+Apple Clang configured and built every retained library, CLI, example, and test
+target in a disposable out-of-tree directory. The complete major-regression
+script passed, including six golden vectors, core round trips, Fano coverage,
+planning, paired encoding, ambiguity observations, CLI text/quiet/JSON checks,
+and correlation. Installation to a disposable prefix succeeded; the external
+CMake consumer configured, built, ran, encoded a message, and decoded `AA0NT`.
+
+The first disposable run exposed and then verified the correction for the
+former `../test_vectors` build-location assumption. Header SHA-256 confirmed
+the bundled nlohmann/json file is the audited upstream snapshot; the golden
+vector SHA-256 remained
+`1d981e0e2aeeaee914a473eb6cce94276bc11df28bcef785bce69d109106900c`.
+A Git-free staged export and repeat validation, parent source-discovery check,
+workflow syntax review, staged whitespace/scope audit, Debian CI execution, and
+post-migration fresh-clone acceptance complete the remaining slice/final gates.
+No RF, GPIO, I2C, hardware, service, installation-to-host, deployment, or
+former-remote operation occurred.
