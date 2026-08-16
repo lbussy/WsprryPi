@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-04T07:11:01-05:00",
+  "title": "Design System: Wsprry Pi Console",
+  "extensions": {
+    "colorMeta": {
+      "transmitter-slate": {
+        "role": "primary",
+        "displayName": "Transmitter Slate",
+        "canonical": "#405e7a",
+        "source": "data/site.css --wspr-accent-rgb light",
+        "tonalRamp": ["#ecf1f6", "#6b8096", "#405e7a", "#344a60"]
+      },
+      "zephyr-primary": {
+        "role": "primary",
+        "displayName": "Zephyr Action Blue",
+        "canonical": "#3459e6",
+        "source": "data/vendor/css/bootswatch-zephyr-5.3.8.min.css --bs-primary",
+        "tonalRamp": ["#d6defa", "#859bf0", "#3459e6", "#15245c"]
+      },
+      "state-success": {
+        "role": "state",
+        "displayName": "Signal Success",
+        "canonical": "#5f8f74",
+        "source": "data/site.css --wspr-state-success",
+        "tonalRamp": ["#d5f0e6", "#75a088", "#5f8f74", "#134833"]
+      },
+      "state-warning": {
+        "role": "state",
+        "displayName": "Signal Warning",
+        "canonical": "#b79256",
+        "source": "data/site.css --wspr-state-warning",
+        "tonalRamp": ["#fdf2df", "#c2a16a", "#b79256", "#624c27"]
+      },
+      "state-danger": {
+        "role": "state",
+        "displayName": "Signal Danger",
+        "canonical": "#b66a76",
+        "source": "data/site.css --wspr-state-danger",
+        "tonalRamp": ["#f8d4d5", "#c1828d", "#b66a76", "#571012"]
+      },
+      "state-active": {
+        "role": "state",
+        "displayName": "Signal Active Gold",
+        "canonical": "#c8a85d",
+        "source": "data/site.css --wspr-state-active",
+        "tonalRamp": ["#fdf2df", "#d0b171", "#c8a85d", "#624c27"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Instrument Display",
+        "purpose": "Major state values and configuration page titles."
+      },
+      "headline": {
+        "displayName": "Navigation Headline",
+        "purpose": "Navbar title and page-level identity."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "Card titles and dense section headers."
+      },
+      "body": {
+        "displayName": "Operational Body",
+        "purpose": "Forms, help text, summaries, and regular UI copy."
+      },
+      "label": {
+        "displayName": "Scan Label",
+        "purpose": "Uppercase metadata labels, panel labels, and small state anchors."
+      }
+    },
+    "elevation": {
+      "baseSurface": "0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06)",
+      "navbar": "0 0.5rem 1.35rem rgba(20, 27, 35, 0.12)",
+      "alert": "0 0.35rem 0.8rem rgba(0,0,0,0.16)",
+      "focusRing": "0 0 0 0.2rem rgba(var(--wspr-accent-soft-rgb), 0.22)",
+      "philosophy": "Outer surfaces may lift lightly; interior panels stay flat with borders and tonal fills."
+    },
+    "motion": {
+      "fast": "120ms ease-in-out",
+      "standard": "180ms ease",
+      "alert": "300ms ease-in-out",
+      "rule": "Animate opacity, transform, color, border-color, background-color, and box-shadow only."
+    },
+    "breakpoints": {
+      "sm": "576px",
+      "md": "768px",
+      "lg": "992px",
+      "xl": "1200px",
+      "xxl": "1400px"
+    },
+    "components": {
+      "navbar": {
+        "description": "Fixed transmitter-slate shell with wrapped icon labels and live connection status.",
+        "source": "data/navbar.php, data/site.css"
+      },
+      "pageCard": {
+        "description": "Single outer card inside page shell, with Bootstrap shadow-sm and card header.",
+        "source": "data/page_shell_start.php, data/card_header.php"
+      },
+      "operationPanel": {
+        "description": "Flat tonal panel with uppercase label, semibold value, 1px border, and wrap-safe content.",
+        "source": "data/operation.css"
+      },
+      "configTabs": {
+        "description": "Segmented top tabs with Barlow typography, tall hit targets, and subtle active tonal fill.",
+        "source": "data/index.css"
+      },
+      "spotsTable": {
+        "description": "Fixed-layout Bootstrap table with sticky headers and wrap-safe technical values.",
+        "source": "data/view_spots.css"
+      },
+      "footerStateBadge": {
+        "description": "Compact warning/danger footer state badge using signal text on state-tinted transmitter slate, with a full 1px state border.",
+        "source": "data/footer.php, data/site.css"
+      }
+    },
+    "rules": {
+      "northStar": "The Bench Instrument",
+      "do": [
+        "Preserve both light and dark themes with the same layout and interaction model.",
+        "Use transmitter slate for shell identity and status chrome.",
+        "Make state, mode, and transmission context easy to scan.",
+        "Use wrap-safe text behavior for long technical values.",
+        "Render footer warning and danger states as accessible signal-text badges on state-tinted slate."
+      ],
+      "dont": [
+        "Do not make the interface flashy, ornamental, or marketing-like.",
+        "Do not use state colors for decoration.",
+        "Do not use gradient text, decorative glassmorphism, or colored side-stripe borders.",
+        "Do not create nested cards for operational content.",
+        "Do not put raw warning or danger foreground text directly on the transmitter-slate footer."
+      ]
+    }
+  }
+}

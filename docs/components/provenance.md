@@ -441,6 +441,138 @@ acceptance remain deferred. No `chronyc`, `systemctl`, clock configuration,
 scheduler-priority, service, installation, device, GPIO, I2C, RF, or hardware
 operation occurred.
 
+## WsprryPi-UI
+
+| Field | Recorded value |
+| --- | --- |
+| Component | WsprryPi-UI |
+| Retained path | `WsprryPi-UI` |
+| Original repository | `https://github.com/WsprryPi/WsprryPi-UI.git` |
+| Parent-recorded import SHA | `bd9f14c9194754db5d1380ef2874cfa0ccbfd675` |
+| Checked-out SHA | `bd9f14c9194754db5d1380ef2874cfa0ccbfd675` |
+| Observed state | `main`, tracking `origin/main`, clean and synchronized with the parent gitlink |
+| Most recent commit | `2026-08-12T07:29:59-05:00` — `Gate RP1 GPIO operator controls` |
+| Version/tag provenance | No repository tag points at or contains the imported revision. Runtime UI version display remains derived from the parent WsprryPi executable. |
+| Raw source tree | `a8f824e6545d5d40c5fe4e4acd7571b84a1c2d36` |
+| Expected and staged Phase A tree | `a8f824e6545d5d40c5fe4e4acd7571b84a1c2d36` |
+| Staged tree after Phase B | `1157a0646ca98abef63d262393736795ab1f1dc0` |
+| Phase A archive | SHA-256 `5388ee5e50abd9521b9d9f543051caf5e467207cded1218039e7801385d638f5`; 90 tracked files |
+| Former component license | `WsprryPi-UI/LICENSE.md` at raw import; MIT, copyright 2023-2025 Lee C. Bussy; blob `8f76068ed640c62116659925c0ece878f7d8b286` |
+| License after absorption | Parent `LICENSE.md` (MIT) for WsprryPi-authored UI code. Independent vendor terms are retained with the deployed assets in `WsprryPi-UI/data/vendor/THIRD_PARTY_NOTICES.md` and `WsprryPi-UI/data/vendor/licenses/OFL-1.1.txt`. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`e94ee1e99cc0d9d8e7fd09404829dc4699e5cd7f79483b5fa7735a9377969e06`.
+The object-derived archive and ordinary staged Phase A subtree both exactly
+matched the recorded source tree before adaptation.
+
+The live submodule's `.git` administrative directory link was not tracked and
+was not imported. There were no ignored files, untracked files, nested
+submodules, or nested Git administration. No tracked product file was excluded.
+In particular, `.impeccable/design.json` was retained byte-for-byte at blob
+`2ad1636ac96ea5a048417ec7cc81c2e8a9211771`, and the tracked `data/cache/`
+snapshots were retained as part of the authoritative recorded tree.
+
+### Ownership and third-party licensing
+
+The contribution history contains only Lee Bussy identity variants, so the
+component's redundant first-party MIT license was consolidated under the parent
+license after Phase A verification. Vendored assets retain their embedded
+attribution and exact imported bytes:
+
+- Bootswatch Zephyr/Bootstrap 5.3.8 CSS:
+  `0eb1079dbae68677d81044a09023da7a28e6748f3462d5c9276fe4ce745d8820`;
+- Bootstrap 5.3.8 bundle:
+  `c6f670216aedd2c61ec83102f7e40c1c44114eecd7f37b2edc332757390c386a`;
+- jQuery 3.7.1:
+  `fc9a93dd241f6b045cbff0481cf4e1901becd0e12fb45166a8f17f95823f0b1a`;
+- Bootstrap Icons 1.11.3 CSS/font:
+  `fc499030409f5641ca47078ac415ff7ed39308a2aebdff8abf783b167a18ae24` /
+  `476adf42b40325098fcfa8b36ab3e769186bb4f6ce6a249753e2e1a9c22bf99e`;
+- Font Awesome Free 6.5.0 CSS:
+  `3219148441227c82ff4cbcbc9deab1bdbcb9c2b1535377a3ee6ccb3edf1abcd4`,
+  with its four imported webfont hashes recorded by the slice audit; and
+- Barlow Semi Condensed and Source Sans 3 font files, whose seven exact hashes
+  are recorded by the slice audit and whose embedded families/foundries match
+  the declared packages.
+
+The added notice set carries the applicable Bootswatch, Bootstrap, Bootstrap
+Icons, jQuery, and Font Awesome MIT notices plus the full SIL Open Font License
+1.1 and copyright/reserved-name notices for Font Awesome, Barlow Semi Condensed,
+and Source Sans 3. No Font Awesome SVG or JavaScript icon artifact is bundled,
+so the CC BY icon-file license does not apply to the retained asset types.
+
+### Phase B adaptations
+
+- Preserved the complete `data/` deployment tree, tests, README, API/design/
+  product documentation, design-system metadata, vendor assets, paths, runtime
+  configuration, validation, persistence, wording, navigation, light/dark
+  themes, responsive rules, and installed web-root layout.
+- Removed only the redundant Lee-owned component MIT license and added the
+  distributable third-party notice/license set required for the retained vendor
+  assets.
+- Removed trailing spaces from two JavaScript lines so the staged whitespace
+  gate passes without changing executable semantics. Repository attributes
+  preserve intentional Markdown hard line breaks in `API_syslog.md` and
+  `DESIGN.md` without modifying those files.
+- Added the six dependency-free Node/PHP UI regressions to the active parent
+  Debian non-hardware workflow and added `php-cli` to that workflow's build
+  dependencies. Existing parent `semantics-test` continues to run the compiled
+  UI/source regression and its parent-side Node checks.
+
+No PHP, JavaScript, CSS, image, font, page copy, interaction, deployment path,
+or application behavior was otherwise changed. The excluded Impeccable page
+`data/view_diag_logs.php` was not modified.
+
+### Test, rendering, and extraction entry points
+
+The safe component suite consists of:
+
+- `node tests/cw_timing_state_test.js`;
+- `node tests/responsive_shell_logs_test.js`;
+- `node tests/support_bundle_ui_test.js`;
+- `node tests/wspr_band_frequency_correlation_test.js`;
+- `php tests/gpio_dropdown_test.php`; and
+- `php tests/spot_menu_test.php`.
+
+The Chromium/WebSocket integration tests additionally require Chromium and the
+Node `ws` package, for which this component intentionally has no tracked package
+manifest. `tests/log_stream_disconnect_integration_test.sh` is a Raspberry Pi
+operator-service test requiring `sudo` and `systemctl`; it is outside ordinary
+hardware-free migration validation.
+
+To extract the UI, copy `WsprryPi-UI` alone, preserve `data/`, tests,
+`.impeccable/design.json`, the vendor notice/license files, assets, and embedded
+notices, then add repository metadata and a license for the
+first-party UI code. Parent integration continues to consume
+`WsprryPi-UI/data` at the same path.
+
+All six dependency-free Node/PHP component tests passed both before and after
+conversion. The parent `ui_source_regression_test` compiled directly with
+Apple Clang and passed against the absorbed tree. The broader parent
+`make semantics-test SUDO=` reached safe compilation but stopped because Apple
+Clang rejects the existing GCC-only `-fmax-errors=10` flag under `-Werror`;
+canonical Debian CI remains the authoritative run for that target.
+
+A Git-free export of the staged parent index repeated all six UI tests and the
+compiled parent UI/source regression successfully. Source/deployment comparison
+found no difference except the documented JavaScript trailing-space removals;
+paths, files, and runtime content are otherwise preserved.
+
+Impeccable desktop/mobile and light/dark rendering before and after conversion
+showed the same layout, copy, controls, unavailable-controller state, and
+pre-existing narrow-viewport clipping. The one required detector pass reported
+only pre-existing design-token advisories and warnings in unchanged UI/vendor
+files; none arose from the absorption adaptations. No aesthetic correction was
+made. `data/view_diag_logs.php` remained untouched.
+
+The Chromium/WebSocket tests were not run because `ws` and Chromium are absent
+and the component has no tracked dependency manifest. The privileged Raspberry
+Pi log-stream/service test was not run. Comprehensive active repository and
+operator-documentation reconciliation remains the agreed late migration gate.
+
 ## Signal-Handler
 
 | Field | Recorded value |

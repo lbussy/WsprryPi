@@ -26,7 +26,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential ca-certificates cmake git libgpiod-dev libssl-dev \
-            libsystemd-dev nodejs pkg-config python3 strace
+            libsystemd-dev nodejs php-cli pkg-config python3 strace
 
       - name: Check out source and pinned submodules
         uses: actions/checkout@v7
@@ -52,6 +52,16 @@ jobs:
           strace -f -e trace=openat,open \
             -o /tmp/wsprrypi-startup-quiesce-parent.strace \
             make startup-quiesce-parent-test SUDO=
+
+      - name: Run UI component regressions
+        working-directory: WsprryPi-UI
+        run: |
+          node tests/cw_timing_state_test.js
+          node tests/responsive_shell_logs_test.js
+          node tests/support_bundle_ui_test.js
+          node tests/wspr_band_frequency_correlation_test.js
+          php tests/gpio_dropdown_test.php
+          php tests/spot_menu_test.php
 
       - name: Run RP1 non-hardware regression
         working-directory: src
