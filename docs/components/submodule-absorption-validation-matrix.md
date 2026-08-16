@@ -1,6 +1,10 @@
 # Issue 415 Validation Matrix
 
-Status: Pre-migration universal preparation gate
+Execution results for the completed migration are recorded in
+[`submodule-absorption-validation-results.md`](submodule-absorption-validation-results.md).
+
+Status: Executed for the committed migration; remaining gates are recorded in
+the linked results
 
 Contract: [`../plans/submodule-absorption-contract.md`](../plans/submodule-absorption-contract.md)
 
