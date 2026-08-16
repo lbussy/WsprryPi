@@ -4688,7 +4688,7 @@ git_clone() {
     fi
 
     exec_command "Clone repository '$GIT_CLONE'" \
-        runuser -u "$SUDO_USER" -- git clone -b "$REPO_BRANCH" --recurse-submodules -j8 \
+        runuser -u "$SUDO_USER" -- git clone -b "$REPO_BRANCH" \
             "$GIT_CLONE" "$dest_root" \
         "$debug" || {
         warn "Failed to clone repository from '$GIT_CLONE' to '$dest_root'"
