@@ -73,10 +73,28 @@ service, hardware, GPIO, I2C, mailbox, Si5351, or RF action was performed there.
 Target-host validation therefore remains blocked pending a separately reviewed
 checkout transition.
 
+## Published-remote clone acceptance
+
+The post-commit acceptance gate passed on 2026-08-16. A new disposable clone of
+the published `codex/issue-415-submodule-absorption` branch was created from
+`https://github.com/WsprryPi/WsprryPi.git` without
+`--recurse-submodules`. Its checked-out commit was
+`2fd0999ceb3a07f3bd380a11372f9d9e343462b8`.
+
+The clone contained all ten ordinary component trees with subtree OIDs equal to
+the source checkout. It contained no `.gitmodules`, registered submodules,
+mode-`160000` entries, or nested component Git administration. The complete
+Debian hardware-free suite described above was repeated from that clone and
+passed, including UI browser integration, component checks, WSPR-Reference
+package consumption, deterministic simulation, and the prohibited-device
+`strace` audit. The clone remained clean apart from ignored build products.
+
+This closes the post-commit remote fresh-clone gate. It does not close the
+separate `wspr4`, operator-documentation, hardware, service, installation, or RF
+qualification gates.
+
 ## Remaining acceptance gates
 
-- Perform a disposable clone from the published remote, without
-  `--recurse-submodules`, and repeat the supported structure/build/test checks.
 - Transition `wspr4` from its pre-absorption initialized-submodule checkout by a
   separately reviewed, preservation-safe procedure, then run its approved
   compile and explicitly hardware-free tests.

@@ -121,8 +121,8 @@ repository and supported build/test checks, and record that separate result.
 
 ## Explicitly deferred or prohibited qualification
 
-- True fresh-clone acceptance is deferred until an authorized migration commit
-  exists.
+- True fresh-clone acceptance passed against the published Issue 415 branch as
+  recorded in the linked validation results.
 - GitHub workflow results are deferred until the migration commit is published
   on a workflow-triggering ref or reviewed through the authorized mechanism.
 - `wspr4` validation is deferred until its checkout is explicitly synchronized
