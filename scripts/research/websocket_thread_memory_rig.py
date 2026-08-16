@@ -14,6 +14,10 @@ from pathlib import Path
 
 VERSION = "issue-349-rig-1"
 STD_PORTS = {31415, 31416}
+COMPONENT_PATHS = ("WsprryPi-UI", "src/INI-Handler", "src/LCBLog",
+                   "src/Mailbox", "src/MonitorFile", "src/PPM-Manager",
+                   "src/Signal-Handler", "src/Singleton",
+                   "src/WSPR-Transmitter", "src/WSPR-Reference")
 STATUS_FIELDS = ("VmPeak", "VmSize", "VmRSS", "RssAnon", "RssFile", "VmData",
                  "VmStk", "VmSwap", "Threads")
 SMAPS_FIELDS = ("Rss", "Pss", "Pss_Anon", "Pss_File", "Private_Clean",
@@ -288,7 +292,7 @@ def main(args):
  a=Artifacts(args.artifact_root); initial_active=service_active(); launch=None; isolated=None; pgid=None; abort=None; cleanup={}; completed=[]; base=None
  try:
   # Read-only preflight evidence.
-  for name,cmd in (("parent_git.txt",["git","rev-parse","HEAD"]),("parent_status.txt",["git","status","--short","--branch"]),("submodule_revisions.txt",["git","submodule","status","--recursive"]),("submodule_status.txt",["git","submodule","foreach","--recursive","git status --short --branch"]),("installed_version.txt",["/usr/local/bin/wsprrypi","--version"]),("service_definition.txt",["systemctl","cat","wsprrypi.service"]),("service_execstart.txt",["systemctl","show","-p","ExecStart","wsprrypi.service"])):
+  for name,cmd in (("parent_git.txt",["git","rev-parse","HEAD"]),("parent_status.txt",["git","status","--short","--branch"]),("component_trees.txt",["git","ls-tree","HEAD","--",*COMPONENT_PATHS]),("component_provenance.md",["git","show","HEAD:docs/components/provenance.md"]),("installed_version.txt",["/usr/local/bin/wsprrypi","--version"]),("service_definition.txt",["systemctl","cat","wsprrypi.service"]),("service_execstart.txt",["systemctl","show","-p","ExecStart","wsprrypi.service"])):
    rc,o,e=command(cmd); a.text(name,o+e)
   binary=Path(args.binary); ini=Path(args.installed_ini)
   if not binary.is_file() or not ini.is_file():raise RigError("installed binary or INI not found")
