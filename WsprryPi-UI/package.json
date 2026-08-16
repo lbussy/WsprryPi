@@ -1,0 +1,17 @@
+{
+  "name": "wsprrypi-ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Development and test dependencies for the WsprryPi UI component",
+  "scripts": {
+    "test": "npm run test:unit",
+    "test:unit": "node tests/cw_timing_state_test.js && node tests/responsive_shell_logs_test.js && node tests/support_bundle_ui_test.js && node tests/wspr_band_frequency_correlation_test.js && php tests/gpio_dropdown_test.php && php tests/spot_menu_test.php",
+    "test:browser": "node tests/conditional_transmit_gpio_integration_test.js && node tests/cw_duration_latch_integration_test.js"
+  },
+  "devDependencies": {
+    "ws": "8.21.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

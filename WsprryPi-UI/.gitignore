@@ -1,7 +1,3 @@
-# Repo-specific ignores
-package.json
-package-lock.json
-
 # macOS / AppleDouble files
 .DS_Store
 ._*

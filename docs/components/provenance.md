@@ -455,7 +455,7 @@ operation occurred.
 | Version/tag provenance | No repository tag points at or contains the imported revision. Runtime UI version display remains derived from the parent WsprryPi executable. |
 | Raw source tree | `a8f824e6545d5d40c5fe4e4acd7571b84a1c2d36` |
 | Expected and staged Phase A tree | `a8f824e6545d5d40c5fe4e4acd7571b84a1c2d36` |
-| Staged tree after Phase B | `1157a0646ca98abef63d262393736795ab1f1dc0` |
+| Staged tree after Phase B | `96ea3071591ae13b3ce9a366ed320a0846dd9d05` |
 | Phase A archive | SHA-256 `5388ee5e50abd9521b9d9f543051caf5e467207cded1218039e7801385d638f5`; 90 tracked files |
 | Former component license | `WsprryPi-UI/LICENSE.md` at raw import; MIT, copyright 2023-2025 Lee C. Bussy; blob `8f76068ed640c62116659925c0ece878f7d8b286` |
 | License after absorption | Parent `LICENSE.md` (MIT) for WsprryPi-authored UI code. Independent vendor terms are retained with the deployed assets in `WsprryPi-UI/data/vendor/THIRD_PARTY_NOTICES.md` and `WsprryPi-UI/data/vendor/licenses/OFL-1.1.txt`. |
@@ -521,6 +521,11 @@ so the CC BY icon-file license does not apply to the retained asset types.
   Debian non-hardware workflow and added `php-cli` to that workflow's build
   dependencies. Existing parent `semantics-test` continues to run the compiled
   UI/source regression and its parent-side Node checks.
+- Added a private, reproducible npm development manifest with the exact `ws`
+  dependency required by the existing loopback WebSocket integration tests.
+  The Debian non-hardware workflow now installs that manifest with `npm ci`,
+  installs Chromium as a CI-only browser dependency, and runs the unit and
+  browser integration suites through separate npm scripts.
 
 No PHP, JavaScript, CSS, image, font, page copy, interaction, deployment path,
 or application behavior was otherwise changed. The excluded Impeccable page
@@ -537,11 +542,12 @@ The safe component suite consists of:
 - `php tests/gpio_dropdown_test.php`; and
 - `php tests/spot_menu_test.php`.
 
-The Chromium/WebSocket integration tests additionally require Chromium and the
-Node `ws` package, for which this component intentionally has no tracked package
-manifest. `tests/log_stream_disconnect_integration_test.sh` is a Raspberry Pi
-operator-service test requiring `sudo` and `systemctl`; it is outside ordinary
-hardware-free migration validation.
+The hardware-free Chromium/WebSocket integration suite is
+`npm run test:browser`. Its Node dependency is reproducibly installed from the
+tracked private `package.json` and `package-lock.json`; Chromium is supplied by
+the Debian CI environment. `tests/log_stream_disconnect_integration_test.sh`
+is a Raspberry Pi operator-service test requiring `sudo` and `systemctl`; it is
+outside ordinary hardware-free migration validation.
 
 To extract the UI, copy `WsprryPi-UI` alone, preserve `data/`, tests,
 `.impeccable/design.json`, the vendor notice/license files, assets, and embedded
@@ -568,10 +574,14 @@ only pre-existing design-token advisories and warnings in unchanged UI/vendor
 files; none arose from the absorption adaptations. No aesthetic correction was
 made. `data/view_diag_logs.php` remained untouched.
 
-The Chromium/WebSocket tests were not run because `ws` and Chromium are absent
-and the component has no tracked dependency manifest. The privileged Raspberry
-Pi log-stream/service test was not run. Comprehensive active repository and
-operator-documentation reconciliation remains the agreed late migration gate.
+The npm lockfile, development dependency installation, and `ws` module load were
+validated locally. The Chromium/WebSocket tests were not run locally because
+Chromium is absent; the active Debian non-hardware workflow now installs
+Chromium and runs them. That CI result remains pending until the pushed workflow
+executes. The privileged Raspberry Pi log-stream/service test was not run.
+Comprehensive active repository and operator-documentation reconciliation,
+including developer dependency documentation, remains the agreed late migration
+gate.
 
 ## Signal-Handler
 
