@@ -75,6 +75,35 @@ bool stop_requested(std::mutex &mutex, bool &stop) noexcept {
     std::lock_guard lock(mutex);
     return stop;
 }
+
+bool write_private_file(const std::filesystem::path &path,
+                        const std::string &contents) {
+    const int descriptor = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+                                0600);
+    if (descriptor < 0) return false;
+    std::size_t offset = 0;
+    while (offset < contents.size()) {
+        const ssize_t count = write(descriptor, contents.data() + offset,
+                                    contents.size() - offset);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) { close(descriptor); return false; }
+        offset += static_cast<std::size_t>(count);
+    }
+    return close(descriptor) == 0;
+}
+
+struct PrivateContextCleanup {
+    std::filesystem::path directory;
+    ~PrivateContextCleanup() {
+        if (directory.empty()) return;
+        std::error_code error;
+        std::filesystem::remove(directory / "problem-description.txt", error);
+        error.clear();
+        std::filesystem::remove(directory / "contact.txt", error);
+        error.clear();
+        std::filesystem::remove(directory, error);
+    }
+};
 }  // namespace
 
 SupportBundleCollectorExecutor::SupportBundleCollectorExecutor(
@@ -102,15 +131,51 @@ SupportBundleExecutionResult SupportBundleCollectorExecutor::run(
         return {false, "collector_cancelled", "Support collection stopped."};
     }
 
-    std::string output_directory = context.job_directory.string();
-    std::vector<char *> argv = {
-        const_cast<char *>(executable_.c_str()),
-        const_cast<char *>("--output-dir"),
-        output_directory.data(),
-    };
+    std::vector<std::string> arguments = {executable_, "--output-dir",
+                                          context.job_directory.string()};
+    PrivateContextCleanup private_context_cleanup;
     if (context.probe_i2c) {
-        argv.push_back(const_cast<char *>("--probe-i2c"));
+        arguments.emplace_back("--probe-i2c");
     }
+    if ((context.case_id.empty() && context.support_context) ||
+        (!context.case_id.empty() && !context.support_context)) {
+        return {false, "collector_launch_failed", "Support collection failed."};
+    }
+    if (!context.case_id.empty()) {
+        if (!context.support_context ||
+            !valid_support_bundle_case_id(context.case_id) ||
+            !valid_support_bundle_context(*context.support_context)) {
+            return {false, "collector_launch_failed", "Support collection failed."};
+        }
+        arguments.insert(arguments.end(), {"--case-id", context.case_id});
+        const auto &support = *context.support_context;
+        if (support.kind == SupportBundleContextKind::existing_github_issue) {
+            arguments.insert(arguments.end(), {"--github-issue", support.issue_url});
+        } else {
+            const std::filesystem::path staging =
+                context.job_directory / ".private-context";
+            if (mkdir(staging.c_str(), 0700) != 0) {
+                return {false, "collector_launch_failed", "Support collection failed."};
+            }
+            private_context_cleanup.directory = staging;
+            const auto description = staging / "problem-description.txt";
+            const auto contact = staging / "contact.txt";
+            if (!write_private_file(description, support.problem_description) ||
+                !write_private_file(contact, support.contact)) {
+                return {false, "collector_launch_failed", "Support collection failed."};
+            }
+            arguments.insert(arguments.end(), {
+                "--context-kind",
+                support.kind == SupportBundleContextKind::new_github_issue
+                    ? "new_github_issue" : "no_github",
+                "--problem-description-file", description.string(),
+                "--contact-file", contact.string(),
+            });
+        }
+    }
+    std::vector<char *> argv;
+    argv.reserve(arguments.size() + 1);
+    for (auto &argument : arguments) argv.push_back(argument.data());
     argv.push_back(nullptr);
 
     const pid_t pid = fork();

@@ -58,5 +58,9 @@ std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_for_testin
     return std::make_unique<SupportBundleJobManager>(
         std::move(dependencies.executor),
         std::move(dependencies.id_generator),
-        std::move(dependencies.storage_root));
+        std::move(dependencies.storage_root),
+        remove_support_bundle_job_directory,
+        SupportBundleJobManager::kProductionRetention,
+        SupportBundleJobManager::kProductionRetryDelay,
+        [] { return generate_support_bundle_case_id({}); });
 }

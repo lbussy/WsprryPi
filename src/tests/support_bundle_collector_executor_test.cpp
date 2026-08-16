@@ -73,6 +73,11 @@ SupportBundleExecutionContext context_for(const fs::path &job_directory,
                                           bool probe_i2c = false) {
     return {probe_i2c, job_directory};
 }
+
+SupportBundleExecutionContext private_context_for(
+    const fs::path &job_directory, SupportBundleContext support) {
+    return {false, job_directory, "7K3M-9QFX-2DPA", std::move(support)};
+}
 }  // namespace
 
 int main() {
@@ -106,6 +111,41 @@ int main() {
         assert(arguments[1] == "--output-dir");
         assert(arguments[2] == job_directory.string());
         assert(arguments[3] == "--probe-i2c");
+    }
+
+    {
+        const fs::path job_directory = make_job_directory(root, "existing issue");
+        SupportBundleContext support;
+        support.kind = SupportBundleContextKind::existing_github_issue;
+        support.issue_url = "https://github.com/WsprryPi/WsprryPi/issues/414";
+        SupportBundleCollectorExecutor executor(helper.string(), 1s, 50ms);
+        assert(executor.run(private_context_for(job_directory, support)).succeeded);
+        const auto arguments = read_lines(job_directory / "executor-helper-argv.txt");
+        assert(arguments.size() == 7);
+        assert(arguments[3] == "--case-id" && arguments[4] == "7K3M-9QFX-2DPA");
+        assert(arguments[5] == "--github-issue" && arguments[6] == support.issue_url);
+    }
+
+    {
+        const fs::path job_directory = make_job_directory(root, "private files");
+        SupportBundleContext support;
+        support.kind = SupportBundleContextKind::no_github;
+        support.problem_description = "transmitter stopped after schedule";
+        support.contact = "radio@example.test";
+        SupportBundleCollectorExecutor executor(helper.string(), 1s, 50ms);
+        assert(executor.run(private_context_for(job_directory, support)).succeeded);
+        const auto arguments = read_lines(job_directory / "executor-helper-argv.txt");
+        assert(arguments.size() == 11);
+        const std::string joined = [&] {
+            std::string value;
+            for (const auto &argument : arguments) value += argument + "\n";
+            return value;
+        }();
+        assert(joined.find(support.problem_description) == std::string::npos);
+        assert(joined.find(support.contact) == std::string::npos);
+        assert(joined.find("--problem-description-file") != std::string::npos);
+        assert(joined.find("--contact-file") != std::string::npos);
+        assert(!fs::exists(job_directory / ".private-context"));
     }
 
     {

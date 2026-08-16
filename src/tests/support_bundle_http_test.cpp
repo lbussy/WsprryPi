@@ -55,7 +55,7 @@ public:
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
         const fs::path archive = context.job_directory / "WsprryPi-support-test.tar.gz";
         const fs::path checksum = archive.string() + ".sha256";
-        const nlohmann::json result = {
+        nlohmann::json result = {
             {"schema_version", 1},
             {"status", "success"},
             {"archive_filename", "WsprryPi-support-test.tar.gz"},
@@ -68,6 +68,10 @@ public:
             {"i2c_probe_status", probe ? "succeeded" : "skipped_by_user"},
             {"privileged_diagnostics_may_be_incomplete", false},
         };
+        if (!context.case_id.empty()) {
+            result["case_id"] = context.case_id;
+            result["manifest_included"] = true;
+        }
         if (mode_ != Mode::missing_archive) {
             std::ofstream(archive) << (mode_ == Mode::corrupt_archive ? "def" : "abc");
             assert(chmod(archive.c_str(), 0600) == 0);
@@ -172,6 +176,13 @@ httplib::Response delete_bundle(httplib::Client &client,
     return require_response(client.Delete("/api/support-bundles/" + id, headers));
 }
 
+httplib::Response finalize_bundle(httplib::Client &client,
+                                  const httplib::Headers &headers,
+                                  const std::string &id) {
+    return require_response(client.Post(
+        "/api/support-bundles/" + id + "/finalize", headers, "", "text/plain"));
+}
+
 void assert_no_private_download_leak(const httplib::Response &response,
                                      const fs::path &storage_root) {
     assert(response.body.find(storage_root.string()) == std::string::npos);
@@ -216,7 +227,9 @@ int main() {
                     SupportBundleJobDirectoryRemovalFailure::removal_failed};
             }
             return remove_support_bundle_job_directory(root, id);
-        });
+        }, SupportBundleJobManager::kProductionRetention,
+        SupportBundleJobManager::kProductionRetryDelay,
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
     httplib::Server server;
     server.set_default_headers({{"Access-Control-Allow-Origin", "*"},
                                 {"Access-Control-Allow-Methods", "GET, POST"},
@@ -271,7 +284,7 @@ int main() {
         {"{}", "text/plain", 415},
         {"{\"unknown\":true}", "application/json", 400},
         {"{\"probe_i2c\":\"true\"}", "application/json", 400},
-        {std::string(1025, 'x'), "application/json", 413},
+        {std::string(8193, 'x'), "application/json", 413},
         {"{}", "application/json; charset=iso-8859-1", 415},
         {"{}", "application/json; boundary=test", 415},
         {"{}", "application/json; charset", 415},
@@ -400,6 +413,81 @@ int main() {
     assert(get_download(client, headers, cleanup_id).status == 200);
     fail_cleanup->store(false);
     assert(delete_bundle(client, headers, cleanup_id).status == 204);
+
+    executor->reset();
+    const std::string private_body = R"({"probe_i2c":false,"support_context":{"kind":"existing_github_issue","issue_url":"https://github.com/WsprryPi/WsprryPi/issues/414"}})";
+    const auto private_created = require_response(client.Post(
+        "/api/support-bundles", headers, private_body, "application/json"));
+    assert(private_created.status == 202);
+    const auto private_created_body = response_json(private_created);
+    const std::string private_id = private_created_body["id"];
+    assert(private_created_body["case_id"] == "7K3M-9QFX-2DPA");
+    assert(private_created_body["workflow_state"] == "collecting");
+    assert(private_created.body.find("issues/414") == std::string::npos);
+    executor->wait_entered();
+    executor->release(FakeExecutor::Mode::success);
+    wait_for_state(client, headers, private_id, "succeeded");
+    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
+           "candidate_ready");
+    const auto premature_finalize = finalize_bundle(client, headers, private_id);
+    assert(premature_finalize.status == 409 &&
+           response_json(premature_finalize)["error"] == "download_required");
+    const auto guarded_finalize = finalize_bundle(client, foreign_origin, private_id);
+    assert(guarded_finalize.status == 403);
+    const auto body_finalize = require_response(client.Post(
+        "/api/support-bundles/" + private_id + "/finalize", headers, "{}",
+        "application/json"));
+    assert(body_finalize.status == 400);
+    assert(get_download(client, headers, private_id).status == 200);
+    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
+           "candidate_downloaded");
+    const auto finalized = finalize_bundle(client, headers, private_id);
+    assert(finalized.status == 200);
+    assert(response_json(finalized)["workflow_state"] == "finalized");
+    assert(finalized.body.find("issues/414") == std::string::npos);
+    assert(finalize_bundle(client, headers, private_id).status == 200);
+    struct stat finalized_info {};
+    assert(lstat((storage_root / private_id / "WsprryPi-support-test.tar.gz").c_str(),
+                 &finalized_info) == 0);
+    assert((finalized_info.st_mode & 0777) == 0400);
+    assert(get_download(client, headers, private_id).status == 200);
+    assert(delete_bundle(client, headers, private_id).status == 204);
+
+    executor->reset();
+    const std::string no_github_description = "intermittent schedule failure";
+    const std::string no_github_contact = "radio@example.test";
+    const std::string no_github_body =
+        "{\"support_context\":{\"kind\":\"no_github\",\"problem_description\":\"" +
+        no_github_description + "\",\"contact\":\"" + no_github_contact + "\"}}";
+    const auto no_github_created = require_response(client.Post(
+        "/api/support-bundles", headers, no_github_body, "application/json"));
+    assert(no_github_created.status == 202);
+    assert(no_github_created.body.find(no_github_description) == std::string::npos);
+    assert(no_github_created.body.find(no_github_contact) == std::string::npos);
+    const std::string no_github_id = response_json(no_github_created)["id"];
+    executor->wait_entered();
+    executor->release(FakeExecutor::Mode::success);
+    wait_for_state(client, headers, no_github_id, "succeeded");
+    assert(get_download(client, headers, no_github_id).status == 200);
+    std::ofstream(storage_root / no_github_id / "WsprryPi-support-test.tar.gz",
+                  std::ios::app) << "size-change";
+    const auto mutated_finalize = finalize_bundle(client, headers, no_github_id);
+    assert(mutated_finalize.status == 409 &&
+           response_json(mutated_finalize)["error"] == "artifact_invalid");
+    assert(mutated_finalize.body.find(no_github_description) == std::string::npos);
+    assert(mutated_finalize.body.find(no_github_contact) == std::string::npos);
+    assert(delete_bundle(client, headers, no_github_id).status == 204);
+
+    const std::vector<std::string> invalid_private_requests = {
+        R"({"support_context":{"kind":"existing_github_issue","issue_url":"https://github.com/WsprryPi/WsprryPi/issues/414","contact":"leak"}})",
+        R"({"support_context":{"kind":"new_github_issue","description":"missing contract name","contact":"radio@example.test"}})",
+        R"({"support_context":{"kind":"no_github","problem_description":"description only"}})",
+    };
+    for (const auto &body : invalid_private_requests) {
+        const auto invalid_private = require_response(
+            client.Post("/api/support-bundles", headers, body, "application/json"));
+        assert(invalid_private.status == 400);
+    }
 
     const auto malformed = require_response(client.Get("/api/support-bundles/not-an-id", headers));
     assert(malformed.status == 404);

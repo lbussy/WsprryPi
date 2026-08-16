@@ -41,8 +41,10 @@ SupportBundleJobManager::SupportBundleJobManager(std::shared_ptr<SupportBundleJo
                                                  std::filesystem::path storage_root,
                                                  JobDirectoryRemover remover,
                                                  std::chrono::milliseconds retention,
-                                                 std::chrono::milliseconds retry_delay)
-    : executor_(std::move(executor)), ids_(std::move(ids)), remover_(std::move(remover)),
+                                                 std::chrono::milliseconds retry_delay,
+                                                 CaseIdGenerator case_ids)
+    : executor_(std::move(executor)), ids_(std::move(ids)), case_ids_(std::move(case_ids)),
+      remover_(std::move(remover)),
       retention_(std::max(retention, std::chrono::milliseconds::zero())),
       retry_delay_(std::max(retry_delay, std::chrono::milliseconds(1))) {
     if (!remover_) {
@@ -60,6 +62,20 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     if (shutting_down_) { error = "shutting_down"; return std::nullopt; }
     if (!storage_ready_) { error = "storage_unavailable"; return std::nullopt; }
     if (job_ && (job_->state == SupportBundleJobState::queued || job_->state == SupportBundleJobState::running)) { error = "job_active"; return std::nullopt; }
+    std::string case_id;
+    if (request.private_request) {
+        if (!valid_support_bundle_context(request.private_request->context)) {
+            error = "invalid_support_context"; return std::nullopt;
+        }
+        if (!case_ids_) { error = "case_id_generation_failed"; return std::nullopt; }
+        try {
+            const auto generated = case_ids_();
+            if (!generated || !valid_support_bundle_case_id(*generated)) {
+                error = "case_id_generation_failed"; return std::nullopt;
+            }
+            case_id = *generated;
+        } catch (...) { error = "case_id_generation_failed"; return std::nullopt; }
+    }
     std::string id;
     try { id = ids_(); } catch (...) { error = "id_generation_failed"; return std::nullopt; }
     if (!valid_id(id)) { error = "invalid_job_id"; return std::nullopt; }
@@ -71,13 +87,24 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
         return std::nullopt;
     }
     if (worker_.joinable()) worker_.join();
-    job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c, "", "", "", false};
+    job_ = SupportBundleJobSnapshot{id, SupportBundleJobState::queued, request.probe_i2c,
+                                    "", "", "", false, case_id,
+                                    request.private_request
+                                        ? SupportBundlePrivateLifecycle::collecting
+                                        : SupportBundlePrivateLifecycle::none};
     job_directory_ = directory;
     validated_archive_filename_.clear();
     validated_checksum_filename_.clear();
     validated_sha256_.clear();
+    downloaded_archive_size_.reset();
     download_removed_ = false;
-    try { worker_ = std::thread(&SupportBundleJobManager::run, this, id, request.probe_i2c, directory); }
+    finalized_bundle_.reset();
+    const auto support_context = request.private_request
+                                     ? std::optional(request.private_request->context)
+                                     : std::nullopt;
+    try { worker_ = std::thread(&SupportBundleJobManager::run, this, id,
+                                request.probe_i2c, directory, case_id,
+                                support_context); }
     catch (const std::system_error &) {
         job_.reset();
         job_directory_.clear();
@@ -155,10 +182,15 @@ SupportBundleDownloadDeletionResult SupportBundleJobManager::delete_download(
     expiration_cv_.notify_all();
     return {SupportBundleDownloadDeletionStatus::removed};
 }
-void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesystem::path job_directory) {
+void SupportBundleJobManager::run(std::string id, bool probe_i2c,
+                                  std::filesystem::path job_directory,
+                                  std::string expected_case_id,
+                                  std::optional<SupportBundleContext> support_context) {
     { std::lock_guard lock(mutex_); if (!job_ || job_->id != id) return; job_->state = SupportBundleJobState::running; }
     SupportBundleExecutionResult result;
-    try { result = executor_->run({probe_i2c, job_directory}); } catch (...) { result = {false, "executor_exception", "Support collection failed."}; }
+    try { result = executor_->run({probe_i2c, job_directory, expected_case_id,
+                                   std::move(support_context)}); }
+    catch (...) { result = {false, "executor_exception", "Support collection failed."}; }
     SupportBundleResultValidation validation;
     if (result.succeeded) validation = validate_support_bundle_result(job_directory, probe_i2c);
     bool remove_job_directory = false;
@@ -176,6 +208,13 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
             case SupportBundleResultFailure::inconsistent: result.failure_category = "result_inconsistent"; break;
             default: result.failure_category = "result_invalid"; break;
             }
+        }
+        if (result.succeeded &&
+            ((expected_case_id.empty() && !validation.case_id.empty()) ||
+             (!expected_case_id.empty() &&
+              (validation.case_id != expected_case_id || !validation.manifest_included)))) {
+            result.succeeded = false;
+            result.failure_category = "result_inconsistent";
         }
         std::filesystem::path archive_path;
         std::filesystem::path checksum_path;
@@ -214,6 +253,74 @@ void SupportBundleJobManager::run(std::string id, bool probe_i2c, std::filesyste
     }
 }
 
+SupportBundleCandidateDownloadStatus SupportBundleJobManager::mark_candidate_downloaded(
+    const std::string &id, std::uint64_t size) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id) {
+        return SupportBundleCandidateDownloadStatus::malformed_or_unknown_id;
+    }
+    if (job_->private_lifecycle == SupportBundlePrivateLifecycle::candidate_downloaded ||
+        job_->private_lifecycle == SupportBundlePrivateLifecycle::finalized) {
+        return SupportBundleCandidateDownloadStatus::already_marked;
+    }
+    if (job_->state != SupportBundleJobState::succeeded ||
+        job_->private_lifecycle != SupportBundlePrivateLifecycle::candidate_ready ||
+        !job_->download_available || size == 0) {
+        return SupportBundleCandidateDownloadStatus::unavailable;
+    }
+    downloaded_archive_size_ = size;
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::candidate_downloaded;
+    return SupportBundleCandidateDownloadStatus::marked;
+}
+
+SupportBundleFinalizationOutcome SupportBundleJobManager::finalize_candidate(
+    const std::string &id) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id) {
+        return {SupportBundleFinalizationStatus::malformed_or_unknown_id, std::nullopt};
+    }
+    if (job_->private_lifecycle == SupportBundlePrivateLifecycle::finalized &&
+        finalized_bundle_ && finalized_bundle_->valid()) {
+        return {SupportBundleFinalizationStatus::already_finalized, job_};
+    }
+    if (job_->case_id.empty() || job_->private_lifecycle == SupportBundlePrivateLifecycle::none) {
+        return {SupportBundleFinalizationStatus::not_private, job_};
+    }
+    if (job_->state != SupportBundleJobState::succeeded || !job_->download_available) {
+        return {SupportBundleFinalizationStatus::not_ready, job_};
+    }
+    if (job_->private_lifecycle != SupportBundlePrivateLifecycle::candidate_downloaded) {
+        return {SupportBundleFinalizationStatus::download_required, job_};
+    }
+    if (!downloaded_archive_size_) {
+        return {SupportBundleFinalizationStatus::artifact_invalid, job_};
+    }
+    std::filesystem::path archive_path;
+    std::filesystem::path checksum_path;
+    if (!safe_download_references(storage_root_, job_directory_, id,
+                                  validated_archive_filename_,
+                                  validated_checksum_filename_, archive_path,
+                                  checksum_path)) {
+        return {SupportBundleFinalizationStatus::artifact_invalid, job_};
+    }
+    struct stat archive_info {};
+    if (lstat(archive_path.c_str(), &archive_info) != 0 ||
+        !S_ISREG(archive_info.st_mode) || S_ISLNK(archive_info.st_mode) ||
+        archive_info.st_uid != geteuid() || (archive_info.st_mode & 0777) != 0600 ||
+        archive_info.st_size < 0 ||
+        static_cast<std::uint64_t>(archive_info.st_size) != *downloaded_archive_size_) {
+        return {SupportBundleFinalizationStatus::artifact_invalid, job_};
+    }
+    auto finalized = finalize_support_bundle(archive_path, validated_sha256_,
+                                              128ULL * 1024ULL * 1024ULL);
+    if (!finalized.finalized()) {
+        return {SupportBundleFinalizationStatus::artifact_invalid, job_};
+    }
+    finalized_bundle_ = std::move(finalized.bundle);
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::finalized;
+    return {SupportBundleFinalizationStatus::finalized, job_};
+}
+
 void SupportBundleJobManager::clear_current_download_locked(const std::string &id) {
     if (!job_ || job_->id != id || job_->state != SupportBundleJobState::succeeded) {
         return;
@@ -222,10 +329,12 @@ void SupportBundleJobManager::clear_current_download_locked(const std::string &i
     validated_archive_filename_.clear();
     validated_checksum_filename_.clear();
     validated_sha256_.clear();
+    downloaded_archive_size_.reset();
     download_removed_ = true;
     job_->download_available = false;
     job_->case_id.clear();
     job_->private_lifecycle = SupportBundlePrivateLifecycle::none;
+    finalized_bundle_.reset();
 }
 
 void SupportBundleJobManager::cancel_expiration_locked(const std::string &id) {

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "support_bundle_job_directory_remover.hpp"
+#include "support_bundle_private_artifact.hpp"
 
 #include <functional>
 #include <filesystem>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -14,8 +16,18 @@
 #include <vector>
 
 enum class SupportBundleJobState { queued, running, succeeded, failed };
-enum class SupportBundlePrivateLifecycle { none, candidate_ready };
-struct SupportBundleJobRequest { bool probe_i2c = false; };
+enum class SupportBundlePrivateLifecycle {
+    none,
+    collecting,
+    candidate_ready,
+    candidate_downloaded,
+    finalized,
+};
+struct SupportBundlePrivateRequest { SupportBundleContext context; };
+struct SupportBundleJobRequest {
+    bool probe_i2c = false;
+    std::optional<SupportBundlePrivateRequest> private_request;
+};
 struct SupportBundleJobSnapshot {
     std::string id;
     SupportBundleJobState state = SupportBundleJobState::queued;
@@ -59,7 +71,32 @@ struct SupportBundleDownloadReference {
     std::string expected_sha256;
 };
 struct SupportBundleExecutionResult { bool succeeded = false; std::string failure_category; std::string failure_message; };
-struct SupportBundleExecutionContext { bool probe_i2c = false; std::filesystem::path job_directory; };
+struct SupportBundleExecutionContext {
+    bool probe_i2c = false;
+    std::filesystem::path job_directory;
+    std::string case_id;
+    std::optional<SupportBundleContext> support_context;
+};
+enum class SupportBundleCandidateDownloadStatus {
+    marked,
+    already_marked,
+    malformed_or_unknown_id,
+    unavailable,
+};
+enum class SupportBundleFinalizationStatus {
+    finalized,
+    already_finalized,
+    malformed_or_unknown_id,
+    not_private,
+    not_ready,
+    download_required,
+    artifact_invalid,
+};
+struct SupportBundleFinalizationOutcome {
+    SupportBundleFinalizationStatus status =
+        SupportBundleFinalizationStatus::malformed_or_unknown_id;
+    std::optional<SupportBundleJobSnapshot> snapshot;
+};
 class SupportBundleJobExecutor {
 public:
     virtual ~SupportBundleJobExecutor() = default;
@@ -71,6 +108,7 @@ public:
     inline static constexpr std::chrono::hours kProductionRetention = std::chrono::hours(24);
     inline static constexpr std::chrono::minutes kProductionRetryDelay = std::chrono::minutes(5);
     using IdGenerator = std::function<std::string()>;
+    using CaseIdGenerator = std::function<std::optional<std::string>()>;
     using JobDirectoryRemover = std::function<SupportBundleJobDirectoryRemovalResult(
         const std::filesystem::path &, const std::string &)>;
     SupportBundleJobManager(std::shared_ptr<SupportBundleJobExecutor> executor,
@@ -78,17 +116,23 @@ public:
                             std::filesystem::path storage_root,
                             JobDirectoryRemover remover = remove_support_bundle_job_directory,
                             std::chrono::milliseconds retention = kProductionRetention,
-                            std::chrono::milliseconds retry_delay = kProductionRetryDelay);
+                            std::chrono::milliseconds retry_delay = kProductionRetryDelay,
+                            CaseIdGenerator case_ids = {});
     ~SupportBundleJobManager();
     SupportBundleJobManager(const SupportBundleJobManager &) = delete;
     std::optional<SupportBundleJobSnapshot> create(SupportBundleJobRequest request, std::string &error);
     std::optional<SupportBundleJobSnapshot> lookup(const std::string &id) const;
     SupportBundleDownloadReference download_reference(const std::string &id) const;
+    SupportBundleCandidateDownloadStatus mark_candidate_downloaded(const std::string &id,
+                                                                    std::uint64_t size);
+    SupportBundleFinalizationOutcome finalize_candidate(const std::string &id);
     SupportBundleDownloadDeletionResult delete_download(const std::string &id);
     void shutdown();
     static bool valid_id(const std::string &id);
 private:
-    void run(std::string id, bool probe_i2c, std::filesystem::path job_directory);
+    void run(std::string id, bool probe_i2c, std::filesystem::path job_directory,
+             std::string expected_case_id,
+             std::optional<SupportBundleContext> support_context);
     void expiration_loop();
     void clear_current_download_locked(const std::string &id);
     void cancel_expiration_locked(const std::string &id);
@@ -96,6 +140,7 @@ private:
                                            const std::filesystem::path &job_directory);
     std::shared_ptr<SupportBundleJobExecutor> executor_;
     IdGenerator ids_;
+    CaseIdGenerator case_ids_;
     std::filesystem::path storage_root_;
     JobDirectoryRemover remover_;
     std::chrono::milliseconds retention_;
@@ -107,7 +152,9 @@ private:
     std::string validated_archive_filename_;
     std::string validated_checksum_filename_;
     std::string validated_sha256_;
+    std::optional<std::uint64_t> downloaded_archive_size_;
     bool download_removed_ = false;
+    std::optional<FinalizedSupportBundle> finalized_bundle_;
     std::thread worker_;
     struct ExpirationEntry {
         std::string id;

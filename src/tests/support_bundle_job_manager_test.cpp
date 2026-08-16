@@ -19,6 +19,7 @@ public:
     std::filesystem::path directory;
     std::filesystem::path symlink_target;
     std::string case_id;
+    std::string digest = std::string(64, 'A');
     bool manifest_included = false;
     SupportBundleExecutionResult run(const SupportBundleExecutionContext &context) override {
         const bool requested = context.probe_i2c; directory = context.job_directory;
@@ -27,7 +28,7 @@ public:
         if (throw_exception) throw 1;
         if (cancelled) return {true, {}, {}}; // Manager must preserve cancellation over this late success.
         if (!fail && !throw_exception && mode != ResultMode::none) {
-            nlohmann::json result={{"schema_version",1},{"status","success"},{"archive_filename","WsprryPi-support-test.tar.gz"},{"sha256_filename","WsprryPi-support-test.tar.gz.sha256"},{"sha256",std::string(64,'A')},{"generated_at_utc","20260101T000000Z"},{"configuration_files_included",true},{"full_logs_included",false},{"i2c_probe_requested",probe},{"i2c_probe_status",probe?"succeeded":"skipped_by_user"},{"privileged_diagnostics_may_be_incomplete",false}};
+            nlohmann::json result={{"schema_version",1},{"status","success"},{"archive_filename","WsprryPi-support-test.tar.gz"},{"sha256_filename","WsprryPi-support-test.tar.gz.sha256"},{"sha256",digest},{"generated_at_utc","20260101T000000Z"},{"configuration_files_included",true},{"full_logs_included",false},{"i2c_probe_requested",probe},{"i2c_probe_status",probe?"succeeded":"skipped_by_user"},{"privileged_diagnostics_may_be_incomplete",false}};
             if (!case_id.empty() || manifest_included) {
                 result["case_id"] = case_id.empty() ? nlohmann::json(nullptr) : nlohmann::json(case_id);
                 result["manifest_included"] = manifest_included;
@@ -120,7 +121,7 @@ static void expect_result_failure(const std::filesystem::path &root, FakeExecuto
 int main() {
     char template_path[] = "/tmp/wsprrypi-job-manager-test.XXXXXX";
     assert(mkdtemp(template_path) != nullptr);
-    const std::filesystem::path root = template_path;
+    const std::filesystem::path root = std::filesystem::canonical(template_path);
     assert(chmod(root.c_str(), 0700) == 0);
     const auto sibling = root / id('p');
     assert(std::filesystem::create_directory(sibling));
@@ -134,8 +135,16 @@ int main() {
     auto success = std::make_shared<FakeExecutor>();
     success->case_id = "7K3M-9QFX-2DPA";
     success->manifest_included = true;
-    int generated = 0; SupportBundleJobManager manager(success, [&] { return id(generated++ == 0 ? 'a' : 'g'); }, root);
-    const auto first = manager.create({true}, error); assert(first && error.empty() && !first->download_available);
+    int generated = 0; SupportBundleJobManager manager(
+        success, [&] { return id(generated++ == 0 ? 'a' : 'g'); }, root,
+        remove_support_bundle_job_directory,
+        SupportBundleJobManager::kProductionRetention,
+        SupportBundleJobManager::kProductionRetryDelay,
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
+    SupportBundleContext issue_context;
+    issue_context.kind = SupportBundleContextKind::existing_github_issue;
+    issue_context.issue_url = "https://github.com/WsprryPi/WsprryPi/issues/414";
+    const auto first = manager.create({true, SupportBundlePrivateRequest{issue_context}}, error); assert(first && error.empty() && !first->download_available && first->case_id == "7K3M-9QFX-2DPA" && first->private_lifecycle == SupportBundlePrivateLifecycle::collecting);
     const auto queued_reference = manager.download_reference(first->id);
     assert(queued_reference.status == SupportBundleDownloadReferenceStatus::not_ready);
     assert_no_download_metadata(queued_reference);
@@ -143,7 +152,14 @@ int main() {
            SupportBundleDownloadDeletionStatus::malformed_or_unknown_id);
     assert(manager.delete_download(first->id).status ==
            SupportBundleDownloadDeletionStatus::not_terminal);
-    success->wait_entered(); struct stat job_info{}; assert(success->probe && success->directory == root / first->id && manager.lookup(first->id)->i2c_probe_status.empty() && lstat(success->directory.c_str(), &job_info) == 0 && S_ISDIR(job_info.st_mode) && (job_info.st_mode & 0777) == 0700 && manager.lookup(first->id)->state == SupportBundleJobState::running);
+    success->wait_entered(); struct stat job_info{};
+    assert(success->probe);
+    assert(success->directory == root / first->id);
+    assert(manager.lookup(first->id)->i2c_probe_status.empty());
+    assert(lstat(success->directory.c_str(), &job_info) == 0);
+    assert(S_ISDIR(job_info.st_mode));
+    assert((job_info.st_mode & 0777) == 0700);
+    assert(manager.lookup(first->id)->state == SupportBundleJobState::running);
     const auto running_reference = manager.download_reference(first->id);
     assert(running_reference.status == SupportBundleDownloadReferenceStatus::not_ready);
     assert_no_download_metadata(running_reference);
@@ -377,6 +393,97 @@ int main() {
                SupportBundleDownloadReferenceStatus::no_download);
     retry_expiry.shutdown();
 
+    const auto make_private_executor = [] {
+        auto executor = std::make_shared<FakeExecutor>();
+        executor->case_id = "7K3M-9QFX-2DPA";
+        executor->manifest_included = true;
+        executor->digest =
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        return executor;
+    };
+    SupportBundleContext lifecycle_context;
+    lifecycle_context.kind = SupportBundleContextKind::no_github;
+    lifecycle_context.problem_description = "schedule stopped";
+    lifecycle_context.contact = "radio@example.test";
+
+    auto lifecycle_executor = make_private_executor();
+    SupportBundleJobManager lifecycle(
+        lifecycle_executor, [] { return id('4'); }, root,
+        remove_support_bundle_job_directory, std::chrono::hours(1),
+        std::chrono::milliseconds(20),
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
+    const auto lifecycle_job = lifecycle.create(
+        {false, SupportBundlePrivateRequest{lifecycle_context}}, error);
+    lifecycle_executor->wait_entered();
+    lifecycle_executor->release();
+    wait_terminal(lifecycle, lifecycle_job->id);
+    const auto lifecycle_archive = root / lifecycle_job->id /
+                                   "WsprryPi-support-test.tar.gz";
+    { std::ofstream output(lifecycle_archive); output << "abc"; }
+    assert(chmod(lifecycle_archive.c_str(), 0600) == 0);
+    assert(lifecycle.lookup(lifecycle_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::candidate_ready);
+    assert(lifecycle.finalize_candidate(lifecycle_job->id).status ==
+           SupportBundleFinalizationStatus::download_required);
+    assert(lifecycle.mark_candidate_downloaded(lifecycle_job->id, 4) ==
+           SupportBundleCandidateDownloadStatus::marked);
+    assert(lifecycle.finalize_candidate(lifecycle_job->id).status ==
+           SupportBundleFinalizationStatus::artifact_invalid);
+    assert(lifecycle.lookup(lifecycle_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::candidate_downloaded);
+    assert(lifecycle.delete_download(lifecycle_job->id).status ==
+           SupportBundleDownloadDeletionStatus::removed);
+    lifecycle.shutdown();
+
+    auto finalized_executor = make_private_executor();
+    SupportBundleJobManager finalized(
+        finalized_executor, [] { return id('5'); }, root,
+        remove_support_bundle_job_directory, std::chrono::hours(1),
+        std::chrono::milliseconds(20),
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
+    const auto finalized_job = finalized.create(
+        {false, SupportBundlePrivateRequest{lifecycle_context}}, error);
+    finalized_executor->wait_entered(); finalized_executor->release();
+    wait_terminal(finalized, finalized_job->id);
+    const auto finalized_archive = root / finalized_job->id /
+                                   "WsprryPi-support-test.tar.gz";
+    { std::ofstream output(finalized_archive); output << "def"; }
+    assert(chmod(finalized_archive.c_str(), 0600) == 0);
+    assert(finalized.mark_candidate_downloaded(finalized_job->id, 3) ==
+           SupportBundleCandidateDownloadStatus::marked);
+    assert(finalized.mark_candidate_downloaded(finalized_job->id, 3) ==
+           SupportBundleCandidateDownloadStatus::already_marked);
+    assert(finalized.finalize_candidate(finalized_job->id).status ==
+           SupportBundleFinalizationStatus::artifact_invalid);
+    { std::ofstream output(finalized_archive, std::ios::trunc); output << "abc"; }
+    assert(finalized.finalize_candidate(finalized_job->id).status ==
+           SupportBundleFinalizationStatus::finalized);
+    assert(finalized.finalize_candidate(finalized_job->id).status ==
+           SupportBundleFinalizationStatus::already_finalized);
+    struct stat immutable_info {};
+    assert(lstat(finalized_archive.c_str(), &immutable_info) == 0 &&
+           (immutable_info.st_mode & 0777) == 0400);
+    assert(finalized.delete_download(finalized_job->id).status ==
+           SupportBundleDownloadDeletionStatus::removed);
+    finalized.shutdown();
+
+    auto private_expiry_executor = make_private_executor();
+    SupportBundleJobManager private_expiry(
+        private_expiry_executor, [] { return id('6'); }, root,
+        remove_support_bundle_job_directory, std::chrono::milliseconds(30),
+        std::chrono::milliseconds(20),
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
+    const auto private_expiry_job = private_expiry.create(
+        {false, SupportBundlePrivateRequest{lifecycle_context}}, error);
+    private_expiry_executor->wait_entered(); private_expiry_executor->release();
+    wait_terminal(private_expiry, private_expiry_job->id);
+    wait_for_condition([&] {
+        return !private_expiry.lookup(private_expiry_job->id)->download_available;
+    });
+    assert(private_expiry.lookup(private_expiry_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::none);
+    private_expiry.shutdown();
+
     std::atomic<int> active_cleanup_calls = 0;
     auto active_executor = std::make_shared<FakeExecutor>();
     SupportBundleJobManager active_expiry(
@@ -398,6 +505,37 @@ int main() {
     });
     assert(active_cleanup_calls.load() == 1);
     active_expiry.shutdown();
+
+    SupportBundleContext invalid_context;
+    invalid_context.kind = SupportBundleContextKind::no_github;
+    invalid_context.problem_description = "missing contact";
+    auto validation_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager context_validation(
+        validation_executor, [] { return id('2'); }, root,
+        remove_support_bundle_job_directory,
+        SupportBundleJobManager::kProductionRetention,
+        SupportBundleJobManager::kProductionRetryDelay,
+        [] { return std::optional<std::string>("7K3M-9QFX-2DPA"); });
+    assert(!context_validation.create(
+               {false, SupportBundlePrivateRequest{invalid_context}}, error) &&
+           error == "invalid_support_context");
+    context_validation.shutdown();
+
+    SupportBundleContext valid_context;
+    valid_context.kind = SupportBundleContextKind::no_github;
+    valid_context.problem_description = "schedule stopped";
+    valid_context.contact = "radio@example.test";
+    auto case_failure_executor = std::make_shared<FakeExecutor>();
+    SupportBundleJobManager case_failure(
+        case_failure_executor, [] { return id('3'); }, root,
+        remove_support_bundle_job_directory,
+        SupportBundleJobManager::kProductionRetention,
+        SupportBundleJobManager::kProductionRetryDelay,
+        [] { return std::optional<std::string>{}; });
+    assert(!case_failure.create(
+               {false, SupportBundlePrivateRequest{valid_context}}, error) &&
+           error == "case_id_generation_failed");
+    case_failure.shutdown();
 
     auto shutdown_executor = std::make_shared<FakeExecutor>();
     SupportBundleJobManager shutdown_expiry(

@@ -177,6 +177,37 @@
     background-color: color-mix(in srgb, var(--bs-body-bg) 94%, var(--bs-primary-bg-subtle) 6%);
 }
 
+.maintenance-support-setup,
+.maintenance-support-review {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-lg);
+    background-color: color-mix(in srgb, var(--bs-body-bg) 88%, var(--bs-primary-bg-subtle) 12%);
+}
+
+.maintenance-support-context {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.maintenance-support-setup .input-group,
+.maintenance-support-setup .form-control {
+    max-width: 42rem;
+}
+
+.maintenance-support-steps {
+    display: grid;
+    gap: 0.4rem;
+    padding-left: 1.35rem;
+    color: var(--bs-secondary-color);
+}
+
 .maintenance-support-status {
     width: fit-content;
     max-width: 100%;
@@ -323,6 +354,10 @@
     .maintenance-utility__grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: stretch;
+    }
+
+    .maintenance-pane--support {
+        grid-column: 1 / -1;
     }
 }
 

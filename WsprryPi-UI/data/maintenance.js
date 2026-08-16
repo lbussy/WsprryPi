@@ -280,15 +280,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const createSupportBundleButton = document.getElementById("createSupportBundleButton");
     const confirmCreateSupportBundleButton = document.getElementById("confirmCreateSupportBundleButton");
+    const cancelCreateSupportBundleButton = document.getElementById("cancelCreateSupportBundleButton");
     const downloadSupportBundleButton = document.getElementById("downloadSupportBundleButton");
+    const finalizeSupportBundleButton = document.getElementById("finalizeSupportBundleButton");
     const deleteSupportBundleButton = document.getElementById("deleteSupportBundleButton");
     const supportBundleProbeI2c = document.getElementById("supportBundleProbeI2c");
     const supportBundleStatus = document.getElementById("supportBundleStatus");
     const supportBundleAlert = document.getElementById("supportBundleAlert");
-    const supportBundleModalElement = document.getElementById("supportBundleModal");
-    const supportBundleModal = supportBundleModalElement
-        ? bootstrap.Modal.getOrCreateInstance(supportBundleModalElement)
-        : null;
+    const supportBundleSetup = document.getElementById("supportBundleSetup");
+    const supportBundleReview = document.getElementById("supportBundleReview");
+    const supportBundleCaseId = document.getElementById("supportBundleCaseId");
+    const supportBundleReviewConsent = document.getElementById("supportBundleReviewConsent");
+    const supportBundleReviewed = document.getElementById("supportBundleReviewed");
+    const supportBundleExistingIssueFields = document.getElementById("supportBundleExistingIssueFields");
+    const supportBundleDescriptionFields = document.getElementById("supportBundleDescriptionFields");
+    const supportBundleIssueNumber = document.getElementById("supportBundleIssueNumber");
+    const supportBundleProblemDescription = document.getElementById("supportBundleProblemDescription");
+    const supportBundleContact = document.getElementById("supportBundleContact");
+    const supportBundleIssueNumberError = document.getElementById("supportBundleIssueNumberError");
+    const supportBundleProblemDescriptionError = document.getElementById("supportBundleProblemDescriptionError");
+    const supportBundleContactError = document.getElementById("supportBundleContactError");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -296,27 +307,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportBundleCreateInFlight = false;
     let supportBundleDownloadInFlight = false;
     let supportBundleDeleteInFlight = false;
+    let supportBundleFinalizeInFlight = false;
     let supportBundlePageUnloading = false;
-    let supportBundleModalOpener = null;
-
-    function isSupportBundleFocusTarget(element) {
-        return element instanceof HTMLElement &&
-            element.isConnected &&
-            !element.matches(":disabled") &&
-            element.getAttribute("aria-disabled") !== "true" &&
-            element.tabIndex >= 0;
-    }
-
-    function restoreSupportBundleModalFocus() {
-        const opener = isSupportBundleFocusTarget(supportBundleModalOpener)
-            ? supportBundleModalOpener
-            : createSupportBundleButton;
-        supportBundleModalOpener = null;
-
-        if (isSupportBundleFocusTarget(opener)) {
-            opener.focus({ preventScroll: true });
-        }
-    }
+    let supportBundleDownloaded = false;
+    let supportBundleFinalized = false;
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -349,22 +343,77 @@ document.addEventListener("DOMContentLoaded", () => {
         supportBundleAlert.classList.remove("d-none");
     }
 
+    function selectedSupportContextKind() {
+        return document.querySelector('input[name="supportBundleContextKind"]:checked')?.value ||
+            "existing_github_issue";
+    }
+
+    function updateSupportContextFields() {
+        const existing = selectedSupportContextKind() === "existing_github_issue";
+        supportBundleExistingIssueFields.classList.toggle("d-none", !existing);
+        supportBundleDescriptionFields.classList.toggle("d-none", existing);
+        supportBundleIssueNumber.disabled = !existing;
+        supportBundleProblemDescription.disabled = existing;
+        supportBundleContact.disabled = existing;
+    }
+
+    function clearSupportContextErrors() {
+        supportBundleIssueNumberError.textContent = "";
+        supportBundleProblemDescriptionError.textContent = "";
+        supportBundleContactError.textContent = "";
+    }
+
+    function normalizedOneLine(value) {
+        return value.replace(/\s+/gu, " ").trim();
+    }
+
+    function supportContextPayload() {
+        clearSupportContextErrors();
+        const kind = selectedSupportContextKind();
+        if (kind === "existing_github_issue") {
+            const issueNumber = supportBundleIssueNumber.value.trim();
+            if (!/^[1-9][0-9]{0,9}$/.test(issueNumber)) {
+                supportBundleIssueNumberError.textContent = "Enter a valid WsprryPi issue number.";
+                supportBundleIssueNumber.focus();
+                return null;
+            }
+            return {
+                kind,
+                issue_url: `https://github.com/WsprryPi/WsprryPi/issues/${issueNumber}`
+            };
+        }
+        const problemDescription = normalizedOneLine(supportBundleProblemDescription.value);
+        const contact = normalizedOneLine(supportBundleContact.value);
+        if (!problemDescription) {
+            supportBundleProblemDescriptionError.textContent = "Describe the problem before collecting diagnostics.";
+            supportBundleProblemDescription.focus();
+            return null;
+        }
+        if (!contact) {
+            supportBundleContactError.textContent = "Provide contact information for maintainer follow-up.";
+            supportBundleContact.focus();
+            return null;
+        }
+        return { kind, problem_description: problemDescription, contact };
+    }
+
     function setSupportBundleActions() {
         const hasReadyDownload = supportBundleJobId !== "" &&
             downloadSupportBundleButton.dataset.available === "true";
         createSupportBundleButton.disabled = supportBundleCreateInFlight ||
             supportBundleDownloadInFlight || supportBundleDeleteInFlight ||
+            supportBundleFinalizeInFlight ||
             (supportBundleJobId !== "" && supportBundlePollTimer !== null);
         downloadSupportBundleButton.disabled = !hasReadyDownload || supportBundleDownloadInFlight;
-        deleteSupportBundleButton.disabled = !hasReadyDownload || supportBundleDeleteInFlight;
+        deleteSupportBundleButton.disabled = supportBundleJobId === "" || supportBundleDeleteInFlight;
+        finalizeSupportBundleButton.disabled = !supportBundleDownloaded ||
+            !supportBundleReviewed.checked || supportBundleFinalizeInFlight || supportBundleFinalized;
     }
 
     function setDownloadAvailability(available) {
         downloadSupportBundleButton.dataset.available = available ? "true" : "false";
         downloadSupportBundleButton.classList.toggle("d-none", !available);
-        if (!available) {
-            deleteSupportBundleButton.classList.add("d-none");
-        }
+        deleteSupportBundleButton.classList.toggle("d-none", supportBundleJobId === "");
         setSupportBundleActions();
     }
 
@@ -386,7 +435,8 @@ document.addEventListener("DOMContentLoaded", () => {
             collect: "Support bundle collection did not complete. Try again when the controller is available.",
             status: "Support bundle status could not be checked. Try again shortly.",
             download: "The support bundle could not be downloaded. Try the download again.",
-            delete: "The Pi-side support bundle could not be removed. Your downloaded file is safe; the Pi-side copy will expire automatically within 24 hours."
+            delete: "The Pi-side support bundle could not be removed. Your downloaded file is safe; the Pi-side copy will expire automatically within 24 hours.",
+            finalize: "The reviewed candidate could not be finalized. The readable archive remains available; verify it has not changed and try again."
         };
         return messages[action] || "The support bundle operation did not complete. Try again.";
     }
@@ -431,7 +481,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             stopSupportBundlePolling();
             if (snapshot.state === "succeeded" && snapshot.download_available === true) {
-                setSupportBundleStatus("ready", "Support bundle ready to download.");
+                if (typeof snapshot.case_id === "string") {
+                    supportBundleCaseId.textContent = snapshot.case_id;
+                }
+                supportBundleReview.classList.remove("d-none");
+                setSupportBundleStatus("ready", "Readable candidate ready. Download and inspect it locally.");
                 setDownloadAvailability(true);
                 return;
             }
@@ -456,12 +510,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         supportBundleCreateInFlight = true;
         clearSupportBundleAlert();
+        const supportContext = supportContextPayload();
+        if (!supportContext) {
+            supportBundleCreateInFlight = false;
+            setSupportBundleActions();
+            return;
+        }
         setSupportBundleActions();
         try {
             const response = await fetchWithEndpointFallback(SUPPORT_BUNDLES_ENDPOINT, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ probe_i2c: supportBundleProbeI2c.checked })
+                body: JSON.stringify({
+                    probe_i2c: supportBundleProbeI2c.checked,
+                    support_context: supportContext
+                })
             });
             if (!response.ok) {
                 throw new Error("create request failed");
@@ -471,9 +534,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error("missing job id");
             }
             supportBundleJobId = snapshot.id;
+            supportBundleCaseId.textContent = typeof snapshot.case_id === "string"
+                ? snapshot.case_id : "Pending";
+            supportBundleSetup.classList.add("d-none");
+            supportBundleReview.classList.remove("d-none");
+            createSupportBundleButton.classList.add("d-none");
+            deleteSupportBundleButton.classList.remove("d-none");
             setDownloadAvailability(false);
-            supportBundleModal.hide();
-            setSupportBundleStatus("queued", "Support bundle queued.");
+            setSupportBundleStatus("queued", "Private support candidate queued.");
             scheduleSupportBundlePoll(supportBundleJobId);
         } catch {
             setSupportBundleStatus("failed", "Support bundle was not created.");
@@ -499,11 +567,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function deleteSupportBundle(jobId, afterDownload = false, filename = "") {
+    function resetSupportBundleWorkflow() {
+        supportBundleJobId = "";
+        supportBundleDownloaded = false;
+        supportBundleFinalized = false;
+        supportBundleReviewed.checked = false;
+        supportBundleReviewed.disabled = false;
+        supportBundleReview.classList.add("d-none");
+        supportBundleReviewConsent.classList.add("d-none");
+        finalizeSupportBundleButton.classList.add("d-none");
+        createSupportBundleButton.classList.remove("d-none");
+        setDownloadAvailability(false);
+    }
+
+    async function deleteSupportBundle(jobId) {
         if (supportBundleDeleteInFlight || jobId !== supportBundleJobId) {
             return false;
         }
         supportBundleDeleteInFlight = true;
+        const downloadWasAvailable = downloadSupportBundleButton.dataset.available === "true";
         setSupportBundleActions();
         try {
             const response = await fetchWithEndpointFallback(
@@ -515,22 +597,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             setDownloadAvailability(false);
             deleteSupportBundleButton.classList.add("d-none");
-            supportBundleJobId = "";
-            setSupportBundleStatus(
-                "deleted",
-                afterDownload
-                    ? `Downloaded: ${filename}. Your browser chose the save location. Review the archive for sensitive information, then attach it to the relevant GitHub issue.`
-                    : "The Pi-side support bundle was deleted."
-            );
+            resetSupportBundleWorkflow();
+            setSupportBundleStatus("deleted", "The Pi-side support candidate was deleted. Any browser download remains under your control.");
             return true;
         } catch {
-            setDownloadAvailability(true);
+            setDownloadAvailability(downloadWasAvailable);
             deleteSupportBundleButton.classList.remove("d-none");
             setSupportBundleStatus(
                 "cleanup-pending",
-                afterDownload
-                    ? `Downloaded: ${filename}. Your browser chose the save location. The downloaded file is safe; the Pi-side copy will expire automatically within 24 hours.`
-                    : "The Pi-side support bundle is still retained."
+                "The Pi-side support candidate is still retained and will expire automatically within 24 hours."
             );
             showSupportBundleAlert(genericSupportBundleFailure("delete"));
             return false;
@@ -564,7 +639,10 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             const filename = safeSupportBundleFilename(response.headers.get("Content-Disposition"));
             invokeBrowserDownload(blob, filename);
-            await deleteSupportBundle(jobId, true, filename);
+            supportBundleDownloaded = true;
+            supportBundleReviewConsent.classList.remove("d-none");
+            finalizeSupportBundleButton.classList.remove("d-none");
+            setSupportBundleStatus("downloaded", `Downloaded: ${filename}. Your browser chose the save location. Open and review it before approval.`);
         } catch {
             setSupportBundleStatus("failed", "Support bundle download did not complete.");
             showSupportBundleAlert(genericSupportBundleFailure("download"));
@@ -574,20 +652,60 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    supportBundleModalElement?.addEventListener("hidden.bs.modal", restoreSupportBundleModalFocus);
+    async function finalizeSupportBundle() {
+        if (supportBundleFinalizeInFlight || !supportBundleDownloaded ||
+            !supportBundleReviewed.checked || supportBundleJobId === "") return;
+        supportBundleFinalizeInFlight = true;
+        clearSupportBundleAlert();
+        setSupportBundleStatus("finalizing", "Finalizing the exact reviewed candidate bytes.");
+        setSupportBundleActions();
+        try {
+            const response = await fetchWithEndpointFallback(
+                supportBundleEndpoint(`/${encodeURIComponent(supportBundleJobId)}/finalize`),
+                { method: "POST" }
+            );
+            if (!response.ok) throw new Error("finalize request failed");
+            const snapshot = await response.json();
+            if (snapshot.workflow_state !== "finalized") throw new Error("finalize state missing");
+            supportBundleFinalized = true;
+            supportBundleReviewed.disabled = true;
+            finalizeSupportBundleButton.classList.add("d-none");
+            setSupportBundleStatus("finalized", "Reviewed candidate finalized. These exact bytes are immutable and retained on the Pi for encryption.");
+        } catch {
+            setSupportBundleStatus("failed", "Candidate finalization did not complete.");
+            showSupportBundleAlert(genericSupportBundleFailure("finalize"));
+        } finally {
+            supportBundleFinalizeInFlight = false;
+            setSupportBundleActions();
+        }
+    }
 
-    createSupportBundleButton.addEventListener("click", (event) => {
+    document.querySelectorAll('input[name="supportBundleContextKind"]').forEach((control) => {
+        control.addEventListener("change", updateSupportContextFields);
+    });
+    supportBundleReviewed.addEventListener("change", setSupportBundleActions);
+    createSupportBundleButton.addEventListener("click", () => {
         if (!supportBundleCreateInFlight && supportBundleJobId === "") {
             clearSupportBundleAlert();
-            supportBundleModalOpener = event.currentTarget;
-            supportBundleModal.show();
+            clearSupportContextErrors();
+            supportBundleSetup.classList.remove("d-none");
+            createSupportBundleButton.classList.add("d-none");
+            updateSupportContextFields();
+            supportBundleIssueNumber.focus();
         }
+    });
+    cancelCreateSupportBundleButton.addEventListener("click", () => {
+        supportBundleSetup.classList.add("d-none");
+        createSupportBundleButton.classList.remove("d-none");
+        createSupportBundleButton.focus();
     });
     confirmCreateSupportBundleButton.addEventListener("click", createSupportBundle);
     downloadSupportBundleButton.addEventListener("click", downloadSupportBundle);
+    finalizeSupportBundleButton.addEventListener("click", finalizeSupportBundle);
     deleteSupportBundleButton.addEventListener("click", () => {
         deleteSupportBundle(supportBundleJobId);
     });
+    updateSupportContextFields();
     window.addEventListener("pagehide", () => {
         supportBundlePageUnloading = true;
         stopSupportBundlePolling();

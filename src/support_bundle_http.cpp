@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 namespace {
-constexpr std::size_t kMaximumRequestBodyBytes = 1024;
+constexpr std::size_t kMaximumRequestBodyBytes = 8192;
 constexpr std::size_t kDownloadReadBufferBytes = 64 * 1024;
 
 void remove_permissive_cors_headers(httplib::Response &response) {
@@ -111,8 +111,19 @@ const char *state_name(SupportBundleJobState state) {
     return "failed";
 }
 
+const char *private_state_name(SupportBundlePrivateLifecycle state) {
+    switch (state) {
+    case SupportBundlePrivateLifecycle::collecting: return "collecting";
+    case SupportBundlePrivateLifecycle::candidate_ready: return "candidate_ready";
+    case SupportBundlePrivateLifecycle::candidate_downloaded: return "candidate_downloaded";
+    case SupportBundlePrivateLifecycle::finalized: return "finalized";
+    case SupportBundlePrivateLifecycle::none: break;
+    }
+    return "";
+}
+
 nlohmann::json snapshot_json(const SupportBundleJobSnapshot &snapshot) {
-    return {
+    nlohmann::json output = {
         {"id", snapshot.id},
         {"state", state_name(snapshot.state)},
         {"probe_i2c_requested", snapshot.probe_i2c_requested},
@@ -121,6 +132,11 @@ nlohmann::json snapshot_json(const SupportBundleJobSnapshot &snapshot) {
         {"failure_message", snapshot.failure_message},
         {"download_available", snapshot.download_available},
     };
+    if (snapshot.private_lifecycle != SupportBundlePrivateLifecycle::none) {
+        output["case_id"] = snapshot.case_id;
+        output["workflow_state"] = private_state_name(snapshot.private_lifecycle);
+    }
+    return output;
 }
 
 std::string attachment_disposition(const std::string &basename) {
@@ -194,16 +210,54 @@ void register_support_bundle_http_routes(
         }
 
         bool probe_i2c = false;
+        std::optional<SupportBundlePrivateRequest> private_request;
         for (const auto &[key, value] : body.items()) {
-            if (key != "probe_i2c" || !value.is_boolean()) {
+            if (key == "probe_i2c" && value.is_boolean()) {
+                probe_i2c = value.get<bool>();
+                continue;
+            }
+            if (key != "support_context" || !value.is_object() || private_request) {
                 set_error(response, 400, "invalid_request");
                 return;
             }
-            probe_i2c = value.get<bool>();
+            SupportBundleContext context;
+            const auto &context_json = value;
+            if (!context_json.contains("kind") || !context_json["kind"].is_string()) {
+                set_error(response, 400, "invalid_request"); return;
+            }
+            const std::string kind = context_json["kind"].get<std::string>();
+            if (kind == "existing_github_issue") {
+                context.kind = SupportBundleContextKind::existing_github_issue;
+                if (context_json.size() != 2 || !context_json.contains("issue_url") ||
+                    !context_json["issue_url"].is_string()) {
+                    set_error(response, 400, "invalid_request"); return;
+                }
+                context.issue_url = context_json["issue_url"].get<std::string>();
+            } else if (kind == "new_github_issue" || kind == "no_github") {
+                context.kind = kind == "new_github_issue"
+                                   ? SupportBundleContextKind::new_github_issue
+                                   : SupportBundleContextKind::no_github;
+                if (context_json.size() != 3 ||
+                    !context_json.contains("problem_description") ||
+                    !context_json["problem_description"].is_string() ||
+                    !context_json.contains("contact") ||
+                    !context_json["contact"].is_string()) {
+                    set_error(response, 400, "invalid_request"); return;
+                }
+                context.problem_description =
+                    context_json["problem_description"].get<std::string>();
+                context.contact = context_json["contact"].get<std::string>();
+            } else {
+                set_error(response, 400, "invalid_request"); return;
+            }
+            if (!valid_support_bundle_context(context)) {
+                set_error(response, 400, "invalid_request"); return;
+            }
+            private_request = SupportBundlePrivateRequest{std::move(context)};
         }
 
         std::string error;
-        const auto snapshot = manager.create({probe_i2c}, error);
+        const auto snapshot = manager.create({probe_i2c, std::move(private_request)}, error);
         if (!snapshot) {
             if (error == "job_active") {
                 set_error(response, 409, "job_active");
@@ -215,6 +269,34 @@ void register_support_bundle_http_routes(
             return;
         }
         set_json(response, 202, snapshot_json(*snapshot));
+    });
+
+    server.Post(R"(/api/support-bundles/(.*)/finalize)",
+                [&manager, guard](const httplib::Request &request,
+                                  httplib::Response &response) {
+        if (!guard(request, response)) return;
+        if (!request.body.empty()) { set_error(response, 400, "invalid_request"); return; }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        if (!SupportBundleJobManager::valid_id(id)) {
+            set_error(response, 404, "not_found"); return;
+        }
+        const auto outcome = manager.finalize_candidate(id);
+        switch (outcome.status) {
+        case SupportBundleFinalizationStatus::finalized:
+        case SupportBundleFinalizationStatus::already_finalized:
+            set_json(response, 200, snapshot_json(*outcome.snapshot)); return;
+        case SupportBundleFinalizationStatus::malformed_or_unknown_id:
+            set_error(response, 404, "not_found"); return;
+        case SupportBundleFinalizationStatus::not_private:
+            set_error(response, 409, "not_private"); return;
+        case SupportBundleFinalizationStatus::not_ready:
+            set_error(response, 409, "not_ready"); return;
+        case SupportBundleFinalizationStatus::download_required:
+            set_error(response, 409, "download_required"); return;
+        case SupportBundleFinalizationStatus::artifact_invalid:
+            set_error(response, 409, "artifact_invalid"); return;
+        }
+        set_error(response, 500, "internal_error");
     });
 
     server.Get(R"(/api/support-bundles/(.*)/download)",
@@ -277,7 +359,9 @@ void register_support_bundle_http_routes(
                 return read_count > 0 &&
                        sink.write(buffer.data(), static_cast<std::size_t>(read_count));
             },
-            [download](bool) {});
+            [&manager, id, download](bool success) {
+                if (success) (void)manager.mark_candidate_downloaded(id, download->size());
+            });
     });
 
     server.Delete(R"(/api/support-bundles/(.*))", [&manager, guard](const httplib::Request &request,

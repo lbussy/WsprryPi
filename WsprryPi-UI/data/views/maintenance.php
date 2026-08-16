@@ -142,7 +142,7 @@ require __DIR__ . '/../card_header.php';
                             aria-labelledby="supportBundlePanelTitle">
                             <h2 id="supportBundlePanelTitle" class="maintenance-section-title h5 mb-0">Support Bundle</h2>
                             <p class="maintenance-pane__body mb-0">
-                                Collect a diagnostic archive to review and attach to the relevant GitHub issue. Bundles can contain sensitive information.
+                                Create a private diagnostic candidate, download the readable archive, and review it before approving the exact bytes for encryption.
                             </p>
                             <div
                                 id="supportBundleStatus"
@@ -158,12 +158,76 @@ require __DIR__ . '/../card_header.php';
                                 aria-live="assertive"
                                 aria-atomic="true">
                             </div>
+                            <section id="supportBundleSetup" class="maintenance-support-setup d-none" aria-labelledby="supportBundleSetupTitle">
+                                <h3 id="supportBundleSetupTitle" class="h6 mb-0">Describe the support request</h3>
+                                <fieldset class="maintenance-support-context">
+                                    <legend class="form-label mb-2">Issue correlation</legend>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="supportBundleContextKind" id="supportBundleExistingIssue" value="existing_github_issue" checked>
+                                        <label class="form-check-label" for="supportBundleExistingIssue">I already have a WsprryPi GitHub issue</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="supportBundleContextKind" id="supportBundleNewIssue" value="new_github_issue">
+                                        <label class="form-check-label" for="supportBundleNewIssue">I will create a GitHub issue after collection</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="supportBundleContextKind" id="supportBundleNoGithub" value="no_github">
+                                        <label class="form-check-label" for="supportBundleNoGithub">I am not using GitHub</label>
+                                    </div>
+                                </fieldset>
+                                <div id="supportBundleExistingIssueFields">
+                                    <label class="form-label" for="supportBundleIssueNumber">Existing issue number</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">#</span>
+                                        <input id="supportBundleIssueNumber" class="form-control" inputmode="numeric" pattern="[1-9][0-9]*" maxlength="10" aria-describedby="supportBundleIssueNumberHelp supportBundleIssueNumberError">
+                                    </div>
+                                    <div id="supportBundleIssueNumberHelp" class="form-text">Enter the number from github.com/WsprryPi/WsprryPi/issues.</div>
+                                    <div id="supportBundleIssueNumberError" class="invalid-feedback d-block" role="alert"></div>
+                                </div>
+                                <div id="supportBundleDescriptionFields" class="d-none">
+                                    <label class="form-label" for="supportBundleProblemDescription">Problem description</label>
+                                    <textarea id="supportBundleProblemDescription" class="form-control" rows="3" maxlength="4096" aria-describedby="supportBundleProblemDescriptionHelp supportBundleProblemDescriptionError"></textarea>
+                                    <div id="supportBundleProblemDescriptionHelp" class="form-text">Describe what happened, what you expected, and when it occurred.</div>
+                                    <div id="supportBundleProblemDescriptionError" class="invalid-feedback d-block" role="alert"></div>
+                                    <label class="form-label mt-3" for="supportBundleContact">Contact information</label>
+                                    <input id="supportBundleContact" class="form-control" maxlength="512" autocomplete="email" aria-describedby="supportBundleContactHelp supportBundleContactError">
+                                    <div id="supportBundleContactHelp" class="form-text">Provide a method the maintainer can use to follow up. Identity is not verified.</div>
+                                    <div id="supportBundleContactError" class="invalid-feedback d-block" role="alert"></div>
+                                </div>
+                                <div class="form-check">
+                                    <input id="supportBundleProbeI2c" class="form-check-input" type="checkbox" aria-describedby="supportBundleProbeI2cHelp">
+                                    <label class="form-check-label" for="supportBundleProbeI2c">Actively probe I²C bus 1</label>
+                                    <div id="supportBundleProbeI2cHelp" class="form-text">Optional: runs <code>i2cdetect -y 1</code> against attached I²C devices.</div>
+                                </div>
+                                <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                    <button id="confirmCreateSupportBundleButton" type="button" class="btn btn-primary">Create readable candidate</button>
+                                    <button id="cancelCreateSupportBundleButton" type="button" class="btn btn-outline-secondary">Cancel</button>
+                                </div>
+                            </section>
+                            <section id="supportBundleReview" class="maintenance-support-review d-none" aria-labelledby="supportBundleReviewTitle">
+                                <div>
+                                    <h3 id="supportBundleReviewTitle" class="h6 mb-1">Review candidate</h3>
+                                    <p class="mb-0">Case ID: <strong id="supportBundleCaseId" class="font-monospace"></strong></p>
+                                </div>
+                                <ol class="maintenance-support-steps mb-0">
+                                    <li>Download the readable <code>.tar.gz</code> archive.</li>
+                                    <li>Open it locally and inspect the manifest and diagnostic files.</li>
+                                    <li>Delete and recollect if anything should not be shared.</li>
+                                </ol>
+                                <div id="supportBundleReviewConsent" class="form-check d-none">
+                                    <input id="supportBundleReviewed" class="form-check-input" type="checkbox">
+                                    <label class="form-check-label" for="supportBundleReviewed">I reviewed this candidate and approve these exact bytes for encryption.</label>
+                                </div>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
-                                    Create Support Bundle
+                                    Start support bundle
                                 </button>
                                 <button id="downloadSupportBundleButton" type="button" class="btn btn-outline-primary d-none" disabled>
-                                    Download support bundle
+                                    Download readable candidate
+                                </button>
+                                <button id="finalizeSupportBundleButton" type="button" class="btn btn-primary d-none" disabled>
+                                    Approve reviewed candidate
                                 </button>
                                 <button id="deleteSupportBundleButton" type="button" class="btn btn-outline-danger d-none" disabled>
                                     Delete from Pi
@@ -175,48 +239,6 @@ require __DIR__ . '/../card_header.php';
             </div>
 
             <div id="maintenanceOverlay" class="maintenance-overlay d-none"></div>
-
-            <div
-                class="modal fade"
-                id="supportBundleModal"
-                tabindex="-1"
-                aria-labelledby="supportBundleModalLabel"
-                aria-describedby="supportBundleModalDescription"
-                aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3 class="modal-title h5" id="supportBundleModalLabel">Create Support Bundle</h3>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p id="supportBundleModalDescription">
-                                Wsprry Pi will collect diagnostic information into an archive. Support bundles can contain sensitive information, so review the archive before sharing it.
-                            </p>
-                            <p class="mb-3">
-                                Passive I²C information is included in normal collection.
-                            </p>
-                            <div class="form-check">
-                                <input
-                                    id="supportBundleProbeI2c"
-                                    class="form-check-input"
-                                    type="checkbox"
-                                    aria-describedby="supportBundleProbeI2cHelp">
-                                <label class="form-check-label" for="supportBundleProbeI2c">
-                                    Actively probe I²C bus 1
-                                </label>
-                                <div id="supportBundleProbeI2cHelp" class="form-text">
-                                    Enabling this runs <code>i2cdetect -y 1</code> and actively probes I²C bus 1.
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button id="confirmCreateSupportBundleButton" type="button" class="btn btn-primary">Create Support Bundle</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <div
                 class="modal fade"

@@ -114,7 +114,8 @@ SupportBundleDownloadFileResult open_support_bundle_download_file(
     if (opened_info.st_uid != geteuid()) {
         return fail_after_open(SupportBundleDownloadFileFailure::ownership_mismatch);
     }
-    if ((opened_info.st_mode & 07777) != 0600) {
+    const mode_t mode = opened_info.st_mode & 07777;
+    if (mode != 0600 && mode != 0400) {
         return fail_after_open(SupportBundleDownloadFileFailure::mode_mismatch);
     }
     if (opened_info.st_size <= 0) {

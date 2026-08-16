@@ -1578,7 +1578,11 @@ int main()
         "maintenance view must split Utility into side-by-side Test Tone and Update Check panels, keep Test Tone left-aligned, expose update-check panel hooks and controls, show user-facing summary text, and keep technical details collapsed by default");
     require(
         maintenance_source.find("id=\"supportBundlePanel\"") != std::string::npos &&
-            maintenance_source.find("id=\"supportBundleModal\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleSetup\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleModal\"") == std::string::npos &&
+            maintenance_source.find("id=\"supportBundleExistingIssue\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleNewIssue\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportBundleNoGithub\"") != std::string::npos &&
             maintenance_source.find("id=\"supportBundleProbeI2c\"") != std::string::npos &&
             maintenance_source.find("aria-describedby=\"supportBundleProbeI2cHelp\"") != std::string::npos &&
             maintenance_source.find("i2cdetect -y 1") != std::string::npos &&
@@ -1586,18 +1590,19 @@ int main()
             maintenance_source.find("id=\"supportBundleStatus\"") != std::string::npos &&
             maintenance_source.find("aria-live=\"polite\"") != std::string::npos &&
             maintenance_source.find("id=\"supportBundleAlert\"") != std::string::npos &&
-            maintenance_script_source.find("JSON.stringify({ probe_i2c: supportBundleProbeI2c.checked })") != std::string::npos &&
+            maintenance_script_source.find("support_context: supportContext") != std::string::npos &&
             maintenance_script_source.find("await response.blob();") != std::string::npos &&
             maintenance_script_source.find("if (blob.size === 0 || jobId !== supportBundleJobId)") != std::string::npos &&
-            maintenance_script_source.find("invokeBrowserDownload(blob, filename);\n            await deleteSupportBundle(jobId, true, filename);") != std::string::npos &&
+            maintenance_script_source.find("supportBundleDownloaded = true") != std::string::npos &&
+            maintenance_script_source.find("/finalize`") != std::string::npos &&
             maintenance_script_source.find("safeSupportBundleFilename") != std::string::npos &&
             maintenance_script_source.find("SUPPORT_BUNDLE_FILENAME_FALLBACK") != std::string::npos &&
             maintenance_script_source.find("Your browser chose the save location") != std::string::npos &&
             maintenance_script_source.find("will expire automatically within 24 hours") != std::string::npos &&
             maintenance_script_source.find("supportBundleDownloadInFlight") != std::string::npos &&
             maintenance_script_source.find("stopSupportBundlePolling();") != std::string::npos &&
-            maintenance_script_source.find("upload") == std::string::npos,
-        "Support Bundle UI must keep active I2C probing opt-in, receive the full Blob before deletion, avoid path claims or uploads, and retain accessible retry-safe status handling");
+            maintenance_script_source.find("Dropbox") == std::string::npos,
+        "Support Bundle UI must collect issue context inline, keep active I2C probing opt-in, receive the full Blob before review finalization, avoid path claims or uploads, and retain accessible retry-safe status handling");
 
     const std::string maintenance_test_tone_script_source =
         read_repo_text_file("/WsprryPi-UI/data/maintenance.js");
