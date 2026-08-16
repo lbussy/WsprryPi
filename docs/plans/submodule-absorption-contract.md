@@ -129,6 +129,17 @@ Exclude:
 
 Document every exclusion.
 
+Two currently tracked paths require deliberate, documented treatment:
+
+- retain `WsprryPi-UI/.impeccable/design.json` because it is the UI's intentional
+  tracked design-system definition and is required by the repository's UI review
+  workflow;
+- exclude the empty `src/WSPR-Transmitter/src/.codex` file because it is local
+  tool-state residue rather than product content.
+
+Do not generalize either decision to similarly named paths without inspecting
+their tracked contents and history.
+
 ## Component Reuse Requirements
 
 ### `LCBLog`
@@ -165,6 +176,71 @@ hierarchy, and available standalone build, test, or demonstration assets. Do not
 refactor, format, modernize, or otherwise change component contents during
 absorption.
 
+#### `INI-Handler`
+
+- preserve `test/test.ini`, the standalone `main.cpp`, atomic file-update
+  behavior, and the dual stock/live file contract;
+- exclude ignored `src/build/` artifacts;
+- run standalone tests against temporary copies of INI fixtures so validation
+  cannot modify tracked files.
+
+#### `Mailbox`
+
+- preserve `bcm_model.hpp`, `mailbox.cpp`, `mailbox.hpp`, the standalone demo,
+  and build entry point;
+- review and correct active README instructions that still describe submodule
+  installation or files no longer present in the imported tree;
+- record both the component MIT license and any still-applicable Broadcom BSD
+  attribution described by the component documentation;
+- compile during ordinary non-hardware validation, but do not execute privileged
+  `/dev/mem` or `/dev/vcio` paths without separate hardware authorization.
+
+#### `MonitorFile`
+
+- preserve the header-only library, standalone demo, and build entry point;
+- run its file-change test in a temporary directory because the demonstration
+  creates and modifies a test file;
+- replace active standalone-clone instructions with truthful monorepo and
+  extraction guidance.
+
+#### `PPM-Manager`
+
+- preserve `PPM_Weighting_Discussion.md`, the provider-neutral snapshot API,
+  standalone demo, and build entry point;
+- exclude ignored `src/build/` artifacts;
+- validate provider-unavailable and safe provider-neutral behavior without
+  installing, starting, stopping, or reconfiguring chrony;
+- replace active instructions that describe the component as a submodule.
+
+#### `Signal-Handler`
+
+- preserve the signal-thread API, standalone demo, and build entry point;
+- use bounded callback and shutdown tests that require neither `sudo` nor
+  real-time scheduler changes and do not send uncontrolled signals to unrelated
+  processes.
+
+#### `Singleton`
+
+- preserve the header-only library, standalone demo, and fixed-name Makefile;
+- validate first-instance success and second-instance rejection with a
+  temporary available UDP port.
+
+#### `WSPR-Transmitter`
+
+- preserve `external/`, all public interfaces, standalone build files, backend
+  contract tests, fake-device tests, and guarded qualification sources;
+- exclude ignored build output and the empty tracked `src/.codex` file;
+- preserve the distinction among simulated, fake-I2C, fake-GPIO, guarded live
+  qualification, and production physical-backend paths;
+- port the component's Debian backend-contract workflow to the parent workflow
+  directory or provide demonstrably equivalent parent CI coverage;
+- ordinary migration validation may run simulator, planner, fake-I2C,
+  fake-GPIO, startup-quiesce, and controller-contract tests only after their
+  targets have been inspected;
+- do not run generic `make test`, `watchdog`, `gdb`, live qualification
+  executables, privileged backends, or physical-device paths as migration
+  validation.
+
 ### `WsprryPi-UI`
 
 Keep `WsprryPi-UI` at its existing path as a coherent first-party UI component.
@@ -178,6 +254,26 @@ Preserve:
 
 Do not change UI appearance, wording, navigation, validation, persistence, or
 behavior. The migration is not a UI design task.
+
+Retain the tracked `.impeccable/design.json` design-system definition. Run the
+existing UI suite, parent source-integration coverage, and deployment-copy
+comparison. Because this migration affects the tracked UI component, follow the
+root `AGENTS.md` Impeccable workflow and render and inspect applicable desktop
+and mobile views, even though no visual change is intended.
+
+### Standalone component naming
+
+Before absorption, several standalone Makefiles derive their project and output
+names from the component repository's `remote.origin.url`. After absorption,
+that lookup resolves to the parent `WsprryPi` remote and can silently rename or
+collide component binaries.
+
+Inspect every retained standalone build entry point. Where output naming depends
+on the former component remote, make the smallest behavior-neutral adaptation
+needed to preserve the component's pre-migration output names when built from
+its component root. Record each adaptation separately from the raw snapshot
+comparison. Do not retain a fake nested Git remote or nested repository solely
+to preserve naming.
 
 ## Provenance Record
 
@@ -204,7 +300,10 @@ unless a later task separately authorizes another disposition.
 
 ## Per-Component Conversion Procedure
 
-Process components individually and verify each one before continuing:
+Process components individually in two explicit phases and verify each one
+before continuing.
+
+### Phase A: raw snapshot import
 
 1. Record the parent gitlink, checked-out HEAD, remote, status, license, tags,
    commit metadata, and tracked-file inventory.
@@ -222,6 +321,27 @@ Process components individually and verify each one before continuing:
 9. Confirm that no user, ignored, generated, or local-tool artifacts were
    imported.
 10. Continue only after the comparison passes.
+
+Preserve the raw comparison evidence before making any integration adaptation.
+At this boundary, the ordinary tracked tree must match the former component tree
+except for Git administrative metadata and pre-approved, documented exclusions.
+
+### Phase B: required monorepo adaptations
+
+After the raw comparison passes, apply only the reviewed adaptations required by
+absorption:
+
+1. preserve standalone component output naming without depending on a component
+   Git remote;
+2. relocate component-local CI coverage or add equivalent parent workflow jobs;
+3. update active component documentation that still instructs users to clone,
+   initialize, or update a submodule;
+4. apply any other behavior-neutral path or terminology change demonstrated to
+   be necessary by the integration inspection.
+
+List every Phase B content change separately in the migration report. Re-run
+component and parent validation after these adaptations. Do not describe an
+adapted tree as byte-for-byte identical to the raw source snapshot.
 
 After all components pass:
 
@@ -247,6 +367,8 @@ minimum inspect:
 - support and research scripts that record submodule revisions;
 - release and update scripts;
 - CI workflows;
+- component-local `.github/workflows` files that will not execute after they are
+  nested in the parent repository;
 - `release_tools/developer_notes.md`;
 - `release_tools/Wsprry Pi Codebase Map.md`;
 - active plans containing submodule instructions.
@@ -264,6 +386,16 @@ Script and build-file edits must be behavior-neutral apart from removing
 obsolete submodule mechanics. Historical documents may retain the word
 "submodule" when clearly describing past state. Do not rewrite unrelated
 historical material merely for terminology cleanup.
+
+GitHub Actions only discovers workflows in the parent repository's root
+`.github/workflows` directory. Preserving a former component workflow under its
+component root is provenance, not active CI. For every imported component-local
+workflow, either port its jobs to the parent workflow directory or document and
+demonstrate equivalent parent coverage. In particular, preserve:
+
+- WSPR-Transmitter simulator and transmission-controller backend contracts;
+- WSPR-Reference configure, build, regression, temporary-prefix install,
+  exported-package consumer build, and consumer execution coverage.
 
 `Wsprry_Pi_Docs` remains a separate sibling repository. Do not modify it without
 explicit cross-repository authorization. Report any required follow-up there.
@@ -313,9 +445,24 @@ validation where available, including:
 - canonical unprivileged Debian validation from
   `.github/workflows/debian-non-hardware.yml` where applicable;
 - existing UI tests and parent UI/source integration tests;
-- standalone `WSPR-Reference` configure, build, and tests;
-- standalone `LCBLog` build or test entry point;
+- Impeccable desktop and mobile visual inspection of the unchanged imported UI;
+- standalone `WSPR-Reference` configure, build, major regressions,
+  temporary-prefix install, exported-package consumer build, and consumer run;
+- standalone `LCBLog` build or test entry point plus an extraction smoke test
+  from a temporary Git-free copy of that component alone;
 - other safe standalone component builds or tests.
+
+For the remaining components, apply these explicit boundaries:
+
+- INI-Handler: temporary-fixture standalone test;
+- Mailbox: compile only, with no privileged device execution;
+- MonitorFile: temporary-directory file-change test;
+- PPM-Manager: provider-unavailable or controlled provider-neutral tests without
+  chrony lifecycle changes;
+- Signal-Handler: bounded unprivileged callback and shutdown tests;
+- Singleton: temporary-port first/second-instance test;
+- WSPR-Transmitter: only the inspected simulator, planner, fake-device,
+  startup-quiesce, and controller-contract targets authorized above.
 
 Read `docs/simulated-backend.md` before application-level simulated transmission
 tests. Simulator evidence qualifies software contracts only. It does not qualify
