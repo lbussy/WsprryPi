@@ -8,6 +8,8 @@ Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/4
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
+Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
@@ -357,6 +359,6 @@ The uploader email was transmitted, but convenient owner-side access appeared pl
 
 Established decisions are readable local review before consent, exact-byte encryption, separate WsprryPi encryption and signing keys, signed dynamic routing, rotatable and disableable intake, minimum-version enforcement, local operation during upload outages, authenticated GitHub participation, description-and-contact fallback, and case-ID correlation.
 
-Implementation still needs decisions for hosting, administration tooling, key formats and storage integration, manifest serialization and signing integration, exclusion mechanics, accessible responsive UI, final copy, and operator documentation in the separate `Wsprry_Pi_Docs` repository.
+The Slice 1 protocol decision record freezes the identifiers, archive and receipt schemas, state model, encryption boundary, signed-intake format, version gate, retention behavior, and manual Dropbox handoff. Implementation still requires production endpoint and public-key provisioning, maintainer administration tooling, key storage integration, accessible responsive UI, final copy, and operator documentation in the separate `Wsprry_Pi_Docs` repository.
 
 No behavior described here is implemented merely by committing this contract.
