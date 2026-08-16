@@ -760,6 +760,53 @@ static double parse_frequency_hz_option(
     return rounded;
 }
 
+static bool validate_cli_frequency_hz(
+    double frequency_hz,
+    bool allow_zero,
+    const std::string &raw_token,
+    const std::string &context,
+    std::string *error_message)
+{
+    const bool valid_sign = allow_zero ? frequency_hz >= 0.0 : frequency_hz > 0.0;
+    if (!std::isfinite(frequency_hz) || !valid_sign)
+    {
+        if (error_message != nullptr)
+        {
+            *error_message =
+                "Invalid " + context + " frequency '" + raw_token +
+                "': expected " + (allow_zero ? "zero or " : "") +
+                "a positive whole-number frequency in Hz.";
+        }
+        return false;
+    }
+
+    if (std::trunc(frequency_hz) != frequency_hz)
+    {
+        if (error_message != nullptr)
+        {
+            *error_message =
+                "Invalid " + context + " frequency '" + raw_token +
+                "': the value must resolve to a whole-number frequency in Hz. "
+                "Use an Hz, kHz, MHz, or GHz suffix for decimal unit values.";
+        }
+        return false;
+    }
+
+    const double signed_hz_exclusive_upper_bound = std::ldexp(1.0, 63);
+    if (frequency_hz >= signed_hz_exclusive_upper_bound)
+    {
+        if (error_message != nullptr)
+        {
+            *error_message =
+                "Invalid " + context + " frequency '" + raw_token +
+                "': the value is outside the supported RF range.";
+        }
+        return false;
+    }
+
+    return true;
+}
+
 static ModeType parse_mode_option(const char *raw_value)
 {
     std::string value = trim_copy_string(raw_value == nullptr ? "" : raw_value);
@@ -1015,12 +1062,13 @@ bool set_direct_tone_startup_request(
     {
         const double actual_rf_frequency_hz =
             lookup.parse_string_to_frequency(entry.token, false);
-        if (actual_rf_frequency_hz <= 0.0)
+        if (!validate_cli_frequency_hz(
+                actual_rf_frequency_hz,
+                false,
+                entry.token,
+                "direct RF test tone",
+                error_message))
         {
-            if (error_message != nullptr)
-            {
-                *error_message = "Invalid direct RF test tone frequency (<=0).";
-            }
             return false;
         }
 
@@ -1391,10 +1439,16 @@ void print_usage(const std::string &message, int exit_code)
               << "  -D, --date-time-log                Prefix stream log output with date/time stamps.\n"
               << "  --debug-logging, --no-debug-logging\n"
               << "                                     Enable or disable DEBUG-level application logging.\n\n"
+              << "Experimental Frequency Policy (CLI/INI only):\n"
+              << "  --allow-unqualified-frequency, --no-allow-unqualified-frequency\n"
+              << "                                     Allow or deny unqualified backend/mode combinations.\n"
+              << "  --allow-non-amateur-frequency, --no-allow-non-amateur-frequency\n"
+              << "                                     Allow or deny frequencies outside recognized amateur bands.\n"
+              << "                                     Outside-band transmission requires both allow flags.\n\n"
               << "WSPR Identity And Frequency:\n"
               << "  Positional CALLSIGN GRID POWER FREQ [FREQ...]\n"
               << "                                     Transmit WSPR directly from CLI. POWER is rounded to a standard WSPR dBm value.\n"
-              << "  FREQ                               Band aliases such as 20m, numeric dial frequencies, or 0 to skip a slot.\n"
+              << "  FREQ                               Band aliases such as 20m; whole-number-Hz or unit-qualified dial frequencies; or 0 to skip.\n"
               << "                                     Append @GPIO, @GPIOH, or @GPIOL for one-slot selector GPIO overrides.\n"
               << "  --planner-preference <auto|prefer_paired|require_paired>\n"
               << "                                     Select single-frame or paired WSPR planning policy.\n"
@@ -1476,7 +1530,9 @@ void print_usage(const std::string &message, int exit_code)
               << "      --use-shutdown, --no-shutdown  Enable or disable shutdown button monitoring.\n"
               << "  Band GPIO                          Configure per-band selector GPIOs in INI or with FREQ @GPIO suffixes.\n\n"
               << "Test Tone:\n"
-              << "  -t, --test-tone <rf_frequency>     Start a transient direct RF test tone. Invalid with --ini-file.\n\n";
+              << "  -t, --test-tone <rf_frequency>     Start a transient direct RF test tone using whole-number Hz or a unit-qualified value.\n"
+              << "                                     Band aliases resolve to their WSPR dial frequency; use an explicit value for another RF carrier.\n"
+              << "                                     Invalid with --ini-file.\n\n";
 
     // Handle exit behavior
     switch (exit_code)
@@ -2732,6 +2788,17 @@ bool set_frequencies(ArgParserConfig &target)
         try
         {
             const double freq = lookup.parse_string_to_frequency(entry.token, false);
+            std::string frequency_error;
+            if (!validate_cli_frequency_hz(
+                    freq,
+                    true,
+                    entry.token,
+                    "WSPR dial",
+                    &frequency_error))
+            {
+                llog.logE(WARN, frequency_error);
+                continue;
+            }
             entry.dial_frequency_hz = freq;
             entry.allow_band_gpio_fallback =
                 entry.selector_gpio == kSelectorGpioUnset;
@@ -3032,6 +3099,10 @@ bool parse_command_line(int argc, char *argv[])
         {"date-time-log", no_argument, nullptr, 'D'},   // Global: config.date_time_log
         {"debug-logging", no_argument, nullptr, 1018},  // Global: config.debug_logging
         {"no-debug-logging", no_argument, nullptr, 1019},
+        {"allow-unqualified-frequency", no_argument, nullptr, 1056},
+        {"no-allow-unqualified-frequency", no_argument, nullptr, 1057},
+        {"allow-non-amateur-frequency", no_argument, nullptr, 1058},
+        {"no-allow-non-amateur-frequency", no_argument, nullptr, 1059},
         {"no-web", no_argument, nullptr, 1020},
         {"no-offset", no_argument, nullptr, 1021},
         {"no-system-clock-frequency-estimate", no_argument, nullptr, 1022},
@@ -3168,6 +3239,26 @@ bool parse_command_line(int argc, char *argv[])
         case 1019:
         {
             config.debug_logging = false;
+            break;
+        }
+        case 1056:
+        {
+            config.allow_unqualified_frequency = true;
+            break;
+        }
+        case 1057:
+        {
+            config.allow_unqualified_frequency = false;
+            break;
+        }
+        case 1058:
+        {
+            config.allow_non_amateur_frequency = true;
+            break;
+        }
+        case 1059:
+        {
+            config.allow_non_amateur_frequency = false;
             break;
         }
         case 1020:

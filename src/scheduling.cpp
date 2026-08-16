@@ -106,6 +106,7 @@ struct BandGPIOResolution
     bool selector_enabled = false;
     bool from_band_config = false;
     const char *selector_source = "none";
+    bool band_known = true;
 };
 
 struct SelectorGPIOReservation
@@ -1110,6 +1111,28 @@ static wsprrypi::BackendKind to_controller_backend(
 static wsprrypi::ClockSource to_controller_clock_source(
     const ArgParserConfig &cfg) noexcept;
 
+static wsprrypi::TransmissionRequest build_controller_request_from_legacy(
+    const TransmissionRequest &legacy_request,
+    wsprrypi::TransmissionMode mode)
+{
+    wsprrypi::TransmissionRequest controller_request;
+    controller_request.mode = mode;
+    controller_request.output.backend =
+        to_controller_backend(config.transmit_backend);
+    controller_request.output.output = to_controller_clock_source(config);
+    controller_request.output.gpio = legacy_request.tx_gpio;
+    controller_request.calibration.ppm = legacy_request.ppm;
+    controller_request.policy.allow_unqualified_frequency =
+        legacy_request.allow_unqualified_frequency;
+    controller_request.policy.allow_non_amateur_frequency =
+        legacy_request.allow_non_amateur_frequency;
+    controller_request.policy.hardware_profile = legacy_request.hardware_profile;
+    controller_request.id.value = 1;
+    controller_request.metadata.label = legacy_request.frequency_entry_label;
+    controller_request.metadata.origin = "scheduler";
+    return controller_request;
+}
+
 /**
  * @brief Commit the single execution request consumed by the transmitter.
  *
@@ -1127,29 +1150,13 @@ static void commit_execution_request(
     committed_execution_route_for_test_storage =
         CommittedExecutionRouteForTest::NONE;
 
-    auto build_controller_request =
-        [&](wsprrypi::TransmissionMode mode) -> wsprrypi::TransmissionRequest
-    {
-        wsprrypi::TransmissionRequest controller_request;
-        controller_request.mode = mode;
-        controller_request.output.backend =
-            to_controller_backend(config.transmit_backend);
-        controller_request.output.output =
-            to_controller_clock_source(config);
-        controller_request.output.gpio = current_transmission_request.tx_gpio;
-        controller_request.calibration.ppm = current_transmission_request.ppm;
-        controller_request.id.value = 1;
-        controller_request.metadata.label =
-            current_transmission_request.frequency_entry_label;
-        controller_request.metadata.origin = "scheduler";
-        return controller_request;
-    };
-
     if (current_transmission_request.isTone() &&
         config.transmit_backend == TransmitBackendKind::SI5351)
     {
         wsprrypi::TransmissionRequest controller_request =
-            build_controller_request(wsprrypi::TransmissionMode::TONE);
+            build_controller_request_from_legacy(
+                current_transmission_request,
+                wsprrypi::TransmissionMode::TONE);
         wsprrypi::TonePayload payload;
         payload.frequency_hz =
             current_transmission_request.actual_rf_frequency_hz;
@@ -1192,10 +1199,13 @@ static void commit_execution_request(
     {
         return;
     }
+
     if (!current_transmission_request.isSkipWindow())
     {
         wsprrypi::TransmissionRequest controller_request =
-            build_controller_request(wsprrypi::TransmissionMode::WSPR);
+            build_controller_request_from_legacy(
+                current_transmission_request,
+                wsprrypi::TransmissionMode::WSPR);
 
         wsprrypi::WsprPayload payload;
         payload.prepared = current_transmission_request.payload;
@@ -1215,6 +1225,34 @@ static void commit_execution_request(
     committed_execution_route_for_test_storage =
         CommittedExecutionRouteForTest::LEGACY;
     wsprTransmitter.configureExecution(current_transmission_request);
+}
+
+static wsprrypi::TransmissionMode to_controller_mode(ModeType mode) noexcept
+{
+    switch (mode)
+    {
+    case ModeType::TONE: return wsprrypi::TransmissionMode::TONE;
+    case ModeType::QRSS: return wsprrypi::TransmissionMode::QRSS;
+    case ModeType::FSKCW: return wsprrypi::TransmissionMode::FSKCW;
+    case ModeType::DFCW: return wsprrypi::TransmissionMode::DFCW;
+    case ModeType::WSPR: return wsprrypi::TransmissionMode::WSPR;
+    }
+    return wsprrypi::TransmissionMode::WSPR;
+}
+
+static wsprrypi::HardwareProfile to_controller_profile(
+    TransmitBackendKind backend) noexcept
+{
+    if (backend == TransmitBackendKind::SI5351)
+        return wsprrypi::HardwareProfile::SI5351;
+    if (backend == TransmitBackendKind::SIMULATED)
+        return wsprrypi::HardwareProfile::UNSPECIFIED;
+    const int generation = get_raspberry_pi_generation();
+    if (generation == 5)
+        return wsprrypi::HardwareProfile::RP1_GPCLK;
+    if (generation == 4)
+        return wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD;
+    return wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD;
 }
 
 static void commit_execution_request(
@@ -1901,7 +1939,11 @@ static BandGPIOPrepareStatus prepare_band_gpio_for_frequency_or_log(
 
     const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
         to_controller_backend(cfg.transmit_backend),
-        source_frequency_hz);
+        source_frequency_hz,
+        to_controller_mode(cfg.mode),
+        cfg.allow_unqualified_frequency,
+        cfg.allow_non_amateur_frequency,
+        to_controller_profile(cfg.transmit_backend));
     if (!gpio_policy.allowed)
     {
         llog.logS(WARN, gpio_policy.error);
@@ -1914,6 +1956,23 @@ static BandGPIOPrepareStatus prepare_band_gpio_for_frequency_or_log(
     const auto band = lookup.lookup_ham_band(source_frequency_hz);
     if (!band.has_value())
     {
+        if (entry.selector_gpio != kSelectorGpioUnset)
+        {
+            BandGPIOResolution explicit_resolution;
+            explicit_resolution.config.gpio = entry.selector_gpio;
+            explicit_resolution.config.enabled = true;
+            explicit_resolution.config.active_high = entry.selector_gpio_active_high;
+            explicit_resolution.selector_enabled = true;
+            explicit_resolution.selector_source = "explicit frequency entry";
+            explicit_resolution.band_known = false;
+            if (resolution_out != nullptr)
+                *resolution_out = explicit_resolution;
+            llog.logS(
+                DEBUG, "[BandGPIO]", "Frequency entry ", entry.token,
+                " uses explicit GPIO ", entry.selector_gpio,
+                " without inferring an amateur band.");
+            return apply_band_gpio_resolution(explicit_resolution);
+        }
         llog.logS(
             WARN,
             "Unable to map source frequency ",
@@ -2063,6 +2122,9 @@ static TransmissionRequest make_tone_request(
     request.power_level = cfg.power_level;
     request.tx_gpio = cfg.tx_pin;
     request.frequency_entry_label = entry.token;
+    request.allow_unqualified_frequency = cfg.allow_unqualified_frequency;
+    request.allow_non_amateur_frequency = cfg.allow_non_amateur_frequency;
+    request.hardware_profile = to_controller_profile(cfg.transmit_backend);
     return request;
 }
 
@@ -2081,7 +2143,11 @@ static bool start_direct_tone_execution(
 {
     const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
         to_controller_backend(cfg.transmit_backend),
-        actual_rf_frequency_hz);
+        actual_rf_frequency_hz,
+        wsprrypi::TransmissionMode::TONE,
+        cfg.allow_unqualified_frequency,
+        cfg.allow_non_amateur_frequency,
+        to_controller_profile(cfg.transmit_backend));
     if (!gpio_policy.allowed)
     {
         if (error_message != nullptr)
@@ -2236,6 +2302,9 @@ static wsprrypi::TransmissionRequest make_qrss_controller_request(
     request.output.output = to_controller_clock_source(cfg);
     request.output.gpio = cfg.tx_pin;
     request.calibration.ppm = committed_ppm;
+    request.policy.allow_unqualified_frequency = cfg.allow_unqualified_frequency;
+    request.policy.allow_non_amateur_frequency = cfg.allow_non_amateur_frequency;
+    request.policy.hardware_profile = to_controller_profile(cfg.transmit_backend);
     request.metadata.label = "qrss-cli-test";
     request.metadata.origin = "cli";
     request.metadata.note = "temporary qrss test path";
@@ -2275,6 +2344,9 @@ static wsprrypi::TransmissionRequest make_fskcw_controller_request(
     request.output.output = to_controller_clock_source(cfg);
     request.output.gpio = cfg.tx_pin;
     request.calibration.ppm = committed_ppm;
+    request.policy.allow_unqualified_frequency = cfg.allow_unqualified_frequency;
+    request.policy.allow_non_amateur_frequency = cfg.allow_non_amateur_frequency;
+    request.policy.hardware_profile = to_controller_profile(cfg.transmit_backend);
     request.metadata.label = "fskcw-cli-test";
     request.metadata.origin = "cli";
     request.metadata.note = "temporary fskcw test path";
@@ -2317,6 +2389,9 @@ static wsprrypi::TransmissionRequest make_dfcw_controller_request(
     request.output.output = to_controller_clock_source(cfg);
     request.output.gpio = cfg.tx_pin;
     request.calibration.ppm = committed_ppm;
+    request.policy.allow_unqualified_frequency = cfg.allow_unqualified_frequency;
+    request.policy.allow_non_amateur_frequency = cfg.allow_non_amateur_frequency;
+    request.policy.hardware_profile = to_controller_profile(cfg.transmit_backend);
     request.metadata.label = "dfcw-cli-test";
     request.metadata.origin = "cli";
     request.metadata.note = "temporary dfcw test path";
@@ -2760,6 +2835,9 @@ static TransmissionRequest make_wspr_request(
     request.use_offset = cfg.use_offset;
     request.applied_offset_hz = applied_offset_hz;
     request.frequency_entry_label = entry.token;
+    request.allow_unqualified_frequency = cfg.allow_unqualified_frequency;
+    request.allow_non_amateur_frequency = cfg.allow_non_amateur_frequency;
+    request.hardware_profile = to_controller_profile(cfg.transmit_backend);
     return request;
 }
 
@@ -3651,7 +3729,11 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
 
         const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
             to_controller_backend(planning_snapshot.transmit_backend),
-            static_cast<double>(frequency_plan.plan->actual_rf_frequency_hz));
+            static_cast<double>(frequency_plan.plan->actual_rf_frequency_hz),
+            wsprrypi::TransmissionMode::TONE,
+            planning_snapshot.allow_unqualified_frequency,
+            planning_snapshot.allow_non_amateur_frequency,
+            to_controller_profile(planning_snapshot.transmit_backend));
         if (!gpio_policy.allowed)
         {
             result.message = gpio_policy.error;
@@ -3776,6 +3858,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             ? static_cast<double>(*explicit_frequency_plan->audio_offset_hz)
             : 0.0;
     }
+    selector_preparation_cfg.mode = ModeType::TONE;
     BandGPIOResolution selector_resolution;
     const BandGPIOPrepareStatus selector_status =
         prepare_band_gpio_for_frequency_or_log(
@@ -3795,7 +3878,11 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         test_tone_restoration_owner = TestToneRestorationOwner::Unknown;
         const auto gpio_policy = wsprrypi::evaluate_gpio_band_policy(
             to_controller_backend(selector_preparation_cfg.transmit_backend),
-            actual_rf_freq);
+            actual_rf_freq,
+            wsprrypi::TransmissionMode::TONE,
+            selector_preparation_cfg.allow_unqualified_frequency,
+            selector_preparation_cfg.allow_non_amateur_frequency,
+            to_controller_profile(selector_preparation_cfg.transmit_backend));
         result.message = gpio_policy.allowed
             ? "Unable to prepare the requested band selector."
             : gpio_policy.error;
@@ -5892,6 +5979,13 @@ void set_current_transmission_request_for_test(
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test()
 {
     return current_controller_request_for_test_storage;
+}
+
+wsprrypi::TransmissionRequest controller_request_from_legacy_for_test(
+    const TransmissionRequest &request,
+    wsprrypi::TransmissionMode mode)
+{
+    return build_controller_request_from_legacy(request, mode);
 }
 
 std::vector<BandGPIOConfig> selector_shutdown_cleanup_targets_for_test()

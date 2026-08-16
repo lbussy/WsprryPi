@@ -2,6 +2,7 @@
 #include "config_handler.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
+#include "gpio_band_policy.hpp"
 #include "gpio_output.hpp"
 #include "scheduling.hpp"
 #include "system_clock_frequency_estimate.hpp"
@@ -746,6 +747,11 @@ int main(int argc, char *argv[])
                 stock_ini.find("2m =\n2m Active High = false") != std::string::npos &&
                 stock_ini.find("Active High = true") == std::string::npos,
             "stock INI must declare explicit disabled Band GPIO defaults for every band");
+        require(
+            stock_ini.find("[Experimental]") != std::string::npos &&
+                stock_ini.find("Allow Unqualified Frequency = false") != std::string::npos &&
+                stock_ini.find("Allow Non-Amateur Frequency = false") != std::string::npos,
+            "stock INI must expose both experimental frequency controls as default deny");
     }
 
     {
@@ -1067,6 +1073,72 @@ int main(int argc, char *argv[])
             current_transmission_request_for_test().mode == TransmissionMode::WSPR,
             "scheduler must commit a normal WSPR request for GPIO on Raspberry Pi 4");
 
+        finish_runtime_planning_state_for_identity_test();
+        clear_pi_generation_override_for_scope();
+    }
+
+    {
+        set_raspberry_pi_generation_override_for_test(4);
+        prime_valid_runtime_identity_config();
+        config.frequencies = "2200m";
+        config.allow_unqualified_frequency = false;
+        config.allow_non_amateur_frequency = false;
+        sync_wspr_fields_for_test();
+        require(
+            set_frequencies(config),
+            "BCM2711 2200 m WSPR regression must resolve its dial frequency");
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "BCM2711 2200 m WSPR regression must plan a scheduler request");
+        const auto bcm2711_legacy_request = current_transmission_request_for_test();
+        auto bcm2711_request = controller_request_from_legacy_for_test(
+            bcm2711_legacy_request,
+            wsprrypi::TransmissionMode::WSPR);
+        wsprrypi::WsprPayload bcm2711_payload;
+        bcm2711_payload.prepared = bcm2711_legacy_request.payload;
+        bcm2711_payload.base_frequency_hz =
+            bcm2711_legacy_request.actual_rf_frequency_hz;
+        bcm2711_request.payload = bcm2711_payload;
+        require(
+            !bcm2711_request.policy.allow_unqualified_frequency &&
+                !bcm2711_request.policy.allow_non_amateur_frequency &&
+                bcm2711_request.policy.hardware_profile ==
+                    wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD &&
+                wsprrypi::evaluate_gpio_band_policy(
+                    wsprrypi::ExecutionPlanCompiler{}.compile(bcm2711_request)).allowed,
+            "direct WSPR controller requests must preserve the qualified BCM2711 2200 m profile");
+        finish_runtime_planning_state_for_identity_test();
+
+        set_raspberry_pi_generation_override_for_test(3);
+        prime_valid_runtime_identity_config();
+        config.frequencies = "2200m";
+        config.allow_unqualified_frequency = true;
+        config.allow_non_amateur_frequency = false;
+        sync_wspr_fields_for_test();
+        require(
+            set_frequencies(config),
+            "legacy 2200 m WSPR override regression must resolve its dial frequency");
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "legacy 2200 m WSPR override regression must plan a scheduler request");
+        const auto legacy_request = current_transmission_request_for_test();
+        auto legacy_override_request = controller_request_from_legacy_for_test(
+            legacy_request,
+            wsprrypi::TransmissionMode::WSPR);
+        wsprrypi::WsprPayload legacy_payload;
+        legacy_payload.prepared = legacy_request.payload;
+        legacy_payload.base_frequency_hz = legacy_request.actual_rf_frequency_hz;
+        legacy_override_request.payload = legacy_payload;
+        require(
+            legacy_override_request.policy.allow_unqualified_frequency &&
+                !legacy_override_request.policy.allow_non_amateur_frequency &&
+                legacy_override_request.policy.hardware_profile ==
+                    wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD &&
+                wsprrypi::evaluate_gpio_band_policy(
+                    wsprrypi::ExecutionPlanCompiler{}.compile(legacy_override_request)).allowed,
+            "direct WSPR controller requests must preserve the legacy unqualified-frequency override");
         finish_runtime_planning_state_for_identity_test();
         clear_pi_generation_override_for_scope();
     }
@@ -1747,6 +1819,38 @@ int main(int argc, char *argv[])
         init_config_json();
         json_to_config();
         config.transmit = true;
+        config.frequencies = "0.136,0.136Hz,14.0971001MHz@22,9223372036854775808";
+
+        require(
+            !set_frequencies(config) &&
+                config.wspr_frequency_entries.empty() &&
+                config.wspr_dial_freq_set.empty(),
+            "WSPR frequency lists must reject values that do not resolve to whole-number Hz before scheduling or selector preparation");
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        config.transmit = true;
+        config.frequencies = "0,0.136MHz,136kHz,136000,2200m,0.136MHz@22";
+
+        require(
+            set_frequencies(config) &&
+                config.wspr_frequency_entries.size() == 6U &&
+                nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 0.0) &&
+                nearly_equal(config.wspr_frequency_entries[1].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[2].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[3].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[4].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[5].dial_frequency_hz, 136000.0) &&
+                config.wspr_frequency_entries[5].selector_gpio == 22,
+            "WSPR frequency lists must retain zero skip, integral unit conversion, aliases, raw Hz, and selector suffixes");
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        config.transmit = true;
         config.frequencies = "80m@";
 
         require(
@@ -1882,6 +1986,12 @@ int main(int argc, char *argv[])
             jConfig["Meta"].contains("debug_logging") &&
                 !jConfig["Meta"]["debug_logging"].get<bool>(),
             "default JSON config must serialize debug_logging as false");
+        require(
+            !config.allow_unqualified_frequency &&
+                !config.allow_non_amateur_frequency &&
+                !jConfig["Experimental"]["Allow Unqualified Frequency"].get<bool>() &&
+                !jConfig["Experimental"]["Allow Non-Amateur Frequency"].get<bool>(),
+            "experimental frequency policy must default deny");
     }
 
     {
@@ -2214,6 +2324,23 @@ int main(int argc, char *argv[])
             "--no-debug-logging must update serialized config state");
     }
 
+
+    {
+        reset_getopt_state();
+        std::vector<std::string> args = {
+            "wsprrypi", "--allow-unqualified-frequency",
+            "--allow-non-amateur-frequency",
+            "--no-allow-non-amateur-frequency",
+            "AA0NT", "EM18", "20", "20m"};
+        std::vector<char *> argv = argv_for(args);
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()),
+            "experimental frequency CLI flags must parse");
+        require(
+            config.allow_unqualified_frequency &&
+                !config.allow_non_amateur_frequency,
+            "experimental frequency CLI flags must use last-option precedence");
+    }
 
     {
         clear_direct_tone_startup_request();
@@ -4034,6 +4161,37 @@ int main(int argc, char *argv[])
             !public_config.contains("Meta"),
             "public config JSON must not expose Meta logging controls to the UI");
 
+        init_default_config();
+    }
+
+    {
+        init_config_json();
+        iniFile.setData({
+            {"Operation", {{"Mode", "WSPR"}}},
+            {"Experimental", {
+                {"Allow Unqualified Frequency", "true"},
+                {"Allow Non-Amateur Frequency", "true"}}}});
+        ini_to_json("/tmp/experimental_frequency.ini");
+        json_to_config();
+        require(
+            config.allow_unqualified_frequency &&
+                config.allow_non_amateur_frequency,
+            "experimental frequency INI controls must load as booleans");
+        config_to_json();
+        const nlohmann::json public_config = get_public_config_json();
+        require(
+            !public_config.contains("Experimental"),
+            "experimental frequency controls must remain hidden from UI JSON");
+        config.use_ini = true;
+        config.ini_filename = "/tmp/experimental_frequency.ini";
+        write_text_file(config.ini_filename, "[Operation]\nMode=WSPR\n");
+        iniFile.set_filename(config.ini_filename);
+        json_to_ini();
+        const auto persisted = iniFile.getData();
+        require(
+            persisted.at("Experimental").at("Allow Unqualified Frequency") == "true" &&
+                persisted.at("Experimental").at("Allow Non-Amateur Frequency") == "true",
+            "experimental frequency controls must persist in the INI section");
         init_default_config();
     }
 
@@ -6654,8 +6812,6 @@ int main(int argc, char *argv[])
 
         const TestToneStartResult band_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "12m", std::nullopt});
-        const TestToneStartResult six_meter_rejected = start_test_tone(
-            TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
         const TestToneStartResult four_meter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "4m", std::nullopt});
         const TestToneStartResult two_meter_rejected = start_test_tone(
@@ -6664,34 +6820,29 @@ int main(int argc, char *argv[])
             TestToneRequest{TestToneFrequencySource::WsprBand, "1.25m", std::nullopt});
         const TestToneStartResult seventy_centimeter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "70cm", std::nullopt});
-        const TestToneStartResult custom_rejected = start_test_tone(
-            TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
         const TestToneStartResult custom_125m_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::CustomRf, "", 223500000U});
         const TestToneStartResult custom_70cm_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::CustomRf, "", 435000000U});
 
         require(
-            !band_rejected.started && !six_meter_rejected.started &&
-                !four_meter_rejected.started && !two_meter_rejected.started &&
+            !band_rejected.started && !four_meter_rejected.started &&
+                !two_meter_rejected.started &&
                 !one_twenty_five_meter_rejected.started &&
                 !seventy_centimeter_rejected.started &&
-                !custom_rejected.started && !custom_125m_rejected.started &&
+                !custom_125m_rejected.started &&
                 !custom_70cm_rejected.started &&
-                band_rejected.message.find("Direct GPIO transmission is blocked") !=
+                band_rejected.message.find("12 m") !=
                     std::string::npos &&
-                six_meter_rejected.message.find("6 m") != std::string::npos &&
                 four_meter_rejected.message.find("4 m") != std::string::npos &&
                 two_meter_rejected.message.find("2 m") != std::string::npos &&
                 one_twenty_five_meter_rejected.message.find("1.25 m") !=
                     std::string::npos &&
                 seventy_centimeter_rejected.message.find("70 cm") !=
                     std::string::npos &&
-                custom_rejected.message.find("Direct GPIO transmission is blocked") !=
-                    std::string::npos &&
                 custom_125m_rejected.message.find("1.25 m") != std::string::npos &&
                 custom_70cm_rejected.message.find("70 cm") != std::string::npos &&
-                band_rejected.message.find("separately qualified") !=
+                band_rejected.message.find("experimental risk") !=
                     std::string::npos &&
                 config.mode == ModeType::QRSS &&
                 nearly_equal(
@@ -6700,6 +6851,33 @@ int main(int argc, char *argv[])
                 band_gpio_prepare_call_count_for_test() == 0U,
             "named and custom disqualified GPIO Test Tones must reject before runtime or selector mutation");
         set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        config.mode = ModeType::QRSS;
+        copy_runtime_config(config, config);
+        set_raspberry_pi_generation_override_for_test(4);
+
+        const TestToneStartResult six_meter_started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
+        const TestToneStopResult six_meter_stopped = end_test_tone();
+        const TestToneStartResult custom_six_meter_started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
+        const TestToneStopResult custom_six_meter_stopped = end_test_tone();
+        require(
+            six_meter_started.started && six_meter_stopped.tone_was_active &&
+                six_meter_stopped.stopped && custom_six_meter_started.started &&
+                custom_six_meter_stopped.tone_was_active &&
+                custom_six_meter_stopped.stopped,
+            "named and custom BCM2711 6 m TONE must start and stop after qualification");
+        set_scheduler_execution_suppressed_for_test(false);
+        clear_pi_generation_override_for_scope();
     }
 
     {
@@ -6782,7 +6960,7 @@ int main(int argc, char *argv[])
         require(
             !unknown_band_started && !lookup_error.empty() &&
                 start_async_calls == 0 &&
-                band_gpio_prepare_call_count_for_test() == 1U &&
+                band_gpio_prepare_call_count_for_test() == 0U &&
                 current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
                 !current_controller_request_for_test().has_value() &&
                 committed_execution_route_for_test() ==
@@ -6790,8 +6968,46 @@ int main(int argc, char *argv[])
                 !current_band_gpio_selection_for_test(
                     inactive_selector_config,
                     inactive_selector_band),
-            "failed direct CLI band lookup and selector preparation must leave RF and selector state inactive without committing or reaching startAsync");
+            "outside-band direct CLI policy rejection must precede selector preparation, request commit, and startAsync");
 
+        reset_direct_tone_start_invoker_for_test();
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        config.allow_unqualified_frequency = true;
+        config.allow_non_amateur_frequency = true;
+        set_scheduler_execution_suppressed_for_test(true);
+        reset_current_transmission_request_for_test();
+        reset_current_controller_request_for_test();
+        reset_committed_execution_route_for_test();
+        reset_band_gpio_prepare_call_count_for_test();
+        int start_async_calls = 0;
+        set_direct_tone_start_invoker_for_test(
+            [&start_async_calls] { ++start_async_calls; });
+
+        WsprFrequencyEntry experimental_entry;
+        experimental_entry.token = "150000000@17H";
+        experimental_entry.dial_frequency_hz = 150000000.0;
+        experimental_entry.selector_gpio = 17;
+        experimental_entry.selector_gpio_active_high = true;
+        std::string error;
+        const bool started = start_direct_tone_execution_for_test(
+            config, experimental_entry,
+            experimental_entry.dial_frequency_hz, &error);
+        const TransmissionRequest committed =
+            current_transmission_request_for_test();
+        require(
+            started && error.empty() && start_async_calls == 1 &&
+                band_gpio_prepare_call_count_for_test() == 1U &&
+                committed.selector_gpio_enabled &&
+                committed.selector_gpio_config.gpio == 17 &&
+                committed.selector_gpio_config.active_high,
+            "dual outside-band override must retain an explicit CLI selector without band inference");
+
+        stop_active_transmission_selectors_for_test();
         reset_direct_tone_start_invoker_for_test();
         set_scheduler_execution_suppressed_for_test(false);
     }
@@ -7221,6 +7437,49 @@ int main(int argc, char *argv[])
         reset_startup_quiesce_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        clear_direct_tone_startup_request();
+        for (const std::string token : {"0.136", "0.136Hz", "14.0971001MHz@22"})
+        {
+            std::string error;
+            require(
+                !set_direct_tone_startup_request(token, &error) &&
+                    error.find("whole-number frequency in Hz") != std::string::npos &&
+                    !has_direct_tone_startup_request(),
+                "direct CLI test tone must reject fractional-Hz values before creating startup state");
+        }
+
+        {
+            std::string error;
+            require(
+                !set_direct_tone_startup_request("9223372036854775808", &error) &&
+                    error.find("outside the supported RF range") != std::string::npos &&
+                    !has_direct_tone_startup_request(),
+                "direct CLI test tone must reject values outside the signed integral-Hz correlation range");
+        }
+
+        for (const std::string token : {"0.136MHz", "136kHz", "136000", "2200m", "0.136MHz@22"})
+        {
+            std::string error;
+            require(
+                set_direct_tone_startup_request(token, &error),
+                "direct CLI test tone must accept inputs that resolve to integral Hz");
+            WsprFrequencyEntry entry;
+            double actual_rf_hz = 0.0;
+            require(
+                try_get_direct_tone_startup_request(entry, actual_rf_hz) &&
+                    nearly_equal(actual_rf_hz, 136000.0),
+                "accepted direct CLI test-tone forms must retain 136000 Hz exactly");
+            if (token == "0.136MHz@22")
+            {
+                require(
+                    entry.selector_gpio == 22,
+                    "integral unit-qualified direct test-tone input must retain its selector suffix");
+            }
+            clear_direct_tone_startup_request();
+        }
     }
 
     {

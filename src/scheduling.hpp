@@ -432,6 +432,9 @@ TransmissionRequest current_transmission_request_for_test();
 void set_current_transmission_request_for_test(
     const TransmissionRequest &request) noexcept;
 std::optional<wsprrypi::TransmissionRequest> current_controller_request_for_test();
+wsprrypi::TransmissionRequest controller_request_from_legacy_for_test(
+    const TransmissionRequest &request,
+    wsprrypi::TransmissionMode mode);
 void reset_current_transmission_request_for_test() noexcept;
 void set_current_frequency_estimate_for_test(
     const SystemClockFrequencyEstimate &estimate);
