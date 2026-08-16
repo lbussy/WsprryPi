@@ -440,3 +440,86 @@ parent-wide regression/CI, final staged export, and post-migration fresh-clone
 acceptance remain deferred. No `chronyc`, `systemctl`, clock configuration,
 scheduler-priority, service, installation, device, GPIO, I2C, RF, or hardware
 operation occurred.
+
+## Signal-Handler
+
+| Field | Recorded value |
+| --- | --- |
+| Component | Signal-Handler |
+| Retained path | `src/Signal-Handler` |
+| Original repository | `https://github.com/WsprryPi/Signal-Handler.git` |
+| Parent-recorded import SHA | `c32118ae4494e49ea110e94e7bbc8c6ac66c2549` |
+| Checked-out SHA | `c32118ae4494e49ea110e94e7bbc8c6ac66c2549` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-07-06T09:55:32-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | No repository tags contain or point at the imported revision; short revision `c32118a` |
+| Raw source tree | `36f1bfc250ec48de89e45d90c8bce031f3cd71bf` |
+| Expected and staged Phase A tree | `36f1bfc250ec48de89e45d90c8bce031f3cd71bf` |
+| Staged tree after Phase B | `a67135c89bea63317ad91016b205c9c2e5d518fb` |
+| Phase A archive | SHA-256 `6261045c0aedc57d22633293250382ba68649b21cddb023f846c8f0ff88a17ee`; 8 tracked files and 2 directory entries |
+| Former component license | `src/Signal-Handler/LICENSE.md` at raw import; MIT, copyright 2025–2026 Lee Bussy; blob `b0b8a0f9d2bdb41a17a6368d1fc155e0470f21c9` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license and repeated full-license source headers were consolidated after the ownership audit found only Lee Bussy contributor identities and no third-party obligation. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`4e3271e71f671bc2ce9e476e6f1ee46fe9dbe0f2b83d8d5956e2f92ae6c0a1d9`.
+The object-derived archive contained the exact recorded tree and component
+license before adaptation. Its ordinary staged Phase A subtree OID equaled the
+source tree OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored or untracked files, nested submodules, nested
+Git administration, or other exclusions.
+
+### Phase B adaptations
+
+- Fixed standalone outputs as `signal-handler` and `signal-handler_test`
+  rather than deriving them from the parent Git remote, and removed an unused
+  `libgpiodcxx` link probe from this signal-only component.
+- Preserved the interactive demonstration in `main.cpp` while separating a new
+  bounded `test.cpp`. The test blocks the handled set, sends one controlled
+  `SIGTERM` to its own process, verifies callback metadata and idempotent
+  shutdown, and uses no scheduler-priority call.
+- Guarded the interactive demonstration behind `make live-test
+  SIGNAL_HANDLER_LIVE_TEST=YES`; it was not executed.
+- Excluded standalone `test.cpp` from parent source discovery so it cannot add
+  a second `main()` to the WsprryPi application.
+- Replaced standalone/component-license instructions with monorepo build,
+  integration, safety, and extraction guidance. Removed the redundant component
+  license and replaced repeated full MIT source headers with root-license
+  references and retained copyright attribution.
+
+Production signal sets, callback behavior, thread lifecycle, terminal handling,
+scheduler hook, public interface, and application integration are unchanged.
+
+### Standalone build, validation, and extraction
+
+From `src/Signal-Handler/src`, `make release` builds the retained interactive
+demo and `make test` builds and runs the bounded self-process signal test. The
+live target requires explicit opt-in and retains its scheduler-priority attempt
+and operator-terminated workflow.
+
+To extract Signal-Handler, copy `src/Signal-Handler`, add repository metadata
+and a license file, and retain `signal_handler.cpp`, `signal_handler.hpp`, the
+Makefile, interactive demo, bounded test, and README. The component has no
+dependency on WsprryPi application internals.
+
+### Slice validation
+
+The default macOS build first rejects the GNU-oriented `-lstdc++fs` compile
+flag under `-Werror`. With GNU-only flags removed, Apple Clang reaches the true
+platform boundary: macOS does not provide the production implementation's
+POSIX `sigwaitinfo()` API. Consequently neither the standalone executable nor
+bounded test can be linked or run on this host, and no portability workaround
+was introduced during snapshot absorption.
+
+A Git-free staged-tree completeness check, target-graph review, live-target
+guard review, production-source comparison, and parent source-discovery check
+are performed in this slice. Compilation and bounded callback/shutdown test
+execution on Debian or synchronized `wspr4`, interactive behavior,
+parent-wide regression/CI, final staged export, and post-migration fresh-clone
+acceptance remain deferred. No signal was sent after the build failure, and no
+scheduler-priority, service, installation, device, GPIO, I2C, RF, hardware, or
+external-process operation occurred.
