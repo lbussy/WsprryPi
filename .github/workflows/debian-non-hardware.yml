@@ -60,7 +60,7 @@ jobs:
             -o /tmp/wsprrypi-rp1.strace \
             make rp1-gpclk-transmit-backend-test SUDO=
 
-      - name: Run pinned transmitter contract regressions
+      - name: Run transmitter component contract regressions
         working-directory: src/WSPR-Transmitter/src
         run: |
           make simulated-backend-test

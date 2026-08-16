@@ -700,3 +700,101 @@ workflow syntax review, staged whitespace/scope audit, Debian CI execution, and
 post-migration fresh-clone acceptance complete the remaining slice/final gates.
 No RF, GPIO, I2C, hardware, service, installation-to-host, deployment, or
 former-remote operation occurred.
+
+## WSPR-Transmitter
+
+| Field | Recorded value |
+| --- | --- |
+| Component | WSPR-Transmitter |
+| Retained path | `src/WSPR-Transmitter` |
+| Original repository | `https://github.com/WsprryPi/WSPR-Transmitter.git` |
+| Parent-recorded import SHA | `d2e329639e907f735531e48f202263d353320035` |
+| Checked-out SHA | `d2e329639e907f735531e48f202263d353320035` |
+| Observed state | detached HEAD; `git submodule status` described the revision as `d2e3296` |
+| Most recent commit | `2026-08-16T10:29:15-05:00` — `Qualify legacy 2200 m keyed modes` |
+| Version/tag provenance | No tag or version description was observed for the imported revision; the exact SHA is authoritative. |
+| Raw source tree | `cc0ca41ad8345369f5c9ff6725e6b03b7be64c40` |
+| Expected and staged Phase A tree | `cc0ca41ad8345369f5c9ff6725e6b03b7be64c40` |
+| Staged tree after Phase B | `8da10107aa32ccb013bbd6402fb349c9bb8b4e68` |
+| Phase A archive | SHA-256 `d002ed090f0af7d30a097c43270f514881da5e2d2c9b2a484b2268b04956b175`; 80 tracked files |
+| Former component license | `src/WSPR-Transmitter/LICENSE.md` at raw import; MIT, copyright 2026 Lee Bussy; blob `6584c5f4f63a8cfbeb0a1a2c642992e5e24af859` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed after the contribution audit found only Lee Bussy identities. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`356dfc130a1f9af2ff73111a7157ca1bdce974625c0a4a0e9ed486472f49c00d`.
+The object-derived archive and ordinary staged Phase A subtree both exactly
+matched the recorded source tree before adaptation.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. Ignored `src/build/` contained 14 generated build artifacts and was
+excluded; the ignored-path inventory SHA-256 was
+`996cfbd04f7d8dd23bc173fbddc1491d14153f1dc6d449139ebf602a7d47a76d`.
+There were no untracked files, nested submodules, or nested Git administration.
+The tracked zero-byte `src/.codex` local-tool marker was deliberately removed
+during Phase B. The tracked `external/` compatibility stubs were retained as
+intentional product content.
+
+### Phase B adaptations
+
+- Preserved controller and backend APIs, source hierarchy, compatibility stubs,
+  standalone Makefile, demo entry point, simulator contracts, fake-I2C and
+  fake-GPIO tests, and guarded live qualification sources.
+- Fixed standalone project and executable naming so it does not depend on a
+  component Git remote, and renamed Makefile source-discovery variables from
+  submodule to component terminology without changing paths.
+- Replaced the former privileged generic `test` behavior with the hardware-free
+  simulator, controller, planner, fake-I2C transition, and startup-quiescence
+  suite. Live `watchdog` and `gdb` diagnostics now require the explicit
+  `WSPR_TRANSMITTER_LIVE_TEST=YES` guard.
+- Recorded the parent Debian workflow as active CI. It already provides the
+  former nested workflow's simulator and controller coverage plus transition
+  and startup-quiescence coverage; only its transmitter step label changed.
+- Removed the redundant component MIT license and documented parent licensing,
+  monorepo dependency paths, hardware boundaries, and extraction guidance.
+
+Production controller, scheduler, encoding adapter, transmission behavior,
+hardware backends, GPIO/RP1/Si5351 logic, public interfaces, and runtime paths
+are otherwise unchanged.
+
+### Standalone build, validation, and extraction
+
+From `src/WSPR-Transmitter/src`, `make test` is the canonical hardware-free
+suite. Individual safe entry points include `simulated-backend-test`,
+`simulated-backend-realtime-test`, `transmission-controller-contract-test`,
+`si5351-planner-test`, `si5351-transition-test`, and
+`startup-quiesce-test`. Live qualification targets remain build-only; their
+executables were not run.
+
+To extract WSPR-Transmitter, copy `src/WSPR-Transmitter` together with
+`src/WSPR-Reference`, `src/Mailbox`, and `src/Signal-Handler` while preserving
+their relative layout, add repository metadata and a license file, and run the
+hardware-free suite before planning separately authorized physical-backend
+qualification. WsprryPi application integration should remain outside the
+extracted component.
+
+On macOS, the unmodified `make test` reached compilation but failed because
+Apple Clang treats the existing compile-time `-lstdc++fs` as an unused linker
+input under `-Werror`. With platform-only compiler/linker overrides, the full
+suite advanced until Linux-only `linux/ioctl.h` and `linux/i2c-dev.h` headers
+were required; Apple Clang also diagnosed an existing unused lambda capture in
+`startup_quiesce_test.cpp`. Individually, the simulator, real-time simulator,
+transmission-controller contract, and Si5351 planner targets all built and
+passed. The guarded `watchdog` and `gdb` targets both refused execution with
+status 2 before building or running the application.
+
+A Git-free export of the staged parent index repeated and passed those four
+portable hardware-free targets. Parent debug source discovery included the
+production transmitter source and excluded its standalone test sources, though
+the dry run emitted expected macOS warnings for Linux `/proc/meminfo` and
+`nproc` assumptions. The source-snapshot comparison found only Git
+administration, ignored build output, the two documented exclusions, and the
+README/Makefile adaptations.
+
+The authoritative default-command run on Debian and synchronized `wspr4`, the
+Linux-only fake-device tests, parent-wide regression/CI, final migration export,
+and post-commit fresh-clone acceptance remain deferred. No hardware, RF, GPIO,
+I2C, mailbox-device, service, installation, deployment, or former-remote
+operation occurred.
