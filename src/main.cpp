@@ -94,7 +94,9 @@ void notify_async_shutdown_signal(int signum) noexcept
     const std::uint8_t wake = 1;
     if (g_async_shutdown_pipe[1] >= 0)
     {
-        (void)::write(g_async_shutdown_pipe[1], &wake, sizeof(wake));
+        const ssize_t wake_result =
+            ::write(g_async_shutdown_pipe[1], &wake, sizeof(wake));
+        (void)wake_result;
     }
 }
 
