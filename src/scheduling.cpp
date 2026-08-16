@@ -3858,6 +3858,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             ? static_cast<double>(*explicit_frequency_plan->audio_offset_hz)
             : 0.0;
     }
+    selector_preparation_cfg.mode = ModeType::TONE;
     BandGPIOResolution selector_resolution;
     const BandGPIOPrepareStatus selector_status =
         prepare_band_gpio_for_frequency_or_log(

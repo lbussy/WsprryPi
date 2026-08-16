@@ -170,11 +170,18 @@ void require_controller_policy(
     request.policy.allow_unqualified_frequency = allow_unqualified;
     request.policy.allow_non_amateur_frequency = allow_non_amateur;
     request.policy.hardware_profile = profile;
+    const auto direct_policy = wsprrypi::evaluate_frequency_policy(
+        backend_kind, mode, frequency_hz, allow_unqualified,
+        allow_non_amateur, profile);
     const auto result = controller.prepare(request);
 
     require(
         result.ok == expected_allowed,
-        context + " policy result must match expectation");
+        context + " policy result must match expectation at " +
+            std::to_string(frequency_hz) + " Hz in mode " +
+            std::to_string(static_cast<int>(mode)) + "; direct policy was " +
+            wsprrypi::qualification_state_name(direct_policy.qualification) +
+            " and controller error was '" + result.error + "'");
     require(
         backend.configure_calls == (expected_allowed ? 1 : 0),
         context + " must reject before backend configuration");
@@ -295,6 +302,32 @@ int main()
         wsprrypi::TransmissionMode::WSPR,
         137500.0, true, "BCM2711 2200 m profile", false, false,
         wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+
+    require_controller_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::TONE,
+        50294500.0, true, "BCM2711 6 m tone profile", false, false,
+        wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+    for (const auto mode : {
+             wsprrypi::TransmissionMode::WSPR,
+             wsprrypi::TransmissionMode::QRSS,
+             wsprrypi::TransmissionMode::FSKCW,
+             wsprrypi::TransmissionMode::DFCW})
+    {
+        require_controller_policy(
+            wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+            mode,
+            50294500.0, false, "BCM2711 6 m non-tone profile", false, false,
+            wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+    }
+    for (const double unavailable_frequency : {222101500.0, 432301500.0})
+    {
+        require_controller_policy(
+            wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+            wsprrypi::TransmissionMode::TONE,
+            unavailable_frequency, false, "BCM2711 unavailable profile", true, true,
+            wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+    }
 
     for (const auto mode : exercised_modes)
     {

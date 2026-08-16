@@ -6780,8 +6780,6 @@ int main(int argc, char *argv[])
 
         const TestToneStartResult band_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "12m", std::nullopt});
-        const TestToneStartResult six_meter_rejected = start_test_tone(
-            TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
         const TestToneStartResult four_meter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "4m", std::nullopt});
         const TestToneStartResult two_meter_rejected = start_test_tone(
@@ -6790,30 +6788,25 @@ int main(int argc, char *argv[])
             TestToneRequest{TestToneFrequencySource::WsprBand, "1.25m", std::nullopt});
         const TestToneStartResult seventy_centimeter_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "70cm", std::nullopt});
-        const TestToneStartResult custom_rejected = start_test_tone(
-            TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
         const TestToneStartResult custom_125m_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::CustomRf, "", 223500000U});
         const TestToneStartResult custom_70cm_rejected = start_test_tone(
             TestToneRequest{TestToneFrequencySource::CustomRf, "", 435000000U});
 
         require(
-            !band_rejected.started && !six_meter_rejected.started &&
-                !four_meter_rejected.started && !two_meter_rejected.started &&
+            !band_rejected.started && !four_meter_rejected.started &&
+                !two_meter_rejected.started &&
                 !one_twenty_five_meter_rejected.started &&
                 !seventy_centimeter_rejected.started &&
-                !custom_rejected.started && !custom_125m_rejected.started &&
+                !custom_125m_rejected.started &&
                 !custom_70cm_rejected.started &&
                 band_rejected.message.find("12 m") !=
                     std::string::npos &&
-                six_meter_rejected.message.find("6 m") != std::string::npos &&
                 four_meter_rejected.message.find("4 m") != std::string::npos &&
                 two_meter_rejected.message.find("2 m") != std::string::npos &&
                 one_twenty_five_meter_rejected.message.find("1.25 m") !=
                     std::string::npos &&
                 seventy_centimeter_rejected.message.find("70 cm") !=
-                    std::string::npos &&
-                custom_rejected.message.find("6 m") !=
                     std::string::npos &&
                 custom_125m_rejected.message.find("1.25 m") != std::string::npos &&
                 custom_70cm_rejected.message.find("70 cm") != std::string::npos &&
@@ -6826,6 +6819,33 @@ int main(int argc, char *argv[])
                 band_gpio_prepare_call_count_for_test() == 0U,
             "named and custom disqualified GPIO Test Tones must reject before runtime or selector mutation");
         set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        config.mode = ModeType::QRSS;
+        copy_runtime_config(config, config);
+        set_raspberry_pi_generation_override_for_test(4);
+
+        const TestToneStartResult six_meter_started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::WsprBand, "6m", std::nullopt});
+        const TestToneStopResult six_meter_stopped = end_test_tone();
+        const TestToneStartResult custom_six_meter_started = start_test_tone(
+            TestToneRequest{TestToneFrequencySource::CustomRf, "", 51000000U});
+        const TestToneStopResult custom_six_meter_stopped = end_test_tone();
+        require(
+            six_meter_started.started && six_meter_stopped.tone_was_active &&
+                six_meter_stopped.stopped && custom_six_meter_started.started &&
+                custom_six_meter_stopped.tone_was_active &&
+                custom_six_meter_stopped.stopped,
+            "named and custom BCM2711 6 m TONE must start and stop after qualification");
+        set_scheduler_execution_suppressed_for_test(false);
+        clear_pi_generation_override_for_scope();
     }
 
     {
