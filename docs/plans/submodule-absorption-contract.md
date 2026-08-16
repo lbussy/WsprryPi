@@ -111,7 +111,8 @@ Retain, where present:
 
 - component source hierarchy;
 - README, design, API, and component documentation;
-- license, copyright, and attribution files;
+- license, copyright, and attribution files needed to establish the raw import
+  and support the Phase B licensing decision;
 - standalone Makefiles or CMake entry points;
 - standalone `main.cpp` or demonstration programs;
 - tests, examples, test vectors, golden vectors, and test data;
@@ -147,7 +148,9 @@ their tracked contents and history.
 `LCBLog` is used by other projects and must retain a strong reusable boundary:
 
 - keep `src/lcblog.cpp`, `src/lcblog.hpp`, and `src/lcblog.tpp` together;
-- preserve its README, license, Makefile, and test or demonstration entry point;
+- preserve its README, Makefile, and test or demonstration entry point; preserve
+  its component license through raw verification and then apply the approved
+  parent-license consolidation decision;
 - do not introduce dependencies on WsprryPi headers, globals, configuration,
   runtime services, or directory layout;
 - keep WsprryPi-specific integration outside the component directory where
@@ -171,10 +174,11 @@ component:
 
 ### Other source components
 
-Preserve each remaining component's named root, README, license, source
+Preserve each remaining component's named root, README, source
 hierarchy, and available standalone build, test, or demonstration assets. Do not
 refactor, format, modernize, or otherwise change component contents during
-absorption.
+raw absorption. Preserve component licenses through raw verification, then apply
+the approved Phase B licensing decision.
 
 #### `INI-Handler`
 
@@ -190,8 +194,11 @@ absorption.
   and build entry point;
 - review and correct active README instructions that still describe submodule
   installation or files no longer present in the imported tree;
-- record both the component MIT license and any still-applicable Broadcom BSD
-  attribution described by the component documentation;
+- state accurately that Broadcom mailbox work is a historical predecessor or
+  design lineage only, not code-level provenance for the current component;
+- do not require or retain a separate Broadcom license or notice unless the
+  fresh file-header and contribution audit finds actual third-party material
+  that contradicts the established current-tree ownership;
 - compile during ordinary non-hardware validation, but do not execute privileged
   `/dev/mem` or `/dev/vcio` paths without separate hardware authorization.
 
@@ -248,7 +255,9 @@ Preserve:
 
 - the `data/` deployment tree;
 - UI tests;
-- README, license, design, product, and API documentation;
+- README, design, product, and API documentation; preserve the component license
+  through raw verification and then apply the approved parent-license
+  consolidation decision;
 - installed web-root layout;
 - parent/UI integration behavior.
 
@@ -286,7 +295,12 @@ imported component, record:
 - checked-out SHA;
 - branch or detached state observed during migration;
 - most recent commit date and subject;
-- license path;
+- former component license path;
+- former component license and copyright holder;
+- ownership and contribution-audit result;
+- parent license adopted after absorption;
+- component license file retained or removed, with the reason;
+- third-party licenses and notices retained, if any;
 - relevant tags or version provenance;
 - whether the former remote was left untouched;
 - files deliberately excluded from import;
@@ -297,6 +311,40 @@ imported component, record:
 Use snapshot import. Do not merge unrelated repository histories into the parent
 or rewrite history. Former repositories remain untouched historical references
 unless a later task separately authorizes another disposition.
+
+## Licensing Consolidation
+
+The parent WsprryPi repository is MIT-licensed. A former component that is
+entirely the user's own copyright-controlled work may be absorbed under the
+parent repository's MIT license without permanently retaining a redundant
+component-level MIT license file.
+
+License consolidation is a Phase B adaptation, not part of raw snapshot import:
+
+1. retain and record the component license during Phase A tree-equivalence
+   verification;
+2. inspect all tracked file headers, contribution history, vendored directories,
+   copied material, and attribution documentation;
+3. verify that the user owns or controls all copyright in the component files;
+4. identify any third-party copyright, contribution, license, or notice that
+   must remain;
+5. when exclusive ownership is verified and no separate obligation exists,
+   remove the redundant component-level MIT license file and document adoption
+   of the parent license;
+6. otherwise retain the required component or third-party license and notice
+   files without alteration.
+
+Previously distributed component-repository versions remain available under
+their historical licenses. Absorption does not revoke those grants. The former
+component repositories remain untouched historical references; archival,
+visibility, deletion, transfer, or other remote disposition is a separate later
+task.
+
+For Mailbox specifically, the current component contains no Broadcom code.
+Broadcom is historical context only and creates no separate licensing obligation
+for the current tree absent contrary evidence discovered during the required
+audit. Update active Mailbox documentation so it does not imply current Broadcom
+code provenance.
 
 ## Per-Component Conversion Procedure
 
@@ -336,7 +384,9 @@ absorption:
 2. relocate component-local CI coverage or add equivalent parent workflow jobs;
 3. update active component documentation that still instructs users to clone,
    initialize, or update a submodule;
-4. apply any other behavior-neutral path or terminology change demonstrated to
+4. consolidate wholly owned component licensing under the parent license and
+   retain all required third-party notices according to the licensing audit;
+5. apply any other behavior-neutral path or terminology change demonstrated to
    be necessary by the integration inspection.
 
 List every Phase B content change separately in the migration report. Re-run
@@ -496,7 +546,10 @@ The migration is accepted only when:
 
 - all ten former submodule trees are ordinary parent content;
 - every imported tree is traceable to its exact original URL and revision;
-- component boundaries, documentation, licenses, and tests remain recognizable;
+- component boundaries, documentation, and tests remain recognizable;
+- every licensing disposition is documented, wholly owned components use the
+  approved parent license, and all required third-party licenses and notices are
+  retained;
 - `LCBLog` remains decoupled and practically extractable;
 - `WSPR-Reference` remains independently buildable and testable;
 - `WsprryPi-UI` remains coherent with unchanged behavior and layout;
