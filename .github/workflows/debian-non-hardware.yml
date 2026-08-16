@@ -28,16 +28,12 @@ jobs:
             build-essential ca-certificates chromium cmake git libgpiod-dev libssl-dev \
             libsystemd-dev nodejs php-cli pkg-config python3 strace
 
-      - name: Check out source and pinned submodules
+      - name: Check out source
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
-      - name: Trust container checkout ownership
+      - name: Trust parent checkout ownership
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git submodule foreach --recursive \
-            'git config --global --add safe.directory "$PWD"'
 
       - name: Build parent debug executable
         working-directory: src
