@@ -1,6 +1,6 @@
 # Issue 401: wspr2 legacy GPIO requalification
 
-Date: 2026-08-14
+Date: 2026-08-14; follow-up WSPR run: 2026-08-16 UTC
 
 ## Outcome
 
@@ -46,6 +46,18 @@ One correct decode demonstrates that a frame was receivable; it does not meet
 the three-consecutive-decode qualification contract. Both bands therefore
 remain WSPR-unqualified.
 
+### 2200 m follow-up
+
+A follow-up 2200 m run on 2026-08-16 UTC first repeated the conducted carrier
+control. The control passed at -1.526 Hz offset with 99.9643% of resolved
+transmitter-added power in the best 20 Hz. The subsequent coherent capture
+contained exactly 92,500,000 CF32 samples at 250,000 samples per second, with
+zero overflow and zero clipped samples, and covered the 01:08, 01:10, and
+01:12 UTC slots. All three transmissions completed, but none decoded as the
+expected `AA0NT EM18 20` message. This follow-up result is 0 of 3; combined
+with the earlier evidence, the maximum consecutive correct decode count
+remains 1 of the 3 required. WSPR therefore remains unqualified.
+
 ## Source and bench binding
 
 - WsprryPi source: `5109d24d39a4f832d31865014e1bfdee21249dd6`
@@ -83,6 +95,22 @@ The bundle retains superseded inconclusive analyses and interrupted-run
 artifacts for audit history. The authoritative carrier analyses use the `-v2`
 suffix. The final WSPR decisions are in
 `2200m-v4-decode-summary.json` and `12m-wspr-decode-summary.json`.
+
+The follow-up evidence is retained externally on `wspr5` at:
+
+```text
+/home/pi/issue401-legacy-2200m-completion-20260816T0110Z
+```
+
+Its verified `SHA256SUMS` manifest has SHA-256:
+
+```text
+a339fed370c8bcbdad2067f259e7f636e32cfba3f946b1b5f584f0f4e26daf22
+```
+
+The authoritative follow-up decode decision is
+`wspr/decode-summary-final.json`. The retained IQ capture SHA-256 is
+`2bab8e00f78459ee4619b56d00b903111faa8d72c7f8939d25feeb9d77726f86`.
 
 ## Qualification boundary
 
