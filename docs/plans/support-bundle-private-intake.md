@@ -10,6 +10,8 @@ Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) crea
 
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
+Local artifact implementation: [Issue 414 Slice 2](../research/issue-414-slice-2-local-artifacts.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
