@@ -160,6 +160,11 @@ Exclude:
 
 Document every exclusion.
 
+The complete reviewed allow/deny decisions and observed local-artifact evidence
+are in
+[`docs/components/submodule-absorption-exclusions.md`](../components/submodule-absorption-exclusions.md).
+Recompute that register's gates immediately before converting each component.
+
 Two currently tracked paths require deliberate, documented treatment:
 
 - retain `WsprryPi-UI/.impeccable/design.json` because it is the UI's intentional

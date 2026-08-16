@@ -6,6 +6,8 @@ Contract: [`../plans/submodule-absorption-contract.md`](../plans/submodule-absor
 
 Baseline: [`submodule-absorption-baseline.md`](submodule-absorption-baseline.md)
 
+Exclusions: [`submodule-absorption-exclusions.md`](submodule-absorption-exclusions.md)
+
 ## Purpose
 
 This procedure converts one reviewed gitlink at a time using only the exact
@@ -82,7 +84,7 @@ expected_tree=$(GIT_INDEX_FILE="$expected_index" \
 ```
 
 No other exclusion is implicit. A newly discovered exclusion requires review
-and a contract update before conversion.
+and updates to the exclusion register and contract before conversion.
 
 ## Gitlink replacement
 
