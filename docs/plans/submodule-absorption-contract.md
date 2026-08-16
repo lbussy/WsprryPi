@@ -484,6 +484,12 @@ gitlink and addition of its ordinary files.
 
 ## Required Integration Updates
 
+The reviewed file-by-file Phase B scope, preserved output names, CI coverage,
+historical-document boundary, and external documentation follow-up are in
+[`docs/components/submodule-absorption-adaptations.md`](../components/submodule-absorption-adaptations.md).
+Do not implement an unlisted cross-cutting adaptation without first reviewing
+and updating that inventory.
+
 Inspect the entire repository for active assumptions about submodules. At
 minimum inspect:
 
