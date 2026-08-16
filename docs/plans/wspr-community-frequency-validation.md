@@ -86,7 +86,8 @@ enabled and is not the intended Wsprry Pi design.
 ### Transmission journal
 
 Create a parent-application component that durably records transmission intent
-and outcome. It should not live in a dependency submodule.
+and outcome. It should not be placed inside an existing reusable component
+under `src/`.
 
 Minimum record fields:
 
@@ -441,8 +442,10 @@ To resume after loss of the original chat or gist:
 1. Read the linked dated research snapshot, including its license boundary.
 2. Recheck the gist revision/checksum and license status if it still exists.
 3. Recheck WSPR Live schema, terms, and limits.
-4. Inspect current `devel`, working tree, submodules, repository instructions,
-   frequency semantics, scheduler request boundary, runtime status, and tests.
+4. Inspect current `devel`, the complete parent working tree, repository
+   instructions, `docs/components/provenance.md`, all ten retained component
+   paths, frequency semantics, the scheduler request boundary, runtime status,
+   and tests. Review any component changes through path-scoped parent diffs.
 5. Resolve the journal schema and persistence decision before implementation.
 6. Obtain approval for exactly one delivery slice.
 7. Keep implementation evidence, later plans, non-goals, and RF qualification
