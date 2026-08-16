@@ -28,7 +28,7 @@
 
 # Debug flags (add/remove as needed)
 # 	"DEBUG_WSPR" handles the primary `llog.logS(DEBUG, "string");` debugging
-# 	All other is specifically guarded within the submodules and does not
+# 	All other is specifically guarded within the components and does not
 #	(should not) use LCBLog.
 DEBUG_DEFS := -DDEBUG_WSPR
 # DEBUG_DEFS := -DDEBUG_TRANS_SYMBOL
@@ -81,19 +81,19 @@ TEST_FREQ := 14095600
 PREFIX ?= /usr/local/bin
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Submodules
+# Components
 # ─────────────────────────────────────────────────────────────────────────────
 
-SUBMODULE_SRCDIRS :=
-SUBMODULE_SRCDIRS += $(wildcard ./Mailbox/src)
-SUBMODULE_SRCDIRS += $(wildcard ./INI-Handler/src)
-SUBMODULE_SRCDIRS += $(wildcard ./LCBLog/src)
-SUBMODULE_SRCDIRS += $(wildcard ./MonitorFile/src)
-SUBMODULE_SRCDIRS += $(wildcard ./PPM-Manager/src)
-SUBMODULE_SRCDIRS += $(wildcard ./Signal-Handler/src)
-SUBMODULE_SRCDIRS += $(wildcard ./Singleton/src)
-SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Reference/src/wspr)
-SUBMODULE_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
+COMPONENT_SRCDIRS :=
+COMPONENT_SRCDIRS += $(wildcard ./Mailbox/src)
+COMPONENT_SRCDIRS += $(wildcard ./INI-Handler/src)
+COMPONENT_SRCDIRS += $(wildcard ./LCBLog/src)
+COMPONENT_SRCDIRS += $(wildcard ./MonitorFile/src)
+COMPONENT_SRCDIRS += $(wildcard ./PPM-Manager/src)
+COMPONENT_SRCDIRS += $(wildcard ./Signal-Handler/src)
+COMPONENT_SRCDIRS += $(wildcard ./Singleton/src)
+COMPONENT_SRCDIRS += $(wildcard ./WSPR-Reference/src/wspr)
+COMPONENT_SRCDIRS += $(wildcard ./WSPR-Transmitter/src)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Project naming/versioning (from Git)
@@ -170,7 +170,7 @@ include ../scripts/build_metadata_rules.mk
 # ─────────────────────────────────────────────────────────────────────────────
 
 LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp' ! -name '._*' 2>/dev/null)
-SUBMODULE_CPP_SOURCES := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
+COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
 PPM_MANAGER_TEST_SOURCE := ./PPM-Manager/src/test.cpp
 SIGNAL_HANDLER_TEST_SOURCE := ./Signal-Handler/src/test.cpp
 SINGLETON_TEST_SOURCE := ./Singleton/src/test.cpp
@@ -190,9 +190,9 @@ RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_trans
 SIMULATED_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_test.cpp
 SIMULATED_BACKEND_REALTIME_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_realtime_test.cpp
 TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./WSPR-Transmitter/src/transmission_controller_contract_test.cpp
-SUBMODULE_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE),$(SUBMODULE_CPP_SOURCES))
+COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
 
-CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(SUBMODULE_CPP_SOURCES)
+CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES)
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
 CPP_OBJECTS       := $(patsubst %.cpp, $(OBJ_DIR_RELEASE)/%.o,$(REL_CPP_SOURCES))
@@ -439,7 +439,7 @@ CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
 # Include paths
 CXXFLAGS += -I$(abspath .)
 CXXFLAGS += -I$(abspath $(BUILD_METADATA_DIR))
-CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
+CXXFLAGS += $(foreach dir,$(COMPONENT_SRCDIRS),-I$(abspath $(dir)))
 CXXFLAGS += -I$(abspath ./WSPR-Reference/src/wspr)
 
 # Debug/release variants
@@ -473,14 +473,14 @@ $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)echo "Compiling (debug) $< into $@"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-define MAKE_DEBUG_SUBMOD_RULES
+define MAKE_DEBUG_COMPONENT_RULES
 $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
 	$(Q)echo "Compiling (debug) $$< into $$@"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
 endef
-$(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_DEBUG_SUBMOD_RULES,$(dir))))
+$(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_DEBUG_COMPONENT_RULES,$(dir))))
 
 # Link debug binary
 $(BIN_DIR)/$(TEST_OUT): $(CPP_DEBUG_OBJECTS)
@@ -770,14 +770,14 @@ $(OBJ_DIR_RELEASE)/%.o: %.cpp
 	$(Q)echo "Compiling (release) $< into $@"
 	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-define MAKE_RELEASE_SUBMOD_RULES
+define MAKE_RELEASE_COMPONENT_RULES
 $(OBJ_DIR_RELEASE)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
 	$(Q)echo "Compiling (release) $$< into $$@"
 	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
 endef
-$(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_RELEASE_SUBMOD_RULES,$(dir))))
+$(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_RELEASE_COMPONENT_RULES,$(dir))))
 
 # Link release binary
 $(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
