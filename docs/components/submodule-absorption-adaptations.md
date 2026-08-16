@@ -96,9 +96,34 @@ smallest fixed, component-local definition that preserves these outputs:
 | `src/Signal-Handler/src/Makefile` | `signal-handler` | `signal-handler_test` |
 | `src/WSPR-Transmitter/src/Makefile` | `wspr-transmitter` | `wspr-transmitter_test` |
 
-Do not change target names, compiler/linker flags, directories, source
-discovery, or sibling-component paths except to replace misleading variable and
-comment terminology where needed.
+Do not change the listed output names, compiler/linker flags, directories,
+source discovery, or sibling-component paths except to replace misleading
+variable and comment terminology where needed. Leave unrelated targets intact;
+the test-target safety exception below is deliberate and bounded.
+
+### Standalone test-target safety
+
+Test target names and recipes are not frozen when the current target is really a
+demo, depends on an operator service, or can reach a hardware-facing interface.
+During Phase B, remove, rename, or rewrite such a target and prefer a
+deterministic, unprivileged, hardware-free test using fixtures, mocks, fake
+providers, loopback-only resources, or dependency injection. Production APIs,
+executables, runtime behavior, and standalone buildability remain unchanged.
+
+In particular, review and adapt:
+
+- INI-Handler to use a temporary fixture rather than mutate a tracked file;
+- Mailbox so ordinary `test` never opens the Raspberry Pi mailbox device;
+- MonitorFile so its file-change exercise is bounded and temporary;
+- PPM-Manager so ordinary `test` uses an unavailable or fake provider rather
+  than live Chrony state or an indefinite signal wait;
+- Signal-Handler and Singleton so their tests remain bounded and unprivileged;
+- WSPR-Transmitter so generic `test` cannot select a physical backend, while
+  simulator, planner, fake-device, startup-quiesce, and controller contracts
+  remain the preferred CI surface.
+
+If a demo or live diagnostic remains useful, give it an explicit non-default
+target and document its operational boundary. Do not run it during Issue 415.
 
 `src/Singleton/src/Makefile` already fixes `NAME = singleton` and produces
 `singleton_test`; it requires no naming change. WSPR-Reference already fixes the
@@ -186,7 +211,7 @@ After implementing the inventory:
    gitlink, recursive-clone, pointer, nested-remote, and old-CI assumptions;
 2. classify every remaining hit as historical, provenance, or an error;
 3. compare parent source discovery and build commands before/after;
-4. verify every fixed standalone output name;
+4. verify every fixed standalone output name and every adapted test target;
 5. verify parent workflow coverage for WSPR-Transmitter, WSPR-Reference, UI,
    and parent integration without hardware access;
 6. validate installer clone and UI-copy behavior without installing or

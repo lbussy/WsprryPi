@@ -464,7 +464,11 @@ absorption:
    initialize, or update a submodule;
 4. consolidate wholly owned component licensing under the parent license and
    retain all required third-party notices according to the licensing audit;
-5. apply any other behavior-neutral path or terminology change demonstrated to
+5. replace, rename, or remove misleading component test targets that execute a
+   demo, depend on an operator service, or cross the non-hardware boundary;
+   prefer deterministic unprivileged hardware-free tests, and place any retained
+   live or demonstration entry point behind an explicit non-default target;
+6. apply any other behavior-neutral path or terminology change demonstrated to
    be necessary by the integration inspection.
 
 List every Phase B content change separately in the migration report. Re-run
@@ -517,9 +521,11 @@ after absorption. This may include:
 - renaming misleading build variables such as `SUBMODULE_SRCDIRS` where needed.
 
 Script and build-file edits must be behavior-neutral apart from removing
-obsolete submodule mechanics. Historical documents may retain the word
-"submodule" when clearly describing past state. Do not rewrite unrelated
-historical material merely for terminology cleanup.
+obsolete submodule mechanics and the explicitly approved test-target safety
+adaptations. Changing a test target must not change the component's production
+library, executable, API, or runtime behavior. Historical documents may retain
+the word "submodule" when clearly describing past state. Do not rewrite
+unrelated historical material merely for terminology cleanup.
 
 GitHub Actions only discovers workflows in the parent repository's root
 `.github/workflows` directory. Preserving a former component workflow under its
@@ -554,6 +560,12 @@ The migration does not authorize:
 
 ## Validation
 
+The reviewed component, parent, host, staged-export, deferred, and prohibited
+validation assignments are fixed in
+[`docs/components/submodule-absorption-validation-matrix.md`](../components/submodule-absorption-validation-matrix.md).
+Reinspect tracked entry points before running them and update the matrix if the
+commands or safety boundaries have changed.
+
 ### Repository validation
 
 Confirm:
@@ -585,6 +597,14 @@ validation where available, including:
 - standalone `LCBLog` build or test entry point plus an extraction smoke test
   from a temporary Git-free copy of that component alone;
 - other safe standalone component builds or tests.
+
+Component test target names and recipes are not compatibility requirements for
+Issue 415. Remove or alter a target when its current recipe is a demo, requires
+privilege or an operator service, or could reach hardware. Prefer a replacement
+that tests the same component boundary deterministically with fixtures, mocks,
+fake providers, loopback-only resources, or dependency injection. A retained
+demo or live check must use an explicit non-default name and must not be part of
+ordinary parent or CI validation.
 
 For the remaining components, apply these explicit boundaries:
 
