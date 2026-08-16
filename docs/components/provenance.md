@@ -347,3 +347,96 @@ in this slice. Authoritative default-Makefile validation on Debian and
 synchronized `wspr4`, parent-wide regression/CI, final staged export, and
 post-migration fresh-clone acceptance remain deferred. No scheduling-priority,
 service, installation, device, GPIO, I2C, RF, or hardware operation occurred.
+
+## PPM-Manager
+
+| Field | Recorded value |
+| --- | --- |
+| Component | PPM-Manager |
+| Retained path | `src/PPM-Manager` |
+| Original repository | `https://github.com/WsprryPi/PPM-Manager.git` |
+| Parent-recorded import SHA | `e60a6f287e4f56790b3a30d9888b1e60ec7b3e49` |
+| Checked-out SHA | `e60a6f287e4f56790b3a30d9888b1e60ec7b3e49` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-08-09T19:11:28-05:00` — `Expose qualified chrony correction snapshots` |
+| Version/tag provenance | No repository tags contain or point at the imported revision; short revision `e60a6f2` |
+| Raw source tree | `b9ffe89f5bd75c1d54f19203c2c23eb80005e10f` |
+| Expected and staged Phase A tree | `b9ffe89f5bd75c1d54f19203c2c23eb80005e10f` |
+| Staged tree after Phase B | `abdfb5967a83b46938f5419b905969d03c159545` |
+| Phase A archive | SHA-256 `7c357e4b2271eb3ce993eff5a626087104c85b8d9d3d54edcedffc3c2bcfb299`; 9 tracked files and 2 directory entries |
+| Former component license | `src/PPM-Manager/LICENSE.md` at raw import; MIT, copyright 2025–2026 Lee Bussy; blob `b0b8a0f9d2bdb41a17a6368d1fc155e0470f21c9` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed after the ownership and header audit found only Lee Bussy contributor identities and no third-party obligation. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`6a32c6075d8b258a29d0ec54ef6591018a20193d0b64162829f9c7e6639fb107`.
+The object-derived archive contained the exact recorded tree, including the
+weighting discussion and component license, before adaptation. Its ordinary
+staged Phase A subtree OID equaled the source tree OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. These ignored build products were deliberately excluded because they
+were absent from the recorded tree:
+
+- `src/build/bin/ppm-manager_test`
+- `src/build/obj/debug/main.o`
+- `src/build/obj/debug/ppm_manager.o`
+
+Their newline-delimited path-list SHA-256 was
+`ba249d97629071838f6a321e32765813c77dcc2263f34e4a223fecdde6b132b5`.
+There were no untracked files, nested submodules, nested Git administration, or
+other exclusions.
+
+### Phase B adaptations
+
+- Fixed standalone outputs as `ppm-manager` and `ppm-manager_test` rather than
+  deriving them from the parent Git remote.
+- Preserved the live Chrony demonstration in `main.cpp`, but separated it from
+  a new fixture-driven `test.cpp`. Ordinary `make test` calls only the static
+  provider-report parser. The live demo is available solely through
+  `make live-test PPM_MANAGER_LIVE_TEST=YES` and was not executed.
+- Excluded the standalone `test.cpp` from parent source discovery so it cannot
+  introduce a second `main()` into the WsprryPi application link.
+- Replaced obsolete submodule, source-deletion, installation, and component
+  license instructions with monorepo build/use, provider boundary, guarded live
+  diagnostic, and extraction guidance.
+- Removed the redundant component MIT license and redirected production source
+  comments to the repository-root license.
+
+The production provider API and implementation differ from the raw tree only
+in their license comments. Chrony commands, snapshot semantics, update-loop
+behavior, callbacks, scheduler behavior, and parent integration are unchanged.
+`PPM_Weighting_Discussion.md` is byte-for-byte unchanged.
+
+### Standalone build, validation, and extraction
+
+From `src/PPM-Manager/src`, `make release` builds the retained live demo,
+`make test` builds and runs the hardware-free fixture test, and `make live-test
+PPM_MANAGER_LIVE_TEST=YES` explicitly opts into live Chrony queries and an
+operator-terminated wait. The ordinary test covers a qualified mixed-source
+snapshot and provider-unavailable parsing without invoking `chronyc`,
+`systemctl`, scheduler changes, or external processes.
+
+To extract PPM-Manager, copy `src/PPM-Manager`, add repository metadata and a
+license file, and retain `ppm_manager.cpp`, `ppm_manager.hpp`, the Makefile,
+demo, parser test, README, and weighting discussion. The provider interface has
+no dependency on WsprryPi application internals.
+
+### Slice validation
+
+The default macOS build reached the known GNU-oriented Makefile boundary:
+Apple Clang rejects `-lstdc++fs` during compilation under `-Werror`. A
+supplemental host-only invocation with GNU-only flags removed built and ran
+`ppm-manager_test` successfully. The retained demo additionally requires
+`-Wno-deprecated-volatile` on this Apple Clang because its historical worker
+loop increments a volatile integer; the source was preserved.
+
+A Git-free staged extraction, guarded-live-target review, and parent dry-run
+source discovery are checked in this slice. Authoritative default-Makefile
+validation on Debian and synchronized `wspr4`, live Chrony behavior,
+parent-wide regression/CI, final staged export, and post-migration fresh-clone
+acceptance remain deferred. No `chronyc`, `systemctl`, clock configuration,
+scheduler-priority, service, installation, device, GPIO, I2C, RF, or hardware
+operation occurred.
