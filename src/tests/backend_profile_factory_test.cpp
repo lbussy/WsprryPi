@@ -1,4 +1,6 @@
 #include "backend_capabilities.hpp"
+#include "arg_parser.hpp"
+#include "config_handler.hpp"
 #include "wspr_transmit.hpp"
 
 #include <array>
@@ -53,5 +55,24 @@ int main()
                 throw std::runtime_error("omitted backend diagnostic lacks compiled capabilities");
             }
         }
+    }
+
+    constexpr std::array config_backends{
+        TransmitBackendKind::GPIO,
+        TransmitBackendKind::SI5351,
+        TransmitBackendKind::SIMULATED,
+    };
+    for (const auto backend : config_backends)
+    {
+        if (transmit_backend_is_compiled(backend))
+            continue;
+
+        ArgParserConfig candidate;
+        candidate.transmit_backend = backend;
+        std::string error;
+        if (validate_config_candidate(candidate, &error))
+            throw std::runtime_error("omitted configuration backend unexpectedly validated");
+        if (error != transmit_backend_unavailable_message(backend))
+            throw std::runtime_error("omitted configuration backend diagnostic mismatch");
     }
 }

@@ -3,10 +3,10 @@
 ## Status
 
 Research and implementation record. Compile-time transmission-backend source
-selection and factory enforcement are implemented through the `BACKENDS` Make
-variable. CLI/configuration capability reporting, backend-specific privilege
-policy, and a strict profile that removes ancillary libgpiod support remain
-future work.
+selection, factory enforcement, and runtime capability reporting are
+implemented through the `BACKENDS` Make variable and generated capability
+definitions. Backend-specific privilege policy and a strict profile that
+removes ancillary libgpiod support remain future work.
 
 This investigation was prompted by an Ubuntu 24.04 x86 user who wanted to use
 the Si5351 backend through a regular Linux `/dev/i2c-N` adapter. The user did not
@@ -153,8 +153,7 @@ make BACKENDS=si5351,simulated
 ```
 
 One authoritative build configuration now controls source selection, factory
-availability, validation, and profile tests. Help/version reporting remains a
-separate implementation slice.
+availability, validation, reporting, and profile tests.
 
 ### Source selection
 
@@ -186,16 +185,19 @@ backend dependency. Factory tests cover both enabled and omitted selections.
 
 ### Capability reporting
 
-The compiled backend set should be visible through:
+The compiled backend set is visible through:
 
-- `--help` and version output;
-- a machine-readable status/version field used by integrations; and
-- preferably a `--list-backends` command.
+- `--help` and `--version` output;
+- the `compiled_backends` field in the `/version` JSON response; and
+- the `--list-backends` command, which prints the canonical comma-separated
+  set for scripts.
 
-Configuration validation must distinguish an invalid backend name from a valid
-backend that is unavailable in this build. Existing configuration that selects
-an omitted backend must be rejected, not rewritten or normalized to an
-available backend.
+Command-line and persisted-configuration validation distinguish an invalid
+backend name from a valid backend that is unavailable in the current build.
+An omitted selection is rejected before runtime side effects, with the compiled
+set in the diagnostic; it is not rewritten, normalized, or allowed to fall
+back. The logical `gpio` selection maps to RP1 GPCLK capability on Raspberry Pi
+5 and legacy Raspberry Pi GPIO capability on earlier Raspberry Pi generations.
 
 ### Transmission GPIO versus ancillary GPIO
 
@@ -248,21 +250,26 @@ are not required to solve this problem. Static build capabilities fit the
 existing `ITransmissionBackend` architecture and give the linker a verifiable
 boundary.
 
-## Proposed validation
+## Validation status
 
-Implementation should be accepted only after the following evidence exists:
+The implemented profile and capability slices provide the following evidence:
 
 1. Ubuntu 24.04 x86 compilation with GCC 13 and the normal `-Werror` policy.
-2. Builds for all supported backend combinations, including an intentional
-   failure when no backend is enabled.
-3. Link or symbol audits proving that a strict Si5351 executable contains no
+2. Builds for the single-backend profiles, the Si5351-plus-simulated profile,
+   and the default all-backend profile, plus intentional rejection when no
+   backend is enabled.
+3. Link and symbol audits proving that a Si5351-only executable contains no
    Raspberry Pi GPIO, RP1 provider, mailbox, MMIO, PWM, or DMA implementation.
-4. CLI and configuration tests proving that omitted backend and ancillary GPIO
-   selections fail closed without fallback or persistence changes.
+4. CLI and configuration tests proving that omitted transmission-backend
+   selections fail closed without fallback or persistence changes, while
+   invalid names retain a distinct diagnostic.
 5. Existing Si5351 fake-I2C planner, transition, startup-quiescence, controller,
    cancellation, and cleanup tests.
 6. Existing simulated and Raspberry Pi backend regression suites in builds
    where those backends are enabled.
+
+The following validation remains outside the implemented slices:
+
 7. A file-access audit proving that an authorized Si5351-only run accesses the
    intended `/dev/i2c-N` and does not access `/dev/mem`, `/dev/vcio`, GPIO chip,
    RP1 GPCLK, mailbox, MMIO, PWM, or DMA paths.
@@ -270,11 +277,10 @@ Implementation should be accepted only after the following evidence exists:
 9. Separately authorized RF and frequency qualification before making any
    physical-output claim.
 
-## Documentation impact for a future implementation
+## Documentation impact
 
-This research record is not operator documentation. If backend-selectable
-builds are implemented, the repository will need developer/build documentation
-covering available profiles, dependencies, commands, capability reporting, and
-test matrices. Operator documentation in the separate `Wsprry_Pi_Docs`
-repository will require review if distributed packages can expose different
-backend or ancillary-GPIO capabilities.
+This research and implementation record documents the developer/build contract,
+available profiles, capability reporting, and validation boundary. Operator
+documentation in the separate `Wsprry_Pi_Docs` repository will require review
+if distributed packages expose different backend or ancillary-GPIO
+capabilities; no package or operator workflow changes are part of this slice.

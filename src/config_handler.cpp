@@ -58,6 +58,29 @@
 ArgParserConfig config;
 nlohmann::json jConfig;
 
+bool transmit_backend_is_compiled(TransmitBackendKind backend) noexcept
+{
+    switch (backend)
+    {
+    case TransmitBackendKind::GPIO:
+        return get_raspberry_pi_generation() == 5
+            ? WSPRRYPI_BACKEND_RP1_GPCLK
+            : WSPRRYPI_BACKEND_RPI_GPIO;
+    case TransmitBackendKind::SI5351:
+        return WSPRRYPI_BACKEND_SI5351;
+    case TransmitBackendKind::SIMULATED:
+        return WSPRRYPI_BACKEND_SIMULATED;
+    }
+    return false;
+}
+
+std::string transmit_backend_unavailable_message(TransmitBackendKind backend)
+{
+    return std::string("Backend '") + transmit_backend_kind_to_string(backend) +
+        "' is valid but unavailable in this build. Compiled backends: " +
+        get_compiled_backends() + ".";
+}
+
 namespace
 {
     constexpr double kManualPpmMin = -200.0;
@@ -153,9 +176,13 @@ namespace
             });
 
         if (lowered.empty() || lowered == "gpio")
+        {
             return TransmitBackendKind::GPIO;
+        }
         if (lowered == "si5351")
+        {
             return TransmitBackendKind::SI5351;
+        }
         if (lowered == "simulated")
             throw std::runtime_error(
                 "Operation.Transmit Backend 'simulated' is transient and cannot be persisted.");

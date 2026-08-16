@@ -42,6 +42,16 @@ jobs:
             rpi-gpio,rp1-gpclk,si5351,simulated
           do
             make release backend-profile-factory-test BACKENDS="$profile" SUDO=
+            omitted=
+            case "$profile" in
+              rpi-gpio) omitted=si5351 ;;
+              rp1-gpclk) omitted=si5351 ;;
+              si5351) omitted=simulated ;;
+              simulated) omitted=si5351 ;;
+              si5351,simulated) omitted=gpio ;;
+            esac
+            ../scripts/tests/backend_capability_reporting_test.sh \
+              ./build/bin/wsprrypi "$profile" "$omitted"
           done
 
   non-hardware-validation:

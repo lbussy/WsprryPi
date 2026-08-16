@@ -611,7 +611,8 @@ static std::string trim_copy_string(std::string value)
 }
 
 static TransmitBackendKind parse_transmit_backend_option(
-    const std::string &value)
+    const std::string &value,
+    bool require_compiled = true)
 {
     std::string lowered = trim_copy_string(value);
     std::transform(
@@ -625,16 +626,30 @@ static TransmitBackendKind parse_transmit_backend_option(
 
     if (lowered == "gpio")
     {
+        if (require_compiled &&
+            !transmit_backend_is_compiled(TransmitBackendKind::GPIO))
+            throw std::invalid_argument(
+                transmit_backend_unavailable_message(TransmitBackendKind::GPIO));
         return TransmitBackendKind::GPIO;
     }
 
     if (lowered == "si5351")
     {
+        if (require_compiled &&
+            !transmit_backend_is_compiled(TransmitBackendKind::SI5351))
+            throw std::invalid_argument(
+                transmit_backend_unavailable_message(TransmitBackendKind::SI5351));
         return TransmitBackendKind::SI5351;
     }
 
     if (lowered == "simulated")
+    {
+        if (require_compiled &&
+            !transmit_backend_is_compiled(TransmitBackendKind::SIMULATED))
+            throw std::invalid_argument(
+                transmit_backend_unavailable_message(TransmitBackendKind::SIMULATED));
         return TransmitBackendKind::SIMULATED;
+    }
 
     throw std::invalid_argument(
         "Invalid backend. Expected 'gpio', 'si5351', or 'simulated'.");
@@ -1432,6 +1447,7 @@ void print_usage(const std::string &message, int exit_code)
               << "General:\n"
               << "  -h, --help                         Display this help message.\n"
               << "  -v, --version                      Show the WsprryPi version.\n"
+              << "      --list-backends                List compiled transmission backends.\n"
               << "  -i, --ini-file <file>              Load and monitor an INI file for daemon/service style operation.\n"
               << "  -r, --repeat                       Repeat direct CLI transmissions until stopped.\n"
               << "  -x, --terminate <count>            Stop after count iterations of the direct CLI WSPR frequency list.\n"
@@ -1455,6 +1471,7 @@ void print_usage(const std::string &message, int exit_code)
               << "  -o, --offset                       Enable random WSPR transmit offset.\n"
               << "  --no-offset                        Disable random WSPR transmit offset.\n\n"
               << "Backend Selection:\n"
+              << "  Compiled backends: " << get_compiled_backends() << "\n"
               << "  --backend <gpio|si5351|simulated>  Select the backend. Default: gpio.\n"
               << "                                     simulated is transient, non-RF, and never persisted.\n"
               << "                                     GPIO uses the RP1 provider on Raspberry Pi 5.\n"
@@ -1631,6 +1648,16 @@ bool validate_config_candidate(
     ArgParserConfig &candidate,
     std::string *error_message)
 {
+    if (!transmit_backend_is_compiled(candidate.transmit_backend))
+    {
+        if (error_message != nullptr)
+        {
+            *error_message =
+                transmit_backend_unavailable_message(candidate.transmit_backend);
+        }
+        return false;
+    }
+
     resolve_backend_specific_config(candidate);
 
     const bool backend_validation_required =
@@ -2860,6 +2887,7 @@ bool set_frequencies()
  * Supported early options:
  * - `-h`, `--help`
  * - `-v`, `--version`
+ * - `--list-backends`
  *
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -2872,6 +2900,8 @@ bool handle_early_cli_options(int argc, char *argv[])
     bool early_enable_timestamps = config.date_time_log;
     bool early_debug_logging = config.debug_logging;
     TransmitBackendKind early_backend = config.transmit_backend;
+    bool explicit_backend = false;
+    std::string backend_parse_error;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -2896,23 +2926,29 @@ bool handle_early_cli_options(int argc, char *argv[])
         }
         else if (arg == "--backend" && i + 1 < argc)
         {
+            explicit_backend = true;
             try
             {
-                early_backend = parse_transmit_backend_option(argv[i + 1]);
+                early_backend = parse_transmit_backend_option(argv[i + 1], false);
+                backend_parse_error.clear();
             }
-            catch (const std::exception &)
+            catch (const std::exception &error)
             {
+                backend_parse_error = error.what();
             }
         }
         else if (arg.rfind("--backend=", 0) == 0)
         {
+            explicit_backend = true;
             try
             {
                 early_backend =
-                    parse_transmit_backend_option(arg.substr(10));
+                    parse_transmit_backend_option(arg.substr(10), false);
+                backend_parse_error.clear();
             }
-            catch (const std::exception &)
+            catch (const std::exception &error)
             {
+                backend_parse_error = error.what();
             }
         }
         else if (arg.size() > 1U && arg[0] == '-' && arg[1] != '-')
@@ -2949,10 +2985,25 @@ bool handle_early_cli_options(int argc, char *argv[])
 
         if (arg == "-v" || arg == "--version")
         {
-            std::cout << get_version_string() << std::endl;
+            std::cout << get_version_string() << std::endl
+                      << "Compiled backends: " << get_compiled_backends() << std::endl;
+            std::exit(EXIT_SUCCESS);
+        }
+
+        if (arg == "--list-backends")
+        {
+            std::cout << get_compiled_backends() << std::endl;
             std::exit(EXIT_SUCCESS);
         }
     }
+
+    if (!backend_parse_error.empty())
+        print_usage(backend_parse_error, EXIT_FAILURE);
+
+    if (explicit_backend && !transmit_backend_is_compiled(early_backend))
+        print_usage(
+            transmit_backend_unavailable_message(early_backend),
+            EXIT_FAILURE);
 
     return false;
 }
@@ -3073,12 +3124,12 @@ bool parse_command_line(int argc, char *argv[])
             if (arg == "--backend" && i + 1 < argc)
             {
                 config.transmit_backend =
-                    parse_transmit_backend_option(argv[i + 1]);
+                    parse_transmit_backend_option(argv[i + 1], false);
             }
             else if (arg.rfind("--backend=", 0) == 0)
             {
                 config.transmit_backend =
-                    parse_transmit_backend_option(arg.substr(10));
+                    parse_transmit_backend_option(arg.substr(10), false);
             }
         }
         catch (const std::exception &)
@@ -3202,7 +3253,8 @@ bool parse_command_line(int argc, char *argv[])
         }
         case 'v': // Version
         {
-            std::cout << get_version_string() << std::endl;
+            std::cout << get_version_string() << std::endl
+                      << "Compiled backends: " << get_compiled_backends() << std::endl;
             std::exit(EXIT_SUCCESS);
         }
         case 'n': // Use system-clock frequency estimate

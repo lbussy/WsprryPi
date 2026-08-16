@@ -30,6 +30,7 @@
 #include "version.hpp"
 
 #include "build_metadata.hpp"
+#include "backend_capabilities.hpp"
 
 #include "logging.hpp"
 
@@ -178,6 +179,11 @@ constexpr std::string_view RAW_BRH = to_string_view(MAKE_RAW_BRH); ///< Raw bran
 constexpr std::string_view BRANCH_STATE = to_string_view(MAKE_BRANCH_STATE); ///< Git branch state.
 constexpr std::string_view SANITIZED_COMMIT = to_string_view(MAKE_COMMIT); ///< Sanitized commit SHA.
 constexpr std::string_view BUILD_DIRTY = to_string_view(MAKE_DIRTY); ///< Build-time dirty state.
+
+std::string get_compiled_backends()
+{
+    return WSPRRYPI_COMPILED_BACKENDS;
+}
 constexpr std::string_view SANITIZED_EXE = to_string_view(MAKE_EXE); ///< Sanitized executable name.
 constexpr std::string_view SANITIZED_PRJ = to_string_view(MAKE_PRJ); ///< Sanitized project name.
 

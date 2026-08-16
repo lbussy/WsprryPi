@@ -93,6 +93,9 @@ extern std::string get_exe_commit();
  */
 extern std::string get_exe_build_dirty();
 
+/** Return the canonical comma-separated transmission backends in this build. */
+extern std::string get_compiled_backends();
+
 /**
  * @brief Retrieves the current debug state based on the build configuration.
  *
