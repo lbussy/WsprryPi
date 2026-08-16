@@ -12,7 +12,7 @@ the fresh 20 m control from +152.969 Hz to +13.733 Hz. The closing control was
 | Band | TONE carrier result | QRSS | FSKCW/DFCW | WSPR | Disposition |
 |---|---|---|---|---|---|
 | 12 m | Failed: -17,131.424 Hz; 11.03% best-20-Hz share | Suppressed | Suppressed | Suppressed | Unqualified |
-| 6 m | Passed 3/3: +63.324, +58.556, and +59.509 Hz; minimum 58.32% share | Qualified: 3/3 keyed repetitions | FSKCW qualified: 3/3 shifted-tone repetitions; DFCW unqualified after its closing carrier control failed | Failed: 2 consecutive correct decodes of 3 required | Partial; TONE, QRSS, and FSKCW |
+| 6 m | Passed 3/3: +63.324, +58.556, and +59.509 Hz; minimum 58.32% share | Qualified: 3/3 keyed repetitions | FSKCW and DFCW qualified: 3/3 shifted-tone repetitions each | Failed: 2 consecutive correct decodes of 3 required | Partial; all CW-family modes qualified |
 | 4 m | Failed: +2,146.149 Hz; 0.0515% share | Suppressed | Suppressed | Suppressed | Unqualified |
 | 2 m | Failed: -51,022.148 Hz; 0.0593% share | Suppressed | Suppressed | Suppressed | Unqualified |
 | 1.25 m | Planner rejected before RF | Unavailable | Unavailable | Unavailable | Unavailable |
@@ -24,8 +24,7 @@ the sole questionable band whose carrier prerequisite passed.
 
 A coalesced continuous tone qualifies TONE; it does not by itself qualify a
 keyed or shifted mode. Follow-up acquired-IQ testing independently qualified
-QRSS and FSKCW on 6 m. DFCW remains unqualified because the final control after
-its corrective captures exceeded the ±100 Hz carrier-offset gate.
+QRSS, FSKCW, and DFCW on 6 m.
 
 ## 6 m keyed-mode follow-up
 
@@ -42,7 +41,15 @@ best-20-Hz share. The control bracketing QRSS and FSKCW closed at +95.749 Hz
 and 89.37% share. Corrective DFCW `AA AA` captures showed the expected timing,
 gaps, and 5 Hz separation, but their final control failed at +107.193 Hz. A
 post-cooldown replacement opening control also failed at +109.100 Hz, so no
-further DFCW candidate run was permitted and no DFCW qualification is claimed.
+further DFCW candidate run was permitted in that session.
+
+A separate DFCW retest recalibrated the transient correction from 10.8511 to
+13.0013 PPM after a +108.147 Hz control failure. The replacement opening and
+closing controls both passed at -19.646 Hz, with 83.18% and 84.05% best-20-Hz
+share. Three accepted `AA AA` repetitions passed timing, RF-off gap, transition,
+carrier-offset, clipping, overflow, and spacing gates. Their median local
+dot/dash separations were 5.158, 4.813, and 5.788 Hz. DFCW is therefore
+qualified on the recorded 6 m BCM2711 path.
 
 The keyed follow-up used WsprryPi revision
 `71bef1d4b38d3810cab974bd3ddcd1928dd1a273` and WSPR-Transmitter revision
@@ -104,6 +111,11 @@ failed-attempt records, and the manifest. The verified `SHA256SUMS` file has
 SHA-256 `3cab95700bab6c0d99fa3c61f7333474620c581993952a487a3de1732fa74c72`.
 The audit excludes scheduled-mode idle attempts, overlapping capture failures,
 and DFCW captures that were not bracketed by a passing closing control.
+
+The superseding DFCW evidence is retained at
+`/home/pi/issue401-wspr4-6m-dfcw-retest-20260815`. Its 45-artifact manifest
+verified without error and has SHA-256
+`3fdbf0f1625f1b5e66e65b1db2deff49c5a8fbeabd8baa6dd820223cb48a040c`.
 
 ## Qualification boundary
 
