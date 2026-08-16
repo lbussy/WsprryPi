@@ -3,7 +3,8 @@
 Status: Proposed
 
 Implementation state: Not implemented
-Repositories affected: `WsprryPi`, `WsprryPi-UI`, and `Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
+Repositories affected: `WsprryPi` (including its `WsprryPi-UI` component) and
+`Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
 
 ## Purpose
 
