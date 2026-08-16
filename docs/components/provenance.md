@@ -184,3 +184,93 @@ Generated build output was cleaned before staging.
 Authoritative default-command validation on Debian and synchronized `wspr4`,
 optional journald coverage, parent-wide regression/CI, final staged export, and
 post-migration fresh-clone acceptance remain deferred to their contract gates.
+
+## Mailbox
+
+| Field | Recorded value |
+| --- | --- |
+| Component | Mailbox |
+| Retained path | `src/Mailbox` |
+| Original repository | `https://github.com/WsprryPi/Mailbox.git` |
+| Parent-recorded import SHA | `73943ec32448715a098b784368b74b6e315c2fcc` |
+| Checked-out SHA | `73943ec32448715a098b784368b74b6e315c2fcc` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-07-06T09:55:10-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | Repository tag `2.0.0` points to `44667d6ef634be7baf492b751cbc825c07a7ce69`; it is not an ancestor of the imported revision, so the import is identified by exact SHA rather than that version |
+| Raw source tree | `8a7e7ead9a0b47930b994225bff76601834600ab` |
+| Expected and staged Phase A tree | `8a7e7ead9a0b47930b994225bff76601834600ab` |
+| Staged tree after Phase B | `c4d317065df349a9f87227427cfb5afbdb9a53b9` |
+| Phase A archive | SHA-256 `ec9900382ee13d58a013768f71174e11acd46ccb3867e68bda2902d3672ead72`; 9 tracked files and 2 directory entries |
+| Former component license | `src/Mailbox/LICENSE.md` at raw import; MIT, copyright 2025–2026 Lee Bussy; blob `b0b8a0f9d2bdb41a17a6368d1fc155e0470f21c9` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed after the ownership/header audit confirmed no current Broadcom or other third-party code. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`781981996256b16883d87fa83a699ab79b466cfe41a196133458edccaf00436c`.
+The object-derived archive contained the exact recorded tree and license before
+adaptation. Its ordinary staged Phase A subtree OID equaled the source OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored files, untracked files, nested submodules,
+nested Git administration, or other exclusions.
+
+### Ownership, licensing, and historical lineage
+
+The current Mailbox implementation and file headers are Lee Bussy work. Earlier
+Broadcom mailbox software is historical design lineage only; no Broadcom source,
+legacy `old_mailbox.c`, or Broadcom-derived notice file is present in the
+recorded tree. The snapshot therefore creates no separate Broadcom licensing
+obligation. The former repository remains an untouched historical reference.
+
+### Phase B adaptations
+
+- Fixed standalone outputs as `mailbox` and `mailbox_test` rather than deriving
+  their names from the parent Git remote.
+- Changed ordinary `make test` into a hardware-free build-only check. Live demo
+  execution is retained only as `make live-test MAILBOX_LIVE_TEST=YES`, with an
+  explicit refusal guard; the `gdb` target has the same guard. Neither was run
+  during Issue 415.
+- Replaced obsolete submodule, Broadcom-repository, legacy-shim, and license
+  instructions with the retained monorepo layout, current API, live-device
+  boundary, extraction guidance, and accurate historical-lineage statement.
+- Removed the redundant component MIT license and redirected source comments to
+  the repository-root license.
+- Removed five pre-existing trailing spaces in Makefile comments/flags so the
+  parent staged whitespace check passes; this has no build or runtime effect.
+
+Production `bcm_model.hpp`, `mailbox.cpp`, and `mailbox.hpp` differ from the raw
+tree only in their license comments. Their API, device paths, I/O behavior, and
+implementation are unchanged. The standalone live demo remains in `main.cpp`.
+
+### Standalone build, validation, and extraction
+
+From `src/Mailbox/src`, `make debug`, `make release`, and `make test` compile
+`mailbox_test` or `mailbox` without executing a device operation. The explicit
+`live-test` target opens `/dev/vcio` and `/dev/mem` and is outside ordinary
+validation.
+
+To extract Mailbox, copy `src/Mailbox`, add repository metadata and a license
+file, then integrate `mailbox.cpp`, `mailbox.hpp`, and `bcm_model.hpp`. Retain
+the guarded live demo and do not represent build-only evidence as Raspberry Pi
+mailbox qualification.
+
+### Slice validation
+
+Make dry-runs proved that ordinary `make test` compiles and reports a
+hardware-free check without invoking `mailbox_test`, while `live-test` contains
+both the explicit `MAILBOX_LIVE_TEST=YES` guard and the demo invocation. The
+live target was not run.
+
+The macOS compile reached the first platform boundary and failed because Apple
+Clang cannot find Linux-only `linux/ioctl.h`. This is the expected host
+limitation; no source workaround was introduced. A Git-free temporary
+extraction reproduced the safe target graph, and parent dry-run discovery
+includes `Mailbox/src/mailbox.cpp` while excluding the standalone `main.cpp`.
+Generated partial build output was removed before staging.
+
+Authoritative compile/build-only validation on Debian and synchronized `wspr4`,
+all mailbox-device behavior, parent-wide regression/CI, final staged export,
+and post-migration fresh-clone acceptance remain deferred. No `/dev/vcio`,
+`/dev/mem`, mailbox ioctl, mapping, GPIO, I2C, or RF operation occurred.
