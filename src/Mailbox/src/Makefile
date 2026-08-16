@@ -33,8 +33,8 @@ CXXVER := 20
 # "sudo" prefix for executing tests, uncomment if required
 SUDO := sudo
 
-# Add any required submodules by their src path
-# SUBMODULE_SRCDIRS := $(wildcard ../../YOUR-SUBMODULE/src)
+# Add any required components by their src path
+# COMPONENT_SRCDIRS := $(wildcard ../../YOUR-COMPONENT/src)
 
 # Keep standalone output names stable inside the parent repository.
 EXE_NAME := mailbox
@@ -58,15 +58,15 @@ LOCAL_C_SOURCES   := $(shell find . -type f -name '*.c')
 LOCAL_CPP_SOURCES := $(shell find . -type f -name '*.cpp')
 
 # -----------------------------------------------------------------------------
-# Find all submodule C and C++ sources, excluding 'main.c' and 'main.cpp'
-SUBMODULE_C_SOURCES   := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.c' ! -name 'main.c' 2>/dev/null)
-SUBMODULE_CPP_SOURCES := $(shell find $(SUBMODULE_SRCDIRS) -type f -name '*.cpp' ! -name 'main.cpp' 2>/dev/null)
+# Find all component C and C++ sources, excluding 'main.c' and 'main.cpp'
+COMPONENT_C_SOURCES   := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.c' ! -name 'main.c' 2>/dev/null)
+COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name 'main.cpp' 2>/dev/null)
 
 # Combine them:
-C_SOURCES   := $(LOCAL_C_SOURCES)   $(SUBMODULE_C_SOURCES)
-CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(SUBMODULE_CPP_SOURCES)
+C_SOURCES   := $(LOCAL_C_SOURCES)   $(COMPONENT_C_SOURCES)
+CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES)
 
-# Strip any leading ../../ from the submodule paths so your object rules work:
+# Strip any leading ../../ from the component paths so your object rules work:
 REL_C_SOURCES   := $(patsubst ../../%,%,$(C_SOURCES))
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
@@ -135,7 +135,7 @@ CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 
 # Include paths
 CXXFLAGS += -I$(abspath .)
-CXXFLAGS += $(foreach dir,$(SUBMODULE_SRCDIRS),-I$(abspath $(dir)))
+CXXFLAGS += $(foreach dir,$(COMPONENT_SRCDIRS),-I$(abspath $(dir)))
 
 # C++ Debug Flags
 CXX_DEBUG_FLAGS := $(CXXFLAGS) -g $(DEBUG)	# Debug flags
@@ -173,8 +173,8 @@ $(OBJ_DIR_DEBUG)/%.o: %.cpp
 	$(Q)echo "Compiling (debug) $< into $@"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Auto‑generate debug compile rules for each submodule
-define MAKE_DEBUG_SUBMOD_RULES
+# Auto‑generate debug compile rules for each component
+define MAKE_DEBUG_COMPONENT_RULES
 $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
@@ -188,7 +188,7 @@ $(OBJ_DIR_DEBUG)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.c
 	$(Q)$(CC)  $(C_DEBUG_FLAGS)   -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
 endef
 
-$(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_DEBUG_SUBMOD_RULES,$(dir))))
+$(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_DEBUG_COMPONENT_RULES,$(dir))))
 
 # Link debug binary
 build/bin/$(TEST_OUT): $(CPP_DEBUG_OBJECTS) $(C_DEBUG_OBJECTS)
@@ -209,8 +209,8 @@ $(OBJ_DIR_RELEASE)/%.o: %.c
 	$(Q)echo "Compiling (release) $< into $@"
 	$(Q)$(CC) $(C_RELEASE_FLAGS) -MF $(DEP_DIR)/$*.d -c $< -o $@
 
-# Auto‑generate release compile rules for each submodule
-define MAKE_RELEASE_SUBMOD_RULES
+# Auto‑generate release compile rules for each component
+define MAKE_RELEASE_COMPONENT_RULES
 $(OBJ_DIR_RELEASE)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.cpp
 	$(Q)mkdir -p $$(@D)
 	$(Q)mkdir -p $(DEP_DIR)/$(dir $$*)
@@ -225,7 +225,7 @@ $(OBJ_DIR_RELEASE)/$(patsubst ../../%,%,$(1))/%.o: $(1)/%.c
 	$(Q)$(CC)  $(C_RELEASE_FLAGS)   -MF $(DEP_DIR)/$$*.d -c $$< -o $$@
 endef
 
-$(foreach dir,$(SUBMODULE_SRCDIRS),$(eval $(call MAKE_RELEASE_SUBMOD_RULES,$(dir))))
+$(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_RELEASE_COMPONENT_RULES,$(dir))))
 
 # Link release binary
 build/bin/$(OUT): $(CPP_OBJECTS) $(C_OBJECTS)
