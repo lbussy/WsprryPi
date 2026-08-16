@@ -15,6 +15,7 @@
 NAME        = singleton
 TEST_NAME   = $(NAME)_test
 DEMO_NAME   = $(NAME)_demo
+DEMO_DEP    = $(DEMO_NAME).d
 
 # Compiler settings
 CXX         = g++
@@ -60,7 +61,8 @@ $(DEMO_NAME): $(DEMO_SRC) singleton.hpp
 
 # Clean up build artifacts
 clean:
-	-$(RM) $(TEST_OBJ) $(TEST_DEP) $(TEST_NAME) $(DEMO_NAME)
+	-$(RM) $(TEST_OBJ) $(TEST_DEP) $(TEST_NAME) $(DEMO_NAME) $(DEMO_DEP)
+	-rm -rf $(TEST_NAME).dSYM $(DEMO_NAME).dSYM
 
 # Include dependency files
 -include $(TEST_DEP)
