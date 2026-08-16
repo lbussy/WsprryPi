@@ -23,9 +23,9 @@ layer. They must not control the meaning of a band for CW modes.
 
 The parent WsprryPi application should own the single frequency-to-band
 correlation catalog because it coordinates every mode and Band GPIO/filter
-selection. `WSPR-Transmitter` should consume the immutable correlated band and
-mode when applying its qualification records. It should not retain a second
-frequency-edge table after migration.
+selection. The `src/WSPR-Transmitter` component should consume the immutable
+correlated band and mode when applying its qualification records. It should not
+retain a second frequency-edge table after migration.
 
 The transmitter remains authoritative for final numeric, backend,
 representability, lifecycle, cancellation, output-inhibition, and cleanup
@@ -112,9 +112,9 @@ The application must not infer locality from an IP address or callsign. A
 profile is an operator-selected convenience default, not a regulatory claim.
 
 Local per-band preferences belong in the normal parent WsprryPi configuration
-lifecycle, alongside the selected WSPR profile. They do not belong in
-`WSPR-Transmitter`. Start with configuration-backed preferences rather than a
-separate database. A future schema might conceptually express:
+lifecycle, alongside the selected WSPR profile. They do not belong in the
+`src/WSPR-Transmitter` component. Start with configuration-backed preferences
+rather than a separate database. A future schema might conceptually express:
 
 ```ini
 [WSPR]
@@ -156,7 +156,8 @@ presets, or saved local preferences.
 
 Before implementation:
 
-1. inspect the final #401 parent/submodule request and enforcement boundaries;
+1. inspect the final #401 request contract and its parent/component enforcement
+   boundaries;
 2. inventory every band-correlation, selector, filter, parser, Test Tone, and
    qualification consumer;
 3. re-verify the international correlation envelopes;
@@ -165,6 +166,7 @@ Before implementation:
 6. review defaults, parsing, validation, persistence, serialization, scheduling,
    UI, and documentation impacts;
 7. define the exact `22m` compatibility behavior;
-8. define independent parent and submodule tests and commit ordering.
+8. define standalone component tests, parent integration tests, and the intended
+   parent-repository commit scope.
 
 No implementation work is authorized by this reference contract.
