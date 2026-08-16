@@ -71,15 +71,31 @@ Keep temporary remote evidence under `/tmp` or another non-repository temporary 
 ## 1. Read-only preflight
 
 1. Resolve the requested host and confirm SSH access with the intended account.
-2. Inspect the parent branch, commit, upstream divergence, working tree, and recursive submodule state:
+2. Inspect the parent branch, commit, upstream divergence, working tree, retained
+   component inventory, and repository organization:
 
    ```bash
+   git branch --show-current
+   git rev-parse HEAD
    git status --short --branch
-   git submodule status --recursive
-   git submodule foreach --recursive 'git status --short --branch'
+   git rev-list --left-right --count HEAD...@{upstream}
+   test ! -e .gitmodules
+   test -f docs/components/provenance.md
+   for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+       src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
+       src/WSPR-Transmitter src/WSPR-Reference; do
+       test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
+       test -z "$(find "$component" -name .git -print -quit)" || {
+           printf 'Nested Git administration under: %s\n' "$component" >&2
+           exit 1
+       }
+   done
+   git ls-files -s | awk '$1 == "160000" { found=1; print > "/dev/stderr" } END { exit found }'
    ```
 
-3. Stop and report any unexpected dirty, uninitialized, divergent, or mismatched state. Do not reset, clean, stash, switch, pull, or overwrite it.
+3. Stop and report any unexpected dirty, divergent, missing-component,
+   nested-Git, or gitlink state. Do not reset, clean, stash, switch, pull, or
+   overwrite it.
 4. Record the running service state, installed application version, served UI build identity when available, failed systemd units, and recent warning/error journal entries.
 5. Inspect current configuration without changing it. Record the station identity, mode, transmit gate, backend, GPIO assignments and polarities, boot policy, LED, amplifier, and shutdown settings.
 6. Determine whether the installed binary or served UI is stale relative to the clean checkout.
@@ -204,15 +220,18 @@ Using the authorized temporary identity and hardware assignments:
 5. Verify the restored identity, mode, backend, boot policy, transmit gate, LED, amplifier, shutdown, selector, and GPIO values through runtime readback.
 6. Confirm all tested output pins are at safe inactive levels.
 7. Verify service active state, zero unexpected failed units, controller connectivity, current version, and no new warning/error journal entries.
-8. Recheck parent and recursive submodule status and upstream divergence. The test must not leave repository changes.
+8. Recheck parent status, upstream divergence, component presence, provenance,
+   and the absence of `.gitmodules`, gitlinks, and nested Git administration.
+   The test must not leave repository changes.
 9. Remove temporary sensitive material when safe, but retain the local issue list and the baseline backup until restoration is conclusively verified.
 
 ## 11. Completion report
 
 Lead with the overall outcome and link the local issue list. Report:
 
-- target host, branch, parent commit, UI commit, installed version, and upstream divergence;
-- parent and recursive submodule cleanliness;
+- target host, branch, parent commit, UI source identity when available,
+  installed version, and upstream divergence;
+- complete parent cleanliness and retained-component integrity;
 - automated tests and their results;
 - whether a rebuild, install, UI copy, or service restart occurred;
 - pages, workflows, states, and viewport matrix reviewed;
@@ -238,6 +257,7 @@ The full suite is complete only when:
 - original configuration is restored and checksum-verified;
 - the service and UI controller are healthy;
 - logs contain no unexplained new warnings or errors;
-- parent and submodules retain their pre-test state;
+- the parent working tree and all ordinary component content retain their
+  pre-test state;
 - findings are saved outside the repository;
 - any deliberately excluded destructive power action is clearly reported as not run.
