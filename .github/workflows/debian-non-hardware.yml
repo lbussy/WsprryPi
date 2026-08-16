@@ -26,7 +26,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential ca-certificates chromium cmake git libgpiod-dev libssl-dev \
-            libsystemd-dev nodejs php-cli pkg-config python3 strace
+            libsystemd-dev nodejs npm php-cli pkg-config python3 strace
 
       - name: Check out source
         uses: actions/checkout@v7
