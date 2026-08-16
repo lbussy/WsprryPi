@@ -274,3 +274,76 @@ Authoritative compile/build-only validation on Debian and synchronized `wspr4`,
 all mailbox-device behavior, parent-wide regression/CI, final staged export,
 and post-migration fresh-clone acceptance remain deferred. No `/dev/vcio`,
 `/dev/mem`, mailbox ioctl, mapping, GPIO, I2C, or RF operation occurred.
+
+## MonitorFile
+
+| Field | Recorded value |
+| --- | --- |
+| Component | MonitorFile |
+| Retained path | `src/MonitorFile` |
+| Original repository | `https://github.com/WsprryPi/MonitorFile.git` |
+| Parent-recorded import SHA | `82588ffd565e6aeedc235bd724f1066d40de2382` |
+| Checked-out SHA | `82588ffd565e6aeedc235bd724f1066d40de2382` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-07-06T09:55:17-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | No repository tags point at the imported revision; short revision `82588ff` |
+| Raw source tree | `818d2cf9b61f3d4cb5cb7cec6a7bebe0eab0a0e2` |
+| Expected and staged Phase A tree | `818d2cf9b61f3d4cb5cb7cec6a7bebe0eab0a0e2` |
+| Staged tree after Phase B | `d8135fb37b6fcf0fc7ca13c1ac66cee31024f0c9` |
+| Phase A archive | SHA-256 `ad87d4a4cc2477a56c18832a39ef89a42cb7c557de831df4bb4c123b3977231f`; 8 tracked files and 2 directory entries |
+| Former component license | `src/MonitorFile/LICENSE.md` at raw import; MIT, copyright 2025–2026 Lee Bussy; blob `b0b8a0f9d2bdb41a17a6368d1fc155e0470f21c9` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed after the ownership and header audit found only Lee Bussy attribution and no third-party obligation. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`c5caf9f1f4fd5a291736099316d23e9fe781ba4f6f03fd1c53ddb301e75f0263`.
+The object-derived archive contained the exact recorded tree and component
+license before adaptation. Its ordinary staged Phase A subtree OID equaled the
+source OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored files, untracked files, nested submodules,
+nested Git administration, or other exclusions.
+
+### Phase B adaptations
+
+- Fixed standalone outputs as `monitorfile` and `monitorfile_test`, independent
+  of the parent Git remote, and reduced include discovery to the component root.
+- Replaced the indefinite, signal-terminated demo with a bounded callback test
+  that creates and removes a unique system temporary directory. The production
+  MonitorFile API and implementation are unchanged apart from license comments.
+- Replaced obsolete clone, contribution, and component-license instructions
+  with monorepo build/use, safety-boundary, and extraction guidance.
+- Removed the redundant component MIT license and redirected source comments to
+  the repository-root license.
+- Removed four pre-existing trailing spaces in the Makefile license block so
+  the parent staged whitespace check passes.
+
+### Standalone build, validation, and extraction
+
+From `src/MonitorFile/src`, `make release` builds `monitorfile` and `make test`
+builds and runs `monitorfile_test`. The test uses only filesystem and threading
+facilities, waits at most three seconds for its callback, calls `stop()`, and
+removes its temporary directory.
+
+To extract MonitorFile, copy `src/MonitorFile`, add repository metadata and a
+license file, then compile `monitorfile.cpp` with `monitorfile.hpp`. No parent
+application internals or directory layout are required.
+
+### Slice validation
+
+The default macOS build reached the known Makefile portability boundary:
+Apple Clang rejects the GNU-oriented `-lstdc++fs` compilation flag under
+`-Werror`. A supplemental host-only invocation overriding GNU-only flags with
+`COMMON_FLAGS='-Wall -Werror -MMD -MP' COMM_CXX_FLAGS='-std=c++20'
+LDFLAGS='-lpthread'` built and ran `monitorfile_test` successfully. It exited
+zero within two seconds and left neither build output nor a temporary test
+directory in the checkout or `/private/tmp`.
+
+A Git-free temporary extraction and parent dry-run source discovery are checked
+in this slice. Authoritative default-Makefile validation on Debian and
+synchronized `wspr4`, parent-wide regression/CI, final staged export, and
+post-migration fresh-clone acceptance remain deferred. No scheduling-priority,
+service, installation, device, GPIO, I2C, RF, or hardware operation occurred.
