@@ -285,11 +285,7 @@ int main()
         require_controller_policy(
             wsprrypi::BackendKind::SI5351,
             mode,
-            137500.0, false, "untested Si5351 2200 m mode");
-        require_controller_policy(
-            wsprrypi::BackendKind::SI5351,
-            mode,
-            137500.0, true, "experimental Si5351 2200 m mode", true, false);
+            137500.0, true, "qualified Si5351 2200 m mode");
     }
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,

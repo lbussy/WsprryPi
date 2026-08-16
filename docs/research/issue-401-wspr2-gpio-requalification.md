@@ -81,6 +81,20 @@ and the fully overridden form reached the selector as 0 Hz. The canonical
 This CLI defect does not invalidate the canonical-selector RF evidence and is
 not corrected by this research record.
 
+## Si5351 2200 m qualification
+
+On 2026-08-16, the Si5351 backend completed the separate 2200 m qualification
+on a Raspberry Pi 5 using CLK0, minimum 2 mA drive, a 27 MHz external TCXO, and
+an SDRplay RSP1B receiver. Opening and closing 160 m carrier controls passed.
+The 137,500 Hz carrier was measured at +0.381 Hz from the request, and three
+consecutive WSPR frames decoded `AA0NT EM18 20` at the requested frequency.
+QRSS, FSKCW, and DFCW each passed three independently captured `TEST`
+repetitions. FSKCW retained continuous RF with 5.001 Hz tone separation; DFCW
+used distinct dot and dash tones separated by approximately 5.08 Hz. Every
+credited capture completed without receiver overflow, and CLK0 was disabled
+after each run. The retained evidence is stored on the qualification host at
+`/home/pi/issue401-si5351-2200m-current-20260816T125941Z`.
+
 ## Evidence integrity
 
 The immutable working evidence is retained externally on `wspr5` at:
