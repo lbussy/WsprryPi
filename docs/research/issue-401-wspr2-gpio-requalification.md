@@ -24,6 +24,11 @@ frames were transmitted for those bands.
 | 1.25 m | 222,101,500 Hz | Fail: -830.269 Hz offset; 1.0872% best-20-Hz share | Suppressed | Unqualified |
 | 70 cm | 432,301,500 Hz | Fail: +62,674.904 Hz offset; 3.2870% best-20-Hz share | Suppressed | Unqualified |
 
+The resulting legacy 500 MHz PLLD policy on 2200 m qualifies TONE from the
+passing carrier evidence. QRSS, FSKCW, and DFCW remain untested and fail closed
+without the explicit experimental override. WSPR remains unqualified after the
+completed decode attempts.
+
 Passing carrier evidence establishes a coalesced continuous tone and the
 carrier prerequisite used by CW-family review. It does not independently
 qualify QRSS keying or the wider tone spacing and transitions used by FSKCW and
