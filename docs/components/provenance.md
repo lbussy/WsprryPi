@@ -99,3 +99,88 @@ generated build output was cleaned before staging.
 Authoritative default-command validation on Debian and synchronized `wspr4`,
 parent-wide regression/CI, final staged export, and post-commit fresh-clone
 acceptance remain deferred to their contract gates.
+
+## LCBLog
+
+| Field | Recorded value |
+| --- | --- |
+| Component | LCBLog |
+| Retained path | `src/LCBLog` |
+| Original repository | `https://github.com/WsprryPi/LCBLog` |
+| Parent-recorded import SHA | `a5d74b837e663d8740bc9aba4e3e712cd2d84308` |
+| Checked-out SHA | `a5d74b837e663d8740bc9aba4e3e712cd2d84308` |
+| Observed state | detached HEAD; `git submodule status` described the commit as `heads/main` |
+| Most recent commit | `2026-07-06T09:55:02-05:00` — `Normalize .gitignore` |
+| Version/tag provenance | No repository tags contain or point at the imported revision; short revision `a5d74b8` |
+| Raw source tree | `94e4e24439e03dbf3b22e3781037b6c9e92ffdff` |
+| Expected and staged Phase A tree | `94e4e24439e03dbf3b22e3781037b6c9e92ffdff` |
+| Staged tree after Phase B | `766e636ceb4c8912480c168a27fec6df2252b547` |
+| Phase A archive | SHA-256 `a5869ff83ad8e61a481227ff2c8a162f23872bfddf8f8130bebae724e05cea0e`; 9 tracked files and 2 directory entries |
+| Former component license | `src/LCBLog/LICENSE.md` at raw import; MIT, copyright 2025–2026 Lee Bussy; blob `b0b8a0f9d2bdb41a17a6368d1fc155e0470f21c9` |
+| License after absorption | Parent `LICENSE.md` (MIT). The redundant component license was removed in Phase B after the ownership audit found only Lee Bussy contributor identities and no third-party obligation in this component. |
+| Former remote | Left untouched; no commit, push, branch, tag, archive, visibility, or synchronization operation was performed in the former repository. |
+
+### Raw-tree evidence and exclusions
+
+The tracked inventory SHA-256 was
+`1ef60d1206b8823d552f6af1158fc508374972cf83a3be6e97263b048613b87a`.
+The object-derived archive contained the exact recorded tree, including the
+component license, before any adaptation. The ordinary staged Phase A subtree
+OID equaled the source tree OID.
+
+The live submodule's `.git` administrative link was not tracked and was not
+imported. There were no ignored files, untracked files, nested submodules,
+nested Git administration, or other exclusions. LCBLog's tracked `.gitignore`
+contains `lcblog*`, which initially hid its three tracked library files from an
+ordinary parent `git add`. Force-adding only the exact archive-restored tree
+restored Phase A equality; the snapshot method now records this required case.
+
+### Phase B adaptations
+
+- Fixed standalone output naming as `lcblog` and `lcblog_test` instead of
+  deriving it from `remote.origin.url`.
+- Removed unused GPIO pkg-config/linker and preprocessor remnants from the
+  standalone Makefile. LCBLog itself has no GPIO dependency; optional journald
+  support remains intact.
+- Removed the redundant component-level MIT license after adopting the parent
+  MIT license. Source comments refer generically to the repository-root license,
+  and the README records the monorepo and extraction dispositions.
+- Updated README paths, standalone build instructions, license wording, and
+  practical extraction guidance without changing the logging API or behavior.
+
+The production library remains the cohesive set `src/lcblog.cpp`,
+`src/lcblog.hpp`, and `src/lcblog.tpp`. No WsprryPi header, global,
+configuration, runtime-service, hardware, or directory-layout dependency was
+introduced.
+
+### Standalone build, test, and extraction
+
+From `src/LCBLog/src`, the standalone entry points are `make release`,
+`make debug`, and the bounded unprivileged hardware-free `make test SUDO=`. The
+expected outputs are `build/bin/lcblog` and `build/bin/lcblog_test`. Journald is
+optional and detected through `libsystemd`; stdout/stderr operation remains the
+portable default when it is unavailable.
+
+To extract LCBLog, copy `src/LCBLog` alone into a new repository, add repository
+metadata and a license file, then run the standalone commands from its `src`
+directory. WsprryPi-specific integration must remain outside the extracted
+component.
+
+### Slice validation
+
+The default standalone command reached compilation on macOS but Apple Clang
+rejected GCC's `-fmax-errors=10` under `-Werror`; its next diagnostic also
+required suppressing Apple Clang's `-Wpessimizing-move` for the existing
+template implementation. Supplemental macOS debug, test, and release builds
+passed with only platform/toolchain flags and unavailable Linux libraries
+overridden. The test was bounded, unprivileged, and used stdout only.
+
+A Git-free temporary extraction containing only `src/LCBLog` independently
+built and passed the same hardware-free test. Parent dry-run source discovery
+includes `LCBLog/src/lcblog.cpp`, excludes the standalone `main.cpp`, and the
+production library files contain no reference to WsprryPi or another component.
+Generated build output was cleaned before staging.
+
+Authoritative default-command validation on Debian and synchronized `wspr4`,
+optional journald coverage, parent-wide regression/CI, final staged export, and
+post-migration fresh-clone acceptance remain deferred to their contract gates.

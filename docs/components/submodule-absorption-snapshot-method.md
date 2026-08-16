@@ -111,11 +111,19 @@ Do not delete `.git/modules` data. The former component object database remains
 available as comparison evidence; optional administrative cleanup is outside
 this migration.
 
-Stage only the selected component path:
+Stage only the selected component path. A component's own ignore rules can
+match files that were tracked in its former repository (LCBLog, for example,
+has a broad `lcblog*` rule). Because the restored directory contains only the
+reviewed archive at this Phase A boundary, force-add the exact restored tree:
 
 ```sh
-git add -A -- "$component_path"
+git add -f -A -- "$component_path"
 ```
+
+Immediately compare the staged tree OID. A missing path, including one hidden
+by a component-local ignore rule, fails raw equivalence. Do not use a later
+force-add after builds or tests have created ignored output; stage Phase B edits
+explicitly so generated artifacts remain excluded.
 
 ## Content-addressed comparison
 
