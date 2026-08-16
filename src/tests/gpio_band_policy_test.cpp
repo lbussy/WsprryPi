@@ -280,6 +280,17 @@ int main()
         wsprrypi::BackendKind::SI5351,
         wsprrypi::TransmissionMode::TONE,
         223500000.0, false, "unavailable cannot be overridden", true, true);
+    for (const auto mode : exercised_modes)
+    {
+        require_controller_policy(
+            wsprrypi::BackendKind::SI5351,
+            mode,
+            137500.0, false, "untested Si5351 2200 m mode");
+        require_controller_policy(
+            wsprrypi::BackendKind::SI5351,
+            mode,
+            137500.0, true, "experimental Si5351 2200 m mode", true, false);
+    }
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::WSPR,
