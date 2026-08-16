@@ -24,10 +24,8 @@ frames were transmitted for those bands.
 | 1.25 m | 222,101,500 Hz | Fail: -830.269 Hz offset; 1.0872% best-20-Hz share | Suppressed | Unqualified |
 | 70 cm | 432,301,500 Hz | Fail: +62,674.904 Hz offset; 3.2870% best-20-Hz share | Suppressed | Unqualified |
 
-The resulting legacy 500 MHz PLLD policy on 2200 m qualifies TONE from the
-passing carrier evidence. QRSS, FSKCW, and DFCW remain untested and fail closed
-without the explicit experimental override. WSPR remains unqualified after the
-completed decode attempts.
+The resulting legacy 500 MHz PLLD policy on 2200 m qualifies TONE, QRSS,
+FSKCW, and DFCW. WSPR remains unqualified after the completed decode attempts.
 
 Passing carrier evidence establishes a coalesced continuous tone and the
 carrier prerequisite used by CW-family review. It does not independently
@@ -80,9 +78,31 @@ exposed inconsistent fractional-Hz validation: the direct test-tone path
 accepted 0.136 Hz before integer-only band correlation and diagnostic rendering
 reported it as 0 Hz. The CLI now rejects values that do not resolve to
 whole-number hertz at the input boundary. Use an explicit unit such as
-`0.136MHz`, an integral value such as `136000`, or the canonical `2200m`
-selector. The authoritative run used `2200m` and emitted 137.500 kHz, so this
-input-validation correction does not alter the RF evidence.
+`0.136MHz` or an integral value such as `136000`. The `2200m` band alias is the
+136,000 Hz WSPR dial frequency; direct `--test-tone 2200m` therefore emits
+136,000 Hz rather than the 137,500 Hz qualification carrier. Use explicit
+`137500Hz` when that RF carrier is intended. This distinction does not alter
+the input-validation correction or the RF evidence.
+
+## Legacy GPIO keyed-mode completion
+
+On 2026-08-16, the exact candidate at WsprryPi `7fcc749` and
+WSPR-Transmitter `22faff5` completed the remaining legacy 500 MHz PLLD tests on
+`wspr2`. Opening and closing 137,500 Hz carrier controls passed at +0.381 Hz;
+their best-20-Hz resolved-power shares were 78.70% and 79.96%.
+
+QRSS, FSKCW, and DFCW each passed three independently captured `TEST`
+repetitions using one-second dots. QRSS reproduced the complete keyed message
+envelope. FSKCW retained continuous RF with 5.007 Hz tone separation in all
+three repetitions. DFCW used distinct dot and dash tones separated by 4.947,
+5.066, and 5.186 Hz. Every credited keyed capture contained 10,625,000 CF32
+samples with verified GPIO4 cleanup after the application exited.
+
+A new bounded WSPR attempt retained exactly 92,500,000 CF32 samples at 250,000
+samples per second with zero overflow and zero clipping. All three transmissions
+completed in the 15:00, 15:02, and 15:04 UTC slots, but none decoded as
+`AA0NT EM18 20`. WSPR therefore remains unqualified; the maximum consecutive
+correct decode count across the recorded attempts remains one.
 
 ## Si5351 2200 m qualification
 
@@ -133,6 +153,17 @@ a339fed370c8bcbdad2067f259e7f636e32cfba3f946b1b5f584f0f4e26daf22
 The authoritative follow-up decode decision is
 `wspr/decode-summary-final.json`. The retained IQ capture SHA-256 is
 `2bab8e00f78459ee4619b56d00b903111faa8d72c7f8939d25feeb9d77726f86`.
+
+The keyed-mode completion evidence is retained externally on `wspr5` at:
+
+```text
+/home/pi/issue401-wspr2-legacy-2200m-keyed-20260816T1430Z
+```
+
+The authoritative keyed-mode analyses use the `analysis-v2.json` suffix. The
+valid WSPR decision is `wspr-v2/decode-summary.json`; the earlier `wspr`
+directory is retained as an incomplete orchestration attempt and is not
+qualification evidence.
 
 ## Qualification boundary
 

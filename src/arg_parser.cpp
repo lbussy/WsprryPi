@@ -1531,6 +1531,7 @@ void print_usage(const std::string &message, int exit_code)
               << "  Band GPIO                          Configure per-band selector GPIOs in INI or with FREQ @GPIO suffixes.\n\n"
               << "Test Tone:\n"
               << "  -t, --test-tone <rf_frequency>     Start a transient direct RF test tone using whole-number Hz or a unit-qualified value.\n"
+              << "                                     Band aliases resolve to their WSPR dial frequency; use an explicit value for another RF carrier.\n"
               << "                                     Invalid with --ini-file.\n\n";
 
     // Handle exit behavior

@@ -297,30 +297,25 @@ int main()
         wsprrypi::TransmissionMode::TONE,
         137500.0, true, "legacy 2200 m TONE profile", false, false,
         wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
-    for (const auto untested_mode : {
+    for (const auto qualified_mode : {
              wsprrypi::TransmissionMode::QRSS,
              wsprrypi::TransmissionMode::FSKCW,
              wsprrypi::TransmissionMode::DFCW})
     {
         const auto decision = wsprrypi::evaluate_frequency_policy(
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
-            untested_mode,
+            qualified_mode,
             137500.0,
             false,
             false,
             wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
         require(
-            decision.qualification == wsprrypi::QualificationState::UNTESTED,
-            "legacy 2200 m untested CW mode must retain untested state");
+            decision.qualification == wsprrypi::QualificationState::QUALIFIED,
+            "legacy 2200 m qualified CW mode must retain qualified state");
         require_controller_policy(
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
-            untested_mode,
-            137500.0, false, "legacy 2200 m untested CW profile", false, false,
-            wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
-        require_controller_policy(
-            wsprrypi::BackendKind::RPI_CLOCK_GPIO,
-            untested_mode,
-            137500.0, true, "legacy 2200 m overridden CW profile", true, false,
+            qualified_mode,
+            137500.0, true, "legacy 2200 m qualified CW profile", false, false,
             wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
     }
     require_controller_policy(
