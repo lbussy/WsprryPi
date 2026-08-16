@@ -80,10 +80,13 @@ TEST_FREQ := 14095600
 # line: make PREFIX=/usr/local/bin install
 PREFIX ?= /usr/local/bin
 
-# Compile-time transmission backend set. Reduced profiles remain fail-closed
-# until their factory and lifecycle integration is implemented.
+# Compile-time transmission backend set. Each validated selection receives
+# isolated objects and a retained profile executable.
 DEFAULT_BACKENDS := rpi-gpio,rp1-gpclk,si5351,simulated
 BACKENDS ?= $(DEFAULT_BACKENDS)
+comma := ,
+BACKEND_LIST := $(subst $(comma), ,$(BACKENDS))
+BACKEND_PROFILE_KEY := $(subst $(comma),+,$(BACKENDS))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Components
@@ -146,15 +149,19 @@ SUPPORT_BUNDLE_ARCHIVE_DIGEST_TEST_OUT := support_bundle_archive_digest_test
 SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT := support_bundle_download_preparation_test
 SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT := support_bundle_job_directory_remover_test
 SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT := support_bundle_startup_cleanup_test
+BACKEND_PROFILE_FACTORY_TEST_OUT := backend_profile_factory_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
 # ─────────────────────────────────────────────────────────────────────────────
 
-OBJ_DIR_RELEASE := build/obj/release
-OBJ_DIR_DEBUG   := build/obj/debug
+OBJ_DIR_RELEASE := build/obj/release/$(BACKEND_PROFILE_KEY)
+OBJ_DIR_DEBUG   := build/obj/debug/$(BACKEND_PROFILE_KEY)
 DEP_DIR         := build/dep
 BIN_DIR         := build/bin
+PROFILE_BIN_DIR := $(BIN_DIR)/profiles/$(BACKEND_PROFILE_KEY)
+PROFILE_RELEASE_BIN := $(PROFILE_BIN_DIR)/$(OUT)
+PROFILE_DEBUG_BIN := $(PROFILE_BIN_DIR)/$(TEST_OUT)
 BUILD_METADATA_DIR := build/generated
 BUILD_METADATA_HEADER := $(BUILD_METADATA_DIR)/build_metadata.hpp
 BACKEND_CAPABILITIES_HEADER := $(BUILD_METADATA_DIR)/backend_capabilities.hpp
@@ -208,6 +215,11 @@ TRANSMITTER_BACKEND_CPP_SOURCES := \
 	$(RP1_GPCLK_BACKEND_CPP_SOURCES) \
 	$(SI5351_BACKEND_CPP_SOURCES) \
 	$(SIMULATED_BACKEND_CPP_SOURCES)
+SELECTED_BACKEND_CPP_SOURCES := \
+	$(if $(filter rpi-gpio,$(BACKEND_LIST)),$(RPI_GPIO_BACKEND_CPP_SOURCES)) \
+	$(if $(filter rp1-gpclk,$(BACKEND_LIST)),$(RP1_GPCLK_BACKEND_CPP_SOURCES)) \
+	$(if $(filter si5351,$(BACKEND_LIST)),$(SI5351_BACKEND_CPP_SOURCES)) \
+	$(if $(filter simulated,$(BACKEND_LIST)),$(SIMULATED_BACKEND_CPP_SOURCES))
 PPM_MANAGER_TEST_SOURCE := ./PPM-Manager/src/test.cpp
 SIGNAL_HANDLER_TEST_SOURCE := ./Signal-Handler/src/test.cpp
 SINGLETON_TEST_SOURCE := ./Singleton/src/test.cpp
@@ -230,13 +242,14 @@ TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./WSPR-Transmitter/src/transmiss
 COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
 COMPONENT_CPP_SOURCES := $(filter-out $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES),$(COMPONENT_CPP_SOURCES))
 
-CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES)
+CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(SELECTED_BACKEND_CPP_SOURCES)
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
 CPP_OBJECTS       := $(patsubst %.cpp, $(OBJ_DIR_RELEASE)/%.o,$(REL_CPP_SOURCES))
 CPP_DEBUG_OBJECTS := $(patsubst %.cpp, $(OBJ_DIR_DEBUG)/%.o,$(REL_CPP_SOURCES))
 $(CPP_OBJECTS) $(CPP_DEBUG_OBJECTS): $(BACKEND_CAPABILITIES_HEADER)
 MAIN_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./main.o
+MAIN_RELEASE_OBJECT := $(OBJ_DIR_RELEASE)/./main.o
 SEMANTICS_TEST_SRC := tests/dial_frequency_semantics_test.cpp
 SEMANTICS_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/dial_frequency_semantics_test.o
 SEMANTICS_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
@@ -304,6 +317,10 @@ SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_D
 STARTUP_QUIESCE_PARENT_TEST_SRC := tests/startup_quiesce_parent_test.cpp
 STARTUP_QUIESCE_PARENT_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/startup_quiesce_parent_test.o
 STARTUP_QUIESCE_PARENT_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+BACKEND_PROFILE_FACTORY_TEST_SRC := tests/backend_profile_factory_test.cpp
+BACKEND_PROFILE_FACTORY_TEST_OBJ := $(OBJ_DIR_RELEASE)/tests/backend_profile_factory_test.o
+BACKEND_PROFILE_FACTORY_TEST_DEPS := $(BACKEND_PROFILE_FACTORY_TEST_OBJ) $(filter-out $(MAIN_RELEASE_OBJECT),$(CPP_OBJECTS))
+BACKEND_PROFILE_FACTORY_TEST_BIN := $(PROFILE_BIN_DIR)/$(BACKEND_PROFILE_FACTORY_TEST_OUT)
 QUALIFICATION_GPIO_TEST_MODE_TEST_SRC := tests/qualification_gpio_test_mode_test.cpp
 QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gpio_test_mode_test.o
 QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
@@ -522,10 +539,17 @@ endef
 $(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_DEBUG_COMPONENT_RULES,$(dir))))
 
 # Link debug binary
-$(BIN_DIR)/$(TEST_OUT): $(CPP_DEBUG_OBJECTS)
-	$(Q)mkdir -p $(BIN_DIR)
+$(PROFILE_DEBUG_BIN): $(CPP_DEBUG_OBJECTS)
+	$(Q)mkdir -p $(PROFILE_BIN_DIR)
 	$(Q)echo "Linking debug: $(TEST_OUT) (libgpiod major: $(GPIOD_API_MAJOR))"
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+.PHONY: FORCE_PROFILE_BINARY
+FORCE_PROFILE_BINARY:
+
+$(BIN_DIR)/$(TEST_OUT): $(PROFILE_DEBUG_BIN) FORCE_PROFILE_BINARY
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)cp $(PROFILE_DEBUG_BIN) $@
 
 $(SEMANTICS_TEST_OBJ): $(SEMANTICS_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -708,6 +732,15 @@ $(BIN_DIR)/startup_quiesce_parent_test: $(STARTUP_QUIESCE_PARENT_TEST_OBJ) $(STA
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BACKEND_PROFILE_FACTORY_TEST_OBJ): $(BACKEND_PROFILE_FACTORY_TEST_SRC) $(BACKEND_CAPABILITIES_HEADER)
+	$(Q)mkdir -p $(dir $@)
+	$(Q)mkdir -p $(DEP_DIR)/tests
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) -MF $(DEP_DIR)/tests/backend_profile_factory_test.d -c $< -o $@
+
+$(BACKEND_PROFILE_FACTORY_TEST_BIN): $(BACKEND_PROFILE_FACTORY_TEST_DEPS)
+	$(Q)mkdir -p $(PROFILE_BIN_DIR)
+	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ): $(QUALIFICATION_GPIO_TEST_MODE_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -819,16 +852,20 @@ endef
 $(foreach dir,$(COMPONENT_SRCDIRS),$(eval $(call MAKE_RELEASE_COMPONENT_RULES,$(dir))))
 
 # Link release binary
-$(BIN_DIR)/$(OUT): $(CPP_OBJECTS)
-	$(Q)mkdir -p $(BIN_DIR)
+$(PROFILE_RELEASE_BIN): $(CPP_OBJECTS)
+	$(Q)mkdir -p $(PROFILE_BIN_DIR)
 	$(Q)echo "Linking release: $(OUT) (libgpiod major: $(GPIOD_API_MAJOR))"
 	$(Q)$(CXX) $(CXX_RELEASE_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)cp $(PROFILE_RELEASE_BIN) $@
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
 DEBUG: debug
 RELEASE: release
@@ -855,6 +892,9 @@ backend-capabilities-regression-test:
 
 backend-capabilities-make-regression-test:
 	$(Q)python3 $(BACKEND_CAPABILITIES_MAKE_REGRESSION_TEST)
+
+backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
+	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."

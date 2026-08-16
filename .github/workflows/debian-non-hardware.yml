@@ -32,7 +32,17 @@ jobs:
 
       - name: Build parent release executable with warnings as errors
         working-directory: src
-        run: make release SUDO=
+        run: |
+          for profile in \
+            rpi-gpio \
+            rp1-gpclk \
+            si5351 \
+            simulated \
+            si5351,simulated \
+            rpi-gpio,rp1-gpclk,si5351,simulated
+          do
+            make release backend-profile-factory-test BACKENDS="$profile" SUDO=
+          done
 
   non-hardware-validation:
     runs-on: ubuntu-24.04

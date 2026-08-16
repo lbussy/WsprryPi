@@ -29,12 +29,15 @@
 #include "config_handler.hpp"
 
 #include <atomic>
+#include "backend_capabilities.hpp"
 #include "arg_parser.hpp"
 #include "ini_file.hpp"
 #include "json.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
+#if WSPRRYPI_BACKEND_SI5351
 #include "si5351_device.hpp"
+#endif
 #include "version.hpp"
 
 #include <algorithm>
@@ -1150,6 +1153,7 @@ bool si5351_device_detected(
         return *g_si5351_detection_override;
     }
 
+#if WSPRRYPI_BACKEND_SI5351
     Si5351Device::Config device_config;
     device_config.i2c_bus = i2c_bus;
     device_config.i2c_address = static_cast<std::uint8_t>(i2c_address);
@@ -1176,6 +1180,17 @@ bool si5351_device_detected(
     }
 
     return detected;
+#else
+    (void)i2c_bus;
+    (void)i2c_address;
+    (void)reference_hz;
+    if (error_message != nullptr)
+    {
+        *error_message =
+            "Si5351 detection is unavailable because the Si5351 backend was not compiled.";
+    }
+    return false;
+#endif
 }
 
 void set_si5351_detection_override_for_test(bool detected) noexcept

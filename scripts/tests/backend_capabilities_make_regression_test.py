@@ -69,9 +69,13 @@ def main() -> int:
         assert "compiled" in refreshed.stdout, refreshed.stdout
         assert obj.stat().st_mtime_ns > first_object_time
 
-        rejected = run("make", "release", "BACKENDS=si5351", cwd=fixture, expect=2)
-        assert "non-default BACKENDS profiles are not enabled yet" in rejected.stderr
-        assert "compiled" not in rejected.stdout
+        selected = run("make", "release", "BACKENDS=si5351", cwd=fixture)
+        assert "backend capabilities updated" in selected.stdout, selected.stdout
+        assert '#define WSPRRYPI_COMPILED_BACKENDS "si5351"' in header.read_text()
+
+        restored = run("make", "release", cwd=fixture)
+        assert "backend capabilities updated" in restored.stdout, restored.stdout
+        assert f'#define WSPRRYPI_COMPILED_BACKENDS "{DEFAULT}"' in header.read_text()
 
     print("backend capability Make integration tests passed")
     return 0

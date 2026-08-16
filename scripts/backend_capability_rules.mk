@@ -12,15 +12,7 @@ endif
 
 ifeq ($(BACKEND_CAPABILITIES_ENABLED),1)
 
-ifneq ($(strip $(BACKENDS)),$(DEFAULT_BACKENDS))
-$(error non-default BACKENDS profiles are not enabled yet; supported foundation value is BACKENDS=$(DEFAULT_BACKENDS))
-endif
-
 ifeq ($(BUILD_METADATA_INTROSPECTION),)
-# Treat the generated C++ header as an included Makefile so GNU Make restarts
-# freshness evaluation when the generator repairs stale capability content.
--include $(BACKEND_CAPABILITIES_HEADER)
-
 .PHONY: FORCE_BACKEND_CAPABILITIES
 FORCE_BACKEND_CAPABILITIES:
 

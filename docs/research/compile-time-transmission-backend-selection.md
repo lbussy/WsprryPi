@@ -2,8 +2,11 @@
 
 ## Status
 
-Research and design record only. No compile-time backend selection described in
-this document is implemented.
+Research and implementation record. Compile-time transmission-backend source
+selection and factory enforcement are implemented through the `BACKENDS` Make
+variable. CLI/configuration capability reporting, backend-specific privilege
+policy, and a strict profile that removes ancillary libgpiod support remain
+future work.
 
 This investigation was prompted by an Ubuntu 24.04 x86 user who wanted to use
 the Si5351 backend through a regular Linux `/dev/i2c-N` adapter. The user did not
@@ -17,12 +20,40 @@ clock/GPIO transmission is technically feasible. The Si5351 device layer uses
 the standard Linux userspace I2C interface and does not inherently depend on a
 Raspberry Pi processor, GPIO clock, mailbox, MMIO, PWM, or DMA.
 
-The current executable cannot be reduced to Si5351 merely by omitting one GPIO
-source file. Its Makefile discovers and links nearly all production sources,
-its backend factory contains unconditional constructors for every backend, and
-`WsprTransmitter` initially constructs the legacy Raspberry Pi GPIO backend
-before configuration selects the requested backend. A maintainable solution
-therefore requires an explicit compile-time backend capability model.
+Before this implementation, the executable could not be reduced to Si5351
+merely by omitting one GPIO source file. Its Makefile discovered and linked
+nearly all production sources, its backend factory contained unconditional
+constructors for every backend, and `WsprTransmitter` initially constructed the
+legacy Raspberry Pi GPIO backend before configuration selected the requested
+backend. Those constraints motivated the explicit capability model below.
+
+## Implemented transmission-backend profiles
+
+The parent build now accepts any nonempty subset of these canonical names:
+
+```sh
+make BACKENDS=rpi-gpio,rp1-gpclk,si5351,simulated
+make BACKENDS=si5351
+make BACKENDS=si5351,simulated
+```
+
+The default remains the complete four-backend executable. The build validates
+the selection, generates stable capability predicates, isolates objects and
+retained profile executables by backend set, and conditionally links only the
+requested transmission implementation groups. The established
+`build/bin/wsprrypi` path receives the executable for the current invocation.
+
+The transmitter factory compiles only enabled constructors. Selecting a valid
+but omitted backend fails with a diagnostic that lists the compiled set; it
+does not fall back. Initial construction selects the first compiled backend in
+canonical order, preserving legacy GPIO startup for the default profile while
+allowing a Si5351-only executable to avoid constructing a Raspberry Pi backend.
+
+`BACKENDS=si5351` has been compiled on Ubuntu 24.04 x86_64 with GCC 13 and
+audited to exclude legacy GPIO transmitter, Mailbox, RP1 GPCLK, and simulated
+backend symbols. This is a no-GPIO-transmission profile, not yet the strict
+I2C-only profile described below: ancillary LED, amplifier, shutdown-button,
+band-selector, and libgpiod support remain compiled.
 
 ## Reported Ubuntu failure
 
@@ -81,30 +112,30 @@ This establishes software-interface compatibility only. It does not prove that
 a particular adapter supports the required transactions, voltage levels,
 pull-ups, bus rate, Si5351 board, or transmitter hardware.
 
-## Current compile and link coupling
+## Pre-implementation compile and link coupling
 
-The current parent Makefile:
+The parent Makefile previously:
 
-- includes the `Mailbox` and complete `WSPR-Transmitter` source directories;
-- recursively discovers nearly every C++ production source in those
+- included the `Mailbox` and complete `WSPR-Transmitter` source directories;
+- recursively discovered nearly every C++ production source in those
   directories;
-- always includes libgpiod detection, compile flags, and link libraries; and
-- links the complete discovered object set into one application executable.
+- always included libgpiod detection, compile flags, and link libraries; and
+- linked the complete discovered object set into one application executable.
 
-The runtime factory in `WsprTransmitter::createBackend()` contains constructors
+The runtime factory in `WsprTransmitter::createBackend()` contained constructors
 for legacy Raspberry Pi clock/GPIO, RP1 GPCLK, Si5351, and simulated backends.
 Those references require the corresponding implementations to be linked unless
 the factory is also made compile-time aware.
 
-In addition, the `WsprTransmitter` constructor currently selects
+In addition, the `WsprTransmitter` constructor selected
 `RPI_CLOCK_GPIO` before CLI or INI parsing. Although this initial construction
 does not by itself start RF or access hardware, it creates an unnecessary link
 dependency and makes a physically unavailable backend the implicit initial
 state.
 
-## Proposed build capability model
+## Build capability model
 
-Define independent build-time capabilities, for example:
+The implementation generates these independent build-time capabilities:
 
 ```text
 WSPRRYPI_BACKEND_RPI_GPIO
@@ -113,7 +144,7 @@ WSPRRYPI_BACKEND_SI5351
 WSPRRYPI_BACKEND_SIMULATED
 ```
 
-A user-facing Make variable could map a concise selection to those generated
+The user-facing Make variable maps a concise selection to those generated
 definitions and source groups:
 
 ```sh
@@ -121,40 +152,37 @@ make BACKENDS=si5351
 make BACKENDS=si5351,simulated
 ```
 
-The exact spelling is an implementation decision. The important contract is
-that one authoritative build configuration controls source selection, factory
-availability, validation, help/version reporting, and tests.
+One authoritative build configuration now controls source selection, factory
+availability, validation, and profile tests. Help/version reporting remains a
+separate implementation slice.
 
 ### Source selection
 
-Replace backend source discovery with explicit source groups. An Si5351-only
-profile should omit:
+Backend source discovery has been replaced with explicit source groups. An
+Si5351-only profile omits:
 
 - the legacy Raspberry Pi clock/GPIO backend;
 - the Raspberry Pi mailbox implementation;
 - the RP1 GPCLK transmitter backend and Linux provider; and
 - the simulated backend when it was not requested.
 
-Shared request, planning, scheduling, controller, Si5351, logging, web, and
-configuration sources remain present as needed by the application.
+Backend-independent request, planning, scheduling, controller, logging, web,
+and configuration sources remain present as needed by the application.
 
 ### Factory and initial state
 
-Conditionally compile each backend factory arm. Selecting a backend that was
-not compiled must fail closed with an explicit diagnostic, such as:
+Each backend factory arm is conditionally compiled. Selecting a backend that
+was not compiled fails closed with an explicit diagnostic, such as:
 
 ```text
-Backend "gpio" is unavailable in this build. Compiled backends: si5351
+Transmission backend GPIO is unavailable in this build. Compiled backends: si5351.
 ```
 
-There must be no automatic fallback to Si5351, simulated, or any other backend.
-
-Prefer constructing `WsprTransmitter` without an active backend and selecting
-one only after the CLI or configuration candidate has been parsed and
-validated. This removes the implicit GPIO dependency and better represents the
-application lifecycle. If an empty initial state proves too invasive, a
-generated compiled default could be used, but it must remain explicit and
-testable.
+There is no automatic fallback to Si5351, simulated, or any other backend.
+Construction selects the first enabled backend in canonical order as an
+explicit, generated default. The default all-backend profile therefore retains
+legacy GPIO startup behavior, while reduced profiles do not acquire an omitted
+backend dependency. Factory tests cover both enabled and omitted selections.
 
 ### Capability reporting
 

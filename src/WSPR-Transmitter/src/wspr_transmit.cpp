@@ -51,11 +51,20 @@
 
 // Project headers
 #include "wspr_transmit.hpp" // Class Declarations
+#include "backend_capabilities.hpp"
 #include "gpio_band_policy.hpp"
+#if WSPRRYPI_BACKEND_RP1_GPCLK
 #include "rp1_gpclk_transmit_backend.hpp"
+#endif
+#if WSPRRYPI_BACKEND_RPI_GPIO
 #include "wspr_transmit_backend_rpi.hpp"
+#endif
+#if WSPRRYPI_BACKEND_SI5351
 #include "wspr_transmit_backend_si5351.hpp"
+#endif
+#if WSPRRYPI_BACKEND_SIMULATED
 #include "simulated_transmit_backend.hpp"
+#endif
 
 // Helper classes and functions in anonymous namespace
 namespace
@@ -119,6 +128,7 @@ namespace
         return cpu;
     }
 
+#if WSPRRYPI_BACKEND_SI5351
     static Si5351Device::Output si5351_output_from_index(int output) noexcept
     {
         switch (output)
@@ -131,6 +141,37 @@ namespace
             default:
                 return Si5351Device::Output::CLK0;
         }
+    }
+#endif
+
+    bool backend_is_compiled(wsprrypi::BackendKind backend) noexcept
+    {
+        switch (backend)
+        {
+        case wsprrypi::BackendKind::RPI_CLOCK_GPIO:
+            return WSPRRYPI_BACKEND_RPI_GPIO;
+        case wsprrypi::BackendKind::RP1_GPCLK:
+            return WSPRRYPI_BACKEND_RP1_GPCLK;
+        case wsprrypi::BackendKind::SI5351:
+            return WSPRRYPI_BACKEND_SI5351;
+        case wsprrypi::BackendKind::SIMULATED:
+            return WSPRRYPI_BACKEND_SIMULATED;
+        }
+        return false;
+    }
+
+    wsprrypi::BackendKind initial_compiled_backend() noexcept
+    {
+#if WSPRRYPI_BACKEND_RPI_GPIO
+        return wsprrypi::BackendKind::RPI_CLOCK_GPIO;
+#elif WSPRRYPI_BACKEND_RP1_GPCLK
+        return wsprrypi::BackendKind::RP1_GPCLK;
+#elif WSPRRYPI_BACKEND_SI5351
+        return wsprrypi::BackendKind::SI5351;
+#else
+        static_assert(WSPRRYPI_BACKEND_SIMULATED, "at least one backend is required");
+        return wsprrypi::BackendKind::SIMULATED;
+#endif
     }
 
     static wsprrypi::ClockSource si5351_clock_source_from_index(int output) noexcept
@@ -392,7 +433,7 @@ WsprTransmitter::WsprTransmitter()
     {
         spin_ns_ = 0; // or 50'000 if you want a tiny spin
     }
-    selectBackend(wsprrypi::BackendKind::RPI_CLOCK_GPIO);
+    selectBackend(initial_compiled_backend());
     callback_thread_ = std::thread(&WsprTransmitter::callback_worker_loop, this);
 }
 
@@ -430,6 +471,14 @@ void WsprTransmitter::selectBackend(
     const Si5351RuntimeConfig &runtime_config,
     const SimulatedRuntimeConfig &simulated_config)
 {
+    if (!backend_is_compiled(backend_kind))
+    {
+        throw std::invalid_argument(
+            std::string("Transmission backend ") + backend_kind_name(backend_kind) +
+            " is unavailable in this build. Compiled backends: " +
+            WSPRRYPI_COMPILED_BACKENDS + ".");
+    }
+
     if (backend_ &&
         selected_backend_ == backend_kind &&
         (backend_kind != wsprrypi::BackendKind::SI5351 ||
@@ -465,14 +514,23 @@ std::unique_ptr<wsprrypi::ITransmissionBackend> WsprTransmitter::createBackend(
     {
         case wsprrypi::BackendKind::RPI_CLOCK_GPIO:
         {
+#if WSPRRYPI_BACKEND_RPI_GPIO
             auto rpi_backend = std::make_unique<WsprRpiBackend>(*this);
             rpi_backend_ = rpi_backend.get();
             return rpi_backend;
+#else
+            break;
+#endif
         }
         case wsprrypi::BackendKind::RP1_GPCLK:
+#if WSPRRYPI_BACKEND_RP1_GPCLK
             return std::make_unique<WsprRp1GpclkBackend>(*this);
+#else
+            break;
+#endif
         case wsprrypi::BackendKind::SI5351:
         {
+#if WSPRRYPI_BACKEND_SI5351
             WsprSi5351Backend::Config si5351_config;
             si5351_config.device.i2c_bus = runtime_config.i2c_bus;
             si5351_config.device.i2c_address =
@@ -499,9 +557,13 @@ std::unique_ptr<wsprrypi::ITransmissionBackend> WsprTransmitter::createBackend(
             return std::make_unique<WsprSi5351Backend>(
                 *this,
                 si5351_config);
+#else
+            break;
+#endif
         }
         case wsprrypi::BackendKind::SIMULATED:
         {
+#if WSPRRYPI_BACKEND_SIMULATED
             wsprrypi::SimulatedBackendConfig config;
             config.virtual_time = simulated_config.virtual_time;
             config.trace_path = simulated_config.trace_path;
@@ -511,9 +573,15 @@ std::unique_ptr<wsprrypi::ITransmissionBackend> WsprTransmitter::createBackend(
             config.cancel_event = simulated_config.cancel_event;
             config.fail_cleanup = simulated_config.fail_cleanup;
             return std::make_unique<wsprrypi::SimulatedTransmitBackend>(*this, config);
+#else
+            break;
+#endif
         }
     }
-    throw std::invalid_argument("Unknown transmission backend.");
+    throw std::invalid_argument(
+        std::string("Transmission backend ") + backend_kind_name(backend_kind) +
+        " is unavailable in this build. Compiled backends: " +
+        WSPRRYPI_COMPILED_BACKENDS + ".");
 }
 
 wsprrypi::StartupQuiesceResult WsprTransmitter::quiesceForStartup()
@@ -1058,7 +1126,13 @@ void WsprTransmitter::shutdown()
 
     // Return to DISABLED when the transmitter is shut down, unless a
     // watchdog recovery is in progress or the transmitter is latched HUNG.
-    if (rpi_backend_ == nullptr || !rpi_backend_->recoveryInProgress())
+#if WSPRRYPI_BACKEND_RPI_GPIO
+    const bool recovery_in_progress =
+        rpi_backend_ != nullptr && rpi_backend_->recoveryInProgress();
+#else
+    constexpr bool recovery_in_progress = false;
+#endif
+    if (!recovery_in_progress)
     {
         const State prior = state_.load(std::memory_order_acquire);
         if (prior != State::HUNG && prior != State::RECOVERING)
@@ -1093,50 +1167,72 @@ void WsprTransmitter::requestStopTxNoJoin() noexcept
 
 void WsprTransmitter::force_dma_reset_sequence() noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->resetTransmissionOutput();
     }
+#endif
 }
 
 
 bool WsprTransmitter::watchdogFaulted() const noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     return rpi_backend_ != nullptr && rpi_backend_->faulted();
+#else
+    return false;
+#endif
 }
 
 void WsprTransmitter::clearWatchdogFault() noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->clearFault();
     }
+#endif
 }
 
 void WsprTransmitter::setWatchdogAutoRecover(bool enable) noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->setAutoRecover(enable);
     }
+#else
+    (void)enable;
+#endif
 }
 
 bool WsprTransmitter::watchdogAutoRecoverEnabled() const noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     return rpi_backend_ != nullptr && rpi_backend_->autoRecoverEnabled();
+#else
+    return false;
+#endif
 }
 
 bool WsprTransmitter::recoverFromWatchdogFault()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     return rpi_backend_ != nullptr && rpi_backend_->recoverFromFault();
+#else
+    return false;
+#endif
 }
 
 void WsprTransmitter::request_watchdog_recovery() noexcept
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->recoverFromFault();
     }
+#endif
 }
 
 void WsprTransmitter::recovery_worker()
@@ -1145,7 +1241,11 @@ void WsprTransmitter::recovery_worker()
 
 bool WsprTransmitter::recover_from_watchdog_fault_locked()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     return rpi_backend_ != nullptr && rpi_backend_->recoverFromFault();
+#else
+    return false;
+#endif
 }
 
 void WsprTransmitter::stopAndJoin()
@@ -1477,18 +1577,22 @@ bool WsprTransmitter::shouldStop() const noexcept
 
 void WsprTransmitter::startFaultMonitoring()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->startFaultMonitoring();
     }
+#endif
 }
 
 void WsprTransmitter::stopFaultMonitoring()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->stopFaultMonitoring();
     }
+#endif
 }
 
 bool WsprTransmitter::waitInterruptableFor(std::chrono::nanoseconds duration)
@@ -1976,10 +2080,14 @@ bool WsprTransmitter::observeBackendCleanup(const char* context)
 
 int WsprTransmitter::getOutputPowerMilliwatts(int level)
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         return rpi_backend_->getOutputPowerMilliwatts(level);
     }
+#else
+    (void)level;
+#endif
 
     return 0;
 }
@@ -2064,6 +2172,7 @@ void WsprTransmitter::emitSymbol(
     const double &tsym,
     int symbol_index)
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ == nullptr)
     {
         throw std::runtime_error(
@@ -2075,18 +2184,28 @@ void WsprTransmitter::emitSymbol(
         sym_num,
         tsym,
         symbol_index);
+#else
+    (void)sym_num;
+    (void)tsym;
+    (void)symbol_index;
+    throw std::runtime_error(
+        "Legacy symbol emission is unavailable because the GPIO backend was not compiled.");
+#endif
 }
 
 void WsprTransmitter::prepareTransmissionBackend()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->prepareTransmission();
     }
+#endif
 }
 
 WsprTransmissionConfigureResult WsprTransmitter::configureTransmissionBackend()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ == nullptr)
     {
         throw std::runtime_error(
@@ -2094,10 +2213,15 @@ WsprTransmissionConfigureResult WsprTransmitter::configureTransmissionBackend()
     }
 
     return rpi_backend_->configureTransmission(buildTransmissionPlan());
+#else
+    throw std::runtime_error(
+        "Legacy transmission path is unavailable because the GPIO backend was not compiled.");
+#endif
 }
 
 void WsprTransmitter::beginTransmissionOutput()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ == nullptr)
     {
         throw std::runtime_error(
@@ -2105,14 +2229,20 @@ void WsprTransmitter::beginTransmissionOutput()
     }
 
     rpi_backend_->beginTransmissionOutput(buildTransmissionPlan());
+#else
+    throw std::runtime_error(
+        "Legacy transmission output is unavailable because the GPIO backend was not compiled.");
+#endif
 }
 
 void WsprTransmitter::endTransmissionOutput()
 {
+#if WSPRRYPI_BACKEND_RPI_GPIO
     if (rpi_backend_ != nullptr)
     {
         rpi_backend_->endTransmissionOutput();
     }
+#endif
 }
 
 std::string WsprTransmitter::stateToStringLower(State state)
