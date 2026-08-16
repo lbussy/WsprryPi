@@ -74,12 +74,15 @@ remains 1 of the 3 required. WSPR therefore remains unqualified.
 - RF path: direct conducted connection with two inline 10 dB attenuators;
   relative measurements only
 
-The direct numeric `0.136` command path exposed a separate input-resolution
-defect during testing: one form incorrectly required the non-amateur override,
-and the fully overridden form reached the selector as 0 Hz. The canonical
-`2200m` selector emitted 137.500 kHz and was used for the authoritative run.
-This CLI defect does not invalidate the canonical-selector RF evidence and is
-not corrected by this research record.
+The bare numeric `0.136` command used during testing correctly meant 0.136 Hz,
+not 0.136 MHz, so the non-amateur-frequency rejection was expected. It also
+exposed inconsistent fractional-Hz validation: the direct test-tone path
+accepted 0.136 Hz before integer-only band correlation and diagnostic rendering
+reported it as 0 Hz. The CLI now rejects values that do not resolve to
+whole-number hertz at the input boundary. Use an explicit unit such as
+`0.136MHz`, an integral value such as `136000`, or the canonical `2200m`
+selector. The authoritative run used `2200m` and emitted 137.500 kHz, so this
+input-validation correction does not alter the RF evidence.
 
 ## Si5351 2200 m qualification
 

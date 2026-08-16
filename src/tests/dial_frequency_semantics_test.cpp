@@ -1819,6 +1819,38 @@ int main(int argc, char *argv[])
         init_config_json();
         json_to_config();
         config.transmit = true;
+        config.frequencies = "0.136,0.136Hz,14.0971001MHz@22,9223372036854775808";
+
+        require(
+            !set_frequencies(config) &&
+                config.wspr_frequency_entries.empty() &&
+                config.wspr_dial_freq_set.empty(),
+            "WSPR frequency lists must reject values that do not resolve to whole-number Hz before scheduling or selector preparation");
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        config.transmit = true;
+        config.frequencies = "0,0.136MHz,136kHz,136000,2200m,0.136MHz@22";
+
+        require(
+            set_frequencies(config) &&
+                config.wspr_frequency_entries.size() == 6U &&
+                nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 0.0) &&
+                nearly_equal(config.wspr_frequency_entries[1].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[2].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[3].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[4].dial_frequency_hz, 136000.0) &&
+                nearly_equal(config.wspr_frequency_entries[5].dial_frequency_hz, 136000.0) &&
+                config.wspr_frequency_entries[5].selector_gpio == 22,
+            "WSPR frequency lists must retain zero skip, integral unit conversion, aliases, raw Hz, and selector suffixes");
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        config.transmit = true;
         config.frequencies = "80m@";
 
         require(
@@ -7405,6 +7437,49 @@ int main(int argc, char *argv[])
         reset_startup_quiesce_for_test();
         reset_current_transmission_request_for_test();
         set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        clear_direct_tone_startup_request();
+        for (const std::string token : {"0.136", "0.136Hz", "14.0971001MHz@22"})
+        {
+            std::string error;
+            require(
+                !set_direct_tone_startup_request(token, &error) &&
+                    error.find("whole-number frequency in Hz") != std::string::npos &&
+                    !has_direct_tone_startup_request(),
+                "direct CLI test tone must reject fractional-Hz values before creating startup state");
+        }
+
+        {
+            std::string error;
+            require(
+                !set_direct_tone_startup_request("9223372036854775808", &error) &&
+                    error.find("outside the supported RF range") != std::string::npos &&
+                    !has_direct_tone_startup_request(),
+                "direct CLI test tone must reject values outside the signed integral-Hz correlation range");
+        }
+
+        for (const std::string token : {"0.136MHz", "136kHz", "136000", "2200m", "0.136MHz@22"})
+        {
+            std::string error;
+            require(
+                set_direct_tone_startup_request(token, &error),
+                "direct CLI test tone must accept inputs that resolve to integral Hz");
+            WsprFrequencyEntry entry;
+            double actual_rf_hz = 0.0;
+            require(
+                try_get_direct_tone_startup_request(entry, actual_rf_hz) &&
+                    nearly_equal(actual_rf_hz, 136000.0),
+                "accepted direct CLI test-tone forms must retain 136000 Hz exactly");
+            if (token == "0.136MHz@22")
+            {
+                require(
+                    entry.selector_gpio == 22,
+                    "integral unit-qualified direct test-tone input must retain its selector suffix");
+            }
+            clear_direct_tone_startup_request();
+        }
     }
 
     {
