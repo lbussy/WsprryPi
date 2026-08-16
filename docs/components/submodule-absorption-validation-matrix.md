@@ -125,8 +125,10 @@ repository and supported build/test checks, and record that separate result.
   recorded in the linked validation results.
 - GitHub workflow results are deferred until the migration commit is published
   on a workflow-triggering ref or reviewed through the authorized mechanism.
-- `wspr4` validation is deferred until its checkout is explicitly synchronized
-  to the same reviewed migration state; do not copy an uncommitted index to it.
+- `wspr4` was preservation-safely transitioned to a synchronized normal clone
+  and passed its approved compile and bounded hardware-free component tests, as
+  recorded in the linked results. Its application simulator rerun remains
+  limited by an occupied fixed singleton port.
 - Installation, Apache/web-root deployment, services, reboot, Chrony operation,
   mailbox device execution, GPIO, MMIO, DMA, I2C, Si5351, test-tone generation,
   transmitter backends, and RF are prohibited by Issue 415.

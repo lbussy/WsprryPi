@@ -64,14 +64,28 @@ The remaining standalone component checks also passed:
 The local UI unit suite passed. Chromium was not installed on the Mac, so the
 browser integrations were run in the canonical Debian environment instead.
 
-The designated `/home/pi/WsprryPi` checkout on `wspr4` was clean and on the
-correct branch, but remained at `0bb9600`. A normal `git pull --ff-only` fetched
-the current remote branch and then stopped without changing the checkout
-because ordinary imported files would overwrite the old initialized-submodule
-working trees. No reset, clean, deinitialization, overwrite, build, test,
-service, hardware, GPIO, I2C, mailbox, Si5351, or RF action was performed there.
-Target-host validation therefore remains blocked pending a separately reviewed
-checkout transition.
+The designated `/home/pi/WsprryPi` checkout on `wspr4` was initially clean and
+on the correct branch at `0bb9600`. A normal `git pull --ff-only` fetched the
+current remote branch and then stopped without changing the checkout because
+ordinary imported files would overwrite the old initialized-submodule working
+trees.
+
+On 2026-08-16, the complete legacy checkout was preserved as
+`/home/pi/WsprryPi.issue415-pre-absorption-20260816` and a normal clone of the
+published Issue 415 branch was created at `/home/pi/WsprryPi`, without
+`--recurse-submodules`. The new checkout was clean and synchronized at
+`73ceaac3395b90ccf4189519c8f213846884aa00`. All ten ordinary subtree OIDs
+matched the local checkout, and no `.gitmodules`, registered submodule,
+mode-`160000` entry, or nested component Git administration remained.
+
+With `WSPRRYPI_DISABLE_HARDWARE_ACCESS=1`, wspr4 passed the parent debug build,
+semantics and startup-quiesce regressions, RP1 non-hardware regression, UI unit
+and Chromium browser integrations, transmitter component contract tests,
+WSPR-Reference build and major regressions, all bounded standalone component
+tests, and Mailbox's compile-only gate. The application-level simulator scripts
+stopped before execution because their fixed singleton UDP port `1234` was
+already occupied. No process or service was stopped or modified to free it;
+those scripts had already passed in both isolated Debian runs.
 
 ## Published-remote clone acceptance
 
@@ -95,11 +109,12 @@ qualification gates.
 
 ## Remaining acceptance gates
 
-- Transition `wspr4` from its pre-absorption initialized-submodule checkout by a
-  separately reviewed, preservation-safe procedure, then run its approved
-  compile and explicitly hardware-free tests.
 - Review and update the separate `Wsprry_Pi_Docs` repository under an explicit
   cross-repository authorization.
+- Optionally repeat the application-level simulator scripts on wspr4 when port
+  `1234` is available through a separately authorized operational window. This
+  target-specific limitation does not replace the two passing isolated Debian
+  simulator and prohibited-device audits.
 
 No installation, deployment, service operation, reboot, GPIO, MMIO, mailbox
 device, I2C, Si5351, physical transmitter, or RF validation was performed.
