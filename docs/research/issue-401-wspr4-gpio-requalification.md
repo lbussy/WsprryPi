@@ -63,6 +63,19 @@ samples per second, with zero overflow and zero clipped samples. Independent
 frame did not decode, leaving a maximum of two consecutive correct decodes and
 failing the three-consecutive-decode gate.
 
+A second three-frame WSPR retest used the uninstalled build at WsprryPi
+revision `b7240c84747ad01d5c15e32ae77c84caf4e3c7d2`, WSPR-Transmitter revision
+`c416e0f4de608164a10d7f0fe2f5adf6f5b911ce`, and a 13.0013 PPM correction.
+Its opening and closing carrier controls passed at -53.024 Hz with 97.90%
+best-20-Hz share and -38.719 Hz with 95.01% share. The first WSPR frame did not
+decode; the second and third decoded `AA0NT EM18 20` at +12 dB and +11 dB.
+The maximum remained two consecutive correct decodes, so 6 m WSPR remains
+unqualified while the backend-band disposition remains Partial.
+
+The repeat capture contained exactly 92,500,000 CF32 samples with zero overflow
+and zero clipping. The transmitter exited normally after the configured three
+iterations, and GPIO4 returned to input.
+
 ## Source and bench binding
 
 - WsprryPi source under test: `854b39d37433c5b98d4ed43784f0b9819cf6143e`
@@ -116,6 +129,14 @@ The superseding DFCW evidence is retained at
 `/home/pi/issue401-wspr4-6m-dfcw-retest-20260815`. Its 45-artifact manifest
 verified without error and has SHA-256
 `3fdbf0f1625f1b5e66e65b1db2deff49c5a8fbeabd8baa6dd820223cb48a040c`.
+
+The second WSPR retest evidence is retained at
+`/home/pi/issue401-wspr4-6m-wspr-retest-20260816T043428Z` on `wspr5`. Its
+48-artifact manifest verified without error and has SHA-256
+`55f100b5be9a53c5becdedf9f9b548cdd06995edcfe51313e2062841cd185b71`.
+The opening and closing carrier gates passed, making the two-decode result
+authoritative rather than path-invalid. The compiled binary was run directly
+from the build tree and was not installed.
 
 ## Qualification boundary
 
