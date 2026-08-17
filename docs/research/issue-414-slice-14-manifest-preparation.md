@@ -79,9 +79,9 @@ removed by test cleanup.
 
 - Provision, back up, recovery-test, and approve the two production identities
   through explicit maintainer actions.
-- Add lifecycle-aware `inspect`, `rotate`, `disable`, and `renew` operations that
-  derive a new generation from verified current state rather than accepting a
-  generation in isolation.
+- Use Slice 15 lifecycle-aware `inspect`, `rotate`, `disable`, and `renew`
+  operations to authenticate current local state and derive successors; remote
+  publication remains separate.
 - Add an authenticated remote publication boundary that preserves pair identity,
   then retrieves and verifies the published exact bytes.
 - Package only reviewed public trust metadata and activate Slice 12 later.
