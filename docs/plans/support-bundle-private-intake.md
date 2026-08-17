@@ -54,6 +54,8 @@ Vault backup and recovery qualification: [Issue 414 Slice 22](../research/issue-
 
 Production public trust compilation: [Issue 414 Slice 23](../research/issue-414-slice-23-production-trust-compilation.md)
 
+Publication repository establishment: [Issue 414 Slice 24](../research/issue-414-slice-24-publication-repository.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

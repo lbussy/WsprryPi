@@ -46,9 +46,11 @@ source calls `support_bundle_intake_compiled_trust()` or
 `resolve_support_bundle_intake_runtime()`. No manifest was prepared, signed,
 retrieved, published, or disclosed, and no bundle was encrypted or uploaded.
 
-The next separately reviewed work is public-repository creation/configuration
-and first-manifest preparation/publication, followed by exact public-byte
-verification. Runtime activation and encryption/upload orchestration remain
+Slice 24 subsequently established and validated the public publication
+repository and its local bare maintainer counterpart. The next separately
+reviewed work is generation-1 manifest preparation using the existing Dropbox
+File Request URL. Candidate commit, live publication, exact public-byte
+verification, runtime activation, and encryption/upload orchestration remain
 later slices.
 
 No private identity, private-file hash, credential, Dropbox/GitHub operation,
