@@ -219,6 +219,30 @@ require __DIR__ . '/../card_header.php';
                                     <label class="form-check-label" for="supportBundleReviewed">I reviewed this candidate and approve these exact bytes for encryption.</label>
                                 </div>
                             </section>
+                            <section
+                                id="supportIntakePanel"
+                                class="maintenance-support-intake d-none"
+                                aria-labelledby="supportIntakeTitle">
+                                <div>
+                                    <h3 id="supportIntakeTitle" class="h6 mb-1">Private upload availability</h3>
+                                    <p id="supportIntakeMessage" class="mb-0" role="status" aria-live="polite" aria-atomic="true">
+                                        Check whether this version can use the current private support channel.
+                                    </p>
+                                </div>
+                                <p id="supportIntakeSignedMessage" class="maintenance-support-intake__signed-message d-none mb-0"></p>
+                                <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                    <button id="checkSupportIntakeButton" type="button" class="btn btn-outline-primary">
+                                        Check private upload availability
+                                    </button>
+                                    <a
+                                        id="supportIntakeUpgradeLink"
+                                        class="btn btn-outline-primary d-none"
+                                        target="_blank"
+                                        rel="noopener noreferrer">
+                                        Download latest version
+                                    </a>
+                                </div>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
                                     Start support bundle

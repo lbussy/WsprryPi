@@ -300,6 +300,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const supportBundleIssueNumberError = document.getElementById("supportBundleIssueNumberError");
     const supportBundleProblemDescriptionError = document.getElementById("supportBundleProblemDescriptionError");
     const supportBundleContactError = document.getElementById("supportBundleContactError");
+    const supportIntakePanel = document.getElementById("supportIntakePanel");
+    const supportIntakeMessage = document.getElementById("supportIntakeMessage");
+    const supportIntakeSignedMessage = document.getElementById("supportIntakeSignedMessage");
+    const checkSupportIntakeButton = document.getElementById("checkSupportIntakeButton");
+    const supportIntakeUpgradeLink = document.getElementById("supportIntakeUpgradeLink");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -311,6 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportBundlePageUnloading = false;
     let supportBundleDownloaded = false;
     let supportBundleFinalized = false;
+    let supportIntakeInFlight = false;
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -408,6 +414,176 @@ document.addEventListener("DOMContentLoaded", () => {
         deleteSupportBundleButton.disabled = supportBundleJobId === "" || supportBundleDeleteInFlight;
         finalizeSupportBundleButton.disabled = !supportBundleDownloaded ||
             !supportBundleReviewed.checked || supportBundleFinalizeInFlight || supportBundleFinalized;
+        checkSupportIntakeButton.disabled = !supportBundleFinalized || supportIntakeInFlight;
+    }
+
+    function clearSupportIntakeState() {
+        supportIntakeInFlight = false;
+        supportIntakePanel.classList.add("d-none");
+        supportIntakeMessage.textContent = "Check whether this version can use the current private support channel.";
+        supportIntakeSignedMessage.textContent = "";
+        supportIntakeSignedMessage.classList.add("d-none");
+        supportIntakeUpgradeLink.removeAttribute("href");
+        supportIntakeUpgradeLink.classList.add("d-none");
+        checkSupportIntakeButton.textContent = "Check private upload availability";
+    }
+
+    function hasExactKeys(value, required, optional = []) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+        const keys = Object.keys(value);
+        const allowed = new Set([...required, ...optional]);
+        return required.every((key) => Object.hasOwn(value, key)) &&
+            keys.every((key) => allowed.has(key));
+    }
+
+    function validIntakeText(value, maximum) {
+        return typeof value === "string" && value.length > 0 && value.length <= maximum;
+    }
+
+    function validIntakeKeyId(value, kind) {
+        return typeof value === "string" &&
+            new RegExp(`^wsprrypi-${kind}-[0-9]{4}-[0-9]{2}$`).test(value);
+    }
+
+    function validIntakeVersion(value) {
+        if (typeof value !== "string" || value.length === 0 || value.length > 64) return false;
+        const buildSplit = value.split("+");
+        if (buildSplit.length > 2) return false;
+        const prereleaseAt = buildSplit[0].indexOf("-");
+        const core = prereleaseAt === -1 ? buildSplit[0] : buildSplit[0].slice(0, prereleaseAt);
+        const prerelease = prereleaseAt === -1 ? undefined : buildSplit[0].slice(prereleaseAt + 1);
+        const numeric = core.split(".");
+        if (numeric.length !== 3 || !numeric.every((part) => /^(0|[1-9][0-9]*)$/.test(part))) {
+            return false;
+        }
+        const identifiersValid = (section, rejectNumericLeadingZero) => section !== undefined &&
+            section.split(".").every((part) => /^[0-9A-Za-z-]+$/.test(part) &&
+                (!rejectNumericLeadingZero || !/^[0-9]+$/.test(part) || /^(0|[1-9][0-9]*)$/.test(part)));
+        if (prerelease !== undefined && !identifiersValid(prerelease, true)) return false;
+        return buildSplit.length !== 2 || identifiersValid(buildSplit[1], false);
+    }
+
+    function validIntakeUrl(value, kind) {
+        if (typeof value !== "string" || value.length > 2048) return false;
+        try {
+            const url = new URL(value);
+            if (url.protocol !== "https:" || url.username || url.password || url.hash) return false;
+            if (kind === "request") {
+                return url.hostname === "www.dropbox.com" &&
+                    /^\/request\/[A-Za-z0-9_-]+$/.test(url.pathname) && !url.search;
+            }
+            return url.hostname === "github.com" &&
+                (url.pathname === "/WsprryPi/WsprryPi/releases" ||
+                    url.pathname.startsWith("/WsprryPi/WsprryPi/releases/")) && !url.search;
+        } catch {
+            return false;
+        }
+    }
+
+    function validIntakeExpiry(value) {
+        if (typeof value !== "string" ||
+            !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(value)) return false;
+        const parsed = new Date(value);
+        return Number.isFinite(parsed.getTime()) && parsed.toISOString().replace(".000Z", "Z") === value;
+    }
+
+    function formatIntakeExpiry(value) {
+        return new Intl.DateTimeFormat(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            timeZone: "UTC",
+            timeZoneName: "short"
+        }).format(new Date(value));
+    }
+
+    function parseSupportIntakeResponse(value) {
+        if (!value || typeof value.status !== "string") return null;
+        const optional = ["user_message"];
+        const messageValid = !Object.hasOwn(value, "user_message") ||
+            validIntakeText(value.user_message, 2048);
+        if (!messageValid) return null;
+        if (value.status === "active") {
+            const required = ["status", "generation", "expires_at", "minimum_upload_version",
+                "signing_key_id", "bundle_key_id", "request_url"];
+            if (!hasExactKeys(value, required, optional) ||
+                !Number.isSafeInteger(value.generation) || value.generation < 1 ||
+                !validIntakeExpiry(value.expires_at) ||
+                !validIntakeVersion(value.minimum_upload_version) ||
+                !validIntakeKeyId(value.signing_key_id, "intake") ||
+                !validIntakeKeyId(value.bundle_key_id, "bundle") ||
+                !validIntakeUrl(value.request_url, "request")) return null;
+            return { status: value.status, expiresAt: value.expires_at, userMessage: value.user_message || "" };
+        }
+        if (value.status === "disabled") {
+            const required = ["status", "generation", "expires_at", "signing_key_id", "bundle_key_id"];
+            if (!hasExactKeys(value, required, optional) ||
+                !Number.isSafeInteger(value.generation) || value.generation < 1 ||
+                !validIntakeExpiry(value.expires_at) ||
+                !validIntakeKeyId(value.signing_key_id, "intake") ||
+                !validIntakeKeyId(value.bundle_key_id, "bundle")) return null;
+            return { status: value.status, expiresAt: value.expires_at, userMessage: value.user_message || "" };
+        }
+        if (value.status === "upgrade_required") {
+            const required = ["status", "minimum_upload_version", "release_url"];
+            if (!hasExactKeys(value, required, optional) ||
+                !validIntakeVersion(value.minimum_upload_version) ||
+                !validIntakeUrl(value.release_url, "release")) return null;
+            return { status: value.status, minimumVersion: value.minimum_upload_version,
+                releaseUrl: value.release_url, userMessage: value.user_message || "" };
+        }
+        if (value.status === "unavailable" && hasExactKeys(value, ["status"])) {
+            return { status: value.status };
+        }
+        return null;
+    }
+
+    function showSupportIntakeResult(result) {
+        supportIntakeSignedMessage.textContent = result.userMessage || "";
+        supportIntakeSignedMessage.classList.toggle("d-none", !result.userMessage);
+        supportIntakeUpgradeLink.removeAttribute("href");
+        supportIntakeUpgradeLink.classList.add("d-none");
+        checkSupportIntakeButton.textContent = "Check again";
+        if (result.status === "active") {
+            supportIntakeMessage.textContent = `Private upload is available until ${formatIntakeExpiry(result.expiresAt)}. No file has been uploaded.`;
+        } else if (result.status === "disabled") {
+            supportIntakeMessage.textContent = `Private upload is temporarily disabled. This configuration expires ${formatIntakeExpiry(result.expiresAt)}. Your local bundle is unchanged.`;
+        } else if (result.status === "upgrade_required") {
+            supportIntakeMessage.textContent = `Upgrade to WsprryPi ${result.minimumVersion} or later before uploading. Your local bundle is unchanged.`;
+            supportIntakeUpgradeLink.href = result.releaseUrl;
+            supportIntakeUpgradeLink.classList.remove("d-none");
+        } else {
+            supportIntakeMessage.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
+            checkSupportIntakeButton.textContent = "Try again";
+        }
+    }
+
+    async function checkSupportIntake() {
+        if (!supportBundleFinalized || supportIntakeInFlight) return;
+        supportIntakeInFlight = true;
+        supportIntakeMessage.textContent = "Checking private upload availability…";
+        supportIntakeSignedMessage.classList.add("d-none");
+        supportIntakeUpgradeLink.classList.add("d-none");
+        setSupportBundleActions();
+        try {
+            const response = await fetchWithEndpointFallback(SUPPORT_INTAKE_ENDPOINT, {
+                method: "GET",
+                cache: "no-store"
+            });
+            const value = await response.json();
+            const result = parseSupportIntakeResponse(value);
+            if ((!response.ok && !(response.status === 503 && result?.status === "unavailable")) || !result) {
+                throw new Error("invalid intake response");
+            }
+            showSupportIntakeResult(result);
+        } catch {
+            showSupportIntakeResult({ status: "unavailable" });
+        } finally {
+            supportIntakeInFlight = false;
+            setSupportBundleActions();
+        }
     }
 
     function setDownloadAvailability(available) {
@@ -577,6 +753,7 @@ document.addEventListener("DOMContentLoaded", () => {
         supportBundleReviewConsent.classList.add("d-none");
         finalizeSupportBundleButton.classList.add("d-none");
         createSupportBundleButton.classList.remove("d-none");
+        clearSupportIntakeState();
         setDownloadAvailability(false);
     }
 
@@ -670,6 +847,7 @@ document.addEventListener("DOMContentLoaded", () => {
             supportBundleFinalized = true;
             supportBundleReviewed.disabled = true;
             finalizeSupportBundleButton.classList.add("d-none");
+            supportIntakePanel.classList.remove("d-none");
             setSupportBundleStatus("finalized", "Reviewed candidate finalized. These exact bytes are immutable and retained on the Pi for encryption.");
         } catch {
             setSupportBundleStatus("failed", "Candidate finalization did not complete.");
@@ -702,10 +880,12 @@ document.addEventListener("DOMContentLoaded", () => {
     confirmCreateSupportBundleButton.addEventListener("click", createSupportBundle);
     downloadSupportBundleButton.addEventListener("click", downloadSupportBundle);
     finalizeSupportBundleButton.addEventListener("click", finalizeSupportBundle);
+    checkSupportIntakeButton.addEventListener("click", checkSupportIntake);
     deleteSupportBundleButton.addEventListener("click", () => {
         deleteSupportBundle(supportBundleJobId);
     });
     updateSupportContextFields();
+    clearSupportIntakeState();
     window.addEventListener("pagehide", () => {
         supportBundlePageUnloading = true;
         stopSupportBundlePolling();

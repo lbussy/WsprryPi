@@ -8,6 +8,8 @@ Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/4
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
+Current implementation slice: [Slice 32 intake availability UI](../research/issue-414-slice-32-intake-ui.md)
+
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
 Local artifact implementation: [Issue 414 Slice 2](../research/issue-414-slice-2-local-artifacts.md)

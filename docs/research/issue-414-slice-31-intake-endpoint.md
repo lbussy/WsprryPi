@@ -63,6 +63,7 @@ No UI calls this endpoint yet. No bundle encryption, upload execution, Dropbox
 navigation, GitHub posting, installer/service operation, hardware access,
 transmission, or RF activity was added.
 
-The next slice may consume this endpoint from the support-bundle UI and render
-the four states without opening Dropbox or uploading. Encryption and upload
-consent remain separate later boundaries.
+Slice 32 is defined by
+[the intake availability UI prompt](issue-414-slice-32-intake-ui-prompt.md).
+It may consume this endpoint and render the four states without opening Dropbox
+or uploading. Encryption and upload consent remain separate later boundaries.

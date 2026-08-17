@@ -69,6 +69,10 @@ const SUPPORT_BUNDLES_PATH = normalizeSameOriginPath(
     PATHS.supportBundlesPath,
     `${APP_BASE_PATH}/api/support-bundles`
 );
+const SUPPORT_INTAKE_PATH = normalizeSameOriginPath(
+    PATHS.supportIntakePath,
+    `${APP_BASE_PATH}/api/support-intake`
+);
 const WEBSOCKET_PATH = normalizeSameOriginPath(
     PATHS.socketPath,
     `${APP_BASE_PATH}/socket`
@@ -97,6 +101,11 @@ const SUPPORT_BUNDLES_ENDPOINT = createEndpointDefinition(
     "support bundles",
     SUPPORT_BUNDLES_PATH,
     buildDirectRestFallbackUrl("/api/support-bundles")
+);
+const SUPPORT_INTAKE_ENDPOINT = createEndpointDefinition(
+    "support intake",
+    SUPPORT_INTAKE_PATH,
+    buildDirectRestFallbackUrl("/api/support-intake")
 );
 const WEBSOCKET_ENDPOINT = createEndpointDefinition(
     "socket",

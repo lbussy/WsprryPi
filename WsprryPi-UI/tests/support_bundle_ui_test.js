@@ -29,10 +29,16 @@ includes(view, "I reviewed this candidate", "local review consent must be explic
 includes(view, "aria-live=\"polite\"", "progress must be announced politely");
 includes(view, "role=\"alert\"", "immediate failures must use alert treatment");
 includes(view, "Delete from Pi", "cleanup retry must be explicitly destructive");
+includes(view, "id=\"supportIntakePanel\"", "private upload availability must use an inline panel");
+includes(view, "Check private upload availability", "intake resolution must require an explicit action");
+assert.ok(!view.includes("id=\"supportIntakeModal\""), "intake availability must not use a modal");
 
 includes(header, "'supportBundlesPath'", "support bundle path must be centrally configured");
+includes(header, "'supportIntakePath'", "support intake path must be centrally configured");
 includes(site, "const SUPPORT_BUNDLES_ENDPOINT", "support bundle endpoint must use central fallback definitions");
 includes(site, "buildDirectRestFallbackUrl(\"/api/support-bundles\")", "support bundle direct fallback must remain centralized");
+includes(site, "const SUPPORT_INTAKE_ENDPOINT", "support intake endpoint must use central definitions");
+includes(site, "buildDirectRestFallbackUrl(\"/api/support-intake\")", "support intake direct fallback must remain centralized");
 includes(script, "support_context: supportContext", "create payload must include validated support context");
 includes(script, "snapshot.state === \"queued\"", "queued jobs must poll");
 includes(script, "snapshot.state === \"running\"", "running jobs must poll");
@@ -50,7 +56,14 @@ includes(script, "/^[A-Za-z0-9][A-Za-z0-9._-]*\\.tar\\.gz$/i", "unsafe attachmen
 includes(script, "SUPPORT_BUNDLE_FILENAME_FALLBACK", "safe filename fallback must exist");
 includes(script, "will expire automatically within 24 hours", "cleanup failure must explain retention");
 includes(script, "Your browser chose the save location", "UI must not claim a filesystem path");
-assert.ok(!script.includes("Dropbox"), "this slice must stop before upload");
+assert.ok(!script.includes("window.open"), "availability must not open an external upload page");
+assert.ok(!script.includes("localStorage"), "intake responses must not be persisted in browser storage");
+includes(script, "supportIntakePanel.classList.remove(\"d-none\")", "intake action must appear after finalization");
+includes(script, "if (!supportBundleFinalized || supportIntakeInFlight) return", "intake checks must be finalized and single-flight");
+includes(script, "cache: \"no-store\"", "intake checks must not use a browser cache");
+includes(script, "parseSupportIntakeResponse", "intake responses must be validated before display");
+includes(script, "clearSupportIntakeState();", "workflow reset must clear intake state");
+assert.ok(!script.includes("requestUrl"), "Dropbox request capability must not be retained in UI state");
 includes(script, "supportBundleDownloadInFlight", "duplicate downloads must be prevented");
 includes(script, "supportBundleCreateInFlight", "duplicate creation must be prevented");
 includes(script, "textContent", "server-derived values must use DOM-safe text assignment");
