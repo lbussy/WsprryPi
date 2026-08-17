@@ -31,6 +31,9 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Trust checkout ownership
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Build and audit strict Si5351 profile
         working-directory: src
         run: |
