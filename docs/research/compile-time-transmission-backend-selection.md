@@ -6,7 +6,7 @@ Research and implementation record. Compile-time transmission-backend source
 selection, factory enforcement, runtime capability reporting, and strict
 ancillary-GPIO exclusion are implemented through the `BACKENDS` and
 `ANCILLARY_GPIO` Make variables and generated capability definitions.
-Backend-specific privilege policy remains future work.
+Backend-specific privilege policy is implemented for GPIO-free Si5351 builds.
 
 This investigation was prompted by an Ubuntu 24.04 x86 user who wanted to use
 the Si5351 backend through a regular Linux `/dev/i2c-N` adapter. The user did not
@@ -227,15 +227,23 @@ Disabled/default fields remain accepted for configuration compatibility.
 
 ## Runtime privilege boundary
 
-The application currently requires root for every physical backend and exempts
-only explicit simulation. Linux deployments commonly grant access to a
-specific `/dev/i2c-N` through device ownership, groups, or udev rules, so a
-future Si5351-only deployment might not technically need full root privilege.
+For a GPIO-free executable, the application evaluates its privilege policy
+after parsing the authoritative backend selection. Explicit simulation does
+not require root. An explicitly selected Si5351 backend may run without root
+only when the executable contains no Raspberry Pi transmission backend and
+`ANCILLARY_GPIO=0`. Any executable capable of physical GPIO retains the
+established root requirement, even when Si5351 is selected at runtime.
 
-That is a separate security and operator-workflow decision. Compile-time
-backend selection should not silently remove the current privilege gate. A
-later change could replace it with backend-specific access checks and clear
-diagnostics while leaving physical GPIO protections intact.
+GPIO-capable executables retain a pre-parse safeguard so a non-root process
+cannot reach physical-backend validation before rejection. Only a GPIO-free
+executable defers the decision until its final backend selection is known.
+
+The application does not preflight an I2C path with `access(2)` or change device
+permissions. The real open/ioctl path and the kernel's permissions on the
+selected `/dev/i2c-N` remain authoritative. Device ownership, group membership,
+and udev policy are administrator-managed deployment concerns and are not
+created by this build feature. A source-level or non-hardware test of this
+policy does not qualify I2C electrical behavior, Si5351 output, or RF.
 
 ## Safety and non-goals
 

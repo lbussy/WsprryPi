@@ -35,7 +35,8 @@ jobs:
         run: |
           make release backend-profile-factory-test \
             BACKENDS=si5351 ANCILLARY_GPIO=0 SUDO=
-          ../scripts/tests/strict_i2c_profile_test.sh ./build/bin/wsprrypi
+          su -s /bin/sh nobody -c \
+            '../scripts/tests/strict_i2c_profile_test.sh ./build/bin/wsprrypi'
 
   ubuntu-gcc13-release:
     runs-on: ubuntu-24.04

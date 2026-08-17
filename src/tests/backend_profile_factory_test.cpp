@@ -77,6 +77,18 @@ int main()
             throw std::runtime_error("omitted configuration backend diagnostic mismatch");
     }
 
+    if (!transmit_backend_requires_root(TransmitBackendKind::GPIO))
+        throw std::runtime_error("GPIO backend unexpectedly permits non-root execution");
+    if (transmit_backend_requires_root(TransmitBackendKind::SIMULATED))
+        throw std::runtime_error("simulated backend unexpectedly requires root");
+
+    const bool gpio_capable = WSPRRYPI_BACKEND_RPI_GPIO ||
+        WSPRRYPI_BACKEND_RP1_GPCLK || WSPRRYPI_ANCILLARY_GPIO;
+    if (build_has_physical_gpio_capability() != gpio_capable)
+        throw std::runtime_error("build GPIO privilege capability mismatch");
+    if (transmit_backend_requires_root(TransmitBackendKind::SI5351) != gpio_capable)
+        throw std::runtime_error("Si5351 privilege policy does not match GPIO capabilities");
+
     if (!WSPRRYPI_ANCILLARY_GPIO)
     {
         if (!ledControl.toggleGPIO(false))

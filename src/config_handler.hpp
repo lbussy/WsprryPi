@@ -164,6 +164,8 @@ inline constexpr const char *transmit_backend_kind_to_string(
 }
 
 bool transmit_backend_is_compiled(TransmitBackendKind backend) noexcept;
+bool build_has_physical_gpio_capability() noexcept;
+bool transmit_backend_requires_root(TransmitBackendKind backend) noexcept;
 std::string transmit_backend_unavailable_message(TransmitBackendKind backend);
 
 inline constexpr const char *enable_on_boot_behavior_to_string(

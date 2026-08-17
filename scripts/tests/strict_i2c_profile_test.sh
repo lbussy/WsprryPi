@@ -3,6 +3,27 @@ set -euo pipefail
 
 binary=${1:?binary path required}
 
+if [ "$(id -u)" -ne 0 ]; then
+    output_file=$(mktemp)
+    trap 'rm -f "$output_file"' EXIT
+    if "$binary" --backend si5351 --use-led AA0NT EM18 20 20m >"$output_file" 2>&1; then
+        echo "ancillary GPIO request unexpectedly succeeded" >&2
+        exit 1
+    fi
+    if grep -F "must be run as root" "$output_file" >/dev/null; then
+        echo "GPIO-free Si5351 executable retained the unconditional root gate" >&2
+        cat "$output_file" >&2
+        exit 1
+    fi
+    grep -F "Ancillary GPIO is unavailable in this build" "$output_file" >/dev/null || {
+        echo "non-root strict-profile request did not reach configuration validation" >&2
+        cat "$output_file" >&2
+        exit 1
+    }
+    rm -f "$output_file"
+    trap - EXIT
+fi
+
 ../scripts/tests/backend_capability_reporting_test.sh \
     "$binary" si5351 simulated disabled
 

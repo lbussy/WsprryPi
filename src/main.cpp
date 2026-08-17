@@ -309,8 +309,10 @@ int main(int argc, char *argv[])
     // Parse command line first allowing calls for -h or -v
     handle_early_cli_options(argc, argv);
 
-    // Physical backends require elevated device access; simulation does not.
-    if (getuid() != 0 && !simulated_backend)
+    // Preserve the pre-parse privilege boundary for every executable capable
+    // of physical GPIO. Only an explicit simulation bypasses this legacy gate.
+    if (getuid() != 0 && !simulated_backend &&
+        build_has_physical_gpio_capability())
     {
         print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
@@ -336,6 +338,14 @@ int main(int argc, char *argv[])
         // Handle any exceptions thrown during command-line parsing.
         std::string error_message = "Exception caught processing arguments: " + std::string(e.what());
         print_usage(error_message, EXIT_FAILURE);
+    }
+
+    // GPIO-capable executables retain the legacy privilege boundary. A
+    // GPIO-free Si5351 executable relies on the selected I2C device's ordinary
+    // kernel permissions, and simulation requires no hardware privilege.
+    if (getuid() != 0 && transmit_backend_requires_root(config.transmit_backend))
+    {
+        print_usage("This program must be run as root or with sudo.", EXIT_FAILURE);
     }
 
     initialize_logger(

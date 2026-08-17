@@ -74,6 +74,26 @@ bool transmit_backend_is_compiled(TransmitBackendKind backend) noexcept
     return false;
 }
 
+bool transmit_backend_requires_root(TransmitBackendKind backend) noexcept
+{
+    switch (backend)
+    {
+    case TransmitBackendKind::SIMULATED:
+        return false;
+    case TransmitBackendKind::SI5351:
+        return build_has_physical_gpio_capability();
+    case TransmitBackendKind::GPIO:
+        return true;
+    }
+    return true;
+}
+
+bool build_has_physical_gpio_capability() noexcept
+{
+    return WSPRRYPI_BACKEND_RPI_GPIO || WSPRRYPI_BACKEND_RP1_GPCLK ||
+        WSPRRYPI_ANCILLARY_GPIO;
+}
+
 std::string transmit_backend_unavailable_message(TransmitBackendKind backend)
 {
     return std::string("Backend '") + transmit_backend_kind_to_string(backend) +
