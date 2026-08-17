@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <vector>
 
 enum class SupportBundleIntakeControllerFailure {
@@ -23,6 +24,7 @@ struct SupportBundleIntakeControllerRequest {
     SupportBundleIntakeRetrievalRequest retrieval;
     std::vector<SupportBundleIntakeSigningKey> signing_keys;
     std::vector<std::string> recognized_bundle_key_ids;
+    std::string installed_upload_version;
     std::int64_t now_utc_seconds = 0;
     std::uint64_t client_protocol = 1;
 };
@@ -39,6 +41,7 @@ struct SupportBundleIntakeControllerResult {
     SupportBundleIntakeStateCommitStatus state_commit_status =
         SupportBundleIntakeStateCommitStatus::invalid_input;
     SupportBundleIntakeManifest manifest;
+    std::optional<SupportBundleIntakeValidationResult::UpgradeRequirement> upgrade;
     [[nodiscard]] bool ready() const noexcept {
         return failure == SupportBundleIntakeControllerFailure::none;
     }

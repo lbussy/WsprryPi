@@ -315,7 +315,12 @@ If the device clock cannot validate the signed window, upload is blocked with a 
 
 `disabled` omits `request_url`. It blocks handoff without blocking collection, review, or encrypted download.
 
-`minimum_client_protocol` is the enforceable integer compatibility gate. `minimum_upload_version` is the user-facing minimum release string. If the client protocol is too old, the UI blocks handoff, does not reveal the request URL, preserves local artifacts, and offers `release_url`.
+`minimum_client_protocol` is the integer protocol compatibility gate.
+`minimum_upload_version` is also enforceable: Slice 11 requires strict SemVer 2
+comparison against the installed application version and returns only limited,
+authenticated upgrade guidance when the installed version is older. Either
+gate blocks handoff without revealing the request URL; later UI work must
+preserve local artifacts and offer the validated `release_url` where applicable.
 
 ## Key rotation
 

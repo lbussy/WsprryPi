@@ -136,11 +136,111 @@ std::optional<std::int64_t> parse_utc(const std::string &value) {
     return days_from_civil(year, month, day) * 86400 + hour * 3600 + minute * 60 + second;
 }
 
-bool valid_version(const std::string &value) {
-    if (value.empty() || value.size() > 64) return false;
-    return std::all_of(value.begin(), value.end(), [](unsigned char character) {
-        return std::isalnum(character) || character == '.' || character == '-' || character == '+';
-    });
+struct SemanticVersion {
+    std::array<std::string, 3> core;
+    std::vector<std::string> prerelease;
+};
+
+bool ascii_digit(unsigned char character) {
+    return character >= '0' && character <= '9';
+}
+
+bool ascii_alphanumeric(unsigned char character) {
+    return ascii_digit(character) ||
+           (character >= 'A' && character <= 'Z') ||
+           (character >= 'a' && character <= 'z');
+}
+
+bool valid_identifier(const std::string &identifier, bool reject_numeric_leading_zero) {
+    if (identifier.empty() || !std::all_of(identifier.begin(), identifier.end(),
+            [](unsigned char character) { return ascii_alphanumeric(character) || character == '-'; }))
+        return false;
+    const bool numeric = std::all_of(identifier.begin(), identifier.end(),
+        [](unsigned char character) { return ascii_digit(character); });
+    return !(reject_numeric_leading_zero && numeric && identifier.size() > 1 && identifier[0] == '0');
+}
+
+std::optional<std::vector<std::string>> split_identifiers(
+    const std::string &value, bool reject_numeric_leading_zero) {
+    std::vector<std::string> identifiers;
+    std::size_t offset = 0;
+    while (offset <= value.size()) {
+        const auto separator = value.find('.', offset);
+        const auto identifier = value.substr(
+            offset, separator == std::string::npos ? std::string::npos : separator - offset);
+        if (!valid_identifier(identifier, reject_numeric_leading_zero)) return std::nullopt;
+        identifiers.push_back(identifier);
+        if (separator == std::string::npos) break;
+        offset = separator + 1;
+    }
+    return identifiers;
+}
+
+std::optional<SemanticVersion> parse_semver(const std::string &value) {
+    if (value.empty() || value.size() > 128) return std::nullopt;
+    if (!std::all_of(value.begin(), value.end(), [](unsigned char character) {
+            return ascii_alphanumeric(character) || character == '.' ||
+                   character == '-' || character == '+';
+        })) return std::nullopt;
+    const auto plus = value.find('+');
+    if (plus != std::string::npos && value.find('+', plus + 1) != std::string::npos)
+        return std::nullopt;
+    const auto before_build = value.substr(0, plus);
+    const auto dash = before_build.find('-');
+    const auto core_text = before_build.substr(0, dash);
+    auto core = split_identifiers(core_text, true);
+    if (!core || core->size() != 3) return std::nullopt;
+    if (!std::all_of(core->begin(), core->end(), [](const std::string &identifier) {
+            return std::all_of(identifier.begin(), identifier.end(),
+                [](unsigned char character) { return ascii_digit(character); });
+        })) return std::nullopt;
+    SemanticVersion parsed;
+    std::copy(core->begin(), core->end(), parsed.core.begin());
+    if (dash != std::string::npos) {
+        auto prerelease = split_identifiers(before_build.substr(dash + 1), true);
+        if (!prerelease) return std::nullopt;
+        parsed.prerelease = std::move(*prerelease);
+    }
+    if (plus != std::string::npos) {
+        if (!split_identifiers(value.substr(plus + 1), false)) return std::nullopt;
+    }
+    return parsed;
+}
+
+int compare_numeric(const std::string &left, const std::string &right) {
+    if (left.size() != right.size()) return left.size() < right.size() ? -1 : 1;
+    if (left == right) return 0;
+    return left < right ? -1 : 1;
+}
+
+int compare_semver(const SemanticVersion &left, const SemanticVersion &right) {
+    for (std::size_t index = 0; index < left.core.size(); ++index) {
+        const auto compared = compare_numeric(left.core[index], right.core[index]);
+        if (compared != 0) return compared;
+    }
+    if (left.prerelease.empty() || right.prerelease.empty()) {
+        if (left.prerelease.empty() == right.prerelease.empty()) return 0;
+        return left.prerelease.empty() ? 1 : -1;
+    }
+    const auto count = std::min(left.prerelease.size(), right.prerelease.size());
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto &a = left.prerelease[index];
+        const auto &b = right.prerelease[index];
+        const bool a_numeric = std::all_of(a.begin(), a.end(),
+            [](unsigned char character) { return ascii_digit(character); });
+        const bool b_numeric = std::all_of(b.begin(), b.end(),
+            [](unsigned char character) { return ascii_digit(character); });
+        if (a_numeric && b_numeric) {
+            const auto compared = compare_numeric(a, b);
+            if (compared != 0) return compared;
+        } else if (a_numeric != b_numeric) {
+            return a_numeric ? -1 : 1;
+        } else if (a != b) {
+            return a < b ? -1 : 1;
+        }
+    }
+    if (left.prerelease.size() == right.prerelease.size()) return 0;
+    return left.prerelease.size() < right.prerelease.size() ? -1 : 1;
 }
 
 bool valid_key_id(const std::string &value, const char *purpose) {
@@ -182,6 +282,17 @@ bool get_unsigned(const json &value, const char *field, std::uint64_t &output) {
 SupportBundleIntakeValidationResult failed(SupportBundleIntakeFailure failure) {
     SupportBundleIntakeValidationResult result;
     result.failure = failure;
+    return result;
+}
+
+SupportBundleIntakeValidationResult upgrade_required(
+    const SupportBundleIntakeManifest &manifest) {
+    SupportBundleIntakeValidationResult result;
+    result.failure = SupportBundleIntakeFailure::upgrade_required;
+    result.upgrade = SupportBundleIntakeValidationResult::UpgradeRequirement{
+        manifest.minimum_upload_version, manifest.release_url, manifest.user_message};
+    result.accepted_state = SupportBundleIntakePreviousState{
+        manifest.generation, manifest.manifest_sha256};
     return result;
 }
 
@@ -274,7 +385,8 @@ SupportBundleIntakeValidationResult validate_support_bundle_intake(
     if (request.now_utc_seconds < *published - kClockSkewSeconds ||
         request.now_utc_seconds > *expires + kClockSkewSeconds)
         return failed(SupportBundleIntakeFailure::outside_validity_window);
-    if (!valid_version(manifest.minimum_upload_version))
+    const auto minimum_version = parse_semver(manifest.minimum_upload_version);
+    if (!minimum_version)
         return failed(SupportBundleIntakeFailure::invalid_manifest);
     if (manifest.minimum_client_protocol > request.client_protocol)
         return failed(SupportBundleIntakeFailure::incompatible_client);
@@ -292,9 +404,15 @@ SupportBundleIntakeValidationResult validate_support_bundle_intake(
         std::find(request.recognized_bundle_key_ids.begin(), request.recognized_bundle_key_ids.end(),
                   manifest.bundle_encryption_key_id) == request.recognized_bundle_key_ids.end())
         return failed(SupportBundleIntakeFailure::unknown_bundle_key);
-
     manifest.manifest_sha256 = *digest;
     manifest.signing_key_id = key_id;
+    const auto installed_version = parse_semver(request.installed_upload_version);
+    if (!installed_version)
+        return failed(SupportBundleIntakeFailure::invalid_client_version);
+    if (manifest.status == "active" &&
+        compare_semver(*installed_version, *minimum_version) < 0)
+        return upgrade_required(manifest);
+
     SupportBundleIntakeValidationResult result;
     result.failure = SupportBundleIntakeFailure::none;
     result.manifest = std::move(manifest);

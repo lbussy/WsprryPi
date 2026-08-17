@@ -22,6 +22,8 @@ enum class SupportBundleIntakeFailure {
     outside_validity_window,
     unsupported_status,
     incompatible_client,
+    invalid_client_version,
+    upgrade_required,
     invalid_request_url,
     invalid_release_url,
     unknown_bundle_key,
@@ -42,6 +44,7 @@ struct SupportBundleIntakeValidationRequest {
     std::string signature_envelope_bytes;
     std::vector<SupportBundleIntakeSigningKey> signing_keys;
     std::vector<std::string> recognized_bundle_key_ids;
+    std::string installed_upload_version;
     std::int64_t now_utc_seconds = 0;
     std::uint64_t client_protocol = 1;
     std::optional<SupportBundleIntakePreviousState> previous;
@@ -65,6 +68,13 @@ struct SupportBundleIntakeManifest {
 struct SupportBundleIntakeValidationResult {
     SupportBundleIntakeFailure failure = SupportBundleIntakeFailure::invalid_manifest;
     SupportBundleIntakeManifest manifest;
+    struct UpgradeRequirement {
+        std::string minimum_upload_version;
+        std::string release_url;
+        std::optional<std::string> user_message;
+    };
+    std::optional<UpgradeRequirement> upgrade;
+    std::optional<SupportBundleIntakePreviousState> accepted_state;
     [[nodiscard]] bool valid() const noexcept {
         return failure == SupportBundleIntakeFailure::none;
     }

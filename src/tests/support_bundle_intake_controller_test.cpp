@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <tuple>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -115,6 +116,7 @@ SupportBundleIntakeControllerRequest basic_request() {
     SupportBundleIntakeControllerRequest request;
     request.state_root = "/private/test-state";
     request.recognized_bundle_key_ids = {"wsprrypi-bundle-2099-99"};
+    request.installed_upload_version = "1.3.0";
     request.now_utc_seconds = 1786986000;
     return request;
 }
@@ -148,6 +150,7 @@ SupportBundleIntakeControllerDependencies successful_dependencies(
             assert(request.manifest_bytes == "exact-manifest");
             assert(request.signature_envelope_bytes == "exact-signature");
             assert(request.now_utc_seconds == 1786986000 && request.client_protocol == 1);
+            assert(request.installed_upload_version == "1.3.0");
             assert(request.recognized_bundle_key_ids ==
                    std::vector<std::string>{"wsprrypi-bundle-2099-99"});
             if (loaded.loaded()) {
@@ -202,6 +205,7 @@ void test_load_failures_stop_before_retrieval() {
         assert(result.failure == SupportBundleIntakeControllerFailure::state_load_failed);
         assert(result.state_load_status == status && calls == std::vector<std::string>{"load"});
         assert_no_manifest(result);
+        assert(!result.upgrade);
     }
 }
 
@@ -229,6 +233,7 @@ void test_retrieval_and_validation_failures_stop_later_stages() {
         assert(result.retrieval_failure == failure);
         assert(calls == std::vector<std::string>({"load", "retrieve"}));
         assert_no_manifest(result);
+        assert(!result.upgrade);
     }
 
     for (const auto failure : {
@@ -249,7 +254,35 @@ void test_retrieval_and_validation_failures_stop_later_stages() {
         assert(result.validation_failure == failure);
         assert(calls == std::vector<std::string>({"load", "retrieve", "validate"}));
         assert_no_manifest(result);
+        assert(!result.upgrade);
     }
+}
+
+void test_upgrade_requirement_is_limited_and_committed_before_disclosure() {
+    std::vector<std::string> calls;
+    auto dependencies = successful_dependencies(calls);
+    dependencies.validate = [&](const SupportBundleIntakeValidationRequest &) {
+        calls.push_back("validate");
+        auto manifest = fake_manifest();
+        manifest.request_url = "https://www.dropbox.com/request/NEVER_DISCLOSE_THIS";
+        SupportBundleIntakeValidationResult result;
+        result.failure = SupportBundleIntakeFailure::upgrade_required;
+        result.manifest = manifest;
+        result.upgrade = SupportBundleIntakeValidationResult::UpgradeRequirement{
+            "9.0.0", "https://github.com/WsprryPi/WsprryPi/releases/latest",
+            "Upgrade before uploading."};
+        result.accepted_state = SupportBundleIntakePreviousState{7, kDigestA};
+        return result;
+    };
+    const auto result = resolve_support_bundle_intake_for_test(basic_request(), dependencies);
+    assert(result.failure == SupportBundleIntakeControllerFailure::validation_failed);
+    assert(result.validation_failure == SupportBundleIntakeFailure::upgrade_required);
+    assert(calls == std::vector<std::string>({"load", "retrieve", "validate", "commit"}));
+    assert_no_manifest(result);
+    assert(result.upgrade && result.upgrade->minimum_upload_version == "9.0.0");
+    assert(result.upgrade->release_url ==
+           "https://github.com/WsprryPi/WsprryPi/releases/latest");
+    assert(result.upgrade->user_message == "Upgrade before uploading.");
 }
 
 void test_commit_failures_and_race_authority() {
@@ -273,6 +306,7 @@ void test_commit_failures_and_race_authority() {
         assert(result.state_commit_status == status);
         assert(calls == std::vector<std::string>({"load", "retrieve", "validate", "commit"}));
         assert_no_manifest(result);
+        assert(!result.upgrade);
     }
 }
 
@@ -281,30 +315,137 @@ void test_missing_dependency_fails_closed() {
     const auto result = resolve_support_bundle_intake_for_test(basic_request(), dependencies);
     assert(result.failure == SupportBundleIntakeControllerFailure::state_load_failed);
     assert_no_manifest(result);
+    assert(!result.upgrade);
 }
 
 void test_real_validation_state_uncertain_retry() {
     auto signing = make_signing_fixture();
-    const auto manifest = json({
-        {"schema_version", 1}, {"project_id", "wsprrypi"}, {"generation", 7},
-        {"published_at", "2026-08-17T00:00:00Z"},
-        {"expires_at", "2026-08-18T00:00:00Z"}, {"status", "active"},
-        {"minimum_client_protocol", 1}, {"minimum_upload_version", "1.3.0"},
-        {"request_url", "https://www.dropbox.com/request/TestOpaque_123"},
-        {"release_url", "https://github.com/WsprryPi/WsprryPi/releases/latest"},
-        {"user_message", nullptr},
-        {"bundle_encryption_key_id", "wsprrypi-bundle-2099-99"},
-    }).dump();
-    const auto envelope = signed_envelope(signing.key.get(), manifest);
+    const auto document = [&](std::uint64_t generation,
+                              const std::string &minimum,
+                              std::uint64_t protocol = 1,
+                              bool active = true) {
+        auto value = json({
+            {"schema_version", 1}, {"project_id", "wsprrypi"},
+            {"generation", generation}, {"published_at", "2026-08-17T00:00:00Z"},
+            {"expires_at", "2026-08-18T00:00:00Z"},
+            {"status", active ? "active" : "disabled"},
+            {"minimum_client_protocol", protocol}, {"minimum_upload_version", minimum},
+            {"release_url", "https://github.com/WsprryPi/WsprryPi/releases/latest"},
+            {"user_message", nullptr},
+            {"bundle_encryption_key_id", "wsprrypi-bundle-2099-99"},
+        });
+        if (active)
+            value["request_url"] = "https://www.dropbox.com/request/TestOpaque_123";
+        const auto manifest = value.dump();
+        return std::pair{manifest, signed_envelope(signing.key.get(), manifest)};
+    };
+    auto [fetched_manifest, fetched_envelope] = document(8, "9.0.0");
     SupportBundleIntakeControllerRequest request;
     request.signing_keys = {signing.pinned};
     request.recognized_bundle_key_ids = {"wsprrypi-bundle-2099-99"};
+    request.installed_upload_version = "1.3.0";
     request.now_utc_seconds = 1786986000;
 
     auto retrieval = [&](const SupportBundleIntakeRetrievalRequest &) {
         return SupportBundleIntakeRetrievalResult{
-            SupportBundleIntakeRetrievalFailure::none, manifest, envelope};
+            SupportBundleIntakeRetrievalFailure::none, fetched_manifest, fetched_envelope};
     };
+
+    TemporaryRoot disabled_root;
+    request.state_root = disabled_root.path;
+    std::tie(fetched_manifest, fetched_envelope) = document(8, "9.0.0", 1, false);
+    SupportBundleIntakeControllerDependencies concrete = {
+        load_support_bundle_intake_state,
+        retrieval,
+        validate_support_bundle_intake,
+        commit_support_bundle_intake_state,
+    };
+    auto result = resolve_support_bundle_intake_for_test(request, concrete);
+    assert(result.ready() && result.manifest.status == "disabled");
+    assert(!result.manifest.request_url && !result.upgrade);
+    auto loaded = load_support_bundle_intake_state(disabled_root.path);
+    assert(loaded.loaded() && loaded.state.generation == 8);
+
+    std::tie(fetched_manifest, fetched_envelope) = document(8, "9.0.0");
+
+    TemporaryRoot upgrade_root;
+    request.state_root = upgrade_root.path;
+    request.installed_upload_version = "1.3.0";
+    SupportBundleIntakeControllerDependencies upgrade = {
+        load_support_bundle_intake_state,
+        retrieval,
+        validate_support_bundle_intake,
+        commit_support_bundle_intake_state,
+    };
+    result = resolve_support_bundle_intake_for_test(request, upgrade);
+    assert(result.failure == SupportBundleIntakeControllerFailure::validation_failed);
+    assert(result.validation_failure == SupportBundleIntakeFailure::upgrade_required);
+    assert_no_manifest(result);
+    assert(result.upgrade && result.upgrade->minimum_upload_version == "9.0.0");
+    loaded = load_support_bundle_intake_state(upgrade_root.path);
+    assert(loaded.loaded() && loaded.state.generation == 8);
+
+    std::tie(fetched_manifest, fetched_envelope) = document(7, "1.0.0");
+    result = resolve_support_bundle_intake_for_test(request, upgrade);
+    assert(result.failure == SupportBundleIntakeControllerFailure::validation_failed);
+    assert(result.validation_failure == SupportBundleIntakeFailure::rollback);
+    assert_no_manifest(result);
+    assert(!result.upgrade);
+    loaded = load_support_bundle_intake_state(upgrade_root.path);
+    assert(loaded.loaded() && loaded.state.generation == 8);
+
+    TemporaryRoot protocol_root;
+    request.state_root = protocol_root.path;
+    std::tie(fetched_manifest, fetched_envelope) = document(8, "9.0.0", 2);
+    result = resolve_support_bundle_intake_for_test(request, upgrade);
+    assert(result.failure == SupportBundleIntakeControllerFailure::validation_failed);
+    assert(result.validation_failure == SupportBundleIntakeFailure::incompatible_client);
+    assert_no_manifest(result);
+    assert(!result.upgrade);
+    assert(load_support_bundle_intake_state(protocol_root.path).status ==
+           SupportBundleIntakeStateLoadStatus::absent);
+
+    TemporaryRoot upgrade_competing_root;
+    request.state_root = upgrade_competing_root.path;
+    std::tie(fetched_manifest, fetched_envelope) = document(8, "9.0.0");
+    SupportBundleIntakeControllerDependencies upgrade_competing = {
+        load_support_bundle_intake_state,
+        retrieval,
+        validate_support_bundle_intake,
+        [&](const fs::path &path, const SupportBundleIntakeState &state) {
+            assert(commit_support_bundle_intake_state(path, {9, kDigestB}).published());
+            return commit_support_bundle_intake_state(path, state);
+        },
+    };
+    result = resolve_support_bundle_intake_for_test(request, upgrade_competing);
+    assert(result.failure == SupportBundleIntakeControllerFailure::state_commit_failed);
+    assert(result.state_commit_status == SupportBundleIntakeStateCommitStatus::rollback);
+    assert_no_manifest(result);
+    assert(!result.upgrade);
+
+    TemporaryRoot upgrade_uncertain_root;
+    request.state_root = upgrade_uncertain_root.path;
+    SupportBundleIntakeControllerDependencies upgrade_uncertain = {
+        load_support_bundle_intake_state,
+        retrieval,
+        validate_support_bundle_intake,
+        [&](const fs::path &path, const SupportBundleIntakeState &state) {
+            return commit_support_bundle_intake_state_for_test(
+                path, state, {SupportBundleIntakeStateTestFault::directory_sync, {}});
+        },
+    };
+    result = resolve_support_bundle_intake_for_test(request, upgrade_uncertain);
+    assert(result.failure == SupportBundleIntakeControllerFailure::state_durability_uncertain);
+    assert_no_manifest(result);
+    assert(!result.upgrade);
+    result = resolve_support_bundle_intake_for_test(request, upgrade);
+    assert(result.failure == SupportBundleIntakeControllerFailure::validation_failed);
+    assert(result.validation_failure == SupportBundleIntakeFailure::upgrade_required);
+    assert(result.state_commit_status == SupportBundleIntakeStateCommitStatus::unchanged);
+    assert_no_manifest(result);
+    assert(result.upgrade && result.upgrade->minimum_upload_version == "9.0.0");
+
+    std::tie(fetched_manifest, fetched_envelope) = document(7, "1.3.0");
 
     TemporaryRoot advanced_root;
     request.state_root = advanced_root.path;
@@ -317,11 +458,11 @@ void test_real_validation_state_uncertain_retry() {
             return commit_support_bundle_intake_state(path, state);
         },
     };
-    auto result = resolve_support_bundle_intake_for_test(request, advanced);
+    result = resolve_support_bundle_intake_for_test(request, advanced);
     assert(result.failure == SupportBundleIntakeControllerFailure::state_commit_failed);
     assert(result.state_commit_status == SupportBundleIntakeStateCommitStatus::rollback);
     assert_no_manifest(result);
-    auto loaded = load_support_bundle_intake_state(advanced_root.path);
+    loaded = load_support_bundle_intake_state(advanced_root.path);
     assert(loaded.loaded() && loaded.state.generation == 8 &&
            loaded.state.manifest_sha256 == kDigestB);
 
@@ -363,6 +504,7 @@ int main() {
     test_order_absent_loaded_and_success();
     test_load_failures_stop_before_retrieval();
     test_retrieval_and_validation_failures_stop_later_stages();
+    test_upgrade_requirement_is_limited_and_committed_before_disclosure();
     test_commit_failures_and_race_authority();
     test_missing_dependency_fails_closed();
     test_real_validation_state_uncertain_retry();

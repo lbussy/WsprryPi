@@ -89,8 +89,16 @@ json valid_manifest() {
 }
 
 SupportBundleIntakeValidationRequest request_for(const Fixture &fixture, const std::string &manifest) {
-    return {manifest, envelope_for(fixture.key.get(), fixture.pinned.key_id, manifest),
-            {fixture.pinned}, {"wsprrypi-bundle-2099-99"}, 1786906800, 1, std::nullopt};
+    SupportBundleIntakeValidationRequest request;
+    request.manifest_bytes = manifest;
+    request.signature_envelope_bytes =
+        envelope_for(fixture.key.get(), fixture.pinned.key_id, manifest);
+    request.signing_keys = {fixture.pinned};
+    request.recognized_bundle_key_ids = {"wsprrypi-bundle-2099-99"};
+    request.installed_upload_version = "1.3.0";
+    request.now_utc_seconds = 1786906800;
+    request.client_protocol = 1;
+    return request;
 }
 
 void expect(const Fixture &fixture, json manifest, SupportBundleIntakeFailure failure) {
@@ -106,6 +114,8 @@ void assert_no_manifest_disclosure(const SupportBundleIntakeValidationResult &re
     assert(!result.manifest.request_url && result.manifest.release_url.empty());
     assert(!result.manifest.user_message && result.manifest.bundle_encryption_key_id.empty());
     assert(result.manifest.manifest_sha256.empty() && result.manifest.signing_key_id.empty());
+    assert(!result.upgrade);
+    assert(!result.accepted_state);
 }
 
 void test_valid_active_and_disabled() {
@@ -125,6 +135,119 @@ void test_valid_active_and_disabled() {
     disabled["user_message"] = "Uploads are temporarily unavailable.";
     result = validate_support_bundle_intake(request_for(fixture, disabled.dump()));
     assert(result.valid() && !result.manifest.request_url && result.manifest.user_message);
+}
+
+void test_minimum_upload_version_gate() {
+    auto fixture = make_fixture();
+    const auto validate_version = [&](const std::string &installed,
+                                      const std::string &minimum = "1.3.0") {
+        auto manifest = valid_manifest();
+        manifest["minimum_upload_version"] = minimum;
+        auto request = request_for(fixture, manifest.dump());
+        request.installed_upload_version = installed;
+        return validate_support_bundle_intake(request);
+    };
+    for (const auto &installed : {
+             "1.3.0", "1.3.0+build.7", "1.3.1", "1.4.0", "2.0.0",
+             "999999999999999999999999999999999999.0.0"}) {
+        const auto result = validate_version(installed);
+        assert(result.valid() && !result.upgrade);
+    }
+    for (const auto &installed : {"1.2.9", "1.2.99", "0.99.99", "1.3.0-alpha.1"}) {
+        const auto result = validate_version(installed);
+        assert(result.failure == SupportBundleIntakeFailure::upgrade_required);
+        assert(result.manifest.generation == 0 && !result.manifest.request_url);
+        assert(result.upgrade);
+        assert(result.upgrade->minimum_upload_version == "1.3.0");
+        assert(result.upgrade->release_url ==
+               "https://github.com/WsprryPi/WsprryPi/releases/latest");
+        assert(!result.upgrade->user_message);
+        assert(result.accepted_state && result.accepted_state->generation == 7);
+        assert(result.accepted_state->manifest_sha256.size() == 64);
+    }
+    auto result = validate_version("1.3.0-alpha.9", "1.3.0-beta.2");
+    assert(result.failure == SupportBundleIntakeFailure::upgrade_required && result.upgrade);
+    result = validate_version("1.3.0-beta.10", "1.3.0-beta.2");
+    assert(result.valid());
+    result = validate_version("1.3.0-7", "1.3.0-alpha");
+    assert(result.failure == SupportBundleIntakeFailure::upgrade_required);
+    result = validate_version("1.3.0+local", "1.3.0+published");
+    assert(result.valid());
+
+    auto disabled = valid_manifest();
+    disabled["status"] = "disabled";
+    disabled.erase("request_url");
+    disabled["minimum_upload_version"] = "9.0.0";
+    auto disabled_request = request_for(fixture, disabled.dump());
+    disabled_request.installed_upload_version = "1.3.0";
+    result = validate_support_bundle_intake(disabled_request);
+    assert(result.valid() && result.manifest.status == "disabled");
+    assert(!result.manifest.request_url && !result.upgrade && !result.accepted_state);
+
+    for (const auto &installed : {
+             "", "1", "1.2", "1.2.3.4", "01.2.3", "1.02.3", "1.2.03",
+             "v1.2.3", "1.2.3-", "1.2.3-alpha..1", "1.2.3-01", "1.2.3+",
+             "1.2.3-\xC3\xA9"}) {
+        result = validate_version(installed);
+        assert(result.failure == SupportBundleIntakeFailure::invalid_client_version);
+        assert_no_manifest_disclosure(result);
+    }
+    result = validate_version(std::string(129, '1'));
+    assert(result.failure == SupportBundleIntakeFailure::invalid_client_version);
+    assert_no_manifest_disclosure(result);
+
+    result = validate_version("1.3.0", "01.3.0");
+    assert(result.failure == SupportBundleIntakeFailure::invalid_manifest);
+    assert_no_manifest_disclosure(result);
+
+    auto manifest = valid_manifest();
+    manifest["minimum_upload_version"] = "9.0.0";
+    manifest["user_message"] = "Upgrade before uploading.";
+    manifest["request_url"] = "https://www.dropbox.com/request/NEVER_DISCLOSE_THIS";
+    auto request = request_for(fixture, manifest.dump());
+    request.installed_upload_version = "1.3.0";
+    result = validate_support_bundle_intake(request);
+    assert(result.failure == SupportBundleIntakeFailure::upgrade_required && result.upgrade);
+    assert(result.upgrade->user_message == "Upgrade before uploading.");
+    assert(result.accepted_state && result.accepted_state->generation == 7);
+    assert(result.manifest.generation == 0 && !result.manifest.request_url);
+
+    manifest["release_url"] = "https://attacker.example/upgrade";
+    request = request_for(fixture, manifest.dump());
+    request.installed_upload_version = "1.3.0";
+    result = validate_support_bundle_intake(request);
+    assert(result.failure == SupportBundleIntakeFailure::invalid_release_url);
+    assert_no_manifest_disclosure(result);
+
+    const auto expect_stale_failure = [&](json candidate,
+                                          SupportBundleIntakeFailure failure,
+                                          const auto &mutate_request) {
+        candidate["minimum_upload_version"] = "9.0.0";
+        auto stale = request_for(fixture, candidate.dump());
+        stale.installed_upload_version = "1.3.0";
+        mutate_request(stale);
+        const auto rejected = validate_support_bundle_intake(stale);
+        assert(rejected.failure == failure);
+        assert_no_manifest_disclosure(rejected);
+    };
+    auto wrong_project = valid_manifest();
+    wrong_project["project_id"] = "other";
+    expect_stale_failure(wrong_project, SupportBundleIntakeFailure::wrong_project,
+                         [](auto &) {});
+    expect_stale_failure(valid_manifest(), SupportBundleIntakeFailure::outside_validity_window,
+                         [](auto &stale) { stale.now_utc_seconds = 2000000000; });
+    expect_stale_failure(valid_manifest(), SupportBundleIntakeFailure::rollback,
+                         [](auto &stale) {
+                             stale.previous = SupportBundleIntakePreviousState{8, std::string(64, '0')};
+                         });
+    expect_stale_failure(valid_manifest(), SupportBundleIntakeFailure::unknown_bundle_key,
+                         [](auto &stale) { stale.recognized_bundle_key_ids.clear(); });
+    auto bad_request = valid_manifest();
+    bad_request["request_url"] = "https://attacker.example/request/secret";
+    expect_stale_failure(bad_request, SupportBundleIntakeFailure::invalid_request_url,
+                         [](auto &) {});
+    expect_stale_failure(valid_manifest(), SupportBundleIntakeFailure::invalid_signature,
+                         [](auto &stale) { stale.manifest_bytes.push_back('\n'); });
 }
 
 void test_signature_boundary() {
@@ -297,6 +420,7 @@ void test_bounds_and_failure_non_disclosure() {
 
 int main() {
     test_valid_active_and_disabled();
+    test_minimum_upload_version_gate();
     test_signature_boundary();
     test_strict_manifest_and_policy();
     test_time_and_generation_state();

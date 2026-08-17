@@ -28,6 +28,8 @@ Bounded HTTPS intake retrieval: [Issue 414 Slice 9](../research/issue-414-slice-
 
 Signed-intake controller composition: [Issue 414 Slice 10](../research/issue-414-slice-10-intake-controller.md)
 
+Minimum upload version gate: [Issue 414 Slice 11](../research/issue-414-slice-11-minimum-upload-version.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

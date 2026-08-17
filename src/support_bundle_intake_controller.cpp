@@ -28,6 +28,7 @@ SupportBundleIntakeControllerResult resolve_internal(
     validation.signature_envelope_bytes = retrieved.signature_envelope_bytes;
     validation.signing_keys = request.signing_keys;
     validation.recognized_bundle_key_ids = request.recognized_bundle_key_ids;
+    validation.installed_upload_version = request.installed_upload_version;
     validation.now_utc_seconds = request.now_utc_seconds;
     validation.client_protocol = request.client_protocol;
     if (loaded.loaded()) {
@@ -38,6 +39,23 @@ SupportBundleIntakeControllerResult resolve_internal(
     result.validation_failure = validated.failure;
     if (!validated.valid()) {
         result.failure = SupportBundleIntakeControllerFailure::validation_failed;
+        if (validated.failure != SupportBundleIntakeFailure::upgrade_required ||
+            !validated.upgrade || !validated.accepted_state)
+            return result;
+        const auto committed = dependencies.commit_state(
+            request.state_root,
+            {validated.accepted_state->generation,
+             validated.accepted_state->manifest_sha256});
+        result.state_commit_status = committed.status;
+        if (committed.status == SupportBundleIntakeStateCommitStatus::committed_sync_uncertain) {
+            result.failure = SupportBundleIntakeControllerFailure::state_durability_uncertain;
+            return result;
+        }
+        if (!committed.durability_confirmed()) {
+            result.failure = SupportBundleIntakeControllerFailure::state_commit_failed;
+            return result;
+        }
+        result.upgrade = validated.upgrade;
         return result;
     }
 
