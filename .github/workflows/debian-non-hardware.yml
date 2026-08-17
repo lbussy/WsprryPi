@@ -14,6 +14,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  strict-i2c-profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container: ubuntu:24.04
+    env:
+      WSPRRYPI_DISABLE_HARDWARE_ACCESS: "1"
+    steps:
+      - name: Install build dependencies without libgpiod
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential git libssl-dev libsystemd-dev pkg-config python3
+
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Build and audit strict Si5351 profile
+        working-directory: src
+        run: |
+          make release backend-profile-factory-test \
+            BACKENDS=si5351 ANCILLARY_GPIO=0 SUDO=
+          ../scripts/tests/strict_i2c_profile_test.sh ./build/bin/wsprrypi
+
   ubuntu-gcc13-release:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

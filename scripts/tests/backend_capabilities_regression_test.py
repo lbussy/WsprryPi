@@ -14,8 +14,11 @@ DEFAULT = "rpi-gpio,rp1-gpclk,si5351,simulated"
 
 
 def run(*arguments: str, expect: int = 0) -> subprocess.CompletedProcess[str]:
+    effective = list(arguments)
+    if "--ancillary-gpio" not in effective:
+        effective[0:0] = ["--ancillary-gpio", "1"]
     result = subprocess.run(
-        ["python3", str(GENERATOR), *arguments], capture_output=True, text=True
+        ["python3", str(GENERATOR), *effective], capture_output=True, text=True
     )
     if result.returncode != expect:
         raise AssertionError(
@@ -31,6 +34,7 @@ def main() -> int:
         run("--backends", DEFAULT, "--output", str(output))
         content = output.read_text(encoding="utf-8")
         assert '#define WSPRRYPI_COMPILED_BACKENDS "' + DEFAULT + '"' in content
+        assert "#define WSPRRYPI_ANCILLARY_GPIO 1" in content
         assert all(f"#define {macro} 1" in content for macro in (
             "WSPRRYPI_BACKEND_RPI_GPIO", "WSPRRYPI_BACKEND_RP1_GPCLK",
             "WSPRRYPI_BACKEND_SI5351", "WSPRRYPI_BACKEND_SIMULATED",
@@ -49,6 +53,11 @@ def main() -> int:
         assert "#define WSPRRYPI_BACKEND_SI5351 1" in subset
         assert "#define WSPRRYPI_BACKEND_SIMULATED 1" in subset
         run("--backends", "si5351", "--output", str(output))
+        run(
+            "--backends", "si5351", "--ancillary-gpio", "0",
+            "--output", str(output),
+        )
+        assert "#define WSPRRYPI_ANCILLARY_GPIO 0" in output.read_text()
         assert run(
             "--backends", "simulated", "--output", str(output), "--check", expect=3
         ).stdout.startswith("backend capabilities stale")
@@ -61,6 +70,12 @@ def main() -> int:
         ):
             failed = run("--backends", invalid, "--output", str(output), expect=1)
             assert fragment in failed.stderr, failed.stderr
+
+        failed = run(
+            "--backends", "si5351", "--ancillary-gpio", "2",
+            "--output", str(output), expect=2,
+        )
+        assert "invalid choice" in failed.stderr
 
     print("backend capability regression tests passed")
     return 0

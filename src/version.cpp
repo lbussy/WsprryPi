@@ -184,6 +184,11 @@ std::string get_compiled_backends()
 {
     return WSPRRYPI_COMPILED_BACKENDS;
 }
+
+bool has_ancillary_gpio() noexcept
+{
+    return WSPRRYPI_ANCILLARY_GPIO;
+}
 constexpr std::string_view SANITIZED_EXE = to_string_view(MAKE_EXE); ///< Sanitized executable name.
 constexpr std::string_view SANITIZED_PRJ = to_string_view(MAKE_PRJ); ///< Sanitized project name.
 

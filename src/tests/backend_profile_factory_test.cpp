@@ -1,6 +1,7 @@
 #include "backend_capabilities.hpp"
 #include "arg_parser.hpp"
 #include "config_handler.hpp"
+#include "gpio_output.hpp"
 #include "wspr_transmit.hpp"
 
 #include <array>
@@ -74,5 +75,53 @@ int main()
             throw std::runtime_error("omitted configuration backend unexpectedly validated");
         if (error != transmit_backend_unavailable_message(backend))
             throw std::runtime_error("omitted configuration backend diagnostic mismatch");
+    }
+
+    if (!WSPRRYPI_ANCILLARY_GPIO)
+    {
+        if (!ledControl.toggleGPIO(false))
+            throw std::runtime_error("unavailable GPIO cleanup was not a successful no-op");
+        if (ledControl.toggleGPIO(true))
+            throw std::runtime_error("unavailable GPIO assertion unexpectedly succeeded");
+
+        ArgParserConfig compatible_disabled_config;
+        compatible_disabled_config.transmit_backend = TransmitBackendKind::SI5351;
+        compatible_disabled_config.use_ini = true;
+        compatible_disabled_config.transmit = false;
+        std::string compatible_error;
+        if (!validate_config_candidate(
+                compatible_disabled_config,
+                &compatible_error))
+        {
+            throw std::runtime_error(
+                "disabled ancillary GPIO defaults were rejected: " +
+                compatible_error);
+        }
+
+        const auto expect_ancillary_rejection = [](ArgParserConfig candidate)
+        {
+            std::string error;
+            if (validate_config_candidate(candidate, &error))
+                throw std::runtime_error("ancillary GPIO configuration unexpectedly validated");
+            if (error.find("Ancillary GPIO is unavailable in this build") == std::string::npos)
+                throw std::runtime_error("ancillary GPIO diagnostic mismatch");
+        };
+
+        ArgParserConfig candidate;
+        candidate.transmit_backend = TransmitBackendKind::SI5351;
+        candidate.use_led = true;
+        expect_ancillary_rejection(candidate);
+        candidate = ArgParserConfig{};
+        candidate.transmit_backend = TransmitBackendKind::SI5351;
+        candidate.use_amp = true;
+        expect_ancillary_rejection(candidate);
+        candidate = ArgParserConfig{};
+        candidate.transmit_backend = TransmitBackendKind::SI5351;
+        candidate.use_shutdown = true;
+        expect_ancillary_rejection(candidate);
+        candidate = ArgParserConfig{};
+        candidate.transmit_backend = TransmitBackendKind::SI5351;
+        candidate.band_gpio.front().enabled = true;
+        expect_ancillary_rejection(candidate);
     }
 }

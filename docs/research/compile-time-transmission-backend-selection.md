@@ -3,10 +3,10 @@
 ## Status
 
 Research and implementation record. Compile-time transmission-backend source
-selection, factory enforcement, and runtime capability reporting are
-implemented through the `BACKENDS` Make variable and generated capability
-definitions. Backend-specific privilege policy and a strict profile that
-removes ancillary libgpiod support remain future work.
+selection, factory enforcement, runtime capability reporting, and strict
+ancillary-GPIO exclusion are implemented through the `BACKENDS` and
+`ANCILLARY_GPIO` Make variables and generated capability definitions.
+Backend-specific privilege policy remains future work.
 
 This investigation was prompted by an Ubuntu 24.04 x86 user who wanted to use
 the Si5351 backend through a regular Linux `/dev/i2c-N` adapter. The user did not
@@ -51,9 +51,9 @@ allowing a Si5351-only executable to avoid constructing a Raspberry Pi backend.
 
 `BACKENDS=si5351` has been compiled on Ubuntu 24.04 x86_64 with GCC 13 and
 audited to exclude legacy GPIO transmitter, Mailbox, RP1 GPCLK, and simulated
-backend symbols. This is a no-GPIO-transmission profile, not yet the strict
-I2C-only profile described below: ancillary LED, amplifier, shutdown-button,
-band-selector, and libgpiod support remain compiled.
+backend symbols. By default it remains a no-GPIO-transmission profile with
+ancillary LED, amplifier, shutdown-button, band-selector, and libgpiod support.
+Adding `ANCILLARY_GPIO=0` produces the strict I2C-only profile.
 
 ## Reported Ubuntu failure
 
@@ -150,6 +150,7 @@ definitions and source groups:
 ```sh
 make BACKENDS=si5351
 make BACKENDS=si5351,simulated
+make BACKENDS=si5351 ANCILLARY_GPIO=0
 ```
 
 One authoritative build configuration now controls source selection, factory
@@ -192,6 +193,11 @@ The compiled backend set is visible through:
 - the `--list-backends` command, which prints the canonical comma-separated
   set for scripts.
 
+Help and version output also report `Ancillary GPIO: enabled|disabled`, and the
+`/version` JSON response exposes the same capability as the boolean
+`ancillary_gpio` field. `--list-backends` intentionally remains limited to
+transmission backends.
+
 Command-line and persisted-configuration validation distinguish an invalid
 backend name from a valid backend that is unavailable in the current build.
 An omitted selection is rejected before runtime side effects, with the compiled
@@ -205,16 +211,19 @@ Excluding Raspberry Pi clock/GPIO transmission is not identical to removing all
 GPIO support. The application also uses libgpiod for TX LED, amplifier control,
 shutdown-button input, and band-selection outputs.
 
-At least two useful profiles exist:
+Two profiles are implemented:
 
 1. **No GPIO transmission backend:** omit Raspberry Pi clock/DMA and RP1 GPCLK,
    but retain optional ancillary libgpiod controls.
-2. **Strict I2C-only:** omit transmission GPIO and all ancillary libgpiod
-   features, dependencies, code, and configuration acceptance.
+2. **Strict I2C-only:** `BACKENDS=si5351 ANCILLARY_GPIO=0` omits transmission
+   GPIO and the libgpiod-backed input, output, and resolver implementations,
+   compiler flags, and linker dependencies.
 
 The strict profile most directly matches an ordinary x86 host whose only
-physical transmitter interface is `/dev/i2c-N`. Ancillary GPIO configuration
-in that profile must fail clearly rather than being silently ignored.
+physical transmitter interface is `/dev/i2c-N`. Enabled TX LED, amplifier,
+shutdown-button, band GPIO, and per-frequency `@GPIO` selections fail with an
+explicit unavailable-in-this-build diagnostic before I2C or GPIO side effects.
+Disabled/default fields remain accepted for configuration compatibility.
 
 ## Runtime privilege boundary
 
@@ -267,14 +276,16 @@ The implemented profile and capability slices provide the following evidence:
    cancellation, and cleanup tests.
 6. Existing simulated and Raspberry Pi backend regression suites in builds
    where those backends are enabled.
+7. A strict Si5351 build in an Ubuntu environment without libgpiod development
+   packages, plus dynamic-link and symbol audits proving no gpiod dependency.
 
 The following validation remains outside the implemented slices:
 
-7. A file-access audit proving that an authorized Si5351-only run accesses the
+8. A file-access audit proving that an authorized Si5351-only run accesses the
    intended `/dev/i2c-N` and does not access `/dev/mem`, `/dev/vcio`, GPIO chip,
    RP1 GPCLK, mailbox, MMIO, PWM, or DMA paths.
-8. Separately authorized validation of the intended adapter and Si5351 hardware.
-9. Separately authorized RF and frequency qualification before making any
+9. Separately authorized validation of the intended adapter and Si5351 hardware.
+10. Separately authorized RF and frequency qualification before making any
    physical-output claim.
 
 ## Documentation impact

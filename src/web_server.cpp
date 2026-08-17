@@ -342,6 +342,7 @@ void WebServer::start(int port)
               j["wspr_build_dirty"] = get_exe_build_dirty();
               j["wspr_build_dirty_state"] = build_dirty_metadata(get_exe_build_dirty());
               j["compiled_backends"] = get_compiled_backends();
+              j["ancillary_gpio"] = has_ancillary_gpio();
               res.set_content(j.dump(4), "application/json");
             });
 

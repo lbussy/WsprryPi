@@ -96,6 +96,9 @@ extern std::string get_exe_build_dirty();
 /** Return the canonical comma-separated transmission backends in this build. */
 extern std::string get_compiled_backends();
 
+/** Return whether ancillary libgpiod controls are compiled into this build. */
+extern bool has_ancillary_gpio() noexcept;
+
 /**
  * @brief Retrieves the current debug state based on the build configuration.
  *

@@ -29,6 +29,7 @@ def makefile() -> str:
     return (
         f"DEFAULT_BACKENDS := {DEFAULT}\n"
         "BACKENDS ?= $(DEFAULT_BACKENDS)\n"
+        "ANCILLARY_GPIO ?= 1\n"
         "BACKEND_CAPABILITIES_HEADER := build/generated/backend_capabilities.hpp\n"
         f"BACKEND_CAPABILITIES_GENERATOR := {GENERATOR}\n"
         "BUILD_METADATA_INTROSPECTION :=\n"
@@ -72,6 +73,12 @@ def main() -> int:
         selected = run("make", "release", "BACKENDS=si5351", cwd=fixture)
         assert "backend capabilities updated" in selected.stdout, selected.stdout
         assert '#define WSPRRYPI_COMPILED_BACKENDS "si5351"' in header.read_text()
+
+        strict = run(
+            "make", "release", "BACKENDS=si5351", "ANCILLARY_GPIO=0", cwd=fixture
+        )
+        assert "backend capabilities updated" in strict.stdout, strict.stdout
+        assert "#define WSPRRYPI_ANCILLARY_GPIO 0" in header.read_text()
 
         restored = run("make", "release", cwd=fixture)
         assert "backend capabilities updated" in restored.stdout, restored.stdout

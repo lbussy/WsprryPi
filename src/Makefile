@@ -84,9 +84,10 @@ PREFIX ?= /usr/local/bin
 # isolated objects and a retained profile executable.
 DEFAULT_BACKENDS := rpi-gpio,rp1-gpclk,si5351,simulated
 BACKENDS ?= $(DEFAULT_BACKENDS)
+ANCILLARY_GPIO ?= 1
 comma := ,
 BACKEND_LIST := $(subst $(comma), ,$(BACKENDS))
-BACKEND_PROFILE_KEY := $(subst $(comma),+,$(BACKENDS))
+BACKEND_PROFILE_KEY := $(subst $(comma),+,$(BACKENDS))+ancillary-gpio$(ANCILLARY_GPIO)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Components
@@ -187,6 +188,15 @@ include ../scripts/backend_capability_rules.mk
 # ─────────────────────────────────────────────────────────────────────────────
 
 LOCAL_CPP_SOURCES := $(shell find . -maxdepth 1 -type f -name '*.cpp' ! -name '._*' 2>/dev/null)
+ANCILLARY_GPIO_REAL_CPP_SOURCES := \
+	./gpio_input.cpp \
+	./gpio_output.cpp \
+	./gpio_line_resolver.cpp
+ANCILLARY_GPIO_STUB_CPP_SOURCES := \
+	./gpio_input_unavailable.cpp \
+	./gpio_output_unavailable.cpp
+LOCAL_CPP_SOURCES := $(filter-out $(ANCILLARY_GPIO_REAL_CPP_SOURCES) $(ANCILLARY_GPIO_STUB_CPP_SOURCES),$(LOCAL_CPP_SOURCES))
+LOCAL_CPP_SOURCES += $(if $(filter 1,$(ANCILLARY_GPIO)),$(ANCILLARY_GPIO_REAL_CPP_SOURCES),$(ANCILLARY_GPIO_STUB_CPP_SOURCES))
 COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
 TRANSMITTER_SHARED_CPP_SOURCES := \
 	./WSPR-Transmitter/src/execution_plan_compiler.cpp \
@@ -458,6 +468,9 @@ endif
 
 # Pull compiler and linker flags from pkg-config (compile flags go to *FLAGS,
 # link flags go to LDFLAGS).
+PKG_CFLAGS :=
+PKG_LIBS   :=
+ifeq ($(ANCILLARY_GPIO),1)
 PKG_CFLAGS := $(strip $(shell pkg-config --cflags libgpiod libgpiodcxx 2>/dev/null))
 PKG_LIBS   := $(strip $(shell pkg-config --libs   libgpiod libgpiodcxx 2>/dev/null))
 
@@ -474,6 +487,10 @@ endif
 ifeq ($(shell [ "$(GPIOD_API_MAJOR)" -ge 2 ] 2>/dev/null && echo yes),yes)
 GPIOD_HAS_V2 := 1
 else
+GPIOD_HAS_V2 := 0
+endif
+else
+GPIOD_API_MAJOR := 0
 GPIOD_HAS_V2 := 0
 endif
 

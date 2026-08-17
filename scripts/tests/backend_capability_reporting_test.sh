@@ -4,12 +4,15 @@ set -euo pipefail
 binary=${1:?binary path required}
 expected=${2:?expected backend list required}
 omitted=${3:-}
+expected_ancillary=${4:-enabled}
 
 actual=$($binary --list-backends)
 test "$actual" = "$expected"
 
 $binary --version 2>&1 | grep -F "Compiled backends: $expected" >/dev/null
 $binary --help 2>&1 | grep -F "Compiled backends: $expected" >/dev/null
+$binary --version 2>&1 | grep -F "Ancillary GPIO: $expected_ancillary" >/dev/null
+$binary --help 2>&1 | grep -F "Ancillary GPIO: $expected_ancillary" >/dev/null
 
 if [[ -n "$omitted" ]]; then
     output_file=$(mktemp)

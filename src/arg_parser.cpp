@@ -988,6 +988,13 @@ static bool parse_frequency_entry_token(
         return true;
     }
 
+    if (!has_ancillary_gpio())
+    {
+        error_message =
+            "Ancillary GPIO is unavailable in this build; @GPIO selectors are not supported.";
+        return false;
+    }
+
     if (token.find('@', at_pos + 1U) != std::string::npos)
     {
         error_message =
@@ -1472,6 +1479,7 @@ void print_usage(const std::string &message, int exit_code)
               << "  --no-offset                        Disable random WSPR transmit offset.\n\n"
               << "Backend Selection:\n"
               << "  Compiled backends: " << get_compiled_backends() << "\n"
+              << "  Ancillary GPIO: " << (has_ancillary_gpio() ? "enabled" : "disabled") << "\n"
               << "  --backend <gpio|si5351|simulated>  Select the backend. Default: gpio.\n"
               << "                                     simulated is transient, non-RF, and never persisted.\n"
               << "                                     GPIO uses the RP1 provider on Raspberry Pi 5.\n"
@@ -1656,6 +1664,27 @@ bool validate_config_candidate(
                 transmit_backend_unavailable_message(candidate.transmit_backend);
         }
         return false;
+    }
+
+    if (!has_ancillary_gpio())
+    {
+        const bool band_gpio_requested = std::any_of(
+            candidate.band_gpio.begin(),
+            candidate.band_gpio.end(),
+            [](const BandGPIOConfig &entry)
+            {
+                return entry.enabled;
+            });
+        if (candidate.use_led || candidate.use_amp || candidate.use_shutdown ||
+            band_gpio_requested)
+        {
+            if (error_message != nullptr)
+            {
+                *error_message =
+                    "Ancillary GPIO is unavailable in this build; disable TX LED, amplifier, shutdown-button, and band GPIO controls.";
+            }
+            return false;
+        }
     }
 
     resolve_backend_specific_config(candidate);
@@ -2102,6 +2131,14 @@ static bool validation_error_is_missing_required(
     const std::string &validation_error)
 {
     return validation_error.rfind("Missing", 0) == 0;
+}
+
+static bool validation_error_is_capability_failure(
+    const std::string &validation_error)
+{
+    return validation_error.rfind("Ancillary GPIO is unavailable", 0) == 0 ||
+        (validation_error.rfind("Backend '", 0) == 0 &&
+         validation_error.find("unavailable in this build") != std::string::npos);
 }
 
 void apply_runtime_config_side_effects()
@@ -2574,6 +2611,20 @@ bool validate_config_data()
                 ? "Missing required parameters."
                 : "Invalid configuration.");
 
+        if (validation_error_is_capability_failure(validation_error))
+        {
+            llog.logE(ERROR, " - ", validation_error);
+            if (config.use_ini)
+            {
+                llog.logE(ERROR, "Please check the INI file for unavailable features.");
+                return false;
+            }
+
+            llog.logE(ERROR, "Try: wsprrypi --help");
+            std::cerr << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+
         if (config.callsign.empty())
         {
             llog.logE(ERROR, " - Missing callsign.");
@@ -2986,7 +3037,8 @@ bool handle_early_cli_options(int argc, char *argv[])
         if (arg == "-v" || arg == "--version")
         {
             std::cout << get_version_string() << std::endl
-                      << "Compiled backends: " << get_compiled_backends() << std::endl;
+                      << "Compiled backends: " << get_compiled_backends() << std::endl
+                      << "Ancillary GPIO: " << (has_ancillary_gpio() ? "enabled" : "disabled") << std::endl;
             std::exit(EXIT_SUCCESS);
         }
 
@@ -3254,7 +3306,8 @@ bool parse_command_line(int argc, char *argv[])
         case 'v': // Version
         {
             std::cout << get_version_string() << std::endl
-                      << "Compiled backends: " << get_compiled_backends() << std::endl;
+                      << "Compiled backends: " << get_compiled_backends() << std::endl
+                      << "Ancillary GPIO: " << (has_ancillary_gpio() ? "enabled" : "disabled") << std::endl;
             std::exit(EXIT_SUCCESS);
         }
         case 'n': // Use system-clock frequency estimate
