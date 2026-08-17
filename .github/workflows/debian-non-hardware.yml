@@ -25,7 +25,8 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential git libssl-dev libsystemd-dev pkg-config python3 strace
+            build-essential ca-certificates git libssl-dev libsystemd-dev pkg-config \
+            python3 strace
 
       - name: Check out source
         uses: actions/checkout@v7
