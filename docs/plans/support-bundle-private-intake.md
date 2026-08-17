@@ -26,6 +26,8 @@ Signed-intake rollback state: [Issue 414 Slice 8](../research/issue-414-slice-8-
 
 Bounded HTTPS intake retrieval: [Issue 414 Slice 9](../research/issue-414-slice-9-https-retrieval.md)
 
+Signed-intake controller composition: [Issue 414 Slice 10](../research/issue-414-slice-10-intake-controller.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
