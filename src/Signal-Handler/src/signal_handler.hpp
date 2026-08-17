@@ -9,6 +9,8 @@
 #ifndef SIGNAL_HANDLER_HPP
 #define SIGNAL_HANDLER_HPP
 
+#include "signal_wait.hpp"
+
 // Standard Libraries
 #include <atomic>
 #include <csignal>
@@ -30,6 +32,7 @@ enum class SignalHandlerState
 {
     RUNNING,        ///< The worker thread is active.
     STOP_REQUESTED, ///< Shutdown was requested and join is pending.
+    FAILED,         ///< The worker exited after an internal wait/setup failure.
     STOPPED         ///< The worker thread has exited.
 };
 
@@ -76,6 +79,14 @@ public:
     SignalHandler();
 
     /**
+     * @brief Construct with an internal synchronous-wait test seam.
+     *
+     * Production code uses the default constructor. This overload permits
+     * deterministic lifecycle and failure-path tests without sending signals.
+     */
+    explicit SignalHandler(SignalWaitFunction wait_function);
+
+    /**
      * @brief Destroy the signal handler after stopping the worker thread.
      *
      * If the worker thread is still active, destruction requests shutdown and
@@ -114,8 +125,8 @@ public:
     /**
      * @brief Set the callback invoked for handled signals.
      *
-     * The callback executes inline on the worker thread after sigwaitinfo()
-     * returns a handled signal.
+     * The callback executes inline on the worker thread after the synchronous
+     * platform wait returns a handled signal.
      *
      * @param cb Function receiving the signal number and whether the signal is
      *           marked immediate in signal_map
@@ -198,11 +209,14 @@ private:
      */
     sigset_t signal_set;
 
+    /** @brief Platform-normalized synchronous signal wait operation. */
+    SignalWaitFunction wait_function;
+
     /**
      * @brief Worker entry point for the dedicated signal thread.
      *
-     * The worker waits in sigwaitinfo(), dispatches the minimal callback for
-     * handled signals, and exits promptly once shutdown is requested.
+     * The worker waits through the normalized platform seam, dispatches the
+     * minimal callback, and exits promptly once shutdown is requested.
      */
     void run();
 };
