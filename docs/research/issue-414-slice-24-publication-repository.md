@@ -72,9 +72,11 @@ No production manifest or signature was prepared, committed, pushed, or
 retrieved. Neither private identity was opened or used. The remote contains no
 `wsprrypi/intake.json` or `wsprrypi/intake.json.sig`.
 
-The next separately reviewed slice is generation-1 manifest preparation and
-local lifecycle authentication using the existing Dropbox File Request URL and
-approved production identities. Candidate commit, live push, public exact-byte
+Slice 25 subsequently established and signed-out-qualified the production
+Dropbox File Request after discovering the prior test capability was gone. The
+next separately reviewed slice is generation-1 manifest preparation and local
+lifecycle authentication using the Keychain-held request URL and approved
+production identities. Candidate commit, live push, public exact-byte
 verification, and runtime activation remain later independent boundaries.
 
 No Dropbox administration, application runtime, installer, HTTP, UI, service,

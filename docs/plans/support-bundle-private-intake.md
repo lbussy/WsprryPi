@@ -56,6 +56,8 @@ Production public trust compilation: [Issue 414 Slice 23](../research/issue-414-
 
 Publication repository establishment: [Issue 414 Slice 24](../research/issue-414-slice-24-publication-repository.md)
 
+Production Dropbox File Request: [Issue 414 Slice 25](../research/issue-414-slice-25-production-file-request.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
