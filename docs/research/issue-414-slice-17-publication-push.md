@@ -32,7 +32,7 @@ and non-disclosure. It runs with zero network access locally and in Debian CI.
 
 - Separately authorize and create the real `WsprryPi/support-intake` repository.
 - Provision and approve production identities and public metadata.
-- Add public raw-file retrieval and exact-byte/signature verification.
+- Use Slice 18 public raw-file retrieval and exact-byte/signature verification.
 - Only then authorize a first live preparation, commit, push, and application
   trust/activation sequence.
 

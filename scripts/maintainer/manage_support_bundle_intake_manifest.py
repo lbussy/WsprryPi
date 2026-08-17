@@ -95,12 +95,15 @@ def inventory(root: Path) -> list[Path]:
     return [numbered[number] for number in range(1, maximum + 1)]
 
 
-def authenticate_current(root: Path, openssl: Path, signing_metadata_path: Path) -> CurrentManifest:
+def authenticate_generation(directory: Path, openssl: Path,
+                            signing_metadata_path: Path) -> CurrentManifest:
     openssl = preparation.require_openssl(openssl)
     signing_metadata_path = preparation.require_file(signing_metadata_path, "signing metadata")
-    directories = inventory(root)
-    directory = directories[-1]
-    generation = int(GENERATION.fullmatch(directory.name).group(1))
+    match = GENERATION.fullmatch(directory.name)
+    if match is None:
+        raise LifecycleError("generation directory name is invalid")
+    require_generation_directory(directory)
+    generation = int(match.group(1))
     manifest_path = directory / "intake.json"
     signature_path = directory / "intake.json.sig"
     signing_key_id, raw_public = preparation.signing_metadata(signing_metadata_path)
@@ -152,6 +155,11 @@ def authenticate_current(root: Path, openssl: Path, signing_metadata_path: Path)
         raise LifecycleError("current manifest is not deterministic Slice 14 bytes")
     return CurrentManifest(directory, manifest_path, signature_path, manifest_bytes, value,
                            signing_key_id, hashlib.sha256(manifest_bytes).hexdigest())
+
+
+def authenticate_current(root: Path, openssl: Path, signing_metadata_path: Path) -> CurrentManifest:
+    directories = inventory(root)
+    return authenticate_generation(directories[-1], openssl, signing_metadata_path)
 
 
 def result_from(current: CurrentManifest, operation: str, status: LifecycleStatus,
