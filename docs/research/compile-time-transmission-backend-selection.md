@@ -286,12 +286,15 @@ The implemented profile and capability slices provide the following evidence:
    where those backends are enabled.
 7. A strict Si5351 build in an Ubuntu environment without libgpiod development
    packages, plus dynamic-link and symbol audits proving no gpiod dependency.
+8. An isolated, non-root syscall audit proving that the strict executable
+   attempts only its explicitly selected, deliberately nonexistent
+   `/dev/i2c-N` path and does not attempt `/dev/mem`, `/dev/gpiomem`,
+   `/dev/vcio`, `/dev/gpiochip*`, `/dev/rp1-gpclk*`, or RP1 platform resource
+   paths. The failed open cannot reach an I2C ioctl, read, write, adapter, or
+   transmitter.
 
 The following validation remains outside the implemented slices:
 
-8. A file-access audit proving that an authorized Si5351-only run accesses the
-   intended `/dev/i2c-N` and does not access `/dev/mem`, `/dev/vcio`, GPIO chip,
-   RP1 GPCLK, mailbox, MMIO, PWM, or DMA paths.
 9. Separately authorized validation of the intended adapter and Si5351 hardware.
 10. Separately authorized RF and frequency qualification before making any
    physical-output claim.

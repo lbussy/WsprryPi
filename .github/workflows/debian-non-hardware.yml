@@ -25,7 +25,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential git libssl-dev libsystemd-dev pkg-config python3
+            build-essential git libssl-dev libsystemd-dev pkg-config python3 strace
 
       - name: Check out source
         uses: actions/checkout@v7
@@ -37,6 +37,8 @@ jobs:
             BACKENDS=si5351 ANCILLARY_GPIO=0 SUDO=
           su -s /bin/sh nobody -c \
             '../scripts/tests/strict_i2c_profile_test.sh ./build/bin/wsprrypi'
+          su -s /bin/sh nobody -c \
+            '../scripts/tests/strict_i2c_file_access_audit.sh ./build/bin/wsprrypi'
 
   ubuntu-gcc13-release:
     runs-on: ubuntu-24.04
