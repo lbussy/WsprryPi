@@ -69,8 +69,8 @@ Debian non-hardware CI runs the same fixture with packaged `/usr/bin/openssl`.
   through explicit maintainer actions.
 - Define signing-key and bundle-key rotation transitions separately; Slice 15
   intentionally requires the existing selected identities.
-- Add authenticated remote publication of one approved generation directory,
-  followed by exact-byte retrieval and verification of both public files.
+- Use Slice 16 to create a verified local publication candidate commit; remote
+  push and exact-byte public retrieval remain separate boundaries.
 - Add expiration monitoring/reminders and documented maintainer recovery.
 - Package approved public trust and activate the application only afterward.
 

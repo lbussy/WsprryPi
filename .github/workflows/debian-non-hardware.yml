@@ -150,6 +150,7 @@ jobs:
           WSPRRYPI_REAL_OPENSSL=/usr/bin/openssl make support-bundle-signing-key-provisioning-test SUDO=
           WSPRRYPI_REAL_OPENSSL=/usr/bin/openssl make support-bundle-intake-manifest-preparation-test SUDO=
           WSPRRYPI_REAL_OPENSSL=/usr/bin/openssl make support-bundle-intake-manifest-lifecycle-test SUDO=
+          make support-bundle-intake-publication-commit-test SUDO=
           make support-bundle-intake-validation-test SUDO=
           make support-bundle-intake-state-test SUDO=
           make support-bundle-intake-retrieval-test SUDO=
