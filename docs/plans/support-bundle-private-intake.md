@@ -46,6 +46,8 @@ Post-publication verification: [Issue 414 Slice 18](../research/issue-414-slice-
 
 Public trust metadata compilation: [Issue 414 Slice 19](../research/issue-414-slice-19-trust-metadata-compilation.md)
 
+Production identity ceremony preflight: [Issue 414 Slice 20](../research/issue-414-slice-20-identity-ceremony-preflight.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

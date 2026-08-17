@@ -35,9 +35,10 @@ partial cleanup, and non-disclosure. Debian non-hardware CI runs the same test.
 
 No production public metadata or generated production header is committed, and
 the application does not call the generated function. Production identities
-still require separately approved storage, generation, password-vault backup,
-recovery testing, and public-value review. Only then may an approved generated
-header be versioned and Slice 12 runtime activation be considered.
+still require Slice 20 preflight plus separately approved storage, generation,
+password-vault backup, recovery testing, and public-value review. Only then may
+an approved generated header be versioned and Slice 12 runtime activation be
+considered.
 
 No network, GitHub/Dropbox administration, credential, installer, HTTP, UI,
 service, Raspberry Pi, GPIO, transmitter, or RF behavior changed.
