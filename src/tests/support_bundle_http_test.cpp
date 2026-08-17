@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
 #include <tuple>
 #include <sys/stat.h>
@@ -218,6 +219,9 @@ int main() {
     const auto executor = std::make_shared<FakeExecutor>();
     const auto provider_calls = std::make_shared<int>(0);
     const auto fail_cleanup = std::make_shared<std::atomic<bool>>(false);
+    int intake_calls = 0;
+    bool intake_throw = false;
+    SupportBundleIntakeProductionResult intake_result;
     int id_index = 0;
     SupportBundleJobManager manager(
         executor, [&] { return job_id(static_cast<char>('a' + id_index++)); }, storage_root,
@@ -237,6 +241,10 @@ int main() {
     register_support_bundle_http_routes(server, manager, [provider_calls] {
         ++*provider_calls;
         return SupportRequestGuardSnapshot{true, "test-pi", {}, {}};
+    }, [&] {
+        ++intake_calls;
+        if (intake_throw) throw std::runtime_error("private provider failure");
+        return intake_result;
     });
     const int port = server.bind_to_any_port("127.0.0.1");
     assert(port > 0);
@@ -244,6 +252,90 @@ int main() {
     server.wait_until_ready();
     httplib::Client client("127.0.0.1", port);
     const auto headers = local_headers(port);
+
+    const auto unavailable_intake =
+        require_response(client.Get("/api/support-intake", headers));
+    assert(unavailable_intake.status == 503);
+    assert(response_json(unavailable_intake) ==
+           nlohmann::json({{"status", "unavailable"}}));
+    assert(unavailable_intake.get_header_value("Cache-Control") == "no-store");
+    assert(unavailable_intake.get_header_value("X-Content-Type-Options") == "nosniff");
+    assert_restrictive(unavailable_intake);
+    assert(intake_calls == 1);
+
+    intake_result.status = SupportBundleIntakeProductionStatus::active;
+    intake_result.generation = 7;
+    intake_result.expires_at = "2026-09-01T00:00:00Z";
+    intake_result.minimum_upload_version = "1.2.3";
+    intake_result.signing_key_id = "wsprrypi-intake-2026-01";
+    intake_result.bundle_key_id = "wsprrypi-bundle-2026-01";
+    intake_result.request_url = "https://www.dropbox.com/request/test-capability";
+    intake_result.user_message = "Support intake is available.";
+    const auto active_intake = require_response(client.Get("/api/support-intake", headers));
+    const auto active_body = response_json(active_intake);
+    assert(active_intake.status == 200 && active_body.size() == 8);
+    assert(active_body["status"] == "active" && active_body["generation"] == 7);
+    assert(active_body["request_url"] == *intake_result.request_url);
+    assert(active_body["user_message"] == *intake_result.user_message);
+    assert(!active_body.contains("release_url") && !active_body.contains("diagnostic"));
+    assert(intake_calls == 2);
+
+    intake_result = {};
+    intake_result.status = SupportBundleIntakeProductionStatus::disabled;
+    intake_result.generation = 8;
+    intake_result.expires_at = "2026-09-02T00:00:00Z";
+    intake_result.signing_key_id = "wsprrypi-intake-2026-01";
+    intake_result.bundle_key_id = "wsprrypi-bundle-2026-01";
+    const auto disabled_intake = require_response(client.Get("/api/support-intake", headers));
+    const auto disabled_body = response_json(disabled_intake);
+    assert(disabled_intake.status == 200 && disabled_body.size() == 5);
+    assert(disabled_body["status"] == "disabled");
+    assert(!disabled_body.contains("request_url") &&
+           !disabled_body.contains("minimum_upload_version"));
+
+    intake_result = {};
+    intake_result.status = SupportBundleIntakeProductionStatus::upgrade_required;
+    intake_result.minimum_upload_version = "2.0.0";
+    intake_result.release_url = "https://github.com/WsprryPi/WsprryPi/releases";
+    intake_result.user_message = "Upgrade before uploading.";
+    const auto upgrade_intake = require_response(client.Get("/api/support-intake", headers));
+    const auto upgrade_body = response_json(upgrade_intake);
+    assert(upgrade_intake.status == 200 && upgrade_body.size() == 4);
+    assert(upgrade_body["status"] == "upgrade_required");
+    assert(!upgrade_body.contains("request_url") && !upgrade_body.contains("generation"));
+
+    intake_result.status = SupportBundleIntakeProductionStatus::disabled;
+    intake_result.request_url = "https://www.dropbox.com/request/must-not-leak";
+    const auto malformed_intake = require_response(client.Get("/api/support-intake", headers));
+    assert(malformed_intake.status == 503);
+    assert(malformed_intake.body.find("must-not-leak") == std::string::npos);
+    assert(response_json(malformed_intake) ==
+           nlohmann::json({{"status", "unavailable"}}));
+
+    intake_throw = true;
+    const auto throwing_intake = require_response(client.Get("/api/support-intake", headers));
+    assert(throwing_intake.status == 503);
+    assert(response_json(throwing_intake) ==
+           nlohmann::json({{"status", "unavailable"}}));
+    intake_throw = false;
+
+    const int calls_before_rejection = intake_calls;
+    assert(calls_before_rejection == 6);
+    const httplib::Headers foreign_intake{
+        {"Host", "127.0.0.1:" + std::to_string(port)},
+        {"Origin", "https://example.invalid"}};
+    const auto rejected_intake =
+        require_response(client.Get("/api/support-intake", foreign_intake));
+    assert(rejected_intake.status == 403 && intake_calls == calls_before_rejection);
+    assert(rejected_intake.body.find("dropbox") == std::string::npos);
+    assert(rejected_intake.get_header_value("Cache-Control") == "no-store");
+    assert(rejected_intake.get_header_value("X-Content-Type-Options") == "nosniff");
+    const auto intake_options =
+        require_response(client.Options("/api/support-intake", headers));
+    assert(intake_options.status == 204 && intake_calls == calls_before_rejection);
+    assert_restrictive(intake_options);
+    assert(intake_options.get_header_value("Cache-Control") == "no-store");
+    *provider_calls = 0;
 
     const auto created = require_response(client.Post(
         "/api/support-bundles", headers, "{}", "ApPlIcAtIoN/JsOn ; ChArSeT = UtF-8"));

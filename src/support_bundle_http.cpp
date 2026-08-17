@@ -38,6 +38,87 @@ void set_no_content(httplib::Response &response) {
     response.status = 204;
 }
 
+void set_private_headers(httplib::Response &response) {
+    response.set_header("Cache-Control", "no-store");
+    response.set_header("X-Content-Type-Options", "nosniff");
+}
+
+void set_private_json(httplib::Response &response,
+                      int status,
+                      const nlohmann::json &body) {
+    set_json(response, status, body);
+    set_private_headers(response);
+}
+
+bool empty_identity(const SupportBundleIntakeProductionResult &result) {
+    return result.generation == 0 && result.expires_at.empty() &&
+           result.minimum_upload_version.empty() && result.signing_key_id.empty() &&
+           result.bundle_key_id.empty() && !result.request_url &&
+           result.release_url.empty() && !result.user_message;
+}
+
+void set_intake_unavailable(httplib::Response &response) {
+    set_private_json(response, 503, {{"status", "unavailable"}});
+}
+
+void set_intake_result(httplib::Response &response,
+                       const SupportBundleIntakeProductionResult &result) {
+    nlohmann::json body;
+    switch (result.status) {
+    case SupportBundleIntakeProductionStatus::active:
+        if (result.generation == 0 || result.expires_at.empty() ||
+            result.minimum_upload_version.empty() || result.signing_key_id.empty() ||
+            result.bundle_key_id.empty() || !result.request_url ||
+            result.request_url->empty() || !result.release_url.empty()) {
+            set_intake_unavailable(response);
+            return;
+        }
+        body = {{"status", "active"},
+                {"generation", result.generation},
+                {"expires_at", result.expires_at},
+                {"minimum_upload_version", result.minimum_upload_version},
+                {"signing_key_id", result.signing_key_id},
+                {"bundle_key_id", result.bundle_key_id},
+                {"request_url", *result.request_url}};
+        break;
+    case SupportBundleIntakeProductionStatus::disabled:
+        if (result.generation == 0 || result.expires_at.empty() ||
+            result.signing_key_id.empty() || result.bundle_key_id.empty() ||
+            !result.minimum_upload_version.empty() || result.request_url ||
+            !result.release_url.empty()) {
+            set_intake_unavailable(response);
+            return;
+        }
+        body = {{"status", "disabled"},
+                {"generation", result.generation},
+                {"expires_at", result.expires_at},
+                {"signing_key_id", result.signing_key_id},
+                {"bundle_key_id", result.bundle_key_id}};
+        break;
+    case SupportBundleIntakeProductionStatus::upgrade_required:
+        if (result.minimum_upload_version.empty() || result.release_url.empty() ||
+            result.generation != 0 || !result.expires_at.empty() ||
+            !result.signing_key_id.empty() || !result.bundle_key_id.empty() ||
+            result.request_url) {
+            set_intake_unavailable(response);
+            return;
+        }
+        body = {{"status", "upgrade_required"},
+                {"minimum_upload_version", result.minimum_upload_version},
+                {"release_url", result.release_url}};
+        break;
+    case SupportBundleIntakeProductionStatus::unavailable:
+        if (!empty_identity(result)) {
+            set_intake_unavailable(response);
+            return;
+        }
+        set_intake_unavailable(response);
+        return;
+    }
+    if (result.user_message) body["user_message"] = *result.user_message;
+    set_private_json(response, 200, body);
+}
+
 bool allow_support_request(const httplib::Request &request,
                            httplib::Response &response,
                            const SupportRequestGuardSnapshotProvider &snapshot_provider) {
@@ -176,12 +257,48 @@ void set_download_error(httplib::Response &response,
 void register_support_bundle_http_routes(
     httplib::Server &server,
     SupportBundleJobManager &manager,
-    SupportRequestGuardSnapshotProvider snapshot_provider) {
+    SupportRequestGuardSnapshotProvider snapshot_provider,
+    SupportBundleIntakeProductionProvider intake_provider) {
     const auto guard = [snapshot_provider = std::move(snapshot_provider)](
                            const httplib::Request &request,
                            httplib::Response &response) {
         return allow_support_request(request, response, snapshot_provider);
     };
+
+    server.Get("/api/support-intake",
+               [guard, intake_provider = std::move(intake_provider)](
+                   const httplib::Request &request,
+                   httplib::Response &response) {
+        if (!guard(request, response)) {
+            set_private_headers(response);
+            return;
+        }
+        if (!request.body.empty()) {
+            set_error(response, 400, "invalid_request");
+            set_private_headers(response);
+            return;
+        }
+        try {
+            if (!intake_provider) {
+                set_intake_unavailable(response);
+                return;
+            }
+            set_intake_result(response, intake_provider());
+        } catch (...) {
+            set_intake_unavailable(response);
+        }
+    });
+
+    server.Options("/api/support-intake",
+                   [guard](const httplib::Request &request,
+                           httplib::Response &response) {
+        if (!guard(request, response)) {
+            set_private_headers(response);
+            return;
+        }
+        set_no_content(response);
+        set_private_headers(response);
+    });
 
     server.Post("/api/support-bundles", [&manager, guard](const httplib::Request &request,
                                                             httplib::Response &response) {

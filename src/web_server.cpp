@@ -32,6 +32,7 @@
 #include "logging.hpp"
 #include "scheduling.hpp"
 #include "support_bundle_http.hpp"
+#include "support_bundle_intake_production.hpp"
 #include "support_bundle_runtime.hpp"
 #include "support_request_guard.hpp"
 #include "version.hpp"
@@ -286,7 +287,8 @@ void WebServer::start(int port)
         register_support_bundle_http_routes(
             *svr,
             *supportBundleJobManager_,
-            [] { return SupportRequestGuard::discover_local_networks(); });
+            [] { return SupportRequestGuard::discover_local_networks(); },
+            resolve_support_bundle_intake_production);
         supportBundleRoutesRegistered_ = true;
     }
 

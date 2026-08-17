@@ -68,6 +68,8 @@ Production public-byte verification: [Issue 414 Slice 29](../research/issue-414-
 
 Production runtime activation adapter: [Issue 414 Slice 30](../research/issue-414-slice-30-runtime-activation-adapter.md)
 
+Guarded production intake endpoint: [Issue 414 Slice 31](../research/issue-414-slice-31-intake-endpoint.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

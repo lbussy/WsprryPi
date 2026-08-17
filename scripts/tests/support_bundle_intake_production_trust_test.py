@@ -116,6 +116,10 @@ class ProductionTrustTest(unittest.TestCase):
         adapter_text = adapter.read_text(encoding="utf-8")
         self.assertEqual(adapter_text.count("support_bundle_intake_compiled_trust()"), 1)
         self.assertEqual(adapter_text.count("resolve_support_bundle_intake_runtime("), 1)
+        web_server = ROOT / "src/web_server.cpp"
+        self.assertEqual(
+            web_server.read_text(encoding="utf-8").count(
+                "resolve_support_bundle_intake_production"), 1)
         for path in production_sources:
             text = path.read_text(encoding="utf-8")
             if path != adapter:
@@ -123,8 +127,8 @@ class ProductionTrustTest(unittest.TestCase):
             if path.name not in {"support_bundle_intake_runtime.cpp",
                                  "support_bundle_intake_production.cpp"}:
                 self.assertNotIn("resolve_support_bundle_intake_runtime(", text, path)
-            if path != adapter:
-                self.assertNotIn("resolve_support_bundle_intake_production(", text, path)
+            if path not in {adapter, web_server}:
+                self.assertNotIn("resolve_support_bundle_intake_production", text, path)
 
 
 if __name__ == "__main__":

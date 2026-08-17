@@ -80,8 +80,7 @@ environment.
 No network, production state, published manifest, Dropbox, Keychain, identity,
 vault, installer, service, Raspberry Pi, GPIO, transmitter, or RF state changed.
 
-The next separately reviewed slice may invoke this adapter from a guarded
-backend support-intake endpoint and translate the same four states to a minimal
-JSON contract. That work must decide the exact capability-disclosure moment,
-retain same-origin/local-network protection, and remain separate from bundle
-encryption and upload execution.
+[Slice 31](issue-414-slice-31-intake-endpoint.md) subsequently invoked this
+adapter only from an explicit guarded backend request and translated the same
+four states to a minimal non-cacheable JSON contract. UI consumption,
+encryption, and upload execution remain separate later boundaries.
