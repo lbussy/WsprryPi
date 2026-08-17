@@ -1,7 +1,7 @@
 # Issue 414 Slice 21: Production Identity Generation
 
 Status: Production identities generated and correspondence verified; backup and
-recovery qualification incomplete
+recovery qualification completed by Slice 22
 
 ## Outcome
 
@@ -40,16 +40,12 @@ generated metadata file is committed in this repository.
 
 ## Mandatory stop state
 
-These identities are **not backup-qualified, recovery-qualified, publishable, or
-activatable**. No password-vault item was created or inspected. No restored key
-copy was tested. No public metadata was committed or published. No manifest was
+Slice 22 subsequently qualified independent Dashlane attachment backups and
+restored-key signing/decryption. The identities remain unpublished and
+unactivated. No public metadata was committed or published, no manifest was
 prepared or signed, and no runtime trust was compiled into the application.
 
-The next bounded ceremony must place each private identity in its separately
-named approved vault entry, restore each attachment independently into a new
-disposable owner-only directory, prove restored-key signing and encryption
-round trips, and remove the disposable recovery material. That operation
-requires explicit authorization and vault access.
+See the Slice 22 evidence record for the completed vault and recovery ceremony.
 
 No support-intake repository, GitHub/Dropbox route, credential, application,
 installer, HTTP, UI, service, Pi, hardware, or RF state changed.

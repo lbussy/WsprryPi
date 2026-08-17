@@ -50,6 +50,8 @@ Production identity ceremony preflight: [Issue 414 Slice 20](../research/issue-4
 
 Production identity generation: [Issue 414 Slice 21](../research/issue-414-slice-21-production-identity-generation.md)
 
+Vault backup and recovery qualification: [Issue 414 Slice 22](../research/issue-414-slice-22-vault-backup-recovery.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
