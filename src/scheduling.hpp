@@ -264,18 +264,16 @@ extern bool wspr_loop();
 /**
  * @brief Synchronize disk and reboot the machine.
  *
- * This function calls sync() to flush filesystem buffers, then
- * invokes the reboot(2) syscall directly. The process must have
- * the CAP_SYS_BOOT capability (typically run as root).
+ * On Linux this flushes filesystem buffers and invokes reboot(2) directly.
+ * Unsupported platforms log a diagnostic and leave the machine running.
  */
 void reboot_machine();
 
 /**
  * @brief Flush filesystems and power off the machine.
  *
- * Calls sync() to ensure all disk buffers are written, then invokes
- * the reboot(2) syscall with the POWER_OFF command. Requires root or
- * the CAP_SYS_BOOT capability.
+ * On Linux this flushes filesystem buffers and invokes reboot(2) directly.
+ * Unsupported platforms log a diagnostic and leave the machine running.
  */
 void shutdown_machine();
 

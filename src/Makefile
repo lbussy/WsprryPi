@@ -151,6 +151,7 @@ SUPPORT_BUNDLE_DOWNLOAD_PREPARATION_TEST_OUT := support_bundle_download_preparat
 SUPPORT_BUNDLE_JOB_DIRECTORY_REMOVER_TEST_OUT := support_bundle_job_directory_remover_test
 SUPPORT_BUNDLE_STARTUP_CLEANUP_TEST_OUT := support_bundle_startup_cleanup_test
 BACKEND_PROFILE_FACTORY_TEST_OUT := backend_profile_factory_test
+MACHINE_POWER_UNAVAILABLE_TEST_OUT := machine_power_control_unavailable_test
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -183,6 +184,8 @@ VERSION_DEBUG_OBJECT := $(OBJ_DIR_DEBUG)/./version.o
 include ../scripts/build_metadata_rules.mk
 include ../scripts/backend_capability_rules.mk
 
+HOST_OS := $(shell uname -s 2>/dev/null)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Source discovery (C++ only)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,8 +198,12 @@ ANCILLARY_GPIO_REAL_CPP_SOURCES := \
 ANCILLARY_GPIO_STUB_CPP_SOURCES := \
 	./gpio_input_unavailable.cpp \
 	./gpio_output_unavailable.cpp
-LOCAL_CPP_SOURCES := $(filter-out $(ANCILLARY_GPIO_REAL_CPP_SOURCES) $(ANCILLARY_GPIO_STUB_CPP_SOURCES),$(LOCAL_CPP_SOURCES))
+MACHINE_POWER_CPP_SOURCES := \
+	./machine_power_control_linux.cpp \
+	./machine_power_control_unavailable.cpp
+LOCAL_CPP_SOURCES := $(filter-out $(ANCILLARY_GPIO_REAL_CPP_SOURCES) $(ANCILLARY_GPIO_STUB_CPP_SOURCES) $(MACHINE_POWER_CPP_SOURCES),$(LOCAL_CPP_SOURCES))
 LOCAL_CPP_SOURCES += $(if $(filter 1,$(ANCILLARY_GPIO)),$(ANCILLARY_GPIO_REAL_CPP_SOURCES),$(ANCILLARY_GPIO_STUB_CPP_SOURCES))
+LOCAL_CPP_SOURCES += $(if $(filter Linux,$(HOST_OS)),./machine_power_control_linux.cpp,./machine_power_control_unavailable.cpp)
 COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
 TRANSMITTER_SHARED_CPP_SOURCES := \
 	./WSPR-Transmitter/src/execution_plan_compiler.cpp \
@@ -331,6 +338,9 @@ BACKEND_PROFILE_FACTORY_TEST_SRC := tests/backend_profile_factory_test.cpp
 BACKEND_PROFILE_FACTORY_TEST_OBJ := $(OBJ_DIR_RELEASE)/tests/backend_profile_factory_test.o
 BACKEND_PROFILE_FACTORY_TEST_DEPS := $(BACKEND_PROFILE_FACTORY_TEST_OBJ) $(filter-out $(MAIN_RELEASE_OBJECT),$(CPP_OBJECTS))
 BACKEND_PROFILE_FACTORY_TEST_BIN := $(PROFILE_BIN_DIR)/$(BACKEND_PROFILE_FACTORY_TEST_OUT)
+MACHINE_POWER_UNAVAILABLE_TEST_SRC := tests/machine_power_control_unavailable_test.cpp
+MACHINE_POWER_UNAVAILABLE_TEST_BIN := $(BIN_DIR)/$(MACHINE_POWER_UNAVAILABLE_TEST_OUT)
+MACHINE_POWER_REGRESSION_TEST := tests/machine_power_control_regression_test.py
 QUALIFICATION_GPIO_TEST_MODE_TEST_SRC := tests/qualification_gpio_test_mode_test.cpp
 QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gpio_test_mode_test.o
 QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
@@ -400,8 +410,6 @@ CXX := g++
 # - Optionally clamp further if a GUI is active
 # - Do not override an explicit -j passed to make
 # ─────────────────────────────────────────────────────────────────────────────
-
-HOST_OS := $(shell uname -s 2>/dev/null)
 
 # Keep Linux's memory-aware sizing policy, but do not run Linux-only probes on
 # other hosts. Darwin supplies its logical CPU count through sysctl; unknown
@@ -897,7 +905,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
 .PHONY: install-binary
 DEBUG: debug
@@ -928,6 +936,14 @@ backend-capabilities-make-regression-test:
 
 backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
 	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
+
+$(MACHINE_POWER_UNAVAILABLE_TEST_BIN): $(MACHINE_POWER_UNAVAILABLE_TEST_SRC) machine_power_control_unavailable.cpp machine_power_control.hpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) -std=c++$(CXXVER) -Wall -Wextra -Werror $(MACHINE_POWER_UNAVAILABLE_TEST_SRC) machine_power_control_unavailable.cpp -o $@
+
+machine-power-control-test: $(MACHINE_POWER_UNAVAILABLE_TEST_BIN)
+	$(Q)./$(MACHINE_POWER_UNAVAILABLE_TEST_BIN)
+	$(Q)python3 $(MACHINE_POWER_REGRESSION_TEST)
 
 debug: $(BIN_DIR)/$(TEST_OUT)
 	$(Q)echo "Debug build completed successfully."

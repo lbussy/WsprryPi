@@ -61,6 +61,7 @@
 #include "web_socket.hpp"
 #include "wspr_transmit.hpp"
 #include "version.hpp"
+#include "machine_power_control.hpp"
 
 // Standard library headers
 #include <algorithm>
@@ -87,8 +88,6 @@
 
 // System headers
 #include <string.h>
-#include <sys/reboot.h>   // for reboot()
-#include <linux/reboot.h> // for LINUX_REBOOT_CMD_* constants
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -4503,13 +4502,16 @@ bool wspr_loop()
  */
 void reboot_machine()
 {
-    // Flush all file system buffers to disk
-    sync();
-
-    // Attempt to reboot; LINUX_REBOOT_CMD_RESTART is the same as RB_AUTOBOOT
-    if (::reboot(LINUX_REBOOT_CMD_RESTART) < 0)
+    const MachinePowerResult result = request_machine_power(MachinePowerOperation::Reboot);
+    if (result.status == MachinePowerStatus::Unsupported)
     {
-        llog.logE(ERROR, "Reboot failed: ", std::strerror(errno));
+        llog.logE(ERROR,
+                  "Machine reboot is unavailable on this platform; "
+                  "application shutdown completed without rebooting the machine.");
+    }
+    else if (result.status == MachinePowerStatus::Failed)
+    {
+        llog.logE(ERROR, "Reboot failed: ", std::strerror(result.error_number));
     }
 }
 
@@ -4522,14 +4524,16 @@ void reboot_machine()
  */
 void shutdown_machine()
 {
-    // 1) Flush all pending disk writes
-    sync();
-
-    // Power off the system
-    // LINUX_REBOOT_CMD_POWER_OFF is equivalent to RB_POWER_OFF
-    if (::reboot(LINUX_REBOOT_CMD_POWER_OFF) < 0)
+    const MachinePowerResult result = request_machine_power(MachinePowerOperation::PowerOff);
+    if (result.status == MachinePowerStatus::Unsupported)
     {
-        llog.logE(ERROR, "Shutdown failed: ", std::strerror(errno));
+        llog.logE(ERROR,
+                  "Machine power-off is unavailable on this platform; "
+                  "application shutdown completed without powering off the machine.");
+    }
+    else if (result.status == MachinePowerStatus::Failed)
+    {
+        llog.logE(ERROR, "Shutdown failed: ", std::strerror(result.error_number));
     }
 }
 

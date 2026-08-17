@@ -39,6 +39,7 @@
 #include "signal_handler.hpp"
 #include "version.hpp"
 #include "logging.hpp"
+#include "machine_power_control.hpp"
 #include "singleton.hpp"
 #include "wspr_transmit.hpp"
 
@@ -423,14 +424,20 @@ int main(int argc, char *argv[])
 
     if (reboot_flag.load(std::memory_order_acquire))
     {
-        llog.logS(INFO, "Rebooting.");
-        std::cerr << "[INFO ] Rebooting." << std::endl;
+        if (machine_power_control_supported())
+        {
+            llog.logS(INFO, "Rebooting.");
+            std::cerr << "[INFO ] Rebooting." << std::endl;
+        }
         reboot_machine();
     }
     if (shutdown_flag.load(std::memory_order_acquire))
     {
-        llog.logS(INFO, "Shutting down.");
-        std::cerr << "[INFO ] Shutting down." << std::endl;
+        if (machine_power_control_supported())
+        {
+            llog.logS(INFO, "Shutting down.");
+            std::cerr << "[INFO ] Shutting down." << std::endl;
+        }
         shutdown_machine();
     }
 
