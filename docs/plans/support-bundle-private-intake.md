@@ -24,6 +24,8 @@ Offline signed-intake validation: [Issue 414 Slice 7](../research/issue-414-slic
 
 Signed-intake rollback state: [Issue 414 Slice 8](../research/issue-414-slice-8-intake-state.md)
 
+Bounded HTTPS intake retrieval: [Issue 414 Slice 9](../research/issue-414-slice-9-https-retrieval.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
