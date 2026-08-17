@@ -82,7 +82,8 @@ This slice does not compile or activate production trust in the application,
 expose the request capability to runtime, encrypt or upload a support bundle, or
 change UI, installer, service, Raspberry Pi, GPIO, transmitter, or RF behavior.
 
-The published pair is now suitable input for a separately reviewed production
-trust compilation and activation decision. That later work must preserve the
-existing signature-before-disclosure, rollback, expiry, disabled, and minimum
-upload-version contracts.
+Slice 30 subsequently bound the already-versioned production trust to the
+qualified runtime through a compiled but uninvoked backend adapter. It preserves
+signature-before-disclosure, rollback, expiry, disabled, and minimum-version
+outcomes in a minimal typed contract. HTTP/UI invocation and upload
+orchestration remain separately reviewed later boundaries.

@@ -66,6 +66,8 @@ Production publication push: [Issue 414 Slice 28](../research/issue-414-slice-28
 
 Production public-byte verification: [Issue 414 Slice 29](../research/issue-414-slice-29-publication-verification.md)
 
+Production runtime activation adapter: [Issue 414 Slice 30](../research/issue-414-slice-30-runtime-activation-adapter.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

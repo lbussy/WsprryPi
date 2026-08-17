@@ -162,6 +162,7 @@ jobs:
           make support-bundle-intake-retrieval-test SUDO=
           make support-bundle-intake-controller-test SUDO=
           make support-bundle-intake-runtime-test SUDO=
+          make support-bundle-intake-production-test SUDO=
 
       - name: Run transmitter component contract regressions
         working-directory: src/WSPR-Transmitter/src

@@ -160,6 +160,7 @@ SUPPORT_BUNDLE_INTAKE_RETRIEVAL_TEST_OUT := support_bundle_intake_retrieval_test
 SUPPORT_BUNDLE_INTAKE_RETRIEVAL_HELPER_OUT := support_bundle_intake_retrieval_helper
 SUPPORT_BUNDLE_INTAKE_CONTROLLER_TEST_OUT := support_bundle_intake_controller_test
 SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OUT := support_bundle_intake_runtime_test
+SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OUT := support_bundle_intake_production_test
 SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
 SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_LDFLAGS = $(filter-out -latomic,$(LDFLAGS))
 SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
@@ -421,6 +422,9 @@ SUPPORT_BUNDLE_INTAKE_CONTROLLER_TEST_DEPS := $(SUPPORT_BUNDLE_INTAKE_CONTROLLER
 SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_SRC := tests/support_bundle_intake_runtime_test.cpp
 SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_intake_runtime_test.o
 SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_DEPS := $(SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_intake_runtime.o $(OBJ_DIR_DEBUG)/./support_bundle_intake_controller.o $(OBJ_DIR_DEBUG)/./support_bundle_intake_retrieval.o $(OBJ_DIR_DEBUG)/./support_bundle_intake_validation.o $(OBJ_DIR_DEBUG)/./support_bundle_intake_state.o
+SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_SRC := tests/support_bundle_intake_production_test.cpp
+SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_intake_production_test.o
+SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_DEPS := $(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_intake_production.o $(OBJ_DIR_DEBUG)/./support_bundle_intake_runtime.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -968,7 +972,19 @@ $(OBJ_DIR_DEBUG)/./support_bundle_intake_runtime.o: support_bundle_intake_runtim
 	$(Q)mkdir -p $(dir $@) $(DEP_DIR)/.
 	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) -MF $(DEP_DIR)/support_bundle_intake_runtime.d -c $< -o $@
 
+$(OBJ_DIR_DEBUG)/./support_bundle_intake_production.o: support_bundle_intake_production.cpp
+	$(Q)mkdir -p $(dir $@) $(DEP_DIR)/.
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) -MF $(DEP_DIR)/support_bundle_intake_production.d -c $< -o $@
+
 $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OUT): $(SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) $^ -o $@ $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_LDFLAGS)
+
+$(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OBJ): $(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_SRC)
+	$(Q)mkdir -p $(dir $@) $(DEP_DIR)/tests
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) -MF $(DEP_DIR)/tests/support_bundle_intake_production_test.d -c $< -o $@
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OUT): $(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_DEPS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) $^ -o $@ $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_LDFLAGS)
 
@@ -1041,6 +1057,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test support-bundle-signing-key-provisioning-test support-bundle-intake-manifest-preparation-test support-bundle-intake-manifest-lifecycle-test support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test support-bundle-intake-publication-verification-test support-bundle-intake-trust-compilation-test support-bundle-intake-identity-ceremony-preflight-test support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test support-bundle-intake-controller-test support-bundle-intake-runtime-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test support-bundle-signing-key-provisioning-test support-bundle-intake-manifest-preparation-test support-bundle-intake-manifest-lifecycle-test support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test support-bundle-intake-publication-verification-test support-bundle-intake-trust-compilation-test support-bundle-intake-production-trust-test support-bundle-intake-identity-ceremony-preflight-test support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test support-bundle-intake-controller-test support-bundle-intake-runtime-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test support-bundle-signing-key-provisioning-test support-bundle-intake-manifest-preparation-test support-bundle-intake-manifest-lifecycle-test support-bundle-intake-production-manifest-test support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test support-bundle-intake-publication-verification-test support-bundle-intake-trust-compilation-test support-bundle-intake-production-trust-test support-bundle-intake-identity-ceremony-preflight-test support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test support-bundle-intake-controller-test support-bundle-intake-runtime-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test support-bundle-signing-key-provisioning-test support-bundle-intake-manifest-preparation-test support-bundle-intake-manifest-lifecycle-test support-bundle-intake-production-manifest-test support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test support-bundle-intake-publication-verification-test support-bundle-intake-trust-compilation-test support-bundle-intake-production-trust-test support-bundle-intake-identity-ceremony-preflight-test support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test support-bundle-intake-controller-test support-bundle-intake-runtime-test support-bundle-intake-production-test build-dependency-regression-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
 .PHONY: install-binary
 DEBUG: debug
@@ -1223,6 +1240,9 @@ support-bundle-intake-controller-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_CONTRO
 
 support-bundle-intake-runtime-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_RUNTIME_TEST_OUT)
+
+support-bundle-intake-production-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_PRODUCTION_TEST_OUT)
 
 build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 	$(Q)echo "Checking generated header dependency discovery."

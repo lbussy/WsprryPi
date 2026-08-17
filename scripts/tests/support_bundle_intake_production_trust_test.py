@@ -112,11 +112,19 @@ class ProductionTrustTest(unittest.TestCase):
 
         production_sources = [path for path in (ROOT / "src").glob("*.cpp")
                               if not path.name.endswith("_test.cpp")]
+        adapter = ROOT / "src/support_bundle_intake_production.cpp"
+        adapter_text = adapter.read_text(encoding="utf-8")
+        self.assertEqual(adapter_text.count("support_bundle_intake_compiled_trust()"), 1)
+        self.assertEqual(adapter_text.count("resolve_support_bundle_intake_runtime("), 1)
         for path in production_sources:
             text = path.read_text(encoding="utf-8")
-            self.assertNotIn("support_bundle_intake_compiled_trust", text, path)
-            if path.name != "support_bundle_intake_runtime.cpp":
+            if path != adapter:
+                self.assertNotIn("support_bundle_intake_compiled_trust", text, path)
+            if path.name not in {"support_bundle_intake_runtime.cpp",
+                                 "support_bundle_intake_production.cpp"}:
                 self.assertNotIn("resolve_support_bundle_intake_runtime(", text, path)
+            if path != adapter:
+                self.assertNotIn("resolve_support_bundle_intake_production(", text, path)
 
 
 if __name__ == "__main__":
