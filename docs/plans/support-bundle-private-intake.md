@@ -62,6 +62,8 @@ Local generation-1 manifest: [Issue 414 Slice 26](../research/issue-414-slice-26
 
 Local production publication candidate: [Issue 414 Slice 27](../research/issue-414-slice-27-publication-candidate.md)
 
+Production publication push: [Issue 414 Slice 28](../research/issue-414-slice-28-publication-push.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

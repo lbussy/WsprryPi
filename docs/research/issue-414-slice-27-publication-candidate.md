@@ -76,9 +76,9 @@ No `support-intake` clone, fetch, push, remote query, public raw-file retrieval,
 Dropbox change, or application activation occurred. The public
 `support-intake` GitHub repository therefore remains unchanged by this slice.
 
-The next separately reviewed step is the Slice 17 authenticated live push. It
-must independently establish the remote parent and use the qualified
-lease-protected push boundary. Exact public-byte verification remains a
-separate Slice 18 operation after a successful push.
+Slice 28 subsequently established the exact remote parent and published this
+candidate through the qualified lease-protected push boundary. The next
+separately reviewed step is Slice 18 exact public-byte retrieval and
+authentication. Runtime activation remains deferred beyond that verification.
 
 No UI, installer, service, Raspberry Pi, GPIO, transmitter, or RF state changed.
