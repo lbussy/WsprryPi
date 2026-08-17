@@ -83,8 +83,10 @@ the README-only initial commit
 `770d63521cf23d1ccb5eb7c9911e040ab18032d7`. No candidate commit, push, public
 retrieval, Dropbox modification, or application activation occurred.
 
-The next separately reviewed slice is the Slice 16 local publication candidate
-commit. Live push, exact public-byte verification, runtime activation, and
-encrypted upload orchestration remain later independent boundaries.
+Slice 27 subsequently authenticated this pair and recorded its exact bytes in a
+verified local publication candidate commit. The next separately reviewed
+slice is the Slice 17 live push boundary. Exact public-byte verification,
+runtime activation, and encrypted upload orchestration remain later independent
+boundaries.
 
 No UI, installer, service, Raspberry Pi, GPIO, transmitter, or RF state changed.

@@ -60,6 +60,8 @@ Production Dropbox File Request: [Issue 414 Slice 25](../research/issue-414-slic
 
 Local generation-1 manifest: [Issue 414 Slice 26](../research/issue-414-slice-26-generation-1.md)
 
+Local production publication candidate: [Issue 414 Slice 27](../research/issue-414-slice-27-publication-candidate.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
