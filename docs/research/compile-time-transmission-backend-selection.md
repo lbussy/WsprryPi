@@ -292,12 +292,20 @@ The implemented profile and capability slices provide the following evidence:
    `/dev/vcio`, `/dev/gpiochip*`, `/dev/rp1-gpclk*`, or RP1 platform resource
    paths. The failed open cannot reach an I2C ioctl, read, write, adapter, or
    transmitter.
+9. A separately authorized, bounded qualification on `wspr5` proving non-root
+   access to `/dev/i2c-1` at address `0x60` and two repeatable startup-quiescence
+   operations. Register 3 was `0xFF` before the test and remained `0xFF` after
+   each audited output-disable write. The strict ARM64 profile also built and
+   passed its non-hardware profile checks on that host.
 
 The following validation remains outside the implemented slices:
 
-9. Separately authorized validation of the intended adapter and Si5351 hardware.
 10. Separately authorized RF and frequency qualification before making any
    physical-output claim.
+
+The `wspr5` result qualifies only that host's adapter access and attached
+Si5351 startup-quiescence behavior. It does not qualify the original end user's
+x86 adapter, frequency programming, timing, spectral behavior, or RF output.
 
 ## Documentation impact
 
