@@ -145,7 +145,9 @@ jobs:
       - name: Qualify support-bundle age round trip
         working-directory: src
         run: |
+          make support-bundle-job-manager-test support-bundle-http-test SUDO=
           make support-bundle-private-artifact-test support-bundle-age-roundtrip-test SUDO=
+          make support-bundle-production-encryption-metadata-test SUDO=
           make support-bundle-key-provisioning-test SUDO=
           WSPRRYPI_REAL_OPENSSL=/usr/bin/openssl make support-bundle-signing-key-provisioning-test SUDO=
           WSPRRYPI_REAL_OPENSSL=/usr/bin/openssl make support-bundle-intake-manifest-preparation-test SUDO=

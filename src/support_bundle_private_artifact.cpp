@@ -349,7 +349,8 @@ SupportBundleEncryptionResult encrypt_support_bundle(
         execv(request.executable.c_str(), argv.data());
         _exit(127);
     }
-    if (setpgid(pid, pid) != 0 && !(errno == EACCES && getpgid(pid) == pid)) {
+    if (setpgid(pid, pid) != 0 &&
+        !(errno == EACCES && getpgid(pid) == pid) && errno != ESRCH) {
         (void)kill(pid, SIGKILL);
         while (waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {}
         unlink(temporary.c_str());

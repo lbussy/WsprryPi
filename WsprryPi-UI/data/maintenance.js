@@ -305,6 +305,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const supportIntakeSignedMessage = document.getElementById("supportIntakeSignedMessage");
     const checkSupportIntakeButton = document.getElementById("checkSupportIntakeButton");
     const supportIntakeUpgradeLink = document.getElementById("supportIntakeUpgradeLink");
+    const supportEncryptionPanel = document.getElementById("supportEncryptionPanel");
+    const supportEncryptionMessage = document.getElementById("supportEncryptionMessage");
+    const supportEncryptionConsent = document.getElementById("supportEncryptionConsent");
+    const encryptSupportBundleButton = document.getElementById("encryptSupportBundleButton");
+    const downloadEncryptedSupportBundleButton = document.getElementById("downloadEncryptedSupportBundleButton");
+    const downloadSupportReceiptButton = document.getElementById("downloadSupportReceiptButton");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -317,6 +323,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportBundleDownloaded = false;
     let supportBundleFinalized = false;
     let supportIntakeInFlight = false;
+    let supportEncryptionInFlight = false;
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -415,6 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
         finalizeSupportBundleButton.disabled = !supportBundleDownloaded ||
             !supportBundleReviewed.checked || supportBundleFinalizeInFlight || supportBundleFinalized;
         checkSupportIntakeButton.disabled = !supportBundleFinalized || supportIntakeInFlight;
+        encryptSupportBundleButton.disabled = !supportEncryptionConsent.checked || supportEncryptionInFlight;
     }
 
     function clearSupportIntakeState() {
@@ -426,6 +434,13 @@ document.addEventListener("DOMContentLoaded", () => {
         supportIntakeUpgradeLink.removeAttribute("href");
         supportIntakeUpgradeLink.classList.add("d-none");
         checkSupportIntakeButton.textContent = "Check private upload availability";
+        supportEncryptionPanel.classList.add("d-none");
+        supportEncryptionConsent.checked = false;
+        supportEncryptionConsent.disabled = false;
+        encryptSupportBundleButton.classList.remove("d-none");
+        supportEncryptionMessage.textContent = "Encryption runs locally on this Pi. The readable archive remains available and no file is uploaded.";
+        downloadEncryptedSupportBundleButton.classList.add("d-none");
+        downloadSupportReceiptButton.classList.add("d-none");
     }
 
     function hasExactKeys(value, required, optional = []) {
@@ -548,16 +563,76 @@ document.addEventListener("DOMContentLoaded", () => {
         checkSupportIntakeButton.textContent = "Check again";
         if (result.status === "active") {
             supportIntakeMessage.textContent = `Private upload is available until ${formatIntakeExpiry(result.expiresAt)}. No file has been uploaded.`;
+            supportEncryptionPanel.classList.remove("d-none");
         } else if (result.status === "disabled") {
+            supportEncryptionPanel.classList.add("d-none");
+            supportEncryptionConsent.checked = false;
+            setSupportBundleActions();
             supportIntakeMessage.textContent = `Private upload is temporarily disabled. This configuration expires ${formatIntakeExpiry(result.expiresAt)}. Your local bundle is unchanged.`;
         } else if (result.status === "upgrade_required") {
+            supportEncryptionPanel.classList.add("d-none");
+            supportEncryptionConsent.checked = false;
+            setSupportBundleActions();
             supportIntakeMessage.textContent = `Upgrade to WsprryPi ${result.minimumVersion} or later before uploading. Your local bundle is unchanged.`;
             supportIntakeUpgradeLink.href = result.releaseUrl;
             supportIntakeUpgradeLink.classList.remove("d-none");
         } else {
+            supportEncryptionPanel.classList.add("d-none");
+            supportEncryptionConsent.checked = false;
+            setSupportBundleActions();
             supportIntakeMessage.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
             checkSupportIntakeButton.textContent = "Try again";
         }
+    }
+
+    async function encryptSupportBundle() {
+        if (!supportBundleFinalized || !supportEncryptionConsent.checked || supportEncryptionInFlight) return;
+        supportEncryptionInFlight = true;
+        supportEncryptionMessage.textContent = "Encrypting the reviewed candidate on this Pi…";
+        setSupportBundleActions();
+        try {
+            const response = await fetchWithEndpointFallback(
+                supportBundleEndpoint(`/${encodeURIComponent(supportBundleJobId)}/encrypt`), { method: "POST" });
+            const value = await response.json();
+            if (!response.ok || value.workflow_state !== "encrypted") throw new Error("encryption failed");
+            supportEncryptionMessage.textContent = "Encrypted bundle ready. Download it before downloading the receipt. No file has been uploaded.";
+            supportEncryptionConsent.disabled = true;
+            encryptSupportBundleButton.classList.add("d-none");
+            downloadEncryptedSupportBundleButton.classList.remove("d-none");
+        } catch {
+            supportEncryptionMessage.textContent = "Encryption did not complete. The readable archive is unchanged. Check availability and try again.";
+        } finally {
+            supportEncryptionInFlight = false;
+            setSupportBundleActions();
+        }
+    }
+
+    async function downloadPrivateArtifact(kind, button, filename) {
+        button.disabled = true;
+        try {
+            const response = await fetchWithEndpointFallback(
+                supportBundleEndpoint(`/${encodeURIComponent(supportBundleJobId)}/${kind}`),
+                { method: "GET", cache: "no-store" });
+            if (!response.ok) throw new Error("download failed");
+            const blob = await response.blob();
+            if (!blob.size) throw new Error("empty download");
+            invokeBrowserDownload(blob, safePrivateArtifactFilename(response.headers.get("Content-Disposition"), filename));
+            if (kind === "encrypted") {
+                supportEncryptionMessage.textContent = "Encrypted bundle downloaded. Download its receipt for your records. No file has been uploaded.";
+                downloadSupportReceiptButton.classList.remove("d-none");
+            } else {
+                supportEncryptionMessage.textContent = "Receipt downloaded. Keep both files together. No file has been uploaded.";
+            }
+        } catch {
+            supportEncryptionMessage.textContent = "Download did not complete. Your files remain on the Pi; try again.";
+        } finally { button.disabled = false; }
+    }
+
+    function safePrivateArtifactFilename(disposition, fallback) {
+        if (typeof disposition !== "string") return fallback;
+        const match = disposition.match(/(?:^|;)\s*filename="?([^";]+)"?/i);
+        const value = match ? match[1].trim() : "";
+        return /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:age|json)$/.test(value) ? value : fallback;
     }
 
     async function checkSupportIntake() {
@@ -881,6 +956,12 @@ document.addEventListener("DOMContentLoaded", () => {
     downloadSupportBundleButton.addEventListener("click", downloadSupportBundle);
     finalizeSupportBundleButton.addEventListener("click", finalizeSupportBundle);
     checkSupportIntakeButton.addEventListener("click", checkSupportIntake);
+    supportEncryptionConsent.addEventListener("change", setSupportBundleActions);
+    encryptSupportBundleButton.addEventListener("click", encryptSupportBundle);
+    downloadEncryptedSupportBundleButton.addEventListener("click", () =>
+        downloadPrivateArtifact("encrypted", downloadEncryptedSupportBundleButton, "wsprrypi-support-bundle.tar.gz.age"));
+    downloadSupportReceiptButton.addEventListener("click", () =>
+        downloadPrivateArtifact("receipt", downloadSupportReceiptButton, "wsprrypi-support-bundle.receipt.json"));
     deleteSupportBundleButton.addEventListener("click", () => {
         deleteSupportBundle(supportBundleJobId);
     });

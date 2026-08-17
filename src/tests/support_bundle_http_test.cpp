@@ -279,6 +279,22 @@ int main() {
     assert(active_body["user_message"] == *intake_result.user_message);
     assert(!active_body.contains("release_url") && !active_body.contains("diagnostic"));
     assert(intake_calls == 2);
+    const std::string unknown_private_id(32, 'Z');
+    const auto encrypt_body_rejected = require_response(client.Post(
+        "/api/support-bundles/" + unknown_private_id + "/encrypt", headers,
+        "{}", "application/json"));
+    assert(encrypt_body_rejected.status == 400 && intake_calls == 2);
+    const httplib::Headers foreign_encrypt{
+        {"Host", "127.0.0.1:" + std::to_string(port)},
+        {"Origin", "https://example.invalid"}};
+    const auto encrypt_guarded = require_response(client.Post(
+        "/api/support-bundles/" + unknown_private_id + "/encrypt", foreign_encrypt));
+    assert(encrypt_guarded.status == 403 && intake_calls == 2);
+    const auto encrypt_unknown = require_response(client.Post(
+        "/api/support-bundles/" + unknown_private_id + "/encrypt", headers));
+    assert(encrypt_unknown.status == 404 && intake_calls == 3);
+    assert(encrypt_unknown.get_header_value("Cache-Control") == "no-store");
+    assert_restrictive(encrypt_unknown);
 
     intake_result = {};
     intake_result.status = SupportBundleIntakeProductionStatus::disabled;
@@ -320,7 +336,7 @@ int main() {
     intake_throw = false;
 
     const int calls_before_rejection = intake_calls;
-    assert(calls_before_rejection == 6);
+    assert(calls_before_rejection == 7);
     const httplib::Headers foreign_intake{
         {"Host", "127.0.0.1:" + std::to_string(port)},
         {"Origin", "https://example.invalid"}};

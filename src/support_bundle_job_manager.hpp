@@ -97,6 +97,15 @@ struct SupportBundleFinalizationOutcome {
         SupportBundleFinalizationStatus::malformed_or_unknown_id;
     std::optional<SupportBundleJobSnapshot> snapshot;
 };
+enum class SupportBundleEncryptionStatus {
+    encrypted, already_encrypted, malformed_or_unknown_id, not_finalized,
+    key_mismatch, encryption_failed, receipt_failed
+};
+struct SupportBundleEncryptionOutcome {
+    SupportBundleEncryptionStatus status = SupportBundleEncryptionStatus::malformed_or_unknown_id;
+    std::optional<SupportBundleJobSnapshot> snapshot;
+    SupportBundleEncryptionFailure primitive_failure = SupportBundleEncryptionFailure::none;
+};
 class SupportBundleJobExecutor {
 public:
     virtual ~SupportBundleJobExecutor() = default;
@@ -126,6 +135,14 @@ public:
     SupportBundleCandidateDownloadStatus mark_candidate_downloaded(const std::string &id,
                                                                     std::uint64_t size);
     SupportBundleFinalizationOutcome finalize_candidate(const std::string &id);
+    SupportBundleEncryptionOutcome encrypt_candidate(const std::string &id,
+                                                      const std::string &key_id,
+                                                      const std::string &recipient,
+                                                      const std::filesystem::path &executable = "/usr/bin/age");
+    SupportBundleDownloadReference encrypted_reference(const std::string &id) const;
+    SupportBundleCandidateDownloadStatus mark_encrypted_downloaded(const std::string &id,
+                                                                    std::uint64_t size);
+    SupportBundleDownloadReference receipt_reference(const std::string &id) const;
     SupportBundleDownloadDeletionResult delete_download(const std::string &id);
     void shutdown();
     static bool valid_id(const std::string &id);
@@ -155,6 +172,9 @@ private:
     std::optional<std::uint64_t> downloaded_archive_size_;
     bool download_removed_ = false;
     std::optional<FinalizedSupportBundle> finalized_bundle_;
+    std::optional<SupportBundleEncryptedArtifact> encrypted_artifact_;
+    std::optional<SupportBundleReceiptResult> receipt_artifact_;
+    std::optional<std::string> issue_url_;
     std::thread worker_;
     struct ExpirationEntry {
         std::string id;

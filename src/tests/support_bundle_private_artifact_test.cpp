@@ -106,7 +106,9 @@ int main(int argc, char **argv) {
     assert(mkdtemp(root_template));
     const fs::path root(root_template);
     assert(chmod(root.c_str(), 0700) == 0);
-    const fs::path executable = fs::canonical(argv[0]);
+    const fs::path executable = root / "fake-age";
+    assert(fs::copy_file(fs::canonical(argv[0]), executable));
+    assert(chmod(executable.c_str(), 0500) == 0);
 
     const fs::path wrong = root / "wrong.tar.gz";
     write_private(wrong, "readable-bundle");

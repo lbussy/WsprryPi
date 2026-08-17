@@ -1067,6 +1067,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
 .PHONY: support-bundle-download-preparation-test support-bundle-job-directory-remover-test support-bundle-startup-cleanup-test
 .PHONY: support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test
+.PHONY: support-bundle-production-encryption-metadata-test
 .PHONY: support-bundle-signing-key-provisioning-test support-bundle-intake-manifest-preparation-test
 .PHONY: support-bundle-intake-manifest-lifecycle-test support-bundle-intake-production-manifest-test
 .PHONY: support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test
@@ -1214,6 +1215,9 @@ support-bundle-age-roundtrip-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_AGE_ROUNDTRIP_TES
 
 support-bundle-key-provisioning-test:
 	$(Q)WSPRRYPI_REAL_AGE_KEYGEN="$(AGE_KEYGEN)" python3 ../scripts/tests/support_bundle_key_provisioning_test.py
+
+support-bundle-production-encryption-metadata-test:
+	$(Q)python3 ../scripts/tests/support_bundle_production_encryption_metadata_test.py
 
 support-bundle-signing-key-provisioning-test:
 	$(Q)python3 ../scripts/tests/support_bundle_signing_key_provisioning_test.py

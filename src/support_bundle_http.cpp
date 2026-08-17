@@ -2,6 +2,8 @@
 
 #include "json.hpp"
 #include "support_bundle_download_preparation.hpp"
+#include "support_bundle_download_file.hpp"
+#include "support_bundle_encryption_production.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +17,7 @@
 namespace {
 constexpr std::size_t kMaximumRequestBodyBytes = 8192;
 constexpr std::size_t kDownloadReadBufferBytes = 64 * 1024;
+std::string attachment_disposition(const std::string &basename);
 
 void remove_permissive_cors_headers(httplib::Response &response) {
     response.headers.erase("Access-Control-Allow-Origin");
@@ -55,6 +58,14 @@ bool empty_identity(const SupportBundleIntakeProductionResult &result) {
            result.minimum_upload_version.empty() && result.signing_key_id.empty() &&
            result.bundle_key_id.empty() && !result.request_url &&
            result.release_url.empty() && !result.user_message;
+}
+
+bool active_intake_authorizes_encryption(const SupportBundleIntakeProductionResult &result) {
+    return result.status == SupportBundleIntakeProductionStatus::active &&
+           result.generation > 0 && !result.expires_at.empty() &&
+           !result.minimum_upload_version.empty() && !result.signing_key_id.empty() &&
+           result.bundle_key_id == kSupportBundleProductionKeyId && result.request_url &&
+           !result.request_url->empty() && result.release_url.empty();
 }
 
 void set_intake_unavailable(httplib::Response &response) {
@@ -117,6 +128,26 @@ void set_intake_result(httplib::Response &response,
     }
     if (result.user_message) body["user_message"] = *result.user_message;
     set_private_json(response, 200, body);
+}
+
+void set_artifact_download(httplib::Response &response,
+                           SupportBundleDownloadFile file,
+                           std::string content_type,
+                           std::function<void(bool, std::uint64_t)> completion = {}) {
+    auto download = std::make_shared<SupportBundleDownloadFile>(std::move(file));
+    response.status = 200;
+    response.set_header("Content-Disposition", attachment_disposition(download->basename()));
+    set_private_headers(response);
+    response.set_content_provider(static_cast<std::size_t>(download->size()), content_type,
+        [download](std::size_t offset, std::size_t length, httplib::DataSink &sink) {
+            if (offset >= download->size() || length == 0) return false;
+            std::array<char, kDownloadReadBufferBytes> buffer{};
+            const auto count = std::min<std::uint64_t>({buffer.size(), length, download->size() - offset});
+            const ssize_t read = pread(download->descriptor(), buffer.data(), count, offset);
+            return read > 0 && sink.write(buffer.data(), static_cast<std::size_t>(read));
+        }, [download, completion](bool success) {
+            if (completion) completion(success, download->size());
+        });
 }
 
 bool allow_support_request(const httplib::Request &request,
@@ -266,7 +297,7 @@ void register_support_bundle_http_routes(
     };
 
     server.Get("/api/support-intake",
-               [guard, intake_provider = std::move(intake_provider)](
+               [guard, intake_provider](
                    const httplib::Request &request,
                    httplib::Response &response) {
         if (!guard(request, response)) {
@@ -414,6 +445,53 @@ void register_support_bundle_http_routes(
             set_error(response, 409, "artifact_invalid"); return;
         }
         set_error(response, 500, "internal_error");
+    });
+
+    server.Post(R"(/api/support-bundles/(.*)/encrypt)",
+        [&manager, guard, intake_provider](const httplib::Request &request, httplib::Response &response) {
+        if (!guard(request, response)) return;
+        if (!request.body.empty()) { set_private_json(response, 400, {{"error", "invalid_request"}}); return; }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        if (!SupportBundleJobManager::valid_id(id)) { set_private_json(response, 404, {{"error", "not_found"}}); return; }
+        SupportBundleIntakeProductionResult intake;
+        try { intake = intake_provider(); } catch (...) {
+            set_private_json(response, 503, {{"error", "intake_unavailable"}}); return;
+        }
+        if (!active_intake_authorizes_encryption(intake)) {
+            set_private_json(response, 409, {{"error", "intake_not_active"}}); return;
+        }
+        const auto outcome = manager.encrypt_candidate(id, std::string(kSupportBundleProductionKeyId),
+                                                        std::string(kSupportBundleProductionAgeRecipient));
+        switch (outcome.status) {
+        case SupportBundleEncryptionStatus::encrypted:
+        case SupportBundleEncryptionStatus::already_encrypted:
+            set_private_json(response, 200, {{"workflow_state", "encrypted"}}); return;
+        case SupportBundleEncryptionStatus::malformed_or_unknown_id: set_private_json(response, 404, {{"error", "not_found"}}); return;
+        case SupportBundleEncryptionStatus::not_finalized: set_private_json(response, 409, {{"error", "not_finalized"}}); return;
+        case SupportBundleEncryptionStatus::key_mismatch: set_private_json(response, 409, {{"error", "key_mismatch"}}); return;
+        default: set_private_json(response, 503, {{"error", "encryption_failed"}}); return;
+        }
+    });
+
+    server.Get(R"(/api/support-bundles/(.*)/encrypted)",
+        [&manager, guard](const httplib::Request &request, httplib::Response &response) {
+        if (!guard(request, response)) { set_private_headers(response); return; }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        auto opened = open_support_bundle_download_file(manager.encrypted_reference(id));
+        if (!opened.available()) { set_private_json(response, 409, {{"error", "not_ready"}}); return; }
+        set_artifact_download(response, std::move(opened.file), "application/octet-stream",
+            [&manager, id](bool success, std::uint64_t size) {
+                if (success) (void)manager.mark_encrypted_downloaded(id, size);
+            });
+    });
+
+    server.Get(R"(/api/support-bundles/(.*)/receipt)",
+        [&manager, guard](const httplib::Request &request, httplib::Response &response) {
+        if (!guard(request, response)) { set_private_headers(response); return; }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        auto opened = open_support_bundle_download_file(manager.receipt_reference(id), 16 * 1024);
+        if (!opened.available()) { set_private_json(response, 409, {{"error", "not_ready"}}); return; }
+        set_artifact_download(response, std::move(opened.file), "application/json");
     });
 
     server.Get(R"(/api/support-bundles/(.*)/download)",

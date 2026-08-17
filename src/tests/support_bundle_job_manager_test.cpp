@@ -118,11 +118,21 @@ static void expect_result_failure(const std::filesystem::path &root, FakeExecuto
     manager.shutdown();
 }
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc > 1 && std::string(argv[1]) == "--encrypt") {
+        std::ifstream input(argv[6], std::ios::binary);
+        std::ofstream output(argv[5], std::ios::binary);
+        output << "encrypted:" << input.rdbuf();
+        output.close();
+        return chmod(argv[5], 0600) == 0 ? 0 : 1;
+    }
     char template_path[] = "/tmp/wsprrypi-job-manager-test.XXXXXX";
     assert(mkdtemp(template_path) != nullptr);
     const std::filesystem::path root = std::filesystem::canonical(template_path);
     assert(chmod(root.c_str(), 0700) == 0);
+    const auto fake_age = root / "fake-age";
+    assert(std::filesystem::copy_file(std::filesystem::canonical(argv[0]), fake_age));
+    assert(chmod(fake_age.c_str(), 0500) == 0);
     const auto sibling = root / id('p');
     assert(std::filesystem::create_directory(sibling));
     assert(chmod(sibling.c_str(), 0700) == 0);
@@ -463,6 +473,27 @@ int main() {
     struct stat immutable_info {};
     assert(lstat(finalized_archive.c_str(), &immutable_info) == 0 &&
            (immutable_info.st_mode & 0777) == 0400);
+    const auto encrypted_outcome = finalized.encrypt_candidate(
+        finalized_job->id, "wsprrypi-bundle-2026-01", "age1test-recipient", fake_age);
+    if (encrypted_outcome.status != SupportBundleEncryptionStatus::encrypted)
+        std::cerr << "primitive failure=" << static_cast<int>(encrypted_outcome.primitive_failure) << "\n";
+    assert(encrypted_outcome.status == SupportBundleEncryptionStatus::encrypted);
+    assert(finalized.encrypt_candidate(finalized_job->id, "wsprrypi-bundle-2026-01",
+                                       "age1test-recipient", fake_age).status ==
+           SupportBundleEncryptionStatus::already_encrypted);
+    const auto encrypted = finalized.encrypted_reference(finalized_job->id);
+    assert(encrypted.status == SupportBundleDownloadReferenceStatus::available);
+    struct stat encrypted_info{};
+    assert(lstat(encrypted.archive_path.c_str(), &encrypted_info) == 0 &&
+           (encrypted_info.st_mode & 0777) == 0600);
+    assert(finalized.receipt_reference(finalized_job->id).status ==
+           SupportBundleDownloadReferenceStatus::not_ready);
+    assert(finalized.mark_encrypted_downloaded(finalized_job->id, encrypted_info.st_size) ==
+           SupportBundleCandidateDownloadStatus::marked);
+    assert(lstat(encrypted.archive_path.c_str(), &encrypted_info) == 0 &&
+           (encrypted_info.st_mode & 0777) == 0400);
+    assert(finalized.receipt_reference(finalized_job->id).status ==
+           SupportBundleDownloadReferenceStatus::available);
     assert(finalized.delete_download(finalized_job->id).status ==
            SupportBundleDownloadDeletionStatus::removed);
     finalized.shutdown();

@@ -1,4 +1,6 @@
 #include "support_bundle_job_manager.hpp"
+
+#include <ctime>
 #include "support_bundle_result_validator.hpp"
 #include <algorithm>
 #include <cctype>
@@ -61,6 +63,9 @@ std::optional<SupportBundleJobSnapshot> SupportBundleJobManager::create(SupportB
     error.clear();
     if (shutting_down_) { error = "shutting_down"; return std::nullopt; }
     if (!storage_ready_) { error = "storage_unavailable"; return std::nullopt; }
+    issue_url_.reset();
+    if (request.private_request && request.private_request->context.kind == SupportBundleContextKind::existing_github_issue)
+        issue_url_ = request.private_request->context.issue_url;
     if (job_ && (job_->state == SupportBundleJobState::queued || job_->state == SupportBundleJobState::running)) { error = "job_active"; return std::nullopt; }
     std::string case_id;
     if (request.private_request) {
@@ -321,6 +326,87 @@ SupportBundleFinalizationOutcome SupportBundleJobManager::finalize_candidate(
     return {SupportBundleFinalizationStatus::finalized, job_};
 }
 
+namespace {
+std::string receipt_timestamp() {
+    const std::time_t now = std::time(nullptr);
+    std::tm utc{};
+    if (gmtime_r(&now, &utc) == nullptr) return {};
+    char value[21]{};
+    return std::strftime(value, sizeof(value), "%Y-%m-%dT%H:%M:%SZ", &utc) == 20
+        ? std::string(value) : std::string{};
+}
+}
+
+SupportBundleEncryptionOutcome SupportBundleJobManager::encrypt_candidate(
+    const std::string &id, const std::string &key_id, const std::string &recipient,
+    const std::filesystem::path &executable) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return {SupportBundleEncryptionStatus::malformed_or_unknown_id, std::nullopt};
+    if (encrypted_artifact_)
+        return {encrypted_artifact_->key_id == key_id ? SupportBundleEncryptionStatus::already_encrypted
+                                                       : SupportBundleEncryptionStatus::key_mismatch, job_};
+    if (!finalized_bundle_ || !finalized_bundle_->valid() ||
+        job_->private_lifecycle != SupportBundlePrivateLifecycle::finalized)
+        return {SupportBundleEncryptionStatus::not_finalized, job_};
+    SupportBundleEncryptionRequest request{&*finalized_bundle_, job_directory_, job_->case_id,
+                                            id, recipient, key_id};
+    request.executable = executable;
+    auto result = encrypt_support_bundle(request);
+    if (!result.encrypted())
+        return {SupportBundleEncryptionStatus::encryption_failed, job_, result.failure};
+    encrypted_artifact_ = std::move(result.artifact);
+    return {SupportBundleEncryptionStatus::encrypted, job_};
+}
+
+SupportBundleDownloadReference SupportBundleJobManager::encrypted_reference(const std::string &id) const {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return {SupportBundleDownloadReferenceStatus::malformed_or_unknown_id};
+    if (!encrypted_artifact_) return {SupportBundleDownloadReferenceStatus::not_ready};
+    return {SupportBundleDownloadReferenceStatus::available, encrypted_artifact_->path,
+            encrypted_artifact_->basename, {}, {}, encrypted_artifact_->sha256};
+}
+
+SupportBundleCandidateDownloadStatus SupportBundleJobManager::mark_encrypted_downloaded(
+    const std::string &id, std::uint64_t size) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return SupportBundleCandidateDownloadStatus::malformed_or_unknown_id;
+    if (receipt_artifact_ && receipt_artifact_->written())
+        return SupportBundleCandidateDownloadStatus::already_marked;
+    if (!encrypted_artifact_ || encrypted_artifact_->size != size || !finalized_bundle_)
+        return SupportBundleCandidateDownloadStatus::unavailable;
+    auto downloaded = finalize_support_bundle(encrypted_artifact_->path,
+                                               encrypted_artifact_->sha256,
+                                               encrypted_artifact_->size);
+    if (!downloaded.finalized() || downloaded.bundle.size() != encrypted_artifact_->size)
+        return SupportBundleCandidateDownloadStatus::unavailable;
+    const std::string created = receipt_timestamp();
+    if (created.empty()) return SupportBundleCandidateDownloadStatus::unavailable;
+    SupportBundleReceipt receipt;
+    receipt.case_id = job_->case_id; receipt.artifact_id = id; receipt.created_at_utc = created;
+    receipt.archive_filename = finalized_bundle_->basename();
+    receipt.archive_size = finalized_bundle_->size(); receipt.archive_sha256 = finalized_bundle_->sha256();
+    receipt.encrypted_filename = encrypted_artifact_->basename;
+    receipt.encrypted_size = encrypted_artifact_->size; receipt.encrypted_sha256 = encrypted_artifact_->sha256;
+    receipt.bundle_encryption_key_id = encrypted_artifact_->key_id; receipt.issue_url = issue_url_;
+    auto result = write_support_bundle_receipt(job_directory_, receipt);
+    if (!result.written()) return SupportBundleCandidateDownloadStatus::unavailable;
+    receipt_artifact_ = std::move(result);
+    return SupportBundleCandidateDownloadStatus::marked;
+}
+
+SupportBundleDownloadReference SupportBundleJobManager::receipt_reference(const std::string &id) const {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return {SupportBundleDownloadReferenceStatus::malformed_or_unknown_id};
+    if (!receipt_artifact_ || !receipt_artifact_->written())
+        return {SupportBundleDownloadReferenceStatus::not_ready};
+    return {SupportBundleDownloadReferenceStatus::available, receipt_artifact_->path,
+            receipt_artifact_->basename, {}, {}, {}};
+}
+
 void SupportBundleJobManager::clear_current_download_locked(const std::string &id) {
     if (!job_ || job_->id != id || job_->state != SupportBundleJobState::succeeded) {
         return;
@@ -335,6 +421,9 @@ void SupportBundleJobManager::clear_current_download_locked(const std::string &i
     job_->case_id.clear();
     job_->private_lifecycle = SupportBundlePrivateLifecycle::none;
     finalized_bundle_.reset();
+    encrypted_artifact_.reset();
+    receipt_artifact_.reset();
+    issue_url_.reset();
 }
 
 void SupportBundleJobManager::cancel_expiration_locked(const std::string &id) {

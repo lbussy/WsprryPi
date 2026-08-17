@@ -31,6 +31,9 @@ includes(view, "role=\"alert\"", "immediate failures must use alert treatment");
 includes(view, "Delete from Pi", "cleanup retry must be explicitly destructive");
 includes(view, "id=\"supportIntakePanel\"", "private upload availability must use an inline panel");
 includes(view, "Check private upload availability", "intake resolution must require an explicit action");
+includes(view, "id=\"supportEncryptionConsent\"", "local encryption must require explicit consent");
+includes(view, "Download encrypted bundle", "encrypted artifact must have an explicit download action");
+includes(view, "Download receipt", "receipt must be separately downloadable");
 assert.ok(!view.includes("id=\"supportIntakeModal\""), "intake availability must not use a modal");
 
 includes(header, "'supportBundlesPath'", "support bundle path must be centrally configured");
@@ -57,6 +60,8 @@ includes(script, "SUPPORT_BUNDLE_FILENAME_FALLBACK", "safe filename fallback mus
 includes(script, "will expire automatically within 24 hours", "cleanup failure must explain retention");
 includes(script, "Your browser chose the save location", "UI must not claim a filesystem path");
 assert.ok(!script.includes("window.open"), "availability must not open an external upload page");
+includes(script, "/encrypt`", "encryption consent must call the guarded encryption endpoint");
+includes(script, "No file has been uploaded", "encryption states must not claim upload");
 assert.ok(!script.includes("localStorage"), "intake responses must not be persisted in browser storage");
 includes(script, "supportIntakePanel.classList.remove(\"d-none\")", "intake action must appear after finalization");
 includes(script, "if (!supportBundleFinalized || supportIntakeInFlight) return", "intake checks must be finalized and single-flight");

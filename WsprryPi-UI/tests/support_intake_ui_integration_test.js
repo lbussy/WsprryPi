@@ -155,6 +155,15 @@ async function browserTest() {
         if (endpoint.name === "support bundles" && endpoint.proxyUrl.endsWith("/finalize")) {
             return response({ workflow_state: "finalized" });
         }
+        if (endpoint.name === "support bundles" && endpoint.proxyUrl.endsWith("/encrypt")) {
+            return response({ workflow_state: "encrypted" });
+        }
+        if (endpoint.name === "support bundles" && endpoint.proxyUrl.endsWith("/encrypted")) {
+            return response({});
+        }
+        if (endpoint.name === "support bundles" && endpoint.proxyUrl.endsWith("/receipt")) {
+            return response({});
+        }
         if (endpoint.name === "support bundles") {
             return response({ state: "succeeded", download_available: true, case_id: "A7K3-M9QF-X2DP" });
         }
@@ -195,6 +204,19 @@ async function browserTest() {
         "Dropbox capability must not enter a link");
     ok(field("supportIntakeSignedMessage").textContent.includes("operating normally"),
         "active signed message must render as text");
+    ok(!field("supportEncryptionPanel").classList.contains("d-none"),
+        "active intake must reveal local encryption consent");
+    field("supportEncryptionConsent").checked = true;
+    field("supportEncryptionConsent").dispatchEvent(new Event("change", { bubbles: true }));
+    field("encryptSupportBundleButton").click();
+    await wait(() => !field("downloadEncryptedSupportBundleButton").classList.contains("d-none"),
+        "encrypted download action");
+    field("downloadEncryptedSupportBundleButton").click();
+    await wait(() => !field("downloadSupportReceiptButton").classList.contains("d-none"),
+        "receipt after encrypted download");
+    field("downloadSupportReceiptButton").click();
+    await wait(() => field("supportEncryptionMessage").textContent.includes("Receipt downloaded"),
+        "receipt download state");
 
     intakeResponse = response({
         status: "disabled",
@@ -206,6 +228,8 @@ async function browserTest() {
     });
     field("checkSupportIntakeButton").click();
     await wait(() => field("supportIntakeMessage").textContent.includes("temporarily disabled"), "disabled state");
+    ok(field("supportEncryptionPanel").classList.contains("d-none"),
+        "non-active intake must revoke encryption authorization");
 
     intakeResponse = response({
         status: "upgrade_required",
@@ -242,7 +266,7 @@ async function browserTest() {
     equal(field("checkSupportIntakeButton").textContent, "Check private upload availability",
         "reset restores initial action");
 
-    return { scenarios: 11, intakeCalls: 6, assertions: "passed" };
+    return { scenarios: 14, intakeCalls: 6, assertions: "passed" };
 }
 
 async function capture(client, outputPath, width, height, state) {
@@ -267,7 +291,13 @@ async function capture(client, outputPath, width, height, state) {
             if (state === "active") {
                 message.textContent = "Private upload is available until Oct 1, 2026, 12:00 AM UTC. No file has been uploaded.";
                 button.textContent = "Check again";
+                document.getElementById("supportEncryptionPanel").classList.remove("d-none");
+                document.getElementById("supportEncryptionConsent").checked = true;
+                document.getElementById("supportEncryptionConsent").disabled = false;
+                document.getElementById("encryptSupportBundleButton").classList.remove("d-none");
+                document.getElementById("encryptSupportBundleButton").disabled = false;
             } else if (state === "upgrade") {
+                document.getElementById("supportEncryptionPanel").classList.add("d-none");
                 message.textContent = "Upgrade to WsprryPi 1.4.0 or later before uploading. Your local bundle is unchanged.";
                 button.textContent = "Check again";
                 link.href = "https://github.com/WsprryPi/WsprryPi/releases/latest";
@@ -327,7 +357,7 @@ async function main() {
             const detail = result.exceptionDetails.exception && result.exceptionDetails.exception.description;
             throw new Error(detail || result.exceptionDetails.text || "Browser test failed");
         }
-        assert.deepEqual(result.result.value, { scenarios: 11, intakeCalls: 6, assertions: "passed" });
+        assert.deepEqual(result.result.value, { scenarios: 14, intakeCalls: 6, assertions: "passed" });
         if (process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR) {
             fs.mkdirSync(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR, { recursive: true });
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,

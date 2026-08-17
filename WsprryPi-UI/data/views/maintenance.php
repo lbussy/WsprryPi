@@ -243,6 +243,23 @@ require __DIR__ . '/../card_header.php';
                                     </a>
                                 </div>
                             </section>
+                            <section id="supportEncryptionPanel" class="maintenance-support-intake d-none" aria-labelledby="supportEncryptionTitle">
+                                <div>
+                                    <h3 id="supportEncryptionTitle" class="h6 mb-1">Encrypt reviewed candidate</h3>
+                                    <p id="supportEncryptionMessage" class="mb-0" role="status" aria-live="polite" aria-atomic="true">
+                                        Encryption runs locally on this Pi. The readable archive remains available and no file is uploaded.
+                                    </p>
+                                </div>
+                                <div class="form-check">
+                                    <input id="supportEncryptionConsent" class="form-check-input" type="checkbox">
+                                    <label class="form-check-label" for="supportEncryptionConsent">Encrypt the exact candidate I reviewed for the WsprryPi maintainer.</label>
+                                </div>
+                                <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                    <button id="encryptSupportBundleButton" type="button" class="btn btn-primary" disabled>Encrypt reviewed candidate</button>
+                                    <button id="downloadEncryptedSupportBundleButton" type="button" class="btn btn-outline-primary d-none">Download encrypted bundle</button>
+                                    <button id="downloadSupportReceiptButton" type="button" class="btn btn-outline-secondary d-none">Download receipt</button>
+                                </div>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
                                     Start support bundle
