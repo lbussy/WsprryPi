@@ -40,6 +40,8 @@ Local intake manifest lifecycle: [Issue 414 Slice 15](../research/issue-414-slic
 
 Publication candidate commit: [Issue 414 Slice 16](../research/issue-414-slice-16-publication-commit.md)
 
+Authenticated publication push: [Issue 414 Slice 17](../research/issue-414-slice-17-publication-push.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

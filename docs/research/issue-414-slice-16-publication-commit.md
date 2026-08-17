@@ -73,8 +73,8 @@ non-disclosure. The same hardware-free suite runs in Debian CI.
 
 - Create and authorize the real public `WsprryPi/support-intake` repository as a
   separate external action.
-- Add a separately reviewed authenticated push boundary for one verified local
-  candidate commit, with explicit remote old/new compare-and-swap expectations.
+- Use the Slice 17 authenticated push controller for exact remote parent/
+  candidate decisions and lease-protected push; live use remains unauthorized.
 - Retrieve both public raw files over the production HTTPS endpoints and verify
   exact bytes, signature, generation, and digest before declaring publication.
 - Provision and approve production identities and public metadata before any

@@ -22,7 +22,7 @@ import prepare_support_bundle_intake_manifest as preparation
 
 EXPECTED_REMOTE = "https://github.com/WsprryPi/support-intake.git"
 TARGETS = ("wsprrypi/intake.json", "wsprrypi/intake.json.sig")
-OBJECT_ID = re.compile(r"^[0-9a-f]{40,64}$")
+OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
 
 class PublicationError(RuntimeError):
