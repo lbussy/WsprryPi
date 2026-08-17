@@ -80,7 +80,9 @@ may enter the repository. This key must never be reused for bundle encryption.
 - Provision, independently review, back up, and recovery-test both identities as
   explicit maintainer operations.
 - Commit and package only approved public metadata.
-- Add a separate exact-byte manifest signing/publication workflow.
+- Use Slice 14 to construct, exact-byte sign, self-verify, and atomically stage a
+  new local manifest pair; lifecycle administration and remote publication
+  remain separate work.
 - Activate Slice 12 only after production public trust is reviewed.
 
 No production key, public trust value, manifest, signature, recipient, Dropbox

@@ -34,6 +34,8 @@ Support intake runtime construction: [Issue 414 Slice 12](../research/issue-414-
 
 Intake-signing key provisioning: [Issue 414 Slice 13](../research/issue-414-slice-13-signing-key-provisioning.md)
 
+Signed intake manifest preparation: [Issue 414 Slice 14](../research/issue-414-slice-14-manifest-preparation.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
