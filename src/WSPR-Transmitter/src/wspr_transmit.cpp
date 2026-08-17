@@ -194,34 +194,6 @@ namespace
         return (a.tv_sec - b.tv_sec) * 1'000'000'000LL + (a.tv_nsec - b.tv_nsec);
     }
 
-    static inline void busy_wait_until(clockid_t clk_id, const timespec &ts_target)
-    {
-        for (;;)
-        {
-            timespec now{};
-            clock_gettime(clk_id, &now);
-            if (diff_ns(now, ts_target) >= 0)
-                break;
-        }
-    }
-
-    static inline timespec add_ns(timespec t, int64_t ns)
-    {
-        t.tv_sec += ns / 1000000000LL;
-        t.tv_nsec += static_cast<long>(ns % 1000000000LL);
-        if (t.tv_nsec >= 1000000000L)
-        {
-            t.tv_sec++;
-            t.tv_nsec -= 1000000000L;
-        }
-        else if (t.tv_nsec < 0)
-        {
-            t.tv_sec--;
-            t.tv_nsec += 1000000000L;
-        }
-        return t;
-    }
-
 } // end anonymous namespace
 
 WsprTransmitter::TransmissionScheduler::TransmissionScheduler(
