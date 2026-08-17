@@ -143,6 +143,7 @@ async function browserTest() {
         request_url: "https://www.dropbox.com/request/secret-capability",
         user_message: "Private intake is operating normally."
     });
+    let uploadReportResponse = response({ workflow_state: "upload_reported_complete" });
     window.fetchWithEndpointFallback = async (endpoint, options = {}) => {
         calls.push({ name: endpoint.name, method: options.method || "GET" });
         if (endpoint.name === "support intake") return intakeResponse;
@@ -163,6 +164,10 @@ async function browserTest() {
         }
         if (endpoint.name === "support bundles" && endpoint.proxyUrl.endsWith("/receipt")) {
             return response({});
+        }
+        if (endpoint.name === "support bundles" &&
+            endpoint.proxyUrl.endsWith("/upload-reported-complete")) {
+            return uploadReportResponse;
         }
         if (endpoint.name === "support bundles") {
             return response({ state: "succeeded", download_available: true, case_id: "A7K3-M9QF-X2DP" });
@@ -228,6 +233,32 @@ async function browserTest() {
     field("supportDropboxHandoffConsent").dispatchEvent(new Event("change", { bubbles: true }));
     ok(!field("openSupportDropboxButton").classList.contains("disabled"),
         "explicit disclosure consent enables handoff");
+    field("openSupportDropboxButton").addEventListener("click", (event) => event.preventDefault(),
+        { once: true });
+    field("openSupportDropboxButton").dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }));
+    ok(!field("supportUploadReportPanel").classList.contains("d-none"),
+        "handoff request reveals a distinct completion-report step");
+    ok(field("reportSupportUploadButton").disabled,
+        "upload report requires a separate explicit assertion");
+    field("supportUploadReportedComplete").checked = true;
+    field("supportUploadReportedComplete").dispatchEvent(new Event("change", { bubbles: true }));
+    uploadReportResponse = response({ error: "temporary" }, 503);
+    field("reportSupportUploadButton").click();
+    await wait(() => field("supportUploadReportMessage").textContent.includes("not recorded"),
+        "upload report failure recovery");
+    ok(field("supportUploadReportedComplete").checked &&
+        !field("reportSupportUploadButton").disabled,
+        "failed report preserves the assertion and permits retry");
+    uploadReportResponse = response({ workflow_state: "upload_reported_complete" });
+    field("reportSupportUploadButton").click();
+    await wait(() => field("supportUploadReportMessage").textContent.includes("You reported"),
+        "truthful upload reported state");
+    ok(field("supportUploadReportMessage").textContent.includes("not maintainer confirmation"),
+        "user report must remain distinct from maintainer confirmation");
+    ok(field("supportUploadReportedComplete").disabled &&
+        field("reportSupportUploadButton").classList.contains("d-none"),
+        "completed report is idempotently settled in the UI");
     field("downloadSupportReceiptButton").click();
     await wait(() => field("supportEncryptionMessage").textContent.includes("Receipt downloaded"),
         "receipt download state");
@@ -249,6 +280,8 @@ async function browserTest() {
         "non-active intake must revoke handoff authorization");
     ok(!field("openSupportDropboxButton").hasAttribute("href"),
         "non-active intake must remove the local handoff target");
+    ok(!field("supportUploadReportPanel").classList.contains("d-none"),
+        "later intake disablement must not erase an already recorded user report");
 
     intakeResponse = response({
         status: "upgrade_required",
@@ -284,6 +317,9 @@ async function browserTest() {
     await wait(() => field("supportIntakePanel").classList.contains("d-none"), "delete reset");
     equal(field("checkSupportIntakeButton").textContent, "Check private upload availability",
         "reset restores initial action");
+    ok(field("supportUploadReportPanel").classList.contains("d-none") &&
+        !field("supportUploadReportedComplete").checked,
+        "delete resets the upload-report workflow");
 
     return { scenarios: 14, intakeCalls: 6, assertions: "passed" };
 }
@@ -307,7 +343,7 @@ async function capture(client, outputPath, width, height, state) {
             const link = document.getElementById("supportIntakeUpgradeLink");
             button.disabled = false;
             link.classList.add("d-none");
-            if (state === "active") {
+            if (state === "active" || state === "reported") {
                 message.textContent = "Private upload is available until Oct 1, 2026, 12:00 AM UTC. No file has been uploaded.";
                 button.textContent = "Check again";
                 document.getElementById("supportEncryptionPanel").classList.remove("d-none");
@@ -321,6 +357,17 @@ async function capture(client, outputPath, width, height, state) {
                 handoff.classList.remove("disabled");
                 handoff.setAttribute("aria-disabled", "false");
                 handoff.tabIndex = 0;
+                if (state === "reported") {
+                    document.getElementById("supportEncryptionPanel").classList.add("d-none");
+                    document.getElementById("supportDropboxHandoffPanel").classList.add("d-none");
+                    const report = document.getElementById("supportUploadReportPanel");
+                    report.classList.remove("d-none");
+                    document.getElementById("supportUploadReportMessage").textContent =
+                        "You reported that Dropbox displayed upload success for case A7K3-M9QF-X2DP. This is not maintainer confirmation. The readable archive remains on this Pi until you delete it or it expires.";
+                    document.getElementById("supportUploadReportedComplete").checked = true;
+                    document.getElementById("supportUploadReportedComplete").disabled = true;
+                    document.getElementById("reportSupportUploadButton").classList.add("d-none");
+                }
             } else if (state === "upgrade") {
                 document.getElementById("supportEncryptionPanel").classList.add("d-none");
                 message.textContent = "Upgrade to WsprryPi 1.4.0 or later before uploading. Your local bundle is unchanged.";
@@ -336,8 +383,9 @@ async function capture(client, outputPath, width, height, state) {
                 message.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
                 button.textContent = "Try again";
             }
-            document.getElementById(state === "active" ? "supportDropboxHandoffPanel" :
-                "supportIntakePanel").scrollIntoView({ block: "center" });
+            document.getElementById(state === "reported" ? "supportUploadReportPanel" :
+                state === "active" ? "supportDropboxHandoffPanel" :
+                    "supportIntakePanel").scrollIntoView({ block: "center" });
         })()`,
     });
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -390,6 +438,10 @@ async function main() {
                 "support-intake-active-desktop.png"), 1440, 1100, "active");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-intake-handoff-mobile.png"), 390, 844, "active");
+            await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
+                "support-upload-reported-desktop.png"), 1440, 1100, "reported");
+            await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
+                "support-upload-reported-mobile.png"), 390, 844, "reported");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-intake-upgrade-desktop.png"), 1440, 1100, "upgrade");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,

@@ -284,8 +284,11 @@ SupportBundleFinalizationOutcome SupportBundleJobManager::finalize_candidate(
     if (!valid_id(id) || !job_ || job_->id != id) {
         return {SupportBundleFinalizationStatus::malformed_or_unknown_id, std::nullopt};
     }
-    if (job_->private_lifecycle == SupportBundlePrivateLifecycle::finalized &&
-        finalized_bundle_ && finalized_bundle_->valid()) {
+    if (finalized_bundle_ && finalized_bundle_->valid() &&
+        (job_->private_lifecycle == SupportBundlePrivateLifecycle::finalized ||
+         job_->private_lifecycle == SupportBundlePrivateLifecycle::encrypted_downloaded ||
+         job_->private_lifecycle == SupportBundlePrivateLifecycle::upload_page_opened ||
+         job_->private_lifecycle == SupportBundlePrivateLifecycle::upload_reported_complete)) {
         return {SupportBundleFinalizationStatus::already_finalized, job_};
     }
     if (job_->case_id.empty() || job_->private_lifecycle == SupportBundlePrivateLifecycle::none) {
@@ -394,6 +397,7 @@ SupportBundleCandidateDownloadStatus SupportBundleJobManager::mark_encrypted_dow
     auto result = write_support_bundle_receipt(job_directory_, receipt);
     if (!result.written()) return SupportBundleCandidateDownloadStatus::unavailable;
     receipt_artifact_ = std::move(result);
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::encrypted_downloaded;
     return SupportBundleCandidateDownloadStatus::marked;
 }
 
@@ -405,6 +409,34 @@ SupportBundleDownloadReference SupportBundleJobManager::receipt_reference(const 
         return {SupportBundleDownloadReferenceStatus::not_ready};
     return {SupportBundleDownloadReferenceStatus::available, receipt_artifact_->path,
             receipt_artifact_->basename, {}, {}, {}};
+}
+
+SupportBundleUploadTransitionStatus SupportBundleJobManager::mark_upload_page_opened(
+    const std::string &id) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return SupportBundleUploadTransitionStatus::malformed_or_unknown_id;
+    if (job_->private_lifecycle == SupportBundlePrivateLifecycle::upload_page_opened ||
+        job_->private_lifecycle == SupportBundlePrivateLifecycle::upload_reported_complete)
+        return SupportBundleUploadTransitionStatus::already_transitioned;
+    if (job_->private_lifecycle != SupportBundlePrivateLifecycle::encrypted_downloaded ||
+        !receipt_artifact_ || !receipt_artifact_->written())
+        return SupportBundleUploadTransitionStatus::unavailable;
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::upload_page_opened;
+    return SupportBundleUploadTransitionStatus::transitioned;
+}
+
+SupportBundleUploadTransitionStatus SupportBundleJobManager::report_upload_complete(
+    const std::string &id) {
+    std::lock_guard lock(mutex_);
+    if (!valid_id(id) || !job_ || job_->id != id)
+        return SupportBundleUploadTransitionStatus::malformed_or_unknown_id;
+    if (job_->private_lifecycle == SupportBundlePrivateLifecycle::upload_reported_complete)
+        return SupportBundleUploadTransitionStatus::already_transitioned;
+    if (job_->private_lifecycle != SupportBundlePrivateLifecycle::upload_page_opened)
+        return SupportBundleUploadTransitionStatus::unavailable;
+    job_->private_lifecycle = SupportBundlePrivateLifecycle::upload_reported_complete;
+    return SupportBundleUploadTransitionStatus::transitioned;
 }
 
 void SupportBundleJobManager::clear_current_download_locked(const std::string &id) {

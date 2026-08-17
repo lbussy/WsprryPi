@@ -278,6 +278,19 @@ require __DIR__ . '/../card_header.php';
                                     <a id="openSupportDropboxButton" class="btn btn-primary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true" tabindex="-1">Open private Dropbox upload</a>
                                 </div>
                             </section>
+                            <section id="supportUploadReportPanel" class="maintenance-support-intake d-none" aria-labelledby="supportUploadReportTitle">
+                                <div>
+                                    <h3 id="supportUploadReportTitle" class="h6 mb-1">Report the Dropbox result</h3>
+                                    <p id="supportUploadReportMessage" class="mb-0" role="status" aria-live="polite" aria-atomic="true">The Dropbox page was requested. Opening it is not upload success or maintainer confirmation.</p>
+                                </div>
+                                <div class="form-check">
+                                    <input id="supportUploadReportedComplete" class="form-check-input" type="checkbox">
+                                    <label class="form-check-label" for="supportUploadReportedComplete">Dropbox displayed “Finished uploading” after I selected and submitted the downloaded <code>.age</code> file.</label>
+                                </div>
+                                <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                    <button id="reportSupportUploadButton" type="button" class="btn btn-primary" disabled>Record my upload report</button>
+                                </div>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
                                     Start support bundle

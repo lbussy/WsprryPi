@@ -22,6 +22,9 @@ enum class SupportBundlePrivateLifecycle {
     candidate_ready,
     candidate_downloaded,
     finalized,
+    encrypted_downloaded,
+    upload_page_opened,
+    upload_reported_complete,
 };
 struct SupportBundlePrivateRequest { SupportBundleContext context; };
 struct SupportBundleJobRequest {
@@ -80,6 +83,12 @@ struct SupportBundleExecutionContext {
 enum class SupportBundleCandidateDownloadStatus {
     marked,
     already_marked,
+    malformed_or_unknown_id,
+    unavailable,
+};
+enum class SupportBundleUploadTransitionStatus {
+    transitioned,
+    already_transitioned,
     malformed_or_unknown_id,
     unavailable,
 };
@@ -143,6 +152,8 @@ public:
     SupportBundleCandidateDownloadStatus mark_encrypted_downloaded(const std::string &id,
                                                                     std::uint64_t size);
     SupportBundleDownloadReference receipt_reference(const std::string &id) const;
+    SupportBundleUploadTransitionStatus mark_upload_page_opened(const std::string &id);
+    SupportBundleUploadTransitionStatus report_upload_complete(const std::string &id);
     SupportBundleDownloadDeletionResult delete_download(const std::string &id);
     void shutdown();
     static bool valid_id(const std::string &id);

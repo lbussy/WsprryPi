@@ -314,6 +314,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const supportDropboxHandoffPanel = document.getElementById("supportDropboxHandoffPanel");
     const supportDropboxHandoffConsent = document.getElementById("supportDropboxHandoffConsent");
     const openSupportDropboxButton = document.getElementById("openSupportDropboxButton");
+    const supportUploadReportPanel = document.getElementById("supportUploadReportPanel");
+    const supportUploadReportMessage = document.getElementById("supportUploadReportMessage");
+    const supportUploadReportedComplete = document.getElementById("supportUploadReportedComplete");
+    const reportSupportUploadButton = document.getElementById("reportSupportUploadButton");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -329,6 +333,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportEncryptionInFlight = false;
     let supportIntakeActive = false;
     let supportEncryptedDownloaded = false;
+    let supportUploadReportInFlight = false;
+    let supportUploadReportComplete = false;
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -433,6 +439,8 @@ document.addEventListener("DOMContentLoaded", () => {
         openSupportDropboxButton.classList.toggle("disabled", !handoffEnabled);
         openSupportDropboxButton.setAttribute("aria-disabled", handoffEnabled ? "false" : "true");
         openSupportDropboxButton.tabIndex = handoffEnabled ? 0 : -1;
+        reportSupportUploadButton.disabled = !supportUploadReportedComplete.checked ||
+            supportUploadReportInFlight || supportUploadReportComplete;
     }
 
     function clearSupportIntakeState() {
@@ -456,6 +464,13 @@ document.addEventListener("DOMContentLoaded", () => {
         supportDropboxHandoffPanel.classList.add("d-none");
         supportDropboxHandoffConsent.checked = false;
         openSupportDropboxButton.removeAttribute("href");
+        supportUploadReportInFlight = false;
+        supportUploadReportComplete = false;
+        supportUploadReportPanel.classList.add("d-none");
+        supportUploadReportedComplete.checked = false;
+        supportUploadReportedComplete.disabled = false;
+        reportSupportUploadButton.classList.remove("d-none");
+        supportUploadReportMessage.textContent = "The Dropbox page was requested. Opening it is not upload success or maintainer confirmation.";
     }
 
     function hasExactKeys(value, required, optional = []) {
@@ -692,6 +707,33 @@ document.addEventListener("DOMContentLoaded", () => {
             showSupportIntakeResult({ status: "unavailable" });
         } finally {
             supportIntakeInFlight = false;
+            setSupportBundleActions();
+        }
+    }
+
+    async function reportSupportUploadComplete() {
+        if (!supportUploadReportedComplete.checked || supportUploadReportInFlight ||
+            supportUploadReportComplete || supportBundleJobId === "") return;
+        supportUploadReportInFlight = true;
+        supportUploadReportMessage.textContent = "Recording your report…";
+        setSupportBundleActions();
+        try {
+            const response = await fetchWithEndpointFallback(
+                supportBundleEndpoint(`/${encodeURIComponent(supportBundleJobId)}/upload-reported-complete`),
+                { method: "POST" });
+            const value = await response.json();
+            if (!response.ok || value.workflow_state !== "upload_reported_complete")
+                throw new Error("upload report failed");
+            supportUploadReportComplete = true;
+            supportUploadReportedComplete.disabled = true;
+            reportSupportUploadButton.classList.add("d-none");
+            supportUploadReportMessage.textContent =
+                `You reported that Dropbox displayed upload success for case ${supportBundleCaseId.textContent}. This is not maintainer confirmation. The readable archive remains on this Pi until you delete it or it expires.`;
+        } catch {
+            supportUploadReportMessage.textContent =
+                "Your report was not recorded. Confirm that Dropbox displayed “Finished uploading,” then reopen the private upload page if needed and try again.";
+        } finally {
+            supportUploadReportInFlight = false;
             setSupportBundleActions();
         }
     }
@@ -995,8 +1037,20 @@ document.addEventListener("DOMContentLoaded", () => {
     supportDropboxHandoffConsent.addEventListener("change", setSupportBundleActions);
     openSupportDropboxButton.addEventListener("click", (event) => {
         if (!supportIntakeActive || !supportEncryptedDownloaded ||
-            !supportDropboxHandoffConsent.checked) event.preventDefault();
+            !supportDropboxHandoffConsent.checked) {
+            event.preventDefault();
+            return;
+        }
+        if (supportUploadReportPanel.classList.contains("d-none")) {
+            supportUploadReportedComplete.checked = false;
+            supportUploadReportPanel.classList.remove("d-none");
+            supportUploadReportMessage.textContent =
+                "The Dropbox page was requested. Opening it is not upload success or maintainer confirmation.";
+            setSupportBundleActions();
+        }
     });
+    supportUploadReportedComplete.addEventListener("change", setSupportBundleActions);
+    reportSupportUploadButton.addEventListener("click", reportSupportUploadComplete);
     encryptSupportBundleButton.addEventListener("click", encryptSupportBundle);
     downloadEncryptedSupportBundleButton.addEventListener("click", () =>
         downloadPrivateArtifact("encrypted", downloadEncryptedSupportBundleButton, "wsprrypi-support-bundle.tar.gz.age"));

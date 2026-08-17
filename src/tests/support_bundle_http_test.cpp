@@ -604,6 +604,12 @@ int main(int argc, char **argv) {
     assert(encrypted_download.status == 200 && !encrypted_download.body.empty());
     assert(manager.receipt_reference(private_id).status ==
            SupportBundleDownloadReferenceStatus::available);
+    const std::string upload_report_path =
+        "/api/support-bundles/" + private_id + "/upload-reported-complete";
+    const auto premature_upload_report =
+        require_response(client.Post(upload_report_path, headers));
+    assert(premature_upload_report.status == 409 &&
+           response_json(premature_upload_report)["error"] == "upload_page_not_opened");
 
     intake_result = {};
     intake_result.status = SupportBundleIntakeProductionStatus::active;
@@ -623,6 +629,28 @@ int main(int argc, char **argv) {
     assert(handoff.get_header_value("X-Content-Type-Options") == "nosniff");
     assert(handoff.get_header_value("Referrer-Policy") == "no-referrer");
     assert_restrictive(handoff);
+    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
+           "upload_page_opened");
+
+    const auto upload_report_body = require_response(client.Post(
+        upload_report_path, headers, "{}", "application/json"));
+    assert(upload_report_body.status == 400);
+    const auto guarded_upload_report =
+        require_response(client.Post(upload_report_path, foreign_origin));
+    assert(guarded_upload_report.status == 403);
+    const auto upload_report = require_response(client.Post(upload_report_path, headers));
+    assert(upload_report.status == 200 &&
+           response_json(upload_report)["workflow_state"] == "upload_reported_complete");
+    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
+           "upload_reported_complete");
+    assert(require_response(client.Post(upload_report_path, headers)).status == 200);
+    const auto retained_receipt = manager.receipt_reference(private_id);
+    std::ifstream receipt_input(retained_receipt.archive_path);
+    const nlohmann::json receipt_json = nlohmann::json::parse(receipt_input);
+    assert(receipt_json["upload_state"] == "encrypted_artifact_downloaded");
+    assert(require_response(client.Get(handoff_path, headers)).status == 302);
+    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
+           "upload_reported_complete");
 
     intake_result.request_url = "https://www.dropbox.com/request/leak-me?unsafe=1";
     const auto malformed_handoff = require_response(client.Get(handoff_path, headers));
@@ -687,6 +715,12 @@ int main(int argc, char **argv) {
     const auto unknown = require_response(client.Get("/api/support-bundles/" + job_id('z'), headers));
     assert(unknown.status == 404);
     assert_restrictive(unknown);
+    const auto malformed_upload_report = require_response(
+        client.Post("/api/support-bundles/not-an-id/upload-reported-complete", headers));
+    assert(malformed_upload_report.status == 404);
+    const auto unknown_upload_report = require_response(client.Post(
+        "/api/support-bundles/" + job_id('z') + "/upload-reported-complete", headers));
+    assert(unknown_upload_report.status == 404);
     const auto malformed_download = require_response(
         client.Get("/api/support-bundles/not-an-id/download", headers));
     assert(malformed_download.status == 404);

@@ -488,12 +488,36 @@ int main(int argc, char **argv) {
            (encrypted_info.st_mode & 0777) == 0600);
     assert(finalized.receipt_reference(finalized_job->id).status ==
            SupportBundleDownloadReferenceStatus::not_ready);
+    assert(finalized.mark_upload_page_opened("bad") ==
+           SupportBundleUploadTransitionStatus::malformed_or_unknown_id);
+    assert(finalized.report_upload_complete("bad") ==
+           SupportBundleUploadTransitionStatus::malformed_or_unknown_id);
+    assert(finalized.mark_upload_page_opened(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::unavailable);
+    assert(finalized.report_upload_complete(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::unavailable);
     assert(finalized.mark_encrypted_downloaded(finalized_job->id, encrypted_info.st_size) ==
            SupportBundleCandidateDownloadStatus::marked);
     assert(lstat(encrypted.archive_path.c_str(), &encrypted_info) == 0 &&
            (encrypted_info.st_mode & 0777) == 0400);
     assert(finalized.receipt_reference(finalized_job->id).status ==
            SupportBundleDownloadReferenceStatus::available);
+    assert(finalized.lookup(finalized_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::encrypted_downloaded);
+    assert(finalized.mark_upload_page_opened(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::transitioned);
+    assert(finalized.mark_upload_page_opened(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::already_transitioned);
+    assert(finalized.lookup(finalized_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::upload_page_opened);
+    assert(finalized.report_upload_complete(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::transitioned);
+    assert(finalized.report_upload_complete(finalized_job->id) ==
+           SupportBundleUploadTransitionStatus::already_transitioned);
+    assert(finalized.lookup(finalized_job->id)->private_lifecycle ==
+           SupportBundlePrivateLifecycle::upload_reported_complete);
+    assert(finalized.finalize_candidate(finalized_job->id).status ==
+           SupportBundleFinalizationStatus::already_finalized);
     assert(finalized.delete_download(finalized_job->id).status ==
            SupportBundleDownloadDeletionStatus::removed);
     finalized.shutdown();

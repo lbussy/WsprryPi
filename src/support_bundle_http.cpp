@@ -243,6 +243,9 @@ const char *private_state_name(SupportBundlePrivateLifecycle state) {
     case SupportBundlePrivateLifecycle::candidate_ready: return "candidate_ready";
     case SupportBundlePrivateLifecycle::candidate_downloaded: return "candidate_downloaded";
     case SupportBundlePrivateLifecycle::finalized: return "finalized";
+    case SupportBundlePrivateLifecycle::encrypted_downloaded: return "encrypted_downloaded";
+    case SupportBundlePrivateLifecycle::upload_page_opened: return "upload_page_opened";
+    case SupportBundlePrivateLifecycle::upload_reported_complete: return "upload_reported_complete";
     case SupportBundlePrivateLifecycle::none: break;
     }
     return "";
@@ -373,6 +376,13 @@ void register_support_bundle_http_routes(
                 set_handoff_headers(response);
                 return;
             }
+            const auto transition = manager.mark_upload_page_opened(id);
+            if (transition != SupportBundleUploadTransitionStatus::transitioned &&
+                transition != SupportBundleUploadTransitionStatus::already_transitioned) {
+                set_private_json(response, 409, {{"error", "encrypted_download_required"}});
+                set_handoff_headers(response);
+                return;
+            }
             remove_permissive_cors_headers(response);
             response.set_redirect(*result.request_url, 302);
             set_handoff_headers(response);
@@ -380,6 +390,28 @@ void register_support_bundle_http_routes(
             set_private_json(response, 503, {{"error", "intake_unavailable"}});
             set_handoff_headers(response);
         }
+    });
+
+    server.Post(R"(/api/support-bundles/(.*)/upload-reported-complete)",
+                [&manager, guard](const httplib::Request &request,
+                                  httplib::Response &response) {
+        if (!guard(request, response)) { set_private_headers(response); return; }
+        if (!request.body.empty()) {
+            set_private_json(response, 400, {{"error", "invalid_request"}}); return;
+        }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        const auto status = manager.report_upload_complete(id);
+        switch (status) {
+        case SupportBundleUploadTransitionStatus::transitioned:
+        case SupportBundleUploadTransitionStatus::already_transitioned:
+            set_private_json(response, 200, {{"workflow_state", "upload_reported_complete"}});
+            return;
+        case SupportBundleUploadTransitionStatus::malformed_or_unknown_id:
+            set_private_json(response, 404, {{"error", "not_found"}}); return;
+        case SupportBundleUploadTransitionStatus::unavailable:
+            set_private_json(response, 409, {{"error", "upload_page_not_opened"}}); return;
+        }
+        set_private_json(response, 500, {{"error", "internal_error"}});
     });
 
     server.Post("/api/support-bundles", [&manager, guard](const httplib::Request &request,
