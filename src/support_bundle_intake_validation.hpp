@@ -82,3 +82,6 @@ struct SupportBundleIntakeValidationResult {
 
 SupportBundleIntakeValidationResult validate_support_bundle_intake(
     const SupportBundleIntakeValidationRequest &request);
+
+// Shared strict SemVer 2 syntax check for trusted runtime construction.
+bool valid_support_bundle_semver(const std::string &value) noexcept;

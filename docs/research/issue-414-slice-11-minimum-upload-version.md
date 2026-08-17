@@ -69,8 +69,10 @@ needed. Tests use ephemeral signing keys and no network access.
 
 ## Remaining work
 
-- Construct the controller from the installed application version, system UTC
-  clock, approved public trust metadata, and private runtime state directory.
+- [Slice 12](issue-414-slice-12-intake-runtime.md) constructs the controller
+  from the installed application version, system UTC clock, supplied public
+  trust metadata, and fixed private runtime state directory. Production public
+  metadata and application activation remain deferred.
 - Add runtime-facing status translation that preserves availability, clock,
   disabled, protocol, and upgrade-required distinctions.
 - Add encryption/upload composition and then the operator UI in later slices.

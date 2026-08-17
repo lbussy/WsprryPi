@@ -298,6 +298,14 @@ SupportBundleIntakeValidationResult upgrade_required(
 
 } // namespace
 
+bool valid_support_bundle_semver(const std::string &value) noexcept {
+    try {
+        return parse_semver(value).has_value();
+    } catch (...) {
+        return false;
+    }
+}
+
 SupportBundleIntakeValidationResult validate_support_bundle_intake(
     const SupportBundleIntakeValidationRequest &request) {
     if (request.manifest_bytes.empty() || request.manifest_bytes.size() > kMaximumManifestBytes)
