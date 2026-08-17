@@ -63,11 +63,12 @@ Neither production private identity was opened or used. No intake manifest or
 signature was prepared, committed, pushed, retrieved, or activated. The public
 `WsprryPi/support-intake` repository remains at its README-only initial commit.
 
-The next separately reviewed slice is local generation-1 manifest preparation
-and lifecycle authentication. It must retrieve the request URL from Keychain
-without printing it or placing it in process arguments. Candidate commit, live
-push, exact public-byte verification, runtime activation, and encrypted upload
-orchestration remain later independent boundaries.
+Slice 26 subsequently retrieved the request URL from Keychain without printing
+it or placing it in process arguments, then durably prepared and independently
+authenticated local generation 1. The next separately reviewed slice is the
+local publication candidate commit. Live push, exact public-byte verification,
+runtime activation, and encrypted upload orchestration remain later independent
+boundaries.
 
 No application, UI, installer, service, Raspberry Pi, GPIO, transmitter, or RF
 state changed.
