@@ -39,6 +39,7 @@ jobs:
             '../scripts/tests/strict_i2c_profile_test.sh ./build/bin/wsprrypi'
           su -s /bin/sh nobody -c \
             '../scripts/tests/strict_i2c_file_access_audit.sh ./build/bin/wsprrypi'
+          ../scripts/tests/strict_i2c_install_path_test.sh
 
   ubuntu-gcc13-release:
     runs-on: ubuntu-24.04

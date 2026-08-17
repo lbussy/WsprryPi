@@ -899,6 +899,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 
 .PHONY: clean debug test test-tone test-oneshot semantics-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
+.PHONY: install-binary
 DEBUG: debug
 RELEASE: release
 
@@ -1140,6 +1141,12 @@ gdb: debug
 	$(Q)echo "Running debug session."
 	$(Q)$(SUDO) gdb --args ./$(BIN_DIR)/$(TEST_OUT) -D -i $(INI_FILE)
 
+install-binary: release
+	$(Q)echo "Installing $(OUT) binary to $(PREFIX)."
+	$(Q)$(SUDO) install -d "$(PREFIX)"
+	$(Q)$(SUDO) install -m 755 "$(BIN_DIR)/$(OUT)" "$(PREFIX)/$(OUT)"
+	$(Q)echo "Binary installation complete: $(PREFIX)/$(OUT)"
+
 install: release
 	$(Q)echo "Installing $(OUT) to $(PREFIX)."
 	$(Q)echo "$(PREFIX)/$(OUT) status before install:"
@@ -1189,6 +1196,7 @@ help:
 	$(Q)echo "  gdb          Debug with gdb"
 	$(Q)echo "  test-tone    Run the binary with a test tone"
 	$(Q)echo "  test-oneshot Run the binary with one iteration"
+	$(Q)echo "  install-binary Install only the selected release binary to $(PREFIX)"
 	$(Q)echo "  install      Install the binary to $(PREFIX)"
 	$(Q)echo "  debuginstall Install the debug binary to $(PREFIX)"
 	$(Q)echo "  uninstall    Remove the installed binary"

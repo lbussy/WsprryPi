@@ -55,6 +55,30 @@ backend symbols. By default it remains a no-GPIO-transmission profile with
 ancillary LED, amplifier, shutdown-button, band-selector, and libgpiod support.
 Adding `ANCILLARY_GPIO=0` produces the strict I2C-only profile.
 
+### Binary-only installation
+
+The strict profile has an explicit binary-only install path for ordinary Linux
+hosts. It builds the selected release profile and installs only that executable
+to the requested prefix:
+
+```sh
+cd src
+make release BACKENDS=si5351 ANCILLARY_GPIO=0 SUDO=
+make install-binary BACKENDS=si5351 ANCILLARY_GPIO=0 \
+  PREFIX=/usr/local/bin
+```
+
+`install-binary` creates `PREFIX` when needed and installs `wsprrypi` with mode
+`0755`. It does not manage packages, configuration, web assets, systemd units,
+services, device permissions, or hardware. `SUDO=` supports an unprivileged
+user-writable prefix; the default `SUDO=sudo` supports an administrator-approved
+system prefix without running the compiler itself through sudo.
+
+This target is distinct from the existing Raspberry Pi `install` target and
+the full `scripts/install.sh` product installer, both of which retain their
+established service and deployment behavior. Installation alone does not
+qualify a USB I2C adapter, Si5351 hardware, frequency accuracy, or RF output.
+
 ## Reported Ubuntu failure
 
 The first reported error was:
