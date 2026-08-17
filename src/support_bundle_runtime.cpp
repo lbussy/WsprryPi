@@ -3,9 +3,8 @@
 #include "support_bundle_collector_executor.hpp"
 
 #include <array>
-#include <cerrno>
+#include <openssl/rand.h>
 #include <stdexcept>
-#include <sys/random.h>
 #include <utility>
 
 namespace {
@@ -14,22 +13,8 @@ constexpr char kHexDigits[] = "0123456789abcdef";
 
 std::string SupportBundleRuntime::generate_secure_job_id() {
     std::array<unsigned char, 16> random_bytes{};
-    std::size_t offset = 0;
-
-    while (offset < random_bytes.size()) {
-        const ssize_t bytes_read = getrandom(random_bytes.data() + offset,
-                                             random_bytes.size() - offset,
-                                             0);
-        if (bytes_read > 0) {
-            offset += static_cast<std::size_t>(bytes_read);
-            continue;
-        }
-        if (bytes_read == 0) {
-            throw std::runtime_error("secure randomness unavailable");
-        }
-        if (bytes_read < 0 && errno == EINTR) {
-            continue;
-        }
+    if (RAND_bytes(random_bytes.data(),
+                   static_cast<int>(random_bytes.size())) != 1) {
         throw std::runtime_error("secure randomness unavailable");
     }
 

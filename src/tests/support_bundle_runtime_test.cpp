@@ -7,6 +7,7 @@
 #include <memory>
 #include <set>
 #include <fstream>
+#include <vector>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -68,9 +69,13 @@ int main() {
         assert(ids.insert(id).second);
     }
 
-    char template_path[] = "/tmp/wsprrypi-runtime-test.XXXXXX";
-    assert(mkdtemp(template_path) != nullptr);
-    const fs::path temporary_root(template_path);
+    const std::string template_string =
+        (fs::canonical(fs::temp_directory_path()) /
+         "wsprrypi-runtime-test.XXXXXX").string();
+    std::vector<char> template_path(template_string.begin(), template_string.end());
+    template_path.push_back('\0');
+    assert(mkdtemp(template_path.data()) != nullptr);
+    const fs::path temporary_root(template_path.data());
     assert(chmod(temporary_root.c_str(), 0700) == 0);
 
     const auto fake_executor = std::make_shared<FakeExecutor>();
