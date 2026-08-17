@@ -154,8 +154,11 @@ BACKEND_PROFILE_FACTORY_TEST_OUT := backend_profile_factory_test
 MACHINE_POWER_UNAVAILABLE_TEST_OUT := machine_power_control_unavailable_test
 SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_OUT := support_bundle_private_artifact_test
 SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_OUT := support_bundle_age_roundtrip_test
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT := support_bundle_intake_validation_test
 SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
 SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_LDFLAGS = $(filter-out -latomic,$(LDFLAGS))
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_LDFLAGS = $(filter-out -latomic,$(LDFLAGS))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output directories
@@ -396,6 +399,9 @@ SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_DEPS := $(SUPPORT_BUNDLE_PRIVATE_ARTIFACT_T
 SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_SRC := tests/support_bundle_age_roundtrip_test.cpp
 SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_age_roundtrip_test.o
 SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_DEPS := $(SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_private_artifact.o
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_SRC := tests/support_bundle_intake_validation_test.cpp
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_intake_validation_test.o
+SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_DEPS := $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_intake_validation.o
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Dependency includes
@@ -879,6 +885,18 @@ $(BIN_DIR)/$(SUPPORT_BUNDLE_AGE_ROUNDTRIP_TEST_OUT): $(SUPPORT_BUNDLE_AGE_ROUNDT
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_FLAGS) $^ -o $@ $(SUPPORT_BUNDLE_PRIVATE_ARTIFACT_TEST_LDFLAGS)
 
+$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OBJ): $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_SRC)
+	$(Q)mkdir -p $(dir $@) $(DEP_DIR)/tests
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) -MF $(DEP_DIR)/tests/support_bundle_intake_validation_test.d -c $< -o $@
+
+$(OBJ_DIR_DEBUG)/./support_bundle_intake_validation.o: support_bundle_intake_validation.cpp
+	$(Q)mkdir -p $(dir $@) $(DEP_DIR)/.
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) -MF $(DEP_DIR)/support_bundle_intake_validation.d -c $< -o $@
+
+$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT): $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_FLAGS) $^ -o $@ $(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_LDFLAGS)
+
 ifeq ($(GPIOD_HAS_V2),1)
 $(GPIO_LOOPBACK_TEST_OBJ): $(GPIO_LOOPBACK_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
@@ -936,7 +954,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 # Phony targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: clean debug test test-tone test-oneshot semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
+.PHONY: clean debug test test-tone test-oneshot semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test installer-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test support-bundle-download-preparation-test support-bundle-startup-cleanup-test support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test support-bundle-intake-validation-test build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
 .PHONY: install-binary
 DEBUG: debug
@@ -1074,6 +1092,9 @@ support-bundle-age-roundtrip-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_AGE_ROUNDTRIP_TES
 
 support-bundle-key-provisioning-test:
 	$(Q)WSPRRYPI_REAL_AGE_KEYGEN=/usr/bin/age-keygen python3 ../scripts/tests/support_bundle_key_provisioning_test.py
+
+support-bundle-intake-validation-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT)
 
 build-dependency-regression-test: $(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
 	$(Q)echo "Checking generated header dependency discovery."

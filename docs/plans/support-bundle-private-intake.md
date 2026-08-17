@@ -20,6 +20,8 @@ Debian packaged-age qualification: [Issue 414 Slice 5](../research/issue-414-sli
 
 Maintainer key-provisioning tooling: [Issue 414 Slice 6](../research/issue-414-slice-6-key-provisioning.md)
 
+Offline signed-intake validation: [Issue 414 Slice 7](../research/issue-414-slice-7-intake-validation.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

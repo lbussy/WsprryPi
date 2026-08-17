@@ -147,6 +147,7 @@ jobs:
         run: |
           make support-bundle-private-artifact-test support-bundle-age-roundtrip-test SUDO=
           make support-bundle-key-provisioning-test SUDO=
+          make support-bundle-intake-validation-test SUDO=
 
       - name: Run transmitter component contract regressions
         working-directory: src/WSPR-Transmitter/src
