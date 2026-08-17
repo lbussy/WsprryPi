@@ -401,9 +401,22 @@ CXX := g++
 # - Do not override an explicit -j passed to make
 # ─────────────────────────────────────────────────────────────────────────────
 
+HOST_OS := $(shell uname -s 2>/dev/null)
+
+# Keep Linux's memory-aware sizing policy, but do not run Linux-only probes on
+# other hosts. Darwin supplies its logical CPU count through sysctl; unknown
+# hosts use the POSIX getconf interface when available. All non-Linux paths
+# fall back to one job if processor discovery is unavailable or invalid.
+ifeq ($(HOST_OS),Linux)
 MEM_KB       := $(shell awk '/^MemTotal:/ {print $$2}' /proc/meminfo)
 MEM_AVAIL_KB := $(shell awk '/^MemAvailable:/ {print $$2}' /proc/meminfo)
 SWAP_KB      := $(shell awk '/^SwapTotal:/ {print $$2}' /proc/meminfo)
+NPROCS       := $(shell n=$$(nproc 2>/dev/null); if [ "$$n" -ge 1 ] 2>/dev/null; then echo "$$n"; else echo 1; fi)
+else ifeq ($(HOST_OS),Darwin)
+NPROCS       := $(shell n=$$(sysctl -n hw.logicalcpu 2>/dev/null); if [ "$$n" -ge 1 ] 2>/dev/null; then echo "$$n"; else echo 1; fi)
+else
+NPROCS       := $(shell n=$$(getconf _NPROCESSORS_ONLN 2>/dev/null); if [ "$$n" -ge 1 ] 2>/dev/null; then echo "$$n"; else echo 1; fi)
+endif
 
 ONE_POINT_FIVE_GIB_KB   := $(shell expr 1536 \* 1024)
 THREE_POINT_FIVE_GIB_KB := $(shell expr 3584 \* 1024)
@@ -412,10 +425,9 @@ THREE_POINT_FIVE_GIB_KB := $(shell expr 3584 \* 1024)
 # 1280 MiB is a safer default for C++ builds when a desktop is running.
 MIN_MEM_AVAIL_KB ?= $(shell expr 1280 \* 1024)
 
-NPROCS := $(shell nproc)
-
 JOBS_COMPUTED :=
 
+ifeq ($(HOST_OS),Linux)
 ifeq ($(shell [ $(MEM_AVAIL_KB) -lt $(MIN_MEM_AVAIL_KB) ] && echo yes),yes)
 	JOBS_COMPUTED := 1
 else ifeq ($(shell [ $(MEM_KB) -lt $(ONE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
@@ -424,6 +436,9 @@ else ifeq ($(shell [ $(SWAP_KB) -eq 0 ] && [ $(MEM_KB) -lt $(THREE_POINT_FIVE_GI
 	JOBS_COMPUTED := 1
 else ifeq ($(shell [ $(MEM_KB) -lt $(THREE_POINT_FIVE_GIB_KB) ] && echo yes),yes)
 	JOBS_COMPUTED := $(shell j=$$(expr $(NPROCS) / 2); [ $$j -lt 1 ] && echo 1 || echo $$j)
+else
+	JOBS_COMPUTED := $(NPROCS)
+endif
 else
 	JOBS_COMPUTED := $(NPROCS)
 endif
