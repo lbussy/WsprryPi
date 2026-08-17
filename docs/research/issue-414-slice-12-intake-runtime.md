@@ -63,8 +63,9 @@ callback and performs no network, service, hardware, or RF activity.
 
 ## Remaining work
 
-- Approve and publish production signing public keys and bundle-encryption
-  recipient metadata through a separately reviewed maintainer workflow.
+- Use the separately reviewed Slice 6 and Slice 13 maintainer tools to provision,
+  back up, recovery-test, approve, and publish the two distinct production
+  public identities.
 - Compile the approved public metadata into versioned application data.
 - Activate this runtime from the support workflow and translate its typed
   outcomes for later UI consumption.
