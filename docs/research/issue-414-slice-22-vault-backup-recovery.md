@@ -50,13 +50,13 @@ single-link mode `0400` files.
 ## Publication boundary
 
 The identities are now backup-qualified and recovery-qualified. This does not
-publish or activate them. Production public metadata remains only in the
-approved external staging directory. The next separately reviewed work is to
-compile and review the production trust header, create and configure the public
-`WsprryPi/support-intake` repository, prepare/sign/publish the first manifest,
-verify its public bytes, and only then consider runtime activation.
+publish or activate them. Slice 23 subsequently versions the reviewed public
+metadata and its deterministic production trust header. The next separately
+reviewed work is to create and configure the public `WsprryPi/support-intake`
+repository, prepare/sign/publish the first manifest, verify its public bytes,
+and only then consider runtime activation.
 
-No private identity, restored copy, private hash, attachment, recipient, local
-absolute path, credential, or generated production metadata is committed.
-No GitHub/Dropbox administration, application runtime, installer, HTTP, UI,
-service, Pi, hardware, or RF state changed.
+At completion of Slice 22, no private identity, restored copy, private hash,
+attachment, recipient, local absolute path, credential, or generated production
+metadata had been committed. No GitHub/Dropbox administration, application
+runtime, installer, HTTP, UI, service, Pi, hardware, or RF state changed.
