@@ -144,7 +144,9 @@ jobs:
 
       - name: Qualify support-bundle age round trip
         working-directory: src
-        run: make support-bundle-private-artifact-test support-bundle-age-roundtrip-test SUDO=
+        run: |
+          make support-bundle-private-artifact-test support-bundle-age-roundtrip-test SUDO=
+          make support-bundle-key-provisioning-test SUDO=
 
       - name: Run transmitter component contract regressions
         working-directory: src/WSPR-Transmitter/src
