@@ -96,7 +96,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential ca-certificates chromium cmake git libgpiod-dev libssl-dev \
+            age build-essential ca-certificates chromium cmake git libgpiod-dev libssl-dev \
             libsystemd-dev nodejs npm php-cli pkg-config python3 strace
 
       - name: Check out source
@@ -141,6 +141,10 @@ jobs:
           strace -f -e trace=openat,open \
             -o /tmp/wsprrypi-rp1.strace \
             make rp1-gpclk-transmit-backend-test SUDO=
+
+      - name: Qualify support-bundle age round trip
+        working-directory: src
+        run: make support-bundle-private-artifact-test support-bundle-age-roundtrip-test SUDO=
 
       - name: Run transmitter component contract regressions
         working-directory: src/WSPR-Transmitter/src

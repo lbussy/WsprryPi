@@ -16,6 +16,8 @@ Candidate manifest and lifecycle: [Issue 414 Slice 3](../research/issue-414-slic
 
 Readable review and finalization: [Issue 414 Slice 4](../research/issue-414-slice-4-review-finalization.md)
 
+Debian packaged-age qualification: [Issue 414 Slice 5](../research/issue-414-slice-5-age-qualification.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
