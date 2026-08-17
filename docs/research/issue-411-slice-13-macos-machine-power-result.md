@@ -68,3 +68,7 @@ operation was executed.
 No reboot, power-off, installation, service operation, GPIO, I2C, transmitter,
 test tone, or RF activity occurred. This is software portability evidence only;
 CP2112 and physical Si5351 qualification remain pending adapter availability.
+
+The same platform behavior, qualification boundary, and next diagnostic were
+posted to [Issue 411](https://github.com/WsprryPi/WsprryPi/issues/411#issuecomment-5317894096).
+The issue remained open and its status was not changed.
