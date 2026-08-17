@@ -50,10 +50,10 @@ directories and run in Debian non-hardware CI.
 
 ## Remaining boundary
 
-The maintainer must still choose and approve actual private roots, public-output
-locations, production key IDs, and password-vault handling. Only then may this
-preflight be run against those read-only inputs and the two production
-provisioners be separately authorized.
+Slice 21 records the approved layout, successful preflight, production identity
+generation, and public/private correspondence. Password-vault backup and
+independent restored-key recovery testing remain mandatory before publication
+or activation.
 
 No production key, metadata, vault item, repository, credential, network,
 Dropbox, runtime, installer, HTTP, UI, service, Pi, hardware, or RF state changed.
