@@ -64,6 +64,8 @@ Local production publication candidate: [Issue 414 Slice 27](../research/issue-4
 
 Production publication push: [Issue 414 Slice 28](../research/issue-414-slice-28-publication-push.md)
 
+Production public-byte verification: [Issue 414 Slice 29](../research/issue-414-slice-29-publication-verification.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.

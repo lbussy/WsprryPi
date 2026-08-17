@@ -67,12 +67,11 @@ the system keyring before the external write; no credential value was exposed.
 
 ## Remaining boundary
 
-This slice intentionally did not retrieve `intake.json` or `intake.json.sig`
-from public raw endpoints. The next separately reviewed Slice 18 operation must
-retrieve both exact public files through the qualified HTTPS boundary, compare
-them byte-for-byte with the authenticated source, verify the signature and
-manifest digest, and confirm generation 1 before publication is considered
-end-to-end verified.
+Slice 29 subsequently retrieved both exact public files through the qualified
+HTTPS boundary, compared them byte-for-byte with the authenticated source, and
+independently verified the signature, digest, generation, and candidate commit.
+The publication is now end-to-end verified. Production trust activation remains
+a separately reviewed later boundary.
 
 Application trust activation, upload orchestration, UI, installer, services,
 Raspberry Pi, GPIO, transmitter, and RF activity remain unchanged and deferred.
