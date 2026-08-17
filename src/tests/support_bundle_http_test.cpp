@@ -1,6 +1,7 @@
 #include "support_bundle_http.hpp"
 
 #include "json.hpp"
+#include "support_bundle_encryption_production.hpp"
 
 #include <atomic>
 #include <cassert>
@@ -13,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <sys/stat.h>
@@ -210,11 +212,21 @@ void wait_for_state(httplib::Client &client,
 }
 }  // namespace
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc > 1 && std::string(argv[1]) == "--encrypt") {
+        std::ifstream input(argv[6], std::ios::binary);
+        std::ofstream output(argv[5], std::ios::binary);
+        output << "encrypted:" << input.rdbuf();
+        output.close();
+        return chmod(argv[5], 0600) == 0 ? 0 : 1;
+    }
     char template_path[] = "/tmp/wsprrypi-support-bundle-http-test.XXXXXX";
     assert(mkdtemp(template_path) != nullptr);
     const fs::path storage_root(template_path);
     assert(chmod(storage_root.c_str(), 0700) == 0);
+    const auto fake_age = storage_root / "fake-age";
+    assert(fs::copy_file(fs::canonical(argv[0]), fake_age));
+    assert(chmod(fake_age.c_str(), 0500) == 0);
 
     const auto executor = std::make_shared<FakeExecutor>();
     const auto provider_calls = std::make_shared<int>(0);
@@ -224,7 +236,7 @@ int main() {
     SupportBundleIntakeProductionResult intake_result;
     int id_index = 0;
     SupportBundleJobManager manager(
-        executor, [&] { return job_id(static_cast<char>('a' + id_index++)); }, storage_root,
+        executor, [&] { return job_id(std::string_view("abcdef0123456789")[id_index++]); }, storage_root,
         [fail_cleanup](const fs::path &root, const std::string &id) {
             if (fail_cleanup->load()) {
                 return SupportBundleJobDirectoryRemovalResult{
@@ -351,6 +363,29 @@ int main() {
     assert(intake_options.status == 204 && intake_calls == calls_before_rejection);
     assert_restrictive(intake_options);
     assert(intake_options.get_header_value("Cache-Control") == "no-store");
+
+    const int handoff_start = intake_calls;
+    const std::string unknown_handoff_path =
+        "/api/support-bundles/" + job_id('z') + "/handoff";
+    const auto unavailable_handoff =
+        require_response(client.Get(unknown_handoff_path, headers));
+    assert(unavailable_handoff.status == 409 && intake_calls == handoff_start);
+    assert(!unavailable_handoff.has_header("Location"));
+    assert(unavailable_handoff.get_header_value("Referrer-Policy") == "no-referrer");
+
+    httplib::Request handoff_with_body;
+    handoff_with_body.method = "GET";
+    handoff_with_body.path = unknown_handoff_path;
+    handoff_with_body.headers = headers;
+    handoff_with_body.body = "unexpected";
+    const auto body_rejected = require_response(client.send(handoff_with_body));
+    assert(body_rejected.status == 400 && intake_calls == handoff_start);
+    assert(body_rejected.get_header_value("Referrer-Policy") == "no-referrer");
+
+    const auto guarded_handoff =
+        require_response(client.Get(unknown_handoff_path, foreign_intake));
+    assert(guarded_handoff.status == 403 && intake_calls == handoff_start);
+    assert(guarded_handoff.get_header_value("Referrer-Policy") == "no-referrer");
     *provider_calls = 0;
 
     const auto created = require_response(client.Post(
@@ -559,6 +594,55 @@ int main() {
                  &finalized_info) == 0);
     assert((finalized_info.st_mode & 0777) == 0400);
     assert(get_download(client, headers, private_id).status == 200);
+
+    const auto encrypted = manager.encrypt_candidate(
+        private_id, std::string(kSupportBundleProductionKeyId),
+        std::string(kSupportBundleProductionAgeRecipient), fake_age);
+    assert(encrypted.status == SupportBundleEncryptionStatus::encrypted);
+    const auto encrypted_download = require_response(client.Get(
+        "/api/support-bundles/" + private_id + "/encrypted", headers));
+    assert(encrypted_download.status == 200 && !encrypted_download.body.empty());
+    assert(manager.receipt_reference(private_id).status ==
+           SupportBundleDownloadReferenceStatus::available);
+
+    intake_result = {};
+    intake_result.status = SupportBundleIntakeProductionStatus::active;
+    intake_result.generation = 9;
+    intake_result.expires_at = "2026-09-03T00:00:00Z";
+    intake_result.minimum_upload_version = "1.2.3";
+    intake_result.signing_key_id = "wsprrypi-intake-2026-01";
+    intake_result.bundle_key_id = "wsprrypi-bundle-2026-01";
+    intake_result.request_url = "https://www.dropbox.com/request/fresh-capability_9";
+    const int successful_handoff_start = intake_calls;
+    const std::string handoff_path =
+        "/api/support-bundles/" + private_id + "/handoff";
+    const auto handoff = require_response(client.Get(handoff_path, headers));
+    assert(handoff.status == 302 && intake_calls == successful_handoff_start + 1);
+    assert(handoff.get_header_value("Location") == *intake_result.request_url);
+    assert(handoff.get_header_value("Cache-Control") == "no-store");
+    assert(handoff.get_header_value("X-Content-Type-Options") == "nosniff");
+    assert(handoff.get_header_value("Referrer-Policy") == "no-referrer");
+    assert_restrictive(handoff);
+
+    intake_result.request_url = "https://www.dropbox.com/request/leak-me?unsafe=1";
+    const auto malformed_handoff = require_response(client.Get(handoff_path, headers));
+    assert(malformed_handoff.status == 409 && !malformed_handoff.has_header("Location"));
+    assert(malformed_handoff.body.find("leak-me") == std::string::npos);
+
+    intake_result = {};
+    intake_result.status = SupportBundleIntakeProductionStatus::disabled;
+    intake_result.generation = 10;
+    intake_result.expires_at = "2026-09-04T00:00:00Z";
+    intake_result.signing_key_id = "wsprrypi-intake-2026-01";
+    intake_result.bundle_key_id = "wsprrypi-bundle-2026-01";
+    const auto disabled_handoff = require_response(client.Get(handoff_path, headers));
+    assert(disabled_handoff.status == 409 && !disabled_handoff.has_header("Location"));
+
+    intake_throw = true;
+    const auto failed_handoff = require_response(client.Get(handoff_path, headers));
+    assert(failed_handoff.status == 503 && !failed_handoff.has_header("Location"));
+    assert(failed_handoff.get_header_value("Referrer-Policy") == "no-referrer");
+    intake_throw = false;
     assert(delete_bundle(client, headers, private_id).status == 204);
 
     executor->reset();

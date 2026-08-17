@@ -260,6 +260,24 @@ require __DIR__ . '/../card_header.php';
                                     <button id="downloadSupportReceiptButton" type="button" class="btn btn-outline-secondary d-none">Download receipt</button>
                                 </div>
                             </section>
+                            <section id="supportDropboxHandoffPanel" class="maintenance-support-intake d-none" aria-labelledby="supportDropboxHandoffTitle">
+                                <div>
+                                    <h3 id="supportDropboxHandoffTitle" class="h6 mb-1">Continue to private Dropbox upload</h3>
+                                    <p class="mb-0">The encrypted support bundle will be uploaded using Dropbox.</p>
+                                </div>
+                                <ul class="maintenance-support-steps mb-0">
+                                    <li>Dropbox will ask for your name and a valid email address. Dropbox and the WsprryPi maintainer may receive this information as upload metadata. A Dropbox account is not required.</li>
+                                    <li>Dropbox cannot read the encrypted bundle contents, but it can observe the filename, file size, upload time, network information, and the name and email address entered on its upload form.</li>
+                                    <li>On the Dropbox page, select the downloaded <code>.age</code> file. Opening the page does not confirm an upload.</li>
+                                </ul>
+                                <div class="form-check">
+                                    <input id="supportDropboxHandoffConsent" class="form-check-input" type="checkbox">
+                                    <label class="form-check-label" for="supportDropboxHandoffConsent">I understand what Dropbox and the maintainer can receive and want to open the private upload page.</label>
+                                </div>
+                                <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                    <a id="openSupportDropboxButton" class="btn btn-primary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true" tabindex="-1">Open private Dropbox upload</a>
+                                </div>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
                                     Start support bundle

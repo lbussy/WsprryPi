@@ -34,6 +34,10 @@ includes(view, "Check private upload availability", "intake resolution must requ
 includes(view, "id=\"supportEncryptionConsent\"", "local encryption must require explicit consent");
 includes(view, "Download encrypted bundle", "encrypted artifact must have an explicit download action");
 includes(view, "Download receipt", "receipt must be separately downloadable");
+includes(view, "id=\"supportDropboxHandoffConsent\"", "Dropbox handoff must require explicit consent");
+includes(view, "A Dropbox account is not required", "Dropbox account disclosure must be visible");
+includes(view, "Dropbox cannot read the encrypted bundle contents", "encrypted-content boundary must be disclosed");
+includes(view, "Opening the page does not confirm an upload", "handoff must not claim upload success");
 assert.ok(!view.includes("id=\"supportIntakeModal\""), "intake availability must not use a modal");
 
 includes(header, "'supportBundlesPath'", "support bundle path must be centrally configured");
@@ -69,6 +73,10 @@ includes(script, "cache: \"no-store\"", "intake checks must not use a browser ca
 includes(script, "parseSupportIntakeResponse", "intake responses must be validated before display");
 includes(script, "clearSupportIntakeState();", "workflow reset must clear intake state");
 assert.ok(!script.includes("requestUrl"), "Dropbox request capability must not be retained in UI state");
+includes(script, "`${SUPPORT_BUNDLES_ENDPOINT.proxyUrl}/${encodeURIComponent(supportBundleJobId)}/handoff`", "handoff must bind the downloaded artifact to the fresh local resolver");
+includes(script, "supportEncryptedDownloaded = true", "handoff must wait for completed ciphertext download");
+includes(script, "supportDropboxHandoffConsent.checked", "handoff navigation must be consent gated");
+assert.ok(!script.includes("secret-capability"), "Dropbox capability must never be embedded in UI code");
 includes(script, "supportBundleDownloadInFlight", "duplicate downloads must be prevented");
 includes(script, "supportBundleCreateInFlight", "duplicate creation must be prevented");
 includes(script, "textContent", "server-derived values must use DOM-safe text assignment");

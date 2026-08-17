@@ -311,6 +311,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const encryptSupportBundleButton = document.getElementById("encryptSupportBundleButton");
     const downloadEncryptedSupportBundleButton = document.getElementById("downloadEncryptedSupportBundleButton");
     const downloadSupportReceiptButton = document.getElementById("downloadSupportReceiptButton");
+    const supportDropboxHandoffPanel = document.getElementById("supportDropboxHandoffPanel");
+    const supportDropboxHandoffConsent = document.getElementById("supportDropboxHandoffConsent");
+    const openSupportDropboxButton = document.getElementById("openSupportDropboxButton");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -324,6 +327,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportBundleFinalized = false;
     let supportIntakeInFlight = false;
     let supportEncryptionInFlight = false;
+    let supportIntakeActive = false;
+    let supportEncryptedDownloaded = false;
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -423,6 +428,11 @@ document.addEventListener("DOMContentLoaded", () => {
             !supportBundleReviewed.checked || supportBundleFinalizeInFlight || supportBundleFinalized;
         checkSupportIntakeButton.disabled = !supportBundleFinalized || supportIntakeInFlight;
         encryptSupportBundleButton.disabled = !supportEncryptionConsent.checked || supportEncryptionInFlight;
+        const handoffEnabled = supportIntakeActive && supportEncryptedDownloaded &&
+            supportDropboxHandoffConsent.checked;
+        openSupportDropboxButton.classList.toggle("disabled", !handoffEnabled);
+        openSupportDropboxButton.setAttribute("aria-disabled", handoffEnabled ? "false" : "true");
+        openSupportDropboxButton.tabIndex = handoffEnabled ? 0 : -1;
     }
 
     function clearSupportIntakeState() {
@@ -441,6 +451,11 @@ document.addEventListener("DOMContentLoaded", () => {
         supportEncryptionMessage.textContent = "Encryption runs locally on this Pi. The readable archive remains available and no file is uploaded.";
         downloadEncryptedSupportBundleButton.classList.add("d-none");
         downloadSupportReceiptButton.classList.add("d-none");
+        supportIntakeActive = false;
+        supportEncryptedDownloaded = false;
+        supportDropboxHandoffPanel.classList.add("d-none");
+        supportDropboxHandoffConsent.checked = false;
+        openSupportDropboxButton.removeAttribute("href");
     }
 
     function hasExactKeys(value, required, optional = []) {
@@ -562,22 +577,38 @@ document.addEventListener("DOMContentLoaded", () => {
         supportIntakeUpgradeLink.classList.add("d-none");
         checkSupportIntakeButton.textContent = "Check again";
         if (result.status === "active") {
+            supportIntakeActive = true;
+            if (supportEncryptedDownloaded) openSupportDropboxButton.href =
+                `${SUPPORT_BUNDLES_ENDPOINT.proxyUrl}/${encodeURIComponent(supportBundleJobId)}/handoff`;
             supportIntakeMessage.textContent = `Private upload is available until ${formatIntakeExpiry(result.expiresAt)}. No file has been uploaded.`;
             supportEncryptionPanel.classList.remove("d-none");
+            supportDropboxHandoffPanel.classList.toggle("d-none", !supportEncryptedDownloaded);
         } else if (result.status === "disabled") {
+            supportIntakeActive = false;
             supportEncryptionPanel.classList.add("d-none");
+            supportDropboxHandoffPanel.classList.add("d-none");
+            supportDropboxHandoffConsent.checked = false;
+            openSupportDropboxButton.removeAttribute("href");
             supportEncryptionConsent.checked = false;
             setSupportBundleActions();
             supportIntakeMessage.textContent = `Private upload is temporarily disabled. This configuration expires ${formatIntakeExpiry(result.expiresAt)}. Your local bundle is unchanged.`;
         } else if (result.status === "upgrade_required") {
+            supportIntakeActive = false;
             supportEncryptionPanel.classList.add("d-none");
+            supportDropboxHandoffPanel.classList.add("d-none");
+            supportDropboxHandoffConsent.checked = false;
+            openSupportDropboxButton.removeAttribute("href");
             supportEncryptionConsent.checked = false;
             setSupportBundleActions();
             supportIntakeMessage.textContent = `Upgrade to WsprryPi ${result.minimumVersion} or later before uploading. Your local bundle is unchanged.`;
             supportIntakeUpgradeLink.href = result.releaseUrl;
             supportIntakeUpgradeLink.classList.remove("d-none");
         } else {
+            supportIntakeActive = false;
             supportEncryptionPanel.classList.add("d-none");
+            supportDropboxHandoffPanel.classList.add("d-none");
+            supportDropboxHandoffConsent.checked = false;
+            openSupportDropboxButton.removeAttribute("href");
             supportEncryptionConsent.checked = false;
             setSupportBundleActions();
             supportIntakeMessage.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
@@ -618,8 +649,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!blob.size) throw new Error("empty download");
             invokeBrowserDownload(blob, safePrivateArtifactFilename(response.headers.get("Content-Disposition"), filename));
             if (kind === "encrypted") {
+                supportEncryptedDownloaded = true;
+                openSupportDropboxButton.href =
+                    `${SUPPORT_BUNDLES_ENDPOINT.proxyUrl}/${encodeURIComponent(supportBundleJobId)}/handoff`;
                 supportEncryptionMessage.textContent = "Encrypted bundle downloaded. Download its receipt for your records. No file has been uploaded.";
                 downloadSupportReceiptButton.classList.remove("d-none");
+                supportDropboxHandoffPanel.classList.toggle("d-none", !supportIntakeActive);
             } else {
                 supportEncryptionMessage.textContent = "Receipt downloaded. Keep both files together. No file has been uploaded.";
             }
@@ -957,6 +992,11 @@ document.addEventListener("DOMContentLoaded", () => {
     finalizeSupportBundleButton.addEventListener("click", finalizeSupportBundle);
     checkSupportIntakeButton.addEventListener("click", checkSupportIntake);
     supportEncryptionConsent.addEventListener("change", setSupportBundleActions);
+    supportDropboxHandoffConsent.addEventListener("change", setSupportBundleActions);
+    openSupportDropboxButton.addEventListener("click", (event) => {
+        if (!supportIntakeActive || !supportEncryptedDownloaded ||
+            !supportDropboxHandoffConsent.checked) event.preventDefault();
+    });
     encryptSupportBundleButton.addEventListener("click", encryptSupportBundle);
     downloadEncryptedSupportBundleButton.addEventListener("click", () =>
         downloadPrivateArtifact("encrypted", downloadEncryptedSupportBundleButton, "wsprrypi-support-bundle.tar.gz.age"));

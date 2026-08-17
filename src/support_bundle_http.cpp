@@ -12,12 +12,21 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unistd.h>
 
 namespace {
 constexpr std::size_t kMaximumRequestBodyBytes = 8192;
 constexpr std::size_t kDownloadReadBufferBytes = 64 * 1024;
 std::string attachment_disposition(const std::string &basename);
+
+bool valid_dropbox_handoff_url(const std::string &url) {
+    constexpr std::string_view prefix = "https://www.dropbox.com/request/";
+    if (!url.starts_with(prefix) || url.size() == prefix.size()) return false;
+    return url.find_first_of("/?#@", prefix.size()) == std::string::npos &&
+           std::all_of(url.begin() + static_cast<std::ptrdiff_t>(prefix.size()), url.end(),
+                       [](unsigned char c) { return std::isalnum(c) || c == '-' || c == '_'; });
+}
 
 void remove_permissive_cors_headers(httplib::Response &response) {
     response.headers.erase("Access-Control-Allow-Origin");
@@ -44,6 +53,11 @@ void set_no_content(httplib::Response &response) {
 void set_private_headers(httplib::Response &response) {
     response.set_header("Cache-Control", "no-store");
     response.set_header("X-Content-Type-Options", "nosniff");
+}
+
+void set_handoff_headers(httplib::Response &response) {
+    set_private_headers(response);
+    response.set_header("Referrer-Policy", "no-referrer");
 }
 
 void set_private_json(httplib::Response &response,
@@ -329,6 +343,43 @@ void register_support_bundle_http_routes(
         }
         set_no_content(response);
         set_private_headers(response);
+    });
+
+    server.Get(R"(/api/support-bundles/(.*)/handoff)",
+               [&manager, guard, intake_provider](const httplib::Request &request,
+                                                  httplib::Response &response) {
+        if (!guard(request, response)) { set_handoff_headers(response); return; }
+        if (!request.body.empty()) {
+            set_private_json(response, 400, {{"error", "invalid_request"}});
+            set_handoff_headers(response);
+            return;
+        }
+        const std::string id = request.matches.size() > 1 ? request.matches[1].str() : "";
+        if (!SupportBundleJobManager::valid_id(id)) {
+            set_private_json(response, 404, {{"error", "not_found"}});
+            set_handoff_headers(response);
+            return;
+        }
+        if (manager.receipt_reference(id).status != SupportBundleDownloadReferenceStatus::available) {
+            set_private_json(response, 409, {{"error", "encrypted_download_required"}});
+            set_handoff_headers(response);
+            return;
+        }
+        try {
+            const auto result = intake_provider();
+            if (!active_intake_authorizes_encryption(result) ||
+                !valid_dropbox_handoff_url(*result.request_url)) {
+                set_private_json(response, 409, {{"error", "intake_not_active"}});
+                set_handoff_headers(response);
+                return;
+            }
+            remove_permissive_cors_headers(response);
+            response.set_redirect(*result.request_url, 302);
+            set_handoff_headers(response);
+        } catch (...) {
+            set_private_json(response, 503, {{"error", "intake_unavailable"}});
+            set_handoff_headers(response);
+        }
     });
 
     server.Post("/api/support-bundles", [&manager, guard](const httplib::Request &request,

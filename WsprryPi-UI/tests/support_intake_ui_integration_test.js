@@ -214,6 +214,20 @@ async function browserTest() {
     field("downloadEncryptedSupportBundleButton").click();
     await wait(() => !field("downloadSupportReceiptButton").classList.contains("d-none"),
         "receipt after encrypted download");
+    ok(!field("supportDropboxHandoffPanel").classList.contains("d-none"),
+        "completed encrypted download reveals Dropbox disclosure");
+    equal(field("openSupportDropboxButton").getAttribute("href"),
+        "/api/support-bundles/job-32/handoff",
+        "handoff link exposes only the local fresh resolver");
+    ok(field("openSupportDropboxButton").classList.contains("disabled"),
+        "handoff starts disabled without consent");
+    const blockedHandoff = new MouseEvent("click", { bubbles: true, cancelable: true });
+    equal(field("openSupportDropboxButton").dispatchEvent(blockedHandoff), false,
+        "handoff click is blocked before consent");
+    field("supportDropboxHandoffConsent").checked = true;
+    field("supportDropboxHandoffConsent").dispatchEvent(new Event("change", { bubbles: true }));
+    ok(!field("openSupportDropboxButton").classList.contains("disabled"),
+        "explicit disclosure consent enables handoff");
     field("downloadSupportReceiptButton").click();
     await wait(() => field("supportEncryptionMessage").textContent.includes("Receipt downloaded"),
         "receipt download state");
@@ -230,6 +244,11 @@ async function browserTest() {
     await wait(() => field("supportIntakeMessage").textContent.includes("temporarily disabled"), "disabled state");
     ok(field("supportEncryptionPanel").classList.contains("d-none"),
         "non-active intake must revoke encryption authorization");
+    ok(field("supportDropboxHandoffPanel").classList.contains("d-none") &&
+        !field("supportDropboxHandoffConsent").checked,
+        "non-active intake must revoke handoff authorization");
+    ok(!field("openSupportDropboxButton").hasAttribute("href"),
+        "non-active intake must remove the local handoff target");
 
     intakeResponse = response({
         status: "upgrade_required",
@@ -296,6 +315,12 @@ async function capture(client, outputPath, width, height, state) {
                 document.getElementById("supportEncryptionConsent").disabled = false;
                 document.getElementById("encryptSupportBundleButton").classList.remove("d-none");
                 document.getElementById("encryptSupportBundleButton").disabled = false;
+                document.getElementById("supportDropboxHandoffPanel").classList.remove("d-none");
+                document.getElementById("supportDropboxHandoffConsent").checked = true;
+                const handoff = document.getElementById("openSupportDropboxButton");
+                handoff.classList.remove("disabled");
+                handoff.setAttribute("aria-disabled", "false");
+                handoff.tabIndex = 0;
             } else if (state === "upgrade") {
                 document.getElementById("supportEncryptionPanel").classList.add("d-none");
                 message.textContent = "Upgrade to WsprryPi 1.4.0 or later before uploading. Your local bundle is unchanged.";
@@ -311,7 +336,8 @@ async function capture(client, outputPath, width, height, state) {
                 message.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
                 button.textContent = "Try again";
             }
-            document.getElementById("supportIntakePanel").scrollIntoView({ block: "center" });
+            document.getElementById(state === "active" ? "supportDropboxHandoffPanel" :
+                "supportIntakePanel").scrollIntoView({ block: "center" });
         })()`,
     });
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -362,6 +388,8 @@ async function main() {
             fs.mkdirSync(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR, { recursive: true });
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-intake-active-desktop.png"), 1440, 1100, "active");
+            await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
+                "support-intake-handoff-mobile.png"), 390, 844, "active");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-intake-upgrade-desktop.png"), 1440, 1100, "upgrade");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
