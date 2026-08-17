@@ -65,15 +65,15 @@ compiled trust/runtime pair and continues to reject every other production call
 site. A repository-wide source scan confirms nothing calls
 `resolve_support_bundle_intake_production()`.
 
-The complete macOS application build was attempted. Its first attempt stopped
-on the pre-existing GCC-only `-fmax-errors=10` flag under clang. With that flag
-removed on the command line, the build advanced but stopped in the existing
-Linux-specific `support_bundle_runtime.cpp` because macOS does not declare
-`getrandom`. The new adapter's release object compiled successfully. Debian CI
-remains the canonical ordinary non-hardware build environment.
-
-Known macOS Make probes for Linux `/proc/meminfo` and `nproc` also emitted their
-existing warnings without affecting focused tests.
+The complete macOS application build attempt originally stopped on the
+pre-existing GCC-only `-fmax-errors=10` flag under clang and then on the
+Linux-only `getrandom` runtime dependency. The subsequent
+[integration rebase and macOS portability qualification](issue-414-integration-rebase-macos-portability.md)
+resolved and qualified both limitations after rebasing this work onto current
+`devel`. The complete application build then reached a separate existing clang
+warning in the reusable LCBLog component; that component issue remains outside
+this slice. Debian remains the canonical ordinary non-hardware build
+environment.
 
 ## Remaining boundary
 
