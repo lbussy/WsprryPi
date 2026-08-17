@@ -41,6 +41,10 @@ includes(view, "Opening the page does not confirm an upload", "handoff must not 
 includes(view, "id=\"supportUploadReportedComplete\"", "upload reporting must require a distinct assertion");
 includes(view, "Finished uploading", "the assertion must name Dropbox's observed success message");
 includes(view, "not upload success or maintainer confirmation", "page opening must remain non-confirming");
+includes(view, "id=\"supportGithubContinuationPanel\"", "post-report GitHub continuation must use an inline panel");
+includes(view, "GitHub sign-in is required", "existing-issue continuation must disclose authentication");
+includes(view, "does not include diagnostics", "new-issue continuation must warn against public disclosure");
+includes(view, "id=\"supportGithubComment\"", "existing issue must provide a reviewable public comment");
 assert.ok(!view.includes("id=\"supportIntakeModal\""), "intake availability must not use a modal");
 
 includes(header, "'supportBundlesPath'", "support bundle path must be centrally configured");
@@ -83,6 +87,13 @@ assert.ok(!script.includes("secret-capability"), "Dropbox capability must never 
 includes(script, "/upload-reported-complete`", "user completion assertion must use the guarded report endpoint");
 includes(script, "You reported that Dropbox displayed upload success", "completion copy must identify the user as its source");
 includes(script, "This is not maintainer confirmation", "completion copy must preserve confirmation boundaries");
+includes(script, "showSupportGithubContinuation();", "GitHub continuation must follow the accepted upload report");
+includes(script, "https://github.com/WsprryPi/WsprryPi/issues/new?", "new issues must use the fixed WsprryPi repository");
+includes(script, "https://github.com/WsprryPi/WsprryPi/issues/${supportExistingIssueNumber}", "existing issues must use the fixed WsprryPi repository");
+includes(script, "navigator.clipboard.writeText", "prepared comments must support explicit clipboard copy");
+includes(script, "The comment is selected so you can copy it manually", "clipboard failure must have a manual recovery");
+assert.ok(!script.includes("api.github.com"), "the UI must not call the GitHub API");
+assert.ok(!script.includes("supportBundleProblemDescription.value)}`"), "private description must not be interpolated into a public URL");
 assert.ok(!script.includes("upload_confirmed"), "the application must not claim maintainer confirmation");
 includes(script, "supportBundleDownloadInFlight", "duplicate downloads must be prevented");
 includes(script, "supportBundleCreateInFlight", "duplicate creation must be prevented");

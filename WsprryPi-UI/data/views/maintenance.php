@@ -291,6 +291,28 @@ require __DIR__ . '/../card_header.php';
                                     <button id="reportSupportUploadButton" type="button" class="btn btn-primary" disabled>Record my upload report</button>
                                 </div>
                             </section>
+                            <section id="supportGithubContinuationPanel" class="maintenance-support-intake d-none" aria-labelledby="supportGithubContinuationTitle">
+                                <div>
+                                    <h3 id="supportGithubContinuationTitle" class="h6 mb-1">Continue your support request</h3>
+                                    <p id="supportGithubContinuationMessage" class="mb-0" role="status" aria-live="polite" aria-atomic="true"></p>
+                                </div>
+                                <div id="supportGithubExistingIssueActions" class="d-none">
+                                    <label class="form-label" for="supportGithubComment">Public issue comment</label>
+                                    <textarea id="supportGithubComment" class="form-control" rows="5" readonly aria-describedby="supportGithubCommentHelp"></textarea>
+                                    <div id="supportGithubCommentHelp" class="form-text">Review this text, copy it, open the issue, and post it yourself. GitHub sign-in is required.</div>
+                                    <div class="maintenance-action maintenance-action--start maintenance-action--wrap mt-3">
+                                        <button id="copySupportGithubCommentButton" type="button" class="btn btn-outline-primary">Copy public comment</button>
+                                        <a id="openSupportGithubIssueButton" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Open existing GitHub issue</a>
+                                    </div>
+                                </div>
+                                <div id="supportGithubNewIssueActions" class="d-none">
+                                    <p class="mb-0">The prefilled issue contains only the case ID and safe instructions. Review it and add a public problem summary that does not include diagnostics, transfer links, email addresses, callsigns, locators, or network details.</p>
+                                    <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                                        <a id="createSupportGithubIssueButton" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Create prefilled GitHub issue</a>
+                                    </div>
+                                </div>
+                                <p id="supportGithubCopyStatus" class="form-text mb-0" role="status" aria-live="polite" aria-atomic="true"></p>
+                            </section>
                             <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
                                 <button id="createSupportBundleButton" type="button" class="btn btn-primary">
                                     Start support bundle

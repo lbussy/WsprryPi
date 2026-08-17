@@ -177,6 +177,11 @@ async function browserTest() {
     URL.createObjectURL = () => "blob:test";
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
+    let copiedText = "";
+    Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: async (value) => { copiedText = value; } }
+    });
 
     equal(calls.length, 0, "page load must not resolve intake");
     ok(field("supportIntakePanel").classList.contains("d-none"), "intake action starts hidden");
@@ -259,6 +264,25 @@ async function browserTest() {
     ok(field("supportUploadReportedComplete").disabled &&
         field("reportSupportUploadButton").classList.contains("d-none"),
         "completed report is idempotently settled in the UI");
+    ok(!field("supportGithubContinuationPanel").classList.contains("d-none"),
+        "accepted upload report reveals the GitHub continuation");
+    equal(field("openSupportGithubIssueButton").getAttribute("href"),
+        "https://github.com/WsprryPi/WsprryPi/issues/414",
+        "existing issue link is fixed to the validated WsprryPi issue");
+    ok(field("supportGithubComment").value.includes("Case ID: A7K3-M9QF-X2DP") &&
+        !field("supportGithubComment").value.includes("secret-capability"),
+        "prepared public comment contains correlation but no transfer capability");
+    field("copySupportGithubCommentButton").click();
+    await wait(() => field("supportGithubCopyStatus").textContent.includes("copied"),
+        "clipboard success status");
+    equal(copiedText, field("supportGithubComment").value,
+        "clipboard receives exactly the reviewed public comment");
+    navigator.clipboard.writeText = async () => { throw new Error("denied"); };
+    field("copySupportGithubCommentButton").click();
+    await wait(() => field("supportGithubCopyStatus").textContent.includes("selected"),
+        "clipboard failure recovery");
+    equal(document.activeElement, field("supportGithubComment"),
+        "clipboard failure focuses the selectable public comment");
     field("downloadSupportReceiptButton").click();
     await wait(() => field("supportEncryptionMessage").textContent.includes("Receipt downloaded"),
         "receipt download state");
@@ -320,16 +344,95 @@ async function browserTest() {
     ok(field("supportUploadReportPanel").classList.contains("d-none") &&
         !field("supportUploadReportedComplete").checked,
         "delete resets the upload-report workflow");
+    ok(field("supportGithubContinuationPanel").classList.contains("d-none") &&
+        !field("openSupportGithubIssueButton").hasAttribute("href") &&
+        !field("createSupportGithubIssueButton").hasAttribute("href"),
+        "delete clears every GitHub continuation target");
 
-    return { scenarios: 14, intakeCalls: 6, assertions: "passed" };
+    async function completeAdditionalWorkflow(kind, description, contact) {
+        intakeResponse = response({
+            status: "active",
+            generation: 34,
+            expires_at: "2026-10-03T00:00:00Z",
+            minimum_upload_version: "1.3.0",
+            signing_key_id: "wsprrypi-intake-2026-01",
+            bundle_key_id: "wsprrypi-bundle-2026-01",
+            request_url: "https://www.dropbox.com/request/secret-capability"
+        });
+        field("createSupportBundleButton").click();
+        const selector = document.querySelector(`input[name="supportBundleContextKind"][value="${kind}"]`);
+        selector.checked = true;
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+        field("supportBundleProblemDescription").value = description;
+        field("supportBundleContact").value = contact;
+        field("confirmCreateSupportBundleButton").click();
+        await wait(() => field("downloadSupportBundleButton").dataset.available === "true",
+            `${kind} candidate ready`, 6000);
+        field("downloadSupportBundleButton").click();
+        await wait(() => !field("supportBundleReviewConsent").classList.contains("d-none"),
+            `${kind} review consent`);
+        field("supportBundleReviewed").checked = true;
+        field("supportBundleReviewed").dispatchEvent(new Event("change", { bubbles: true }));
+        field("finalizeSupportBundleButton").click();
+        await wait(() => !field("supportIntakePanel").classList.contains("d-none"),
+            `${kind} finalized`);
+        field("checkSupportIntakeButton").click();
+        await wait(() => !field("supportEncryptionPanel").classList.contains("d-none"),
+            `${kind} intake active`);
+        field("supportEncryptionConsent").checked = true;
+        field("supportEncryptionConsent").dispatchEvent(new Event("change", { bubbles: true }));
+        field("encryptSupportBundleButton").click();
+        await wait(() => !field("downloadEncryptedSupportBundleButton").classList.contains("d-none"),
+            `${kind} encrypted`);
+        field("downloadEncryptedSupportBundleButton").click();
+        await wait(() => !field("supportDropboxHandoffPanel").classList.contains("d-none"),
+            `${kind} handoff`);
+        field("supportDropboxHandoffConsent").checked = true;
+        field("supportDropboxHandoffConsent").dispatchEvent(new Event("change", { bubbles: true }));
+        field("openSupportDropboxButton").addEventListener("click", (event) => event.preventDefault(),
+            { once: true });
+        field("openSupportDropboxButton").dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }));
+        field("supportUploadReportedComplete").checked = true;
+        field("supportUploadReportedComplete").dispatchEvent(new Event("change", { bubbles: true }));
+        field("reportSupportUploadButton").click();
+        await wait(() => !field("supportGithubContinuationPanel").classList.contains("d-none"),
+            `${kind} continuation`);
+    }
+
+    const privateDescription = "Private callsign K0ABC at EM10 with 192.168.1.5";
+    const privateContact = "private.operator@example.invalid";
+    await completeAdditionalWorkflow("new_github_issue", privateDescription, privateContact);
+    const newIssueHref = field("createSupportGithubIssueButton").href;
+    ok(newIssueHref.startsWith("https://github.com/WsprryPi/WsprryPi/issues/new?"),
+        "new issue uses the fixed WsprryPi issue composer");
+    ok(newIssueHref.includes("A7K3-M9QF-X2DP") &&
+        !newIssueHref.includes("K0ABC") && !newIssueHref.includes("EM10") &&
+        !newIssueHref.includes("192.168.1.5") && !newIssueHref.includes("private.operator"),
+        "new issue URL includes correlation but excludes private context");
+    field("deleteSupportBundleButton").click();
+    await wait(() => field("supportGithubContinuationPanel").classList.contains("d-none"),
+        "new issue workflow reset");
+
+    await completeAdditionalWorkflow("no_github", privateDescription, privateContact);
+    ok(field("supportGithubContinuationMessage").textContent.includes("No public GitHub issue is required") &&
+        field("supportGithubExistingIssueActions").classList.contains("d-none") &&
+        field("supportGithubNewIssueActions").classList.contains("d-none"),
+        "non-GitHub path stays private and offers no public action");
+    field("deleteSupportBundleButton").click();
+    await wait(() => field("supportGithubContinuationPanel").classList.contains("d-none"),
+        "non-GitHub workflow reset");
+
+    return { scenarios: 21, intakeCalls: 8, assertions: "passed" };
 }
 
-async function capture(client, outputPath, width, height, state) {
+async function capture(client, outputPath, width, height, state, theme = "light") {
     await client.send("Emulation.setDeviceMetricsOverride", {
         width, height, deviceScaleFactor: 1, mobile: width < 600,
     });
-    await client.send("Runtime.evaluate", {
+    const rendered = await client.send("Runtime.evaluate", {
         expression: `(() => {
+            document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
             document.getElementById("supportBundleSetup").classList.add("d-none");
             document.getElementById("supportBundleReview").classList.remove("d-none");
             document.getElementById("supportBundleCaseId").textContent = "A7K3-M9QF-X2DP";
@@ -367,6 +470,15 @@ async function capture(client, outputPath, width, height, state) {
                     document.getElementById("supportUploadReportedComplete").checked = true;
                     document.getElementById("supportUploadReportedComplete").disabled = true;
                     document.getElementById("reportSupportUploadButton").classList.add("d-none");
+                    const github = document.getElementById("supportGithubContinuationPanel");
+                    github.classList.remove("d-none");
+                    document.getElementById("supportGithubContinuationMessage").textContent =
+                        "GitHub cannot be updated automatically. Sign in, then post the prepared case note yourself.";
+                    document.getElementById("supportGithubExistingIssueActions").classList.remove("d-none");
+                    document.getElementById("supportGithubComment").value =
+                        "A support bundle was generated and uploaded through the private support channel.\\n\\nCase ID: A7K3-M9QF-X2DP\\n\\nNo diagnostic bundle or transfer link is attached to this public comment.";
+                    document.getElementById("openSupportGithubIssueButton").href =
+                        "https://github.com/WsprryPi/WsprryPi/issues/414";
                 }
             } else if (state === "upgrade") {
                 document.getElementById("supportEncryptionPanel").classList.add("d-none");
@@ -383,11 +495,15 @@ async function capture(client, outputPath, width, height, state) {
                 message.textContent = "Private upload availability could not be checked. Your local bundle is unchanged. Try again.";
                 button.textContent = "Try again";
             }
-            document.getElementById(state === "reported" ? "supportUploadReportPanel" :
+            document.getElementById(state === "reported" ? "supportGithubContinuationPanel" :
                 state === "active" ? "supportDropboxHandoffPanel" :
                     "supportIntakePanel").scrollIntoView({ block: "center" });
         })()`,
     });
+    if (rendered.exceptionDetails) {
+        const detail = rendered.exceptionDetails.exception && rendered.exceptionDetails.exception.description;
+        throw new Error(detail || rendered.exceptionDetails.text || "Screenshot state rendering failed");
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
     const screenshot = await client.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
     fs.writeFileSync(outputPath, screenshot.data, "base64");
@@ -431,7 +547,7 @@ async function main() {
             const detail = result.exceptionDetails.exception && result.exceptionDetails.exception.description;
             throw new Error(detail || result.exceptionDetails.text || "Browser test failed");
         }
-        assert.deepEqual(result.result.value, { scenarios: 14, intakeCalls: 6, assertions: "passed" });
+        assert.deepEqual(result.result.value, { scenarios: 21, intakeCalls: 8, assertions: "passed" });
         if (process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR) {
             fs.mkdirSync(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR, { recursive: true });
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
@@ -442,6 +558,8 @@ async function main() {
                 "support-upload-reported-desktop.png"), 1440, 1100, "reported");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-upload-reported-mobile.png"), 390, 844, "reported");
+            await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
+                "support-upload-reported-dark-desktop.png"), 1440, 1100, "reported", "dark");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,
                 "support-intake-upgrade-desktop.png"), 1440, 1100, "upgrade");
             await capture(client, path.join(process.env.WSPRRYPI_SUPPORT_INTAKE_SCREENSHOT_DIR,

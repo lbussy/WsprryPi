@@ -1601,8 +1601,11 @@ int main()
             maintenance_script_source.find("will expire automatically within 24 hours") != std::string::npos &&
             maintenance_script_source.find("supportBundleDownloadInFlight") != std::string::npos &&
             maintenance_script_source.find("stopSupportBundlePolling();") != std::string::npos &&
-            maintenance_script_source.find("Dropbox") == std::string::npos,
-        "Support Bundle UI must collect issue context inline, keep active I2C probing opt-in, receive the full Blob before review finalization, avoid path claims or uploads, and retain accessible retry-safe status handling");
+            maintenance_source.find("id=\"supportGithubContinuationPanel\"") != std::string::npos &&
+            maintenance_source.find("id=\"supportGithubComment\"") != std::string::npos &&
+            maintenance_script_source.find("showSupportGithubContinuation();") != std::string::npos &&
+            maintenance_script_source.find("api.github.com") == std::string::npos,
+        "Support Bundle UI must collect issue context inline, keep active I2C probing opt-in, receive the full Blob before review finalization, preserve safe browser handoffs, and retain accessible retry-safe status handling");
 
     const std::string maintenance_test_tone_script_source =
         read_repo_text_file("/WsprryPi-UI/data/maintenance.js");

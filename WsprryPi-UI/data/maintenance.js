@@ -318,6 +318,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const supportUploadReportMessage = document.getElementById("supportUploadReportMessage");
     const supportUploadReportedComplete = document.getElementById("supportUploadReportedComplete");
     const reportSupportUploadButton = document.getElementById("reportSupportUploadButton");
+    const supportGithubContinuationPanel = document.getElementById("supportGithubContinuationPanel");
+    const supportGithubContinuationMessage = document.getElementById("supportGithubContinuationMessage");
+    const supportGithubExistingIssueActions = document.getElementById("supportGithubExistingIssueActions");
+    const supportGithubNewIssueActions = document.getElementById("supportGithubNewIssueActions");
+    const supportGithubComment = document.getElementById("supportGithubComment");
+    const supportGithubCopyStatus = document.getElementById("supportGithubCopyStatus");
+    const copySupportGithubCommentButton = document.getElementById("copySupportGithubCommentButton");
+    const openSupportGithubIssueButton = document.getElementById("openSupportGithubIssueButton");
+    const createSupportGithubIssueButton = document.getElementById("createSupportGithubIssueButton");
     const SUPPORT_BUNDLE_POLL_INTERVAL_MS = 2000;
     const SUPPORT_BUNDLE_FILENAME_FALLBACK = "wsprrypi-support-bundle.tar.gz";
     let supportBundleJobId = "";
@@ -335,6 +344,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let supportEncryptedDownloaded = false;
     let supportUploadReportInFlight = false;
     let supportUploadReportComplete = false;
+    let supportContextKind = "";
+    let supportExistingIssueNumber = "";
 
     function supportBundleEndpoint(suffix = "") {
         return createEndpointDefinition(
@@ -471,6 +482,61 @@ document.addEventListener("DOMContentLoaded", () => {
         supportUploadReportedComplete.disabled = false;
         reportSupportUploadButton.classList.remove("d-none");
         supportUploadReportMessage.textContent = "The Dropbox page was requested. Opening it is not upload success or maintainer confirmation.";
+        supportGithubContinuationPanel.classList.add("d-none");
+        supportGithubExistingIssueActions.classList.add("d-none");
+        supportGithubNewIssueActions.classList.add("d-none");
+        supportGithubContinuationMessage.textContent = "";
+        supportGithubComment.value = "";
+        supportGithubCopyStatus.textContent = "";
+        openSupportGithubIssueButton.removeAttribute("href");
+        createSupportGithubIssueButton.removeAttribute("href");
+    }
+
+    function githubPublicComment(caseId) {
+        return `A support bundle was generated and uploaded through the private support channel.\n\nCase ID: ${caseId}\n\nNo diagnostic bundle or transfer link is attached to this public comment.`;
+    }
+
+    function showSupportGithubContinuation() {
+        const caseId = supportBundleCaseId.textContent;
+        supportGithubContinuationPanel.classList.remove("d-none");
+        supportGithubCopyStatus.textContent = "";
+        if (supportContextKind === "existing_github_issue" &&
+            /^[1-9][0-9]{0,9}$/.test(supportExistingIssueNumber)) {
+            supportGithubContinuationMessage.textContent = "GitHub cannot be updated automatically. Sign in, then post the prepared case note yourself.";
+            supportGithubComment.value = githubPublicComment(caseId);
+            openSupportGithubIssueButton.href = `https://github.com/WsprryPi/WsprryPi/issues/${supportExistingIssueNumber}`;
+            supportGithubExistingIssueActions.classList.remove("d-none");
+            supportGithubNewIssueActions.classList.add("d-none");
+            return;
+        }
+        if (supportContextKind === "new_github_issue") {
+            const title = `Support request — case ${caseId}`;
+            const body = `${githubPublicComment(caseId)}\n\nDescribe the problem here without including private diagnostic or contact information.`;
+            const query = new URLSearchParams({ title, body });
+            createSupportGithubIssueButton.href = `https://github.com/WsprryPi/WsprryPi/issues/new?${query.toString()}`;
+            supportGithubContinuationMessage.textContent = "GitHub sign-in is required. The application will open a prefilled issue for you to review and submit.";
+            supportGithubExistingIssueActions.classList.add("d-none");
+            supportGithubNewIssueActions.classList.remove("d-none");
+            return;
+        }
+        supportGithubContinuationMessage.textContent =
+            "No public GitHub issue is required. Your encrypted bundle contains the private problem description and contact information for maintainer follow-up.";
+        supportGithubExistingIssueActions.classList.add("d-none");
+        supportGithubNewIssueActions.classList.add("d-none");
+    }
+
+    async function copySupportGithubComment() {
+        try {
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+                throw new Error("clipboard unavailable");
+            }
+            await navigator.clipboard.writeText(supportGithubComment.value);
+            supportGithubCopyStatus.textContent = "Public comment copied. Open the issue and post it yourself.";
+        } catch {
+            supportGithubComment.focus();
+            supportGithubComment.select();
+            supportGithubCopyStatus.textContent = "Copy was not available. The comment is selected so you can copy it manually.";
+        }
     }
 
     function hasExactKeys(value, required, optional = []) {
@@ -729,6 +795,7 @@ document.addEventListener("DOMContentLoaded", () => {
             reportSupportUploadButton.classList.add("d-none");
             supportUploadReportMessage.textContent =
                 `You reported that Dropbox displayed upload success for case ${supportBundleCaseId.textContent}. This is not maintainer confirmation. The readable archive remains on this Pi until you delete it or it expires.`;
+            showSupportGithubContinuation();
         } catch {
             supportUploadReportMessage.textContent =
                 "Your report was not recorded. Confirm that Dropbox displayed “Finished uploading,” then reopen the private upload page if needed and try again.";
@@ -844,6 +911,9 @@ document.addEventListener("DOMContentLoaded", () => {
             setSupportBundleActions();
             return;
         }
+        supportContextKind = supportContext.kind;
+        supportExistingIssueNumber = supportContext.kind === "existing_github_issue"
+            ? supportBundleIssueNumber.value.trim() : "";
         setSupportBundleActions();
         try {
             const response = await fetchWithEndpointFallback(SUPPORT_BUNDLES_ENDPOINT, {
@@ -897,6 +967,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function resetSupportBundleWorkflow() {
         supportBundleJobId = "";
+        supportContextKind = "";
+        supportExistingIssueNumber = "";
         supportBundleDownloaded = false;
         supportBundleFinalized = false;
         supportBundleReviewed.checked = false;
@@ -1051,6 +1123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     supportUploadReportedComplete.addEventListener("change", setSupportBundleActions);
     reportSupportUploadButton.addEventListener("click", reportSupportUploadComplete);
+    copySupportGithubCommentButton.addEventListener("click", copySupportGithubComment);
     encryptSupportBundleButton.addEventListener("click", encryptSupportBundle);
     downloadEncryptedSupportBundleButton.addEventListener("click", () =>
         downloadPrivateArtifact("encrypted", downloadEncryptedSupportBundleButton, "wsprrypi-support-bundle.tar.gz.age"));

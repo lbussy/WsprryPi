@@ -8,7 +8,7 @@ Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/4
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
-Current implementation slice: [Slice 35 truthful upload reporting](../research/issue-414-slice-35-upload-reporting.md)
+Current implementation slice: [Slice 36 truthful GitHub continuation](../research/issue-414-slice-36-github-continuation.md)
 
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
