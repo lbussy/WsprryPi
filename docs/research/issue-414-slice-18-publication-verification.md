@@ -34,5 +34,5 @@ This slice does not create or contact `WsprryPi/support-intake`, use credentials
 publish production material, activate the application runtime, or exercise a
 service, installer, Raspberry Pi, GPIO, transmitter, or RF path. Production use
 still requires the separately approved repository, backed-up private signing and
-bundle identities, reviewed public trust metadata, an actual Slice 17 push, and
-an explicit invocation of this verification controller.
+bundle identities, Slice 19 compilation of reviewed public trust metadata, an
+actual Slice 17 push, and an explicit invocation of this verification controller.

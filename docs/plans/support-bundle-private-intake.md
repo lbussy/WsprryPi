@@ -44,6 +44,8 @@ Authenticated publication push: [Issue 414 Slice 17](../research/issue-414-slice
 
 Post-publication verification: [Issue 414 Slice 18](../research/issue-414-slice-18-publication-verification.md)
 
+Public trust metadata compilation: [Issue 414 Slice 19](../research/issue-414-slice-19-trust-metadata-compilation.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
