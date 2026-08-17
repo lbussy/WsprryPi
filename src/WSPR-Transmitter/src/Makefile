@@ -37,6 +37,7 @@ SI5351_TRANSITION_TEST_SOURCE := ./si5351_transition_test.cpp
 SIMULATED_BACKEND_TEST_SOURCE := ./simulated_transmit_backend_test.cpp
 SIMULATED_BACKEND_REALTIME_TEST_SOURCE := ./simulated_transmit_backend_realtime_test.cpp
 TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./transmission_controller_contract_test.cpp
+THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE := ./thread_affinity_unavailable_test.cpp
 STARTUP_QUIESCE_TEST_SOURCE := ./startup_quiesce_test.cpp
 SI5351_QUALIFICATION_SOURCE := ./si5351_startup_quiesce_qualification.cpp
 SI5351_QUALIFICATION_MAIN_SOURCE := ./si5351_startup_quiesce_qualification_main.cpp
@@ -50,7 +51,7 @@ GPIO_QUALIFICATION_TEST_SOURCE := ./gpio_startup_quiesce_qualification_test.cc
 SI5351_MIN_DRIVE_SOURCE := ./si5351_min_drive_qualification.cc
 SI5351_MIN_DRIVE_MAIN_SOURCE := ./si5351_min_drive_qualification_main.cc
 SI5351_MIN_DRIVE_TEST_SOURCE := ./si5351_min_drive_qualification_test.cc
-LOCAL_CPP_SOURCES := $(filter-out $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE),$(LOCAL_CPP_SOURCES))
+LOCAL_CPP_SOURCES := $(filter-out $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE),$(LOCAL_CPP_SOURCES))
 
 # Find sources in each sibling component, explicitly skipping demo entry points.
 COMPONENT_C_SOURCES   := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.c'   ! -name 'main.c')
@@ -255,6 +256,12 @@ build/bin/transmission_controller_contract_test: $(TRANSMISSION_CONTROLLER_CONTR
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+build/bin/thread_affinity_unavailable_test: thread_affinity_unavailable_test.cpp thread_affinity.cpp thread_affinity.hpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) -std=c++$(CXXVER) -Wall -Wextra -Werror \
+		-DWSPRRYPI_FORCE_UNAVAILABLE_AFFINITY_FOR_TEST \
+		thread_affinity_unavailable_test.cpp thread_affinity.cpp -o $@
+
 build/bin/simulated_transmit_backend_test: $(SIMULATED_BACKEND_TEST_OBJECTS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
@@ -357,6 +364,11 @@ si5351-transition-test: build/bin/si5351_transition_test
 
 transmission-controller-contract-test: build/bin/transmission_controller_contract_test
 	$(Q)./build/bin/transmission_controller_contract_test
+
+.PHONY: thread-affinity-test
+thread-affinity-test: build/bin/thread_affinity_unavailable_test
+	$(Q)./build/bin/thread_affinity_unavailable_test
+	$(Q)python3 thread_affinity_source_test.py
 
 simulated-backend-test: build/bin/simulated_transmit_backend_test
 	$(Q)./build/bin/simulated_transmit_backend_test

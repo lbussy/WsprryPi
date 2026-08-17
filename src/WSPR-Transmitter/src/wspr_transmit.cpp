@@ -53,6 +53,7 @@
 #include "wspr_transmit.hpp" // Class Declarations
 #include "backend_capabilities.hpp"
 #include "gpio_band_policy.hpp"
+#include "thread_affinity.hpp"
 #if WSPRRYPI_BACKEND_RP1_GPCLK
 #include "rp1_gpclk_transmit_backend.hpp"
 #endif
@@ -191,34 +192,6 @@ namespace
     static inline int64_t diff_ns(const timespec &a, const timespec &b)
     {
         return (a.tv_sec - b.tv_sec) * 1'000'000'000LL + (a.tv_nsec - b.tv_nsec);
-    }
-
-    static inline void busy_wait_until(clockid_t clk_id, const timespec &ts_target)
-    {
-        for (;;)
-        {
-            timespec now{};
-            clock_gettime(clk_id, &now);
-            if (diff_ns(now, ts_target) >= 0)
-                break;
-        }
-    }
-
-    static inline timespec add_ns(timespec t, int64_t ns)
-    {
-        t.tv_sec += ns / 1000000000LL;
-        t.tv_nsec += static_cast<long>(ns % 1000000000LL);
-        if (t.tv_nsec >= 1000000000L)
-        {
-            t.tv_sec++;
-            t.tv_nsec -= 1000000000L;
-        }
-        else if (t.tv_nsec < 0)
-        {
-            t.tv_sec--;
-            t.tv_nsec += 1000000000L;
-        }
-        return t;
     }
 
 } // end anonymous namespace
@@ -2109,27 +2082,29 @@ void WsprTransmitter::thread_entry()
 
     if (ncpu > 1)
     {
-        cpu_set_t cpus;
-        CPU_ZERO(&cpus);
-        CPU_SET(tx_cpu_, &cpus);
+        const ThreadAffinityResult affinity_result =
+            pin_current_thread_to_cpu(tx_cpu_);
 
-        const int aff_ret =
-            pthread_setaffinity_np(pthread_self(),
-                                   sizeof(cpus),
-                                   &cpus);
-
-        if (aff_ret != 0)
+        if (affinity_result.status == ThreadAffinityStatus::Failed)
         {
             {
                 std::ostringstream oss;
                 oss << "thread_entry(): failed to set CPU affinity: "
-                    << std::strerror(aff_ret);
+                    << std::strerror(affinity_result.error_number);
                 fire_transmit_cb(
                     TransmissionCallbackEvent::LOGGING,
                     LogLevel::DEBUG,
                     oss.str(),
                     0.0);
             }
+        }
+        else if (affinity_result.status == ThreadAffinityStatus::Unsupported)
+        {
+            fire_transmit_cb(
+                TransmissionCallbackEvent::LOGGING,
+                LogLevel::DEBUG,
+                "thread_entry(): CPU affinity is unavailable on this platform; continuing without CPU pinning.",
+                0.0);
         }
     }
 

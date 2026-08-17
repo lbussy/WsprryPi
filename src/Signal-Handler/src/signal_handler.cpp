@@ -12,6 +12,7 @@
 // Standard libraries
 #include <cstdlib>
 #include <iostream>
+#include <utility>
 
 // System Libraries
 #include <pthread.h>
@@ -66,7 +67,7 @@ bool apply_handled_signal_mask(const sigset_t &set)
 /**
  * @brief Mapping of handled signals to display names and immediacy flags.
  *
- * SIGUSR1 is included so stop() can wake sigwaitinfo() without installing a
+ * SIGUSR1 is included so stop() can wake the synchronous waiter without a
  * separate shutdown primitive.
  */
 const std::unordered_map<int, std::pair<std::string_view, bool>> SignalHandler::signal_map = {
@@ -85,7 +86,7 @@ const std::unordered_map<int, std::pair<std::string_view, bool>> SignalHandler::
  * @brief Block all signals registered in SignalHandler::signal_map.
  *
  * This keeps the handled signals out of arbitrary threads so the dedicated
- * signal worker can receive them synchronously through sigwaitinfo().
+ * signal worker can receive them through the platform's synchronous wait.
  *
  * @throws No exceptions are thrown. Debug builds may report system call
  *         failures to stderr.
@@ -109,8 +110,14 @@ void block_signals()
  * setup and launches the worker when the surrounding process is ready.
  */
 SignalHandler::SignalHandler()
+    : SignalHandler(wait_for_blocked_signal)
+{
+}
+
+SignalHandler::SignalHandler(SignalWaitFunction wait_function_value)
     : state(SignalHandlerState::STOPPED),
-      termios_saved(false)
+      termios_saved(false),
+      wait_function(std::move(wait_function_value))
 {
 }
 
@@ -124,8 +131,7 @@ SignalHandler::SignalHandler()
  */
 void SignalHandler::start()
 {
-    if (state.load() == SignalHandlerState::RUNNING ||
-        state.load() == SignalHandlerState::STOP_REQUESTED)
+    if (state.load() != SignalHandlerState::STOPPED)
     {
         return;
     }
@@ -145,13 +151,13 @@ void SignalHandler::start()
 
     if (!build_handled_signal_set(signal_set))
     {
-        state.store(SignalHandlerState::STOPPED);
+        state.store(SignalHandlerState::FAILED);
         return;
     }
 
     if (!apply_handled_signal_mask(signal_set))
     {
-        state.store(SignalHandlerState::STOPPED);
+        state.store(SignalHandlerState::FAILED);
         return;
     }
 
@@ -171,7 +177,8 @@ SignalHandler::~SignalHandler()
     const SignalHandlerState current = state.load();
 
     if (current == SignalHandlerState::RUNNING ||
-        current == SignalHandlerState::STOP_REQUESTED)
+        current == SignalHandlerState::STOP_REQUESTED ||
+        current == SignalHandlerState::FAILED)
     {
         stop();
     }
@@ -229,20 +236,27 @@ bool SignalHandler::stop()
         return false;
     }
 
-    state.store(SignalHandlerState::STOP_REQUESTED);
+    const bool worker_needs_wake = current == SignalHandlerState::RUNNING;
+    if (worker_needs_wake)
+    {
+        state.store(SignalHandlerState::STOP_REQUESTED);
+    }
 
     if (worker_thread.joinable())
     {
-        const int retval = pthread_kill(worker_thread.native_handle(), SIGUSR1);
-        if (retval != 0)
+        if (worker_needs_wake)
         {
-            std::cerr
-                << "[ERROR] Failed to wake signal handler thread with SIGUSR1. "
-                << "pthread_kill() returned "
-                << retval
-                << ". Joining anyway because returning before thread exit would "
-                   "leave object lifetime unsafe."
-                << std::endl;
+            const int retval = pthread_kill(worker_thread.native_handle(), SIGUSR1);
+            if (retval != 0)
+            {
+                std::cerr
+                    << "[ERROR] Failed to wake signal handler thread with SIGUSR1. "
+                    << "pthread_kill() returned "
+                    << retval
+                    << ". Joining anyway because returning before thread exit would "
+                       "leave object lifetime unsafe."
+                    << std::endl;
+            }
         }
 
         worker_thread.join();
@@ -292,7 +306,7 @@ bool SignalHandler::setPriority(int schedPolicy, int priority)
 /**
  * @brief Main loop for the signal handling thread.
  *
- * The worker waits synchronously in sigwaitinfo(), filters the internal
+ * The worker waits synchronously through the normalized platform seam, filters
  * shutdown wake signal, and invokes the callback inline for handled signals.
  * When STOP_REQUESTED is observed, the loop exits promptly so stop() can join.
  *
@@ -310,7 +324,7 @@ void SignalHandler::run()
     sigset_t local_set;
     if (!build_handled_signal_set(local_set))
     {
-        local_this->state.store(SignalHandlerState::STOPPED);
+        local_this->state.store(SignalHandlerState::FAILED);
         return;
     }
 
@@ -319,7 +333,7 @@ void SignalHandler::run()
     // disturbed the inherited mask.
     if (!apply_handled_signal_mask(local_set))
     {
-        local_this->state.store(SignalHandlerState::STOPPED);
+        local_this->state.store(SignalHandlerState::FAILED);
         return;
     }
 
@@ -333,8 +347,7 @@ void SignalHandler::run()
             break;
         }
 
-        siginfo_t siginfo;
-        int sig = sigwaitinfo(&local_set, &siginfo);
+        const SignalWaitResult wait_result = local_this->wait_function(local_set);
 
         const SignalHandlerState post_wait_state = local_this->state.load();
         if (post_wait_state == SignalHandlerState::STOP_REQUESTED)
@@ -346,6 +359,24 @@ void SignalHandler::run()
         {
             break;
         }
+
+        if (wait_result.status == SignalWaitStatus::Interrupted)
+        {
+            continue;
+        }
+
+        if (wait_result.status == SignalWaitStatus::Failed)
+        {
+            std::cerr << "[ERROR] Synchronous signal wait failed with error "
+                      << wait_result.error_number << "." << std::endl;
+            SignalHandlerState expected = SignalHandlerState::RUNNING;
+            (void)local_this->state.compare_exchange_strong(
+                expected,
+                SignalHandlerState::FAILED);
+            break;
+        }
+
+        const int sig = wait_result.signal_number;
 
         if (sig == SIGUSR1)
         {

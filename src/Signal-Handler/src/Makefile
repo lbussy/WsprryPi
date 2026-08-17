@@ -23,7 +23,7 @@ BIN_DIR		 	= build/bin
 
 # Keep the reusable implementation, demonstration, and bounded test separate.
 C_SOURCES :=
-LIB_SOURCES := signal_handler.cpp
+LIB_SOURCES := signal_handler.cpp signal_wait.cpp
 DEMO_SOURCES := main.cpp
 TEST_SOURCES := test.cpp
 CPP_SOURCES := $(LIB_SOURCES) $(DEMO_SOURCES) $(TEST_SOURCES)
@@ -166,6 +166,10 @@ test: debug
 	$(Q)echo "Running bounded unprivileged signal-handler test."
 	$(Q)./build/bin/$(TEST_OUT)
 
+.PHONY: portability-test
+portability-test: test
+	$(Q)python3 signal_wait_source_test.py
+
 .PHONY: live-test
 live-test: release
 	$(Q)test "$(SIGNAL_HANDLER_LIVE_TEST)" = "YES" || { \
@@ -197,6 +201,7 @@ help:
 	$(Q)echo "  all          Build the project (default: release)."
 	$(Q)echo "  clean        Remove build artifacts."
 	$(Q)echo "  test         Run the bounded unprivileged callback/shutdown test."
+	$(Q)echo "  portability-test Run lifecycle and compile-time signal-wait tests."
 	$(Q)echo "  live-test    Run the interactive demo (requires SIGNAL_HANDLER_LIVE_TEST=YES)."
 	$(Q)echo "  lint         Run static analysis."
 	$(Q)echo "  macros       Show defined project macros."
