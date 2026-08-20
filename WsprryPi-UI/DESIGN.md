@@ -1,6 +1,6 @@
 ---
 name: Wsprry Pi Console
-description: A precise transmitter-appliance interface for configuring, operating, and monitoring WSPR-family radio workflows.
+description: A precise bench-instrument interface for WSPR-family radio workflows.
 colors:
   transmitter-slate: "#405e7a"
   transmitter-slate-dark: "#344a60"
@@ -93,178 +93,171 @@ components:
 
 # Design System: Wsprry Pi Console
 
-## 1. Overview
+## Overview
 
 **Creative North Star: "The Bench Instrument"**
 
-Wsprry Pi Console is an operational control surface for technically capable ham radio operators. It should feel like a clean bench instrument: compact, readable, and specific, with clear state changes and enough typographic hierarchy to scan transmitter status, configuration, logs, maintenance, and spots without theatrical styling.
+Wsprry Pi Console is an operational control surface for technically capable amateur-radio operators. It should feel like a clean bench instrument: compact, readable, and specific, with clear state changes and enough hierarchy to scan transmitter status, configuration, logs, maintenance, and spots without theatrical styling.
 
-The system uses Bootstrap 5 with the Zephyr theme as its base, then narrows the personality through a custom slate transmitter accent, local Source Sans 3 and Barlow Semi Condensed fonts, restrained tonal panels, and explicit state color tokens. `PRODUCT.md` says the interface should feel "trustworthy and utilitarian rather than decorative"; that sentence is the governing rule for new screens.
+Bootstrap 5 and Zephyr provide familiar control behavior. The product gains its character from a transmitter-slate shell, local Source Sans 3 and Barlow Semi Condensed fonts, restrained tonal panels, and explicit operational state colors. Trust comes from truthful state, predictable placement, readable technical values, and consistent light, dark, desktop, and mobile behavior.
 
 **Key Characteristics:**
 
 - Precise, clean, technical, and operational.
-- Dense enough for repeated appliance use, but not visually cramped.
-- Light and dark themes share the same layout and interaction model.
-- State, mode, and transmission context are visually more important than brand expression.
+- Dense enough for repeated appliance use without feeling cramped.
+- Light and dark themes share one layout and interaction model.
+- State, mode, and transmission context outrank decoration.
+- Recovery actions remain close to the state requiring attention.
 
-## 2. Colors
+## Colors
 
-The palette is restrained: a transmitter-slate shell, neutral Bootstrap surfaces, Zephyr primary for default Bootstrap actions, and muted operational state colors for live system feedback.
+The palette combines a restrained slate appliance shell, neutral Bootstrap surfaces, Zephyr blue for ordinary primary actions, and muted state colors reserved for confirmed operational meaning.
 
 ### Primary
 
-- **Transmitter Slate** (#405e7a): The custom navigation and appliance accent in light theme, defined as `--wspr-accent-rgb: 64, 94, 122`. Use for shell-level chrome, not large decorative fills.
-- **Low-Light Transmitter Slate** (#344a60): The dark-theme navigation accent, defined as `--wspr-accent-rgb: 52, 74, 96`.
-- **Zephyr Action Blue** (#3459e6): Bootstrap's primary action and link color. Use where native Bootstrap components already expect `--bs-primary`; do not replace the transmitter-slate shell with this brighter blue.
+- **Transmitter Slate:** Fixed navigation, footer, and status chrome; avoid large interior fills.
+- **Low-Light Transmitter Slate:** Dark-theme shell counterpart without excess luminosity.
+- **Zephyr Action Blue:** Primary actions and links where Bootstrap establishes that role; it does not replace the slate shell.
 
 ### Secondary
 
-- **Slate Muted** (#6b8096): Soft accent and focus-ring source, defined as `--wspr-accent-soft-rgb: 107, 128, 150`. Use for focus affordances and subtle active treatment.
+- **Slate Muted:** Subtle active treatments and the shared focus-ring source.
 
 ### Tertiary
 
-- **Signal Active Gold** (#c8a85d): Connected or transmitting-ready status, defined as `--wspr-state-active`. Reserve for live radio state, not decoration.
+- **Signal Active Gold:** Connected or ready state only.
+- **Signal Success, Warning, and Danger:** Confirmed operational success, caution, and failure.
 
 ### Neutral
 
-- **Light Body Text** (#495057): Default Zephyr body text in light mode.
-- **Light Canvas** (#ffffff): Bootstrap body background in light mode.
-- **Light Secondary Surface** (#e9ecef): Subtle surface mix-in for panels and backgrounds.
-- **Light Border** (#dee2e6): Standard divider and panel stroke.
-- **Dark Body Text** (#dee2e6): Default body text in dark mode.
-- **Dark Canvas** (#212529): Bootstrap body background in dark mode.
-- **Dark Secondary Surface** (#343a40): Subtle surface mix-in for dark panels.
-- **Dark Border** (#495057): Standard dark-mode divider and panel stroke.
-- **Signal Text Light** (#ecf1f6) and **Signal Text Dark** (#e5ecf2): Text colors inside transmitter-slate navigation and alert surfaces.
+- **Light and Dark Canvas:** Principal page and card surfaces.
+- **Light and Dark Body Text:** Default readable foregrounds.
+- **Secondary Surfaces:** Tonal ingredients for grouped panels.
+- **Light and Dark Borders:** One-pixel structural dividers and field boundaries.
+- **Signal Text:** High-contrast foregrounds inside transmitter-slate chrome.
 
 ### Named Rules
 
-**The State Color Rule.** Success (#5f8f74), warning (#b79256), danger (#b66a76), and active (#c8a85d) are operational vocabulary. Do not use them for decorative emphasis.
+**The State Color Rule.** State colors are operational vocabulary, never decoration.
 
-**The Slate Shell Rule.** The navigation bar owns the transmitter-slate identity. Interior panels should stay neutral, with `color-mix()` tints only where they clarify status or grouping.
+**The Slate Shell Rule.** The shell owns transmitter slate. Interior panels stay neutral and use restrained tonal mixing only for grouping or state.
 
-**The Slate State Badge Rule.** Warning and danger text on transmitter slate must not use raw state colors as foregrounds. Use signal text (#ecf1f6 light, #e5ecf2 dark) on a state-tinted slate badge so footer status remains WCAG AA readable.
+**The Accessible State Badge Rule.** Warning and danger on slate use signal text over a state-tinted slate badge, not raw semantic foreground text.
 
-## 3. Typography
+## Typography
 
 **Display Font:** Barlow Semi Condensed, with Segoe UI and sans-serif fallbacks  
 **Body Font:** Source Sans 3, with Segoe UI and sans-serif fallbacks  
-**Label/Mono Font:** Barlow Semi Condensed for labels; Bootstrap's monospace stack only for code or logs
+**Label/Mono Font:** Barlow Semi Condensed for scan labels; Bootstrap monospace for logs and code
 
-**Character:** The pairing reads technical without becoming terminal-like. Barlow Semi Condensed gives headings, nav labels, and mode controls an instrument-panel cadence; Source Sans 3 keeps long help text, logs, tables, and form guidance readable.
+**Character:** Barlow Semi Condensed gives headings, navigation, tabs, and state values an instrument-panel cadence. Source Sans 3 keeps help, tables, forms, and summaries readable over repeated use.
 
 ### Hierarchy
 
-- **Display** (600, `clamp(1.5rem, 2vw, 2rem)`, 1.05): Page-level configuration titles and major state values.
-- **Headline** (600, `1.5625rem`, 1.12): Navbar page title and high-level view headings.
-- **Title** (600, `1.25rem`, 1.12): Card titles and section headers.
-- **Body** (400, `1rem`, 1.55): Forms, operational summaries, alerts, and normal copy. Paragraphs and legends should stay near 68ch maximum.
-- **Label** (700, `0.75rem`, 0.08em, uppercase): Eyebrows, state labels, panel labels, and compact technical metadata.
+- **Display:** Major state values and page-level titles.
+- **Headline:** Navbar identity and primary view headings.
+- **Title:** Card titles and dense section headings.
+- **Body:** Forms, summaries, alerts, and copy, kept near 68 characters wide where practical.
+- **Label:** Uppercase eyebrows, compact metadata, state labels, and scan anchors.
 
 ### Named Rules
 
-**The Label Discipline Rule.** Uppercase Barlow labels are for scan anchors only. Do not apply them to paragraphs, helper text, or button bodies.
+**The Label Discipline Rule.** Uppercase Barlow labels are scan anchors, not body copy, help text, or button prose.
 
-## 4. Elevation
+## Layout
 
-The system uses a hybrid of light structural shadows and tonal layering. Bootstrap cards, tables, list groups, and modals carry a small two-layer shadow (`0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06)`), while interior operational panels rely on borders and `color-mix()` surface tints instead of additional shadow.
+Fixed navigation and footer frame a single responsive page shell. A centered Bootstrap container carries one primary card, with the spacing scale providing rhythm. Dense operational information uses grids, tables, and flat panels inside that card instead of repeated nested cards.
+
+At narrow widths, navigation stacks, toolbars wrap, and controls expand when touch use benefits. Wide technical tables retain readable columns inside explicit horizontal scrollers instead of wrapping by character or forcing page overflow. Long identifiers and messages wrap safely where scrolling is not intended.
+
+**The One-Shell Rule.** Keep one dominant page card; use spacing, borders, and tonal panels for interior hierarchy.
+
+**The Responsive Truth Rule.** Mobile may stack or scroll, but it must preserve every operational distinction and behavior.
+
+## Elevation & Depth
+
+The system uses light structural lift plus tonal layering. The outer page card and temporary overlays may lift; interior panels remain flat and gain hierarchy through one-pixel borders, neutral mixes, and spacing.
 
 ### Shadow Vocabulary
 
-- **Base Surface Shadow** (`box-shadow: 0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06)`): Cards, tables, list groups, and modals.
-- **Navbar Shadow** (`box-shadow: 0 0.5rem 1.35rem rgba(20, 27, 35, 0.12)`): Fixed top navigation only.
-- **Alert Shadow** (`box-shadow: 0 0.35rem 0.8rem rgba(0,0,0,0.16)`): Temporary connection alert banner.
-- **Focus Ring** (`box-shadow: 0 0 0 0.2rem rgba(var(--wspr-accent-soft-rgb), 0.22)`): Keyboard focus on nav, buttons, fields, selects, and switches.
+- **Base Surface Shadow:** Small two-layer lift for the page card, tables, list groups, and modals.
+- **Navbar Shadow:** Wider low-contrast separation for fixed navigation.
+- **Alert Shadow:** Compact lift for the temporary connection banner.
+- **Focus Ring:** Slate-derived keyboard focus on controls and navigation.
 
 ### Named Rules
 
-**The Interior Flatness Rule.** Panels inside cards should use a 1px border, neutral tint, and spacing before they use another shadow.
+**The Interior Flatness Rule.** Interior panels use a one-pixel border, restrained tint, and spacing before another shadow.
 
-## 5. Components
+## Shapes
+
+Controls and containers use Bootstrap's radius family: compact corners for small controls, medium corners for ordinary fields and cards, and slightly larger corners for alerts. Pills are reserved for compact metadata and live status. Tabs use stronger top corners to show their segmented relationship.
+
+Borders are structural and complete. Avoid decorative side stripes, arbitrary clipping, and novelty geometry.
+
+**The Familiar Geometry Rule.** Shape communicates control type and grouping; it does not compete with operational content.
+
+## Components
 
 ### Buttons
 
-- **Shape:** Bootstrap medium radius (`0.375rem`) unless a control is a segmented tab, chip, or switch.
-- **Primary:** Bootstrap `btn-primary` uses Zephyr Action Blue (#3459e6) with standard Bootstrap contrast and `0.5rem 1rem` action padding in custom operational actions.
-- **Hover / Focus:** Hover follows Bootstrap or the component's explicit background/border transition. Focus uses the slate-derived `--focus-ring`.
-- **Secondary / Ghost / Tertiary:** Outline and link buttons are acceptable for utility actions. Destructive actions use Bootstrap danger, but only for real stop, shutdown, delete, or failure contexts.
+- **Shape:** Medium curved corners with standard action padding.
+- **Primary:** Zephyr Action Blue with a high-contrast light foreground.
+- **Hover / Focus:** Established Bootstrap state change plus the shared slate focus ring.
+- **Secondary / Destructive:** Outline or link utilities; danger only for genuine stop, shutdown, delete, or failure actions.
+- **Busy State:** Disable concurrent activation and use direct progressive language such as “Connecting…”.
 
 ### Chips
 
-- **Style:** Hostname and signal status chips use pill radius (`999px`), compact padding, neutral or transmitter-slate-tinted backgrounds, and medium-weight text.
-- **State:** Use chips for compact metadata and live status only. They should not replace form controls or table filters.
+- **Style:** Pill-shaped, compact, medium-weight, and neutral or slate-tinted.
+- **State:** Hostname, metadata, and live status—not filters or form controls.
 
 ### Cards / Containers
 
-- **Corner Style:** Bootstrap card radius (`0.375rem`), with `shadow-sm` on the outer page card.
-- **Background:** Bootstrap body background for primary cards; interior panels use `color-mix(in srgb, var(--bs-body-bg) 91%, var(--bs-secondary-bg) 9%)` or nearby mixes.
-- **Shadow Strategy:** The page card may use the base surface shadow. Interior panels stay flat.
-- **Border:** 1px `var(--bs-border-color)` or a subtle `color-mix()` border.
-- **Internal Padding:** Operational panels use about `1.05rem 1.15rem`; page spacing follows `--page-space-*` from `0.5rem` to `clamp(2.5rem, 4vw, 3.5rem)`.
+- **Corner Style:** Medium Bootstrap corners.
+- **Background:** Theme canvas outside; restrained neutral mixes inside.
+- **Shadow Strategy:** The outer card may lift; nested operational panels stay flat.
+- **Border:** One-pixel theme border or subtle tonal mix.
 
 ### Inputs / Fields
 
-- **Style:** Bootstrap form controls and selects, with extra right padding for validation affordances where needed.
-- **Focus:** Slate-derived focus ring across `.form-control`, `.form-select`, and `.form-check-input`.
-- **Error / Disabled:** Validation messages appear below the field, wrap long technical values, and hide when the field is disabled.
+- **Style:** Familiar Bootstrap controls with room for validation and technical values.
+- **Focus:** Shared slate-derived ring.
+- **Error / Disabled:** Validation beneath its field, preserved drafts, wrap-safe values, and unmistakable disabled state.
 
 ### Navigation
 
-- **Style:** Fixed top navbar in transmitter slate, with Barlow page title, Source Sans kicker, wrapped nav links, and compact Bootstrap icons.
-- **Active State:** `rgba(var(--wspr-accent-text-rgb), 0.12)` background, 1px translucent border, and a subtle inset line.
-- **Mobile Treatment:** Navbar collapses into a full-width stacked menu, preserving icon/text alignment and allowing long labels to wrap.
+- **Style:** Fixed transmitter-slate shell with Barlow identity, Source Sans supporting copy, wrapped icon labels, and concise connection state.
+- **Active / Focus:** Subtle translucent fill and border plus the shared focus ring.
+- **Mobile Treatment:** Full-width stacked menu retaining labels, theme control, and state visibility.
 
-### Footer Status
+### Tabs, Panels, and Tables
 
-- **Style:** Fixed bottom footer uses transmitter slate with signal text for base content.
-- **Update Available:** Render version/update indicators as compact state badges using signal text on `color-mix(in srgb, var(--wspr-state-warning) 30%, rgb(var(--wspr-accent-rgb)) 70%)`, with a 1px full-border state tint.
-- **Update Failed:** Use the same badge structure with `--wspr-state-danger`; do not place raw danger text directly on the slate footer.
-- **Hover / Focus:** Keep signal text and deepen the state tint only slightly, around 32% state color, so warning/danger links remain above 4.5:1 contrast.
+- **Tabs:** Condensed display type, tall targets, strong top corners, and restrained active fill.
+- **Panels:** Grid structure, uppercase scan labels, semibold values, neutral tint, borders, and wrap-safe content.
+- **Tables:** Compact readable type, sticky headings where useful, and horizontal scrolling when technical columns must remain legible.
+- **Stateful Content:** Expose loading with `aria-busy`, keep recovery nearby, and distinguish empty results from failed requests.
 
-### Tabs and Segmented Controls
-
-- **Style:** Configuration tabs use Barlow Semi Condensed, `0.9rem 0.9rem 0 0` top corners, strong min-height, and active tonal background.
-- **State:** Active segments use subtle primary/body color mixes, not saturated fills.
-
-### Operational Panels
-
-- **Style:** Grid-based panels with uppercase labels, semibold values, neutral tint, 1px border, and wrap-safe values.
-- **State:** Live transmitter state values may use success, warning, danger, or primary mixes, always tied to actual backend state.
-
-### Tables
-
-- **Style:** Bootstrap tables with fixed layout for spots, sticky headers, uppercase table headings, and 0.875rem table text.
-- **Behavior:** Long call signs, grid locators, frequencies, and messages should wrap safely rather than overflow.
-
-## 6. Do's and Don'ts
+## Do's and Don'ts
 
 ### Do:
 
-- **Do** preserve both light and dark themes with the same layout and interaction model.
-- **Do** use transmitter slate (#405e7a light, #344a60 dark) for shell identity and status chrome.
-- **Do** use Source Sans 3 for normal reading and Barlow Semi Condensed for headings, labels, tabs, and state values.
-- **Do** keep controls and terminology direct, consistent, and pragmatic.
-- **Do** make system state, mode, and transmission context easy to scan quickly.
-- **Do** let technical values wrap with `overflow-wrap: anywhere` when they can be long or user supplied.
-- **Do** use 1px borders and neutral surface mixes for interior grouping before adding more shadows.
-- **Do** render footer warning and danger states as accessible state badges, not raw colored text on slate.
+- **Do** preserve one interaction model across light and dark themes.
+- **Do** use transmitter slate for shell identity and status chrome.
+- **Do** use Source Sans 3 for reading and Barlow Semi Condensed for scan hierarchy.
+- **Do** keep terminology direct and system state easy to scan.
+- **Do** keep keyboard focus visible and loading state available to assistive technology.
+- **Do** wrap long values safely or put wide tables in an explicit scroller.
+- **Do** use borders and neutral mixes before adding interior shadows.
 
 ### Don't:
 
 - **Don't** make the interface flashy, ornamental, or marketing-like.
-- **Don't** simplify technical workflows into vague abstractions when precise controls are needed.
-- **Don't** use state colors for decoration; keep them tied to actual success, warning, danger, active, loading, or offline states.
-- **Don't** replace the restrained transmitter-slate shell with saturated blue across the whole interface.
-- **Don't** create nested cards or repeated identical card grids for dense operational screens.
-- **Don't** use gradient text, decorative glassmorphism, or colored side-stripe borders.
-- **Don't** use modal dialogs as the first answer for normal configuration flows; prefer inline progressive controls.
-- **Don't** put low-contrast warning or danger foreground colors directly on the transmitter-slate footer.
-
-### Excluded Pages
-
-The following files must NOT be modified by automated tools (including Codex + Impeccable):
-
-- data/view_diag_logs.php
-
-These pages are considered stable or externally managed.
+- **Don't** replace precise workflows with vague abstractions.
+- **Don't** use semantic colors for decoration.
+- **Don't** replace the slate shell with saturated action blue.
+- **Don't** create nested-card grids for dense operational screens.
+- **Don't** use gradient text, decorative glassmorphism, colored side stripes, or novelty geometry.
+- **Don't** compress technical tables until content wraps character by character.
+- **Don't** use modal dialogs as the first answer for normal configuration; prefer inline progressive controls.
+- **Don't** modify `data/view_diag_logs.php` through automated design tooling; that page is explicitly excluded.

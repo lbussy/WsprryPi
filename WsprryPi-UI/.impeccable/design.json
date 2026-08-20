@@ -1,136 +1,100 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-05-04T07:11:01-05:00",
+  "generatedAt": "2026-08-20T18:50:08Z",
   "title": "Design System: Wsprry Pi Console",
   "extensions": {
     "colorMeta": {
-      "transmitter-slate": {
-        "role": "primary",
-        "displayName": "Transmitter Slate",
-        "canonical": "#405e7a",
-        "source": "data/site.css --wspr-accent-rgb light",
-        "tonalRamp": ["#ecf1f6", "#6b8096", "#405e7a", "#344a60"]
-      },
-      "zephyr-primary": {
-        "role": "primary",
-        "displayName": "Zephyr Action Blue",
-        "canonical": "#3459e6",
-        "source": "data/vendor/css/bootswatch-zephyr-5.3.8.min.css --bs-primary",
-        "tonalRamp": ["#d6defa", "#859bf0", "#3459e6", "#15245c"]
-      },
-      "state-success": {
-        "role": "state",
-        "displayName": "Signal Success",
-        "canonical": "#5f8f74",
-        "source": "data/site.css --wspr-state-success",
-        "tonalRamp": ["#d5f0e6", "#75a088", "#5f8f74", "#134833"]
-      },
-      "state-warning": {
-        "role": "state",
-        "displayName": "Signal Warning",
-        "canonical": "#b79256",
-        "source": "data/site.css --wspr-state-warning",
-        "tonalRamp": ["#fdf2df", "#c2a16a", "#b79256", "#624c27"]
-      },
-      "state-danger": {
-        "role": "state",
-        "displayName": "Signal Danger",
-        "canonical": "#b66a76",
-        "source": "data/site.css --wspr-state-danger",
-        "tonalRamp": ["#f8d4d5", "#c1828d", "#b66a76", "#571012"]
-      },
-      "state-active": {
-        "role": "state",
-        "displayName": "Signal Active Gold",
-        "canonical": "#c8a85d",
-        "source": "data/site.css --wspr-state-active",
-        "tonalRamp": ["#fdf2df", "#d0b171", "#c8a85d", "#624c27"]
-      }
+      "transmitter-slate": { "role": "primary", "displayName": "Transmitter Slate", "canonical": "#405e7a", "tonalRamp": ["#18232e", "#273a4b", "#405e7a", "#6b8096", "#92a3b4", "#b8c4cf", "#dae1e7", "#f1f4f7"] },
+      "transmitter-slate-dark": { "role": "primary", "displayName": "Low-Light Transmitter Slate", "canonical": "#344a60", "tonalRamp": ["#15202a", "#233240", "#344a60", "#5f7387", "#8999a8", "#afb9c3", "#d3d9df", "#eff2f4"] },
+      "zephyr-primary": { "role": "primary", "displayName": "Zephyr Action Blue", "canonical": "#3459e6", "tonalRamp": ["#101b45", "#172968", "#20398f", "#3459e6", "#718cf0", "#a5b5f6", "#d6defa", "#f0f3fd"] },
+      "slate-muted": { "role": "secondary", "displayName": "Slate Muted", "canonical": "#6b8096", "tonalRamp": ["#1c252e", "#303f4d", "#4b6073", "#6b8096", "#91a1b1", "#b5c0ca", "#d8dee4", "#f2f4f6"] },
+      "state-success": { "role": "tertiary", "displayName": "Signal Success", "canonical": "#5f8f74", "tonalRamp": ["#173024", "#28503b", "#3d7155", "#5f8f74", "#87ad99", "#adc9ba", "#d4e4dc", "#f0f6f3"] },
+      "state-warning": { "role": "tertiary", "displayName": "Signal Warning", "canonical": "#b79256", "tonalRamp": ["#382b19", "#5b4628", "#83663b", "#b79256", "#ceb17f", "#dfcaa8", "#eee2d0", "#faf5ed"] },
+      "state-danger": { "role": "tertiary", "displayName": "Signal Danger", "canonical": "#b66a76", "tonalRamp": ["#3a2025", "#5f343d", "#884c58", "#b66a76", "#ce929b", "#dfb7bd", "#efdadd", "#faf1f3"] },
+      "state-active": { "role": "tertiary", "displayName": "Signal Active Gold", "canonical": "#c8a85d", "tonalRamp": ["#3b3019", "#604f29", "#8c743d", "#c8a85d", "#d9c080", "#e6d5a9", "#f1e8d1", "#fbf7ed"] },
+      "signal-text-light": { "role": "neutral", "displayName": "Signal Text Light", "canonical": "#ecf1f6", "tonalRamp": ["#202830", "#3c4854", "#5f6d7a", "#84929f", "#aab5bf", "#cbd3da", "#e3e9ee", "#f5f8fa"] },
+      "signal-text-dark": { "role": "neutral", "displayName": "Signal Text Dark", "canonical": "#e5ecf2", "tonalRamp": ["#20272d", "#3b464f", "#5e6a75", "#84909a", "#abb5be", "#cbd3da", "#e3e8ec", "#f5f7f9"] },
+      "body-text-light": { "role": "neutral", "displayName": "Light Body Text", "canonical": "#495057", "tonalRamp": ["#181b1d", "#2e3337", "#495057", "#6f767c", "#979da2", "#bdc1c5", "#dfe2e4", "#f5f6f6"] },
+      "body-bg-light": { "role": "neutral", "displayName": "Light Canvas", "canonical": "#ffffff", "tonalRamp": ["#262626", "#474747", "#6b6b6b", "#909090", "#b4b4b4", "#d5d5d5", "#eeeeee", "#ffffff"] },
+      "secondary-bg-light": { "role": "neutral", "displayName": "Light Secondary Surface", "canonical": "#e9ecef", "tonalRamp": ["#232729", "#41474b", "#656c71", "#8b9297", "#b2b8bc", "#d0d5d8", "#e7eaec", "#f7f8f9"] },
+      "border-light": { "role": "neutral", "displayName": "Light Border", "canonical": "#dee2e6", "tonalRamp": ["#222528", "#3f4449", "#636970", "#898f96", "#afb5bb", "#cdd2d6", "#e3e7ea", "#f6f7f8"] },
+      "body-text-dark": { "role": "neutral", "displayName": "Dark Body Text", "canonical": "#dee2e6", "tonalRamp": ["#22262a", "#3f454b", "#636a71", "#8c939a", "#b2b8be", "#cdd2d7", "#e3e7ea", "#f6f7f8"] },
+      "body-bg-dark": { "role": "neutral", "displayName": "Dark Canvas", "canonical": "#212529", "tonalRamp": ["#171a1c", "#212529", "#3c4146", "#60666c", "#898f94", "#b4b8bc", "#dce0e2", "#f4f5f6"] },
+      "secondary-bg-dark": { "role": "neutral", "displayName": "Dark Secondary Surface", "canonical": "#343a40", "tonalRamp": ["#181b1e", "#262b30", "#343a40", "#5c6268", "#858a8f", "#afb3b7", "#d8dadc", "#f2f3f4"] },
+      "border-dark": { "role": "neutral", "displayName": "Dark Border", "canonical": "#495057", "tonalRamp": ["#181b1d", "#2e3337", "#495057", "#6f767c", "#979da2", "#bdc1c5", "#dfe2e4", "#f5f6f6"] }
     },
     "typographyMeta": {
-      "display": {
-        "displayName": "Instrument Display",
-        "purpose": "Major state values and configuration page titles."
-      },
-      "headline": {
-        "displayName": "Navigation Headline",
-        "purpose": "Navbar title and page-level identity."
-      },
-      "title": {
-        "displayName": "Section Title",
-        "purpose": "Card titles and dense section headers."
-      },
-      "body": {
-        "displayName": "Operational Body",
-        "purpose": "Forms, help text, summaries, and regular UI copy."
-      },
-      "label": {
-        "displayName": "Scan Label",
-        "purpose": "Uppercase metadata labels, panel labels, and small state anchors."
-      }
+      "display": { "displayName": "Instrument Display", "purpose": "Major state values and page-level titles." },
+      "headline": { "displayName": "Navigation Headline", "purpose": "Navbar identity and primary view headings." },
+      "title": { "displayName": "Section Title", "purpose": "Card titles and dense section headings." },
+      "body": { "displayName": "Operational Body", "purpose": "Forms, help, summaries, tables, and regular copy." },
+      "label": { "displayName": "Scan Label", "purpose": "Uppercase metadata, compact state labels, and scan anchors." }
     },
-    "elevation": {
-      "baseSurface": "0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06)",
-      "navbar": "0 0.5rem 1.35rem rgba(20, 27, 35, 0.12)",
-      "alert": "0 0.35rem 0.8rem rgba(0,0,0,0.16)",
-      "focusRing": "0 0 0 0.2rem rgba(var(--wspr-accent-soft-rgb), 0.22)",
-      "philosophy": "Outer surfaces may lift lightly; interior panels stay flat with borders and tonal fills."
+    "shadows": [
+      { "name": "base-surface", "value": "0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06)", "purpose": "Light structural lift for the outer page card and overlays." },
+      { "name": "navbar", "value": "0 0.5rem 1.35rem rgba(20,27,35,.12)", "purpose": "Separates fixed navigation from page content." },
+      { "name": "connection-alert", "value": "0 0.35rem 0.8rem rgba(0,0,0,.16)", "purpose": "Temporary connection alert lift." },
+      { "name": "focus-ring", "value": "0 0 0 0.2rem rgba(var(--wspr-accent-soft-rgb),.22)", "purpose": "Shared keyboard focus treatment." }
+    ],
+    "motion": [
+      { "name": "fast-control", "value": "120ms ease-in-out", "purpose": "Compact control feedback." },
+      { "name": "standard-state", "value": "180ms ease", "purpose": "Color, border, background, and shadow changes." },
+      { "name": "connection-alert", "value": "300ms ease-in-out", "purpose": "Banner opacity and transform." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "576px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "992px" },
+      { "name": "xl", "value": "1200px" },
+      { "name": "xxl", "value": "1400px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button", "kind": "button", "refersTo": "button-primary",
+      "description": "Ordinary high-emphasis action using Zephyr primary.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Save changes</button>",
+      "css": ".ds-btn-primary { padding: .5rem 1rem; color: #fff; background: #3459e6; border: 1px solid #3459e6; border-radius: .375rem; font: 600 1rem/1.5 'Source Sans 3', 'Segoe UI', sans-serif; transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; } .ds-btn-primary:hover { background: #2a47b8; border-color: #2a47b8; } .ds-btn-primary:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
     },
-    "motion": {
-      "fast": "120ms ease-in-out",
-      "standard": "180ms ease",
-      "alert": "300ms ease-in-out",
-      "rule": "Animate opacity, transform, color, border-color, background-color, and box-shadow only."
+    {
+      "name": "Text Field", "kind": "input",
+      "description": "Familiar bordered field for station and configuration values.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-callsign\">Callsign</label><input class=\"ds-field\" id=\"ds-callsign\" value=\"AA0NT\">",
+      "css": ".ds-field-label { display: block; margin-bottom: .35rem; color: #495057; font: 700 .75rem/1.3 'Barlow Semi Condensed', 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; } .ds-field { width: 16rem; max-width: 100%; padding: .5rem .75rem; color: #495057; background: #fff; border: 1px solid #dee2e6; border-radius: .375rem; font: 400 1rem/1.5 'Source Sans 3', 'Segoe UI', sans-serif; } .ds-field:focus-visible { outline: 0; border-color: #6b8096; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
     },
-    "breakpoints": {
-      "sm": "576px",
-      "md": "768px",
-      "lg": "992px",
-      "xl": "1200px",
-      "xxl": "1400px"
+    {
+      "name": "Primary Navigation", "kind": "nav", "refersTo": "nav-primary",
+      "description": "Compact shell navigation with clear active and keyboard states.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-nav-link-active\" href=\"#\">Operation</a><a class=\"ds-nav-link\" href=\"#\">Logs</a></nav>",
+      "css": ".ds-nav { display: flex; gap: .35rem; padding: .5rem; background: #405e7a; border-radius: .5rem; } .ds-nav-link { padding: .5rem .8rem; color: rgba(236,241,246,.8); border: 1px solid transparent; border-radius: .5rem; font: 600 1rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; text-decoration: none; } .ds-nav-link:hover { color: #ecf1f6; } .ds-nav-link-active { color: #ecf1f6; background: rgba(236,241,246,.12); border-color: rgba(236,241,246,.14); } .ds-nav-link:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
     },
-    "components": {
-      "navbar": {
-        "description": "Fixed transmitter-slate shell with wrapped icon labels and live connection status.",
-        "source": "data/navbar.php, data/site.css"
-      },
-      "pageCard": {
-        "description": "Single outer card inside page shell, with Bootstrap shadow-sm and card header.",
-        "source": "data/page_shell_start.php, data/card_header.php"
-      },
-      "operationPanel": {
-        "description": "Flat tonal panel with uppercase label, semibold value, 1px border, and wrap-safe content.",
-        "source": "data/operation.css"
-      },
-      "configTabs": {
-        "description": "Segmented top tabs with Barlow typography, tall hit targets, and subtle active tonal fill.",
-        "source": "data/index.css"
-      },
-      "spotsTable": {
-        "description": "Fixed-layout Bootstrap table with sticky headers and wrap-safe technical values.",
-        "source": "data/view_spots.css"
-      },
-      "footerStateBadge": {
-        "description": "Compact warning/danger footer state badge using signal text on state-tinted transmitter slate, with a full 1px state border.",
-        "source": "data/footer.php, data/site.css"
-      }
+    {
+      "name": "Operational Panel", "kind": "card", "refersTo": "panel",
+      "description": "Flat tonal grouping for a label and wrap-safe technical value.",
+      "html": "<section class=\"ds-panel\"><span class=\"ds-panel-label\">Controller state</span><strong class=\"ds-panel-value\">Connected</strong></section>",
+      "css": ".ds-panel { display: grid; gap: .3rem; padding: 1.05rem 1.15rem; color: #495057; background: color-mix(in srgb, #fff 91%, #e9ecef 9%); border: 1px solid #dee2e6; border-radius: .375rem; } .ds-panel-label { font: 700 .75rem/1.3 'Barlow Semi Condensed', 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; } .ds-panel-value { overflow-wrap: anywhere; font: 600 1.125rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; }"
     },
-    "rules": {
-      "northStar": "The Bench Instrument",
-      "do": [
-        "Preserve both light and dark themes with the same layout and interaction model.",
-        "Use transmitter slate for shell identity and status chrome.",
-        "Make state, mode, and transmission context easy to scan.",
-        "Use wrap-safe text behavior for long technical values.",
-        "Render footer warning and danger states as accessible signal-text badges on state-tinted slate."
-      ],
-      "dont": [
-        "Do not make the interface flashy, ornamental, or marketing-like.",
-        "Do not use state colors for decoration.",
-        "Do not use gradient text, decorative glassmorphism, or colored side-stripe borders.",
-        "Do not create nested cards for operational content.",
-        "Do not put raw warning or danger foreground text directly on the transmitter-slate footer."
-      ]
+    {
+      "name": "Signal Status Chip", "kind": "chip", "refersTo": "chip",
+      "description": "Compact operational metadata that does not masquerade as a control.",
+      "html": "<span class=\"ds-status-chip\">Connected</span>",
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; min-height: 2rem; padding: .45rem .75rem; color: #495057; background: color-mix(in srgb, #fff 88%, #5f8f74 12%); border: 1px solid color-mix(in srgb, #dee2e6 75%, #5f8f74 25%); border-radius: 999px; font: 600 .875rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; }"
     }
+  ],
+  "narrative": {
+    "northStar": "The Bench Instrument",
+    "overview": "Wsprry Pi Console is compact, readable, specific, and truthful about state. Familiar Bootstrap behavior is shaped by a transmitter-slate shell, restrained tonal panels, and instrument-panel typography.",
+    "keyCharacteristics": ["Precise, clean, technical, and operational.", "Dense enough for repeated appliance use without feeling cramped.", "Light and dark themes share one layout and interaction model.", "State, mode, and transmission context outrank decoration.", "Recovery actions remain close to the state requiring attention."],
+    "rules": [
+      { "name": "The State Color Rule", "body": "State colors are operational vocabulary, never decoration.", "section": "colors" },
+      { "name": "The Slate Shell Rule", "body": "The shell owns transmitter slate. Interior panels stay neutral and use restrained tonal mixing only for grouping or state.", "section": "colors" },
+      { "name": "The Label Discipline Rule", "body": "Uppercase Barlow labels are scan anchors, not body copy, help text, or button prose.", "section": "typography" },
+      { "name": "The One-Shell Rule", "body": "Keep one dominant page card; use spacing, borders, and tonal panels for interior hierarchy.", "section": "layout" },
+      { "name": "The Responsive Truth Rule", "body": "Mobile may stack or scroll, but it must preserve every operational distinction and behavior.", "section": "layout" },
+      { "name": "The Interior Flatness Rule", "body": "Interior panels use a one-pixel border, restrained tint, and spacing before another shadow.", "section": "elevation" },
+      { "name": "The Familiar Geometry Rule", "body": "Shape communicates control type and grouping; it does not compete with operational content.", "section": "shapes" }
+    ],
+    "dos": ["Do preserve one interaction model across light and dark themes.", "Do use transmitter slate for shell identity and status chrome.", "Do use Source Sans 3 for reading and Barlow Semi Condensed for scan hierarchy.", "Do keep terminology direct and system state easy to scan.", "Do keep keyboard focus visible and loading state available to assistive technology.", "Do wrap long values safely or put wide tables in an explicit scroller.", "Do use borders and neutral mixes before adding interior shadows."],
+    "donts": ["Don't make the interface flashy, ornamental, or marketing-like.", "Don't replace precise workflows with vague abstractions.", "Don't use semantic colors for decoration.", "Don't replace the slate shell with saturated action blue.", "Don't create nested-card grids for dense operational screens.", "Don't use gradient text, decorative glassmorphism, colored side stripes, or novelty geometry.", "Don't compress technical tables until content wraps character by character.", "Don't use modal dialogs as the first answer for normal configuration; prefer inline progressive controls.", "Don't modify data/view_diag_logs.php through automated design tooling; that page is explicitly excluded."]
   }
 }

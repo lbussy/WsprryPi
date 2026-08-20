@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const siteCss = fs.readFileSync(path.join(root, "data/site.css"), "utf8");
 const logsCss = fs.readFileSync(path.join(root, "data/view_logs.css"), "utf8");
 const logsJs = fs.readFileSync(path.join(root, "data/view_logs.js"), "utf8");
+const pageShell = fs.readFileSync(path.join(root, "data/page_shell_start.php"), "utf8");
 
 assert.match(
     siteCss,
@@ -28,6 +29,36 @@ assert.doesNotMatch(
     siteCss.match(/@media \(max-width: 575\.98px\)[\s\S]*?@media \(prefers-reduced-motion/)?.[0] || "",
     /text-overflow:\s*ellipsis/,
     "phone footer must not ellipsize the build identifier"
+);
+assert.match(
+    pageShell,
+    /<a class="skip-link" href="#main-content">Skip to main content<\/a>/,
+    "the shared shell must provide a keyboard bypass for repeated navigation"
+);
+assert.match(
+    pageShell,
+    /<main id="main-content" class="page-shell" tabindex="-1">/,
+    "the keyboard bypass target must accept programmatic focus"
+);
+assert.match(
+    logsJs,
+    /isConnecting[\s\S]*?"Connecting…"[\s\S]*?btn\.disabled = isConnecting;[\s\S]*?aria-disabled/,
+    "log reconnect must reject concurrent restart actions while connecting"
+);
+assert.match(
+    logsJs,
+    /const retry = document\.getElementById\("logsRetryButton"\);[\s\S]*?retry\.disabled = isConnecting;[\s\S]*?aria-disabled/,
+    "the log empty-state retry must not permit a second connection while reconnecting"
+);
+assert.match(
+    logsJs,
+    /button\.dataset\.idleLabel = action\.label;/,
+    "log retry actions must retain their context-specific idle label after reconnecting"
+);
+assert.match(
+    logsJs,
+    /scrollRegion\.setAttribute\("aria-busy", state === "reconnecting" \? "true" : "false"\)/,
+    "log loading state must be exposed to assistive technology"
 );
 assert.match(
     logsCss,

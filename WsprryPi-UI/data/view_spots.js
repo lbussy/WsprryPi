@@ -79,6 +79,13 @@
         return document.querySelector(".card-body.tab-content");
     }
 
+    function setSpotsBusy(isBusy) {
+        const container = getSpotsBody();
+        if (container) {
+            container.setAttribute("aria-busy", isBusy ? "true" : "false");
+        }
+    }
+
     function getSourceSelect() {
         return document.getElementById("spotsSource");
     }
@@ -156,6 +163,7 @@
         }
 
         container.replaceChildren();
+        setSpotsBusy(false);
 
         const state = document.createElement("div");
         state.className = "spots-state py-5 px-3";
@@ -198,6 +206,7 @@
         }
 
         container.replaceChildren();
+        setSpotsBusy(true);
 
         const state = document.createElement("div");
         state.className = "spots-state py-5 px-3";
@@ -418,6 +427,7 @@
 
     function renderTable(spots) {
         const $c = $(".card-body.tab-content").empty();
+        setSpotsBusy(false);
         if (!Array.isArray(spots) || spots.length === 0) {
             return renderState(
                 "No recent spots",
@@ -468,6 +478,8 @@
     function fetchSpots() {
         const now = Date.now();
         const requestId = ++_requestSequence;
+        clearRefreshTimer();
+        clearActiveRequest();
         const selectedSource = getSelectedSource();
         const demoMode = isDemoMode();
         const rawCallSign = $("#callsign").val();
@@ -484,7 +496,6 @@
                 { href: getConfigPageUrl(), label: "Open Setup" }
             );
             setSourceStatus("A station callsign is required before spot lookup can run.");
-            clearRefreshTimer();
             return scheduleNext();
         }
 
@@ -518,7 +529,6 @@
             };
             _cacheKey = cacheKey;
             _cacheTS = now;
-            clearActiveRequest();
             renderTable(spots);
             refreshSpotsHeader();
             setSourceStatus("Demo data is active. Live spot lookup is bypassed.", "warning");
@@ -526,8 +536,6 @@
         }
 
         if (!_cacheEntry) renderLoading(selectedSource);
-        clearActiveRequest();
-
         const endDate = new Date(now);
         const startDate = new Date(now - MINUTES * 60 * 1000);
 
@@ -600,10 +608,11 @@
                 renderError(message, selectedSource);
             })
             .always(() => {
-                if (_activeRequest && requestId === _requestSequence) {
+                if (requestId === _requestSequence) {
                     _activeRequest = null;
+                    setSpotsBusy(false);
+                    scheduleNext();
                 }
-                scheduleNext();
             });
     }
 
@@ -619,6 +628,8 @@
     });
 
     window.addEventListener("offline", () => {
+        _requestSequence++;
+        clearRefreshTimer();
         clearActiveRequest();
         renderError("This browser went offline before the spots list could finish loading.", getSelectedSource());
     });

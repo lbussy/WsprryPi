@@ -255,6 +255,31 @@ body {
     padding-bottom: var(--footer-offset);
 }
 
+.skip-link {
+    position: fixed;
+    inset-block-start: var(--page-space-sm);
+    inset-inline-start: var(--page-space-sm);
+    z-index: 1090;
+    padding: 0.55rem 0.8rem;
+    color: var(--bs-body-color);
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
+        0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    transform: translateY(calc(-100% - var(--page-space-lg)));
+}
+
+.skip-link:focus {
+    color: var(--bs-body-color);
+    transform: translateY(0);
+    box-shadow: var(--focus-ring);
+}
+
+#main-content:focus {
+    outline: none;
+}
+
 h1,
 h2,
 h3,
