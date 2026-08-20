@@ -513,12 +513,16 @@ int main()
             apache_proxy_source.find("ProxyPreserveHost On") != std::string::npos &&
             apache_proxy_source.find("ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
             apache_proxy_source.find("ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
+            apache_proxy_source.find("ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake") != std::string::npos &&
+            apache_proxy_source.find("ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake") != std::string::npos &&
             apache_proxy_source.find("ProxyPass        /wsprrypi/api ") == std::string::npos &&
             apache_proxy_source.find("Access-Control-Allow-Origin *") == std::string::npos &&
             apache_proxy_source.find("RequestHeader set Host") == std::string::npos &&
             apache_proxy_source.find("RequestHeader set Origin") == std::string::npos &&
             installer_source.find("ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
-            installer_source.find("ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos,
+            installer_source.find("ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles") != std::string::npos &&
+            installer_source.find("ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake") != std::string::npos &&
+            installer_source.find("ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake") != std::string::npos,
         "Support Bundle must use the same-origin guarded proxy family without broad API proxying, CORS relaxation, or Host/Origin rewriting");
     require(
         count_occurrences(site_source, ":31415") == 1 &&

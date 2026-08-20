@@ -7444,9 +7444,11 @@ install_wsprrypi_proxy_block() {
     ProxyPassReverse /wsprrypi/config  http://127.0.0.1:31415/config
     ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version
     ProxyPassReverse /wsprrypi/version http://127.0.0.1:31415/version
-    # Support bundle API family, including job status, archive download, delete, and OPTIONS.
+    # Support bundle API family and signed private-intake availability.
     ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
     ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
+    ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
+    ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
 
     # WebSocket (port 31416)
     ProxyPass        /wsprrypi/socket  ws://127.0.0.1:31416/socket

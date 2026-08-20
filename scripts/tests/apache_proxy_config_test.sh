@@ -8,14 +8,20 @@ INSTALLER="${REPOSITORY_ROOT}/scripts/install.sh"
 
 mapping='ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles'
 reverse_mapping='ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles'
+intake_mapping='ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake'
+intake_reverse_mapping='ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake'
 
 grep -Fqx '    ProxyPreserveHost On' "$CONFIG"
 grep -Fqx "    ${mapping}" "$CONFIG"
 grep -Fqx "    ${reverse_mapping}" "$CONFIG"
+grep -Fqx "    ${intake_mapping}" "$CONFIG"
+grep -Fqx "    ${intake_reverse_mapping}" "$CONFIG"
 grep -Fqx "    ${mapping}" "$INSTALLER"
 grep -Fqx "    ${reverse_mapping}" "$INSTALLER"
-grep -Fq 'Support bundle API family, including job status, archive download, delete, and OPTIONS.' "$CONFIG"
-grep -Fq 'Support bundle API family, including job status, archive download, delete, and OPTIONS.' "$INSTALLER"
+grep -Fqx "    ${intake_mapping}" "$INSTALLER"
+grep -Fqx "    ${intake_reverse_mapping}" "$INSTALLER"
+grep -Fq 'Support bundle API family and signed private-intake availability.' "$CONFIG"
+grep -Fq 'Support bundle API family and signed private-intake availability.' "$INSTALLER"
 
 ! grep -Eq 'ProxyPass[[:space:]]+/wsprrypi/api([[:space:]]|/)' "$CONFIG"
 ! grep -Eq 'ProxyPass[[:space:]]+/wsprrypi/api([[:space:]]|/)' "$INSTALLER"
