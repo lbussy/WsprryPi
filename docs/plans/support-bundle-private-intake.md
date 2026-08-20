@@ -1,14 +1,14 @@
 # WsprryPi Support Bundle Private Intake Contract
 
-Status: Proposed
+Status: Implemented contract; release/provider qualification remains gated
 
-Implementation state: Implemented through installer dependency integration; production end-to-end qualification remains pending
+Implementation state: Implemented through local retention enforcement and non-RF production intake qualification
 
 Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/414)
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
-Current implementation slice: [Slice 39 installer integration for age](../research/issue-414-slice-39-age-installer.md)
+Current reconciliation slice: [Slice 43 contract reconciliation](../research/issue-414-slice-43-contract-reconciliation.md)
 
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
@@ -72,6 +72,28 @@ Production runtime activation adapter: [Issue 414 Slice 30](../research/issue-41
 
 Guarded production intake endpoint: [Issue 414 Slice 31](../research/issue-414-slice-31-intake-endpoint.md)
 
+Responsive intake workflow: [Issue 414 Slice 32](../research/issue-414-slice-32-intake-ui.md)
+
+Exact-byte local encryption: [Issue 414 Slice 33](../research/issue-414-slice-33-local-encryption.md)
+
+Dropbox handoff boundary: [Issue 414 Slice 34](../research/issue-414-slice-34-dropbox-handoff.md)
+
+Upload reporting boundary: [Issue 414 Slice 35](../research/issue-414-slice-35-upload-reporting.md)
+
+GitHub continuation: [Issue 414 Slice 36](../research/issue-414-slice-36-github-continuation.md)
+
+Maintainer intake inspection: [Issue 414 Slice 37](../research/issue-414-slice-37-maintainer-intake-inspection.md)
+
+Maintainer processing and promotion: [Issue 414 Slice 38](../research/issue-414-slice-38-maintainer-processing.md)
+
+Installer age dependency: [Issue 414 Slice 39](../research/issue-414-slice-39-age-installer.md)
+
+Production installation qualification: [Issue 414 Slice 40](../research/issue-414-slice-40-production-install.md)
+
+Retention eligibility audit: [Issue 414 Slice 41](../research/issue-414-slice-41-retention-audit.md)
+
+Explicit retention deletion: [Issue 414 Slice 42](../research/issue-414-slice-42-retention-deletion.md)
+
 ## Purpose
 
 This contract defines how a user can generate a support bundle locally, inspect it, associate it with useful support context, encrypt it for the maintainer, and upload it through a private Dropbox File Request.
@@ -127,30 +149,27 @@ The application SHALL collect only information reasonably relevant to support. K
 
 Potentially identifying diagnostic categories MAY be included when relevant, but MUST be disclosed before upload. These include email addresses, callsigns, locators, hostnames, usernames, internal IP addresses, device identifiers, logs, and configuration.
 
-Every readable bundle SHALL contain a machine-readable manifest with at least:
+Every version-1 readable bundle SHALL contain a machine-readable manifest with
+exactly these top-level fields:
 
 ```text
+schema_version
 contract_version
-bundle_format_version
 project_id
 project_version
 case_id
 created_at_utc
-operating_system
-application_installation_id
-bundle_encryption_key_id
-bundle_encryption_key_fingerprint
-issue_reference, when supplied
-user_description, when supplied
-user_contact, when supplied and approved
-included_files
-excluded_or_redacted_categories
+collection_options
+privacy_categories
+support_context
 collection_warnings
-per-file sizes
-per-file SHA-256 hashes
+files, with relative path, size, and SHA-256
 ```
 
-`application_installation_id` SHOULD be random and project-specific. It MUST NOT be presented as proof of identity. Collection errors, omissions, and partial results SHALL be recorded.
+The v1 manifest deliberately contains no installation identifier, encryption key,
+recipient, fingerprint, or upload destination. Those values are not needed to
+inspect the readable archive and some are selected only after finalization.
+Collection errors, omissions, and partial results SHALL be recorded.
 
 ## Local Creation, Review, and Finalization
 
@@ -168,10 +187,11 @@ The application SHOULD encourage inspection. It MUST NOT prevent the user from o
 The required sequence is:
 
 ```text
+choose collection options and support context
 collect
 build readable archive
 present review
-apply user-approved exclusions
+either cancel/recollect with changed options, or approve the retained candidate
 finalize readable archive
 hash the exact readable archive bytes
 encrypt those exact bytes
@@ -182,18 +202,24 @@ The application MUST NOT recollect diagnostics between review and encryption.
 
 ## Integrity Terminology and Local Receipt
 
-The application SHALL calculate the finalized readable archive's SHA-256 digest and SHOULD save a receipt containing:
+The application SHALL calculate the finalized readable archive's SHA-256 digest
+and SHALL provide a receipt containing exactly the v1 fields:
 
 ```text
+schema_version
 project_id
 case_id
+artifact_id
 created_at_utc
 archive_filename
+archive_size
 archive_sha256
 encrypted_filename
+encrypted_size
+encrypted_sha256
 bundle_encryption_key_id
-upload_status
-issue_reference, when applicable
+issue_url, nullable
+upload_state = encrypted_artifact_downloaded
 ```
 
 Documentation and UI MUST distinguish a hash, a digital signature, and encryption. A hash alone MUST NOT be called a signature. A bundle application signature is optional and, if implemented, attests to the manifest and file hashes rather than the user's identity.
@@ -202,12 +228,16 @@ Documentation and UI MUST distinguish a hash, a digital signature, and encryptio
 
 After review and consent, the application SHALL encrypt the exact readable archive bytes with the WsprryPi bundle-encryption public key using a standard format such as `age`.
 
-It SHALL record the key identifier and fingerprint, verify successful non-empty structurally valid output, retain the readable archive unless the user deletes it explicitly, and never upload the readable archive.
+It SHALL record the key identifier, require successful non-empty exact-size and
+SHA-256-verified output, retain the readable archive unless the user deletes it
+explicitly, and never upload the readable archive. Real packaged-`age`
+encrypt/decrypt fixtures provide format qualification; the application does not
+claim that superficial ciphertext parsing proves decryptability.
 
 Recommended encrypted filename:
 
 ```text
-wsprrypi-support-<case-id>-<timestamp>.age
+wsprrypi-support-<case-id>-<artifact-id>.tar.gz.age
 ```
 
 The encrypted manifest is authoritative. Dropbox may alter the stored filename.
@@ -217,7 +247,8 @@ The encrypted manifest is authoritative. Dropbox may alter the stored filename.
 Before upload, the user SHALL provide one of:
 
 - an existing GitHub issue reference;
-- consent to create a new GitHub issue; or
+- intent to create a new GitHub issue, plus a meaningful description and
+  user-approved contact method until that public issue exists; or
 - a meaningful problem description and contact method.
 
 A bundle MUST NOT be uploaded with no GitHub correlation, no useful description, and no contact method. An explicitly anonymous submission MAY be permitted only when the project has a documented no-follow-up workflow.
@@ -242,7 +273,9 @@ When no issue exists, the application SHOULD offer a prefilled issue containing 
 
 GitHub requires an authenticated user or authenticated intermediary to create or comment on an issue. The application MUST explain that sign-in is required and MUST NOT contain maintainer GitHub credentials or create issues automatically. WsprryPi does not initially provide an anonymous issue-creation intermediary.
 
-If the issue is created after encryption, the case ID SHALL correlate it with the bundle and the local receipt SHOULD be updated with the issue reference.
+If the issue is created after encryption, the case ID SHALL correlate it with the
+bundle. The version-1 downloaded receipt is immutable and is not retroactively
+rewritten; it retains the issue reference known when encryption began.
 
 ## Non-GitHub Workflow
 
@@ -263,7 +296,7 @@ intake.json.sig
 
 The detached signature SHALL cover the exact published bytes of `intake.json`. The application SHALL pin a public key used exclusively for intake-manifest verification.
 
-The manifest SHALL contain at least:
+The version-1 manifest SHALL contain exactly:
 
 ```text
 schema_version
@@ -272,12 +305,16 @@ generation
 published_at
 expires_at
 minimum_upload_version
+minimum_client_protocol
 request_url, when active
 release_url
 status
-user_message, when applicable
-manifest_signing_key_id
+user_message, nullable
+bundle_encryption_key_id
 ```
+
+The signing key ID is carried by the detached signature envelope together with
+the Ed25519 algorithm and signature. It is not duplicated inside `intake.json`.
 
 Before every upload attempt, the application SHALL retrieve the manifest and signature and verify the exact-byte signature, project ID, supported schema, expiry, minimum application version, and active status. It SHALL use the request URL only if every check succeeds.
 
@@ -358,13 +395,14 @@ Opening the Dropbox page is not upload success. The local receipt MAY record com
 Recommended completion copy:
 
 ```text
-Your encrypted support bundle has been submitted.
+You reported that Dropbox displayed upload success for your encrypted support bundle.
 
 Case ID: <case-id>
 Local bundle: <path>
 Local receipt: <path>
 
-Keep the case ID for future correspondence. Your readable local bundle has not been deleted.
+Keep the case ID for future correspondence. The maintainer has not yet confirmed receipt.
+Your readable local bundle has not been deleted.
 
 If you use GitHub, continue to the issue now. Do not attach the diagnostic archive or encrypted file to the public issue.
 ```
@@ -373,7 +411,17 @@ The completion view SHOULD provide **Open Existing Issue**, **Create GitHub Issu
 
 ## Maintainer Intake and Retention
 
-For every received artifact, the maintainer SHOULD record its filename, size, and receipt time; decrypt it with the project key; verify the readable archive hash, project, case ID, format, and key ID; reject absolute paths, traversal, symlinks, and excessive expansion; inspect before opening individual files; correlate the support context; move it from `Incoming` to `Processed`; and apply retention.
+For every received artifact, the maintainer SHOULD pair it with the separately
+downloaded receipt; decrypt it with the project key; verify the ciphertext and
+readable archive sizes and hashes, project, case ID, format, and key ID; reject
+absolute paths, traversal, symlinks, and excessive expansion; inspect before
+opening individual files; correlate the support context; promote it from
+`Incoming` to a canonical `Processed` case; and assign retention.
+
+Dropbox may append uploader identity to its stored filename. The processor SHALL
+therefore treat that name as untrusted personal metadata and SHALL NOT copy it
+into the canonical processing record. Canonical correlation comes from the
+validated receipt and encrypted manifest, not the provider filename.
 
 Decryption or integrity failure MUST be reported and MUST NOT be treated as valid.
 
@@ -417,6 +465,38 @@ A signed-out Chrome Incognito test using Dropbox Basic on 3 August 2026 verified
 
 The uploader email was transmitted, but convenient owner-side access appeared plan- or interface-dependent. Provider behavior SHALL be retested periodically.
 
+## Implementation Reconciliation
+
+The repository implementation satisfies the v1 local creation, review,
+finalization, exact-byte encryption, receipt, signed-intake, rollback,
+minimum-version, disabled-state, guarded endpoint, privacy disclosure, manual
+Dropbox handoff, user-reported completion, GitHub continuation, maintainer
+inspection/promotion, and local Processed-retention boundaries described above.
+
+Production qualification on `wspr4` proved installation, fixed packaged `age`
+tools, service activation with transmission disabled, authenticated
+upgrade-required output for a feature prerelease, durable generation state, and
+canonical-version active resolution. It did not perform a production upload.
+
+The following remain deliberately outside the completed evidence:
+
+- a release build satisfying `minimum_upload_version` completing the entire UI
+  workflow through a fresh signed-out Dropbox submission;
+- maintainer receipt, inspection, and promotion of that same qualification
+  artifact;
+- erasure from Dropbox, synchronized replicas, backups, downloads, or user-held
+  copies, which local retention tooling cannot guarantee;
+- automatic or bulk retention deletion and automatic active-to-resolved case
+  transitions;
+- anonymous GitHub issue creation, direct Dropbox upload, or embedded provider
+  credentials; and
+- operator and maintainer documentation in `Wsprry_Pi_Docs`.
+
+Historical slice records remain scoped statements of what each slice did and did
+not implement at that time. Their “later slice” language is not the current
+project status; this reconciled contract and the latest roadmap paragraph are
+authoritative.
+
 ## Current Decisions and Open Work
 
 Established decisions are readable local review before consent, exact-byte encryption, separate WsprryPi encryption and signing keys, signed dynamic routing, rotatable and disableable intake, minimum-version enforcement, local operation during upload outages, authenticated GitHub participation, description-and-contact fallback, and case-ID correlation.
@@ -427,10 +507,10 @@ GitHub continuation, maintainer inspection and processing, key-administration
 tools, vault recovery qualification, and installer dependency are implemented.
 The production installer, service restart, authenticated upgrade-required
 endpoint, durable generation state, and canonical-version active resolution have
-been qualified on `wspr4` without RF activity. Remaining work is the signed-out
-Dropbox submission and maintainer receipt/inspection/promotion exercise,
-final contract reconciliation, and operator/maintainer documentation in the
-separate `Wsprry_Pi_Docs` repository. Strict Processed-case retention auditing
+been qualified on `wspr4` without RF activity. Remaining work comprises the
+signed-out Dropbox submission and maintainer receipt/inspection/promotion
+exercise, plus operator and maintainer documentation in the separate
+`Wsprry_Pi_Docs` repository. Strict Processed-case retention auditing
 and explicit one-case local deletion are implemented; Dropbox, synchronized
 replica, backup, and user-copy retention remain operational boundaries. The
 separately observed service stop-timeout limitation remains service-lifecycle

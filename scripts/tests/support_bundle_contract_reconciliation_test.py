@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+import re
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PLAN = (ROOT / "docs/plans/support-bundle-private-intake.md").read_text()
+COLLECTOR = (ROOT / "scripts/collect-support-bundle.sh").read_text()
+PRIVATE = (ROOT / "src/support_bundle_private_artifact.cpp").read_text()
+VALIDATOR = (ROOT / "src/support_bundle_intake_validation.cpp").read_text()
+
+
+def require(value: str, source: str, message: str) -> None:
+    if value not in source:
+        raise AssertionError(message)
+
+
+def documented_fields(marker: str) -> list[str]:
+    match = re.search(re.escape(marker) + r".*?```text\n(.*?)\n```", PLAN, re.DOTALL)
+    if match is None:
+        raise AssertionError(f"missing documented field block after {marker}")
+    return [line.split(",", 1)[0].split(" =", 1)[0].strip()
+            for line in match.group(1).splitlines()]
+
+
+require("Status: Implemented contract; release/provider qualification remains gated", PLAN,
+        "contract status must distinguish implementation from remaining qualification")
+require("Slice 43 contract reconciliation", PLAN, "current reconciliation slice must be linked")
+require("exactly these top-level fields", PLAN,
+        "readable v1 manifest must retain its exact top-level contract")
+
+readable_fields = ["schema_version", "contract_version", "project_id", "project_version",
+                   "case_id", "created_at_utc", "collection_options", "privacy_categories",
+                   "support_context", "collection_warnings", "files"]
+if documented_fields("exactly these top-level fields:") != readable_fields:
+    raise AssertionError("readable manifest documentation must list the exact v1 fields")
+for field in readable_fields:
+    require(f'"{field}"', COLLECTOR, f"collector manifest is missing {field}")
+    require(field, PLAN, f"contract manifest list is missing {field}")
+
+receipt_fields = ["schema_version", "project_id", "case_id", "artifact_id", "created_at_utc",
+                  "archive_filename", "archive_size", "archive_sha256", "encrypted_filename",
+                  "encrypted_size", "encrypted_sha256", "bundle_encryption_key_id", "issue_url",
+                  "upload_state"]
+if documented_fields("receipt containing exactly the v1 fields:") != receipt_fields:
+    raise AssertionError("receipt documentation must list the exact v1 fields")
+for field in receipt_fields:
+    require(f'"{field}"', PRIVATE, f"receipt implementation is missing {field}")
+    require(field, PLAN, f"contract receipt list is missing {field}")
+
+intake_fields = ["schema_version", "project_id", "generation", "published_at", "expires_at",
+                 "minimum_upload_version", "minimum_client_protocol", "request_url", "release_url",
+                 "status", "user_message", "bundle_encryption_key_id"]
+if documented_fields("The version-1 manifest SHALL contain exactly:") != intake_fields:
+    raise AssertionError("signed intake documentation must list the exact v1 fields")
+for field in intake_fields:
+    require(f'"{field}"', VALIDATOR, f"intake validator is missing {field}")
+    require(field, PLAN, f"contract intake list is missing {field}")
+
+require("wsprrypi-support-<case-id>-<artifact-id>.tar.gz.age", PLAN,
+        "encrypted filename must match production")
+require("The signing key ID is carried by the detached signature envelope", PLAN,
+        "signing key placement must remain explicit")
+require("The version-1 manifest SHALL contain exactly", PLAN,
+        "signed intake v1 must retain its exact-field contract")
+require("The version-1 downloaded receipt is immutable", PLAN,
+        "receipt immutability must remain explicit")
+require("into the canonical processing record", PLAN,
+        "Dropbox filename privacy boundary must remain explicit")
+require("The maintainer has not yet confirmed receipt.", PLAN,
+        "user-reported completion must not claim maintainer confirmation")
+require("a release build satisfying `minimum_upload_version`", PLAN,
+        "signed-out release qualification must remain deferred")
+require("operator and maintainer documentation in `Wsprry_Pi_Docs`", PLAN,
+        "operator documentation follow-up must remain explicit")
+
+print("support_bundle_contract_reconciliation_test: PASS")

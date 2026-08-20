@@ -381,7 +381,10 @@ The existing 24-hour Pi-side retention remains the maximum for candidate, finali
 
 ## Maintainer intake contract
 
-The maintainer records the Dropbox filename, size, receipt time, project, case ID, and artifact ID. Processing then:
+The maintainer treats the Dropbox filename as untrusted personal metadata because
+the provider may append uploader identity. Canonical processing does not retain
+that name; it derives size, project, case ID, artifact ID, and key correlation
+from the validated ciphertext, receipt, and encrypted manifest. Processing then:
 
 1. Decrypts with the private identity selected by key ID from the receipt or case record.
 2. Hashes the decrypted `.tar.gz` and compares it with the receipt when available.
