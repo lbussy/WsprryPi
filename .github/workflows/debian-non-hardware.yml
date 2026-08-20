@@ -162,6 +162,7 @@ jobs:
           make support-bundle-maintainer-intake-inspection-test SUDO=
           make support-bundle-maintainer-processing-test SUDO=
           make support-bundle-retention-audit-test SUDO=
+          make support-bundle-retention-deletion-test SUDO=
           make support-bundle-age-dependency-test installer-dependency-test SUDO=
           make support-bundle-intake-validation-test SUDO=
           make support-bundle-intake-state-test SUDO=
