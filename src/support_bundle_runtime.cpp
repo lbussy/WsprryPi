@@ -1,6 +1,7 @@
 #include "support_bundle_runtime.hpp"
 
 #include "support_bundle_collector_executor.hpp"
+#include "build_metadata.hpp"
 
 #include <array>
 #include <openssl/rand.h>
@@ -36,10 +37,12 @@ std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_production
     dependencies.timeout = std::chrono::minutes(10);
     dependencies.term_grace = std::chrono::seconds(2);
     dependencies.run_startup_cleanup = true;
+    dependencies.project_version = MAKE_TAG;
     dependencies.executor = std::make_shared<SupportBundleCollectorExecutor>(
         dependencies.collector_executable.string(),
         dependencies.timeout,
-        dependencies.term_grace);
+        dependencies.term_grace,
+        dependencies.project_version);
     return create_for_testing(std::move(dependencies));
 }
 
@@ -52,7 +55,8 @@ std::unique_ptr<SupportBundleJobManager> SupportBundleRuntime::create_for_testin
         dependencies.executor = std::make_shared<SupportBundleCollectorExecutor>(
             dependencies.collector_executable.string(),
             dependencies.timeout,
-            dependencies.term_grace);
+            dependencies.term_grace,
+            dependencies.project_version);
     }
 
     return std::make_unique<SupportBundleJobManager>(

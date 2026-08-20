@@ -38,6 +38,8 @@ if documented_fields("exactly these top-level fields:") != readable_fields:
 for field in readable_fields:
     require(f'"{field}"', COLLECTOR, f"collector manifest is missing {field}")
     require(field, PLAN, f"contract manifest list is missing {field}")
+if '"project_version": "unknown"' in COLLECTOR:
+    raise AssertionError("private readable manifests must not publish an unknown project version")
 
 receipt_fields = ["schema_version", "project_id", "case_id", "artifact_id", "created_at_utc",
                   "archive_filename", "archive_size", "archive_sha256", "encrypted_filename",

@@ -109,8 +109,10 @@ struct PrivateContextCleanup {
 SupportBundleCollectorExecutor::SupportBundleCollectorExecutor(
     std::string executable,
     std::chrono::milliseconds timeout,
-    std::chrono::milliseconds grace)
-    : executable_(std::move(executable)), timeout_(timeout), grace_(grace) {}
+    std::chrono::milliseconds grace,
+    std::string project_version)
+    : executable_(std::move(executable)), timeout_(timeout), grace_(grace),
+      project_version_(std::move(project_version)) {}
 
 void SupportBundleCollectorExecutor::request_stop() noexcept {
     std::lock_guard lock(mutex_);
@@ -144,10 +146,12 @@ SupportBundleExecutionResult SupportBundleCollectorExecutor::run(
     if (!context.case_id.empty()) {
         if (!context.support_context ||
             !valid_support_bundle_case_id(context.case_id) ||
-            !valid_support_bundle_context(*context.support_context)) {
+            !valid_support_bundle_context(*context.support_context) ||
+            project_version_.empty()) {
             return {false, "collector_launch_failed", "Support collection failed."};
         }
-        arguments.insert(arguments.end(), {"--case-id", context.case_id});
+        arguments.insert(arguments.end(), {"--case-id", context.case_id,
+                                           "--project-version", project_version_});
         const auto &support = *context.support_context;
         if (support.kind == SupportBundleContextKind::existing_github_issue) {
             arguments.insert(arguments.end(), {"--github-issue", support.issue_url});

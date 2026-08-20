@@ -43,6 +43,7 @@ PROBLEM_DESCRIPTION_FILE=""
 CONTACT_FILE=""
 PROBLEM_DESCRIPTION=""
 CONTACT_VALUE=""
+PROJECT_VERSION=""
 MANIFEST_INCLUDED=0
 SYMLINKS_OMITTED=0
 
@@ -67,6 +68,7 @@ Options:
   --context-kind KIND  new_github_issue or no_github
   --problem-description-file FILE  Private bounded description file
   --contact-file FILE  Private bounded contact file
+  --project-version VERSION  Application-supplied semantic version for private intake
   --keep-workdir       Keep temporary collection directory
   -h, --help           Show this help
 
@@ -117,6 +119,10 @@ while [[ $# -gt 0 ]]; do
       shift
       CONTACT_FILE="${1:-}"
       ;;
+    --project-version)
+      shift
+      PROJECT_VERSION="${1:-}"
+      ;;
     --keep-workdir) KEEP_WORKDIR=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
@@ -151,6 +157,20 @@ valid_case_id() {
   [[ "$1" =~ ^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$ ]]
 }
 
+valid_project_version() {
+  local value="$1" core prerelease identifier
+  [[ ${#value} -le 128 && "$value" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || return 1
+  core="${value%%+*}"
+  [[ "$core" == *-* ]] || return 0
+  prerelease="${core#*-}"
+  while [[ -n "$prerelease" ]]; do
+    identifier="${prerelease%%.*}"
+    [[ ! "$identifier" =~ ^[0-9]+$ || "$identifier" == "0" || "$identifier" != 0* ]] || return 1
+    [[ "$prerelease" == *.* ]] || break
+    prerelease="${prerelease#*.}"
+  done
+}
+
 read_private_context_file() {
   local path="$1" maximum="$2" label="$3" size value mode owner
   [[ "$path" == /* && ! -L "$path" && -f "$path" ]] || fail "$label must be an absolute regular non-symlink file."
@@ -170,9 +190,10 @@ read_private_context_file() {
 
 validate_private_metadata() {
   local any_private=0
-  [[ -n "$CASE_ID$CONTEXT_KIND$GITHUB_ISSUE_URL$PROBLEM_DESCRIPTION_FILE$CONTACT_FILE" ]] && any_private=1
+  [[ -n "$CASE_ID$CONTEXT_KIND$GITHUB_ISSUE_URL$PROBLEM_DESCRIPTION_FILE$CONTACT_FILE$PROJECT_VERSION" ]] && any_private=1
   [[ "$any_private" -eq 1 ]] || return 0
   valid_case_id "$CASE_ID" || fail "Private intake requires a valid case ID."
+  valid_project_version "$PROJECT_VERSION" || fail "Private intake requires a valid project version."
   if [[ -n "$GITHUB_ISSUE_URL" ]]; then
     [[ -z "$CONTEXT_KIND$PROBLEM_DESCRIPTION_FILE$CONTACT_FILE" ]] || fail "Private intake support context is conflicting."
     [[ "$GITHUB_ISSUE_URL" =~ ^https://github\.com/WsprryPi/WsprryPi/issues/[1-9][0-9]{0,9}$ ]] || fail "GitHub issue URL is invalid."
@@ -1099,7 +1120,7 @@ create_private_manifest() {
     printf '  "schema_version": 1,\n'
     printf '  "contract_version": 1,\n'
     printf '  "project_id": "wsprrypi",\n'
-    printf '  "project_version": "unknown",\n'
+    printf '  "project_version": "'; json_escape "$PROJECT_VERSION"; printf '",\n'
     printf '  "case_id": "%s",\n' "$CASE_ID"
     printf '  "created_at_utc": "%s",\n' "$created"
     printf '  "collection_options": {\n'

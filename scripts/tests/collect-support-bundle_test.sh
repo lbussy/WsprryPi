@@ -232,6 +232,7 @@ printf 'operator@example.test' > "$TEST_ROOT/contact.txt"
 chmod 600 "$TEST_ROOT/description.txt" "$TEST_ROOT/contact.txt"
 run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/private-i2c.log" \
   --case-id 7K3M-9QFX-2DPA --context-kind no_github \
+  --project-version 3.2.1-qualification.1 \
   --problem-description-file "$TEST_ROOT/description.txt" \
   --contact-file "$TEST_ROOT/contact.txt" > "$TEST_ROOT/private.stdout"
 extract_bundle "$TEST_ROOT/extracted-private"
@@ -251,6 +252,7 @@ manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
 assert manifest["schema_version"] == 1
 assert manifest["contract_version"] == 1
 assert manifest["project_id"] == "wsprrypi"
+assert manifest["project_version"] == "3.2.1-qualification.1"
 assert manifest["case_id"] == "7K3M-9QFX-2DPA"
 assert manifest["created_at_utc"] == "2026-01-02T03:04:05Z"
 assert manifest["support_context"] == {
@@ -275,6 +277,7 @@ PY
 rm -f "$archive" "${archive}.sha256" "$result"
 run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/github-i2c.log" \
   --case-id ABCD-EFGH-JKMP \
+  --project-version 3.2.1-qualification.1 \
   --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 > "$TEST_ROOT/github.stdout"
 extract_bundle "$TEST_ROOT/extracted-github"
 python3 - "$TEST_ROOT/extracted-github/bundle/manifest.json" <<'PY'
@@ -288,6 +291,19 @@ PY
 
 # Invalid or conflicting private metadata fails closed without a successful archive.
 rm -f "$archive" "${archive}.sha256" "$result"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/missing-version.log" \
+  --case-id ABCD-EFGH-JKMP --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 >/dev/null 2>&1; then
+  fail "missing private project version succeeded"
+fi
+assert_failure_result "$result"
+rm -f "$result"
+if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/noncanonical-version.log" \
+  --case-id ABCD-EFGH-JKMP --project-version 03.2.1 \
+  --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 >/dev/null 2>&1; then
+  fail "noncanonical private project version succeeded"
+fi
+assert_failure_result "$result"
+rm -f "$result"
 if run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/invalid-private.log" \
   --case-id bad --github-issue https://github.com/WsprryPi/WsprryPi/issues/352 >/dev/null 2>&1; then
   fail "invalid private case ID succeeded"

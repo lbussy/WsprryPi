@@ -78,6 +78,11 @@ SupportBundleExecutionContext private_context_for(
     const fs::path &job_directory, SupportBundleContext support) {
     return {false, job_directory, "7K3M-9QFX-2DPA", std::move(support)};
 }
+
+SupportBundleCollectorExecutor private_executor(const fs::path &helper) {
+    return SupportBundleCollectorExecutor(helper.string(), 1s, 50ms,
+                                          "3.2.1-qualification.1");
+}
 }  // namespace
 
 int main() {
@@ -118,12 +123,14 @@ int main() {
         SupportBundleContext support;
         support.kind = SupportBundleContextKind::existing_github_issue;
         support.issue_url = "https://github.com/WsprryPi/WsprryPi/issues/414";
-        SupportBundleCollectorExecutor executor(helper.string(), 1s, 50ms);
+        auto executor = private_executor(helper);
         assert(executor.run(private_context_for(job_directory, support)).succeeded);
         const auto arguments = read_lines(job_directory / "executor-helper-argv.txt");
-        assert(arguments.size() == 7);
+        assert(arguments.size() == 9);
         assert(arguments[3] == "--case-id" && arguments[4] == "7K3M-9QFX-2DPA");
-        assert(arguments[5] == "--github-issue" && arguments[6] == support.issue_url);
+        assert(arguments[5] == "--project-version" &&
+               arguments[6] == "3.2.1-qualification.1");
+        assert(arguments[7] == "--github-issue" && arguments[8] == support.issue_url);
     }
 
     {
@@ -132,10 +139,10 @@ int main() {
         support.kind = SupportBundleContextKind::no_github;
         support.problem_description = "transmitter stopped after schedule";
         support.contact = "radio@example.test";
-        SupportBundleCollectorExecutor executor(helper.string(), 1s, 50ms);
+        auto executor = private_executor(helper);
         assert(executor.run(private_context_for(job_directory, support)).succeeded);
         const auto arguments = read_lines(job_directory / "executor-helper-argv.txt");
-        assert(arguments.size() == 11);
+        assert(arguments.size() == 13);
         const std::string joined = [&] {
             std::string value;
             for (const auto &argument : arguments) value += argument + "\n";
@@ -145,7 +152,19 @@ int main() {
         assert(joined.find(support.contact) == std::string::npos);
         assert(joined.find("--problem-description-file") != std::string::npos);
         assert(joined.find("--contact-file") != std::string::npos);
+        assert(joined.find("--project-version\n3.2.1-qualification.1\n") != std::string::npos);
         assert(!fs::exists(job_directory / ".private-context"));
+    }
+
+    {
+        const fs::path job_directory = make_job_directory(root, "missing version");
+        SupportBundleContext support;
+        support.kind = SupportBundleContextKind::existing_github_issue;
+        support.issue_url = "https://github.com/WsprryPi/WsprryPi/issues/414";
+        SupportBundleCollectorExecutor executor(helper.string(), 1s, 50ms);
+        const auto result = executor.run(private_context_for(job_directory, support));
+        assert_sanitized_failure(result, helper, job_directory);
+        assert(result.failure_category == "collector_launch_failed");
     }
 
     {

@@ -22,6 +22,7 @@ struct SupportBundleRuntimeTestDependencies {
     std::filesystem::path storage_root;
     std::function<std::string()> id_generator;
     std::shared_ptr<SupportBundleJobExecutor> executor;
+    std::string project_version;
     std::chrono::milliseconds timeout = std::chrono::minutes(10);
     std::chrono::milliseconds term_grace = std::chrono::seconds(2);
     bool run_startup_cleanup = false;
