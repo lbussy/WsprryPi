@@ -28,6 +28,7 @@ DIGEST = re.compile(r"^[0-9a-f]{64}$")
 ISSUE_URL = re.compile(r"^https://github\.com/WsprryPi/WsprryPi/issues/([1-9][0-9]{0,9})$")
 TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 MAX_RECEIPT = 16 * 1024
+MAX_MANIFEST = 256 * 1024
 MAX_ARCHIVE = 64 * 1024 * 1024
 MAX_FILES = 2048
 MAX_MEMBERS = 4096
@@ -152,8 +153,9 @@ def open_safe_file(path: Path, *, identity: bool = False) -> int:
         info = os.fstat(descriptor)
     except OSError as error:
         raise InspectionError(InspectionStatus.unsafe_input) from error
+    identity_mode = stat.S_IMODE(info.st_mode)
     if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1
-            or identity and stat.S_IMODE(info.st_mode) != 0o600):
+            or identity and identity_mode not in (0o400, 0o600)):
         os.close(descriptor)
         raise InspectionError(InspectionStatus.unsafe_input)
     return descriptor
@@ -165,6 +167,7 @@ def safe_executable(path: Path) -> None:
     except OSError as error:
         raise InspectionError(InspectionStatus.unsafe_input) from error
     if (not path.is_absolute() or not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)
+            or info.st_uid not in (0, os.geteuid())
             or not info.st_mode & stat.S_IXUSR or info.st_mode & 0o022):
         raise InspectionError(InspectionStatus.unsafe_input)
 
@@ -195,16 +198,73 @@ def descriptor_path(descriptor: int) -> str:
     return str(proc / str(descriptor)) if proc.is_dir() else f"/dev/fd/{descriptor}"
 
 
+def stage_descriptor(descriptor: int, destination: Path, maximum: int) -> None:
+    output = -1
+    copied = 0
+    try:
+        output = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                         | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+        while block := os.pread(descriptor, min(64 * 1024, maximum + 1 - copied), copied):
+            copied += len(block)
+            if copied > maximum:
+                raise InspectionError(InspectionStatus.decrypt_failed)
+            offset = 0
+            while offset < len(block):
+                count = os.write(output, block[offset:])
+                if count <= 0:
+                    raise InspectionError(InspectionStatus.decrypt_failed)
+                offset += count
+        if copied != os.fstat(descriptor).st_size:
+            raise InspectionError(InspectionStatus.decrypt_failed)
+        os.fsync(output)
+    except (InspectionError, OSError) as error:
+        if isinstance(error, InspectionError):
+            raise
+        raise InspectionError(InspectionStatus.decrypt_failed) from error
+    finally:
+        if output >= 0:
+            os.close(output)
+
+
 def decrypt_bounded(age: Path, identity_descriptor: int, ciphertext_descriptor: int, output: Path,
                     expected_size: int, timeout: float) -> None:
-    process = subprocess.Popen(
-        [str(age), "--decrypt", "--identity", descriptor_path(identity_descriptor),
-         descriptor_path(ciphertext_descriptor)],
-        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
-        start_new_session=True,
-        pass_fds=(identity_descriptor, ciphertext_descriptor),
-    )
+    staged: list[Path] = []
+    proc = Path("/proc/self/fd")
+    if proc.is_dir():
+        identity_input = descriptor_path(identity_descriptor)
+        ciphertext_input = descriptor_path(ciphertext_descriptor)
+        inherited = (identity_descriptor, ciphertext_descriptor)
+        identity_stdin = subprocess.DEVNULL
+    else:
+        identity_input = "-"
+        ciphertext_input = str(output.parent / ".ciphertext")
+        staged = [Path(ciphertext_input)]
+        try:
+            stage_descriptor(ciphertext_descriptor, staged[0], os.fstat(ciphertext_descriptor).st_size)
+        except InspectionError:
+            for candidate in staged:
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
+            raise
+        inherited = ()
+        identity_stdin = identity_descriptor
+    try:
+        process = subprocess.Popen(
+            [str(age), "--decrypt", "--identity", identity_input, ciphertext_input],
+            stdin=identity_stdin, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
+            start_new_session=True,
+            pass_fds=inherited,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        for candidate in staged:
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
+        raise InspectionError(InspectionStatus.decrypt_failed) from error
     assert process.stdout is not None
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
@@ -257,6 +317,11 @@ def decrypt_bounded(age: Path, identity_descriptor: int, ciphertext_descriptor: 
         selector.close()
         process.stdout.close()
         terminate()
+        for candidate in staged:
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def safe_member_name(name: str) -> tuple[str, str] | None:
@@ -364,7 +429,7 @@ def inspect_archive(path: Path, receipt: dict[str, object]) -> str:
                     read += len(block)
                     digest.update(block)
                     if contents is not None:
-                        if read > MAX_RECEIPT:
+                        if read > MAX_MANIFEST:
                             raise InspectionError(InspectionStatus.invalid_manifest)
                         contents.extend(block)
                 if read != member.size:
@@ -431,14 +496,7 @@ def inspect(*, age: Path, ciphertext: Path, receipt_path: Path, identity: Path,
 
 
 def inspect_production(*, ciphertext: Path, receipt_path: Path, identity: Path,
-                       work_directory: Path) -> InspectionResult:
-    age = Path("/usr/bin/age")
-    try:
-        info = age.lstat()
-        if info.st_uid != 0:
-            return InspectionResult(InspectionStatus.unsafe_input)
-    except OSError:
-        return InspectionResult(InspectionStatus.unsafe_input)
+                       work_directory: Path, age: Path = Path("/usr/bin/age")) -> InspectionResult:
     return inspect(age=age, ciphertext=ciphertext, receipt_path=receipt_path,
                    identity=identity, work_directory=work_directory)
 
@@ -449,6 +507,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--receipt", required=True, type=Path)
     parser.add_argument("--identity", required=True, type=Path)
     parser.add_argument("--work-directory", required=True, type=Path)
+    parser.add_argument("--age", type=Path, default=Path("/usr/bin/age"))
     return parser.parse_args(argv)
 
 
@@ -457,7 +516,8 @@ def main(argv: list[str]) -> int:
     result = inspect_production(ciphertext=arguments.ciphertext,
                                 receipt_path=arguments.receipt,
                                 identity=arguments.identity,
-                                work_directory=arguments.work_directory)
+                                work_directory=arguments.work_directory,
+                                age=arguments.age)
     print(f"status: {result.status.value}")
     if result.status is InspectionStatus.inspected:
         print(f"case ID: {result.case_id}")

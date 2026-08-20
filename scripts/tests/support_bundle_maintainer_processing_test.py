@@ -15,6 +15,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -275,6 +276,25 @@ class MaintainerProcessingTest(unittest.TestCase):
         rendered = output.getvalue()
         self.assertRegex(rendered, r"^status: processed\ncase ID: [A-Z0-9-]+\nartifact ID: [a-f0-9]+\n$")
         self.assertNotIn(str(self.root), rendered)
+
+    def test_production_forwards_the_explicit_age_executable(self):
+        chosen = self.root / "age"
+        captured = {}
+
+        def fake_inspect_production(**kwargs):
+            captured.update(kwargs)
+            return self.inspected()
+
+        def fake_process(**kwargs):
+            kwargs["inspector"](sentinel=True)
+            return MODULE.ProcessingResult(MODULE.ProcessingStatus.processed)
+
+        with mock.patch.object(MODULE.INSPECTOR, "inspect_production",
+                               side_effect=fake_inspect_production), \
+                mock.patch.object(MODULE, "process_with_test_seam", side_effect=fake_process):
+            self.assertEqual(MODULE.process_production(age=chosen).status,
+                             MODULE.ProcessingStatus.processed)
+        self.assertEqual(captured, {"age": chosen, "sentinel": True})
 
 
 if __name__ == "__main__":

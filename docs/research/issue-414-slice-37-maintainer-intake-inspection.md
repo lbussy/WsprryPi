@@ -21,14 +21,19 @@ or expansion beyond the receipt size; archive size/hash mismatch; unsafe or
 duplicate tar paths; links and special nodes; permission-escalation bits; and
 file-count, individual-file, or total-expansion limit violations. It hashes every
 declared diagnostic member and requires the manifest inventory to match the
-archive exactly. Plaintext exists only under an owner-only temporary directory
+archive exactly. Receipt JSON is bounded independently to 16 KiB; the bundle
+manifest is bounded to 256 KiB so its inventory can represent the permitted file
+count. Plaintext exists only under an owner-only temporary directory
 and is removed on success and every failure.
 
 ## Operational use
 
 The maintainer supplies explicit absolute paths to the ciphertext, receipt,
-matching `<bundle-key-id>.age-identity.txt`, and an owner-only `0700` work
-directory. Production defaults to `/usr/bin/age`. The tool does not search a
+matching `<bundle-key-id>.age-identity.txt` with exact owner-only mode `0400` or
+`0600`, and an owner-only `0700` work directory. Production defaults to the
+fixed Debian `/usr/bin/age`; a maintainer on another platform may explicitly
+select an absolute owner- or root-owned regular executable with no symlink or
+group/world write permissions. The tool does not search a
 Keychain, password vault, Dropbox directory, or repository for identities.
 
 ## Validation

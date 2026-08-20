@@ -515,9 +515,12 @@ def process_with_test_seam(*, incoming: Path, processed: Path, ciphertext: Path,
                     pass
 
 
-def process_production(**kwargs) -> ProcessingResult:
+def process_production(*, age: Path = Path("/usr/bin/age"), **kwargs) -> ProcessingResult:
+    def production_inspector(**inspection_kwargs):
+        return INSPECTOR.inspect_production(age=age, **inspection_kwargs)
+
     return process_with_test_seam(repository=HERE.parents[1], now_provider=lambda: datetime.now(timezone.utc).replace(microsecond=0),
-                                  inspector=INSPECTOR.inspect_production, ops=FileOps(), **kwargs)
+                                  inspector=production_inspector, ops=FileOps(), **kwargs)
 
 
 def main(argv: list[str]) -> int:
@@ -526,12 +529,14 @@ def main(argv: list[str]) -> int:
         parser.add_argument("--" + flag, required=True, type=Path)
     parser.add_argument("--retention-class", required=True, choices=sorted(RETENTION))
     parser.add_argument("--resolved-retention-days", type=int, default=60)
+    parser.add_argument("--age", type=Path, default=Path("/usr/bin/age"))
     args = parser.parse_args(argv)
     result = process_production(incoming=args.incoming, processed=args.processed,
                                 ciphertext=args.ciphertext, receipt_path=args.receipt,
                                 identity=args.identity, work_directory=args.work_directory,
                                 retention_class=args.retention_class,
-                                resolved_retention_days=args.resolved_retention_days)
+                                resolved_retention_days=args.resolved_retention_days,
+                                age=args.age)
     print(f"status: {result.status.value}")
     if result.case_id:
         print(f"case ID: {result.case_id}")

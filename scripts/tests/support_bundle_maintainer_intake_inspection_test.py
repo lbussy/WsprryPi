@@ -144,6 +144,35 @@ class MaintainerIntakeInspectionTest(unittest.TestCase):
             "https://github.com/WsprryPi/WsprryPi/issues/414"))
         self.assertEqual(list(self.work.iterdir()), [])
 
+    def test_manifest_has_an_independent_bounded_size(self) -> None:
+        manifest = self.manifest()
+        manifest["collection_warnings"] = ["x" * MODULE.MAX_RECEIPT]
+        self.use_archive(self.make_archive(manifest=manifest))
+        self.assertGreater(
+            len(json.dumps(manifest, sort_keys=True).encode()), MODULE.MAX_RECEIPT)
+        self.assertEqual(self.invoke().status, MODULE.InspectionStatus.inspected)
+
+        with mock.patch.object(MODULE, "MAX_MANIFEST", 1):
+            self.assertEqual(self.invoke().status, MODULE.InspectionStatus.invalid_manifest)
+        self.assertEqual(list(self.work.iterdir()), [])
+
+    def test_provisioned_read_only_identity_mode_is_accepted(self) -> None:
+        self.identity.chmod(0o400)
+        self.assertEqual(self.invoke().status, MODULE.InspectionStatus.inspected)
+        self.assertEqual(list(self.work.iterdir()), [])
+
+    def test_production_accepts_an_explicit_safe_age_executable(self) -> None:
+        result = MODULE.inspect_production(
+            ciphertext=self.ciphertext, receipt_path=self.receipt,
+            identity=self.identity, work_directory=self.work, age=self.age)
+        self.assertEqual(result.status, MODULE.InspectionStatus.inspected)
+        unsafe = self.root / "age-link"
+        unsafe.symlink_to(self.age)
+        result = MODULE.inspect_production(
+            ciphertext=self.ciphertext, receipt_path=self.receipt,
+            identity=self.identity, work_directory=self.work, age=unsafe)
+        self.assertEqual(result.status, MODULE.InspectionStatus.unsafe_input)
+
     def test_receipt_is_strict_bounded_and_duplicate_rejecting(self) -> None:
         for override in ({"unexpected": True}, {"schema_version": True},
                          {"case_id": "bad"}, {"archive_size": MODULE.MAX_ARCHIVE + 1},
@@ -215,8 +244,10 @@ class MaintainerIntakeInspectionTest(unittest.TestCase):
         self.assertEqual(list(self.work.iterdir()), [])
 
     def test_unsafe_files_and_cli_output_do_not_disclose(self) -> None:
-        self.identity.chmod(0o644)
-        self.assertEqual(self.invoke().status, MODULE.InspectionStatus.unsafe_input)
+        for mode in (0o000, 0o200, 0o440, 0o640, 0o644, 0o660, 0o700):
+            with self.subTest(mode=oct(mode)):
+                self.identity.chmod(mode)
+                self.assertEqual(self.invoke().status, MODULE.InspectionStatus.unsafe_input)
         self.identity.chmod(0o600)
         output = io.StringIO()
         success = MODULE.InspectionResult(MODULE.InspectionStatus.inspected, CASE_ID,
