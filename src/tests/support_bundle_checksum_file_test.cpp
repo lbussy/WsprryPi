@@ -56,6 +56,9 @@ void expect_failure(const SupportBundleDownloadReference &reference,
 
 std::size_t open_descriptor_count() {
     DIR *directory = opendir("/proc/self/fd");
+    if (directory == nullptr) {
+        directory = opendir("/dev/fd");
+    }
     assert(directory != nullptr);
     std::size_t count = 0;
     while (readdir(directory) != nullptr) {
