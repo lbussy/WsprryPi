@@ -115,7 +115,10 @@ WebSocketServer::~WebSocketServer()
  * @note Uses IPv6 dual-stack by setting IPV6_V6ONLY to 0, allowing both IPv4
  *       and IPv6 clients to connect.
  */
-bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
+bool WebSocketServer::start(
+    uint16_t port,
+    uint32_t keep_alive_secs,
+    bool loopback_only)
 {
     if (port < 1024 || port > 49151)
     {
@@ -123,6 +126,7 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
         return false;
     }
     keep_alive_secs_ = keep_alive_secs;
+    loopback_only_ = loopback_only;
 
     // Create an IPv6 socket.
     listen_fd_ = socket(AF_INET6, SOCK_STREAM, 0);
@@ -152,7 +156,7 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
     struct sockaddr_in6 addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin6_family = AF_INET6;
-    addr.sin6_addr = in6addr_any; // Accept connections from any IPv6 (and IPv4 via mapped addresses)
+    addr.sin6_addr = loopback_only ? in6addr_loopback : in6addr_any;
     addr.sin6_port = htons(port);
     if (bind(listen_fd_, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
     {
@@ -177,7 +181,11 @@ bool WebSocketServer::start(uint16_t port, uint32_t keep_alive_secs)
         keep_alive_thread_ = std::thread(&WebSocketServer::keepAliveLoop, this, keep_alive_secs_);
     }
 
-    llog.logS(INFO, "Socket server started on port: ", port);
+    llog.logS(
+        INFO,
+        "Socket server started on ",
+        loopback_only ? "loopback port: " : "port: ",
+        port);
     return true;
 }
 
@@ -200,8 +208,28 @@ void WebSocketServer::stop()
     if (!running_ && !server_thread_.joinable() && !keep_alive_thread_.joinable())
         return;
 
-    // Disable the server loop
+    // Close the command gate before joining the watchdog. Existing client
+    // handlers may still finish, but no new bounded transaction may arm.
     running_ = false;
+    bounded_tone_watchdog_.request_stop();
+    if (bounded_tone_watchdog_.joinable())
+        bounded_tone_watchdog_.join();
+    bool bounded_tone_was_active = false;
+    {
+        std::lock_guard<std::mutex> lock(bounded_tone_mutex_);
+        bounded_tone_was_active = !bounded_tone_request_id_.empty();
+        bounded_tone_request_id_.clear();
+    }
+    if (bounded_tone_was_active)
+    {
+        bounded_tone_watchdog_.request_stop();
+        if (bounded_tone_watchdog_.joinable())
+            bounded_tone_watchdog_.join();
+        std::lock_guard<std::mutex> command_lock(test_tone_command_mutex_);
+        const TestToneStopResult stopped = end_test_tone();
+        if (!stopped.stopped)
+            llog.logE(ERROR, "Bounded tone cleanup failed: ", stopped.message);
+    }
 
     // Wake keep-alive thread if sleeping
     keep_alive_cv_.notify_all();
@@ -344,7 +372,8 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         std::string cmd = j.value("command", "");
         std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
 
-        if (cmd == "tone_start" || cmd == "tone_end")
+        if (cmd == "tone_start" || cmd == "tone_end" ||
+            cmd == "bounded_tone")
         {
             // Multiple clients have independent handler threads. Keep each
             // Test Tone lifecycle operation and its broadcast reply in one
@@ -469,8 +498,134 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                 reply = build_test_tone_response(*parsed_request.request, start_result);
             }
         }
+        else if (cmd == "bounded_tone")
+        {
+            reply["command"] = "bounded_tone";
+            if (!running_)
+            {
+                reply["status"] = "error";
+                reply["started"] = false;
+                reply["message"] = "WebSocket server is stopping";
+            }
+            else if (!loopback_only_)
+            {
+                reply["status"] = "error";
+                reply["started"] = false;
+                reply["message"] =
+                    "bounded_tone requires a loopback-only server";
+            }
+            else
+            {
+                const BoundedTestToneRequestParseResult parsed =
+                    parse_bounded_test_tone_request(j);
+                if (!parsed)
+                {
+                    reply["status"] = "error";
+                    reply["started"] = false;
+                    reply["message"] = parsed.error;
+                }
+                else
+                {
+                    std::lock_guard<std::mutex> bounded_lock(
+                        bounded_tone_mutex_);
+                    if (!running_)
+                    {
+                        reply["status"] = "error";
+                        reply["started"] = false;
+                        reply["request_id"] = parsed.request->request_id;
+                        reply["message"] = "WebSocket server is stopping";
+                    }
+                    else if (!bounded_tone_request_id_.empty())
+                    {
+                        reply["status"] = "error";
+                        reply["started"] = false;
+                        reply["request_id"] = parsed.request->request_id;
+                        reply["message"] =
+                            "another bounded tone transaction is active";
+                    }
+                    else
+                    {
+                        const TestToneStartResult start_result =
+                            start_test_tone(parsed.request->tone);
+                        reply = build_test_tone_response(
+                            parsed.request->tone, start_result);
+                        reply["command"] = "bounded_tone";
+                        reply["request_id"] = parsed.request->request_id;
+                        reply["duration_ms"] = parsed.request->duration_ms;
+                        if (start_result.started)
+                        {
+                            bounded_tone_request_id_ =
+                                parsed.request->request_id;
+                            try
+                            {
+                                const std::string request_id =
+                                    parsed.request->request_id;
+                                const auto duration = std::chrono::milliseconds(
+                                    parsed.request->duration_ms);
+                                bounded_tone_watchdog_ = std::jthread(
+                                    [this, request_id, duration](
+                                        std::stop_token stop_token) {
+                                        std::mutex wait_mutex;
+                                        std::condition_variable_any wait_cv;
+                                        std::unique_lock<std::mutex> wait_lock(
+                                            wait_mutex);
+                                        if (wait_cv.wait_for(
+                                                wait_lock,
+                                                stop_token,
+                                                duration,
+                                                [] { return false; }))
+                                            return;
+                                        if (stop_token.stop_requested())
+                                            return;
+                                        std::lock_guard<std::mutex> command_lock(
+                                            test_tone_command_mutex_);
+                                        {
+                                            std::lock_guard<std::mutex> state_lock(
+                                                bounded_tone_mutex_);
+                                            if (bounded_tone_request_id_ != request_id)
+                                                return;
+                                            bounded_tone_request_id_.clear();
+                                        }
+                                        const TestToneStopResult stopped =
+                                            end_test_tone();
+                                        nlohmann::json terminal = {
+                                            {"command", "bounded_tone"},
+                                            {"event", "completed"},
+                                            {"request_id", request_id},
+                                            {"stopped", stopped.stopped},
+                                            {"scheduler_restored",
+                                             stopped.scheduler_restored},
+                                            {"status", stopped.stopped
+                                                ? "ok" : "error"},
+                                            {"message", stopped.message}};
+                                        if (running_)
+                                            sendAllClients(terminal.dump());
+                                    });
+                            }
+                            catch (...)
+                            {
+                                bounded_tone_request_id_.clear();
+                                const TestToneStopResult stopped =
+                                    end_test_tone();
+                                reply["status"] = "error";
+                                reply["started"] = false;
+                                reply["cleanup_stopped"] = stopped.stopped;
+                                reply["message"] =
+                                    "unable to arm bounded tone watchdog";
+                            }
+                        }
+                    }
+                }
+            }
+        }
         else if (cmd == "tone_end")
         {
+            bounded_tone_watchdog_.request_stop();
+            {
+                std::lock_guard<std::mutex> bounded_lock(
+                    bounded_tone_mutex_);
+                bounded_tone_request_id_.clear();
+            }
             llog.logS(DEBUG, "Received JSON test_tone_stop command.");
             const TestToneStopResult stop_result = end_test_tone();
             reply["command"] = "tone_end";

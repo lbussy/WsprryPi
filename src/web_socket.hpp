@@ -83,7 +83,10 @@ public:
      * @return true if the server started successfully.
      * @return false if startup failed (e.g. bind or listen error).
      */
-    bool start(uint16_t port, uint32_t keep_alive_secs = 30);
+    bool start(
+        uint16_t port,
+        uint32_t keep_alive_secs = 30,
+        bool loopback_only = false);
 
     /**
      * @brief Stops the server and closes any open connections.
@@ -136,6 +139,10 @@ private:
     std::condition_variable client_handlers_cv_;
     std::mutex stop_mutex_;
     std::mutex test_tone_command_mutex_;
+    std::mutex bounded_tone_mutex_;
+    std::string bounded_tone_request_id_;
+    std::jthread bounded_tone_watchdog_;
+    bool loopback_only_{false};
 
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop
     std::mutex keep_alive_mutex_;           ///< Mutex to control loop break

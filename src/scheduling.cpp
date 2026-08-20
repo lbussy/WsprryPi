@@ -4287,7 +4287,10 @@ bool wspr_loop()
     // Start socket server and set priority
     if (websocket_server_start_enabled(config))
     {
-        socketServer.start(config.socket_port, SOCKET_KEEPALIVE);
+        socketServer.start(
+            config.socket_port,
+            SOCKET_KEEPALIVE,
+            config.socket_loopback_only);
         socketServer.setThreadPriority(SCHED_RR, 10);
     }
     else

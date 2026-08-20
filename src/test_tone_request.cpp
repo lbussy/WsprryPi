@@ -1,5 +1,7 @@
 #include "test_tone_request.hpp"
 #include "wspr_band_lookup.hpp"
+#include <algorithm>
+#include <cctype>
 #include <limits>
 
 namespace
@@ -78,4 +80,36 @@ TestToneRequestParseResult parse_test_tone_request(const nlohmann::json &j)
         return {{ParsedTestToneRequest{TestToneRequestSource::CustomRf,{},value}},{}};
     }
     return fail("unknown frequency_source");
+}
+
+BoundedTestToneRequestParseResult parse_bounded_test_tone_request(
+    const nlohmann::json &j)
+{
+    auto fail = [](const std::string &message) {
+        return BoundedTestToneRequestParseResult{{}, message};
+    };
+    if (!j.contains("request_id") || !j["request_id"].is_string())
+        return fail("request_id must be a string");
+    const std::string request_id = j["request_id"].get<std::string>();
+    if (request_id.empty() || request_id.size() > 128U)
+        return fail("request_id must contain 1 to 128 characters");
+    if (!std::all_of(request_id.begin(), request_id.end(), [](unsigned char c) {
+            return std::isalnum(c) || c == '-' || c == '_' || c == '.';
+        }))
+        return fail("request_id contains unsupported characters");
+
+    if (!j.contains("duration_ms") || !j["duration_ms"].is_number_integer())
+        return fail("duration_ms must be a positive integer");
+    if (!j["duration_ms"].is_number_unsigned() &&
+        j["duration_ms"].get<std::int64_t>() <= 0)
+        return fail("duration_ms must be a positive integer");
+    const std::uint64_t duration_ms = j["duration_ms"].get<std::uint64_t>();
+    if (duration_ms == 0 || duration_ms > MAX_BOUNDED_TONE_DURATION_MS)
+        return fail("duration_ms must be between 1 and 60000");
+
+    const TestToneRequestParseResult tone = parse_test_tone_request(j);
+    if (!tone)
+        return fail(tone.error);
+    return {{ParsedBoundedTestToneRequest{
+        *tone.request, request_id, duration_ms}}, {}};
 }
