@@ -42,6 +42,7 @@ enforced = run_renderer("[Security]\nPrivileged Network Safety = enforced\n", in
 assert "Require ip 192.168.50.0/24" in enforced
 assert "172.17.0.0/16" not in enforced
 assert "^/wsprrypi/socket(?:/|$)" in enforced
+assert "^/wsprrypi/api/network-safety$" in enforced
 assert "<LimitExcept GET>" in enforced
 
 invalid = run_renderer("[Security]\nPrivileged Network Safety = true\n", interfaces)

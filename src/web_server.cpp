@@ -32,6 +32,7 @@
 #include "config_handler.hpp"
 #include "logging.hpp"
 #include "privileged_network_runtime.hpp"
+#include "privileged_network_admin.hpp"
 #include "scheduling.hpp"
 #include "support_bundle_http.hpp"
 #include "support_bundle_intake_production.hpp"
@@ -175,15 +176,15 @@ WebServer::~WebServer() { stop(); }
  * response.
  *
  * @details
- * Configures the HTTP response with the appropriate headers to allow
- * cross-origin requests from any origin. The allowed methods include GET, PUT,
- * PATCH, and OPTIONS, and the "Content-Type" header is allowed.
+ * Advertises method and content headers without granting a cross-origin
+ * origin. Browser operation uses the same-origin Apache proxy; protected
+ * responses never receive a wildcard origin policy.
  *
  * @param res The HTTP response object on which to set the CORS headers.
  */
 void WebServer::setCORSHeaders(httplib::Response &res)
 {
-    res.set_header("Access-Control-Allow-Origin", "*");
+    res.headers.erase("Access-Control-Allow-Origin");
     res.set_header("Access-Control-Allow-Methods",
                    "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.set_header("Access-Control-Allow-Headers", "Content-Type, Accept");
@@ -229,6 +230,11 @@ void WebServer::start(int port)
         if (!supportBundleJobManager_)
         {
             supportBundleJobManager_ = SupportBundleRuntime::create_production();
+        }
+        if (!privilegedNetworkAdmin_)
+        {
+            privilegedNetworkAdmin_ = std::make_unique<PrivilegedNetworkAdmin>(
+                PrivilegedNetworkAdminPaths{config.ini_filename});
         }
     }
 
@@ -331,6 +337,95 @@ void WebServer::start(int port)
             [this](const httplib::Request &req, httplib::Response &res) {
               setCORSHeaders(res);
               res.set_content(get_public_config_json().dump(4), "application/json");
+            });
+
+    svr->Get("/api/network-safety",
+            [this](const httplib::Request &, httplib::Response &res) {
+                const auto state = privilegedNetworkAdmin_->status();
+                const auto mode_name = [](PrivilegedNetworkMode mode) {
+                    return mode == PrivilegedNetworkMode::insecure_disabled
+                        ? "insecure-disabled" : "enforced";
+                };
+                nlohmann::json body = {
+                    {"configured_known", state.configured_known},
+                    {"active_known", state.active_known},
+                    {"setting_was_valid", state.setting_was_valid},
+                    {"setting_was_missing", state.setting_was_missing},
+                    {"configured", state.configured_known
+                        ? nlohmann::json(mode_name(state.configured))
+                        : nlohmann::json(nullptr)},
+                    {"active", state.active_known
+                        ? nlohmann::json(mode_name(state.active))
+                        : nlohmann::json(nullptr)},
+                    {"status", state.active_known &&
+                        state.active == PrivilegedNetworkMode::insecure_disabled
+                        ? "NETWORK SAFETY OFF" : state.active_known
+                        ? "NETWORK SAFETY ENFORCED"
+                        : "NETWORK SAFETY STATE UNKNOWN"}
+                };
+                res.headers.erase("Access-Control-Allow-Origin");
+                res.set_content(body.dump(4), "application/json");
+            });
+
+    svr->Post("/api/network-safety",
+            [this](const httplib::Request &req, httplib::Response &res) {
+                try {
+                    const auto request = nlohmann::json::parse(req.body);
+                    const std::optional<std::string> mode =
+                        request.contains("mode") && request["mode"].is_string()
+                        ? std::optional<std::string>(request["mode"].get<std::string>())
+                        : std::nullopt;
+                    const auto result = privilegedNetworkAdmin_->apply(mode);
+                    const auto state = result.state;
+                    const auto mode_name = [](PrivilegedNetworkMode value) {
+                        return value == PrivilegedNetworkMode::insecure_disabled
+                            ? "insecure-disabled" : "enforced";
+                    };
+                    nlohmann::json body = {
+                        {"applied", result.applied()},
+                        {"result", privileged_network_transaction_status_name(result.status)},
+                        {"configured_known", state.configured_known},
+                        {"active_known", state.active_known},
+                        {"configured", state.configured_known
+                            ? nlohmann::json(mode_name(state.configured))
+                            : nlohmann::json(nullptr)},
+                        {"active", state.active_known
+                            ? nlohmann::json(mode_name(state.active))
+                            : nlohmann::json(nullptr)},
+                        {"status", result.status_text()},
+                        {"warning_defaulted_to_enforced",
+                         result.warning_defaulted_to_enforced}
+                    };
+                    res.status = result.applied() ? 200 :
+                        result.status == PrivilegedNetworkTransactionStatus::rollback_failed
+                        ? 500 : 409;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(body.dump(4), "application/json");
+                    if (result.applied()) {
+                        llog.logS(
+                            result.status_text() == "NETWORK SAFETY OFF" ? WARN : INFO,
+                            result.status_text());
+                    } else {
+                        llog.logS(
+                            ERROR,
+                            "Privileged network safety apply failed: ",
+                            privileged_network_transaction_status_name(result.status));
+                    }
+                } catch (const nlohmann::json::parse_error &) {
+                    res.status = 400;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(
+                        R"({"error":"invalid_json","message":"Malformed JSON request."})",
+                        "application/json");
+                } catch (const std::exception &error) {
+                    llog.logS(ERROR, "Privileged network safety apply failed: ",
+                              std::string(error.what()));
+                    res.status = 500;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(
+                        R"({"error":"apply_failed","message":"The network safety transaction could not be completed."})",
+                        "application/json");
+                }
             });
 
     svr->Put("/config", handlePutPatch);

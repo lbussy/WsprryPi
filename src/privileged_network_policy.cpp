@@ -85,12 +85,16 @@ PrivilegedOperationClass classify_privileged_http_operation(
         return PrivilegedOperationClass::protected_operation;
     }
     if (method == "POST" &&
-        (path == "/config/repair" || path == "/control/stop")) {
+        (path == "/config/repair" || path == "/control/stop" ||
+         path == "/api/network-safety")) {
         return PrivilegedOperationClass::protected_operation;
     }
     if (method == "GET" &&
         (path == "/config" || path == "/version" || path == "/status" ||
          path == "/telemetry" || path == "/api/support-intake")) {
+        return PrivilegedOperationClass::read_only;
+    }
+    if (method == "GET" && path == "/api/network-safety") {
         return PrivilegedOperationClass::read_only;
     }
     return PrivilegedOperationClass::reject;

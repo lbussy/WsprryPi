@@ -74,6 +74,8 @@ def render(mode: str, networks: list[str]) -> str:
         + requirement() + '\n</LocationMatch>',
         '<LocationMatch "^/wsprrypi/api/support-bundles(?:/|$)">\n'
         + requirement() + '\n</LocationMatch>',
+        '<LocationMatch "^/wsprrypi/api/network-safety$">\n    <LimitExcept GET>\n'
+        + requirement() + '\n    </LimitExcept>\n</LocationMatch>',
         '<LocationMatch "^/wsprrypi/socket(?:/|$)">\n' + requirement() + '\n</LocationMatch>',
     ]
     header = (

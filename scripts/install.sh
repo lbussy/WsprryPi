@@ -7470,6 +7470,8 @@ install_wsprrypi_proxy_block() {
     ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
     ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
     ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
+    ProxyPass        /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
+    ProxyPassReverse /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
 
     Include /usr/local/etc/wsprrypi-apache-network-policy.conf
 

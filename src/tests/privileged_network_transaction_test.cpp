@@ -76,6 +76,11 @@ std::string read_file(const std::filesystem::path &path) {
 } // namespace
 
 int main() {
+    assert(std::string(privileged_network_transaction_status_name(
+               PrivilegedNetworkTransactionStatus::applied)) == "applied");
+    assert(std::string(privileged_network_transaction_status_name(
+               PrivilegedNetworkTransactionStatus::rollback_failed)) ==
+           "rollback_failed");
     {
         Controls controls;
         auto transaction = make_transaction(controls);
@@ -149,7 +154,19 @@ int main() {
         auto transaction = make_transaction(controls);
         const auto result = transaction.apply("insecure-disabled");
         assert(result.status == PrivilegedNetworkTransactionStatus::publish_failed);
-        require_calls(controls, {"validate_application", "validate_apache", "publish"});
+        require_calls(controls, {"validate_application", "validate_apache", "publish",
+                                 "restore"});
+    }
+    {
+        Controls controls;
+        controls.publish_ok = false;
+        controls.restore_ok = false;
+        auto transaction = make_transaction(controls);
+        const auto result = transaction.apply("insecure-disabled");
+        assert(result.status == PrivilegedNetworkTransactionStatus::rollback_failed);
+        assert(!result.state.configured_known && !result.state.active_known);
+        require_calls(controls, {"validate_application", "validate_apache", "publish",
+                                 "restore"});
     }
     {
         Controls controls;

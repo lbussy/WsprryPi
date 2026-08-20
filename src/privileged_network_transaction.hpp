@@ -15,6 +15,9 @@ struct PrivilegedNetworkTransactionSnapshot {
     bool active_known = true;
     std::string persisted_setting;
     std::string apache_policy;
+    std::string application_configuration;
+    bool setting_was_valid = false;
+    bool setting_was_missing = true;
 };
 
 struct PrivilegedNetworkTransactionCandidate {
@@ -36,6 +39,9 @@ enum class PrivilegedNetworkTransactionStatus {
     confirmation_failed_rolled_back,
     rollback_failed
 };
+
+[[nodiscard]] const char *privileged_network_transaction_status_name(
+    PrivilegedNetworkTransactionStatus status) noexcept;
 
 struct PrivilegedNetworkTransactionResult {
     PrivilegedNetworkTransactionStatus status;

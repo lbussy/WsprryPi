@@ -18,11 +18,18 @@ int main() {
     const auto parser = read_file(root / "arg_parser.cpp");
     const auto http = read_file(root / "web_server.cpp");
     const auto websocket = read_file(root / "web_socket.cpp");
+    const auto scheduling = read_file(root / "scheduling.cpp");
     const auto stock_ini = read_file(root / "../config/wsprrypi.ini");
 
     assert(parser.find("initialize_privileged_network_runtime(") != std::string::npos);
     assert(http.find("active_privileged_network_mode())") != std::string::npos);
     assert(websocket.find("active_privileged_network_mode());") != std::string::npos);
+    assert(http.find("svr->Get(\"/api/network-safety\"") != std::string::npos);
+    assert(http.find("svr->Post(\"/api/network-safety\"") != std::string::npos);
+    assert(http.find("Access-Control-Allow-Origin\", \"*\"") == std::string::npos);
+    assert(scheduling.find("reconcile_privileged_network_policy(") != std::string::npos);
+    assert(scheduling.find("HTTP and WebSocket listeners remain disabled") !=
+           std::string::npos);
     assert(stock_ini.find("[Security]") != std::string::npos);
     assert(stock_ini.find("Privileged Network Safety = enforced") != std::string::npos);
 

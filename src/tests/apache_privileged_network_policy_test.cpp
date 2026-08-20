@@ -34,15 +34,16 @@ int main(int argc, char **argv) {
         std::cout << policy;
         return 0;
     }
-    assert(count(policy, "Require ip 192.168.50.0/24") == 5);
-    assert(count(policy, "Require ip fd00:1234::/64") == 5);
-    assert(count(policy, "Require local") == 5);
+    assert(count(policy, "Require ip 192.168.50.0/24") == 6);
+    assert(count(policy, "Require ip fd00:1234::/64") == 6);
+    assert(count(policy, "Require local") == 6);
     assert(policy.find("<LocationMatch \"^/wsprrypi/config$\">") != std::string::npos);
     assert(policy.find("<LimitExcept GET>") != std::string::npos);
     assert(policy.find("<LocationMatch \"^/wsprrypi/config/\">") != std::string::npos);
     assert(policy.find("^/wsprrypi/control/stop(?:/|$)") != std::string::npos);
     assert(policy.find("^/wsprrypi/api/support-bundles(?:/|$)") != std::string::npos);
     assert(policy.find("^/wsprrypi/socket(?:/|$)") != std::string::npos);
+    assert(policy.find("^/wsprrypi/api/network-safety$") != std::string::npos);
     assert(policy.find("support-intake") == std::string::npos);
     assert(policy.find("/wsprrypi/version") == std::string::npos);
     assert(policy.find("Forwarded") == std::string::npos);

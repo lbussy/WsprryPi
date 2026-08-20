@@ -4,6 +4,26 @@
 
 #include <utility>
 
+const char *privileged_network_transaction_status_name(
+    PrivilegedNetworkTransactionStatus status) noexcept {
+    switch (status) {
+    case PrivilegedNetworkTransactionStatus::applied: return "applied";
+    case PrivilegedNetworkTransactionStatus::discovery_failed: return "discovery_failed";
+    case PrivilegedNetworkTransactionStatus::render_failed: return "render_failed";
+    case PrivilegedNetworkTransactionStatus::application_validation_failed:
+        return "application_validation_failed";
+    case PrivilegedNetworkTransactionStatus::apache_validation_failed:
+        return "apache_validation_failed";
+    case PrivilegedNetworkTransactionStatus::publish_failed: return "publish_failed";
+    case PrivilegedNetworkTransactionStatus::reload_failed_rolled_back:
+        return "reload_failed_rolled_back";
+    case PrivilegedNetworkTransactionStatus::confirmation_failed_rolled_back:
+        return "confirmation_failed_rolled_back";
+    case PrivilegedNetworkTransactionStatus::rollback_failed: return "rollback_failed";
+    }
+    return "unknown";
+}
+
 PrivilegedNetworkTransaction::PrivilegedNetworkTransaction(
     PrivilegedNetworkTransactionSnapshot initial,
     PrivilegedNetworkTransactionOperations operations)
@@ -42,11 +62,11 @@ PrivilegedNetworkTransactionResult PrivilegedNetworkTransaction::apply(
         return {PrivilegedNetworkTransactionStatus::apache_validation_failed, state_, warning};
 
     const auto previous = state_;
-    if (!operations_.publish(candidate))
-        return {PrivilegedNetworkTransactionStatus::publish_failed, state_, warning};
 
-    const auto rollback = [&](PrivilegedNetworkTransactionStatus failure) {
-        if (!operations_.restore(previous) || !operations_.reload_apache()) {
+    const auto rollback = [&](PrivilegedNetworkTransactionStatus failure,
+                              bool reload_required = true) {
+        if (!operations_.restore(previous) ||
+            (reload_required && !operations_.reload_apache())) {
             state_.configured_known = false;
             state_.active_known = false;
             return PrivilegedNetworkTransactionResult{
@@ -56,12 +76,15 @@ PrivilegedNetworkTransactionResult PrivilegedNetworkTransaction::apply(
         return PrivilegedNetworkTransactionResult{failure, state_, warning};
     };
 
+    if (!operations_.publish(candidate))
+        return rollback(PrivilegedNetworkTransactionStatus::publish_failed, false);
+
     if (!operations_.reload_apache())
         return rollback(PrivilegedNetworkTransactionStatus::reload_failed_rolled_back);
     if (!operations_.confirm_active(parsed.mode))
         return rollback(PrivilegedNetworkTransactionStatus::confirmation_failed_rolled_back);
 
     state_ = {parsed.mode, parsed.mode, true, true, candidate.persisted_setting,
-              candidate.apache_policy};
+              candidate.apache_policy, "", true, false};
     return {PrivilegedNetworkTransactionStatus::applied, state_, warning};
 }

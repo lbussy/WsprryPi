@@ -53,6 +53,7 @@
 #include "gpio_output.hpp"
 #include "logging.hpp"
 #include "ppm_manager.hpp"
+#include "privileged_network_admin.hpp"
 #include "signal_handler.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "execution_plan_compiler.hpp"
@@ -4269,12 +4270,32 @@ bool wspr_loop()
             startup_quiesce_error);
     }
 
+    const bool start_web = web_server_start_enabled(config);
+    const bool start_websocket = websocket_server_start_enabled(config);
+    bool network_safety_ready = true;
+    if (start_web || start_websocket)
+    {
+        const auto reconciliation = reconcile_privileged_network_policy(
+            PrivilegedNetworkAdminPaths{config.ini_filename});
+        network_safety_ready = reconciliation.applied();
+        if (!network_safety_ready)
+        {
+            llog.logS(
+                ERROR,
+                "Privileged network policy reconciliation failed; HTTP and WebSocket listeners remain disabled.");
+        }
+        else if (reconciliation.status_text() == "NETWORK SAFETY OFF")
+        {
+            llog.logS(WARN, "NETWORK SAFETY OFF");
+        }
+    }
+
     if (!config.enable_web)
     {
         llog.logS(INFO, "Web UI disabled via CLI (--no-web)");
     }
     // Start web server and set priority
-    else if (web_server_start_enabled(config))
+    else if (start_web && network_safety_ready)
     {
         webServer.start(config.web_port);
         webServer.setThreadPriority(SCHED_RR, 10);
@@ -4285,7 +4306,7 @@ bool wspr_loop()
     }
 
     // Start socket server and set priority
-    if (websocket_server_start_enabled(config))
+    if (start_websocket && network_safety_ready)
     {
         socketServer.start(
             config.socket_port,

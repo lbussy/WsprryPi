@@ -6,9 +6,10 @@ Implementation state: Phases 1 and 2 implemented. Phase 3 has an offline,
 fail-closed Apache policy renderer. Phase 4 has an offline administrator-mode
 and transactional apply/rollback coordinator with injected system adapters.
 Phase 5A wires the startup mode into the live backend guards and installs a
-fail-closed managed Apache policy include. The administrator apply API,
-validated live reload transaction, UI, operator documentation, and runtime
-qualification remain unimplemented.
+fail-closed managed Apache policy include. Phase 5B adds the protected
+administrator apply API, read-only status API, production validation/reload/
+rollback adapters, and fail-closed startup reconciliation. UI, operator
+documentation, and runtime qualification remain unimplemented.
 Repositories affected: `WsprryPi` (including its `WsprryPi-UI` component) and
 `Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
 
@@ -197,6 +198,11 @@ When the active value is `insecure-disabled`, the UI SHALL conspicuously display
 ```text
 NETWORK SAFETY OFF
 ```
+
+The browser uses `GET /api/network-safety` for configured and active status and
+`POST /api/network-safety` for the separately confirmed apply operation. The
+mutation route is itself a protected operation. Transaction results use stable
+named states rather than numeric implementation values.
 
 ## Status, Configuration, and Logging
 

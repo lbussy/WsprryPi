@@ -40,10 +40,11 @@
 #include <string>
 
 class SupportBundleJobManager;
+class PrivilegedNetworkAdmin;
 
 /**
  * @class WebServer
- * @brief A simple web server that runs in a separate thread with CORS support.
+ * @brief A simple web server that runs in a separate thread.
  *
  * @details
  * The WebServer class creates an HTTP server that listens on a user-specified port.
@@ -52,7 +53,7 @@ class SupportBundleJobManager;
  *  - GET requests by sending a JSON response.
  *  - PUT and PATCH requests by parsing the request body as JSON, printing it for debugging,
  *    and returning a text response.
- *  - OPTIONS requests to support CORS preflight, setting the proper headers.
+ *  - OPTIONS requests without granting cross-origin browser access.
  *
  * The server runs in its own thread and can be stopped cleanly by calling stop(), which uses
  * condition variables for synchronization.
@@ -108,6 +109,7 @@ private:
     int port_;                         ///< Port on which the server listens.
     // Declared before svr so route captures are destroyed before the manager.
     std::unique_ptr<SupportBundleJobManager> supportBundleJobManager_;
+    std::unique_ptr<PrivilegedNetworkAdmin> privilegedNetworkAdmin_;
     bool supportBundleRoutesRegistered_ = false;
     std::unique_ptr<httplib::Server> svr; ///< Underlying HTTP server from cpp-httplib.
     std::thread serverThread;          ///< Thread running the HTTP server.

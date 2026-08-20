@@ -16,7 +16,9 @@ BackendHttpGuardDecision evaluate_backend_http_request(
             path == "/config" || path.starts_with("/config/") ||
             path == "/control" || path.starts_with("/control/") ||
             path == "/api/support-bundles" ||
-            path.starts_with("/api/support-bundles/");
+            path.starts_with("/api/support-bundles/") ||
+            path == "/api/network-safety" ||
+            path.starts_with("/api/network-safety/");
         if (protected_candidate) return BackendHttpGuardDecision::rejected;
     }
     const bool protected_operation =

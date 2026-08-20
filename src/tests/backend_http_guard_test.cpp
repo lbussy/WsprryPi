@@ -21,6 +21,10 @@ int main() {
            BackendHttpGuardDecision::rejected);
     assert(evaluate("POST", "/api/support-bundles", "192.168.50.42", "evil") ==
            BackendHttpGuardDecision::rejected);
+    assert(evaluate("POST", "/api/network-safety", "192.168.51.42", "wsprrypi") ==
+           BackendHttpGuardDecision::rejected);
+    assert(evaluate("GET", "/api/network-safety", "192.168.50.42", "wsprrypi") ==
+           BackendHttpGuardDecision::allowed);
     assert(evaluate("GET", "/api/support-bundles/job/download", "192.168.50.42",
                     "wsprrypi", "http://evil") == BackendHttpGuardDecision::rejected);
     assert(evaluate("GET", "/config", "203.0.113.4", "foreign") ==

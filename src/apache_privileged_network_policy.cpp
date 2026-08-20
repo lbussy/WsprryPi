@@ -105,6 +105,11 @@ ApachePrivilegedNetworkPolicyResult render_apache_privileged_network_policy(
            << "<LocationMatch \"^/wsprrypi/api/support-bundles(?:/|$)\">\n";
     append_peer_requirement(output, cidrs);
     output << "</LocationMatch>\n\n"
+           << "<LocationMatch \"^/wsprrypi/api/network-safety$\">\n"
+           << "    <LimitExcept GET>\n";
+    append_peer_requirement(output, cidrs);
+    output << "    </LimitExcept>\n"
+           << "</LocationMatch>\n\n"
            << "<LocationMatch \"^/wsprrypi/socket(?:/|$)\">\n";
     append_peer_requirement(output, cidrs);
     output << "</LocationMatch>\n";
