@@ -188,6 +188,7 @@ BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
 BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
 BUILD_METADATA_MAKE_REGRESSION_TEST := ../scripts/tests/build_metadata_make_regression_test.py
 SUPPORT_BUNDLE_MAINTAINER_INTAKE_INSPECTION_TEST := ../scripts/tests/support_bundle_maintainer_intake_inspection_test.py
+SUPPORT_BUNDLE_MAINTAINER_PROCESSING_TEST := ../scripts/tests/support_bundle_maintainer_processing_test.py
 BUILD_METADATA_REPO_ROOT := ..
 BUILD_METADATA_PROJECT := $(PRJ)
 BUILD_METADATA_EXECUTABLE := $(OUT)
@@ -1074,7 +1075,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: support-bundle-intake-publication-commit-test support-bundle-intake-publication-push-test
 .PHONY: support-bundle-intake-publication-verification-test support-bundle-intake-trust-compilation-test
 .PHONY: support-bundle-intake-production-trust-test support-bundle-intake-identity-ceremony-preflight-test
-.PHONY: support-bundle-maintainer-intake-inspection-test
+.PHONY: support-bundle-maintainer-intake-inspection-test support-bundle-maintainer-processing-test
 .PHONY: support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test
 .PHONY: support-bundle-intake-controller-test support-bundle-intake-runtime-test support-bundle-intake-production-test
 .PHONY: build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test
@@ -1253,6 +1254,9 @@ support-bundle-intake-identity-ceremony-preflight-test:
 
 support-bundle-maintainer-intake-inspection-test:
 	$(Q)python3 $(SUPPORT_BUNDLE_MAINTAINER_INTAKE_INSPECTION_TEST)
+
+support-bundle-maintainer-processing-test:
+	$(Q)python3 $(SUPPORT_BUNDLE_MAINTAINER_PROCESSING_TEST)
 
 support-bundle-intake-validation-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_INTAKE_VALIDATION_TEST_OUT)

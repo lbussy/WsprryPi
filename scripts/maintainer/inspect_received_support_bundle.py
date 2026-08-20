@@ -94,23 +94,15 @@ def positive_int(value: object, maximum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and 0 < value <= maximum
 
 
-def load_receipt(path: Path) -> dict[str, object]:
-    descriptor = -1
+def parse_receipt(raw: bytes) -> dict[str, object]:
     try:
-        descriptor = open_safe_file(path)
-        raw = bytearray()
-        while block := os.read(descriptor, 4096):
-            raw.extend(block)
-            if len(raw) > MAX_RECEIPT:
-                raise InspectionError(InspectionStatus.invalid_receipt)
-        value = strict_json(bytes(raw))
+        if len(raw) > MAX_RECEIPT:
+            raise InspectionError(InspectionStatus.invalid_receipt)
+        value = strict_json(raw)
     except InspectionError:
         raise
     except Exception as error:
         raise InspectionError(InspectionStatus.invalid_receipt) from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
     if not isinstance(value, dict) or set(value) != RECEIPT_KEYS:
         raise InspectionError(InspectionStatus.invalid_receipt)
     case_id, artifact_id, key_id = value["case_id"], value["artifact_id"], value["bundle_encryption_key_id"]
@@ -135,6 +127,21 @@ def load_receipt(path: Path) -> dict[str, object]:
     if not valid:
         raise InspectionError(InspectionStatus.invalid_receipt)
     return value
+
+
+def load_receipt(path: Path) -> dict[str, object]:
+    descriptor = -1
+    try:
+        descriptor = open_safe_file(path)
+        raw = bytearray()
+        while block := os.read(descriptor, 4096):
+            raw.extend(block)
+            if len(raw) > MAX_RECEIPT:
+                raise InspectionError(InspectionStatus.invalid_receipt)
+        return parse_receipt(bytes(raw))
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def open_safe_file(path: Path, *, identity: bool = False) -> int:
