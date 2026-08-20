@@ -24,9 +24,10 @@ def documented_fields(marker: str) -> list[str]:
             for line in match.group(1).splitlines()]
 
 
-require("Status: Implemented contract; release/provider qualification remains gated", PLAN,
-        "contract status must distinguish implementation from remaining qualification")
-require("Slice 43 contract reconciliation", PLAN, "current reconciliation slice must be linked")
+require("Status: Implemented and qualified", PLAN,
+        "contract status must reflect completed implementation and qualification")
+require("Support Bundle Intake Maintainer Runbook", PLAN,
+        "contract must link the durable maintainer runbook")
 require("exactly these top-level fields", PLAN,
         "readable v1 manifest must retain its exact top-level contract")
 
@@ -72,9 +73,9 @@ require("into the canonical processing record", PLAN,
         "Dropbox filename privacy boundary must remain explicit")
 require("The maintainer has not yet confirmed receipt.", PLAN,
         "user-reported completion must not claim maintainer confirmation")
-require("a release build satisfying `minimum_upload_version`", PLAN,
-        "signed-out release qualification must remain deferred")
-require("operator and maintainer documentation in `Wsprry_Pi_Docs`", PLAN,
-        "operator documentation follow-up must remain explicit")
+require("complete signed-out production Dropbox upload", PLAN,
+        "completed signed-out production qualification must remain explicit")
+require("Operator instructions live in the separate `Wsprry_Pi_Docs` repository", PLAN,
+        "operator documentation ownership must remain explicit")
 
 print("support_bundle_contract_reconciliation_test: PASS")

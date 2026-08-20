@@ -1,102 +1,18 @@
 # WsprryPi Support Bundle Private Intake Contract
 
-Status: Implemented contract; release/provider qualification remains gated
+Status: Implemented and qualified
 
-Implementation state: Implemented through a release-like, non-RF active-intake qualification on wspr4
+Implementation state: The local review, exact-byte encryption, signed dynamic
+intake, Dropbox handoff, truthful reporting, GitHub/non-GitHub correlation, and
+maintainer processing and retention boundaries are implemented. A signed-out
+production upload and the matching maintainer inspection/promotion transaction
+were completed without exposing diagnostic content publicly.
 
 Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/414)
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
-Current qualification slice: [Slice 44 release-like active-intake installation](../research/issue-414-slice-44-active-intake-qualification.md)
-
-Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
-
-Local artifact implementation: [Issue 414 Slice 2](../research/issue-414-slice-2-local-artifacts.md)
-
-Candidate manifest and lifecycle: [Issue 414 Slice 3](../research/issue-414-slice-3-candidate-lifecycle.md)
-
-Readable review and finalization: [Issue 414 Slice 4](../research/issue-414-slice-4-review-finalization.md)
-
-Debian packaged-age qualification: [Issue 414 Slice 5](../research/issue-414-slice-5-age-qualification.md)
-
-Maintainer key-provisioning tooling: [Issue 414 Slice 6](../research/issue-414-slice-6-key-provisioning.md)
-
-Offline signed-intake validation: [Issue 414 Slice 7](../research/issue-414-slice-7-intake-validation.md)
-
-Signed-intake rollback state: [Issue 414 Slice 8](../research/issue-414-slice-8-intake-state.md)
-
-Bounded HTTPS intake retrieval: [Issue 414 Slice 9](../research/issue-414-slice-9-https-retrieval.md)
-
-Signed-intake controller composition: [Issue 414 Slice 10](../research/issue-414-slice-10-intake-controller.md)
-
-Minimum upload version gate: [Issue 414 Slice 11](../research/issue-414-slice-11-minimum-upload-version.md)
-
-Support intake runtime construction: [Issue 414 Slice 12](../research/issue-414-slice-12-intake-runtime.md)
-
-Intake-signing key provisioning: [Issue 414 Slice 13](../research/issue-414-slice-13-signing-key-provisioning.md)
-
-Signed intake manifest preparation: [Issue 414 Slice 14](../research/issue-414-slice-14-manifest-preparation.md)
-
-Local intake manifest lifecycle: [Issue 414 Slice 15](../research/issue-414-slice-15-manifest-lifecycle.md)
-
-Publication candidate commit: [Issue 414 Slice 16](../research/issue-414-slice-16-publication-commit.md)
-
-Authenticated publication push: [Issue 414 Slice 17](../research/issue-414-slice-17-publication-push.md)
-
-Post-publication verification: [Issue 414 Slice 18](../research/issue-414-slice-18-publication-verification.md)
-
-Public trust metadata compilation: [Issue 414 Slice 19](../research/issue-414-slice-19-trust-metadata-compilation.md)
-
-Production identity ceremony preflight: [Issue 414 Slice 20](../research/issue-414-slice-20-identity-ceremony-preflight.md)
-
-Production identity generation: [Issue 414 Slice 21](../research/issue-414-slice-21-production-identity-generation.md)
-
-Vault backup and recovery qualification: [Issue 414 Slice 22](../research/issue-414-slice-22-vault-backup-recovery.md)
-
-Production public trust compilation: [Issue 414 Slice 23](../research/issue-414-slice-23-production-trust-compilation.md)
-
-Publication repository establishment: [Issue 414 Slice 24](../research/issue-414-slice-24-publication-repository.md)
-
-Production Dropbox File Request: [Issue 414 Slice 25](../research/issue-414-slice-25-production-file-request.md)
-
-Local generation-1 manifest: [Issue 414 Slice 26](../research/issue-414-slice-26-generation-1.md)
-
-Local production publication candidate: [Issue 414 Slice 27](../research/issue-414-slice-27-publication-candidate.md)
-
-Production publication push: [Issue 414 Slice 28](../research/issue-414-slice-28-publication-push.md)
-
-Production public-byte verification: [Issue 414 Slice 29](../research/issue-414-slice-29-publication-verification.md)
-
-Production runtime activation adapter: [Issue 414 Slice 30](../research/issue-414-slice-30-runtime-activation-adapter.md)
-
-Guarded production intake endpoint: [Issue 414 Slice 31](../research/issue-414-slice-31-intake-endpoint.md)
-
-Responsive intake workflow: [Issue 414 Slice 32](../research/issue-414-slice-32-intake-ui.md)
-
-Exact-byte local encryption: [Issue 414 Slice 33](../research/issue-414-slice-33-local-encryption.md)
-
-Dropbox handoff boundary: [Issue 414 Slice 34](../research/issue-414-slice-34-dropbox-handoff.md)
-
-Upload reporting boundary: [Issue 414 Slice 35](../research/issue-414-slice-35-upload-reporting.md)
-
-GitHub continuation: [Issue 414 Slice 36](../research/issue-414-slice-36-github-continuation.md)
-
-Maintainer intake inspection: [Issue 414 Slice 37](../research/issue-414-slice-37-maintainer-intake-inspection.md)
-
-Maintainer processing and promotion: [Issue 414 Slice 38](../research/issue-414-slice-38-maintainer-processing.md)
-
-Installer age dependency: [Issue 414 Slice 39](../research/issue-414-slice-39-age-installer.md)
-
-Production installation qualification: [Issue 414 Slice 40](../research/issue-414-slice-40-production-install.md)
-
-Retention eligibility audit: [Issue 414 Slice 41](../research/issue-414-slice-41-retention-audit.md)
-
-Explicit retention deletion: [Issue 414 Slice 42](../research/issue-414-slice-42-retention-deletion.md)
-
-Contract reconciliation: [Slice 43 contract reconciliation](../research/issue-414-slice-43-contract-reconciliation.md)
-
-Release-like active-intake installation: [Issue 414 Slice 44](../research/issue-414-slice-44-active-intake-qualification.md)
+Maintainer operations: [Support Bundle Intake Maintainer Runbook](../support-bundle-maintainer-runbook.md)
 
 ## Purpose
 
@@ -360,7 +276,7 @@ Applications released before dynamic intake configuration cannot display this pr
 
 The manifest and signature MAY be public; their signature provides authenticity, not secrecy. A maintainer-only tool SHOULD provide `inspect`, `rotate`, `disable`, and `renew` operations rather than requiring manual JSON or signature editing.
 
-The tool SHOULD validate URLs, read the current generation, set timestamps and minimum version, create deterministic bytes, sign and self-verify, show the proposed changes, publish only after explicit approval, and retrieve and verify the published result.
+The tool SHOULD validate URLs, read the current generation, set timestamps and minimum version, create deterministic bytes, sign and self-verify, preview the exact change, publish only after explicit approval, and retrieve and verify the published result.
 
 The manifest SHALL expire. An initial policy MAY use 90-day validity and a reminder 14 days before expiration. Renewal increments the generation and creates a new signature without requiring URL rotation. Expiration blocks upload but not local bundle creation.
 
@@ -469,60 +385,27 @@ A signed-out Chrome Incognito test using Dropbox Basic on 3 August 2026 verified
 
 The uploader email was transmitted, but convenient owner-side access appeared plan- or interface-dependent. Provider behavior SHALL be retested periodically.
 
-## Implementation Reconciliation
+## Implementation and Qualification
 
-The repository implementation satisfies the v1 local creation, review,
-finalization, exact-byte encryption, receipt, signed-intake, rollback,
-minimum-version, disabled-state, guarded endpoint, privacy disclosure, manual
-Dropbox handoff, user-reported completion, GitHub continuation, maintainer
-inspection/promotion, and local Processed-retention boundaries described above.
+The repository implementation satisfies this v1 contract. Qualification includes
+real packaged-`age` round trips on macOS and Debian, signed-manifest publication
+and retrieval, installation and active endpoint resolution on `wspr4`,
+a complete signed-out production Dropbox upload, and matching maintainer receipt,
+inspection, promotion, public case correlation, retention audit, and temporary-
+fixture deletion exercises. These are software and provider-workflow results;
+they make no GPIO, transmitter, timing, or RF claim.
 
-Production qualification on `wspr4` proved installation, fixed packaged `age`
-tools, service activation with transmission disabled, authenticated
-upgrade-required output for a feature prerelease, durable generation state, and
-canonical-version active resolution. It did not perform a production upload.
+Operator instructions live in the separate `Wsprry_Pi_Docs` repository. This
+repository retains only the normative contract and durable maintainer runbook.
 
-A later release-like qualification installed exact version
-`3.2.1-qualification.1` from the reconciled Issue #414 and `devel` source. The
-ordinary production endpoint then returned authenticated generation-one
-`active` state while transmission remained disabled. The temporary tag was
-local-only and was removed with its isolated checkout after validation.
+## Deliberate Operational Limits
 
-The following remain deliberately outside the completed evidence:
-
-- a release build satisfying `minimum_upload_version` completing the entire UI
-  workflow through a fresh signed-out Dropbox submission;
-- maintainer receipt, inspection, and promotion of that same qualification
-  artifact;
-- erasure from Dropbox, synchronized replicas, backups, downloads, or user-held
-  copies, which local retention tooling cannot guarantee;
-- automatic or bulk retention deletion and automatic active-to-resolved case
-  transitions;
-- anonymous GitHub issue creation, direct Dropbox upload, or embedded provider
-  credentials; and
-- operator and maintainer documentation in `Wsprry_Pi_Docs`.
-
-Historical slice records remain scoped statements of what each slice did and did
-not implement at that time. Their “later slice” language is not the current
-project status; this reconciled contract and the latest roadmap paragraph are
-authoritative.
-
-## Current Decisions and Open Work
-
-Established decisions are readable local review before consent, exact-byte encryption, separate WsprryPi encryption and signing keys, signed dynamic routing, rotatable and disableable intake, minimum-version enforcement, local operation during upload outages, authenticated GitHub participation, description-and-contact fallback, and case-ID correlation.
-
-The protocol, production endpoint and public trust metadata, signed routing,
-responsive application workflow, exact-byte encryption, manual Dropbox handoff,
-GitHub continuation, maintainer inspection and processing, key-administration
-tools, vault recovery qualification, and installer dependency are implemented.
-The production installer, service restart, authenticated upgrade-required
-endpoint, durable generation state, and ordinary active endpoint have been
-qualified on `wspr4` without RF activity. The installed release-like
-`3.2.1-qualification.1` build is ready for the signed-out Dropbox submission and
-same-artifact maintainer receipt/inspection/promotion exercise. Operator and
-maintainer documentation in the separate `Wsprry_Pi_Docs` repository also
-remains. Strict Processed-case retention auditing
-and explicit one-case local deletion are implemented; Dropbox, synchronized
-replica, backup, and user-copy retention remain operational boundaries. The
-separately observed service stop-timeout limitation remains service-lifecycle
-follow-up.
+- Local deletion cannot erase Dropbox history, synchronized replicas, backups,
+  downloaded copies, or user-held artifacts.
+- Retention deletion is one explicit case at a time; there is no automatic bulk
+  deletion or automatic active-to-resolved transition.
+- GitHub authentication remains user-controlled. There is no anonymous issue
+  proxy and no embedded GitHub or Dropbox credential.
+- Provider behavior and the signed request route must be revalidated when the
+  Dropbox request is replaced, account behavior changes, or a new intake
+  generation is published.
