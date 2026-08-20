@@ -29,6 +29,14 @@ int main() {
     assert(evaluate(request("wsprrypi:31416", "http://wsprrypi:31416"),
                     "192.168.50.42") == WebSocketUpgradeGuardDecision::allowed);
     assert(evaluate(request(), "192.168.51.42") == WebSocketUpgradeGuardDecision::rejected);
+    assert(evaluate_websocket_upgrade(
+               request(), "192.168.51.42", snapshot,
+               PrivilegedNetworkMode::insecure_disabled).decision ==
+           WebSocketUpgradeGuardDecision::allowed);
+    assert(evaluate_websocket_upgrade(
+               request("evil"), "192.168.51.42", snapshot,
+               PrivilegedNetworkMode::insecure_disabled).decision ==
+           WebSocketUpgradeGuardDecision::rejected);
     assert(evaluate(request("evil"), "192.168.50.42") ==
            WebSocketUpgradeGuardDecision::rejected);
     assert(evaluate(request("wsprrypi:31416", "null"), "192.168.50.42") ==

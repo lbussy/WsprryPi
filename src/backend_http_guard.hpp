@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support_request_guard.hpp"
+#include "privileged_network_policy.hpp"
 
 #include <optional>
 #include <string>
@@ -17,4 +18,5 @@ enum class BackendHttpGuardDecision {
     const std::string &peer_address,
     const std::string &host_header,
     const std::optional<std::string> &origin_header,
-    const SupportRequestGuardSnapshot &snapshot);
+    const SupportRequestGuardSnapshot &snapshot,
+    PrivilegedNetworkMode mode = PrivilegedNetworkMode::enforced);

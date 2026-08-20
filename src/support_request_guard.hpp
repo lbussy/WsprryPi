@@ -36,7 +36,8 @@ public:
     [[nodiscard]] SupportRequestGuardResult evaluate(
         const std::string &peer_address,
         const std::string &host_header,
-        const std::optional<std::string> &origin_header) const;
+        const std::optional<std::string> &origin_header,
+        bool enforce_peer = true) const;
 
     [[nodiscard]] static SupportRequestGuardSnapshot discover_local_networks();
 

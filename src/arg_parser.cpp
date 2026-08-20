@@ -3107,6 +3107,8 @@ bool parse_command_line(int argc, char *argv[])
 
             try
             {
+                iniFile.set_raw_passthrough_keys(
+                    {{"Security", "Privileged Network Safety"}});
                 iniFile.set_filename(config.ini_filename);
 
                 if (!load_json(config.ini_filename, &load_error, &warning_messages))

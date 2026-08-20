@@ -136,10 +136,10 @@ bool excluded_interface_name(const std::string &name) {
 
 SupportRequestGuard::SupportRequestGuard(SupportRequestGuardSnapshot snapshot) : snapshot_(std::move(snapshot)) {}
 
-SupportRequestGuardResult SupportRequestGuard::evaluate(const std::string &peer_address, const std::string &host_header, const std::optional<std::string> &origin_header) const {
+SupportRequestGuardResult SupportRequestGuard::evaluate(const std::string &peer_address, const std::string &host_header, const std::optional<std::string> &origin_header, bool enforce_peer) const {
     const auto peer = address(peer_address);
     if (!peer || prohibited(*peer)) return {SupportRequestGuardDecision::rejected_peer};
-    if (!loopback(*peer)) {
+    if (enforce_peer && !loopback(*peer)) {
         if (!snapshot_.discovery_succeeded) return {SupportRequestGuardDecision::interface_discovery_unavailable};
         bool matched = false;
         for (const auto &item : snapshot_.networks) { const auto network = address(item.address); const auto mask = address(item.netmask); if (network && mask && same_subnet(*peer, *network, *mask)) { matched = true; break; } }

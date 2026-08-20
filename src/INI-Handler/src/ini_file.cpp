@@ -158,6 +158,10 @@ void IniFile::save()
 
     std::string current_section;
     std::unordered_map<std::string, std::unordered_set<std::string>> written_keys;
+    for (const auto &entry : _rawPassthroughKeys)
+    {
+        written_keys[entry.first].insert(entry.second);
+    }
     for (size_t i = 0; i < _lines.size(); ++i)
     {
         const std::string trimmed = trim(_lines[i]);
@@ -179,6 +183,11 @@ void IniFile::save()
         if (pos != std::string::npos)
         {
             const std::string key = trim(trimmed.substr(0, pos));
+            if (_rawPassthroughKeys.count({current_section, key}) > 0)
+            {
+                file << _lines[i] << "\n";
+                continue;
+            }
             if (_removedKeys.count({current_section, key}) > 0)
             {
                 continue;
@@ -252,6 +261,12 @@ void IniFile::save()
     }
 
     _pendingChanges = false;
+}
+
+void IniFile::set_raw_passthrough_keys(
+    const std::set<std::pair<std::string, std::string>> &keys)
+{
+    _rawPassthroughKeys = keys;
 }
 
 void IniFile::reset_to_stock(const std::string &semantic_version)

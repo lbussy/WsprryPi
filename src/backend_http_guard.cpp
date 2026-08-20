@@ -8,7 +8,8 @@ BackendHttpGuardDecision evaluate_backend_http_request(
     const std::string &peer_address,
     const std::string &host_header,
     const std::optional<std::string> &origin_header,
-    const SupportRequestGuardSnapshot &snapshot) {
+    const SupportRequestGuardSnapshot &snapshot,
+    PrivilegedNetworkMode mode) {
     const auto classification = classify_privileged_http_operation(method, path);
     if (classification == PrivilegedOperationClass::reject) {
         const bool protected_candidate =
@@ -18,8 +19,12 @@ BackendHttpGuardDecision evaluate_backend_http_request(
             path.starts_with("/api/support-bundles/");
         if (protected_candidate) return BackendHttpGuardDecision::rejected;
     }
+    const bool protected_operation =
+        classification == PrivilegedOperationClass::protected_operation;
+    const bool enforce_peer = !protected_operation ||
+        mode != PrivilegedNetworkMode::insecure_disabled;
     return SupportRequestGuard(snapshot).evaluate(
-               peer_address, host_header, origin_header).allowed()
+               peer_address, host_header, origin_header, enforce_peer).allowed()
                ? BackendHttpGuardDecision::allowed
                : BackendHttpGuardDecision::rejected;
 }

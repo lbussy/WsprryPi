@@ -2643,6 +2643,8 @@ void commit_config_candidate(const PreparedConfigCandidate &candidate)
 
     if (candidate.migration_required)
     {
+        iniFile.set_raw_passthrough_keys(
+            {{"Security", "Privileged Network Safety"}});
         iniFile.set_filename(candidate.normalized_config.ini_filename);
         iniFile.erase_value("GPIO", "Use NTP");
         persist_config_json(candidate.normalized_json);

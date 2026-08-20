@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support_request_guard.hpp"
+#include "privileged_network_policy.hpp"
 
 #include <string>
 
@@ -18,4 +19,5 @@ struct WebSocketUpgradeGuardResult {
 [[nodiscard]] WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
     const std::string &request,
     const std::string &peer_address,
-    const SupportRequestGuardSnapshot &snapshot);
+    const SupportRequestGuardSnapshot &snapshot,
+    PrivilegedNetworkMode mode = PrivilegedNetworkMode::enforced);

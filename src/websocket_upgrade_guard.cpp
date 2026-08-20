@@ -36,7 +36,8 @@ bool token_list_contains(std::string value, std::string_view expected) {
 WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
     const std::string &request,
     const std::string &peer_address,
-    const SupportRequestGuardSnapshot &snapshot) {
+    const SupportRequestGuardSnapshot &snapshot,
+    PrivilegedNetworkMode mode) {
     if (request.size() > 4096 || !request.ends_with("\r\n\r\n")) {
         return {};
     }
@@ -93,7 +94,8 @@ WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
         origin == headers.end() ? std::nullopt
                                 : std::optional<std::string>(origin->second);
     if (!SupportRequestGuard(snapshot).evaluate(
-            peer_address, host->second, origin_value).allowed()) {
+            peer_address, host->second, origin_value,
+            mode != PrivilegedNetworkMode::insecure_disabled).allowed()) {
         return {WebSocketUpgradeGuardDecision::rejected, {}};
     }
     return {WebSocketUpgradeGuardDecision::allowed, key->second};

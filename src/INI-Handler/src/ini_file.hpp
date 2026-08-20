@@ -91,6 +91,17 @@ public:
     void save();
 
     /**
+     * @brief Configures section/key pairs that normal saves preserve verbatim.
+     *
+     * Existing matching lines are copied byte-for-byte from the loaded layout.
+     * Missing matching keys are not appended, and pending in-memory changes or
+     * removals for those keys are not persisted by save(). Dedicated owners may
+     * update such values through a separately controlled persistence path.
+     */
+    void set_raw_passthrough_keys(
+        const std::set<std::pair<std::string, std::string>> &keys);
+
+    /**
      * @brief Retrieves a raw string value.
      *
      * @param section Section name.
@@ -310,6 +321,9 @@ private:
 
     /** @brief Exact section/key lines intentionally omitted by the next save. */
     std::set<std::pair<std::string, std::string>> _removedKeys;
+
+    /** @brief Keys copied verbatim, or kept absent, during normal saves. */
+    std::set<std::pair<std::string, std::string>> _rawPassthroughKeys;
 
     /** @brief True when in-memory data has unsaved changes. */
     bool _pendingChanges = false;

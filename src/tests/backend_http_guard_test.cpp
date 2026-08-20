@@ -36,6 +36,18 @@ int main() {
     // therefore cannot turn this actual off-LAN peer into an allowed request.
     assert(evaluate("PUT", "/config", "203.0.113.4", "wsprrypi") ==
            BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "203.0.113.4", "wsprrypi", std::nullopt,
+               snapshot, PrivilegedNetworkMode::insecure_disabled) ==
+           BackendHttpGuardDecision::allowed);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "203.0.113.4", "evil", std::nullopt,
+               snapshot, PrivilegedNetworkMode::insecure_disabled) ==
+           BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "GET", "/config", "203.0.113.4", "wsprrypi", std::nullopt,
+               snapshot, PrivilegedNetworkMode::insecure_disabled) ==
+           BackendHttpGuardDecision::rejected);
 
     std::cout << "backend_http_guard_test: PASS\n";
 }

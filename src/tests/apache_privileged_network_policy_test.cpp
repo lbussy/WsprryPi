@@ -48,6 +48,13 @@ int main(int argc, char **argv) {
     assert(policy.find("Forwarded") == std::string::npos);
     assert(policy.find("X-Forwarded") == std::string::npos);
     assert(policy.find("RemoteIP") == std::string::npos);
+    const auto disabled = render_apache_privileged_network_policy(
+        {}, PrivilegedNetworkMode::insecure_disabled);
+    assert(disabled.valid());
+    assert(*disabled.configuration ==
+           "# NETWORK SAFETY OFF\n"
+           "# Peer/subnet restrictions are explicitly disabled.\n");
+    assert(disabled.configuration->find("Require") == std::string::npos);
 
     const auto source_root = std::filesystem::current_path();
     const std::string stock_vhost = read_file(source_root / "../config/wsprrypi.conf");

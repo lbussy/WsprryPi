@@ -72,7 +72,12 @@ void append_peer_requirement(std::ostringstream &output, const std::set<std::str
 } // namespace
 
 ApachePrivilegedNetworkPolicyResult render_apache_privileged_network_policy(
-    const std::vector<SupportLocalNetwork> &networks) {
+    const std::vector<SupportLocalNetwork> &networks,
+    PrivilegedNetworkMode mode) {
+    if (mode == PrivilegedNetworkMode::insecure_disabled) {
+        return {"# NETWORK SAFETY OFF\n"
+                "# Peer/subnet restrictions are explicitly disabled.\n", {}};
+    }
     std::set<std::string> cidrs;
     for (const auto &network : networks) {
         const auto cidr = network_cidr(network);
