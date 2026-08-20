@@ -10,8 +10,8 @@
 #include <string>
 #include <string_view>
 
-// The installer does not provision this collector yet.  The future installer
-// slice must install it root-owned and executable at this fixed path.
+// The installer provisions the collector root-owned and executable at this
+// fixed path; production runtime requests cannot override it.
 inline constexpr std::string_view kSupportBundleProductionCollectorPath =
     "/usr/local/lib/wsprrypi/collect-support-bundle.sh";
 inline constexpr std::string_view kSupportBundleProductionStorageRoot =
