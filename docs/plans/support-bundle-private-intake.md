@@ -2,13 +2,13 @@
 
 Status: Implemented contract; release/provider qualification remains gated
 
-Implementation state: Implemented through local retention enforcement and non-RF production intake qualification
+Implementation state: Implemented through a release-like, non-RF active-intake qualification on wspr4
 
 Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/414)
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
-Current reconciliation slice: [Slice 43 contract reconciliation](../research/issue-414-slice-43-contract-reconciliation.md)
+Current qualification slice: [Slice 44 release-like active-intake installation](../research/issue-414-slice-44-active-intake-qualification.md)
 
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
@@ -93,6 +93,10 @@ Production installation qualification: [Issue 414 Slice 40](../research/issue-41
 Retention eligibility audit: [Issue 414 Slice 41](../research/issue-414-slice-41-retention-audit.md)
 
 Explicit retention deletion: [Issue 414 Slice 42](../research/issue-414-slice-42-retention-deletion.md)
+
+Contract reconciliation: [Slice 43 contract reconciliation](../research/issue-414-slice-43-contract-reconciliation.md)
+
+Release-like active-intake installation: [Issue 414 Slice 44](../research/issue-414-slice-44-active-intake-qualification.md)
 
 ## Purpose
 
@@ -478,6 +482,12 @@ tools, service activation with transmission disabled, authenticated
 upgrade-required output for a feature prerelease, durable generation state, and
 canonical-version active resolution. It did not perform a production upload.
 
+A later release-like qualification installed exact version
+`3.2.1-qualification.1` from the reconciled Issue #414 and `devel` source. The
+ordinary production endpoint then returned authenticated generation-one
+`active` state while transmission remained disabled. The temporary tag was
+local-only and was removed with its isolated checkout after validation.
+
 The following remain deliberately outside the completed evidence:
 
 - a release build satisfying `minimum_upload_version` completing the entire UI
@@ -506,11 +516,12 @@ responsive application workflow, exact-byte encryption, manual Dropbox handoff,
 GitHub continuation, maintainer inspection and processing, key-administration
 tools, vault recovery qualification, and installer dependency are implemented.
 The production installer, service restart, authenticated upgrade-required
-endpoint, durable generation state, and canonical-version active resolution have
-been qualified on `wspr4` without RF activity. Remaining work comprises the
-signed-out Dropbox submission and maintainer receipt/inspection/promotion
-exercise, plus operator and maintainer documentation in the separate
-`Wsprry_Pi_Docs` repository. Strict Processed-case retention auditing
+endpoint, durable generation state, and ordinary active endpoint have been
+qualified on `wspr4` without RF activity. The installed release-like
+`3.2.1-qualification.1` build is ready for the signed-out Dropbox submission and
+same-artifact maintainer receipt/inspection/promotion exercise. Operator and
+maintainer documentation in the separate `Wsprry_Pi_Docs` repository also
+remains. Strict Processed-case retention auditing
 and explicit one-case local deletion are implemented; Dropbox, synchronized
 replica, backup, and user-copy retention remain operational boundaries. The
 separately observed service stop-timeout limitation remains service-lifecycle
