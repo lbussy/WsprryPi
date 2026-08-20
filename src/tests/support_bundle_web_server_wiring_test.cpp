@@ -54,6 +54,14 @@ int main() {
     assert(count(source, "->listen(") == 1);
     assert(source.find("svr->Get(\"/config\"") != std::string::npos);
     assert(source.find("svr->Get(\"/version\"") != std::string::npos);
+    assert(source.find("svr->set_pre_routing_handler(") != std::string::npos);
+    assert(source.find("evaluate_backend_http_request(") != std::string::npos);
+    assert(source.find("BackendHttpGuardDecision::allowed") != std::string::npos);
+    const std::size_t mutation_handler = source.find("auto handlePutPatch");
+    const std::size_t support_registration = source.find("if (!supportBundleRoutesRegistered_)");
+    assert(mutation_handler != std::string::npos && support_registration != std::string::npos);
+    assert(source.substr(mutation_handler, support_registration - mutation_handler)
+               .find("setCORSHeaders(res)") == std::string::npos);
     assert(source.find("create_directory") == std::string::npos);
     assert(source.find("supportBundleJobManager_->create(") == std::string::npos);
 

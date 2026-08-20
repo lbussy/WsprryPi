@@ -138,6 +138,8 @@ SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
 QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
 SUPPORT_REQUEST_GUARD_TEST_OUT := support_request_guard_test
 PRIVILEGED_NETWORK_POLICY_TEST_OUT := privileged_network_policy_test
+BACKEND_HTTP_GUARD_TEST_OUT := backend_http_guard_test
+WEBSOCKET_UPGRADE_GUARD_TEST_OUT := websocket_upgrade_guard_test
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT := support_bundle_job_manager_test
 SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT := support_bundle_result_validator_test
 SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT := support_bundle_collector_executor_test
@@ -367,7 +369,7 @@ QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/qualification_gp
 QUALIFICATION_GPIO_TEST_MODE_TEST_DEPS := $(QUALIFICATION_GPIO_TEST_MODE_TEST_OBJ)
 SUPPORT_REQUEST_GUARD_TEST_SRC := tests/support_request_guard_test.cpp
 SUPPORT_REQUEST_GUARD_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_request_guard_test.o
-SUPPORT_REQUEST_GUARD_TEST_DEPS := $(SUPPORT_REQUEST_GUARD_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_request_guard.o
+SUPPORT_REQUEST_GUARD_TEST_DEPS := $(SUPPORT_REQUEST_GUARD_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_request_guard.o $(OBJ_DIR_DEBUG)/./privileged_network_policy.o
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_SRC := tests/support_bundle_job_manager_test.cpp
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_job_manager_test.o
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_DEPS := $(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_bundle_private_artifact.o
@@ -384,7 +386,7 @@ SUPPORT_BUNDLE_RUNTIME_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_runtime
 SUPPORT_BUNDLE_RUNTIME_TEST_DEPS := $(SUPPORT_BUNDLE_RUNTIME_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_runtime.o $(OBJ_DIR_DEBUG)/./support_bundle_startup_cleanup.o $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_bundle_collector_executor.o $(OBJ_DIR_DEBUG)/./support_bundle_private_artifact.o
 SUPPORT_BUNDLE_HTTP_TEST_SRC := tests/support_bundle_http_test.cpp
 SUPPORT_BUNDLE_HTTP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_http_test.o
-SUPPORT_BUNDLE_HTTP_TEST_DEPS := $(SUPPORT_BUNDLE_HTTP_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_http.o $(OBJ_DIR_DEBUG)/./support_bundle_download_preparation.o $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_bundle_private_artifact.o $(OBJ_DIR_DEBUG)/./support_request_guard.o $(OBJ_DIR_DEBUG)/./httplib.o
+SUPPORT_BUNDLE_HTTP_TEST_DEPS := $(SUPPORT_BUNDLE_HTTP_TEST_OBJ) $(OBJ_DIR_DEBUG)/./support_bundle_http.o $(OBJ_DIR_DEBUG)/./support_bundle_download_preparation.o $(OBJ_DIR_DEBUG)/./support_bundle_archive_digest.o $(OBJ_DIR_DEBUG)/./support_bundle_checksum_file.o $(OBJ_DIR_DEBUG)/./support_bundle_download_file.o $(OBJ_DIR_DEBUG)/./support_bundle_job_manager.o $(OBJ_DIR_DEBUG)/./support_bundle_result_validator.o $(OBJ_DIR_DEBUG)/./support_bundle_job_directory_remover.o $(OBJ_DIR_DEBUG)/./support_bundle_private_artifact.o $(OBJ_DIR_DEBUG)/./support_request_guard.o $(OBJ_DIR_DEBUG)/./privileged_network_policy.o $(OBJ_DIR_DEBUG)/./httplib.o
 SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_SRC := tests/support_bundle_web_server_wiring_test.cpp
 SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/support_bundle_web_server_wiring_test.o
 SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_DEPS := $(SUPPORT_BUNDLE_WEB_SERVER_WIRING_TEST_OBJ)
@@ -1067,7 +1069,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
 .PHONY: semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
-.PHONY: support-request-guard-test privileged-network-policy-test support-bundle-job-manager-test support-bundle-result-validator-test
+.PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
@@ -1179,6 +1181,20 @@ $(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT): tests/privileged_network_polic
 
 privileged-network-policy-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT)
+
+$(BIN_DIR)/$(BACKEND_HTTP_GUARD_TEST_OUT): tests/backend_http_guard_test.cpp backend_http_guard.cpp privileged_network_policy.cpp support_request_guard.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+backend-http-guard-test: $(BIN_DIR)/$(BACKEND_HTTP_GUARD_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(BACKEND_HTTP_GUARD_TEST_OUT)
+
+$(BIN_DIR)/$(WEBSOCKET_UPGRADE_GUARD_TEST_OUT): tests/websocket_upgrade_guard_test.cpp websocket_upgrade_guard.cpp support_request_guard.cpp privileged_network_policy.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+websocket-upgrade-guard-test: $(BIN_DIR)/$(WEBSOCKET_UPGRADE_GUARD_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(WEBSOCKET_UPGRADE_GUARD_TEST_OUT)
 
 support-bundle-job-manager-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)

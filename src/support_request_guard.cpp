@@ -1,4 +1,5 @@
 #include "support_request_guard.hpp"
+#include "privileged_network_policy.hpp"
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -116,6 +117,21 @@ std::optional<ParsedHost> origin_host(const std::string &origin, bool &https) {
     if (authority.empty() || authority.find_first_of("/?#") != std::string::npos) return std::nullopt;
     return host(authority);
 }
+
+PrivilegedInterfaceKind physical_interface_kind(const std::string &name) {
+    const auto begins = [&](std::string_view prefix) { return name.starts_with(prefix); };
+    if (begins("wlan") || begins("wl")) return PrivilegedInterfaceKind::wifi;
+    if (begins("eth") || begins("en")) return PrivilegedInterfaceKind::ethernet;
+    return PrivilegedInterfaceKind::other;
+}
+
+bool excluded_interface_name(const std::string &name) {
+    static constexpr std::array<std::string_view, 14> prefixes = {
+        "lo", "tun", "tap", "utun", "wg", "tailscale", "zt", "docker",
+        "veth", "br", "virbr", "cni", "podman", "awdl"};
+    return std::any_of(prefixes.begin(), prefixes.end(),
+                       [&](std::string_view prefix) { return name.starts_with(prefix); });
+}
 }
 
 SupportRequestGuard::SupportRequestGuard(SupportRequestGuardSnapshot snapshot) : snapshot_(std::move(snapshot)) {}
@@ -143,17 +159,32 @@ SupportRequestGuardSnapshot SupportRequestGuard::discover_local_networks() {
     SupportRequestGuardSnapshot result; char hostname[256]{};
     if (gethostname(hostname, sizeof(hostname) - 1) == 0) result.hostname = hostname;
     ifaddrs *interfaces = nullptr; if (getifaddrs(&interfaces) != 0) return result;
-    result.discovery_succeeded = true;
     for (auto *item = interfaces; item != nullptr; item = item->ifa_next) {
-        if (!item->ifa_addr || !item->ifa_netmask || !(item->ifa_flags & IFF_UP) || item->ifa_addr->sa_family != item->ifa_netmask->sa_family) continue;
+        if (!item->ifa_name || !item->ifa_addr || !item->ifa_netmask ||
+            item->ifa_addr->sa_family != item->ifa_netmask->sa_family) continue;
+        const std::string name = item->ifa_name;
+        if (excluded_interface_name(name)) continue;
         char buffer[INET6_ADDRSTRLEN]{};
+        std::string address_text;
+        std::string mask_text;
         if (item->ifa_addr->sa_family == AF_INET) {
             const auto *a = reinterpret_cast<sockaddr_in *>(item->ifa_addr); const auto *m = reinterpret_cast<sockaddr_in *>(item->ifa_netmask);
-            if (inet_ntop(AF_INET, &a->sin_addr, buffer, sizeof(buffer))) { std::string a_text = buffer; if (inet_ntop(AF_INET, &m->sin_addr, buffer, sizeof(buffer))) result.networks.push_back({a_text, buffer}); }
+            if (inet_ntop(AF_INET, &a->sin_addr, buffer, sizeof(buffer))) { address_text = buffer; if (inet_ntop(AF_INET, &m->sin_addr, buffer, sizeof(buffer))) mask_text = buffer; }
         } else if (item->ifa_addr->sa_family == AF_INET6) {
             const auto *a = reinterpret_cast<sockaddr_in6 *>(item->ifa_addr); const auto *m = reinterpret_cast<sockaddr_in6 *>(item->ifa_netmask);
-            if (inet_ntop(AF_INET6, &a->sin6_addr, buffer, sizeof(buffer))) { std::string a_text = buffer; if (inet_ntop(AF_INET6, &m->sin6_addr, buffer, sizeof(buffer))) result.networks.push_back({a_text, buffer}); }
+            if (inet_ntop(AF_INET6, &a->sin6_addr, buffer, sizeof(buffer))) { address_text = buffer; if (inet_ntop(AF_INET6, &m->sin6_addr, buffer, sizeof(buffer))) mask_text = buffer; }
         }
+        const PrivilegedInterfaceCandidate candidate{
+            (item->ifa_flags & IFF_UP) != 0,
+            physical_interface_kind(name),
+            (item->ifa_flags & IFF_LOOPBACK) != 0,
+            (item->ifa_flags & IFF_POINTOPOINT) != 0,
+            false, false, false, false,
+            address_text, mask_text};
+        if (is_eligible_privileged_interface(candidate))
+            result.networks.push_back({address_text, mask_text});
     }
-    freeifaddrs(interfaces); return result;
+    freeifaddrs(interfaces);
+    result.discovery_succeeded = !result.networks.empty();
+    return result;
 }

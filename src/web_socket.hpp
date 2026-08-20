@@ -175,7 +175,7 @@ private:
      * @param client Socket descriptor for the client.
      * @return true if handshake succeeded, false otherwise.
      */
-    bool performHandshake(int client);
+    bool performHandshake(int client, const std::string &peer_address);
 
     /**
      * @brief Trims whitespace from both ends of a string.

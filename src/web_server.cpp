@@ -28,6 +28,7 @@
 
 #include "web_server.hpp"
 
+#include "backend_http_guard.hpp"
 #include "config_handler.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
@@ -236,8 +237,8 @@ void WebServer::start(int port)
     serverThread = std::thread([this]()
                                {
     // PUT and PATCH handler: Accept and print JSON input.
-    auto handlePutPatch = [this](const httplib::Request &req,
-                                 httplib::Response &res) {
+    auto handlePutPatch = [](const httplib::Request &req,
+                             httplib::Response &res) {
         try
         {
             // Parse data into JSON
@@ -246,14 +247,13 @@ void WebServer::start(int port)
             // Patch into the current running config
             patch_all_from_web(j);
 
-            // Send CORS headers
-            setCORSHeaders(res);
+            res.headers.erase("Access-Control-Allow-Origin");
             res.set_content("Ok", "text/plain");
         }
         catch (const nlohmann::json::parse_error &e)
         {
             llog.logE(WARN, "Error parsing JSON: ", std::string(e.what()));
-            setCORSHeaders(res);
+            res.headers.erase("Access-Control-Allow-Origin");
             res.status = 400;
             nlohmann::json err = {{"error", "invalid_json"}, {"message", e.what()}};
             res.set_content(err.dump(4), "application/json");
@@ -261,7 +261,7 @@ void WebServer::start(int port)
         catch (const ConfigValidationError &e)
         {
             llog.logE(WARN, "Configuration update rejected: ", std::string(e.what()));
-            setCORSHeaders(res);
+            res.headers.erase("Access-Control-Allow-Origin");
             res.status = 400;
             nlohmann::json err = e.details();
             if (!err.is_object())
@@ -275,7 +275,7 @@ void WebServer::start(int port)
         catch (const std::exception &e)
         {
             llog.logE(WARN, "Configuration update rejected: ", std::string(e.what()));
-            setCORSHeaders(res);
+            res.headers.erase("Access-Control-Allow-Origin");
             res.status = 400;
             nlohmann::json err = {{"error", "invalid_config"}, {"message", e.what()}};
             res.set_content(err.dump(4), "application/json");
@@ -291,6 +291,24 @@ void WebServer::start(int port)
             resolve_support_bundle_intake_production);
         supportBundleRoutesRegistered_ = true;
     }
+
+    svr->set_pre_routing_handler(
+        [](const httplib::Request &request, httplib::Response &response) {
+            const std::optional<std::string> origin = request.has_header("Origin")
+                ? std::optional<std::string>(request.get_header_value("Origin"))
+                : std::nullopt;
+            if (evaluate_backend_http_request(
+                    request.method, request.path, request.remote_addr,
+                    request.get_header_value("Host"), origin,
+                    SupportRequestGuard::discover_local_networks()) ==
+                BackendHttpGuardDecision::allowed) {
+                return httplib::Server::HandlerResponse::Unhandled;
+            }
+            response.status = 403;
+            response.headers.erase("Access-Control-Allow-Origin");
+            response.set_content("Forbidden", "text/plain");
+            return httplib::Server::HandlerResponse::Handled;
+        });
 
     // Set up OPTIONS handler for CORS preflight requests.
     svr->Options(R"(/(.*))",

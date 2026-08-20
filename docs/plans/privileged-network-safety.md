@@ -2,7 +2,10 @@
 
 Status: Proposed
 
-Implementation state: Not implemented
+Implementation state: Phases 1 and 2 implemented. Backend HTTP and WebSocket
+entry points enforce the network, Host, and optional Origin policy. Apache,
+administrator override, UI/installer, operator documentation, and runtime
+qualification remain unimplemented.
 Repositories affected: `WsprryPi` (including its `WsprryPi-UI` component) and
 `Wsprry_Pi_Docs` (the separate sibling operator-documentation repository)
 

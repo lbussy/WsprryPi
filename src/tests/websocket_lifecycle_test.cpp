@@ -25,8 +25,8 @@ class WebSocketLifecycleTest {
         int fd=socket(AF_INET,SOCK_STREAM,0); assert(fd>=0);
         sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(port); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
         assert(connect(fd,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
-        const char *h="GET / HTTP/1.1\r\nHost: 127.0.0.1:\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
-        assert(send(fd,h,strlen(h),0)>0); char b[512]{}; auto n=recv(fd,b,sizeof(b),0); assert(n>0); assert(std::string(b,n).find("HTTP/1.1 101") == 0); return fd;
+        const std::string h="GET / HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port) + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+        assert(send(fd,h.data(),h.size(),0)>0); char b[512]{}; auto n=recv(fd,b,sizeof(b),0); assert(n>0); assert(std::string(b,n).find("HTTP/1.1 101") == 0); return fd;
     }
     static bool wait_zero(WebSocketServer &s) {
         std::unique_lock<std::mutex> l(s.clients_mutex_);

@@ -27,6 +27,8 @@
  */
 
 #include "web_socket.hpp"
+#include "support_request_guard.hpp"
+#include "websocket_upgrade_guard.hpp"
 
 #include "config_handler.hpp"
 #include "logging.hpp"
@@ -1037,8 +1039,20 @@ void WebSocketServer::serverLoop()
             client_handlers_cv_.notify_all();
         }
 
-        // Perform WebSocket handshake
-        if (!performHandshake(client))
+        char peer_ip[INET6_ADDRSTRLEN]{};
+        if (peer_addr.ss_family == AF_INET)
+        {
+            const auto *s4 = reinterpret_cast<sockaddr_in *>(&peer_addr);
+            inet_ntop(AF_INET, &s4->sin_addr, peer_ip, sizeof(peer_ip));
+        }
+        else if (peer_addr.ss_family == AF_INET6)
+        {
+            const auto *s6 = reinterpret_cast<sockaddr_in6 *>(&peer_addr);
+            inet_ntop(AF_INET6, &s6->sin6_addr, peer_ip, sizeof(peer_ip));
+        }
+
+        // Perform WebSocket handshake using only the actual socket peer.
+        if (!performHandshake(client, peer_ip))
         {
             llog.logE(WARN, "Handshake failed for new client");
             std::lock_guard<std::mutex> lock(clients_mutex_);
@@ -1242,7 +1256,7 @@ void WebSocketServer::keepAliveLoop(uint32_t interval)
  * @note If the handshake fails, this method does not close the socket.
  *       The caller is responsible for cleanup.
  */
-bool WebSocketServer::performHandshake(int client)
+bool WebSocketServer::performHandshake(int client, const std::string &peer_address)
 {
     const int buf_size = 4096;
     char buf[buf_size];
@@ -1257,35 +1271,21 @@ bool WebSocketServer::performHandshake(int client)
         buf[bytes] = '\0';
         request.append(buf);
         if (request.size() > 4096)
-            break;
+            return false;
     }
 
-    std::istringstream stream(request);
-    std::string line;
-    std::string key;
-
-    while (std::getline(stream, line))
+    const auto guard = evaluate_websocket_upgrade(
+        request, peer_address, SupportRequestGuard::discover_local_networks());
+    if (guard.decision != WebSocketUpgradeGuardDecision::allowed)
     {
-        if (line.find("Sec-WebSocket-Key:") != std::string::npos)
-        {
-            size_t pos = line.find(":");
-            if (pos != std::string::npos)
-            {
-                key = line.substr(pos + 1);
-                key.erase(std::remove(key.begin(), key.end(), '\r'), key.end());
-                key.erase(0, key.find_first_not_of(" \t"));
-            }
-            break;
-        }
-    }
-
-    if (key.empty())
-    {
-        llog.logE(WARN, "Socket key not found in request.");
+        const char *status = guard.decision == WebSocketUpgradeGuardDecision::rejected
+            ? "HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            : "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+        (void)send(client, status, std::strlen(status), 0);
         return false;
     }
 
-    std::string accept_key = computeWebSocketAccept(key);
+    std::string accept_key = computeWebSocketAccept(guard.key);
     std::ostringstream response;
     response << "HTTP/1.1 101 Switching Protocols\r\n"
              << "Upgrade: websocket\r\n"
