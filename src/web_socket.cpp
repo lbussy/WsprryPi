@@ -372,12 +372,16 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         std::string cmd = j.value("command", "");
         std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
 
-        if (cmd == "tone_start" || cmd == "tone_end" ||
-            cmd == "bounded_tone")
+        if (cmd == "tone_start" || cmd == "tone_end")
         {
             // Multiple clients have independent handler threads. Keep each
             // Test Tone lifecycle operation and its broadcast reply in one
             // transaction so Start and End cannot race or report out of order.
+            test_tone_command_lock =
+                std::unique_lock<std::mutex>(test_tone_command_mutex_);
+        }
+        else if (cmd == "bounded_tone")
+        {
             test_tone_command_lock =
                 std::unique_lock<std::mutex>(test_tone_command_mutex_);
         }
