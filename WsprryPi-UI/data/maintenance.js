@@ -533,9 +533,12 @@ document.addEventListener("DOMContentLoaded", () => {
             await navigator.clipboard.writeText(supportGithubComment.value);
             supportGithubCopyStatus.textContent = "Public comment copied. Open the issue and post it yourself.";
         } catch {
-            supportGithubComment.focus();
-            supportGithubComment.select();
-            supportGithubCopyStatus.textContent = "Copy was not available. The comment is selected so you can copy it manually.";
+            window.setTimeout(() => {
+                supportGithubComment.focus({ preventScroll: true });
+                supportGithubComment.select();
+                supportGithubComment.setSelectionRange(0, supportGithubComment.value.length);
+                supportGithubCopyStatus.textContent = "Copy was not available. The comment is selected so you can copy it manually.";
+            }, 0);
         }
     }
 

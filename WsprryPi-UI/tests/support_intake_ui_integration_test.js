@@ -67,6 +67,28 @@ async function terminate(child) {
     });
 }
 
+async function removeProfileDirectory(profileDir, options = {}) {
+    const remove = options.remove || fs.rmSync;
+    const wait = options.wait || ((milliseconds) =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    const attempts = options.attempts || 10;
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            remove(profileDir, { recursive: true, force: true });
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt < attempts) await wait(100);
+        }
+    }
+    throw lastError;
+}
+
+function preferredHarnessError(primaryError, cleanupError) {
+    return primaryError || cleanupError;
+}
+
 function chromiumBinary() {
     if (process.env.CHROMIUM_BIN) return process.env.CHROMIUM_BIN;
     for (const candidate of ["chromium", "chromium-browser", "google-chrome"]) {
@@ -272,6 +294,18 @@ async function browserTest() {
     ok(field("supportGithubComment").value.includes("Case ID: A7K3-M9QF-X2DP") &&
         !field("supportGithubComment").value.includes("secret-capability"),
         "prepared public comment contains correlation but no transfer capability");
+    const refreshModal = field("confirmModal");
+    if (refreshModal.classList.contains("show") &&
+        field("confirmModalLabel").textContent.trim() === "UI refresh required") {
+        field("confirmCancelBtn").click();
+        await wait(() => !refreshModal.classList.contains("show") &&
+            !document.body.classList.contains("modal-open") &&
+            !document.querySelector(".modal-backdrop"),
+        "UI refresh prompt cleanup before focus recovery");
+    }
+    field("supportGithubComment").focus();
+    equal(document.activeElement && document.activeElement.id, "supportGithubComment",
+        "visible public comment can receive keyboard focus");
     field("copySupportGithubCommentButton").click();
     await wait(() => field("supportGithubCopyStatus").textContent.includes("copied"),
         "clipboard success status");
@@ -281,8 +315,12 @@ async function browserTest() {
     field("copySupportGithubCommentButton").click();
     await wait(() => field("supportGithubCopyStatus").textContent.includes("selected"),
         "clipboard failure recovery");
-    equal(document.activeElement, field("supportGithubComment"),
+    equal(document.activeElement && document.activeElement.id, "supportGithubComment",
         "clipboard failure focuses the selectable public comment");
+    equal(field("supportGithubComment").selectionStart, 0,
+        "clipboard failure selects the public comment from its first character");
+    equal(field("supportGithubComment").selectionEnd, field("supportGithubComment").value.length,
+        "clipboard failure selects the complete public comment");
     field("downloadSupportReceiptButton").click();
     await wait(() => field("supportEncryptionMessage").textContent.includes("Receipt downloaded"),
         "receipt download state");
@@ -426,7 +464,37 @@ async function browserTest() {
     return { scenarios: 21, intakeCalls: 8, assertions: "passed" };
 }
 
+async function dismissUiRefreshPrompt(client) {
+    const dismissed = await client.send("Runtime.evaluate", {
+        expression: `(() => {
+            const modal = document.getElementById("confirmModal");
+            const heading = document.getElementById("confirmModalLabel");
+            if (modal && modal.classList.contains("show") && heading &&
+                heading.textContent.trim() === "UI refresh required") {
+                document.getElementById("confirmCancelBtn").click();
+            }
+        })()`,
+    });
+    if (dismissed.exceptionDetails) {
+        const detail = dismissed.exceptionDetails.exception && dismissed.exceptionDetails.exception.description;
+        throw new Error(detail || dismissed.exceptionDetails.text || "UI refresh prompt dismissal failed");
+    }
+    await waitFor(async () => {
+        const result = await client.send("Runtime.evaluate", {
+            expression: `(() => {
+                const modal = document.getElementById("confirmModal");
+                return (!modal || !modal.classList.contains("show")) &&
+                    !document.body.classList.contains("modal-open") &&
+                    !document.querySelector(".modal-backdrop");
+            })()`,
+            returnByValue: true,
+        });
+        return result.result.value === true;
+    }, "UI refresh prompt to close");
+}
+
 async function capture(client, outputPath, width, height, state, theme = "light") {
+    await dismissUiRefreshPrompt(client);
     await client.send("Emulation.setDeviceMetricsOverride", {
         width, height, deviceScaleFactor: 1, mobile: width < 600,
     });
@@ -440,6 +508,10 @@ async function capture(client, outputPath, width, height, state, theme = "light"
             document.getElementById("createSupportBundleButton").classList.add("d-none");
             document.getElementById("supportBundleStatus").dataset.state = "finalized";
             document.getElementById("supportBundleStatus").textContent = "Reviewed candidate finalized. No file has been uploaded.";
+            document.getElementById("supportEncryptionPanel").classList.add("d-none");
+            document.getElementById("supportDropboxHandoffPanel").classList.add("d-none");
+            document.getElementById("supportUploadReportPanel").classList.add("d-none");
+            document.getElementById("supportGithubContinuationPanel").classList.add("d-none");
             const state = ${JSON.stringify(state)};
             const message = document.getElementById("supportIntakeMessage");
             const button = document.getElementById("checkSupportIntakeButton");
@@ -518,6 +590,7 @@ async function main() {
     const profileDir = `/tmp/wsprrypi-support-intake-ui-${process.pid}`;
     let chromium;
     let client;
+    let primaryError;
     try {
         await waitFor(async () => await getStatus(
             `http://127.0.0.1:${phpPort}/index.php?page=maintenance`) === 200, "Maintenance fixture");
@@ -533,6 +606,14 @@ async function main() {
         }, "Maintenance page in Chromium");
         client = new CdpClient(page.webSocketDebuggerUrl);
         await client.open();
+        await client.send("Page.bringToFront");
+        await waitFor(async () => {
+            const result = await client.send("Runtime.evaluate", {
+                expression: "document.hasFocus()",
+                returnByValue: true,
+            });
+            return result.result.value === true;
+        }, "Maintenance page to receive browser focus");
         await waitFor(async () => {
             const result = await client.send("Runtime.evaluate", {
                 expression: "document.readyState === 'complete' && typeof SUPPORT_INTAKE_ENDPOINT === 'object'",
@@ -540,6 +621,7 @@ async function main() {
             });
             return result.result.value === true;
         }, "Maintenance scripts");
+        await dismissUiRefreshPrompt(client);
         const result = await client.send("Runtime.evaluate", {
             expression: `(${browserTest.toString()})()`, awaitPromise: true, returnByValue: true,
         });
@@ -568,15 +650,33 @@ async function main() {
                 "support-intake-unavailable-mobile.png"), 390, 844, "unavailable");
         }
         console.log("support_intake_ui_integration_test passed");
+    } catch (error) {
+        primaryError = error;
     } finally {
-        if (client) client.close();
-        await terminate(chromium);
-        await terminate(php);
-        fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        let cleanupError;
+        const cleanupSteps = [
+            async () => { if (client) client.close(); },
+            async () => terminate(chromium),
+            async () => terminate(php),
+            async () => removeProfileDirectory(profileDir),
+        ];
+        for (const cleanupStep of cleanupSteps) {
+            try {
+                await cleanupStep();
+            } catch (error) {
+                cleanupError ||= error;
+            }
+        }
+        const failure = preferredHarnessError(primaryError, cleanupError);
+        if (failure) throw failure;
     }
 }
 
-main().catch((error) => {
-    console.error(error.stack || error.message);
-    process.exitCode = 1;
-});
+if (require.main === module) {
+    main().catch((error) => {
+        console.error(error.stack || error.message);
+        process.exitCode = 1;
+    });
+}
+
+module.exports = { preferredHarnessError, removeProfileDirectory };
