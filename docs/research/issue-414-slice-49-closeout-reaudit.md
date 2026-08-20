@@ -10,7 +10,8 @@ operator-documentation branches have not been integrated into their respective
 
 ## Audited revisions
 
-- Application integration: `d4fd9335ff3c95cd945e395a36c1a28494e1811f`
+- Application integration and collateral merge: `d4fd9335ff3c95cd945e395a36c1a28494e1811f`.
+- Portable closeout fixture and this re-audit: `82a0eb3993c14e77924db7f9457587974e025880`
   on `codex/issue-414-slice-30-runtime-activation-adapter`.
 - Impeccable collateral: `96ef06096efd1f876d2979e1f9992c05d40aff52`
   is an ancestor of the integration tip through merge commit `d4fd933`.
@@ -70,8 +71,8 @@ facilities. The checksum descriptor-leak fixture now tries Linux
 strict `BACKENDS=si5351 ANCILLARY_GPIO=0` profile. Job-directory removal and
 startup cleanup continue to exercise Linux descriptor-relative behavior and
 passed on `wspr4` from a temporary clone of application revision `d4fd933`; no
-installation or service action occurred. The checksum fixture will be rerun on
-Linux at the final re-audit commit before integration.
+installation or service action occurred. The corrected checksum fixture also
+passed on `wspr4` from a temporary clone of exact revision `82a0eb3`.
 
 The UI component unit suite passed, including support workflow source/state,
 browser-harness cleanup, logs, spots, responsive-shell, GPIO-menu, and frequency
