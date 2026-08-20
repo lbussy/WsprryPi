@@ -33,7 +33,25 @@
 
         // Connected state shows a manual reconnect action; otherwise start the stream.
         const isConnected = (state === "connected");
-        btn.textContent = isConnected ? "Refresh stream" : "Start stream";
+        const isConnecting = (state === "reconnecting");
+        btn.textContent = isConnected
+            ? "Refresh stream"
+            : isConnecting
+                ? "Connecting…"
+                : "Start stream";
+        btn.disabled = isConnecting;
+        btn.setAttribute("aria-disabled", isConnecting ? "true" : "false");
+
+        const retry = document.getElementById("logsRetryButton");
+        if (retry) {
+            retry.textContent = isConnecting
+                ? "Connecting…"
+                : isConnected
+                    ? "Refresh stream"
+                    : retry.dataset.idleLabel || "Start stream";
+            retry.disabled = isConnecting;
+            retry.setAttribute("aria-disabled", isConnecting ? "true" : "false");
+        }
 
         // Green when disconnected, blue when connected.
         btn.classList.remove("btn-outline-success", "btn-outline-primary");
@@ -54,6 +72,11 @@
 
         if (text && String(text).trim() !== "") el.textContent = text;
         if (title && String(title).trim() !== "") el.title = title;
+
+        const scrollRegion = document.getElementById("log-scroll");
+        if (scrollRegion) {
+            scrollRegion.setAttribute("aria-busy", state === "reconnecting" ? "true" : "false");
+        }
 
         setConnectButton(state);
     }
@@ -380,6 +403,7 @@
             button.id = action.id;
             button.className = "btn btn-outline-primary logs-empty-state__action";
             button.textContent = action.label;
+            button.dataset.idleLabel = action.label;
             state.appendChild(button);
         }
 
