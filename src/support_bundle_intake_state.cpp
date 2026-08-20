@@ -219,8 +219,14 @@ SupportBundleIntakeStateCommitResult commit_internal(
                                        O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
         if (replacement >= 0) {
             static constexpr char replacement_bytes[] = "{}\n";
-            write(replacement, replacement_bytes, sizeof(replacement_bytes) - 1);
-            close(replacement);
+            const bool replacement_written = write_all(
+                replacement,
+                std::string(replacement_bytes, sizeof(replacement_bytes) - 1));
+            const int replacement_close = close(replacement);
+            if (!replacement_written || replacement_close != 0) {
+                cleanup();
+                return {SupportBundleIntakeStateCommitStatus::publish_failed};
+            }
         }
     }
     if (!same_temporary_file(*root, opened, bytes.size())) {
