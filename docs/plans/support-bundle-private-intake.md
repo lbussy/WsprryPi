@@ -2,13 +2,13 @@
 
 Status: Proposed
 
-Implementation state: Not implemented
+Implementation state: Implemented through installer dependency integration; production end-to-end qualification remains pending
 
 Implementation issue: [Issue #414](https://github.com/WsprryPi/WsprryPi/issues/414)
 
 Related work: [Issue #352](https://github.com/WsprryPi/WsprryPi/issues/352) created the local support-bundle workflow
 
-Current implementation slice: [Slice 38 maintainer processing and promotion](../research/issue-414-slice-38-maintainer-processing.md)
+Current implementation slice: [Slice 39 installer integration for age](../research/issue-414-slice-39-age-installer.md)
 
 Protocol decision record: [Issue 414 Slice 1](../research/issue-414-slice-1-protocol-contract.md)
 
@@ -421,6 +421,11 @@ The uploader email was transmitted, but convenient owner-side access appeared pl
 
 Established decisions are readable local review before consent, exact-byte encryption, separate WsprryPi encryption and signing keys, signed dynamic routing, rotatable and disableable intake, minimum-version enforcement, local operation during upload outages, authenticated GitHub participation, description-and-contact fallback, and case-ID correlation.
 
-The Slice 1 protocol decision record freezes the identifiers, archive and receipt schemas, state model, encryption boundary, signed-intake format, version gate, retention behavior, and manual Dropbox handoff. Implementation still requires production endpoint and public-key provisioning, maintainer administration tooling, key storage integration, accessible responsive UI, final copy, and operator documentation in the separate `Wsprry_Pi_Docs` repository.
-
-No behavior described here is implemented merely by committing this contract.
+The protocol, production endpoint and public trust metadata, signed routing,
+responsive application workflow, exact-byte encryption, manual Dropbox handoff,
+GitHub continuation, maintainer inspection and processing, key-administration
+tools, vault recovery qualification, and installer dependency are implemented.
+Remaining work is production installation and end-to-end qualification,
+maintainer receipt confirmation and diagnostic-access workflows, retention
+enforcement, final contract reconciliation, and operator/maintainer documentation
+in the separate `Wsprry_Pi_Docs` repository.

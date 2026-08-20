@@ -776,6 +776,8 @@ readonly SYSTEM_READS
 #          - `git`: Version control system.
 #          - `libssl-dev`: OpenSSL EVP headers, libcrypto pkg-config metadata,
 #            and the matching libcrypto runtime dependency.
+#          - `age`: age encryption and age-keygen executables used by the
+#            encrypted support-bundle workflow.
 #
 # @example
 # for pkg in "${APT_PACKAGES[@]}"; do
@@ -793,6 +795,7 @@ readonly APT_PACKAGES=(
     "libgpiod-dev"
     "libsystemd-dev"
     "libssl-dev"
+    "age"
 )
 
 # -----------------------------------------------------------------------------
@@ -4936,6 +4939,30 @@ handle_apt_packages() {
     return "$error_count"
 }
 
+# shellcheck disable=SC2317
+validate_support_bundle_age_dependency() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: would validate the support-bundle encryption tools."
+        debug_end "$debug"
+        return 0
+    fi
+
+    # shellcheck source=scripts/support_bundle_age_dependency.sh
+    if ! source "${LOCAL_REPO_DIR}/scripts/support_bundle_age_dependency.sh" ||
+        ! support_bundle_validate_age_dependency; then
+        logE "Required support-bundle encryption tools are unavailable or unsafe."
+        debug_end "$debug"
+        return 1
+    fi
+    debug_print "Validated fixed support-bundle encryption tools." "$debug"
+    debug_end "$debug"
+    return 0
+}
+
 # -----------------------------------------------------------------------------
 # @brief Resolve the libgpiod runtime package required by libgpiod-dev.
 # @details Ensures libgpiod-dev has a non-(none) candidate in the configured
@@ -8090,7 +8117,10 @@ _main() {
     fi
 
     # Install dependencies after system checks
-    [[ "$ACTION" != "uninstall" ]] && handle_apt_packages "$debug"
+    if [[ "$ACTION" != "uninstall" ]]; then
+        handle_apt_packages "$debug" || return 1
+        validate_support_bundle_age_dependency "$debug" || return 1
+    fi
 
     # Handle correcting timezone
     [[ "$ACTION" != "uninstall" ]] && set_time "$debug"
