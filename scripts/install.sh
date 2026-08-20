@@ -6802,13 +6802,31 @@ manage_apache() {
     # Declare local variables after debug initialization
     local status=0
     local config_file source_path site_conf server_name target_conf
+    local network_policy_file network_policy_renderer installed_ini
 
     config_file="wsprrypi.conf"
     source_path="${LOCAL_CONFIG_DIR}/${config_file}"
     site_conf="${DEFAULT_SITES_CONF}/${config_file}"
     server_name="${DEFAULT_SERVERNAME}"
+    network_policy_file="/usr/local/etc/wsprrypi-apache-network-policy.conf"
+    network_policy_renderer="${LOCAL_REPO_DIR}/scripts/render-apache-privileged-network-policy.py"
+    installed_ini="/usr/local/etc/${WSPR_INI}"
 
     if [[ -z "$ACTION" || "$ACTION" == install ]]; then
+        if [[ ! -f "$network_policy_renderer" ]]; then
+            logE "Network policy renderer not found at '$network_policy_renderer'."
+            debug_end "$debug"
+            return 1
+        fi
+        exec_command "Render Apache privileged-network policy" \
+            python3 "$network_policy_renderer" \
+            --ini "$installed_ini" \
+            --output "$network_policy_file" \
+            "$debug" || {
+            logE "Failed to render the Apache privileged-network policy."
+            debug_end "$debug"
+            return 1
+        }
         # Ensure ServerName is present in the main Apache config
         if [[ "${APACHE_WEB_MODE:-unknown}" == "unknown" ]]; then
             detect_apache_web_mode "$debug" || true
@@ -6926,6 +6944,9 @@ manage_apache() {
         fi
 
         exec_command "Remove wsprrypi available config" rm -f "${site_conf}" "$debug"
+
+        exec_command "Remove Apache privileged-network policy" \
+            rm -f "$network_policy_file" "$debug"
 
         exec_command "Remove ServerName directive" sed -i "/^${server_name}/d" "$APACHE_CONF" "$debug"
     fi
@@ -7449,6 +7470,8 @@ install_wsprrypi_proxy_block() {
     ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
     ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
     ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
+
+    Include /usr/local/etc/wsprrypi-apache-network-policy.conf
 
     # WebSocket (port 31416)
     ProxyPass        /wsprrypi/socket  ws://127.0.0.1:31416/socket

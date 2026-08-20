@@ -31,6 +31,7 @@
 #include "backend_http_guard.hpp"
 #include "config_handler.hpp"
 #include "logging.hpp"
+#include "privileged_network_runtime.hpp"
 #include "scheduling.hpp"
 #include "support_bundle_http.hpp"
 #include "support_bundle_intake_production.hpp"
@@ -300,7 +301,8 @@ void WebServer::start(int port)
             if (evaluate_backend_http_request(
                     request.method, request.path, request.remote_addr,
                     request.get_header_value("Host"), origin,
-                    SupportRequestGuard::discover_local_networks()) ==
+                    SupportRequestGuard::discover_local_networks(),
+                    active_privileged_network_mode()) ==
                 BackendHttpGuardDecision::allowed) {
                 return httplib::Server::HandlerResponse::Unhandled;
             }

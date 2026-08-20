@@ -28,6 +28,7 @@
 
 #include "web_socket.hpp"
 #include "support_request_guard.hpp"
+#include "privileged_network_runtime.hpp"
 #include "websocket_upgrade_guard.hpp"
 
 #include "config_handler.hpp"
@@ -1275,7 +1276,8 @@ bool WebSocketServer::performHandshake(int client, const std::string &peer_addre
     }
 
     const auto guard = evaluate_websocket_upgrade(
-        request, peer_address, SupportRequestGuard::discover_local_networks());
+        request, peer_address, SupportRequestGuard::discover_local_networks(),
+        active_privileged_network_mode());
     if (guard.decision != WebSocketUpgradeGuardDecision::allowed)
     {
         const char *status = guard.decision == WebSocketUpgradeGuardDecision::rejected

@@ -34,6 +34,7 @@
 #include "gpio_input.hpp"
 #include "gpio_output.hpp"
 #include "logging.hpp"
+#include "privileged_network_runtime.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
 #include "wspr_band_lookup.hpp"
@@ -3159,6 +3160,29 @@ bool parse_command_line(int argc, char *argv[])
                 config.transmit = false;
                 config_to_json();
                 startup_config_handoff_ready.store(true, std::memory_order_release);
+            }
+
+            std::optional<std::string> privileged_network_setting;
+            try
+            {
+                privileged_network_setting = iniFile.get_string_value(
+                    "Security", "Privileged Network Safety");
+            }
+            catch (const std::exception &)
+            {
+                privileged_network_setting = std::nullopt;
+            }
+            initialize_privileged_network_runtime(privileged_network_setting);
+            const auto network_safety = privileged_network_runtime_state();
+            if (!network_safety.setting_was_valid)
+            {
+                defer_startup_diagnostic(
+                    WARN,
+                    "Privileged Network Safety is missing or invalid; enforcing local-LAN safety.");
+            }
+            else if (network_safety.active == PrivilegedNetworkMode::insecure_disabled)
+            {
+                defer_startup_diagnostic(WARN, "NETWORK SAFETY OFF");
             }
 
             // Remove "-i <file>" from args

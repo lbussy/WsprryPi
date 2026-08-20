@@ -12,6 +12,9 @@ intake_mapping='ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:3
 intake_reverse_mapping='ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake'
 
 grep -Fqx '    ProxyPreserveHost On' "$CONFIG"
+grep -Fqx '    Include /usr/local/etc/wsprrypi-apache-network-policy.conf' "$CONFIG"
+grep -Fqx '    Include /usr/local/etc/wsprrypi-apache-network-policy.conf' "$INSTALLER"
+grep -Fq 'render-apache-privileged-network-policy.py' "$INSTALLER"
 grep -Fqx "    ${mapping}" "$CONFIG"
 grep -Fqx "    ${reverse_mapping}" "$CONFIG"
 grep -Fqx "    ${intake_mapping}" "$CONFIG"
