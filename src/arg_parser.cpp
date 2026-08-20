@@ -1543,6 +1543,7 @@ void print_usage(const std::string &message, int exit_code)
               << "  --no-web                           Disable the HTTP web UI and WebSocket server for this run.\n"
               << "  -w, --web-port <port>              HTTP REST/Web UI port. Default: 31415.\n"
               << "  -k, --socket-port <port>           WebSocket server port. Default: 31416.\n"
+              << "      --socket-loopback-only        Bind WebSocket control to loopback only.\n"
               << "  -l, --led_pin <gpio>               Enable the TX LED on the given GPIO.\n"
               << "      --led-pin <gpio>               Alias for --led_pin.\n"
               << "      --use-led, --no-led            Enable or disable the TX LED using the configured/default pin.\n"
@@ -3280,6 +3281,7 @@ bool parse_command_line(int argc, char *argv[])
         {"power-level", required_argument, nullptr, 'd'},
         {"web-port", required_argument, nullptr, 'w'},    // Via: [Server] Port = 31415
         {"socket-port", required_argument, nullptr, 'k'}, // Via: [Server] Port = 31416
+        {"socket-loopback-only", no_argument, nullptr, 1060},
         {nullptr, 0, nullptr, 0}};
 
     while (true)
@@ -3298,6 +3300,9 @@ bool parse_command_line(int argc, char *argv[])
         switch (c)
         {
         // No arguments
+        case 1060:
+            config.socket_loopback_only = true;
+            break;
         case 'h': // Help/Usage
         case '?':
         {

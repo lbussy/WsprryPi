@@ -62,8 +62,20 @@ class WebSocketLifecycleTest {
         assert(s.test_tone_command_mutex_.try_lock());
         s.test_tone_command_mutex_.unlock();
     }
+    static void verify_loopback_binding(unsigned short port) {
+        WebSocketServer local;
+        assert(local.start(port, 0, true));
+        sockaddr_in6 address{};
+        socklen_t size = sizeof(address);
+        assert(getsockname(
+            local.listen_fd_, reinterpret_cast<sockaddr *>(&address), &size) == 0);
+        assert(address.sin6_family == AF_INET6);
+        assert(IN6_IS_ADDR_LOOPBACK(&address.sin6_addr));
+        local.stop();
+    }
 public:
     static int run() {
+        verify_loopback_binding(39518);
         WebSocketServer s; verify_test_tone_transaction_lock(s); const unsigned short p=39519; assert(s.start(p,0));
         int raw=socket(AF_INET,SOCK_STREAM,0); assert(raw>=0); sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(p); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr); assert(connect(raw,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
         assert(wait_handshake(s)); std::thread incomplete_stopper([&]{s.stop();}); incomplete_stopper.join(); close(raw);

@@ -304,6 +304,7 @@ struct ArgParserConfig
     bool enable_web;   ///< Enable the HTTP web UI and WebSocket server.
     int web_port;      ///< Web server port number.
     int socket_port;   ///< Socket server port number.
+    bool socket_loopback_only; ///< Restrict WebSocket control to loopback.
     bool use_shutdown; ///< Enable GPIO-based shutdown feature.
     int shutdown_pin;  ///< GPIO pin used to signal shutdown.
 
@@ -385,6 +386,7 @@ struct ArgParserConfig
           enable_web(true),
           web_port(-1),
           socket_port(-1),
+          socket_loopback_only(false),
           use_shutdown(false),
           shutdown_pin(-1),
           use_journald(false),
@@ -472,6 +474,7 @@ struct ArgParserConfig
         enable_web = other.enable_web;
         web_port = other.web_port;
         socket_port = other.socket_port;
+        socket_loopback_only = other.socket_loopback_only;
         use_shutdown = other.use_shutdown;
         shutdown_pin = other.shutdown_pin;
         use_journald = other.use_journald;

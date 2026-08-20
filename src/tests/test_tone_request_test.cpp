@@ -27,6 +27,29 @@ int main()
 {
     using json = nlohmann::json;
 
+    {
+        const auto parsed = parse_bounded_test_tone_request(json{
+            {"command", "bounded_tone"},
+            {"request_id", "phase7-001"},
+            {"duration_ms", 2000},
+            {"frequency_source", "custom_rf"},
+            {"frequency_hz", 14097100}});
+        require(parsed && parsed.request->request_id == "phase7-001" &&
+                    parsed.request->duration_ms == 2000,
+                "bounded request accepts correlated finite custom RF tone");
+    }
+    for (const auto &candidate : std::vector<json>{
+             json{{"command", "bounded_tone"}, {"duration_ms", 2000}},
+             json{{"command", "bounded_tone"}, {"request_id", "bad id"},
+                  {"duration_ms", 2000}},
+             json{{"command", "bounded_tone"}, {"request_id", "x"},
+                  {"duration_ms", 0}},
+             json{{"command", "bounded_tone"}, {"request_id", "x"},
+                  {"duration_ms", 60001}}})
+    {
+        require(!parse_bounded_test_tone_request(candidate),
+                "bounded request rejects missing, malformed, or unsafe bounds");
+    }
     const auto legacy_default = parse_test_tone_request(
         json{{"command", "tone_start"}});
     require(legacy_default &&
