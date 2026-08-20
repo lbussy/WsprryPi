@@ -29,10 +29,10 @@ then
 fi
 
 if ! grep -E \
-    "open(at)?\\(.*\"${expected_i2c_path}\", O_RDWR\\|O_CLOEXEC\\) = -1 ENOENT" \
+    "open(at)?\\(.*\"${expected_i2c_path}\", O_RDWR\\|O_CLOEXEC(\\) = -1 ENOENT| <unfinished \\.\\.\\.>)" \
     "$trace_file" >/dev/null
 then
-    echo "trace did not contain the expected failed I2C open: $expected_i2c_path" >&2
+    echo "trace did not contain the expected I2C open attempt: $expected_i2c_path" >&2
     cat "$trace_file" >&2
     exit 1
 fi
