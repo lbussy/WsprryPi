@@ -425,7 +425,10 @@ The protocol, production endpoint and public trust metadata, signed routing,
 responsive application workflow, exact-byte encryption, manual Dropbox handoff,
 GitHub continuation, maintainer inspection and processing, key-administration
 tools, vault recovery qualification, and installer dependency are implemented.
-Remaining work is production installation and end-to-end qualification,
-maintainer receipt confirmation and diagnostic-access workflows, retention
-enforcement, final contract reconciliation, and operator/maintainer documentation
-in the separate `Wsprry_Pi_Docs` repository.
+The production installer, service restart, authenticated upgrade-required
+endpoint, durable generation state, and canonical-version active resolution have
+been qualified on `wspr4` without RF activity. Remaining work is the signed-out
+Dropbox submission and maintainer receipt/inspection/promotion exercise,
+retention enforcement, final contract reconciliation, and operator/maintainer
+documentation in the separate `Wsprry_Pi_Docs` repository. The separately
+observed service stop-timeout limitation remains service-lifecycle follow-up.

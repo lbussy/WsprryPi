@@ -20,6 +20,8 @@ executable. It executes curl directly with:
 
 - curl configuration disabled before all other options;
 - a minimal controlled environment without proxy or CA override variables;
+- IPv4 transport, matching the qualified Raspberry Pi deployment where IPv6
+  DNS answers are present without a usable IPv6 route;
 - HTTPS-only initial and redirect protocol policy;
 - ordinary curl CA-chain and hostname verification, with no insecure option;
 - redirects left disabled and a required final HTTP status of 200;

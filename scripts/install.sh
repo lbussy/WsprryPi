@@ -4955,6 +4955,7 @@ validate_support_bundle_age_dependency() {
     if ! source "${LOCAL_REPO_DIR}/scripts/support_bundle_age_dependency.sh" ||
         ! support_bundle_validate_age_dependency; then
         logE "Required support-bundle encryption tools are unavailable or unsafe."
+        debug_print "Support-bundle encryption validation status: ${SUPPORT_BUNDLE_AGE_DEPENDENCY_ERROR:-helper_unavailable}." "$debug"
         debug_end "$debug"
         return 1
     fi

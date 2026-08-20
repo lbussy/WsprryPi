@@ -27,12 +27,13 @@ bool valid_contract(const std::vector<std::string> &arguments) {
         "LANG=C", "LC_ALL=C", "HOME=/nonexistent", "PATH=/usr/bin:/bin"};
     std::vector<std::string> environment;
     for (char **entry = environ; *entry; ++entry) environment.emplace_back(*entry);
-    if (environment != expected_environment || arguments.size() != 26) return false;
+    if (environment != expected_environment || arguments.size() != 27) return false;
     const auto url = value_after(arguments, "--url");
     const auto maximum = url == kWsprryPiIntakeManifestUrl ? "16384" : "2048";
     if (url != kWsprryPiIntakeManifestUrl && url != kWsprryPiIntakeSignatureUrl) return false;
     const std::vector<std::string> expected = {
         arguments[0], "--disable", "--silent", "--show-error", "--fail",
+        "--ipv4",
         "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "0",
         "--connect-timeout", "0.100", "--max-time", "0.800", "--max-filesize", maximum,
         "--http1.1", "--request", "GET", "--output", "-", "--write-out",

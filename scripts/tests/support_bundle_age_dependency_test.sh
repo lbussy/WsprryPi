@@ -18,47 +18,55 @@ write_tools() {
 }
 
 assert_rejected() {
+    local expected="$1"
+    shift
     if support_bundle_validate_age_dependency_at_root "$@"; then
         echo "unsafe age dependency fixture was accepted" >&2
         exit 1
     fi
+    [[ "$SUPPORT_BUNDLE_AGE_DEPENDENCY_ERROR" == "$expected" ]]
 }
 
 write_tools
 support_bundle_validate_age_dependency_at_root "$fixture" "$uid"
 
+saved_ifs="$IFS"
+IFS=$'\n\t'
+support_bundle_validate_age_dependency_at_root "$fixture" "$uid"
+IFS="$saved_ifs"
+
 chmod 0775 "$fixture/usr/bin/age"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_mode "$fixture" "$uid"
 write_tools
 
 chmod 0757 "$fixture/usr/bin/age"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_mode "$fixture" "$uid"
 write_tools
 
 chmod 0644 "$fixture/usr/bin/age-keygen"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_mode "$fixture" "$uid"
 write_tools
 
 rm "$fixture/usr/bin/age"
 ln -s /bin/sh "$fixture/usr/bin/age"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_file "$fixture" "$uid"
 rm "$fixture/usr/bin/age"
 write_tools
 
 rm "$fixture/usr/bin/age-keygen"
 mkdir "$fixture/usr/bin/age-keygen"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_file "$fixture" "$uid"
 rmdir "$fixture/usr/bin/age-keygen"
 write_tools
 
 rm "$fixture/usr/bin/age-keygen"
 mkfifo "$fixture/usr/bin/age-keygen"
-assert_rejected "$fixture" "$uid"
+assert_rejected unsafe_file "$fixture" "$uid"
 rm "$fixture/usr/bin/age-keygen"
 write_tools
 
-assert_rejected "$fixture" "$((uid + 1))"
-assert_rejected relative "$uid"
+assert_rejected unsafe_metadata "$fixture" "$((uid + 1))"
+assert_rejected invalid_arguments relative "$uid"
 
 rm "$fixture/usr/bin/age"
 failure_output=$(support_bundle_validate_age_dependency_at_root "$fixture" "$uid" 2>&1 || true)

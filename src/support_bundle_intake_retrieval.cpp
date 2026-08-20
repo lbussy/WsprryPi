@@ -81,6 +81,7 @@ FetchResult fetch(const SupportBundleIntakeRetrievalRequest &request,
     const auto maximum = std::to_string(maximum_bytes);
     std::vector<std::string> arguments = {
         request.curl_executable.string(), "--disable", "--silent", "--show-error", "--fail",
+        "--ipv4",
         "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "0",
         "--connect-timeout", connect_timeout, "--max-time", operation_timeout,
         "--max-filesize", maximum, "--http1.1", "--request", "GET", "--output", "-",
