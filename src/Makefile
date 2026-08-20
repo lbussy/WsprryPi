@@ -137,6 +137,7 @@ RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT := rp1_gpclk_transmit_backend_test
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
 QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
 SUPPORT_REQUEST_GUARD_TEST_OUT := support_request_guard_test
+PRIVILEGED_NETWORK_POLICY_TEST_OUT := privileged_network_policy_test
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT := support_bundle_job_manager_test
 SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT := support_bundle_result_validator_test
 SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT := support_bundle_collector_executor_test
@@ -1066,7 +1067,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
 .PHONY: semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
-.PHONY: support-request-guard-test support-bundle-job-manager-test support-bundle-result-validator-test
+.PHONY: support-request-guard-test privileged-network-policy-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
@@ -1171,6 +1172,13 @@ test-tone-response-test: $(BIN_DIR)/$(TEST_TONE_RESPONSE_TEST_OUT)
 
 support-request-guard-test: $(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_REQUEST_GUARD_TEST_OUT)
+
+$(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT): tests/privileged_network_policy_test.cpp privileged_network_policy.cpp privileged_network_policy.hpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) tests/privileged_network_policy_test.cpp privileged_network_policy.cpp -o $@ $(LDFLAGS)
+
+privileged-network-policy-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_POLICY_TEST_OUT)
 
 support-bundle-job-manager-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)

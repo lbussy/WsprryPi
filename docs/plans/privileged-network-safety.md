@@ -49,6 +49,8 @@ Preflight and other method handling for a protected route SHALL NOT provide a by
 
 `GET /config`, version information, ordinary status, and telemetry are not privileged under this contract and SHOULD remain available where practical. No read-only route may mutate configuration, runtime state, support-bundle state, or transmission state as a side effect.
 
+`GET /api/support-intake` reports read-only support-intake availability and SHOULD remain available where practical.
+
 ### WebSocket
 
 The following commands are privileged:
@@ -58,10 +60,12 @@ The following commands are privileged:
 - `stop`
 - `tone_start`
 - `tone_end`
+- `bounded_tone`
 
 The following commands or protocol operations are read-only:
 
 - `get_tx_state`
+- `wspr_band_catalog`
 - `echo`
 - ping and pong
 - server broadcasts
