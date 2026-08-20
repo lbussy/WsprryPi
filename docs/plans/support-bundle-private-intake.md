@@ -429,6 +429,8 @@ The production installer, service restart, authenticated upgrade-required
 endpoint, durable generation state, and canonical-version active resolution have
 been qualified on `wspr4` without RF activity. Remaining work is the signed-out
 Dropbox submission and maintainer receipt/inspection/promotion exercise,
-retention enforcement, final contract reconciliation, and operator/maintainer
-documentation in the separate `Wsprry_Pi_Docs` repository. The separately
-observed service stop-timeout limitation remains service-lifecycle follow-up.
+destructive retention enforcement, final contract reconciliation, and operator/
+maintainer documentation in the separate `Wsprry_Pi_Docs` repository. A strict
+read-only Processed-case retention eligibility audit is implemented; deletion
+remains separately gated. The separately observed service stop-timeout
+limitation remains service-lifecycle follow-up.
