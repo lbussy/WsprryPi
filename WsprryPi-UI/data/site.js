@@ -73,6 +73,10 @@ const SUPPORT_INTAKE_PATH = normalizeSameOriginPath(
     PATHS.supportIntakePath,
     `${APP_BASE_PATH}/api/support-intake`
 );
+const NETWORK_SAFETY_PATH = normalizeSameOriginPath(
+    PATHS.networkSafetyPath,
+    `${APP_BASE_PATH}/api/network-safety`
+);
 const WEBSOCKET_PATH = normalizeSameOriginPath(
     PATHS.socketPath,
     `${APP_BASE_PATH}/socket`
@@ -106,6 +110,11 @@ const SUPPORT_INTAKE_ENDPOINT = createEndpointDefinition(
     "support intake",
     SUPPORT_INTAKE_PATH,
     buildDirectRestFallbackUrl("/api/support-intake")
+);
+const NETWORK_SAFETY_ENDPOINT = createEndpointDefinition(
+    "network safety",
+    NETWORK_SAFETY_PATH,
+    NETWORK_SAFETY_PATH
 );
 const WEBSOCKET_ENDPOINT = createEndpointDefinition(
     "socket",

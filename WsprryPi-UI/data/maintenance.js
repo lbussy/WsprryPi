@@ -18,6 +18,177 @@ document.addEventListener("DOMContentLoaded", () => {
     const resultPanel = document.getElementById("maintenanceResult");
     const resultTitle = document.getElementById("maintenanceResultTitle");
     const resultBody = document.getElementById("maintenanceResultBody");
+    const networkSafetyBanner = document.getElementById("networkSafetyBanner");
+    const networkSafetyRequested = document.getElementById("networkSafetyRequested");
+    const networkSafetyConfigured = document.getElementById("networkSafetyConfigured");
+    const networkSafetyActive = document.getElementById("networkSafetyActive");
+    const networkSafetyEnforced = document.getElementById("networkSafetyEnforced");
+    const networkSafetyDisabled = document.getElementById("networkSafetyDisabled");
+    const networkSafetyDisableConfirmation = document.getElementById("networkSafetyDisableConfirmation");
+    const networkSafetyDisablePhrase = document.getElementById("networkSafetyDisablePhrase");
+    const networkSafetyPhraseStatus = document.getElementById("networkSafetyPhraseStatus");
+    const networkSafetyResult = document.getElementById("networkSafetyResult");
+    const applyNetworkSafetyButton = document.getElementById("applyNetworkSafetyButton");
+    const cancelNetworkSafetyButton = document.getElementById("cancelNetworkSafetyButton");
+    const NETWORK_SAFETY_DISABLE_PHRASE = "DISABLE LOCAL-LAN SAFETY";
+    let networkSafetyInFlight = false;
+
+    function selectedNetworkSafetyMode() {
+        return document.querySelector('input[name="networkSafetyMode"]:checked')?.value || "";
+    }
+
+    function networkSafetyModeLabel(mode) {
+        if (mode === "enforced") return "Enforced";
+        if (mode === "insecure-disabled") return "Insecure disabled";
+        return "Unknown";
+    }
+
+    function setNetworkSafetyResult(state, message) {
+        networkSafetyResult.dataset.state = state;
+        networkSafetyResult.textContent = message;
+        networkSafetyResult.classList.remove("d-none");
+    }
+
+    function updateNetworkSafetyDraft() {
+        const requestedMode = selectedNetworkSafetyMode();
+        const disabling = requestedMode === "insecure-disabled";
+        const phraseMatches = networkSafetyDisablePhrase.value === NETWORK_SAFETY_DISABLE_PHRASE;
+        networkSafetyRequested.textContent = requestedMode
+            ? networkSafetyModeLabel(requestedMode)
+            : "No change selected";
+        networkSafetyDisableConfirmation.classList.toggle("d-none", !disabling);
+        cancelNetworkSafetyButton.classList.toggle("d-none", !requestedMode);
+        applyNetworkSafetyButton.disabled = networkSafetyInFlight || !requestedMode ||
+            (disabling && !phraseMatches);
+        networkSafetyEnforced.disabled = networkSafetyInFlight;
+        networkSafetyDisabled.disabled = networkSafetyInFlight;
+        networkSafetyDisablePhrase.disabled = networkSafetyInFlight;
+        cancelNetworkSafetyButton.disabled = networkSafetyInFlight;
+        networkSafetyDisablePhrase.setAttribute(
+            "aria-invalid",
+            disabling && networkSafetyDisablePhrase.value !== "" && !phraseMatches ? "true" : "false"
+        );
+        networkSafetyPhraseStatus.textContent = networkSafetyInFlight
+            ? "Applying the requested state. Controls are locked until validation finishes."
+            : phraseMatches
+                ? "Confirmation phrase matches. Ready to apply."
+                : "Enter the exact phrase to unlock Apply.";
+        applyNetworkSafetyButton.classList.toggle("btn-danger", disabling);
+        applyNetworkSafetyButton.classList.toggle("btn-primary", !disabling);
+    }
+
+    function renderNetworkSafetyState(data) {
+        const configured = data.configured_known ? networkSafetyModeLabel(data.configured) : "Unknown";
+        const active = data.active_known ? networkSafetyModeLabel(data.active) : "Unknown";
+        networkSafetyConfigured.textContent = configured;
+        networkSafetyActive.textContent = active;
+        networkSafetyBanner.textContent = typeof data.status === "string"
+            ? data.status
+            : "NETWORK SAFETY STATE UNKNOWN";
+        networkSafetyBanner.dataset.state = data.active === "insecure-disabled" && data.active_known
+            ? "off"
+            : data.active === "enforced" && data.active_known
+                ? "enforced"
+                : "unknown";
+    }
+
+    async function fetchNetworkSafetyStatus(options = {}) {
+        try {
+            const response = await fetch(NETWORK_SAFETY_ENDPOINT.proxyUrl, {
+                method: "GET",
+                cache: "no-store"
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "The status request failed.");
+            renderNetworkSafetyState(data);
+        } catch {
+            renderNetworkSafetyState({
+                configured_known: false,
+                active_known: false,
+                status: "NETWORK SAFETY STATE UNKNOWN"
+            });
+            if (options.reportFailure !== false) {
+                setNetworkSafetyResult(
+                    "danger",
+                    "Network safety status could not be read through Apache. Verify the browser is using the normal port-80 site, then reload this page."
+                );
+            }
+        }
+    }
+
+    async function applyNetworkSafety() {
+        const requestedMode = selectedNetworkSafetyMode();
+        if (!requestedMode || networkSafetyInFlight) return;
+        if (requestedMode === "insecure-disabled" &&
+            networkSafetyDisablePhrase.value !== NETWORK_SAFETY_DISABLE_PHRASE) return;
+
+        networkSafetyInFlight = true;
+        updateNetworkSafetyDraft();
+        applyNetworkSafetyButton.dataset.originalText = applyNetworkSafetyButton.textContent;
+        applyNetworkSafetyButton.textContent = "Applying and validating…";
+        networkSafetyResult.classList.add("d-none");
+
+        try {
+            const response = await fetch(NETWORK_SAFETY_ENDPOINT.proxyUrl, {
+                method: "POST",
+                cache: "no-store",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: requestedMode })
+            });
+            let data = null;
+            try {
+                data = await response.json();
+            } catch {
+                data = null;
+            }
+            if (!response.ok || !data || data.applied !== true) {
+                const detail = data && typeof data.message === "string"
+                    ? data.message
+                    : "The requested state was not applied.";
+                throw new Error(detail);
+            }
+
+            renderNetworkSafetyState(data);
+            setNetworkSafetyResult(
+                "success",
+                requestedMode === "enforced"
+                    ? "Network safety is active. Privileged browser operation is restricted to the directly connected LAN."
+                    : "NETWORK SAFETY OFF. The insecure override is active."
+            );
+            networkSafetyEnforced.checked = false;
+            networkSafetyDisabled.checked = false;
+            networkSafetyDisablePhrase.value = "";
+        } catch (error) {
+            const detail = error && typeof error.message === "string" && error.message.trim()
+                ? error.message.trim()
+                : "The request could not be completed.";
+            setNetworkSafetyResult(
+                "danger",
+                `${detail} The requested, configured, and active states may differ. Your selection is preserved; verify the current state before trying again.`
+            );
+            await fetchNetworkSafetyStatus({ reportFailure: false });
+        } finally {
+            networkSafetyInFlight = false;
+            applyNetworkSafetyButton.textContent = applyNetworkSafetyButton.dataset.originalText || "Apply requested state";
+            delete applyNetworkSafetyButton.dataset.originalText;
+            updateNetworkSafetyDraft();
+        }
+    }
+
+    document.querySelectorAll('input[name="networkSafetyMode"]').forEach((control) => {
+        control.addEventListener("change", updateNetworkSafetyDraft);
+    });
+    networkSafetyDisablePhrase.addEventListener("input", updateNetworkSafetyDraft);
+    applyNetworkSafetyButton.addEventListener("click", applyNetworkSafety);
+    cancelNetworkSafetyButton.addEventListener("click", () => {
+        networkSafetyEnforced.checked = false;
+        networkSafetyDisabled.checked = false;
+        networkSafetyDisablePhrase.value = "";
+        networkSafetyResult.classList.add("d-none");
+        updateNetworkSafetyDraft();
+    });
+    updateNetworkSafetyDraft();
+    fetchNetworkSafetyStatus();
 
     /**
      * Removes any existing toasts from the global container.

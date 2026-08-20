@@ -83,6 +83,90 @@ require __DIR__ . '/../card_header.php';
                     </div>
                 </section>
 
+                <section
+                    id="networkSafetyPanel"
+                    class="maintenance-pane maintenance-pane--network-safety"
+                    aria-labelledby="networkSafetyTitle">
+                    <div class="maintenance-network-safety__heading">
+                        <div>
+                            <h2 id="networkSafetyTitle" class="maintenance-section-title h5 mb-0">Privileged network safety</h2>
+                            <p class="maintenance-pane__body mb-0">
+                                Limit configuration changes, device controls, support bundles, and the WebSocket endpoint to this Pi's directly connected LAN.
+                            </p>
+                        </div>
+                        <div
+                            id="networkSafetyBanner"
+                            class="maintenance-network-safety__banner"
+                            data-state="loading"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true">
+                            Checking network safety…
+                        </div>
+                    </div>
+
+                    <dl class="maintenance-network-safety__states" aria-label="Network safety state">
+                        <div class="maintenance-fact">
+                            <dt>Requested</dt>
+                            <dd id="networkSafetyRequested">No change selected</dd>
+                        </div>
+                        <div class="maintenance-fact">
+                            <dt>Configured</dt>
+                            <dd id="networkSafetyConfigured">Checking…</dd>
+                        </div>
+                        <div class="maintenance-fact">
+                            <dt>Active</dt>
+                            <dd id="networkSafetyActive">Checking…</dd>
+                        </div>
+                    </dl>
+
+                    <fieldset class="maintenance-network-safety__choices">
+                        <legend class="form-label fw-semibold mb-2">Choose the requested state</legend>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="networkSafetyMode" id="networkSafetyEnforced" value="enforced">
+                            <label class="form-check-label" for="networkSafetyEnforced">
+                                <strong>Enforced</strong> <span class="text-body-secondary">— recommended; privileged browser operation requires Apache and a directly connected LAN client.</span>
+                            </label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="radio" name="networkSafetyMode" id="networkSafetyDisabled" value="insecure-disabled">
+                            <label class="form-check-label" for="networkSafetyDisabled">
+                                <strong>Insecure disabled</strong> <span class="text-body-secondary">— permits protected operations outside the directly connected LAN.</span>
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <section id="networkSafetyDisableConfirmation" class="maintenance-network-safety__confirmation d-none" aria-labelledby="networkSafetyDisableTitle">
+                        <h3 id="networkSafetyDisableTitle" class="h6 mb-0">Confirm the insecure override</h3>
+                        <p class="mb-0">
+                            This removes only the peer/subnet restriction. Host, Origin, CORS, malformed-request, and forwarded-header protections remain active.
+                        </p>
+                        <label class="form-label mb-0" for="networkSafetyDisablePhrase">
+                            Type <code>DISABLE LOCAL-LAN SAFETY</code> exactly to continue.
+                        </label>
+                        <input
+                            id="networkSafetyDisablePhrase"
+                            class="form-control"
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            aria-describedby="networkSafetyDisableHelp networkSafetyPhraseStatus">
+                        <p id="networkSafetyDisableHelp" class="small mb-0">The phrase is case-sensitive. It is cleared after a confirmed successful change or when you cancel this draft.</p>
+                        <p id="networkSafetyPhraseStatus" class="small fw-semibold mb-0" role="status" aria-live="polite">Enter the exact phrase to unlock Apply.</p>
+                    </section>
+
+                    <div id="networkSafetyResult" class="maintenance-network-safety__result d-none" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+                    <div class="maintenance-action maintenance-action--start maintenance-action--wrap">
+                        <button id="applyNetworkSafetyButton" type="button" class="btn btn-primary" disabled>
+                            Apply requested state
+                        </button>
+                        <button id="cancelNetworkSafetyButton" type="button" class="btn btn-outline-secondary d-none">
+                            Cancel change
+                        </button>
+                    </div>
+                </section>
+
                 <section class="maintenance-utility" aria-label="Maintenance utilities">
                     <div class="maintenance-utility__grid">
                         <section class="maintenance-pane maintenance-pane--utility" aria-labelledby="maintenanceUtilityTitle">

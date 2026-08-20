@@ -15,6 +15,7 @@ $pathConfig = [
     'repairPath' => $basePath . '/config/repair',
     'supportBundlesPath' => $basePath . '/api/support-bundles',
     'supportIntakePath' => $basePath . '/api/support-intake',
+    'networkSafetyPath' => $basePath . '/api/network-safety',
     'socketPath' => $basePath . '/socket',
     'logStreamPath' => $basePath . '/log_stream.php',
 ];
