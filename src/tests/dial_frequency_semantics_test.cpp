@@ -30,6 +30,10 @@
 #include <unordered_map>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 #define private public
 #include "wspr_transmit.hpp"
 #undef private
@@ -198,12 +202,22 @@ namespace
         const std::string &message)
     {
         char exe_path[PATH_MAX] = {0};
+#if defined(__APPLE__)
+        std::uint32_t exe_path_capacity = sizeof(exe_path);
+        const bool resolved_executable_path =
+            _NSGetExecutablePath(exe_path, &exe_path_capacity) == 0;
+#else
         const ssize_t exe_path_length =
             readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+        const bool resolved_executable_path = exe_path_length > 0;
+        if (resolved_executable_path)
+        {
+            exe_path[exe_path_length] = '\0';
+        }
+#endif
         require(
-            exe_path_length > 0,
+            resolved_executable_path,
             message + " must resolve the current test binary path");
-        exe_path[exe_path_length] = '\0';
 
         pid_t pid = fork();
         require(pid >= 0, message + " must be able to fork a child process");
@@ -700,10 +714,16 @@ int main(int argc, char *argv[])
         }
     }
 
+#if WSPRRYPI_BACKEND_RPI_GPIO || WSPRRYPI_BACKEND_RP1_GPCLK || WSPRRYPI_BACKEND_SI5351
     {
         ScopedTemporaryFile conflict_ini("/tmp/wsprrypi-gpio-migration-conflict-XXXXXX");
         iniFile.set_filename(conflict_ini.path());
         auto conflict_data = make_managed_ini_data("AA0NT", "EM18", "20m", false);
+#if !WSPRRYPI_BACKEND_RPI_GPIO && WSPRRYPI_BACKEND_SI5351
+        conflict_data["Operation"]["Transmit Backend"] = "si5351";
+#elif !WSPRRYPI_BACKEND_RPI_GPIO && WSPRRYPI_BACKEND_RP1_GPCLK
+        set_raspberry_pi_generation_override_for_test(5);
+#endif
         conflict_data["GPIO"]["Use System Clock Frequency Estimate"] = "true";
         conflict_data["GPIO"]["Use NTP"] = "false";
         iniFile.setData(conflict_data);
@@ -719,11 +739,16 @@ int main(int argc, char *argv[])
                 return warning.find("conflicts with GPIO.Use System Clock Frequency Estimate") !=
                     std::string::npos;
             });
+        require(conflict_candidate.valid,
+                "GPIO estimate conflict migration must produce a valid configuration: " +
+                    conflict_candidate.error_reason);
+        require(conflict_candidate.migration_required,
+                "GPIO estimate conflict must require migration");
         require(
-            conflict_candidate.valid && conflict_candidate.migration_required &&
-                conflict_candidate.normalized_config.gpio_use_system_clock_frequency_estimate &&
-                conflict_warning,
-            "the canonical GPIO estimate key must win a legacy conflict and produce a clear warning");
+            conflict_candidate.normalized_config.gpio_use_system_clock_frequency_estimate,
+            "the canonical GPIO estimate value must win a legacy conflict");
+        require(conflict_warning,
+                "GPIO estimate conflict migration must produce a clear warning");
         commit_config_candidate(conflict_candidate);
         std::ifstream conflict_file(conflict_ini.path());
         const std::string conflict_text(
@@ -732,7 +757,11 @@ int main(int argc, char *argv[])
         require(
             conflict_text.find("Use NTP =") == std::string::npos,
             "conflict migration must remove the retired key after retaining the canonical value");
+#if !WSPRRYPI_BACKEND_RPI_GPIO && !WSPRRYPI_BACKEND_SI5351 && WSPRRYPI_BACKEND_RP1_GPCLK
+        clear_pi_generation_override_for_scope();
+#endif
     }
+#endif
 
     {
         init_config_json();
