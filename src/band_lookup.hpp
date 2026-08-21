@@ -1,6 +1,6 @@
 /**
- * @file wspr_band_lookup.hpp
- * @brief Provides WSPR frequency lookup, formatting, and band correlation.
+ * @file band_lookup.hpp
+ * @brief Provides general band correlation and WSPR frequency conveniences.
  *
  * This class translates frequencies to band names, band names to default WSPR
  * dial frequencies, and frequency strings to Hz. Band edge definitions are used to
@@ -32,15 +32,14 @@
  * SOFTWARE.
  */
 
-#ifndef WSPR_BAND_LOOKUP_HPP
-#define WSPR_BAND_LOOKUP_HPP
+#ifndef BAND_LOOKUP_HPP
+#define BAND_LOOKUP_HPP
 
 #include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -53,28 +52,25 @@ struct WsprBandCatalogEntry
     std::uint64_t dial_frequency_hz;
 };
 
+struct WsprPresetCatalogEntry
+{
+    std::string preset;
+    std::string band;
+    std::uint64_t dial_frequency_hz;
+    bool existing_common;
+};
+
 /**
- * @class WSPRBandLookup
- * @brief Provides methods for WSPR frequency lookup, validation, and display.
+ * @class BandLookup
+ * @brief Provides band correlation plus separate WSPR preset conveniences.
  */
-class WSPRBandLookup
+class BandLookup
 {
 private:
-    /**
-     * @brief Defines a frequency range tuple of lower edge, upper edge, and
-     *        display name.
-     */
-    using FrequencyRange = std::tuple<long long, long long, std::string>;
-
     /**
      * @brief Stores default WSPR dial frequencies by normalized band name or alias.
      */
     std::unordered_map<std::string, double> wsprFrequencies;
-
-    /**
-     * @brief Stores band ranges used to correlate a frequency to a band.
-     */
-    std::vector<FrequencyRange> validHamFrequencies;
 
 protected:
     /**
@@ -97,7 +93,7 @@ public:
     /**
      * @brief Constructs the lookup object and initializes band tables.
      */
-    WSPRBandLookup();
+    BandLookup();
 
     /**
      * @brief Return the correlated HamBand for a numeric frequency.
@@ -147,12 +143,16 @@ public:
      *
      * @param input Band alias, unit-qualified frequency, or raw numeric value.
      * @param validate If true, validates numeric values against known bands.
+     * @param frequency_profile Explicit WSPR convenience profile. The default
+     *        preserves the existing/common bare-alias meanings.
      * @return Frequency in Hz.
      * @throws std::invalid_argument If the input is invalid.
      */
     double parse_string_to_frequency(
         std::string_view input,
-        bool validate = true) const;
+        bool validate = true,
+        std::string_view frequency_profile = "existing_common",
+        const std::unordered_map<std::string, std::string> &band_preferences = {}) const;
 
     /**
      * @brief Return canonical WSPR display bands in stable order.
@@ -161,7 +161,18 @@ public:
      * @throws std::logic_error if an authoritative definition cannot be
      *         represented as an integral external Hz value.
      */
-    std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog() const;
+    std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog(
+        std::string_view frequency_profile = "existing_common",
+        const std::unordered_map<std::string, std::string> &band_preferences = {}) const;
+
+    /**
+     * @brief Return every built-in qualified WSPR preset in stable order.
+     *
+     * @details This is separate from the one-effective-preset-per-band catalog
+     * used by compatibility consumers. Multiple presets may correlate to the
+     * same canonical band.
+     */
+    std::vector<WsprPresetCatalogEntry> complete_wspr_preset_catalog() const;
 
     /**
      * @brief Detect whether a numeric frequency exactly matches a legacy
@@ -194,4 +205,4 @@ public:
  */
 const char *ham_band_to_string(HamBand band);
 
-#endif // WSPR_BAND_LOOKUP_HPP
+#endif // BAND_LOOKUP_HPP

@@ -1,8 +1,10 @@
 # Canonical Band Correlation and WSPR Preset Contract
 
-Status: provisional reference contract for issue #332. Issue #401 must finish,
-and the implementation and external frequency references must be reviewed again,
-before this becomes an implementation contract.
+Status: implementation contract for issue #332. Issue #401 is merged. This
+contract was refreshed against synchronized `devel` at
+`ad2d0cb89af7d3df8ad5e69c3d3cec27411431ec`; implementation branches must be
+created from the then-current clean, synchronized `devel` rather than an older
+issue branch.
 
 ## Purpose
 
@@ -21,11 +23,11 @@ layer. They must not control the meaning of a band for CW modes.
 
 ## Ownership and boundaries
 
-The parent WsprryPi application should own the single frequency-to-band
-correlation catalog because it coordinates every mode and Band GPIO/filter
-selection. The `src/WSPR-Transmitter` component should consume the immutable
-correlated band and mode when applying its qualification records. It should not
-retain a second frequency-edge table after migration.
+A neutral `src/Band-Lookup` component owns the single frequency-to-band
+correlation catalog because the catalog serves every mode, Band GPIO/filter
+selection, and final transmitter policy. The parent `BandLookup` facade and
+`src/WSPR-Transmitter` consume that same definition. Neither consumer may
+retain a second frequency-edge table.
 
 The transmitter remains authoritative for final numeric, backend,
 representability, lifecycle, cancellation, output-inhibition, and cleanup
@@ -41,7 +43,9 @@ is a band-level project classification.
 
 ## Correlation catalog
 
-The ordinary amateur correlation scope is 2200 m through 70 cm. Experimental,
+The ordinary worldwide amateur correlation scope is 2200 m through 70 cm. A
+band allocated to the ordinary amateur service in at least one jurisdiction is
+in scope even when it is not an ITU-wide allocation. Experimental,
 trial, ISM, Part 15, special-research, and individually granted extension
 frequencies are excluded. The 22 m entry is not part of the canonical amateur
 catalog.
@@ -60,14 +64,18 @@ catalog.
 | `15m` | 21.0-21.45 MHz |
 | `12m` | 24.89-24.99 MHz |
 | `10m` | 28.0-29.7 MHz |
+| `8m` | 40-45 MHz |
 | `6m` | 50-54 MHz |
+| `5m` | 54-68 MHz |
 | `4m` | 69.9-70.5 MHz |
 | `2m` | 144-148 MHz |
 | `1.25m` | 219-225 MHz |
 | `70cm` | 420-450 MHz |
 
 These are correlation envelopes. They can contain jurisdiction-specific gaps
-and do not assert operating authority.
+and do not assert operating authority. Because a numeric frequency can have
+only one correlation identity, the exact shared 54 MHz edge correlates to `6m`;
+`5m` begins at the next integral hertz.
 
 ## Canonical band identity
 
@@ -81,13 +89,12 @@ identity.
 
 A band has one correlation identity but may have multiple WSPR frequency
 presets. A common convention can use the bare band name, while a convention that
-needs disambiguation uses a qualified WSPR-only preset identifier, for example:
+needs disambiguation uses a qualified WSPR-only preset identifier. The first
+implemented qualified identities are:
 
 ```text
-60m:legacy
-60m:wrc15
-60m:us
-60m:uk
+60m:legacy = 5,287,200 Hz USB dial
+60m:wrc15  = 5,364,700 Hz USB dial
 ```
 
 All of these correlate to the same `60m` band. Qualified preset names do not
@@ -98,14 +105,19 @@ bare `60m` unless the operator selects another WSPR frequency profile or local
 preference. The current convention should also receive an explicit stable name,
 such as `60m:legacy`, during migration.
 
-Do not add regional variants speculatively. Each built-in preset must have a
-maintained source and a demonstrated operator-convenience need.
+The current WSPRnet frequency list publishes both 60 m dial frequencies, while
+the retained WSPRnet QRG reference identifies 5,287.2 kHz as the established
+60 m dial frequency. The qualified names describe those WSPR conventions; they
+do not claim that either frequency is authorized in a particular jurisdiction.
+Do not add country labels such as `:us` or `:uk` without a maintained source and
+a demonstrated operator-convenience need.
 
 ## WSPR frequency profiles and local preferences
 
-The parent application should provide an explicitly selected WSPR frequency
-profile. Initial compatibility behavior is `Existing/Common`. Maintained
-country or locality profiles may choose a different default preset for a band.
+The parent application provides an explicitly selected WSPR frequency profile,
+persisted as `WSPR.Frequency Profile`. Initial compatibility behavior is
+`existing_common`; the first alternate profile is `wrc15`. Maintained country
+or locality profiles may later choose a different default preset for a band.
 IARU regions alone are insufficient where national conventions differ.
 
 The application must not infer locality from an IP address or callsign. A
@@ -113,21 +125,24 @@ profile is an operator-selected convenience default, not a regulatory claim.
 
 Local per-band preferences belong in the normal parent WsprryPi configuration
 lifecycle, alongside the selected WSPR profile. They do not belong in the
-`src/WSPR-Transmitter` component. Start with configuration-backed preferences
-rather than a separate database. A future schema might conceptually express:
+`src/WSPR-Transmitter` component. They are stored as the JSON object
+`WSPR.Band Preferences`; the INI representation is the same object serialized
+on one line. For example:
 
 ```ini
 [WSPR]
-Frequency Profile = Existing/Common
+Frequency Profile = existing_common
 
-[WSPR Band Preferences]
-60m = 60m:us
-20m = 20m
+Band Preferences = {"60m":"60m:wrc15"}
 ```
 
-User-defined local presets may later supply a band, integral USB dial frequency,
-and label. The exact INI/JSON/UI schema is unresolved until the post-#401
-configuration-lifecycle review.
+Preference keys are canonical bands and values are built-in preset identifiers
+that must correlate back to the same band. A 60 m preference must be qualified,
+so changing the selected profile cannot change its meaning. User-defined local
+presets may later supply a band, integral USB dial frequency, and label. A UI
+editor exposes the currently meaningful 60 m choice as Follow frequency
+profile, Legacy, or WRC-15 while preserving any other configuration-backed
+preferences it does not edit.
 
 WSPR frequency resolution precedence is:
 
@@ -139,6 +154,17 @@ WSPR frequency resolution precedence is:
 
 Changing profiles must not rewrite explicit numeric entries, explicit qualified
 presets, or saved local preferences.
+
+The implemented profile resolver currently changes only bare `60m`:
+
+| Profile | Effective bare `60m` preset |
+| --- | --- |
+| `existing_common` | `60m:legacy` (5,287,200 Hz USB dial) |
+| `wrc15` | `60m:wrc15` (5,364,700 Hz USB dial) |
+
+All other bare bands retain their existing/common preset under both profiles.
+The selected profile is returned with the effective compatibility band catalog
+so Test Tone and scheduled WSPR planning resolve the same dial frequency.
 
 ## Compatibility and migration
 
@@ -152,21 +178,32 @@ presets, or saved local preferences.
 - Include both canonical band and WSPR preset identity in new control-plane
   responses and diagnostics.
 
-## Required post-#401 reference pass
+## Post-#401 reference pass
 
-Before implementation:
+The implementation must preserve these reviewed findings:
 
-1. inspect the final #401 request contract and its parent/component enforcement
-   boundaries;
+1. preserve the final #401 request contract and its parent/component enforcement
+   boundaries, including final numeric verification in the transmitter;
 2. inventory every band-correlation, selector, filter, parser, Test Tone, and
    qualification consumer;
-3. re-verify the international correlation envelopes;
+3. retain only the 19 bands above; `22m` and all bands above `70cm` are outside
+   the catalog;
 4. re-research current official and community WSPR dial conventions;
 5. identify only bands that genuinely need multiple presets;
 6. review defaults, parsing, validation, persistence, serialization, scheduling,
    UI, and documentation impacts;
-7. define the exact `22m` compatibility behavior;
+7. preserve explicit rejection of the removed `22m` alias;
 8. define standalone component tests, parent integration tests, and the intended
    parent-repository commit scope.
 
-No implementation work is authorized by this reference contract.
+Implementation remains subject to repository safety, tests, documentation
+review, and hardware-free validation boundaries.
+
+## Frequency references
+
+- WSPRnet, current "Frequencies" list:
+  <https://www.wsprnet.org/drupal/WSPRnet/map>
+- WSPRnet, "WSPR Frequencies" retained QRG reference:
+  <https://www.wsprnet.org/drupal/sites/wsprnet.org/files/wspr-qrg.pdf>
+- IARU Region 1, WRC-15 5 MHz allocation context:
+  <https://www.iaru-r1.org/about-us/committees-and-working-groups/hf-committee-c4/news/cept-licenses-do-not-allow-operation-at-60-meters-in-portugal/>

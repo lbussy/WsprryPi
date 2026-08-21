@@ -5,7 +5,7 @@
 
 #include "wspr_band_catalog_response.hpp"
 
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -36,8 +36,10 @@ namespace
 }
 
 std::string build_wspr_band_catalog_response_json(
-    const WSPRBandLookup &lookup,
-    double audio_offset_hz)
+    const BandLookup &lookup,
+    double audio_offset_hz,
+    const std::string &frequency_profile,
+    const std::unordered_map<std::string, std::string> &band_preferences)
 {
     using json = nlohmann::json;
 
@@ -47,10 +49,14 @@ std::string build_wspr_band_catalog_response_json(
         {"command", "wspr_band_catalog"},
         {"status", "ok"},
         {"audio_offset_hz", offset_hz},
+        {"frequency_profile", frequency_profile},
+        {"band_preferences", band_preferences},
         {"bands", json::array()},
+        {"presets", json::array()},
     };
 
-    for (const WsprBandCatalogEntry &band : lookup.canonical_wspr_band_catalog())
+    for (const WsprBandCatalogEntry &band :
+         lookup.canonical_wspr_band_catalog(frequency_profile, band_preferences))
     {
         if (band.dial_frequency_hz >
             static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
@@ -74,6 +80,23 @@ std::string build_wspr_band_catalog_response_json(
             {"band", band.band},
             {"dial_frequency_hz", dial_frequency_hz},
             {"tone_frequency_hz", dial_frequency_hz + offset_hz},
+        });
+    }
+
+    for (const WsprPresetCatalogEntry &preset : lookup.complete_wspr_preset_catalog())
+    {
+        if (preset.dial_frequency_hz >
+            static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        {
+            throw std::runtime_error(
+                "preset dial_frequency_hz must be a safely representable integral Hz value.");
+        }
+
+        response["presets"].push_back({
+            {"preset", preset.preset},
+            {"band", preset.band},
+            {"dial_frequency_hz", static_cast<std::int64_t>(preset.dial_frequency_hz)},
+            {"existing_common", preset.existing_common},
         });
     }
 

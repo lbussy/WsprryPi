@@ -133,7 +133,7 @@ const TAB_STATE_STORAGE_PREFIX = "wsprrypi.activeTab";
 const TEST_TONE_COMMAND_TIMEOUT_MS = 15000;
 const WSPR_BAND_CATALOG_TIMEOUT_MS = 5000;
 const CANONICAL_WSPR_BAND_NAMES = Object.freeze([
-    "2200m", "630m", "160m", "80m", "60m", "40m", "30m", "22m",
+    "2200m", "630m", "160m", "80m", "60m", "40m", "30m",
     "20m", "17m", "15m", "12m", "10m", "6m", "4m", "2m", "1.25m", "70cm"
 ]);
 const TEST_TONE_SELECTION_MODES = Object.freeze({
@@ -574,6 +574,8 @@ const configSchema = {
             "Grid Square": { required: false, type: "string" },
             "TX Power": { required: false, type: "number" },
             "Frequency": { required: false, type: "string" },
+            "Frequency Profile": { required: false, type: "string" },
+            "Band Preferences": { required: false, type: "object" },
             "Planner Preference": { required: false, type: "string" },
             "Use Random Offset": { required: false, type: "boolean" }
         }
@@ -600,13 +602,14 @@ const configSchema = {
             "60m": { required: false, type: "object" },
             "40m": { required: false, type: "object" },
             "30m": { required: false, type: "object" },
-            "22m": { required: false, type: "object" },
+            "8m": { required: false, type: "object" },
             "20m": { required: false, type: "object" },
             "17m": { required: false, type: "object" },
             "15m": { required: false, type: "object" },
             "12m": { required: false, type: "object" },
             "10m": { required: false, type: "object" },
             "6m": { required: false, type: "object" },
+            "5m": { required: false, type: "object" },
             "4m": { required: false, type: "object" },
             "2m": { required: false, type: "object" },
             "1.25m": { required: false, type: "object" },
@@ -1609,6 +1612,28 @@ function populateConfig(callback = null) {
                     plannerPreference = "auto";
                 }
 
+                let frequencyProfile = getConfigValue(
+                    wspr,
+                    "WSPR",
+                    "Frequency Profile",
+                    "existing_common"
+                );
+                if (!["existing_common", "wrc15"].includes(frequencyProfile)) {
+                    frequencyProfile = "existing_common";
+                }
+                const bandPreferencesValue = getConfigValue(
+                    wspr, "WSPR", "Band Preferences", {}
+                );
+                currentWsprBandPreferences = bandPreferencesValue &&
+                    typeof bandPreferencesValue === "object" &&
+                    !Array.isArray(bandPreferencesValue)
+                    ? { ...bandPreferencesValue }
+                    : {};
+                const frequencyPreference60m =
+                    ["60m:legacy", "60m:wrc15"].includes(currentWsprBandPreferences["60m"])
+                        ? currentWsprBandPreferences["60m"]
+                        : "";
+
                 let transmit = getConfigBoolValue(
                     operation,
                     "Operation",
@@ -1863,6 +1888,8 @@ function populateConfig(callback = null) {
                         updateRuntimeControlConfigStatus(mode, transmit);
                     }
                     $("#planner_preference").val(plannerPreference).trigger("change");
+                    $("#frequency_profile").val(frequencyProfile).trigger("change");
+                    $("#frequency_preference_60m").val(frequencyPreference60m).trigger("change");
                     $("#transmit_backend").val(transmitBackend).trigger("change");
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
@@ -2290,6 +2317,10 @@ function validateWsprBandCatalog(response) {
     const audioOffsetHz = response.audio_offset_hz;
     if (typeof audioOffsetHz !== "number" ||
         !Number.isSafeInteger(audioOffsetHz) || audioOffsetHz < 0) {
+        return null;
+    }
+
+    if (!["existing_common", "wrc15"].includes(response.frequency_profile)) {
         return null;
     }
 

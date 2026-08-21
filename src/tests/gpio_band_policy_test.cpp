@@ -199,6 +199,15 @@ void require_controller_policy(
 
 int main()
 {
+    const auto twelve_meter_policy = wsprrypi::evaluate_frequency_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::TONE,
+        24950000.0);
+    require(
+        twelve_meter_policy.band == "12m" &&
+            twelve_meter_policy.error.find("12 m band") != std::string::npos,
+        "policy must retain canonical band identity and readable diagnostics");
+
     const std::initializer_list<wsprrypi::TransmissionMode> exercised_modes{
         wsprrypi::TransmissionMode::WSPR,
         wsprrypi::TransmissionMode::QRSS,
@@ -280,6 +289,27 @@ int main()
         wsprrypi::BackendKind::SI5351,
         wsprrypi::TransmissionMode::TONE,
         223500000.0, false, "unavailable cannot be overridden", true, true);
+    require_controller_policy(
+        wsprrypi::BackendKind::SI5351,
+        wsprrypi::TransmissionMode::TONE,
+        435000000.0, false, "Si5351 70cm remains unavailable", true, true);
+    for (const double nationally_allocated_frequency : {40000000.0, 60000000.0})
+    {
+        require_controller_policy(
+            wsprrypi::BackendKind::SI5351,
+            wsprrypi::TransmissionMode::TONE,
+            nationally_allocated_frequency, false,
+            "8m and 5m remain untested without override");
+        require_controller_policy(
+            wsprrypi::BackendKind::SI5351,
+            wsprrypi::TransmissionMode::TONE,
+            nationally_allocated_frequency, true,
+            "8m and 5m experimental qualification override", true, false);
+    }
+    require_controller_policy(
+        wsprrypi::BackendKind::SI5351,
+        wsprrypi::TransmissionMode::TONE,
+        902000000.0, false, "bands above 70cm require both overrides", true, false);
     for (const auto mode : exercised_modes)
     {
         require_controller_policy(

@@ -7,7 +7,7 @@
 #include "scheduling.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "ppm_manager.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 #include "wspr_transmit_backend_si5351.hpp"
 
 #include <cmath>
@@ -647,7 +647,7 @@ int main(int argc, char *argv[])
         "Pi 4 runtime resolution must preserve the legacy GPIO power level");
     init_default_config();
 
-    WSPRBandLookup lookup;
+    BandLookup lookup;
 
     require(
         nearly_equal(lookup.parse_string_to_frequency("20m", false), 14095600.0),
@@ -665,8 +665,17 @@ int main(int argc, char *argv[])
         nearly_equal(lookup.parse_string_to_frequency("mf", false), 474200.0),
         "mf must resolve to the 630m WSPR dial frequency");
     require(
-        nearly_equal(lookup.parse_string_to_frequency("22m", false), 13551500.0),
-        "22m must resolve to the WSPR dial frequency");
+        nearly_equal(
+            lookup.parse_string_to_frequency("60m", false, "wrc15"),
+            5364700.0) &&
+            nearly_equal(
+                lookup.parse_string_to_frequency("60m:legacy", false, "wrc15"),
+                5287200.0),
+        "WSPR profile resolution must affect only bare 60m");
+    bool rejected_22m = false;
+    try { (void)lookup.parse_string_to_frequency("22m", false); }
+    catch (const std::invalid_argument &) { rejected_22m = true; }
+    require(rejected_22m, "22m must no longer resolve as a WSPR alias");
     require(
         lookup.lookup_ham_band(14095600.0).has_value(),
         "band lookup should still succeed on WSPR dial frequency values");
@@ -1484,6 +1493,31 @@ int main(int argc, char *argv[])
 
     {
         init_config_json();
+        jConfig["WSPR"]["Frequency Profile"] = "wrc15";
+        jConfig["WSPR"]["Band Preferences"] = {{"60m", "60m:legacy"}};
+        jConfig["WSPR"]["Frequency"] = "60m 60m:legacy 5.2872MHz";
+        json_to_config();
+        config.transmit = true;
+        config.frequencies = config.wspr.frequencies;
+
+        require(config.wspr.frequency_profile == "wrc15",
+                "WSPR frequency profile must load through the configuration model");
+        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 3,
+                "profile-aware WSPR frequency lists must parse");
+        require(
+            nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 5287200.0) &&
+                nearly_equal(config.wspr_frequency_entries[1].dial_frequency_hz, 5287200.0) &&
+                nearly_equal(config.wspr_frequency_entries[2].dial_frequency_hz, 5287200.0),
+            "local preference must precede the profile while preserving explicit entries");
+        config_to_json();
+        require(jConfig["WSPR"].at("Frequency Profile") == "wrc15",
+                "WSPR frequency profile must serialize through the configuration model");
+        require(jConfig["WSPR"].at("Band Preferences").at("60m") == "60m:legacy",
+                "WSPR band preferences must serialize through the configuration model");
+    }
+
+    {
+        init_config_json();
         if (jConfig.contains("WSPR") && jConfig["WSPR"].is_object())
         {
             jConfig["WSPR"].erase("WSPR Dial Frequency Set");
@@ -1780,7 +1814,7 @@ int main(int argc, char *argv[])
         init_config_json();
         json_to_config();
         config.transmit = true;
-        config.frequencies = "0,2200m,630m,22m@17H,20m@27L,14.097100MHz@22";
+        config.frequencies = "0,2200m,630m,30m@17H,20m@27L,14.097100MHz@22";
 
         require(
             set_frequencies(config),
@@ -1801,8 +1835,8 @@ int main(int argc, char *argv[])
         require(
             config.wspr_frequency_entries[3].selector_gpio == 17 &&
                 config.wspr_frequency_entries[3].selector_gpio_active_high &&
-                nearly_equal(config.wspr_frequency_entries[3].dial_frequency_hz, 13551500.0),
-            "22m@17H must retain the GPIO mapping, polarity, and dial frequency");
+                nearly_equal(config.wspr_frequency_entries[3].dial_frequency_hz, 10138700.0),
+            "30m@17H must retain the GPIO mapping, polarity, and dial frequency");
         require(
             config.wspr_frequency_entries[4].selector_gpio == 27 &&
                 !config.wspr_frequency_entries[4].selector_gpio_active_high &&
@@ -7042,13 +7076,8 @@ int main(int argc, char *argv[])
         copy_runtime_config(config, config);
         const TestToneStartResult started = start_test_tone(
             TestToneRequest{TestToneFrequencySource::WsprBand, "22m", std::nullopt});
-        const TransmissionRequest request = current_transmission_request_for_test();
-        require(started.started && nearly_equal(request.dial_frequency_hz, 13551500.0) &&
-                    nearly_equal(request.actual_rf_frequency_hz, 13553000.0),
-                "explicit 22m tone must commit canonical dial plus 1500 Hz offset");
-        const TestToneStopResult stopped = end_test_tone();
-        require(stopped.tone_was_active && stopped.stopped,
-                "explicit 22m Test Tone End must succeed");
+        require(!started.started && started.message.find("22m") != std::string::npos,
+                "removed 22m Test Tone preset must fail with an explicit diagnostic");
         set_scheduler_execution_suppressed_for_test(false);
     }
 

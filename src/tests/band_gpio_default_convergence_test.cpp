@@ -1,5 +1,5 @@
 #include "config_handler.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 
 #include <cstdlib>
 #include <fstream>
@@ -99,7 +99,7 @@ int main()
             config.band_gpio[ham_band_index(HamBand::BAND_70CM)].active_high,
         "explicit Band GPIO mappings must still be honored");
 
-    WSPRBandLookup lookup;
+    BandLookup lookup;
     require(
         lookup.lookup_ham_band(14095600.0).has_value() &&
             *lookup.lookup_ham_band(14095600.0) == HamBand::BAND_20M,

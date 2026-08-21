@@ -71,7 +71,6 @@ constexpr double WSPR_CENTER_FREQ_80M = 3570100.0;
 constexpr double WSPR_CENTER_FREQ_60M = 5288700.0;
 constexpr double WSPR_CENTER_FREQ_40M = 7040100.0;
 constexpr double WSPR_CENTER_FREQ_30M = 10140200.0;
-constexpr double WSPR_CENTER_FREQ_22M = 13553000.0;
 constexpr double WSPR_CENTER_FREQ_20M = 14097100.0;
 constexpr double WSPR_CENTER_FREQ_17M = 18106100.0;
 constexpr double WSPR_CENTER_FREQ_15M = 21096100.0;

@@ -1,9 +1,10 @@
 #include "../wspr_band_catalog_response.hpp"
-#include "../wspr_band_lookup.hpp"
+#include "../band_lookup.hpp"
 #include "../config_handler.hpp"
 #include "../version.hpp"
 
 #include <cmath>
+#include <array>
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
@@ -34,7 +35,7 @@ namespace
     const std::vector<ExpectedBand> expected_bands = {
         {"2200m", 136000}, {"630m", 474200}, {"160m", 1836600},
         {"80m", 3568600}, {"60m", 5287200}, {"40m", 7038600},
-        {"30m", 10138700}, {"22m", 13551500}, {"20m", 14095600},
+        {"30m", 10138700}, {"20m", 14095600},
         {"17m", 18104600}, {"15m", 21094600}, {"12m", 24924600},
         {"10m", 28124600}, {"6m", 50293000}, {"4m", 70091000},
         {"2m", 144489000}, {"1.25m", 222100000}, {"70cm", 432300000},
@@ -77,7 +78,7 @@ namespace
     }
 
     void require_rejected_offset(
-        const WSPRBandLookup &lookup,
+        const BandLookup &lookup,
         double offset_hz,
         const std::string &description)
     {
@@ -96,10 +97,10 @@ namespace
 
 int main()
 {
-    WSPRBandLookup lookup;
+    BandLookup lookup;
     const auto catalog = lookup.canonical_wspr_band_catalog();
     require(catalog.size() == expected_bands.size(),
-            "lookup catalog must expose exactly 18 canonical display bands");
+            "lookup catalog must expose exactly 17 canonical WSPR display bands");
     for (std::size_t index = 0; index < expected_bands.size(); ++index)
     {
         require(catalog.at(index).band == expected_bands.at(index).name,
@@ -114,6 +115,27 @@ int main()
                 "lookup catalog must expose only authoritative WSPR display rows");
     }
 
+    const auto presets = lookup.complete_wspr_preset_catalog();
+    require(presets.size() == expected_bands.size() + 2,
+            "complete preset catalog must add two qualified 60m identities");
+    require(
+        presets.at(expected_bands.size()).preset == "60m:legacy" &&
+            presets.at(expected_bands.size()).band == "60m" &&
+            presets.at(expected_bands.size()).dial_frequency_hz == 5287200 &&
+            presets.at(expected_bands.size()).existing_common,
+        "60m:legacy must explicitly identify the retained bare-alias convention");
+    require(
+        presets.at(expected_bands.size() + 1).preset == "60m:wrc15" &&
+            presets.at(expected_bands.size() + 1).band == "60m" &&
+            presets.at(expected_bands.size() + 1).dial_frequency_hz == 5364700 &&
+            !presets.at(expected_bands.size() + 1).existing_common,
+        "60m:wrc15 must expose the alternate sourced WSPR convention");
+    require(
+        lookup.parse_string_to_frequency("60m") == 5287200.0 &&
+            lookup.parse_string_to_frequency("60M:LEGACY") == 5287200.0 &&
+            lookup.parse_string_to_frequency("60m:wrc15") == 5364700.0,
+        "bare and qualified 60m presets must resolve case-insensitively without changing compatibility");
+
     require(
         lookup.lookup_ham_band(223500000.0) ==
             std::optional<HamBand>(HamBand::BAND_1_25M) &&
@@ -121,13 +143,13 @@ int main()
             std::get<std::string>(lookup.lookup(223500000.0)) == "1.25m",
         "numeric 1.25 m WSPR input must resolve to the canonical HamBand");
     require(
-        lookup.lookup_ham_band(222000000.0) ==
+        lookup.lookup_ham_band(219000000.0) ==
                 std::optional<HamBand>(HamBand::BAND_1_25M) &&
             lookup.lookup_ham_band(225000000.0) ==
                 std::optional<HamBand>(HamBand::BAND_1_25M) &&
-            !lookup.lookup_ham_band(221999999.0).has_value() &&
+            !lookup.lookup_ham_band(218999999.0).has_value() &&
             !lookup.lookup_ham_band(225000001.0).has_value(),
-        "1.25 m lookup must use the ordinary 222-225 MHz amateur allocation");
+        "1.25 m lookup must use the worldwide 219-225 MHz correlation envelope");
     require(
         lookup.lookup_ham_band(435000000.0) ==
             std::optional<HamBand>(HamBand::BAND_70CM) &&
@@ -152,16 +174,65 @@ int main()
             "lf lookup alias must remain accepted");
     require(std::get<double>(lookup.lookup(std::string("mf"))) == 474200.0,
             "mf lookup alias must remain accepted");
-    require(lookup.parse_string_to_frequency("22m") == 13551500.0,
-            "22m parser behavior must remain unchanged");
+    bool rejected_22m = false;
+    try { (void)lookup.parse_string_to_frequency("22m"); }
+    catch (const std::invalid_argument &) { rejected_22m = true; }
+    require(rejected_22m, "22m must not remain a canonical WSPR alias");
+
+    struct CorrelationEdge
+    {
+        HamBand band;
+        long long lower_hz;
+        long long upper_hz;
+    };
+    constexpr std::array<CorrelationEdge, HAM_BAND_COUNT> edges{{
+        {HamBand::BAND_2200M, 130000, 190000},
+        {HamBand::BAND_630M, 472000, 479000},
+        {HamBand::BAND_160M, 1800000, 2000000},
+        {HamBand::BAND_80M, 3500000, 4000000},
+        {HamBand::BAND_60M, 5250000, 5450000},
+        {HamBand::BAND_40M, 7000000, 7300000},
+        {HamBand::BAND_30M, 10100000, 10150000},
+        {HamBand::BAND_20M, 14000000, 14350000},
+        {HamBand::BAND_17M, 18068000, 18168000},
+        {HamBand::BAND_15M, 21000000, 21450000},
+        {HamBand::BAND_12M, 24890000, 24990000},
+        {HamBand::BAND_10M, 28000000, 29700000},
+        {HamBand::BAND_8M, 40000000, 45000000},
+        {HamBand::BAND_6M, 50000000, 54000000},
+        {HamBand::BAND_5M, 54000001, 68000000},
+        {HamBand::BAND_4M, 69900000, 70500000},
+        {HamBand::BAND_2M, 144000000, 148000000},
+        {HamBand::BAND_1_25M, 219000000, 225000000},
+        {HamBand::BAND_70CM, 420000000, 450000000},
+    }};
+    for (const auto &edge : edges)
+    {
+        require(lookup.lookup_ham_band(edge.lower_hz) == edge.band,
+                std::string(band_to_string(edge.band)) + " lower edge must be inclusive");
+        require(lookup.lookup_ham_band(edge.upper_hz) == edge.band,
+                std::string(band_to_string(edge.band)) + " upper edge must be inclusive");
+    }
+    require(!lookup.lookup_ham_band(13551500LL).has_value(),
+            "former 22m frequency must be outside the catalog");
+    require(!lookup.lookup_ham_band(902000000LL).has_value(),
+            "bands above 70cm must be outside the catalog");
 
     const auto default_response = nlohmann::json::parse(
         build_wspr_band_catalog_response_json(lookup, 1500.0));
     require_catalog_response(default_response, 1500);
-    require(default_response.at("bands").at(7).at("dial_frequency_hz") == 13551500,
-            "22m catalog dial frequency must be 13,551,500 Hz");
-    require(default_response.at("bands").at(8).at("tone_frequency_hz") == 14097100,
+    require(default_response.at("bands").at(7).at("tone_frequency_hz") == 14097100,
             "20m default catalog tone frequency must be 14,097,100 Hz");
+    require(default_response.at("presets").size() == expected_bands.size() + 2,
+            "catalog response must expose the separate complete preset catalog");
+    require(
+        default_response.at("presets").at(expected_bands.size() + 1).at("preset") ==
+                "60m:wrc15" &&
+            default_response.at("presets").at(expected_bands.size() + 1).at("band") ==
+                "60m" &&
+            default_response.at("presets").at(expected_bands.size() + 1).at("dial_frequency_hz") ==
+                5364700,
+        "catalog response must keep preset identity separate from correlated band identity");
 
     const auto zero_offset_response = nlohmann::json::parse(
         build_wspr_band_catalog_response_json(lookup, 0.0));
@@ -170,7 +241,7 @@ int main()
     const auto non_default_response = nlohmann::json::parse(
         build_wspr_band_catalog_response_json(lookup, 2750.0));
     require_catalog_response(non_default_response, 2750);
-    require(non_default_response.at("bands").at(8).at("tone_frequency_hz") == 14098350,
+    require(non_default_response.at("bands").at(7).at("tone_frequency_hz") == 14098350,
             "non-default offset must be reflected exactly once in the catalog tone frequency");
 
     require_rejected_offset(lookup, -1500.0, "negative integral offsets");

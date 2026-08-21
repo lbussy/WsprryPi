@@ -37,7 +37,7 @@
 #include "privileged_network_runtime.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 #include "wspr_transmit.hpp"
 #include "version.hpp"
 
@@ -78,9 +78,9 @@
 MonitorFile iniMonitor;
 
 /**
- * @brief Instance of WSPRBandLookup.
+ * @brief Instance of BandLookup.
  *
- * This instance of WSPRBandLookup is used to translate frequency representations:
+ * This instance of BandLookup is used to translate frequency representations:
  * - Converts from a short-hand (Hx) to a higher order (e.g., MHz) and vice versa.
  * - Validates frequency values.
  * - Translates terms (e.g., "20m") into a valid WSPR frequency.
@@ -88,7 +88,7 @@ MonitorFile iniMonitor;
  * Use this instance for any operations requiring frequency conversions and validation
  * within the WSPR system.
  */
-WSPRBandLookup lookup;
+BandLookup lookup;
 
 /**
  * @brief Semaphore indicating a pending INI file reload.
@@ -229,7 +229,7 @@ namespace
     static std::string get_wspr_gpio_suffix_for_entry(
         const WsprFrequencyEntry &entry,
         const ArgParserConfig &config,
-        WSPRBandLookup &lookup)
+        BandLookup &lookup)
     {
         int gpio = kSelectorGpioUnset;
         bool active_high = false;
@@ -2867,7 +2867,11 @@ bool set_frequencies(ArgParserConfig &target)
 
         try
         {
-            const double freq = lookup.parse_string_to_frequency(entry.token, false);
+            const double freq = lookup.parse_string_to_frequency(
+                entry.token,
+                false,
+                target.wspr.frequency_profile,
+                target.wspr.band_preferences);
             std::string frequency_error;
             if (!validate_cli_frequency_hz(
                     freq,

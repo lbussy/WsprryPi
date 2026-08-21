@@ -2,7 +2,7 @@
 $defaultLedGpio = 'GPIO18';
 $defaultShutdownGpio = 'GPIO19';
 $defaultAmpGpio = '';
-$bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '22m', '20m', '17m', '15m', '12m', '10m', '6m', '4m', '2m', '1.25m', '70cm'];
+$bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '8m', '6m', '5m', '4m', '2m', '1.25m', '70cm'];
 ?>
 
             <div class="card-header pb-0">
@@ -169,10 +169,10 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '22m', '2
                                                 spellcheck="false"
                                                 aria-describedby="frequencies-hint"
                                                 data-bs-toggle="tooltip"
-                                                title="Enter one or more WSPR dial frequencies as numeric values with optional Hz/kHz/MHz/GHz units, or as band aliases such as 20m, 22m, 2200m, or 630m. Separate entries with spaces or commas. A 0 skips a transmission window. Append @GPIO, @GPIOH, or @GPIOL to override the selector for one entry."
+                                                title="Enter WSPR presets, numeric dial frequencies, or 0. Separate entries with spaces or commas."
                                                 required />
                                             <div id="frequencies-hint" class="form-text mt-2">
-                                                Separate entries with spaces or commas. Use band names such as `20m`, numeric values, or `0` to skip a slot. Optional `@GPIO`, `@GPIOH`, or `@GPIOL` suffixes are supported.
+                                                Separate entries with spaces or commas. Use presets such as `20m`, `60m:legacy`, or `60m:wrc15`; numeric values; or `0` to skip a slot. Qualified names select a WSPR dial convention, not a different amateur band. Optional `@GPIO`, `@GPIOH`, or `@GPIOL` suffixes are supported.
                                             </div>
                                         </div>
 
@@ -233,6 +233,41 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '22m', '2
                                     </div>
 
                                     <div class="config-wspr-secondary-row">
+                                        <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
+                                            <label for="frequency_profile" class="form-label">
+                                                Frequency profile
+                                            </label>
+                                            <select
+                                                id="frequency_profile"
+                                                class="form-select"
+                                                aria-describedby="frequency-profile-hint"
+                                                data-bs-toggle="tooltip"
+                                                title="Choose the default WSPR dial convention used by bare preset names.">
+                                                <option value="existing_common">Existing/Common</option>
+                                                <option value="wrc15">WRC-15</option>
+                                            </select>
+                                            <div id="frequency-profile-hint" class="form-text mt-2">
+                                                Bare `60m` follows this profile. Numeric frequencies and qualified presets such as `60m:legacy` remain unchanged. This is a convenience setting, not a statement of operating authority.
+                                            </div>
+                                        </div>
+                                        <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
+                                            <label for="frequency_preference_60m" class="form-label">
+                                                60 m preference
+                                            </label>
+                                            <select
+                                                id="frequency_preference_60m"
+                                                class="form-select"
+                                                aria-describedby="frequency-preference-60m-hint"
+                                                data-bs-toggle="tooltip"
+                                                title="Optionally override the selected profile for bare 60m entries.">
+                                                <option value="">Follow frequency profile</option>
+                                                <option value="60m:legacy">Legacy — 5,287,200 Hz</option>
+                                                <option value="60m:wrc15">WRC-15 — 5,364,700 Hz</option>
+                                            </select>
+                                            <div id="frequency-preference-60m-hint" class="form-text mt-2">
+                                                Applies only to bare `60m`. Explicit numeric and qualified entries remain unchanged.
+                                            </div>
+                                        </div>
                                         <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
                                             <label for="planner_preference" class="form-label">
                                                 Planning mode

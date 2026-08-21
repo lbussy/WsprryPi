@@ -12,6 +12,7 @@ let configAutosavePendingAfterFlight = false;
 let configAutosaveDirty = false;
 let lastSavedConfigPayload = "";
 let persistedStationIdentity = null;
+let currentWsprBandPreferences = {};
 let lastFailedConfigPayload = "";
 let lastFailedConfigMessage = "";
 let cwDurationPolicyLatched = false;
@@ -253,6 +254,17 @@ function restorePersistedConfigDraft() {
     }
 
     $("#planner_preference").val(String(wspr["Planner Preference"] || "auto")).trigger("change");
+    $("#frequency_profile").val(String(wspr["Frequency Profile"] || "existing_common")).trigger("change");
+    currentWsprBandPreferences = wspr["Band Preferences"] &&
+        typeof wspr["Band Preferences"] === "object" &&
+        !Array.isArray(wspr["Band Preferences"])
+        ? { ...wspr["Band Preferences"] }
+        : {};
+    $("#frequency_preference_60m")
+        .val(["60m:legacy", "60m:wrc15"].includes(currentWsprBandPreferences["60m"])
+            ? currentWsprBandPreferences["60m"]
+            : "")
+        .trigger("change");
     $("#transmit_backend").val(String(operation["Transmit Backend"] || "gpio")).trigger("change");
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
@@ -3606,6 +3618,17 @@ function buildConfigPayload(options = {}) {
     if (!validPlannerPreferences.has(planner_preference)) {
         planner_preference = "auto";
     }
+    let frequency_profile = String($("#frequency_profile").val() || "existing_common");
+    if (!["existing_common", "wrc15"].includes(frequency_profile)) {
+        frequency_profile = "existing_common";
+    }
+    const frequency_preference_60m = String($("#frequency_preference_60m").val() || "");
+    const band_preferences = { ...currentWsprBandPreferences };
+    if (["60m:legacy", "60m:wrc15"].includes(frequency_preference_60m)) {
+        band_preferences["60m"] = frequency_preference_60m;
+    } else {
+        delete band_preferences["60m"];
+    }
     let callsign = trimIdentityValue($("#callsign").val());
     let gridsquare = trimIdentityValue($("#gridsquare").val());
     if (
@@ -3741,6 +3764,8 @@ function buildConfigPayload(options = {}) {
         "Grid Square": gridsquare,
         "TX Power": dbm,
         "Frequency": frequencies,
+        "Frequency Profile": frequency_profile,
+        "Band Preferences": band_preferences,
         "Planner Preference": planner_preference,
         "Use Random Offset": useoffset,
     };
@@ -4174,9 +4199,10 @@ function validateWsprFrequencyBaseToken(token) {
         "160m",
         "80m",
         "60m",
+        "60m:legacy",
+        "60m:wrc15",
         "40m",
         "30m",
-        "22m",
         "20m",
         "17m",
         "15m",
@@ -4263,7 +4289,7 @@ function validateFrequencies() {
     fld.setCustomValidity(
         valid
             ? ""
-            : "Enter WSPR band names like 20m or 2200m, numeric frequencies or 0, separated by spaces or commas. Optional @GPIO, @GPIOH, or @GPIOL suffixes are supported."
+            : "Enter WSPR presets such as 20m, 60m:legacy, or 60m:wrc15; numeric frequencies; or 0. Separate entries with spaces or commas. Optional @GPIO, @GPIOH, or @GPIOL suffixes are supported."
     );
 
     setFieldValidationState(fld, valid);
@@ -4500,6 +4526,8 @@ function setHardwareControlsDisabled(disabled) {
         "#transmit",
         "#stop_transmit",
         "#planner_preference",
+        "#frequency_profile",
+        "#frequency_preference_60m",
         "#transmit_backend",
         "#tx_pin",
         "#gpio-power-range",
