@@ -38,7 +38,8 @@ namespace
 std::string build_wspr_band_catalog_response_json(
     const BandLookup &lookup,
     double audio_offset_hz,
-    const std::string &frequency_profile)
+    const std::string &frequency_profile,
+    const std::unordered_map<std::string, std::string> &band_preferences)
 {
     using json = nlohmann::json;
 
@@ -49,12 +50,13 @@ std::string build_wspr_band_catalog_response_json(
         {"status", "ok"},
         {"audio_offset_hz", offset_hz},
         {"frequency_profile", frequency_profile},
+        {"band_preferences", band_preferences},
         {"bands", json::array()},
         {"presets", json::array()},
     };
 
     for (const WsprBandCatalogEntry &band :
-         lookup.canonical_wspr_band_catalog(frequency_profile))
+         lookup.canonical_wspr_band_catalog(frequency_profile, band_preferences))
     {
         if (band.dial_frequency_hz >
             static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))

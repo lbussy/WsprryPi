@@ -1494,6 +1494,7 @@ int main(int argc, char *argv[])
     {
         init_config_json();
         jConfig["WSPR"]["Frequency Profile"] = "wrc15";
+        jConfig["WSPR"]["Band Preferences"] = {{"60m", "60m:legacy"}};
         jConfig["WSPR"]["Frequency"] = "60m 60m:legacy 5.2872MHz";
         json_to_config();
         config.transmit = true;
@@ -1504,13 +1505,15 @@ int main(int argc, char *argv[])
         require(set_frequencies(config) && config.wspr_frequency_entries.size() == 3,
                 "profile-aware WSPR frequency lists must parse");
         require(
-            nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 5364700.0) &&
+            nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 5287200.0) &&
                 nearly_equal(config.wspr_frequency_entries[1].dial_frequency_hz, 5287200.0) &&
                 nearly_equal(config.wspr_frequency_entries[2].dial_frequency_hz, 5287200.0),
-            "profile resolution must preserve explicit qualified and numeric entries");
+            "local preference must precede the profile while preserving explicit entries");
         config_to_json();
         require(jConfig["WSPR"].at("Frequency Profile") == "wrc15",
                 "WSPR frequency profile must serialize through the configuration model");
+        require(jConfig["WSPR"].at("Band Preferences").at("60m") == "60m:legacy",
+                "WSPR band preferences must serialize through the configuration model");
     }
 
     {

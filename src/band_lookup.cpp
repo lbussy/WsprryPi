@@ -191,7 +191,9 @@ BandLookup::BandLookup()
 }
 
 std::vector<WsprBandCatalogEntry>
-BandLookup::canonical_wspr_band_catalog(std::string_view frequency_profile) const
+BandLookup::canonical_wspr_band_catalog(
+    std::string_view frequency_profile,
+    const std::unordered_map<std::string, std::string> &band_preferences) const
 {
     std::vector<WsprBandCatalogEntry> catalog;
     catalog.reserve(CANONICAL_WSPR_BAND_DEFINITIONS.size());
@@ -201,10 +203,14 @@ BandLookup::canonical_wspr_band_catalog(std::string_view frequency_profile) cons
 
     for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
     {
-        const double dial_frequency_hz =
+        double dial_frequency_hz =
             normalized_profile == "wrc15" && normalize_key(band.name) == "60m"
                 ? FREQ_60M_WRC15
                 : band.default_wspr_hz;
+        const auto preference = band_preferences.find(normalize_key(band.name));
+        if (preference != band_preferences.end())
+            dial_frequency_hz = parse_string_to_frequency(
+                preference->second, false, frequency_profile);
         if (!std::isfinite(dial_frequency_hz) ||
             dial_frequency_hz <= 0.0 ||
             std::trunc(dial_frequency_hz) != dial_frequency_hz ||
@@ -395,7 +401,8 @@ std::variant<double, std::string> BandLookup::lookup(
 double BandLookup::parse_string_to_frequency(
     std::string_view input,
     bool validate,
-    std::string_view frequency_profile) const
+    std::string_view frequency_profile,
+    const std::unordered_map<std::string, std::string> &band_preferences) const
 {
     std::string input_str(input);
 
@@ -474,6 +481,9 @@ double BandLookup::parse_string_to_frequency(
     }
 
     std::string preset_key = lower;
+    const auto preference = band_preferences.find(preset_key);
+    if (preference != band_preferences.end())
+        preset_key = normalize_key(preference->second);
     std::string normalized_profile = normalize_key(std::string(frequency_profile));
     std::replace(normalized_profile.begin(), normalized_profile.end(), '-', '_');
     if (preset_key == "60m" && normalized_profile == "wrc15")

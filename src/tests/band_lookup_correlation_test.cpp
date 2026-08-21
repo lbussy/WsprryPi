@@ -76,6 +76,12 @@ int main()
             "60m:wrc15 must resolve case-insensitively to 5,364,700 Hz");
     require(lookup.parse_string_to_frequency("60m", false, "wrc15") == 5364700.0,
             "the WRC-15 profile must change only the bare 60m convenience default");
+    const std::unordered_map<std::string, std::string> preferences = {
+        {"60m", "60m:legacy"}};
+    require(lookup.parse_string_to_frequency("60m", false, "wrc15", preferences) == 5287200.0,
+            "local preference must take precedence over the selected profile");
+    require(lookup.parse_string_to_frequency("60m:wrc15", false, "existing_common", preferences) == 5364700.0,
+            "explicit qualified presets must take precedence over local preferences");
     require(lookup.parse_string_to_frequency("60m:legacy", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("5.2872MHz", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("20m", false, "wrc15") == 14095600.0,

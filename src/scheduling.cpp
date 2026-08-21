@@ -3704,7 +3704,8 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         const auto frequency_plan = plan_explicit_test_tone_frequency(
             tone_request,
             planning_snapshot.wspr_audio_offset_hz,
-            planning_snapshot.wspr_frequency_profile);
+            planning_snapshot.wspr_frequency_profile,
+            planning_snapshot.wspr_band_preferences);
         if (!frequency_plan)
         {
             result.message = frequency_plan.error;

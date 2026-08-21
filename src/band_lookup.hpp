@@ -151,7 +151,8 @@ public:
     double parse_string_to_frequency(
         std::string_view input,
         bool validate = true,
-        std::string_view frequency_profile = "existing_common") const;
+        std::string_view frequency_profile = "existing_common",
+        const std::unordered_map<std::string, std::string> &band_preferences = {}) const;
 
     /**
      * @brief Return canonical WSPR display bands in stable order.
@@ -161,7 +162,8 @@ public:
      *         represented as an integral external Hz value.
      */
     std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog(
-        std::string_view frequency_profile = "existing_common") const;
+        std::string_view frequency_profile = "existing_common",
+        const std::unordered_map<std::string, std::string> &band_preferences = {}) const;
 
     /**
      * @brief Return every built-in qualified WSPR preset in stable order.

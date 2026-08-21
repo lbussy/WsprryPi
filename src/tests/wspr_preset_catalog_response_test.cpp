@@ -53,6 +53,13 @@ int main()
                 wrc15_response.at("bands").at(4).at("tone_frequency_hz") == 5366200,
             "WRC-15 profile must change the effective 60m compatibility row");
 
+    const auto preferred_response = nlohmann::json::parse(
+        build_wspr_band_catalog_response_json(
+            lookup, 1500.0, "wrc15", {{"60m", "60m:legacy"}}));
+    require(preferred_response.at("band_preferences").at("60m") == "60m:legacy" &&
+                preferred_response.at("bands").at(4).at("dial_frequency_hz") == 5287200,
+            "local preference must be visible and override the effective profile row");
+
     std::cout << "WSPR preset catalog response tests passed.\n";
     return 0;
 }

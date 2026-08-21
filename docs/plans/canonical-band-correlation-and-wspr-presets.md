@@ -125,20 +125,22 @@ profile is an operator-selected convenience default, not a regulatory claim.
 
 Local per-band preferences belong in the normal parent WsprryPi configuration
 lifecycle, alongside the selected WSPR profile. They do not belong in the
-`src/WSPR-Transmitter` component. Start with configuration-backed preferences
-rather than a separate database. A future schema might conceptually express:
+`src/WSPR-Transmitter` component. They are stored as the JSON object
+`WSPR.Band Preferences`; the INI representation is the same object serialized
+on one line. For example:
 
 ```ini
 [WSPR]
 Frequency Profile = existing_common
 
-[WSPR Band Preferences]
-60m = 60m:us
-20m = 20m
+Band Preferences = {"60m":"60m:wrc15"}
 ```
 
-User-defined local presets may later supply a band, integral USB dial frequency,
-and label. The exact INI/JSON/UI schema remains a separate implementation slice.
+Preference keys are canonical bands and values are built-in preset identifiers
+that must correlate back to the same band. A 60 m preference must be qualified,
+so changing the selected profile cannot change its meaning. User-defined local
+presets may later supply a band, integral USB dial frequency, and label. A UI
+editor for preferences remains a separate implementation slice.
 
 WSPR frequency resolution precedence is:
 

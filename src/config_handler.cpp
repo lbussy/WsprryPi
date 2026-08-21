@@ -120,6 +120,7 @@ namespace
         snapshot.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
         snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
         snapshot.wspr_frequency_profile = source.wspr.frequency_profile;
+        snapshot.wspr_band_preferences = source.wspr.band_preferences;
         snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
         snapshot.band_gpio = source.band_gpio;
 
@@ -736,6 +737,7 @@ namespace
             {"TX Power", source.at("WSPR").at("TX Power")},
             {"Frequency", source.at("WSPR").at("Frequency")},
             {"Frequency Profile", source.at("WSPR").at("Frequency Profile")},
+            {"Band Preferences", source.at("WSPR").at("Band Preferences")},
             {"Planner Preference", source.at("WSPR").at("Planner Preference")},
             {"Use Random Offset", source.at("WSPR").at("Use Random Offset")}};
         public_json["CW"] = source.at("CW");
@@ -841,6 +843,8 @@ namespace
                 internal_json["WSPR"]["Frequency"] = wspr.at("Frequency");
             if (wspr.contains("Frequency Profile"))
                 internal_json["WSPR"]["Frequency Profile"] = wspr.at("Frequency Profile");
+            if (wspr.contains("Band Preferences"))
+                internal_json["WSPR"]["Band Preferences"] = wspr.at("Band Preferences");
             if (wspr.contains("Planner Preference"))
                 internal_json["WSPR"]["Planner Preference"] = wspr.at("Planner Preference");
             if (wspr.contains("Use Random Offset"))
@@ -1583,6 +1587,7 @@ namespace
             {"TX Power", 20},
             {"Frequency", "20m"},
             {"Frequency Profile", "existing_common"},
+            {"Band Preferences", nlohmann::json::object()},
             {"Planner Preference", "auto"},
             {"Use Random Offset", true}};
         target["CW"] = {
@@ -1792,6 +1797,30 @@ namespace
             json_to_string(source.at("WSPR").at("Frequency"));
         target.wspr.frequency_profile =
             parse_wspr_frequency_profile(source.at("WSPR"));
+        target.wspr.band_preferences.clear();
+        const auto &band_preferences = source.at("WSPR").value(
+            "Band Preferences", nlohmann::json::object());
+        if (!band_preferences.is_object())
+            throw std::runtime_error("WSPR.Band Preferences must be an object.");
+        BandLookup preference_lookup;
+        for (const auto &item : band_preferences.items())
+        {
+            std::string band = trim_copy(item.key());
+            std::transform(
+                band.begin(), band.end(), band.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (!item.value().is_string())
+                throw std::runtime_error("WSPR.Band Preferences values must be strings.");
+            const std::string preset = item.value().get<std::string>();
+            if (band == "60m" && preset.find(':') == std::string::npos)
+                throw std::runtime_error(
+                    "WSPR band preference for 60m must use a qualified preset.");
+            const double frequency = preference_lookup.parse_string_to_frequency(preset, false);
+            const auto correlated = preference_lookup.lookup_ham_band(frequency);
+            if (!correlated || band_to_string(*correlated) != band)
+                throw std::runtime_error("WSPR band preference for " + band + " must resolve within that band.");
+            target.wspr.band_preferences[band] = preset;
+        }
         target.wspr.audio_offset_hz =
             WSPR_AUDIO_OFFSET_HZ;
         target.wspr.planner_preference =
@@ -1955,6 +1984,7 @@ namespace
         target["WSPR"]["TX Power"] = source.wspr.power_dbm;
         target["WSPR"]["Frequency"] = source.wspr.frequencies;
         target["WSPR"]["Frequency Profile"] = source.wspr.frequency_profile;
+        target["WSPR"]["Band Preferences"] = source.wspr.band_preferences;
         target["WSPR"]["Planner Preference"] =
             wspr_planner_preference_to_string(source.wspr.planner_preference);
         target["WSPR"]["Use Random Offset"] = source.use_offset;
@@ -2475,6 +2505,7 @@ build_persistent_ini_data(const nlohmann::json &source)
                   key == "TX Power" ||
                   key == "Frequency" ||
                   key == "Frequency Profile" ||
+                  key == "Band Preferences" ||
                   key == "Planner Preference" ||
                   key == "Use Random Offset")) ||
                 (section_name == "CW" &&
