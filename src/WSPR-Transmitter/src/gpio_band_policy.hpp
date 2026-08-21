@@ -43,6 +43,15 @@ inline const char* qualification_state_name(QualificationState state) noexcept
 
 namespace detail
 {
+inline std::string display_band_name(std::string_view canonical_band)
+{
+    const std::size_t unit_length = canonical_band.ends_with("cm") ? 2U : 1U;
+    if (canonical_band.size() <= unit_length)
+        return std::string(canonical_band);
+    return std::string(canonical_band.substr(0, canonical_band.size() - unit_length)) +
+        " " + std::string(canonical_band.substr(canonical_band.size() - unit_length));
+}
+
 inline QualificationState qualification_for(
     BackendKind backend, HardwareProfile profile, TransmissionMode mode,
     std::string_view band) noexcept
@@ -140,7 +149,7 @@ inline FrequencyPolicyDecision evaluate_frequency_policy(
         return decision;
 
     decision.allowed = false;
-    decision.error = "Transmission on the " + decision.band + " band is " +
+    decision.error = "Transmission on the " + detail::display_band_name(decision.band) + " band is " +
         qualification_state_name(decision.qualification) +
         " for the selected backend and mode.";
     if (decision.qualification == QualificationState::UNAVAILABLE)

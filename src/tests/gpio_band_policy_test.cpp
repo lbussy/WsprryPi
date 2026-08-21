@@ -199,6 +199,15 @@ void require_controller_policy(
 
 int main()
 {
+    const auto twelve_meter_policy = wsprrypi::evaluate_frequency_policy(
+        wsprrypi::BackendKind::RPI_CLOCK_GPIO,
+        wsprrypi::TransmissionMode::TONE,
+        24950000.0);
+    require(
+        twelve_meter_policy.band == "12m" &&
+            twelve_meter_policy.error.find("12 m band") != std::string::npos,
+        "policy must retain canonical band identity and readable diagnostics");
+
     const std::initializer_list<wsprrypi::TransmissionMode> exercised_modes{
         wsprrypi::TransmissionMode::WSPR,
         wsprrypi::TransmissionMode::QRSS,
