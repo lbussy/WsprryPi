@@ -382,6 +382,7 @@ int main()
             ui_source.find("\"60m:legacy\",") != std::string::npos &&
             ui_source.find("\"60m:wrc15\",") != std::string::npos &&
             ui_source.find("\"Frequency Profile\": frequency_profile") != std::string::npos &&
+            ui_source.find("\"Band Preferences\": band_preferences") != std::string::npos &&
             ui_source.find("\"22m\",") == std::string::npos &&
             ui_source.find("@GPIO, @GPIOH, or @GPIOL") != std::string::npos &&
             ui_source.find(".replace(/,/g, \" \")") != std::string::npos &&

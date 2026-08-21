@@ -363,6 +363,14 @@ async function browserTest() {
     equal(buildConfigPayload().WSPR["Frequency Profile"], "wrc15",
         "frequency profile selection must serialize through the Setup payload");
     field("frequency_profile").value = "existing_common";
+    equal(field("frequency_preference_60m").value, "",
+        "60 m preference must default to following the selected profile");
+    field("frequency_preference_60m").value = "60m:wrc15";
+    equal(buildConfigPayload().WSPR["Band Preferences"]["60m"], "60m:wrc15",
+        "60 m preference must serialize through the Setup payload");
+    field("frequency_preference_60m").value = "";
+    ok(!Object.hasOwn(buildConfigPayload().WSPR["Band Preferences"], "60m"),
+        "following the profile must remove the local 60 m override");
 
     let matrixCases = 0;
     for (const transmit of [false, true]) {

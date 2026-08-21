@@ -140,7 +140,9 @@ Preference keys are canonical bands and values are built-in preset identifiers
 that must correlate back to the same band. A 60 m preference must be qualified,
 so changing the selected profile cannot change its meaning. User-defined local
 presets may later supply a band, integral USB dial frequency, and label. A UI
-editor for preferences remains a separate implementation slice.
+editor exposes the currently meaningful 60 m choice as Follow frequency
+profile, Legacy, or WRC-15 while preserving any other configuration-backed
+preferences it does not edit.
 
 WSPR frequency resolution precedence is:
 

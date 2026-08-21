@@ -251,6 +251,24 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             </div>
                                         </div>
                                         <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
+                                            <label for="frequency_preference_60m" class="form-label">
+                                                60 m preference
+                                            </label>
+                                            <select
+                                                id="frequency_preference_60m"
+                                                class="form-select"
+                                                aria-describedby="frequency-preference-60m-hint"
+                                                data-bs-toggle="tooltip"
+                                                title="Optionally override the selected profile for bare 60m entries.">
+                                                <option value="">Follow frequency profile</option>
+                                                <option value="60m:legacy">Legacy — 5,287,200 Hz</option>
+                                                <option value="60m:wrc15">WRC-15 — 5,364,700 Hz</option>
+                                            </select>
+                                            <div id="frequency-preference-60m-hint" class="form-text mt-2">
+                                                Applies only to bare `60m`. Explicit numeric and qualified entries remain unchanged.
+                                            </div>
+                                        </div>
+                                        <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
                                             <label for="planner_preference" class="form-label">
                                                 Planning mode
                                             </label>

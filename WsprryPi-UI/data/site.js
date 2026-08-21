@@ -575,6 +575,7 @@ const configSchema = {
             "TX Power": { required: false, type: "number" },
             "Frequency": { required: false, type: "string" },
             "Frequency Profile": { required: false, type: "string" },
+            "Band Preferences": { required: false, type: "object" },
             "Planner Preference": { required: false, type: "string" },
             "Use Random Offset": { required: false, type: "boolean" }
         }
@@ -1620,6 +1621,18 @@ function populateConfig(callback = null) {
                 if (!["existing_common", "wrc15"].includes(frequencyProfile)) {
                     frequencyProfile = "existing_common";
                 }
+                const bandPreferencesValue = getConfigValue(
+                    wspr, "WSPR", "Band Preferences", {}
+                );
+                currentWsprBandPreferences = bandPreferencesValue &&
+                    typeof bandPreferencesValue === "object" &&
+                    !Array.isArray(bandPreferencesValue)
+                    ? { ...bandPreferencesValue }
+                    : {};
+                const frequencyPreference60m =
+                    ["60m:legacy", "60m:wrc15"].includes(currentWsprBandPreferences["60m"])
+                        ? currentWsprBandPreferences["60m"]
+                        : "";
 
                 let transmit = getConfigBoolValue(
                     operation,
@@ -1876,6 +1889,7 @@ function populateConfig(callback = null) {
                     }
                     $("#planner_preference").val(plannerPreference).trigger("change");
                     $("#frequency_profile").val(frequencyProfile).trigger("change");
+                    $("#frequency_preference_60m").val(frequencyPreference60m).trigger("change");
                     $("#transmit_backend").val(transmitBackend).trigger("change");
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
