@@ -541,8 +541,144 @@ legend {
 }
 
 .config-wspr-secondary-row {
-    grid-template-columns: minmax(0, 0.95fr) minmax(12rem, 0.8fr) minmax(0, 1.2fr);
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.2fr);
     margin-top: 0.95rem;
+}
+
+.band-preferences {
+    margin-top: 1rem;
+    border-top: 1px solid var(--bs-border-color);
+    padding-top: 0.85rem;
+}
+
+.band-preferences > summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 2.75rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.band-preferences__summary,
+.band-preferences__status {
+    color: var(--bs-secondary-color);
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
+.band-preferences__intro {
+    max-width: 72ch;
+}
+
+.band-preferences__status {
+    margin-bottom: 0.65rem;
+}
+
+.band-preferences__table-wrap {
+    overflow-x: auto;
+}
+
+.band-preferences__table {
+    min-width: 52rem;
+    margin-bottom: 0;
+    vertical-align: middle;
+}
+
+.band-preferences__table th {
+    color: var(--bs-secondary-color);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.band-preferences__table td {
+    min-width: 8rem;
+}
+
+.band-preferences__table td:first-child {
+    min-width: 5rem;
+    font-weight: 600;
+}
+
+.band-preferences__selection {
+    display: grid;
+    grid-template-columns: minmax(9rem, 1fr) auto;
+    gap: 0.4rem;
+}
+
+.band-preference-preset[hidden],
+.band-preference-custom[hidden],
+.band-preference-clear[hidden],
+.band-preference-default-label[hidden] {
+    display: none;
+}
+
+.band-preference-default-label {
+    align-self: center;
+    color: var(--bs-secondary-color);
+}
+
+.band-preferences__value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.band-preferences__error {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--bs-danger-text-emphasis);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 767.98px) {
+    .band-preferences > summary {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .band-preferences__table-wrap {
+        overflow: visible;
+    }
+
+    .band-preferences__table,
+    .band-preferences__table tbody,
+    .band-preferences__table tr,
+    .band-preferences__table td {
+        display: block;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .band-preferences__table thead {
+        display: none;
+    }
+
+    .band-preferences__table tr {
+        padding: 0.85rem 0;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .band-preferences__table td {
+        display: grid;
+        grid-template-columns: minmax(6.5rem, 0.65fr) minmax(0, 1.35fr);
+        gap: 0.7rem;
+        padding: 0.3rem 0;
+        border: 0;
+    }
+
+    .band-preferences__table td::before {
+        content: attr(data-label);
+        color: var(--bs-secondary-color);
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .band-preferences__selection {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
 }
 
 .config-wspr-top-row__item {

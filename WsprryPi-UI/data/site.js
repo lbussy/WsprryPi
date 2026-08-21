@@ -136,6 +136,10 @@ const CANONICAL_WSPR_BAND_NAMES = Object.freeze([
     "2200m", "630m", "160m", "80m", "60m", "40m", "30m",
     "20m", "17m", "15m", "12m", "10m", "6m", "4m", "2m", "1.25m", "70cm"
 ]);
+const EFFECTIVE_WSPR_BAND_NAMES = Object.freeze([
+    "2200m", "630m", "160m", "80m", "60m", "40m", "30m",
+    "20m", "17m", "15m", "12m", "10m", "8m", "6m", "5m", "4m", "2m", "1.25m", "70cm"
+]);
 const TEST_TONE_SELECTION_MODES = Object.freeze({
     WSPR_BAND: "wspr_band",
     CUSTOM_RF: "custom_rf"
@@ -1629,11 +1633,6 @@ function populateConfig(callback = null) {
                     !Array.isArray(bandPreferencesValue)
                     ? { ...bandPreferencesValue }
                     : {};
-                const frequencyPreference60m =
-                    ["60m:legacy", "60m:wrc15"].includes(currentWsprBandPreferences["60m"])
-                        ? currentWsprBandPreferences["60m"]
-                        : "";
-
                 let transmit = getConfigBoolValue(
                     operation,
                     "Operation",
@@ -1889,7 +1888,9 @@ function populateConfig(callback = null) {
                     }
                     $("#planner_preference").val(plannerPreference).trigger("change");
                     $("#frequency_profile").val(frequencyProfile).trigger("change");
-                    $("#frequency_preference_60m").val(frequencyPreference60m).trigger("change");
+                    if (typeof renderBandPreferenceRows === "function") {
+                        renderBandPreferenceRows();
+                    }
                     $("#transmit_backend").val(transmitBackend).trigger("change");
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
@@ -2324,22 +2325,28 @@ function validateWsprBandCatalog(response) {
         return null;
     }
 
-    if (!Array.isArray(response.bands) ||
-        response.bands.length !== CANONICAL_WSPR_BAND_NAMES.length) {
+    if (!Array.isArray(response.bands) || !Array.isArray(response.presets) ||
+        !response.band_preferences || typeof response.band_preferences !== "object" ||
+        Array.isArray(response.band_preferences)) {
         return null;
     }
 
     const nextCatalog = Object.create(null);
-    for (let index = 0; index < CANONICAL_WSPR_BAND_NAMES.length; index += 1) {
+    let previousBandIndex = -1;
+    for (let index = 0; index < response.bands.length; index += 1) {
         const entry = response.bands[index];
+        const bandIndex = EFFECTIVE_WSPR_BAND_NAMES.indexOf(entry?.band);
         if (!entry || typeof entry !== "object" || Array.isArray(entry) ||
-            entry.band !== CANONICAL_WSPR_BAND_NAMES[index] ||
+            bandIndex <= previousBandIndex ||
             typeof entry.dial_frequency_hz !== "number" ||
             !Number.isSafeInteger(entry.dial_frequency_hz) || entry.dial_frequency_hz <= 0 ||
             typeof entry.tone_frequency_hz !== "number" ||
-            !Number.isSafeInteger(entry.tone_frequency_hz) || entry.tone_frequency_hz <= 0) {
+            !Number.isSafeInteger(entry.tone_frequency_hz) || entry.tone_frequency_hz <= 0 ||
+            !["built_in_preset", "profile_preset", "band_preference_preset", "band_preference_numeric"].includes(entry.resolution_source) ||
+            !(entry.preset === null || typeof entry.preset === "string")) {
             return null;
         }
+        previousBandIndex = bandIndex;
 
         const expectedToneFrequencyHz = entry.dial_frequency_hz + audioOffsetHz;
         if (!Number.isSafeInteger(expectedToneFrequencyHz) ||
@@ -2350,9 +2357,26 @@ function validateWsprBandCatalog(response) {
         nextCatalog[entry.band] = entry.dial_frequency_hz;
     }
 
+    if (CANONICAL_WSPR_BAND_NAMES.some((band) => !Number.isSafeInteger(nextCatalog[band]))) {
+        return null;
+    }
+
+    for (const preset of response.presets) {
+        if (!preset || typeof preset !== "object" || Array.isArray(preset) ||
+            typeof preset.preset !== "string" || !/^[a-z0-9.]+(?::[a-z0-9_]+)?$/.test(preset.preset) ||
+            !CANONICAL_WSPR_BAND_NAMES.includes(preset.band) ||
+            !Number.isSafeInteger(preset.dial_frequency_hz) || preset.dial_frequency_hz <= 0 ||
+            typeof preset.existing_common !== "boolean") {
+            return null;
+        }
+    }
+
     return {
         audioOffsetHz,
-        dialFrequenciesHz: nextCatalog
+        dialFrequenciesHz: nextCatalog,
+        bands: response.bands.map((entry) => ({ ...entry })),
+        presets: response.presets.map((entry) => ({ ...entry })),
+        bandPreferences: { ...response.band_preferences }
     };
 }
 
@@ -2364,7 +2388,7 @@ function invalidTestToneSelection(error) {
 }
 
 function createWsprBandTestToneSelection(band, catalog) {
-    if (typeof band !== "string" || !CANONICAL_WSPR_BAND_NAMES.includes(band)) {
+    if (typeof band !== "string" || !EFFECTIVE_WSPR_BAND_NAMES.includes(band)) {
         return invalidTestToneSelection("Select a canonical WSPR band.");
     }
     if (!catalog || typeof catalog !== "object" ||
@@ -2508,7 +2532,7 @@ function configuredWsprCatalogBand(rawValue, catalog) {
             : normalized === "mf"
                 ? "630m"
                 : normalized;
-        if (CANONICAL_WSPR_BAND_NAMES.includes(canonical) &&
+        if (EFFECTIVE_WSPR_BAND_NAMES.includes(canonical) &&
             Number.isSafeInteger(catalog.dialFrequenciesHz[canonical])) {
             return canonical;
         }
@@ -2517,7 +2541,7 @@ function configuredWsprCatalogBand(rawValue, catalog) {
         if (!Number.isSafeInteger(numericFrequencyHz) || numericFrequencyHz <= 0) {
             continue;
         }
-        for (const band of CANONICAL_WSPR_BAND_NAMES) {
+        for (const band of EFFECTIVE_WSPR_BAND_NAMES) {
             if (catalog.dialFrequenciesHz[band] === numericFrequencyHz) {
                 return band;
             }
@@ -2540,7 +2564,7 @@ function populateTestToneBandOptions(catalog) {
     placeholder.textContent = "Select a WSPR band";
     select.appendChild(placeholder);
     if (catalog && catalog.dialFrequenciesHz) {
-        for (const band of CANONICAL_WSPR_BAND_NAMES) {
+        for (const band of EFFECTIVE_WSPR_BAND_NAMES) {
             if (!Number.isSafeInteger(catalog.dialFrequenciesHz[band])) {
                 continue;
             }
@@ -2648,6 +2672,9 @@ function updateWsprBandCatalog(response) {
 
     wsprBandDialFrequenciesHz = validatedCatalog.dialFrequenciesHz;
     wsprAudioOffsetHz = validatedCatalog.audioOffsetHz;
+    if (typeof updateBandPreferenceCatalog === "function") {
+        updateBandPreferenceCatalog(validatedCatalog);
+    }
     updateTestToneConfigContext(
         currentTestToneConfigContext.mode,
         currentTestToneConfigContext.wsprFrequencyValue,
@@ -2944,7 +2971,7 @@ function committedTestToneExecutionText(
     const selector = committedTestToneSelectorText(response);
     if (expectedFrequencySource === TEST_TONE_SELECTION_MODES.WSPR_BAND) {
         const expectedRf = response.dial_frequency_hz + response.audio_offset_hz;
-        if (!CANONICAL_WSPR_BAND_NAMES.includes(response.band) ||
+        if (!EFFECTIVE_WSPR_BAND_NAMES.includes(response.band) ||
             !validCommittedToneFrequency(response.dial_frequency_hz) ||
             !Number.isSafeInteger(response.audio_offset_hz) || response.audio_offset_hz < 0 ||
             !validCommittedToneFrequency(response.actual_rf_frequency_hz) ||
@@ -2971,7 +2998,7 @@ function committedTestToneExecutionText(
     }
 
     if (expectedFrequencySource === TEST_TONE_SELECTION_MODES.CUSTOM_RF) {
-        if (!CANONICAL_WSPR_BAND_NAMES.includes(response.band) ||
+        if (!EFFECTIVE_WSPR_BAND_NAMES.includes(response.band) ||
             !validCommittedToneFrequency(response.actual_rf_frequency_hz) || !selector.valid) {
             return { applicable: true, valid: false };
         }

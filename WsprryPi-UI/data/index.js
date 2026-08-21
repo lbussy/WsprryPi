@@ -13,6 +13,11 @@ let configAutosaveDirty = false;
 let lastSavedConfigPayload = "";
 let persistedStationIdentity = null;
 let currentWsprBandPreferences = {};
+let currentWsprBandPreferenceCatalog = null;
+const WSPR_BAND_PREFERENCE_NAMES = Object.freeze([
+    "2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m",
+    "15m", "12m", "10m", "8m", "6m", "5m", "4m", "2m", "1.25m", "70cm"
+]);
 let lastFailedConfigPayload = "";
 let lastFailedConfigMessage = "";
 let cwDurationPolicyLatched = false;
@@ -34,6 +39,177 @@ const cwSpacingSelectionOverride = { conventional: null, dfcw: null };
 const cwRepairRevealed = { conventional: false, dfcw: false };
 const PAIRED_PLANNING_SHORT_MESSAGE =
     "Paired planning requires a compound callsign and 6-character locator.";
+
+function validBandPreferenceValue(value) {
+    return (typeof value === "number" && Number.isSafeInteger(value) && value > 0) ||
+        (typeof value === "string" && value.length > 0);
+}
+
+function formatBandPreferenceFrequency(value) {
+    return Number.isSafeInteger(value) && value > 0
+        ? `${value.toLocaleString("en-US")} Hz`
+        : "Unavailable";
+}
+
+function bandPreferenceMode(value) {
+    if (typeof value === "number") return "custom";
+    if (typeof value === "string" && value) return "preset";
+    return "default";
+}
+
+function bandPreferencePresets(band) {
+    return currentWsprBandPreferenceCatalog?.presets?.filter((entry) => entry.band === band) || [];
+}
+
+function defaultBandPreferenceEntry(band) {
+    const profile = String($("#frequency_profile").val() || "existing_common");
+    const presets = bandPreferencePresets(band);
+    const selectedPreset = band === "60m" && profile === "wrc15"
+        ? presets.find((entry) => entry.preset === "60m:wrc15")
+        : presets.find((entry) => entry.existing_common === true);
+    return selectedPreset || currentWsprBandPreferenceCatalog?.bands?.find((entry) => entry.band === band) || null;
+}
+
+function effectiveBandPreferenceFrequencies(band) {
+    const preference = currentWsprBandPreferences[band];
+    if (typeof preference === "number") {
+        const offset = currentWsprBandPreferenceCatalog?.audioOffsetHz;
+        return {
+            dial: preference,
+            tone: Number.isSafeInteger(offset) ? preference + offset : null
+        };
+    }
+    if (typeof preference === "string") {
+        const preset = bandPreferencePresets(band).find((entry) => entry.preset === preference);
+        const offset = currentWsprBandPreferenceCatalog?.audioOffsetHz;
+        return {
+            dial: preset?.dial_frequency_hz,
+            tone: preset && Number.isSafeInteger(offset) ? preset.dial_frequency_hz + offset : null
+        };
+    }
+    const entry = defaultBandPreferenceEntry(band);
+    const offset = currentWsprBandPreferenceCatalog?.audioOffsetHz;
+    return {
+        dial: entry?.dial_frequency_hz,
+        tone: entry?.tone_frequency_hz ?? (entry && Number.isSafeInteger(offset)
+            ? entry.dial_frequency_hz + offset : null)
+    };
+}
+
+function validateBandPreferenceControls() {
+    let valid = true;
+    document.querySelectorAll(".band-preference-custom").forEach((field) => {
+        if (field.hidden || field.disabled) {
+            field.setCustomValidity("");
+            clearFieldValidationState(field);
+            return;
+        }
+        const raw = String(field.value || "").trim();
+        const value = Number(raw);
+        const fieldValid = /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(value);
+        field.setCustomValidity(fieldValid ? "" : "Enter a positive whole-number dial frequency in Hz.");
+        setFieldValidationState(field, fieldValid);
+        const error = field.closest("td")?.querySelector(".band-preferences__error");
+        if (error) error.textContent = fieldValid ? "" : field.validationMessage;
+        valid = valid && fieldValid;
+    });
+    return valid;
+}
+
+function updateBandPreferenceSummary() {
+    const count = Object.values(currentWsprBandPreferences).filter(validBandPreferenceValue).length;
+    const summary = document.getElementById("band-preferences-summary");
+    if (summary) summary.textContent = count === 0 ? "No custom preferences" : `${count} preference${count === 1 ? "" : "s"}`;
+}
+
+function renderBandPreferenceRows() {
+    const body = document.getElementById("band-preferences-body");
+    if (!body) return;
+    body.replaceChildren();
+    for (const band of WSPR_BAND_PREFERENCE_NAMES) {
+        const preference = currentWsprBandPreferences[band];
+        const mode = bandPreferenceMode(preference);
+        const presets = bandPreferencePresets(band);
+        const row = document.createElement("tr");
+        row.dataset.band = band;
+        const presetOptions = presets.map((entry) =>
+            `<option value="${entry.preset}">${entry.preset} — ${formatBandPreferenceFrequency(entry.dial_frequency_hz)}</option>`
+        ).join("");
+        row.innerHTML = `
+            <td data-label="Band">${band}</td>
+            <td data-label="Use"><select class="form-select band-preference-mode" aria-label="${band} preference type">
+                <option value="default">Default</option>
+                <option value="preset"${presets.length ? "" : " disabled"}>Preset</option>
+                <option value="custom">Custom</option>
+            </select></td>
+            <td data-label="Selection"><div class="band-preferences__selection">
+                <span class="band-preference-default-label">Built-in default</span>
+                <select class="form-select band-preference-preset" aria-label="${band} named preset">${presetOptions}</select>
+                <input class="form-control band-preference-custom" type="text" inputmode="numeric" autocomplete="off" aria-label="${band} custom dial frequency in Hz" placeholder="Dial Hz">
+                <button type="button" class="btn btn-outline-secondary band-preference-clear" aria-label="Clear ${band} preference">Clear</button>
+            </div><span class="band-preferences__error" aria-live="polite"></span></td>
+            <td data-label="Effective dial" class="band-preferences__value band-preference-dial"></td>
+            <td data-label="Effective RF" class="band-preferences__value band-preference-tone"></td>`;
+        body.appendChild(row);
+        row.querySelector(".band-preference-mode").value = mode;
+        row.querySelector(".band-preference-preset").value = typeof preference === "string" ? preference : (presets[0]?.preset || "");
+        row.querySelector(".band-preference-custom").value = typeof preference === "number" ? String(preference) : "";
+    }
+    refreshBandPreferenceRows();
+}
+
+function refreshBandPreferenceRows() {
+    document.querySelectorAll("#band-preferences-body tr").forEach((row) => {
+        const band = row.dataset.band;
+        const mode = row.querySelector(".band-preference-mode").value;
+        const preset = row.querySelector(".band-preference-preset");
+        const custom = row.querySelector(".band-preference-custom");
+        row.querySelector(".band-preference-default-label").hidden = mode !== "default";
+        preset.hidden = mode !== "preset";
+        preset.disabled = mode !== "preset";
+        custom.hidden = mode !== "custom";
+        custom.disabled = mode !== "custom";
+        row.querySelector(".band-preference-clear").hidden = mode === "default";
+        const effective = effectiveBandPreferenceFrequencies(band);
+        row.querySelector(".band-preference-dial").textContent = formatBandPreferenceFrequency(effective.dial);
+        row.querySelector(".band-preference-tone").textContent = formatBandPreferenceFrequency(effective.tone);
+    });
+    validateBandPreferenceControls();
+    updateBandPreferenceSummary();
+}
+
+function updateBandPreferenceCatalog(catalog) {
+    currentWsprBandPreferenceCatalog = catalog;
+    const status = document.getElementById("band-preferences-status");
+    if (status) status.textContent = catalog
+        ? `Effective RF includes the ${formatBandPreferenceFrequency(catalog.audioOffsetHz)} audio offset.`
+        : "Effective frequencies are unavailable while the controller catalog is unavailable.";
+    renderBandPreferenceRows();
+}
+
+function handleBandPreferenceInput(event) {
+    const row = event.target.closest("tr[data-band]");
+    if (!row) return;
+    const band = row.dataset.band;
+    const mode = row.querySelector(".band-preference-mode").value;
+    if (mode === "default") {
+        delete currentWsprBandPreferences[band];
+    } else if (mode === "preset") {
+        const value = row.querySelector(".band-preference-preset").value;
+        if (value) currentWsprBandPreferences[band] = value;
+    } else {
+        const raw = String(row.querySelector(".band-preference-custom").value || "").trim();
+        const value = Number(raw);
+        if (/^[1-9]\d*$/.test(raw) && Number.isSafeInteger(value)) {
+            currentWsprBandPreferences[band] = value;
+        } else {
+            delete currentWsprBandPreferences[band];
+        }
+    }
+    refreshBandPreferenceRows();
+    validatePage();
+    scheduleAutosave();
+}
 
 function browserOfflineConfigMessage() {
     return "This browser is offline. Changes stay local until the connection returns.";
@@ -260,11 +436,7 @@ function restorePersistedConfigDraft() {
         !Array.isArray(wspr["Band Preferences"])
         ? { ...wspr["Band Preferences"] }
         : {};
-    $("#frequency_preference_60m")
-        .val(["60m:legacy", "60m:wrc15"].includes(currentWsprBandPreferences["60m"])
-            ? currentWsprBandPreferences["60m"]
-            : "")
-        .trigger("change");
+    renderBandPreferenceRows();
     $("#transmit_backend").val(String(operation["Transmit Backend"] || "gpio")).trigger("change");
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
@@ -517,6 +689,20 @@ function bindIndexActions() {
         "input blur",
         validateTransmitterHardwareFields
     );
+
+    $("#band-preferences-body").on(
+        "input change",
+        ".band-preference-mode, .band-preference-preset, .band-preference-custom",
+        handleBandPreferenceInput
+    );
+    $("#band-preferences-body").on("click", ".band-preference-clear", function () {
+        const row = this.closest("tr[data-band]");
+        if (!row) return;
+        row.querySelector(".band-preference-mode").value = "default";
+        row.querySelector(".band-preference-custom").value = "";
+        handleBandPreferenceInput({ target: row.querySelector(".band-preference-mode") });
+    });
+    $("#frequency_profile").on("change", refreshBandPreferenceRows);
 
     // Bind any text/number/select control changes
     $(document).on(
@@ -3179,6 +3365,9 @@ function validatePage(options = {}) {
         if (!validateFrequencies()) {
             invalidCount++;
         }
+        if (!validateBandPreferenceControls()) {
+            invalidCount++;
+        }
         clearValidationState("#qrss_config");
     } else {
         activeSelectors.push("#qrss_config");
@@ -3622,13 +3811,7 @@ function buildConfigPayload(options = {}) {
     if (!["existing_common", "wrc15"].includes(frequency_profile)) {
         frequency_profile = "existing_common";
     }
-    const frequency_preference_60m = String($("#frequency_preference_60m").val() || "");
     const band_preferences = { ...currentWsprBandPreferences };
-    if (["60m:legacy", "60m:wrc15"].includes(frequency_preference_60m)) {
-        band_preferences["60m"] = frequency_preference_60m;
-    } else {
-        delete band_preferences["60m"];
-    }
     let callsign = trimIdentityValue($("#callsign").val());
     let gridsquare = trimIdentityValue($("#gridsquare").val());
     if (
@@ -4527,7 +4710,9 @@ function setHardwareControlsDisabled(disabled) {
         "#stop_transmit",
         "#planner_preference",
         "#frequency_profile",
-        "#frequency_preference_60m",
+        "#band-preferences-body select",
+        "#band-preferences-body input",
+        "#band-preferences-body button",
         "#transmit_backend",
         "#tx_pin",
         "#gpio-power-range",
