@@ -46,4 +46,12 @@ Both responses disable caching.
 Every rendered page embeds the installed identity and uses it as the cache key
 for UI assets. These endpoints are ordinary Apache/PHP UI resources; they are
 not proxied to the running service. `/wsprrypi/version` remains the service
-version endpoint. Refresh-dialog and installer behavior are outside this slice.
+version endpoint.
+
+An open page polls the UI-owned identity endpoint. A changed installed identity
+prompts once for a refresh and supplies that identity as the refresh cache key.
+A page that loads with the requested identity has converged; a mismatch instead
+shows a persistent consistency diagnostic and suppresses further prompts. A
+stable packaged or locally modified installation does not prompt, and service
+or executable version changes do not participate in UI refresh decisions.
+Installer behavior remains outside this component.

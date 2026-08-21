@@ -128,6 +128,28 @@
         visibility 0s linear 0s;
 }
 
+.ui-consistency-diagnostic {
+    max-width: 72rem;
+    margin: 0 auto 1rem;
+    overflow-wrap: anywhere;
+    border-color: color-mix(in srgb, var(--wspr-state-warning) 58%, var(--bs-border-color));
+}
+
+.ui-consistency-diagnostic__title {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.35rem;
+    font-family: var(--font-display);
+    font-size: var(--text-body-strong);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+}
+
+.ui-consistency-diagnostic__message {
+    max-width: 68ch;
+}
+
 /* ------------------------------------------------------------
        Nav Items Wrapping
 ------------------------------------------------------------ */

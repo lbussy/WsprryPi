@@ -27,9 +27,7 @@ $pathConfig = [
     window.currentPage = <?= json_encode($legacyCurrentPage) ?>;
     window.WSPRRYPI_VIEW = <?= json_encode($activeView) ?>;
     window.WSPRRYPI_PATHS = <?= json_encode($pathConfig, JSON_UNESCAPED_SLASHES) ?>;
-    window.WSPRRYPI_UI_VERSION = <?= json_encode(getWsprryPiUiVersion()) ?>;
     window.WSPRRYPI_INSTALLED_UI_BUILD_ID = <?= json_encode(getWsprryPiInstalledUiBuildId()) ?>;
-    window.WSPRRYPI_UI_BUILD_ID = window.WSPRRYPI_INSTALLED_UI_BUILD_ID;
 </script>
 <script>
     (function () {

@@ -656,12 +656,13 @@ int main()
             site_source.find("preserveLineBreaks = options.preserveLineBreaks === true") != std::string::npos,
         "shared confirm modal must support preserving diagnostic line breaks for detail dialogs");
     require(
-        site_source.find("let dismissedUiRefreshVersion = null;") != std::string::npos &&
+        site_source.find("let dismissedUiRefreshVersion = null;") == std::string::npos &&
             site_source.find("let dismissedUiRefreshBuildId = null;") != std::string::npos &&
             site_source.find("const UI_BUILD_POLL_INTERVAL_MS = 60 * 1000;") != std::string::npos &&
+            site_source.find("const UI_REFRESH_REQUEST_PARAM = \"ui_refresh\";") != std::string::npos &&
             site_source.find("const GITHUB_UPDATE_POLL_INTERVAL_MS = 60 * 60 * 1000;") != std::string::npos &&
-            site_source.find("window.WSPRRYPI_UI_VERSION") != std::string::npos &&
-            site_source.find("window.WSPRRYPI_UI_BUILD_ID") != std::string::npos &&
+            site_source.find("window.WSPRRYPI_INSTALLED_UI_BUILD_ID") != std::string::npos &&
+            site_source.find("window.WSPRRYPI_UI_BUILD_ID") == std::string::npos &&
             site_source.find("let githubUpdatePollTimer = null;") != std::string::npos &&
             site_source.find("function checkUiBuildVersion()") != std::string::npos &&
             site_source.find("function initUiBuildChangePolling()") != std::string::npos &&
@@ -675,14 +676,14 @@ int main()
             site_source.find("const modalEl = document.getElementById(\"confirmModal\");") != std::string::npos &&
             site_source.find("const promptShown = showConfirmationDialog({") != std::string::npos &&
             site_source.find("uiRefreshPromptActive = promptShown === true;") != std::string::npos &&
-            site_source.find("getJsonWithEndpointFallback(VERSION_ENDPOINT)\n        .done(function (response) {\n            if (response && (response.ui_build_id || response.ui_version)) {\n                maybePromptForUiRefresh(response);") != std::string::npos &&
+            site_source.find("getJsonWithEndpointFallback(UI_IDENTITY_ENDPOINT)\n        .done(function (response) {\n            if (response && response.installed_ui_build_id) {\n                maybePromptForUiRefresh(response);") != std::string::npos &&
             site_source.find("// Start UI build polling from global script initialization as soon as site.js") != std::string::npos &&
             site_source.find("initUiBuildChangePolling();\ninitGithubUpdatePolling();\n\nfunction getPersistedTabStorageKey") != std::string::npos &&
             site_source.find("initUiBuildChangePolling();\n    initGithubUpdatePolling();\n    populateConfig();") != std::string::npos &&
             site_source.find("initGithubUpdatePolling();\n    populateConfig();") != std::string::npos &&
             site_source.find("if (uiBuildPollTimer !== null)") != std::string::npos &&
-            site_source.find("const canCompareBuildId = loadedBuildId && normalizedServerBuildId;") != std::string::npos &&
-            site_source.find("normalizedServerBuildId === dismissedUiRefreshBuildId") != std::string::npos &&
+            site_source.find("installedBuildId === dismissedUiRefreshBuildId") != std::string::npos &&
+            site_source.find("maybePromptForUiRefresh(response);\n                checkForWsprryPiUpdate(response);") == std::string::npos &&
             web_server_source.find("j[\"ui_version\"] = get_raw_version_string();") != std::string::npos &&
             web_server_source.find("j[\"wspr_version_raw\"] = get_exe_version();") != std::string::npos &&
             web_server_source.find("j[\"wspr_version_parsed\"] = parse_version_for_update_metadata(get_exe_version());") != std::string::npos &&
@@ -691,7 +692,7 @@ int main()
             web_server_source.find("j[\"wspr_display_branch\"] = get_exe_branch();") != std::string::npos &&
             web_server_source.find("j[\"wspr_exe_version\"] = get_exe_version();") != std::string::npos &&
             web_server_source.find("j[\"wspr_commit\"] = get_exe_commit();") != std::string::npos,
-        "site.js must detect backend UI version changes using the existing /version response, and backend /version must expose raw and parsed executable version, raw branch, branch state, executable version, and commit metadata");
+        "site.js must poll the UI-owned installed identity independently while backend /version remains available only for service and update metadata");
     require(
         site_source.find("title: \"UI refresh required\"") != std::string::npos &&
             site_source.find("The WsprryPi web interface has been updated. Refresh this page to load the new web pages, CSS, and JavaScript.") != std::string::npos &&
@@ -700,18 +701,21 @@ int main()
             site_source.find("showConfirmationDialog({") != std::string::npos,
         "UI refresh prompt must use the shared Bootstrap confirmation modal path with the required copy and labels");
     require(
-        site_source.find("function refreshUiForVersion(serverVersion, serverBuildId = \"\")") != std::string::npos &&
+        site_source.find("function refreshUiForIdentity(installedBuildId)") != std::string::npos &&
             site_source.find("const url = new URL(window.location.href);") != std::string::npos &&
-            site_source.find("url.searchParams.set(\n        \"ui_refresh\",") != std::string::npos &&
+            site_source.find("url.searchParams.set(UI_REFRESH_REQUEST_PARAM, normalizedBuildId);") != std::string::npos &&
             site_source.find("window.location.replace(url.toString());") != std::string::npos &&
-            site_source.find("normalizedBuildId || normalizedVersion || Date.now().toString()") != std::string::npos &&
-            site_source.find("refreshUiForVersion(normalizedServerVersion, normalizedServerBuildId);") != std::string::npos &&
-            site_source.find("dismissedUiRefreshBuildId = normalizedServerBuildId;") != std::string::npos &&
+            site_source.find("refreshUiForIdentity(installedBuildId);") != std::string::npos &&
+            site_source.find("dismissedUiRefreshBuildId = installedBuildId;") != std::string::npos &&
+            site_source.find("function checkUiRefreshConvergence()") != std::string::npos &&
+            site_source.find("function showUiConsistencyDiagnostic(expectedBuildId, loadedBuildId)") != std::string::npos &&
+            site_source.find("uiConsistencyDiagnosticActive = true;") != std::string::npos &&
+            site_source.find("window.history.replaceState(null, \"\", url.toString());") != std::string::npos &&
             site_source.find("if (typeof options.onCancel === \"function\")") != std::string::npos &&
             site_source.find("if (typeof options.onHidden === \"function\")") != std::string::npos &&
             site_source.find("confirmModal.show();\n        return true;") != std::string::npos &&
             site_source.find("return false;") != std::string::npos,
-        "UI refresh prompt must replace the current URL with a ui_refresh cache-busting query parameter on OK and suppress repeat prompts for the same server build id on Cancel or dismiss");
+        "UI refresh must cache-bust with installed identity, verify convergence, diagnose a mismatch persistently, and suppress repeat prompts for a dismissed identity");
     require(
         site_source.find("function initFooterMetaPanelInteractions()") != std::string::npos &&
             site_source.find("document.addEventListener(\"click\", function (event) {") != std::string::npos &&
@@ -1285,9 +1289,9 @@ int main()
             site_css_source.find(".footer-meta__action") != std::string::npos,
         "footer markup must keep the native click-based About disclosure and provide a site-global update-check toggle for disabling or re-enabling checks");
     require(
-        header_source.find("window.WSPRRYPI_UI_VERSION = <?= json_encode(getWsprryPiUiVersion()) ?>;") != std::string::npos &&
+        header_source.find("window.WSPRRYPI_UI_VERSION") == std::string::npos &&
             header_source.find("window.WSPRRYPI_INSTALLED_UI_BUILD_ID = <?= json_encode(getWsprryPiInstalledUiBuildId()) ?>;") != std::string::npos &&
-            header_source.find("window.WSPRRYPI_UI_BUILD_ID = window.WSPRRYPI_INSTALLED_UI_BUILD_ID;") != std::string::npos &&
+            header_source.find("window.WSPRRYPI_UI_BUILD_ID") == std::string::npos &&
             header_source.find("'uiIdentityPath' => $basePath . '/ui-version.php'") != std::string::npos &&
             header_source.find("'uiManifestPath' => $basePath . '/ui-manifest.php'") != std::string::npos &&
             ui_version_source.find("function getWsprryPiUiVersion(): string") != std::string::npos &&

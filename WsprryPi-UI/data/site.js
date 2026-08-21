@@ -61,6 +61,10 @@ const VERSION_PATH = normalizeSameOriginPath(
     PATHS.versionPath,
     `${APP_BASE_PATH}/version`
 );
+const UI_IDENTITY_PATH = normalizeSameOriginPath(
+    PATHS.uiIdentityPath,
+    `${APP_BASE_PATH}/ui-version.php`
+);
 const REPAIR_PATH = normalizeSameOriginPath(
     PATHS.repairPath,
     `${APP_BASE_PATH}/config/repair`
@@ -95,6 +99,11 @@ const VERSION_ENDPOINT = createEndpointDefinition(
     "version",
     VERSION_PATH,
     buildDirectRestFallbackUrl("/version")
+);
+const UI_IDENTITY_ENDPOINT = createEndpointDefinition(
+    "UI identity",
+    UI_IDENTITY_PATH,
+    UI_IDENTITY_PATH
 );
 const REPAIR_ENDPOINT = createEndpointDefinition(
     "config/repair",
@@ -162,6 +171,7 @@ const UPDATE_MODAL_RATE_LIMIT_MS = 2 * 60 * 60 * 1000;
 const UPDATE_CHECK_RELEASES_URL = "https://github.com/WsprryPi/WsprryPi/releases";
 const UPDATE_CHECK_API_BASE = "https://api.github.com/repos/WsprryPi/WsprryPi";
 const UI_BUILD_POLL_INTERVAL_MS = 60 * 1000;
+const UI_REFRESH_REQUEST_PARAM = "ui_refresh";
 const GITHUB_UPDATE_POLL_INTERVAL_MS = 60 * 60 * 1000;
 const UPDATE_CHECK_ERROR_MESSAGES = Object.freeze({
     missing_version_data: "Update check failed: local version metadata is incomplete.",
@@ -377,12 +387,12 @@ let backendCurrentlyConnected = false;
 let websocketCurrentlyConnected = false;
 let outageBannerArmed = false;
 let pageUnloading = false;
-let dismissedUiRefreshVersion = null;
 let dismissedUiRefreshBuildId = null;
 let uiBuildPollTimer = null;
 let githubUpdatePollTimer = null;
 let uiBuildVersionCheckRunning = false;
 let uiRefreshPromptActive = false;
+let uiConsistencyDiagnosticActive = false;
 let pendingTestToneStopDisableAction = null;
 let pendingTestToneStartRequest = false;
 let unresolvedTestToneStartContext = null;
@@ -642,6 +652,9 @@ function loadPage() {
     initGithubUpdatePolling();
     populateConfig();
 }
+
+// Verify a requested refresh before polling for later installed-UI changes.
+checkUiRefreshConvergence();
 
 // Start UI build polling from global script initialization as soon as site.js
 // runs. The shared modal markup is already present before this script is
@@ -4044,7 +4057,6 @@ function updateWsprryPiVersion() {
                 lastWsprryPiVersionResponse = response;
                 versionElement.textContent = response.wspr_version;
                 versionElement.title = response.wspr_version;
-                maybePromptForUiRefresh(response);
                 checkForWsprryPiUpdate(response);
             } else {
                 versionElement.textContent = "Service unavailable";
@@ -4075,9 +4087,9 @@ function checkUiBuildVersion() {
     }
 
     uiBuildVersionCheckRunning = true;
-    getJsonWithEndpointFallback(VERSION_ENDPOINT)
+    getJsonWithEndpointFallback(UI_IDENTITY_ENDPOINT)
         .done(function (response) {
-            if (response && (response.ui_build_id || response.ui_version)) {
+            if (response && response.installed_ui_build_id) {
                 maybePromptForUiRefresh(response);
             }
         })
@@ -6436,10 +6448,6 @@ function checkForWsprryPiUpdate(response, options = {}) {
         });
 }
 
-function normalizeUiVersion(value) {
-    return typeof value === "string" ? value.trim() : "";
-}
-
 function normalizeUiBuildId(value) {
     return typeof value === "string" ? value.trim() : "";
 }
@@ -6450,23 +6458,12 @@ function sharedConfirmModalIsVisible() {
 }
 
 function maybePromptForUiRefresh(versionResponse) {
-    const loadedVersion = normalizeUiVersion(window.WSPRRYPI_UI_VERSION);
-    const loadedBuildId = normalizeUiBuildId(window.WSPRRYPI_UI_BUILD_ID);
-    const normalizedServerVersion = normalizeUiVersion(
+    const loadedBuildId = normalizeUiBuildId(window.WSPRRYPI_INSTALLED_UI_BUILD_ID);
+    const installedBuildId = normalizeUiBuildId(
         typeof versionResponse === "object" && versionResponse !== null
-            ? versionResponse.ui_version
+            ? versionResponse.installed_ui_build_id
             : versionResponse
     );
-    const normalizedServerBuildId = normalizeUiBuildId(
-        typeof versionResponse === "object" && versionResponse !== null
-            ? versionResponse.ui_build_id
-            : ""
-    );
-    const canCompareBuildId = loadedBuildId && normalizedServerBuildId;
-    const canCompareVersion = loadedVersion && normalizedServerVersion;
-    const refreshIdentity = canCompareBuildId
-        ? normalizedServerBuildId
-        : normalizedServerVersion;
 
     if (uiRefreshPromptActive && !sharedConfirmModalIsVisible()) {
         uiRefreshPromptActive = false;
@@ -6474,11 +6471,11 @@ function maybePromptForUiRefresh(versionResponse) {
 
     if (
         uiRefreshPromptActive ||
-        !refreshIdentity ||
-        (canCompareBuildId && normalizedServerBuildId === loadedBuildId) ||
-        (!canCompareBuildId && (!canCompareVersion || normalizedServerVersion === loadedVersion)) ||
-        (canCompareBuildId && normalizedServerBuildId === dismissedUiRefreshBuildId) ||
-        (!canCompareBuildId && normalizedServerVersion === dismissedUiRefreshVersion)
+        uiConsistencyDiagnosticActive ||
+        !loadedBuildId ||
+        !installedBuildId ||
+        installedBuildId === loadedBuildId ||
+        installedBuildId === dismissedUiRefreshBuildId
     ) {
         return;
     }
@@ -6496,23 +6493,15 @@ function maybePromptForUiRefresh(versionResponse) {
         confirmClass: "btn-primary",
         cancelLabel: "Cancel",
         onConfirm: () => {
-            refreshUiForVersion(normalizedServerVersion, normalizedServerBuildId);
+            refreshUiForIdentity(installedBuildId);
         },
         onCancel: () => {
-            if (canCompareBuildId) {
-                dismissedUiRefreshBuildId = normalizedServerBuildId;
-            } else {
-                dismissedUiRefreshVersion = normalizedServerVersion;
-            }
+            dismissedUiRefreshBuildId = installedBuildId;
             uiRefreshPromptActive = false;
         },
         onHidden: () => {
             if (uiRefreshPromptActive) {
-                if (canCompareBuildId) {
-                    dismissedUiRefreshBuildId = normalizedServerBuildId;
-                } else {
-                    dismissedUiRefreshVersion = normalizedServerVersion;
-                }
+                dismissedUiRefreshBuildId = installedBuildId;
                 uiRefreshPromptActive = false;
             }
         }
@@ -6521,17 +6510,56 @@ function maybePromptForUiRefresh(versionResponse) {
     uiRefreshPromptActive = promptShown === true;
 }
 
-function refreshUiForVersion(serverVersion, serverBuildId = "") {
+function refreshUiForIdentity(installedBuildId) {
     const url = new URL(window.location.href);
-    const normalizedVersion = normalizeUiVersion(serverVersion);
-    const normalizedBuildId = normalizeUiBuildId(serverBuildId);
+    const normalizedBuildId = normalizeUiBuildId(installedBuildId);
 
-    url.searchParams.set(
-        "ui_refresh",
-        normalizedBuildId || normalizedVersion || Date.now().toString()
-    );
+    if (!normalizedBuildId) {
+        return;
+    }
+
+    url.searchParams.set(UI_REFRESH_REQUEST_PARAM, normalizedBuildId);
 
     window.location.replace(url.toString());
+}
+
+function showUiConsistencyDiagnostic(expectedBuildId, loadedBuildId) {
+    const diagnostic = document.getElementById("uiConsistencyDiagnostic");
+    const message = diagnostic?.querySelector(".ui-consistency-diagnostic__message");
+
+    uiConsistencyDiagnosticActive = true;
+    if (!diagnostic || !message) {
+        debugConsole("error", "UI consistency could not be confirmed after refresh.");
+        return;
+    }
+
+    const expected = normalizeUiBuildId(expectedBuildId) || "unavailable";
+    const loaded = normalizeUiBuildId(loadedBuildId) || "unavailable";
+    message.textContent = `The requested UI identity (${expected}) did not match the page that loaded (${loaded}). The installation may still be changing. Wait for it to finish, then reload this page once.`;
+    diagnostic.classList.remove("d-none");
+}
+
+function checkUiRefreshConvergence() {
+    const url = new URL(window.location.href);
+    const expectedBuildId = normalizeUiBuildId(
+        url.searchParams.get(UI_REFRESH_REQUEST_PARAM)
+    );
+
+    if (!expectedBuildId) {
+        return true;
+    }
+
+    const loadedBuildId = normalizeUiBuildId(window.WSPRRYPI_INSTALLED_UI_BUILD_ID);
+    if (!loadedBuildId || loadedBuildId !== expectedBuildId) {
+        showUiConsistencyDiagnostic(expectedBuildId, loadedBuildId);
+        return false;
+    }
+
+    url.searchParams.delete(UI_REFRESH_REQUEST_PARAM);
+    if (window.history?.replaceState) {
+        window.history.replaceState(null, "", url.toString());
+    }
+    return true;
 }
 
 function updateClocks() {

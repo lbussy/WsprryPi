@@ -41,6 +41,16 @@ assert.match(
     "the keyboard bypass target must accept programmatic focus"
 );
 assert.match(
+    pageShell,
+    /id="uiConsistencyDiagnostic"[\s\S]*?role="status"[\s\S]*?aria-live="polite"[\s\S]*?UI consistency could not be confirmed/,
+    "the shared shell must provide a persistent, assistive-technology-readable UI consistency diagnostic"
+);
+assert.match(
+    siteCss,
+    /\.ui-consistency-diagnostic\s*{[\s\S]*?overflow-wrap:\s*anywhere;/,
+    "long UI identities must wrap without overflowing the diagnostic"
+);
+assert.match(
     logsJs,
     /isConnecting[\s\S]*?"Connecting…"[\s\S]*?btn\.disabled = isConnecting;[\s\S]*?aria-disabled/,
     "log reconnect must reject concurrent restart actions while connecting"
