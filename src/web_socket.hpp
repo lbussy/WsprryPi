@@ -140,8 +140,10 @@ private:
     std::mutex stop_mutex_;
     std::mutex test_tone_command_mutex_;
     std::mutex bounded_tone_mutex_;
+    std::condition_variable bounded_tone_cv_;
+    bool bounded_tone_stop_requested_{false};
     std::string bounded_tone_request_id_;
-    std::jthread bounded_tone_watchdog_;
+    std::thread bounded_tone_watchdog_;
     bool loopback_only_{false};
 
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop

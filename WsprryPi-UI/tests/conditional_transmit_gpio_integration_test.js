@@ -212,6 +212,39 @@ async function captureHiddenRp1Screenshot(client, outputPath, theme) {
     fs.writeFileSync(outputPath, screenshot.data, "base64");
 }
 
+async function captureBandPreferencesScreenshot(client, outputPath) {
+    await client.send("Runtime.evaluate", {
+        expression: `(() => {
+            document.documentElement.setAttribute("data-bs-theme", "light");
+            applyConfigModeSelection("WSPR");
+            const tab = document.getElementById("radio-tab");
+            document.querySelectorAll("#configTabs .nav-link").forEach((item) => {
+                item.classList.toggle("active", item === tab);
+                item.setAttribute("aria-selected", item === tab ? "true" : "false");
+            });
+            document.querySelectorAll("#configTabsContent > .tab-pane").forEach((pane) => {
+                const selected = "#" + pane.id === tab.getAttribute("data-bs-target");
+                pane.classList.toggle("active", selected);
+                pane.classList.toggle("show", selected);
+            });
+            const details = document.getElementById("band-preferences");
+            details.open = true;
+            details.scrollIntoView({ block: "start" });
+            document.scrollingElement.scrollTop = Math.max(
+                0,
+                window.scrollY + details.getBoundingClientRect().top - 120
+            );
+            document.querySelectorAll(".toast.show").forEach((toast) => toast.classList.remove("show"));
+        })()`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const screenshot = await client.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: false,
+    });
+    fs.writeFileSync(outputPath, screenshot.data, "base64");
+}
+
 async function browserTest() {
     const fail = (message) => { throw new Error(message); };
     const equal = (actual, expected, message) => {
@@ -363,14 +396,46 @@ async function browserTest() {
     equal(buildConfigPayload().WSPR["Frequency Profile"], "wrc15",
         "frequency profile selection must serialize through the Setup payload");
     field("frequency_profile").value = "existing_common";
-    equal(field("frequency_preference_60m").value, "",
+    const preferenceBands = [
+        "2200m", "630m", "160m", "80m", "60m", "40m", "30m", "20m", "17m",
+        "15m", "12m", "10m", "6m", "4m", "2m", "1.25m", "70cm"
+    ];
+    const preferenceDials = [
+        136000, 474200, 1836600, 3568600, 5287200, 7038600, 10138700,
+        14095600, 18104600, 21094600, 24924600, 28124600, 50293000, 70091000,
+        144489000, 222100000, 432300000
+    ];
+    updateBandPreferenceCatalog({
+        audioOffsetHz: 1500,
+        bands: preferenceBands.map((band, index) => ({
+            band,
+            dial_frequency_hz: preferenceDials[index],
+            tone_frequency_hz: preferenceDials[index] + 1500
+        })),
+        presets: preferenceBands.map((band, index) => ({
+            preset: band, band, dial_frequency_hz: preferenceDials[index], existing_common: true
+        })).concat([
+            { preset: "60m:legacy", band: "60m", dial_frequency_hz: 5287200, existing_common: true },
+            { preset: "60m:wrc15", band: "60m", dial_frequency_hz: 5364700, existing_common: false }
+        ])
+    });
+    const sixtyRow = document.querySelector('#band-preferences-body tr[data-band="60m"]');
+    equal(sixtyRow.querySelector(".band-preference-mode").value, "default",
         "60 m preference must default to following the selected profile");
-    field("frequency_preference_60m").value = "60m:wrc15";
+    sixtyRow.querySelector(".band-preference-mode").value = "preset";
+    sixtyRow.querySelector(".band-preference-preset").value = "60m:wrc15";
+    handleBandPreferenceInput({ target: sixtyRow.querySelector(".band-preference-preset") });
     equal(buildConfigPayload().WSPR["Band Preferences"]["60m"], "60m:wrc15",
         "60 m preference must serialize through the Setup payload");
-    field("frequency_preference_60m").value = "";
+    sixtyRow.querySelector(".band-preference-clear").click();
     ok(!Object.hasOwn(buildConfigPayload().WSPR["Band Preferences"], "60m"),
         "following the profile must remove the local 60 m override");
+    const eightRow = document.querySelector('#band-preferences-body tr[data-band="8m"]');
+    eightRow.querySelector(".band-preference-mode").value = "custom";
+    eightRow.querySelector(".band-preference-custom").value = "40680000";
+    handleBandPreferenceInput({ target: eightRow.querySelector(".band-preference-custom") });
+    equal(buildConfigPayload().WSPR["Band Preferences"]["8m"], 40680000,
+        "custom numeric band preference must serialize as a number");
 
     let matrixCases = 0;
     for (const transmit of [false, true]) {
@@ -668,7 +733,12 @@ async function main() {
         await waitFor(async () => await getStatus(
             `http://127.0.0.1:${phpPort}/index.php?page=config`) === 200,
         "local PHP fixture");
-        chromium = spawn("chromium", [
+        const chromiumExecutable = process.env.CHROME_BIN || (
+            process.platform === "darwin"
+                ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                : "chromium"
+        );
+        chromium = spawn(chromiumExecutable, [
             "--headless", "--no-sandbox", "--disable-gpu",
             `--remote-debugging-port=${debugPort}`,
             `--user-data-dir=${profileDir}`,
@@ -750,6 +820,7 @@ async function main() {
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Dark.png"), "dark");
             await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Desktop_Light.png"), "light");
             await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Desktop_Dark.png"), "dark");
+            await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Desktop.png"));
             await client.send("Emulation.setDeviceMetricsOverride", {
                 width: 390,
                 height: 844,
@@ -762,6 +833,7 @@ async function main() {
                 "transmitter-hardware-tab",
                 "#gpio-backend-panel .backend-calibration-section"
             );
+            await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Mobile.png"));
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Light.png"), "light");
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Dark.png"), "dark");
             await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Mobile_Light.png"), "light");

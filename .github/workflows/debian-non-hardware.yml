@@ -1,4 +1,4 @@
-name: Debian non-hardware validation
+name: Non-hardware validation
 
 on:
   pull_request:
@@ -14,6 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  macos-simulated-profile:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Build portable simulated profile
+        working-directory: src
+        run: |
+          make backend-capabilities-regression-test SUDO=
+          make backend-capabilities-make-regression-test SUDO=
+          make debug band-lookup-correlation-test \
+            BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
+
   strict-i2c-profile:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

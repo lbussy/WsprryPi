@@ -609,7 +609,12 @@ async function main() {
             ) === 200,
             "local PHP fixture"
         );
-        chromium = spawn("chromium", [
+        const chromiumExecutable = process.env.CHROME_BIN || (
+            process.platform === "darwin"
+                ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                : "chromium"
+        );
+        chromium = spawn(chromiumExecutable, [
             "--headless",
             "--no-sandbox",
             "--disable-gpu",

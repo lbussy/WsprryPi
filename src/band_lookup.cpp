@@ -169,6 +169,16 @@ namespace
     }};
 }
 
+std::unordered_map<std::string, std::string> preset_only_band_preferences(
+    const WsprBandPreferences &preferences)
+{
+    std::unordered_map<std::string, std::string> result;
+    for (const auto &[band, value] : preferences)
+        if (const auto *preset = std::get_if<std::string>(&value))
+            result.emplace(band, *preset);
+    return result;
+}
+
 BandLookup::BandLookup()
 {
     wsprFrequencies.reserve(
@@ -193,47 +203,19 @@ BandLookup::BandLookup()
 std::vector<WsprBandCatalogEntry>
 BandLookup::canonical_wspr_band_catalog(
     std::string_view frequency_profile,
-    const std::unordered_map<std::string, std::string> &band_preferences) const
+    const WsprBandPreferences &band_preferences) const
 {
     std::vector<WsprBandCatalogEntry> catalog;
-    catalog.reserve(CANONICAL_WSPR_BAND_DEFINITIONS.size());
-
-    std::string normalized_profile = normalize_key(std::string(frequency_profile));
-    std::replace(normalized_profile.begin(), normalized_profile.end(), '-', '_');
-
-    for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
+    catalog.reserve(wsprrypi::bands::catalog.size());
+    for (const auto &band : wsprrypi::bands::catalog)
     {
-        double dial_frequency_hz =
-            normalized_profile == "wrc15" && normalize_key(band.name) == "60m"
-                ? FREQ_60M_WRC15
-                : band.default_wspr_hz;
-        const auto preference = band_preferences.find(normalize_key(band.name));
-        if (preference != band_preferences.end())
-            dial_frequency_hz = parse_string_to_frequency(
-                preference->second, false, frequency_profile);
-        if (!std::isfinite(dial_frequency_hz) ||
-            dial_frequency_hz <= 0.0 ||
-            std::trunc(dial_frequency_hz) != dial_frequency_hz ||
-            dial_frequency_hz >
-                static_cast<double>(std::numeric_limits<std::uint64_t>::max()))
-        {
-            throw std::logic_error(
-                std::string("Cannot serialize canonical WSPR frequency for ") +
-                band.name);
-        }
-
-        std::string display_name = band.name;
-        std::transform(
-            display_name.begin(),
-            display_name.end(),
-            display_name.begin(),
-            [](unsigned char character)
-            {
-                return static_cast<char>(std::tolower(character));
-            });
-        catalog.push_back({
-            display_name,
-            static_cast<std::uint64_t>(dial_frequency_hz)});
+        const auto resolution = resolve_wspr_band_frequency(
+            band.canonical_name, frequency_profile, band_preferences);
+        if (resolution)
+            catalog.push_back({resolution->band,
+                               resolution->dial_frequency_hz,
+                               resolution->source,
+                               resolution->preset});
     }
 
     return catalog;
@@ -266,6 +248,65 @@ BandLookup::complete_wspr_preset_catalog() const
     }
 
     return catalog;
+}
+
+std::optional<WsprBandFrequencyResolution>
+BandLookup::resolve_wspr_band_frequency(
+    std::string_view canonical_band,
+    std::string_view frequency_profile,
+    const WsprBandPreferences &band_preferences) const
+{
+    const std::string band = normalize_key(std::string(canonical_band));
+    const auto preference = band_preferences.find(band);
+    if (preference != band_preferences.end())
+    {
+        if (const auto *custom = std::get_if<std::uint64_t>(&preference->second))
+        {
+            const auto correlated = lookup_ham_band(static_cast<double>(*custom));
+            if (!correlated || ham_band_to_string(*correlated) != band)
+                throw std::invalid_argument(
+                    "WSPR band preference for " + band +
+                    " must resolve within that band.");
+            return WsprBandFrequencyResolution{
+                band, *custom, std::nullopt, true,
+                WsprBandResolutionSource::BandPreferenceNumeric};
+        }
+
+        const std::string &preset = std::get<std::string>(preference->second);
+        const double resolved = parse_string_to_frequency(preset, false);
+        const auto correlated = lookup_ham_band(resolved);
+        if (!correlated || ham_band_to_string(*correlated) != band)
+            throw std::invalid_argument(
+                "WSPR band preference for " + band +
+                " must resolve within that band.");
+        return WsprBandFrequencyResolution{
+            band,
+            static_cast<std::uint64_t>(resolved),
+            normalize_key(preset),
+            false,
+            WsprBandResolutionSource::BandPreferencePreset};
+    }
+
+    std::string normalized_profile = normalize_key(std::string(frequency_profile));
+    std::replace(normalized_profile.begin(), normalized_profile.end(), '-', '_');
+    for (const auto &entry : CANONICAL_WSPR_BAND_DEFINITIONS)
+        if (normalize_key(entry.name) == band)
+        {
+            const bool profile_preset =
+                band == "60m" && normalized_profile == "wrc15";
+            return WsprBandFrequencyResolution{
+                band,
+                static_cast<std::uint64_t>(
+                    profile_preset ? FREQ_60M_WRC15 : entry.default_wspr_hz),
+                profile_preset
+                    ? std::optional<std::string>("60m:wrc15")
+                    : std::optional<std::string>(band),
+                false,
+                profile_preset
+                    ? WsprBandResolutionSource::ProfilePreset
+                    : WsprBandResolutionSource::BuiltInPreset};
+        }
+    return std::nullopt;
 }
 
 long long BandLookup::parse_frequency_string(const std::string &freq_str) const

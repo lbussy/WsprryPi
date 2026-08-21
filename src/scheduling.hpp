@@ -216,6 +216,9 @@ struct TestToneStartResult
     std::uint64_t dial_frequency_hz = 0;
     std::uint64_t audio_offset_hz = 0;
     std::uint64_t actual_rf_frequency_hz = 0;
+    WsprBandResolutionSource resolution_source =
+        WsprBandResolutionSource::BuiltInPreset;
+    std::optional<std::string> preset;
     bool selector_gpio_enabled = false;
     int selector_gpio = -1;
     bool selector_gpio_active_high = false;

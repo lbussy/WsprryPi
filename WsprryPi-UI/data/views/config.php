@@ -251,24 +251,6 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             </div>
                                         </div>
                                         <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
-                                            <label for="frequency_preference_60m" class="form-label">
-                                                60 m preference
-                                            </label>
-                                            <select
-                                                id="frequency_preference_60m"
-                                                class="form-select"
-                                                aria-describedby="frequency-preference-60m-hint"
-                                                data-bs-toggle="tooltip"
-                                                title="Optionally override the selected profile for bare 60m entries.">
-                                                <option value="">Follow frequency profile</option>
-                                                <option value="60m:legacy">Legacy — 5,287,200 Hz</option>
-                                                <option value="60m:wrc15">WRC-15 — 5,364,700 Hz</option>
-                                            </select>
-                                            <div id="frequency-preference-60m-hint" class="form-text mt-2">
-                                                Applies only to bare `60m`. Explicit numeric and qualified entries remain unchanged.
-                                            </div>
-                                        </div>
-                                        <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
                                             <label for="planner_preference" class="form-label">
                                                 Planning mode
                                             </label>
@@ -287,6 +269,33 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             </div>
                                         </div>
                                     </div>
+
+                                    <details class="band-preferences" id="band-preferences">
+                                        <summary>
+                                            <span>Band preferences</span>
+                                            <span class="band-preferences__summary" id="band-preferences-summary">No custom preferences</span>
+                                        </summary>
+                                        <p class="form-text band-preferences__intro">
+                                            Choose the default convention, a named preset, or a custom dial frequency for each bare band name. Explicit numeric and qualified frequency entries remain unchanged.
+                                        </p>
+                                        <div id="band-preferences-status" class="band-preferences__status" role="status" aria-live="polite">
+                                            Loading effective frequencies…
+                                        </div>
+                                        <div class="band-preferences__table-wrap">
+                                            <table class="table band-preferences__table">
+                                                <thead>
+                                                    <tr>
+                                                        <th scope="col">Band</th>
+                                                        <th scope="col">Use</th>
+                                                        <th scope="col">Selection</th>
+                                                        <th scope="col">Effective dial</th>
+                                                        <th scope="col">Effective RF</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="band-preferences-body"></tbody>
+                                            </table>
+                                        </div>
+                                    </details>
                                 </fieldset>
 
                             </div>

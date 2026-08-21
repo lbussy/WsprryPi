@@ -1,4 +1,5 @@
 #include "arg_parser.hpp"
+#include "backend_capabilities.hpp"
 #include "config_handler.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
@@ -28,6 +29,10 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 
 #define private public
 #include "wspr_transmit.hpp"
@@ -197,12 +202,22 @@ namespace
         const std::string &message)
     {
         char exe_path[PATH_MAX] = {0};
+#if defined(__APPLE__)
+        std::uint32_t exe_path_capacity = sizeof(exe_path);
+        const bool resolved_executable_path =
+            _NSGetExecutablePath(exe_path, &exe_path_capacity) == 0;
+#else
         const ssize_t exe_path_length =
             readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+        const bool resolved_executable_path = exe_path_length > 0;
+        if (resolved_executable_path)
+        {
+            exe_path[exe_path_length] = '\0';
+        }
+#endif
         require(
-            exe_path_length > 0,
+            resolved_executable_path,
             message + " must resolve the current test binary path");
-        exe_path[exe_path_length] = '\0';
 
         pid_t pid = fork();
         require(pid >= 0, message + " must be able to fork a child process");
@@ -699,10 +714,16 @@ int main(int argc, char *argv[])
         }
     }
 
+#if WSPRRYPI_BACKEND_RPI_GPIO || WSPRRYPI_BACKEND_RP1_GPCLK || WSPRRYPI_BACKEND_SI5351
     {
         ScopedTemporaryFile conflict_ini("/tmp/wsprrypi-gpio-migration-conflict-XXXXXX");
         iniFile.set_filename(conflict_ini.path());
         auto conflict_data = make_managed_ini_data("AA0NT", "EM18", "20m", false);
+#if !WSPRRYPI_BACKEND_RPI_GPIO && WSPRRYPI_BACKEND_SI5351
+        conflict_data["Operation"]["Transmit Backend"] = "si5351";
+#elif !WSPRRYPI_BACKEND_RPI_GPIO && WSPRRYPI_BACKEND_RP1_GPCLK
+        set_raspberry_pi_generation_override_for_test(5);
+#endif
         conflict_data["GPIO"]["Use System Clock Frequency Estimate"] = "true";
         conflict_data["GPIO"]["Use NTP"] = "false";
         iniFile.setData(conflict_data);
@@ -718,11 +739,16 @@ int main(int argc, char *argv[])
                 return warning.find("conflicts with GPIO.Use System Clock Frequency Estimate") !=
                     std::string::npos;
             });
+        require(conflict_candidate.valid,
+                "GPIO estimate conflict migration must produce a valid configuration: " +
+                    conflict_candidate.error_reason);
+        require(conflict_candidate.migration_required,
+                "GPIO estimate conflict must require migration");
         require(
-            conflict_candidate.valid && conflict_candidate.migration_required &&
-                conflict_candidate.normalized_config.gpio_use_system_clock_frequency_estimate &&
-                conflict_warning,
-            "the canonical GPIO estimate key must win a legacy conflict and produce a clear warning");
+            conflict_candidate.normalized_config.gpio_use_system_clock_frequency_estimate,
+            "the canonical GPIO estimate value must win a legacy conflict");
+        require(conflict_warning,
+                "GPIO estimate conflict migration must produce a clear warning");
         commit_config_candidate(conflict_candidate);
         std::ifstream conflict_file(conflict_ini.path());
         const std::string conflict_text(
@@ -731,7 +757,11 @@ int main(int argc, char *argv[])
         require(
             conflict_text.find("Use NTP =") == std::string::npos,
             "conflict migration must remove the retired key after retaining the canonical value");
+#if !WSPRRYPI_BACKEND_RPI_GPIO && !WSPRRYPI_BACKEND_SI5351 && WSPRRYPI_BACKEND_RP1_GPCLK
+        clear_pi_generation_override_for_scope();
+#endif
     }
+#endif
 
     {
         init_config_json();
@@ -1362,6 +1392,7 @@ int main(int argc, char *argv[])
         clear_si5351_detection_override_for_scope();
     }
 
+#if WSPRRYPI_BACKEND_SI5351
     {
         set_raspberry_pi_generation_override_for_test(5);
 
@@ -1411,6 +1442,7 @@ int main(int argc, char *argv[])
 
         clear_pi_generation_override_for_scope();
     }
+#endif
 
     {
         WsprTransmitter transmitter;
@@ -1514,6 +1546,44 @@ int main(int argc, char *argv[])
                 "WSPR frequency profile must serialize through the configuration model");
         require(jConfig["WSPR"].at("Band Preferences").at("60m") == "60m:legacy",
                 "WSPR band preferences must serialize through the configuration model");
+    }
+
+    {
+        init_config_json();
+        jConfig["WSPR"]["Band Preferences"] = {
+            {"20m", 14095650},
+            {"60m", "60m:wrc15"},
+            {"8m", 40680000},
+            {"5m", 60000000}};
+        jConfig["WSPR"]["Frequency"] = "20m 60m 8m 5m";
+        json_to_config();
+
+        require(
+            std::get<std::uint64_t>(config.wspr.band_preferences.at("20m")) ==
+                    14095650 &&
+                std::get<std::string>(config.wspr.band_preferences.at("60m")) ==
+                    "60m:wrc15",
+            "configuration must retain typed numeric and preset band preferences");
+        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 4 &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[0].dial_frequency_hz,
+                        14095650.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[1].dial_frequency_hz,
+                        5364700.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[2].dial_frequency_hz,
+                        40680000.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[3].dial_frequency_hz,
+                        60000000.0),
+            "numeric preferences, including configured-only 8m and 5m, must drive scheduler dial resolution");
+        config_to_json();
+        require(
+            jConfig["WSPR"].at("Band Preferences").at("20m").is_number_unsigned() &&
+                jConfig["WSPR"].at("Band Preferences").at("20m") == 14095650 &&
+                jConfig["WSPR"].at("Band Preferences").at("60m") == "60m:wrc15",
+            "typed band preferences must serialize without changing representation");
     }
 
     {
@@ -5424,6 +5494,7 @@ int main(int argc, char *argv[])
                 nearly_equal(tone_payload->frequency_hz, tone_request.actual_rf_frequency_hz),
             "disabled-scheduler Si5351 test tone start must expose the committed tone frequency through the controller request");
 
+#if WSPRRYPI_BACKEND_SI5351
         set_raspberry_pi_generation_override_for_test(5);
         wsprrypi::ExecutionPlan plan =
             wsprrypi::ExecutionPlanCompiler{}.compile(*controller_request);
@@ -5452,6 +5523,7 @@ int main(int argc, char *argv[])
             execute_result.ok,
             "disabled-scheduler Si5351 test tone dry-run execution must not fail through the canonical backend path");
         clear_pi_generation_override_for_scope();
+#endif
 
         wsprTransmitter.backendSetStateValue(WsprTransmitter::State::TRANSMITTING);
         const TestToneStopResult tone_stop_result = end_test_tone();
@@ -5518,6 +5590,7 @@ int main(int argc, char *argv[])
             "custom 2 m Test Tone must preserve requested RF in the "
             "controller payload");
 
+#if WSPRRYPI_BACKEND_SI5351
         set_raspberry_pi_generation_override_for_test(5);
         const wsprrypi::ExecutionPlan calibrated_plan =
             wsprrypi::ExecutionPlanCompiler{}.compile(
@@ -5548,6 +5621,7 @@ int main(int argc, char *argv[])
             "calibrated custom 2 m Test Tone must execute through the "
             "canonical dry-run Si5351 backend");
         clear_pi_generation_override_for_scope();
+#endif
 
         wsprTransmitter.backendSetStateValue(
             WsprTransmitter::State::TRANSMITTING);

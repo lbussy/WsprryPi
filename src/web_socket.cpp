@@ -214,7 +214,11 @@ void WebSocketServer::stop()
     // Close the command gate before joining the watchdog. Existing client
     // handlers may still finish, but no new bounded transaction may arm.
     running_ = false;
-    bounded_tone_watchdog_.request_stop();
+    {
+        std::lock_guard<std::mutex> lock(bounded_tone_mutex_);
+        bounded_tone_stop_requested_ = true;
+    }
+    bounded_tone_cv_.notify_all();
     if (bounded_tone_watchdog_.joinable())
         bounded_tone_watchdog_.join();
     bool bounded_tone_was_active = false;
@@ -225,9 +229,6 @@ void WebSocketServer::stop()
     }
     if (bounded_tone_was_active)
     {
-        bounded_tone_watchdog_.request_stop();
-        if (bounded_tone_watchdog_.joinable())
-            bounded_tone_watchdog_.join();
         std::lock_guard<std::mutex> command_lock(test_tone_command_mutex_);
         const TestToneStopResult stopped = end_test_tone();
         if (!stopped.stopped)
@@ -565,6 +566,9 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                         reply["duration_ms"] = parsed.request->duration_ms;
                         if (start_result.started)
                         {
+                            if (bounded_tone_watchdog_.joinable())
+                                bounded_tone_watchdog_.join();
+                            bounded_tone_stop_requested_ = false;
                             bounded_tone_request_id_ =
                                 parsed.request->request_id;
                             try
@@ -573,21 +577,20 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                                     parsed.request->request_id;
                                 const auto duration = std::chrono::milliseconds(
                                     parsed.request->duration_ms);
-                                bounded_tone_watchdog_ = std::jthread(
-                                    [this, request_id, duration](
-                                        std::stop_token stop_token) {
-                                        std::mutex wait_mutex;
-                                        std::condition_variable_any wait_cv;
-                                        std::unique_lock<std::mutex> wait_lock(
-                                            wait_mutex);
-                                        if (wait_cv.wait_for(
-                                                wait_lock,
-                                                stop_token,
-                                                duration,
-                                                [] { return false; }))
-                                            return;
-                                        if (stop_token.stop_requested())
-                                            return;
+                                bounded_tone_watchdog_ = std::thread(
+                                    [this, request_id, duration] {
+                                        {
+                                            std::unique_lock<std::mutex> wait_lock(
+                                                bounded_tone_mutex_);
+                                            if (bounded_tone_cv_.wait_for(
+                                                    wait_lock,
+                                                    duration,
+                                                    [this, &request_id] {
+                                                        return bounded_tone_stop_requested_ ||
+                                                            bounded_tone_request_id_ != request_id;
+                                                    }))
+                                                return;
+                                        }
                                         std::lock_guard<std::mutex> command_lock(
                                             test_tone_command_mutex_);
                                         {
@@ -631,12 +634,15 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         }
         else if (cmd == "tone_end")
         {
-            bounded_tone_watchdog_.request_stop();
             {
                 std::lock_guard<std::mutex> bounded_lock(
                     bounded_tone_mutex_);
+                bounded_tone_stop_requested_ = true;
                 bounded_tone_request_id_.clear();
             }
+            bounded_tone_cv_.notify_all();
+            if (bounded_tone_watchdog_.joinable())
+                bounded_tone_watchdog_.join();
             llog.logS(DEBUG, "Received JSON test_tone_stop command.");
             const TestToneStopResult stop_result = end_test_tone();
             reply["command"] = "tone_end";

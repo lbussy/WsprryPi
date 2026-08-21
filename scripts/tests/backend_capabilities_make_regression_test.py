@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts" / "generate_backend_capabilities.py"
 RULES = ROOT / "scripts" / "backend_capability_rules.mk"
+PRODUCTION_MAKEFILE = ROOT / "src" / "Makefile"
 DEFAULT = "rpi-gpio,rp1-gpclk,si5351,simulated"
 
 
@@ -46,6 +47,11 @@ def makefile() -> str:
 
 
 def main() -> int:
+    production_makefile = PRODUCTION_MAKEFILE.read_text(encoding="utf-8")
+    assert (
+        "$(GPIO_BAND_POLICY_TEST_OBJ): $(BACKEND_CAPABILITIES_HEADER)"
+    ) in production_makefile
+
     with tempfile.TemporaryDirectory(prefix="wsprrypi-backend-make-") as temporary:
         fixture = Path(temporary)
         (fixture / "fixture.cpp").write_text("fixture\n", encoding="utf-8")

@@ -591,10 +591,26 @@ function validCatalog(offset = 1500) {
         status: "ok",
         audio_offset_hz: offset,
         frequency_profile: "existing_common",
+        band_preferences: {},
         bands: canonicalBands.map((band, index) => {
             const dial = dialFrequenciesHz[index];
-            return { band, dial_frequency_hz: dial, tone_frequency_hz: dial + offset };
+            return {
+                band,
+                dial_frequency_hz: dial,
+                tone_frequency_hz: dial + offset,
+                resolution_source: "built_in_preset",
+                preset: band
+            };
         }),
+        presets: canonicalBands.map((band, index) => ({
+            preset: band,
+            band,
+            dial_frequency_hz: dialFrequenciesHz[index],
+            existing_common: true
+        })).concat([
+            { preset: "60m:legacy", band: "60m", dial_frequency_hz: 5287200, existing_common: true },
+            { preset: "60m:wrc15", band: "60m", dial_frequency_hz: 5364700, existing_common: false }
+        ]),
     };
 }
 function assertStartDisabled(message) {

@@ -3805,6 +3805,8 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         result.band = frequency_plan.band;
         result.dial_frequency_hz = frequency_plan.dial_frequency_hz.value_or(0);
         result.audio_offset_hz = frequency_plan.audio_offset_hz.value_or(0);
+        result.resolution_source = frequency_plan.resolution_source;
+        result.preset = frequency_plan.preset;
     }
     else
     {
