@@ -134,7 +134,7 @@ void LCBLog::log(LogLevel level, Args&&... args)
 
     auto entry = std::make_unique<LogEntry>();
     entry->level = level;
-    entry->msg   = std::move(oss.str());
+    entry->msg   = oss.str();
     entry->dest = (level >= LogLevel::ERROR
                        ? ::LogEntry::Err
                        : ::LogEntry::Out);

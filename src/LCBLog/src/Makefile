@@ -52,9 +52,6 @@ CPP_SOURCES := $(shell find . -name "*.cpp" ! -path "./*/main.cpp")
 C_OBJECTS   := $(patsubst %.c,$(OBJ_DIR_RELEASE)/%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst %.cpp,$(OBJ_DIR_RELEASE)/%.o,$(CPP_SOURCES))
 
-# Linker Flags
-LDFLAGS := -lpthread  -latomic
-
 # Collect dependency files
 DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
 # Include dependencies if they exist
@@ -63,6 +60,15 @@ DEPFILES := $(wildcard $(DEP_DIR)/**/*.d)
 # Compiler Executables
 CXX = g++
 CC = gcc
+HOST_OS := $(shell uname -s 2>/dev/null)
+
+# Linker Flags
+ifeq ($(HOST_OS),Linux)
+ATOMIC_LIB := -latomic
+else
+ATOMIC_LIB :=
+endif
+LDFLAGS := -lpthread $(ATOMIC_LIB)
 
 # Allow threading using all available processors unless the caller already
 # supplied or inherited a parallel job setting.
@@ -73,8 +79,15 @@ endif
 
 # Compiler Flags
 #
-# Common flags for both C and C++ compilers
-COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
+# Common flags for both C and C++ compilers. Apple Clang rejects GCC's
+# diagnostic-limit option under -Werror.
+CXX_VERSION_LINE := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+ifneq ($(findstring clang,$(CXX_VERSION_LINE)),)
+COMPILER_DIAGNOSTIC_FLAGS :=
+else
+COMPILER_DIAGNOSTIC_FLAGS := -fmax-errors=10
+endif
+COMMON_FLAGS := -Wall -Werror $(COMPILER_DIAGNOSTIC_FLAGS) -MMD -MP
 
 # C Flags
 CFLAGS := $(COMMON_FLAGS)

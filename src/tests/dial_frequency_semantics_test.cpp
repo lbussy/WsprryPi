@@ -1,4 +1,5 @@
 #include "arg_parser.hpp"
+#include "backend_capabilities.hpp"
 #include "config_handler.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
@@ -1362,6 +1363,7 @@ int main(int argc, char *argv[])
         clear_si5351_detection_override_for_scope();
     }
 
+#if WSPRRYPI_BACKEND_SI5351
     {
         set_raspberry_pi_generation_override_for_test(5);
 
@@ -1411,6 +1413,7 @@ int main(int argc, char *argv[])
 
         clear_pi_generation_override_for_scope();
     }
+#endif
 
     {
         WsprTransmitter transmitter;
@@ -5453,6 +5456,7 @@ int main(int argc, char *argv[])
                 nearly_equal(tone_payload->frequency_hz, tone_request.actual_rf_frequency_hz),
             "disabled-scheduler Si5351 test tone start must expose the committed tone frequency through the controller request");
 
+#if WSPRRYPI_BACKEND_SI5351
         set_raspberry_pi_generation_override_for_test(5);
         wsprrypi::ExecutionPlan plan =
             wsprrypi::ExecutionPlanCompiler{}.compile(*controller_request);
@@ -5481,6 +5485,7 @@ int main(int argc, char *argv[])
             execute_result.ok,
             "disabled-scheduler Si5351 test tone dry-run execution must not fail through the canonical backend path");
         clear_pi_generation_override_for_scope();
+#endif
 
         wsprTransmitter.backendSetStateValue(WsprTransmitter::State::TRANSMITTING);
         const TestToneStopResult tone_stop_result = end_test_tone();
@@ -5547,6 +5552,7 @@ int main(int argc, char *argv[])
             "custom 2 m Test Tone must preserve requested RF in the "
             "controller payload");
 
+#if WSPRRYPI_BACKEND_SI5351
         set_raspberry_pi_generation_override_for_test(5);
         const wsprrypi::ExecutionPlan calibrated_plan =
             wsprrypi::ExecutionPlanCompiler{}.compile(
@@ -5577,6 +5583,7 @@ int main(int argc, char *argv[])
             "calibrated custom 2 m Test Tone must execute through the "
             "canonical dry-run Si5351 backend");
         clear_pi_generation_override_for_scope();
+#endif
 
         wsprTransmitter.backendSetStateValue(
             WsprTransmitter::State::TRANSMITTING);

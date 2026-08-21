@@ -358,6 +358,13 @@ GPIO_BAND_POLICY_TEST_DEPS := \
 	$(GPIO_BAND_POLICY_TEST_OBJ) \
 	$(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/execution_plan_compiler.o \
 	$(OBJ_DIR_DEBUG)/./WSPR-Transmitter/src/transmission_controller.o
+# These explicitly defined semantics-test objects can include production
+# headers that consume generated capability macros. Make their generation
+# barrier explicit so parallel profile builds cannot read a stale header.
+$(SEMANTICS_TEST_OBJ) \
+$(CLEANUP_LIFECYCLE_TEST_OBJ) \
+$(UI_SOURCE_REGRESSION_TEST_OBJ) \
+$(GPIO_BAND_POLICY_TEST_OBJ): $(BACKEND_CAPABILITIES_HEADER)
 SELECTOR_SHUTDOWN_CLEANUP_TEST_SRC := tests/selector_shutdown_cleanup_test.cpp
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/selector_shutdown_cleanup_test.o
 SELECTOR_SHUTDOWN_CLEANUP_TEST_DEPS := $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
