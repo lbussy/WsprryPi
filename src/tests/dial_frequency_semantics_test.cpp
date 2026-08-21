@@ -1518,6 +1518,35 @@ int main(int argc, char *argv[])
 
     {
         init_config_json();
+        jConfig["WSPR"]["Band Preferences"] = {
+            {"20m", 14095650}, {"60m", "60m:wrc15"}};
+        jConfig["WSPR"]["Frequency"] = "20m 60m";
+        json_to_config();
+
+        require(
+            std::get<std::uint64_t>(config.wspr.band_preferences.at("20m")) ==
+                    14095650 &&
+                std::get<std::string>(config.wspr.band_preferences.at("60m")) ==
+                    "60m:wrc15",
+            "configuration must retain typed numeric and preset band preferences");
+        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 2 &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[0].dial_frequency_hz,
+                        14095600.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[1].dial_frequency_hz,
+                        5364700.0),
+            "slice one must keep custom numeric preferences operationally inert");
+        config_to_json();
+        require(
+            jConfig["WSPR"].at("Band Preferences").at("20m").is_number_unsigned() &&
+                jConfig["WSPR"].at("Band Preferences").at("20m") == 14095650 &&
+                jConfig["WSPR"].at("Band Preferences").at("60m") == "60m:wrc15",
+            "typed band preferences must serialize without changing representation");
+    }
+
+    {
+        init_config_json();
         if (jConfig.contains("WSPR") && jConfig["WSPR"].is_object())
         {
             jConfig["WSPR"].erase("WSPR Dial Frequency Set");

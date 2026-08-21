@@ -2871,7 +2871,7 @@ bool set_frequencies(ArgParserConfig &target)
                 entry.token,
                 false,
                 target.wspr.frequency_profile,
-                target.wspr.band_preferences);
+                preset_only_band_preferences(target.wspr.band_preferences));
             std::string frequency_error;
             if (!validate_cli_frequency_hz(
                     freq,

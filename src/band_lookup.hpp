@@ -60,6 +60,22 @@ struct WsprPresetCatalogEntry
     bool existing_common;
 };
 
+using WsprBandPreferenceValue = std::variant<std::string, std::uint64_t>;
+using WsprBandPreferences =
+    std::unordered_map<std::string, WsprBandPreferenceValue>;
+
+struct WsprBandFrequencyResolution
+{
+    std::string band;
+    std::uint64_t dial_frequency_hz;
+    std::optional<std::string> preset;
+    bool custom;
+};
+
+/** Return only built-in preset preferences for legacy runtime consumers. */
+std::unordered_map<std::string, std::string> preset_only_band_preferences(
+    const WsprBandPreferences &preferences);
+
 /**
  * @class BandLookup
  * @brief Provides band correlation plus separate WSPR preset conveniences.
@@ -173,6 +189,17 @@ public:
      * same canonical band.
      */
     std::vector<WsprPresetCatalogEntry> complete_wspr_preset_catalog() const;
+
+    /**
+     * @brief Resolve one canonical WSPR band through a typed local preference.
+     *
+     * @details This contract accepts built-in preset identities or integral
+     * custom USB dial frequencies. Runtime consumers are migrated separately.
+     */
+    std::optional<WsprBandFrequencyResolution> resolve_wspr_band_frequency(
+        std::string_view canonical_band,
+        std::string_view frequency_profile,
+        const WsprBandPreferences &band_preferences) const;
 
     /**
      * @brief Detect whether a numeric frequency exactly matches a legacy

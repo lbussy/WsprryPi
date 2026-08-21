@@ -82,6 +82,46 @@ int main()
             "local preference must take precedence over the selected profile");
     require(lookup.parse_string_to_frequency("60m:wrc15", false, "existing_common", preferences) == 5364700.0,
             "explicit qualified presets must take precedence over local preferences");
+    const WsprBandPreferences typed_preferences = {
+        {"60m", std::string("60m:legacy")},
+        {"20m", std::uint64_t{14095650}}};
+    const auto custom_resolution = lookup.resolve_wspr_band_frequency(
+        "20m", "existing_common", typed_preferences);
+    require(custom_resolution && custom_resolution->band == "20m" &&
+                custom_resolution->dial_frequency_hz == 14095650 &&
+                custom_resolution->custom && !custom_resolution->preset,
+            "typed numeric preference must resolve as a custom same-band dial frequency");
+    const auto preset_resolution = lookup.resolve_wspr_band_frequency(
+        "60m", "wrc15", typed_preferences);
+    require(preset_resolution && preset_resolution->dial_frequency_hz == 5287200 &&
+                !preset_resolution->custom &&
+                preset_resolution->preset == std::optional<std::string>("60m:legacy"),
+            "typed preset preference must precede the selected profile");
+    const auto profile_resolution = lookup.resolve_wspr_band_frequency(
+        "60m", "wrc15", {});
+    require(profile_resolution &&
+                profile_resolution->dial_frequency_hz == 5364700 &&
+                profile_resolution->preset ==
+                    std::optional<std::string>("60m:wrc15"),
+            "shared resolver must retain the selected profile preset identity");
+    const auto operational_preferences =
+        preset_only_band_preferences(typed_preferences);
+    require(operational_preferences.size() == 1 &&
+                operational_preferences.at("60m") == "60m:legacy",
+            "slice-one runtime projection must omit custom numeric preferences");
+    bool rejected_cross_band_custom = false;
+    try
+    {
+        (void)lookup.resolve_wspr_band_frequency(
+            "20m", "existing_common",
+            WsprBandPreferences{{"20m", std::uint64_t{7038600}}});
+    }
+    catch (const std::invalid_argument &)
+    {
+        rejected_cross_band_custom = true;
+    }
+    require(rejected_cross_band_custom,
+            "typed custom preference must remain inside its canonical band");
     require(lookup.parse_string_to_frequency("60m:legacy", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("5.2872MHz", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("20m", false, "wrc15") == 14095600.0,

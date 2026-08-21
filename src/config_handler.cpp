@@ -120,7 +120,8 @@ namespace
         snapshot.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
         snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
         snapshot.wspr_frequency_profile = source.wspr.frequency_profile;
-        snapshot.wspr_band_preferences = source.wspr.band_preferences;
+        snapshot.wspr_band_preferences =
+            preset_only_band_preferences(source.wspr.band_preferences);
         snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
         snapshot.band_gpio = source.band_gpio;
 
@@ -1809,17 +1810,42 @@ namespace
             std::transform(
                 band.begin(), band.end(), band.begin(),
                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (!item.value().is_string())
-                throw std::runtime_error("WSPR.Band Preferences values must be strings.");
-            const std::string preset = item.value().get<std::string>();
-            if (band == "60m" && preset.find(':') == std::string::npos)
+            if (item.value().is_string())
+            {
+                const std::string preset = item.value().get<std::string>();
+                if (band == "60m" && preset.find(':') == std::string::npos)
+                    throw std::runtime_error(
+                        "WSPR band preference for 60m must use a qualified preset.");
+                const double frequency =
+                    preference_lookup.parse_string_to_frequency(preset, false);
+                const auto correlated = preference_lookup.lookup_ham_band(frequency);
+                if (!correlated || band_to_string(*correlated) != band)
+                    throw std::runtime_error(
+                        "WSPR band preference for " + band +
+                        " must resolve within that band.");
+                target.wspr.band_preferences[band] = preset;
+                continue;
+            }
+            if (!item.value().is_number_unsigned() &&
+                !item.value().is_number_integer())
                 throw std::runtime_error(
-                    "WSPR band preference for 60m must use a qualified preset.");
-            const double frequency = preference_lookup.parse_string_to_frequency(preset, false);
-            const auto correlated = preference_lookup.lookup_ham_band(frequency);
+                    "WSPR.Band Preferences values must be preset strings or integral Hz values.");
+            if (item.value().is_number_integer() &&
+                !item.value().is_number_unsigned() &&
+                item.value().get<std::int64_t>() <= 0)
+                throw std::runtime_error(
+                    "WSPR band preference frequencies must be positive integral Hz values.");
+            const auto frequency = item.value().get<std::uint64_t>();
+            if (frequency == 0)
+                throw std::runtime_error(
+                    "WSPR band preference frequencies must be positive integral Hz values.");
+            const auto correlated = preference_lookup.lookup_ham_band(
+                static_cast<double>(frequency));
             if (!correlated || band_to_string(*correlated) != band)
-                throw std::runtime_error("WSPR band preference for " + band + " must resolve within that band.");
-            target.wspr.band_preferences[band] = preset;
+                throw std::runtime_error(
+                    "WSPR band preference for " + band +
+                    " must resolve within that band.");
+            target.wspr.band_preferences[band] = frequency;
         }
         target.wspr.audio_offset_hz =
             WSPR_AUDIO_OFFSET_HZ;
@@ -1984,7 +2010,17 @@ namespace
         target["WSPR"]["TX Power"] = source.wspr.power_dbm;
         target["WSPR"]["Frequency"] = source.wspr.frequencies;
         target["WSPR"]["Frequency Profile"] = source.wspr.frequency_profile;
-        target["WSPR"]["Band Preferences"] = source.wspr.band_preferences;
+        nlohmann::json serialized_band_preferences = nlohmann::json::object();
+        for (const auto &[band, preference] : source.wspr.band_preferences)
+        {
+            if (const auto *preset = std::get_if<std::string>(&preference))
+                serialized_band_preferences[band] = *preset;
+            else
+                serialized_band_preferences[band] =
+                    std::get<std::uint64_t>(preference);
+        }
+        target["WSPR"]["Band Preferences"] =
+            std::move(serialized_band_preferences);
         target["WSPR"]["Planner Preference"] =
             wspr_planner_preference_to_string(source.wspr.planner_preference);
         target["WSPR"]["Use Random Offset"] = source.use_offset;
