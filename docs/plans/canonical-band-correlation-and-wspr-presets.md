@@ -1,10 +1,9 @@
 # Canonical Band Correlation and WSPR Preset Contract
 
-Status: implementation contract for issue #332. Issue #401 is merged. This
-contract was refreshed against synchronized `devel` at
-`ad2d0cb89af7d3df8ad5e69c3d3cec27411431ec`; implementation branches must be
-created from the then-current clean, synchronized `devel` rather than an older
-issue branch.
+Status: Implemented by Issue 332. Issue 401 is merged. This document records
+the reconciled application, component, control-plane, and operator contract.
+The implementation branch was created from synchronized `devel` after the
+Issue 401 reference pass.
 
 ## Purpose
 
@@ -136,18 +135,23 @@ Frequency Profile = existing_common
 Band Preferences = {"60m":"60m:wrc15"}
 ```
 
-Preference keys are canonical bands and values are built-in preset identifiers
-that must correlate back to the same band. A 60 m preference must be qualified,
-so changing the selected profile cannot change its meaning. User-defined local
-presets may later supply a band, integral USB dial frequency, and label. A UI
-editor exposes the currently meaningful 60 m choice as Follow frequency
-profile, Legacy, or WRC-15 while preserving any other configuration-backed
-preferences it does not edit.
+Preference keys are canonical bands. Values are either built-in preset
+identifiers that correlate back to the same band or positive integral USB dial
+frequencies that correlate to that band. A 60 m preset preference must be
+qualified, so changing the selected profile cannot change its meaning. Numeric
+preferences provide the implemented local-frequency mechanism; they do not
+create new named presets.
+
+The UI exposes all 19 bands from 2200 m through 70 cm. Each row can follow the
+profile/default, select an available named preset, or use a custom integral USB
+dial frequency. It previews the effective dial and RF tone, validates before
+autosave, clears by removing only that band's preference, and preserves the
+typed preset-string or numeric representation across round trips.
 
 WSPR frequency resolution precedence is:
 
 1. explicit numeric frequency;
-2. explicit qualified preset such as `60m:us`;
+2. explicit qualified preset such as `60m:wrc15`;
 3. local per-band preference;
 4. selected WSPR frequency profile;
 5. built-in Existing/Common preset.
@@ -165,6 +169,8 @@ The implemented profile resolver currently changes only bare `60m`:
 All other bare bands retain their existing/common preset under both profiles.
 The selected profile is returned with the effective compatibility band catalog
 so Test Tone and scheduled WSPR planning resolve the same dial frequency.
+Configured numeric preferences also add `8m` and `5m` to that effective catalog;
+those bands have correlation envelopes but no built-in WSPR preset.
 
 ## Compatibility and migration
 
@@ -177,10 +183,13 @@ so Test Tone and scheduled WSPR planning resolve the same dial frequency.
   band.
 - Include both canonical band and WSPR preset identity in new control-plane
   responses and diagnostics.
+- Existing valid preset-only preference objects remain valid. Numeric values
+  are an additive extension and require no INI migration.
+- A missing or empty `Band Preferences` object preserves historical behavior.
 
 ## Post-#401 reference pass
 
-The implementation must preserve these reviewed findings:
+The implemented result preserves these reviewed findings:
 
 1. preserve the final #401 request contract and its parent/component enforcement
    boundaries, including final numeric verification in the transmitter;
@@ -196,7 +205,7 @@ The implementation must preserve these reviewed findings:
 8. define standalone component tests, parent integration tests, and the intended
    parent-repository commit scope.
 
-Implementation remains subject to repository safety, tests, documentation
+Future changes remain subject to repository safety, tests, documentation
 review, and hardware-free validation boundaries.
 
 ## Frequency references

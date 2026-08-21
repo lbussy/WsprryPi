@@ -4,6 +4,7 @@
 DEBUG := -DDEBUG_WSPR_TRANSMIT
 # C++ Version
 CXXVER := 20
+HOST_OS := $(shell uname -s 2>/dev/null)
 # Ordinary sibling components used by the standalone build.
 COMPONENT_SRCDIRS := $(wildcard ../../WSPR-Reference/src/wspr)
 COMPONENT_SRCDIRS += $(wildcard ../../Mailbox/src)
@@ -121,7 +122,10 @@ GPIO_QUALIFICATION_OBJECTS := \
 # ────────────────────────────────────────────────────────────────────────────────
 
 # Linker Flags
-LDFLAGS := -lpthread  -latomic
+LDFLAGS := -lpthread
+ifeq ($(HOST_OS),Linux)
+LDFLAGS += -latomic
+endif
 # Get packages for linker from PKG_CONFIG_PATH
 # LDFLAGS += $(shell pkg-config --cflags --libs libgpiod)
 # LDFLAGS += $(shell pkg-config --libs libgpiodcxx)
@@ -146,7 +150,14 @@ endif
 # Compiler Flags
 #
 # Common flags for both C and C++ compilers
-COMMON_FLAGS := -Wall -Werror -fmax-errors=10 -MMD -MP
+CXX_VERSION_LINE := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+ifneq ($(findstring clang,$(CXX_VERSION_LINE)),)
+COMPILER_DIAGNOSTIC_FLAGS :=
+else
+COMPILER_DIAGNOSTIC_FLAGS := -fmax-errors=10
+endif
+
+COMMON_FLAGS := -Wall -Werror $(COMPILER_DIAGNOSTIC_FLAGS) -MMD -MP
 
 # C Flags
 CFLAGS := $(COMMON_FLAGS)
@@ -156,7 +167,7 @@ C_DEBUG_FLAGS := $(CFLAGS) -g $(DEBUG)	# Debug flags
 C_RELEASE_FLAGS := $(CFLAGS) -O2		# Release optimized
 
 # C++ Flags
-CXXFLAGS := -Wno-psabi -lstdc++fs -std=c++$(CXXVER)
+CXXFLAGS := -Wno-psabi -std=c++$(CXXVER)
 CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 
 # Include paths
