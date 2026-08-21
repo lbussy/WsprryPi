@@ -114,9 +114,10 @@ a demonstrated operator-convenience need.
 
 ## WSPR frequency profiles and local preferences
 
-The parent application should provide an explicitly selected WSPR frequency
-profile. Initial compatibility behavior is `Existing/Common`. Maintained
-country or locality profiles may choose a different default preset for a band.
+The parent application provides an explicitly selected WSPR frequency profile,
+persisted as `WSPR.Frequency Profile`. Initial compatibility behavior is
+`existing_common`; the first alternate profile is `wrc15`. Maintained country
+or locality profiles may later choose a different default preset for a band.
 IARU regions alone are insufficient where national conventions differ.
 
 The application must not infer locality from an IP address or callsign. A
@@ -129,7 +130,7 @@ rather than a separate database. A future schema might conceptually express:
 
 ```ini
 [WSPR]
-Frequency Profile = Existing/Common
+Frequency Profile = existing_common
 
 [WSPR Band Preferences]
 60m = 60m:us
@@ -149,6 +150,17 @@ WSPR frequency resolution precedence is:
 
 Changing profiles must not rewrite explicit numeric entries, explicit qualified
 presets, or saved local preferences.
+
+The implemented profile resolver currently changes only bare `60m`:
+
+| Profile | Effective bare `60m` preset |
+| --- | --- |
+| `existing_common` | `60m:legacy` (5,287,200 Hz USB dial) |
+| `wrc15` | `60m:wrc15` (5,364,700 Hz USB dial) |
+
+All other bare bands retain their existing/common preset under both profiles.
+The selected profile is returned with the effective compatibility band catalog
+so Test Tone and scheduled WSPR planning resolve the same dial frequency.
 
 ## Compatibility and migration
 

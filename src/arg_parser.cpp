@@ -2867,7 +2867,10 @@ bool set_frequencies(ArgParserConfig &target)
 
         try
         {
-            const double freq = lookup.parse_string_to_frequency(entry.token, false);
+            const double freq = lookup.parse_string_to_frequency(
+                entry.token,
+                false,
+                target.wspr.frequency_profile);
             std::string frequency_error;
             if (!validate_cli_frequency_hz(
                     freq,

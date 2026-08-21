@@ -234,6 +234,23 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
 
                                     <div class="config-wspr-secondary-row">
                                         <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
+                                            <label for="frequency_profile" class="form-label">
+                                                Frequency profile
+                                            </label>
+                                            <select
+                                                id="frequency_profile"
+                                                class="form-select"
+                                                aria-describedby="frequency-profile-hint"
+                                                data-bs-toggle="tooltip"
+                                                title="Choose the default WSPR dial convention used by bare preset names.">
+                                                <option value="existing_common">Existing/Common</option>
+                                                <option value="wrc15">WRC-15</option>
+                                            </select>
+                                            <div id="frequency-profile-hint" class="form-text mt-2">
+                                                Bare `60m` follows this profile. Numeric frequencies and qualified presets such as `60m:legacy` remain unchanged. This is a convenience setting, not a statement of operating authority.
+                                            </div>
+                                        </div>
+                                        <div class="config-wspr-top-row__item config-wspr-top-row__field config-wspr-top-row__planner">
                                             <label for="planner_preference" class="form-label">
                                                 Planning mode
                                             </label>

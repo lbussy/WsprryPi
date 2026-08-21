@@ -379,12 +379,15 @@ int main()
             ui_source.find("function validateWsprFrequencyToken(token)") != std::string::npos &&
             ui_source.find("\"2200m\",") != std::string::npos &&
             ui_source.find("\"630m\",") != std::string::npos &&
+            ui_source.find("\"60m:legacy\",") != std::string::npos &&
+            ui_source.find("\"60m:wrc15\",") != std::string::npos &&
+            ui_source.find("\"Frequency Profile\": frequency_profile") != std::string::npos &&
             ui_source.find("\"22m\",") == std::string::npos &&
             ui_source.find("@GPIO, @GPIOH, or @GPIOL") != std::string::npos &&
             ui_source.find(".replace(/,/g, \" \")") != std::string::npos &&
             ui_source.find("const numericRx = /^-?(?:(?:\\\\d+(?:\\\\.\\\\d*)?)|(?:\\\\.\\\\d+))(?:hz|khz|mhz|ghz)?$/i;") == std::string::npos &&
             ui_source.find("-15") == std::string::npos,
-        "WSPR frequency validation must support remaining band aliases, comma-separated lists, optional @GPIO suffixes, reject negative numeric tokens, and must not retain -15 aliases");
+        "WSPR frequency validation must support bare and qualified presets, profile serialization, comma-separated lists, optional @GPIO suffixes, reject negative numeric tokens, and must not retain removed aliases");
     require(
         ui_source.find("bindTestToneControls();") != std::string::npos,
         "configuration view must bind the shared Test Tone controls");
@@ -1406,8 +1409,8 @@ int main()
             config_view_source.find("id=\"dbm\"") != std::string::npos &&
             config_view_source.find("<option value=\"60\">60</option>") != std::string::npos &&
             config_view_source.find("spaces or commas") != std::string::npos &&
-            config_view_source.find("@GPIO, @GPIOH, or @GPIOL") != std::string::npos &&
-            config_view_source.find("-15") == std::string::npos &&
+            config_view_source.find("`@GPIO`, `@GPIOH`, or `@GPIOL`") != std::string::npos &&
+            config_view_source.find("20m-15") == std::string::npos &&
             config_view_source.find("class=\"form-select config-planner-field__select\"") == std::string::npos,
         "WSPR transmission settings must keep TX dBm as a fixed-value select and expose planner_preference in the WSPR planning controls");
     require(

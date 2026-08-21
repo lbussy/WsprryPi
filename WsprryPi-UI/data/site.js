@@ -574,6 +574,7 @@ const configSchema = {
             "Grid Square": { required: false, type: "string" },
             "TX Power": { required: false, type: "number" },
             "Frequency": { required: false, type: "string" },
+            "Frequency Profile": { required: false, type: "string" },
             "Planner Preference": { required: false, type: "string" },
             "Use Random Offset": { required: false, type: "boolean" }
         }
@@ -1610,6 +1611,16 @@ function populateConfig(callback = null) {
                     plannerPreference = "auto";
                 }
 
+                let frequencyProfile = getConfigValue(
+                    wspr,
+                    "WSPR",
+                    "Frequency Profile",
+                    "existing_common"
+                );
+                if (!["existing_common", "wrc15"].includes(frequencyProfile)) {
+                    frequencyProfile = "existing_common";
+                }
+
                 let transmit = getConfigBoolValue(
                     operation,
                     "Operation",
@@ -1864,6 +1875,7 @@ function populateConfig(callback = null) {
                         updateRuntimeControlConfigStatus(mode, transmit);
                     }
                     $("#planner_preference").val(plannerPreference).trigger("change");
+                    $("#frequency_profile").val(frequencyProfile).trigger("change");
                     $("#transmit_backend").val(transmitBackend).trigger("change");
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
@@ -2291,6 +2303,10 @@ function validateWsprBandCatalog(response) {
     const audioOffsetHz = response.audio_offset_hz;
     if (typeof audioOffsetHz !== "number" ||
         !Number.isSafeInteger(audioOffsetHz) || audioOffsetHz < 0) {
+        return null;
+    }
+
+    if (!["existing_common", "wrc15"].includes(response.frequency_profile)) {
         return null;
     }
 

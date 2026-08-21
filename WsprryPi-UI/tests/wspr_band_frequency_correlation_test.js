@@ -590,6 +590,7 @@ function validCatalog(offset = 1500) {
         command: "wspr_band_catalog",
         status: "ok",
         audio_offset_hz: offset,
+        frequency_profile: "existing_common",
         bands: canonicalBands.map((band, index) => {
             const dial = dialFrequenciesHz[index];
             return { band, dial_frequency_hz: dial, tone_frequency_hz: dial + offset };
@@ -634,6 +635,7 @@ const invalidCatalogCases = [
     ["invalid offset string", (() => { const value = validCatalog(); value.audio_offset_hz = "1500"; return value; })()],
     ["invalid offset Boolean", (() => { const value = validCatalog(); value.audio_offset_hz = false; return value; })()],
     ["invalid offset fractional", (() => { const value = validCatalog(); value.audio_offset_hz = 1500.5; return value; })()],
+    ["invalid frequency profile", (() => { const value = validCatalog(); value.frequency_profile = "automatic"; return value; })()],
     ["invalid dial string", (() => { const value = validCatalog(); value.bands[0].dial_frequency_hz = "136000"; return value; })()],
     ["invalid dial Boolean", (() => { const value = validCatalog(); value.bands[0].dial_frequency_hz = true; return value; })()],
     ["invalid dial fractional", (() => { const value = validCatalog(); value.bands[0].dial_frequency_hz = 136000.5; return value; })()],

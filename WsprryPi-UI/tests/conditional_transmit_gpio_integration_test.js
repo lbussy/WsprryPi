@@ -357,6 +357,12 @@ async function browserTest() {
     ok(validateWsprFrequencyBaseToken("60m:legacy") &&
         validateWsprFrequencyBaseToken("60M:WRC15"),
         "qualified 60 m WSPR preset identities must validate case-insensitively");
+    equal(field("frequency_profile").value, "existing_common",
+        "frequency profile must default to Existing/Common");
+    field("frequency_profile").value = "wrc15";
+    equal(buildConfigPayload().WSPR["Frequency Profile"], "wrc15",
+        "frequency profile selection must serialize through the Setup payload");
+    field("frequency_profile").value = "existing_common";
 
     let matrixCases = 0;
     for (const transmit of [false, true]) {

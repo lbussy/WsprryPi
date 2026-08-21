@@ -469,9 +469,12 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             try
             {
                 const BandLookup lookup;
+                const TestTonePlanningConfigSnapshot planning_snapshot =
+                    current_test_tone_planning_config_snapshot();
                 reply = json::parse(build_wspr_band_catalog_response_json(
                     lookup,
-                    current_wspr_audio_offset_hz()));
+                    current_wspr_audio_offset_hz(),
+                    planning_snapshot.wspr_frequency_profile));
             }
             catch (const std::exception &error)
             {

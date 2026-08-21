@@ -191,14 +191,20 @@ BandLookup::BandLookup()
 }
 
 std::vector<WsprBandCatalogEntry>
-BandLookup::canonical_wspr_band_catalog() const
+BandLookup::canonical_wspr_band_catalog(std::string_view frequency_profile) const
 {
     std::vector<WsprBandCatalogEntry> catalog;
     catalog.reserve(CANONICAL_WSPR_BAND_DEFINITIONS.size());
 
+    std::string normalized_profile = normalize_key(std::string(frequency_profile));
+    std::replace(normalized_profile.begin(), normalized_profile.end(), '-', '_');
+
     for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
     {
-        const double dial_frequency_hz = band.default_wspr_hz;
+        const double dial_frequency_hz =
+            normalized_profile == "wrc15" && normalize_key(band.name) == "60m"
+                ? FREQ_60M_WRC15
+                : band.default_wspr_hz;
         if (!std::isfinite(dial_frequency_hz) ||
             dial_frequency_hz <= 0.0 ||
             std::trunc(dial_frequency_hz) != dial_frequency_hz ||
@@ -388,7 +394,8 @@ std::variant<double, std::string> BandLookup::lookup(
 
 double BandLookup::parse_string_to_frequency(
     std::string_view input,
-    bool validate) const
+    bool validate,
+    std::string_view frequency_profile) const
 {
     std::string input_str(input);
 
@@ -466,7 +473,13 @@ double BandLookup::parse_string_to_frequency(
         }
     }
 
-    const auto result = lookup(input_str);
+    std::string preset_key = lower;
+    std::string normalized_profile = normalize_key(std::string(frequency_profile));
+    std::replace(normalized_profile.begin(), normalized_profile.end(), '-', '_');
+    if (preset_key == "60m" && normalized_profile == "wrc15")
+        preset_key = "60m:wrc15";
+
+    const auto result = lookup(preset_key);
     if (std::holds_alternative<double>(result))
     {
         return std::get<double>(result);

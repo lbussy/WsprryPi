@@ -190,6 +190,7 @@ struct WsprModeConfig
     std::string grid_square;
     int power_dbm = 0;
     std::string frequencies;
+    std::string frequency_profile = "existing_common";
     double audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
     WsprPlannerPreference planner_preference = WsprPlannerPreference::Auto;
 };
@@ -536,6 +537,7 @@ struct TestTonePlanningConfigSnapshot
     bool allow_unqualified_frequency = false;
     bool allow_non_amateur_frequency = false;
     double wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
+    std::string wspr_frequency_profile = "existing_common";
     std::vector<WsprFrequencyEntry> wspr_frequency_entries{};
     std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio{};
 };
@@ -670,6 +672,7 @@ void ini_to_json(std::string filename);
  *       "Grid Square": "ZZ99",
  *       "TX Power": 20,
  *       "Frequency": "20m",
+ *       "Frequency Profile": "existing_common",
  *       "Planner Preference": "auto",
  *       "Use Random Offset": true
  *   },

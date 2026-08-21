@@ -664,6 +664,14 @@ int main(int argc, char *argv[])
     require(
         nearly_equal(lookup.parse_string_to_frequency("mf", false), 474200.0),
         "mf must resolve to the 630m WSPR dial frequency");
+    require(
+        nearly_equal(
+            lookup.parse_string_to_frequency("60m", false, "wrc15"),
+            5364700.0) &&
+            nearly_equal(
+                lookup.parse_string_to_frequency("60m:legacy", false, "wrc15"),
+                5287200.0),
+        "WSPR profile resolution must affect only bare 60m");
     bool rejected_22m = false;
     try { (void)lookup.parse_string_to_frequency("22m", false); }
     catch (const std::invalid_argument &) { rejected_22m = true; }
@@ -1481,6 +1489,28 @@ int main(int argc, char *argv[])
         require(
             config.wspr.frequencies == "20m",
             "WSPR.Frequency must remain the authoritative external WSPR frequency input");
+    }
+
+    {
+        init_config_json();
+        jConfig["WSPR"]["Frequency Profile"] = "wrc15";
+        jConfig["WSPR"]["Frequency"] = "60m 60m:legacy 5.2872MHz";
+        json_to_config();
+        config.transmit = true;
+        config.frequencies = config.wspr.frequencies;
+
+        require(config.wspr.frequency_profile == "wrc15",
+                "WSPR frequency profile must load through the configuration model");
+        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 3,
+                "profile-aware WSPR frequency lists must parse");
+        require(
+            nearly_equal(config.wspr_frequency_entries[0].dial_frequency_hz, 5364700.0) &&
+                nearly_equal(config.wspr_frequency_entries[1].dial_frequency_hz, 5287200.0) &&
+                nearly_equal(config.wspr_frequency_entries[2].dial_frequency_hz, 5287200.0),
+            "profile resolution must preserve explicit qualified and numeric entries");
+        config_to_json();
+        require(jConfig["WSPR"].at("Frequency Profile") == "wrc15",
+                "WSPR frequency profile must serialize through the configuration model");
     }
 
     {

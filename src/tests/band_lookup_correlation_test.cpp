@@ -74,6 +74,12 @@ int main()
             "bare 60m and 60m:legacy must retain the existing convention");
     require(lookup.parse_string_to_frequency("60M:WRC15") == 5364700.0,
             "60m:wrc15 must resolve case-insensitively to 5,364,700 Hz");
+    require(lookup.parse_string_to_frequency("60m", false, "wrc15") == 5364700.0,
+            "the WRC-15 profile must change only the bare 60m convenience default");
+    require(lookup.parse_string_to_frequency("60m:legacy", false, "wrc15") == 5287200.0 &&
+                lookup.parse_string_to_frequency("5.2872MHz", false, "wrc15") == 5287200.0 &&
+                lookup.parse_string_to_frequency("20m", false, "wrc15") == 14095600.0,
+            "qualified, numeric, and unaffected-band inputs must ignore the selected profile");
     require(presets.at(18).preset == "60m:wrc15" &&
                 presets.at(18).band == "60m" &&
                 !presets.at(18).existing_common,

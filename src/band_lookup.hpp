@@ -143,12 +143,15 @@ public:
      *
      * @param input Band alias, unit-qualified frequency, or raw numeric value.
      * @param validate If true, validates numeric values against known bands.
+     * @param frequency_profile Explicit WSPR convenience profile. The default
+     *        preserves the existing/common bare-alias meanings.
      * @return Frequency in Hz.
      * @throws std::invalid_argument If the input is invalid.
      */
     double parse_string_to_frequency(
         std::string_view input,
-        bool validate = true) const;
+        bool validate = true,
+        std::string_view frequency_profile = "existing_common") const;
 
     /**
      * @brief Return canonical WSPR display bands in stable order.
@@ -157,7 +160,8 @@ public:
      * @throws std::logic_error if an authoritative definition cannot be
      *         represented as an integral external Hz value.
      */
-    std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog() const;
+    std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog(
+        std::string_view frequency_profile = "existing_common") const;
 
     /**
      * @brief Return every built-in qualified WSPR preset in stable order.

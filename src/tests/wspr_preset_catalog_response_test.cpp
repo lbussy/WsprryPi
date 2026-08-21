@@ -26,6 +26,8 @@ int main()
 
     require(response.at("bands").size() == 17,
             "compatibility band catalog must retain one effective preset per band");
+    require(response.at("frequency_profile") == "existing_common",
+            "catalog response must identify the effective default profile");
     require(response.at("presets").size() == 19,
             "complete preset catalog must contain the bare catalog and two qualified presets");
 
@@ -42,6 +44,14 @@ int main()
                 wrc15.at("dial_frequency_hz") == 5364700 &&
                 wrc15.at("existing_common") == false,
             "60m:wrc15 response must retain separate preset and band identities");
+
+    const auto wrc15_response = nlohmann::json::parse(
+        build_wspr_band_catalog_response_json(lookup, 1500.0, "wrc15"));
+    require(wrc15_response.at("frequency_profile") == "wrc15" &&
+                wrc15_response.at("bands").at(4).at("band") == "60m" &&
+                wrc15_response.at("bands").at(4).at("dial_frequency_hz") == 5364700 &&
+                wrc15_response.at("bands").at(4).at("tone_frequency_hz") == 5366200,
+            "WRC-15 profile must change the effective 60m compatibility row");
 
     std::cout << "WSPR preset catalog response tests passed.\n";
     return 0;

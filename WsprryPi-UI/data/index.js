@@ -253,6 +253,7 @@ function restorePersistedConfigDraft() {
     }
 
     $("#planner_preference").val(String(wspr["Planner Preference"] || "auto")).trigger("change");
+    $("#frequency_profile").val(String(wspr["Frequency Profile"] || "existing_common")).trigger("change");
     $("#transmit_backend").val(String(operation["Transmit Backend"] || "gpio")).trigger("change");
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
@@ -3606,6 +3607,10 @@ function buildConfigPayload(options = {}) {
     if (!validPlannerPreferences.has(planner_preference)) {
         planner_preference = "auto";
     }
+    let frequency_profile = String($("#frequency_profile").val() || "existing_common");
+    if (!["existing_common", "wrc15"].includes(frequency_profile)) {
+        frequency_profile = "existing_common";
+    }
     let callsign = trimIdentityValue($("#callsign").val());
     let gridsquare = trimIdentityValue($("#gridsquare").val());
     if (
@@ -3741,6 +3746,7 @@ function buildConfigPayload(options = {}) {
         "Grid Square": gridsquare,
         "TX Power": dbm,
         "Frequency": frequencies,
+        "Frequency Profile": frequency_profile,
         "Planner Preference": planner_preference,
         "Use Random Offset": useoffset,
     };
@@ -4501,6 +4507,7 @@ function setHardwareControlsDisabled(disabled) {
         "#transmit",
         "#stop_transmit",
         "#planner_preference",
+        "#frequency_profile",
         "#transmit_backend",
         "#tx_pin",
         "#gpio-power-range",
