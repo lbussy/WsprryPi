@@ -71,8 +71,13 @@ def collect_file_records(ui_root: Path) -> list[dict[str, str]]:
     if not root.is_dir():
         raise ManifestError(f"UI root is not a directory: {ui_root}")
 
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
     records: list[dict[str, str]] = []
-    for current, directory_names, file_names in os.walk(root, topdown=True, followlinks=False):
+    for current, directory_names, file_names in os.walk(
+        root, topdown=True, onerror=raise_walk_error, followlinks=False
+    ):
         current_path = Path(current)
         if current_path == root:
             directory_names[:] = [
@@ -215,6 +220,85 @@ def load_manifest(path: Path) -> dict[str, Any]:
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ManifestError(f"could not read manifest: {error}") from error
     return validate_manifest(value)
+
+
+def unknown_installation_classification(
+    error: str,
+    packaged_ui_build_id_value: str | None = None,
+) -> dict[str, Any]:
+    """Return a fail-closed result when either UI identity is unavailable."""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "installed_state": "unknown",
+        "packaged_ui_build_id": packaged_ui_build_id_value,
+        "installed_ui_build_id": None,
+        "modified_files": [],
+        "added_files": [],
+        "missing_files": [],
+        "error": error,
+    }
+
+
+def classify_installed_ui(ui_root: Path, manifest_path: Path) -> dict[str, Any]:
+    """Compare installed UI files with a validated immutable package manifest.
+
+    Classification is read-only. Invalid or unreadable inputs produce an
+    ``unknown`` result rather than treating an unverified installation as
+    packaged or locally modified.
+    """
+    try:
+        manifest = load_manifest(manifest_path)
+    except ManifestError as error:
+        return unknown_installation_classification(str(error))
+
+    packaged_id = manifest["packaged_ui_build_id"]
+    try:
+        installed_records = collect_file_records(ui_root)
+    except (ManifestError, OSError) as error:
+        return unknown_installation_classification(str(error), packaged_id)
+
+    packaged_by_path = {
+        record["path"]: record["sha256"] for record in manifest["files"]
+    }
+    installed_by_path = {
+        record["path"]: record["sha256"] for record in installed_records
+    }
+    packaged_paths = set(packaged_by_path)
+    installed_paths = set(installed_by_path)
+    modified_files = sorted(
+        (
+            path for path in packaged_paths & installed_paths
+            if packaged_by_path[path] != installed_by_path[path]
+        ),
+        key=lambda path: path.encode("utf-8"),
+    )
+    added_files = sorted(
+        installed_paths - packaged_paths,
+        key=lambda path: path.encode("utf-8"),
+    )
+    missing_files = sorted(
+        packaged_paths - installed_paths,
+        key=lambda path: path.encode("utf-8"),
+    )
+    installed_id = packaged_ui_build_id(installed_records)
+    installed_state = (
+        "packaged"
+        if installed_id == packaged_id
+        and not modified_files
+        and not added_files
+        and not missing_files
+        else "locally_modified"
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "installed_state": installed_state,
+        "packaged_ui_build_id": packaged_id,
+        "installed_ui_build_id": installed_id,
+        "modified_files": modified_files,
+        "added_files": added_files,
+        "missing_files": missing_files,
+        "error": None,
+    }
 
 
 def main() -> int:

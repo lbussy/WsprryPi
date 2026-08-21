@@ -29,3 +29,10 @@ python3 scripts/generate_ui_manifest.py --validate /tmp/ui-manifest.json
 ```
 
 Run the focused regression suite with `npm run test:manifest`.
+
+The same module provides the read-only `classify_installed_ui()` comparison
+layer. It validates the immutable packaged manifest, calculates the identity
+of the covered files currently present, and returns `packaged`,
+`locally_modified`, or fail-closed `unknown` state with deterministic modified,
+added, and missing path lists. Classification does not alter the installed
+files and is not connected to the browser or installer yet.
