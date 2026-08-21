@@ -120,8 +120,7 @@ namespace
         snapshot.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
         snapshot.wspr_audio_offset_hz = source.wspr.audio_offset_hz;
         snapshot.wspr_frequency_profile = source.wspr.frequency_profile;
-        snapshot.wspr_band_preferences =
-            preset_only_band_preferences(source.wspr.band_preferences);
+        snapshot.wspr_band_preferences = source.wspr.band_preferences;
         snapshot.wspr_frequency_entries = source.wspr_frequency_entries;
         snapshot.band_gpio = source.band_gpio;
 

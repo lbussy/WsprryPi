@@ -57,8 +57,24 @@ int main()
         build_wspr_band_catalog_response_json(
             lookup, 1500.0, "wrc15", {{"60m", "60m:legacy"}}));
     require(preferred_response.at("band_preferences").at("60m") == "60m:legacy" &&
-                preferred_response.at("bands").at(4).at("dial_frequency_hz") == 5287200,
+                preferred_response.at("bands").at(4).at("dial_frequency_hz") == 5287200 &&
+                preferred_response.at("bands").at(4).at("resolution_source") ==
+                    "band_preference_preset" &&
+                preferred_response.at("bands").at(4).at("preset") == "60m:legacy",
             "local preference must be visible and override the effective profile row");
+
+    const auto configured_response = nlohmann::json::parse(
+        build_wspr_band_catalog_response_json(
+            lookup, 1500.0, "existing_common",
+            {{"8m", std::uint64_t{40680000}},
+             {"5m", std::uint64_t{60000000}}}));
+    require(configured_response.at("bands").size() == 19 &&
+                configured_response.at("bands").at(12).at("band") == "8m" &&
+                configured_response.at("bands").at(12).at("resolution_source") ==
+                    "band_preference_numeric" &&
+                configured_response.at("bands").at(12).at("preset").is_null() &&
+                configured_response.at("bands").at(14).at("band") == "5m",
+            "effective API catalog must expose configured-only bands and source metadata");
 
     std::cout << "WSPR preset catalog response tests passed.\n";
     return 0;

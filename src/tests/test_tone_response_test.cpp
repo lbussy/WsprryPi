@@ -60,6 +60,8 @@ int main()
     result.dial_frequency_hz = 14095600;
     result.audio_offset_hz = 1500;
     result.actual_rf_frequency_hz = 14097100;
+    result.resolution_source =
+        WsprBandResolutionSource::BandPreferenceNumeric;
     result.selector_gpio_enabled = true;
     result.selector_gpio = 17;
     result.selector_gpio_active_high = true;
@@ -73,6 +75,9 @@ int main()
                 active_high_band["dial_frequency_hz"] == 14095600 &&
                 active_high_band["audio_offset_hz"] == 1500 &&
                 active_high_band["actual_rf_frequency_hz"] == 14097100 &&
+                active_high_band["resolution_source"] ==
+                    "band_preference_numeric" &&
+                active_high_band["preset"].is_null() &&
                 active_high_band["selector_gpio"].get<int>() == 17 &&
                 active_high_band["selector_gpio_active_high"].get<bool>(),
             "active-high band response");

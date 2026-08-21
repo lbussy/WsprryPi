@@ -1522,8 +1522,11 @@ int main(int argc, char *argv[])
     {
         init_config_json();
         jConfig["WSPR"]["Band Preferences"] = {
-            {"20m", 14095650}, {"60m", "60m:wrc15"}};
-        jConfig["WSPR"]["Frequency"] = "20m 60m";
+            {"20m", 14095650},
+            {"60m", "60m:wrc15"},
+            {"8m", 40680000},
+            {"5m", 60000000}};
+        jConfig["WSPR"]["Frequency"] = "20m 60m 8m 5m";
         json_to_config();
 
         require(
@@ -1532,14 +1535,20 @@ int main(int argc, char *argv[])
                 std::get<std::string>(config.wspr.band_preferences.at("60m")) ==
                     "60m:wrc15",
             "configuration must retain typed numeric and preset band preferences");
-        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 2 &&
+        require(set_frequencies(config) && config.wspr_frequency_entries.size() == 4 &&
                     nearly_equal(
                         config.wspr_frequency_entries[0].dial_frequency_hz,
-                        14095600.0) &&
+                        14095650.0) &&
                     nearly_equal(
                         config.wspr_frequency_entries[1].dial_frequency_hz,
-                        5364700.0),
-            "slice one must keep custom numeric preferences operationally inert");
+                        5364700.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[2].dial_frequency_hz,
+                        40680000.0) &&
+                    nearly_equal(
+                        config.wspr_frequency_entries[3].dial_frequency_hz,
+                        60000000.0),
+            "numeric preferences, including configured-only 8m and 5m, must drive scheduler dial resolution");
         config_to_json();
         require(
             jConfig["WSPR"].at("Band Preferences").at("20m").is_number_unsigned() &&

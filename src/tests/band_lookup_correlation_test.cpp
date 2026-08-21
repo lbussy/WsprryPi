@@ -122,6 +122,19 @@ int main()
     }
     require(rejected_cross_band_custom,
             "typed custom preference must remain inside its canonical band");
+    const WsprBandPreferences configured_only = {
+        {"8m", std::uint64_t{40680000}},
+        {"5m", std::uint64_t{60000000}}};
+    const auto expanded_catalog = lookup.canonical_wspr_band_catalog(
+        "existing_common", configured_only);
+    require(expanded_catalog.size() == 19 &&
+                expanded_catalog.at(12).band == "8m" &&
+                expanded_catalog.at(12).dial_frequency_hz == 40680000 &&
+                expanded_catalog.at(12).resolution_source ==
+                    WsprBandResolutionSource::BandPreferenceNumeric &&
+                expanded_catalog.at(14).band == "5m" &&
+                expanded_catalog.at(14).dial_frequency_hz == 60000000,
+            "configured-only 8m and 5m preferences must join the effective catalog");
     require(lookup.parse_string_to_frequency("60m:legacy", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("5.2872MHz", false, "wrc15") == 5287200.0 &&
                 lookup.parse_string_to_frequency("20m", false, "wrc15") == 14095600.0,

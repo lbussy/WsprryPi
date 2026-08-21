@@ -46,10 +46,35 @@
 
 #include "band_gpio.hpp"
 
+enum class WsprBandResolutionSource
+{
+    BuiltInPreset,
+    ProfilePreset,
+    BandPreferencePreset,
+    BandPreferenceNumeric,
+};
+
+inline constexpr const char *wspr_band_resolution_source_name(
+    WsprBandResolutionSource source) noexcept
+{
+    switch (source)
+    {
+    case WsprBandResolutionSource::BuiltInPreset: return "built_in_preset";
+    case WsprBandResolutionSource::ProfilePreset: return "profile_preset";
+    case WsprBandResolutionSource::BandPreferencePreset:
+        return "band_preference_preset";
+    case WsprBandResolutionSource::BandPreferenceNumeric:
+        return "band_preference_numeric";
+    }
+    return "built_in_preset";
+}
+
 struct WsprBandCatalogEntry
 {
     std::string band;
     std::uint64_t dial_frequency_hz;
+    WsprBandResolutionSource resolution_source;
+    std::optional<std::string> preset;
 };
 
 struct WsprPresetCatalogEntry
@@ -70,6 +95,7 @@ struct WsprBandFrequencyResolution
     std::uint64_t dial_frequency_hz;
     std::optional<std::string> preset;
     bool custom;
+    WsprBandResolutionSource source;
 };
 
 /** Return only built-in preset preferences for legacy runtime consumers. */
@@ -179,7 +205,7 @@ public:
      */
     std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog(
         std::string_view frequency_profile = "existing_common",
-        const std::unordered_map<std::string, std::string> &band_preferences = {}) const;
+        const WsprBandPreferences &band_preferences = {}) const;
 
     /**
      * @brief Return every built-in qualified WSPR preset in stable order.

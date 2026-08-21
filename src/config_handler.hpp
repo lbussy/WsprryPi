@@ -541,7 +541,7 @@ struct TestTonePlanningConfigSnapshot
     bool allow_non_amateur_frequency = false;
     double wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
     std::string wspr_frequency_profile = "existing_common";
-    std::unordered_map<std::string, std::string> wspr_band_preferences;
+    WsprBandPreferences wspr_band_preferences;
     std::vector<WsprFrequencyEntry> wspr_frequency_entries{};
     std::array<BandGPIOConfig, HAM_BAND_COUNT> band_gpio{};
 };

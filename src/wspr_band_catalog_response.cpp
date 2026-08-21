@@ -39,7 +39,7 @@ std::string build_wspr_band_catalog_response_json(
     const BandLookup &lookup,
     double audio_offset_hz,
     const std::string &frequency_profile,
-    const std::unordered_map<std::string, std::string> &band_preferences)
+    const WsprBandPreferences &band_preferences)
 {
     using json = nlohmann::json;
 
@@ -50,10 +50,18 @@ std::string build_wspr_band_catalog_response_json(
         {"status", "ok"},
         {"audio_offset_hz", offset_hz},
         {"frequency_profile", frequency_profile},
-        {"band_preferences", band_preferences},
+        {"band_preferences", json::object()},
         {"bands", json::array()},
         {"presets", json::array()},
     };
+    for (const auto &[band, preference] : band_preferences)
+    {
+        if (const auto *preset = std::get_if<std::string>(&preference))
+            response["band_preferences"][band] = *preset;
+        else
+            response["band_preferences"][band] =
+                std::get<std::uint64_t>(preference);
+    }
 
     for (const WsprBandCatalogEntry &band :
          lookup.canonical_wspr_band_catalog(frequency_profile, band_preferences))
@@ -80,6 +88,9 @@ std::string build_wspr_band_catalog_response_json(
             {"band", band.band},
             {"dial_frequency_hz", dial_frequency_hz},
             {"tone_frequency_hz", dial_frequency_hz + offset_hz},
+            {"resolution_source",
+             wspr_band_resolution_source_name(band.resolution_source)},
+            {"preset", band.preset ? json(*band.preset) : json(nullptr)},
         });
     }
 

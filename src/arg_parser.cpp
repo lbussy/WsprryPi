@@ -2867,11 +2867,17 @@ bool set_frequencies(ArgParserConfig &target)
 
         try
         {
-            const double freq = lookup.parse_string_to_frequency(
+            const auto band_resolution = lookup.resolve_wspr_band_frequency(
                 entry.token,
-                false,
                 target.wspr.frequency_profile,
-                preset_only_band_preferences(target.wspr.band_preferences));
+                target.wspr.band_preferences);
+            const double freq = band_resolution
+                ? static_cast<double>(band_resolution->dial_frequency_hz)
+                : lookup.parse_string_to_frequency(
+                      entry.token,
+                      false,
+                      target.wspr.frequency_profile,
+                      preset_only_band_preferences(target.wspr.band_preferences));
             std::string frequency_error;
             if (!validate_cli_frequency_hz(
                     freq,
