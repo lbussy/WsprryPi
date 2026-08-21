@@ -64,6 +64,14 @@ namespace
         double actual_frequency_hz;
     };
 
+    struct QualifiedWsprPresetDefinition
+    {
+        const char *preset;
+        const char *band;
+        double dial_frequency_hz;
+        bool existing_common;
+    };
+
     // Built-in WSPR aliases are user-facing USB dial frequencies.
     // The scheduler converts dial frequency to actual RF exactly once before
     // configuring the RF-only transmitter/backend layer.
@@ -72,6 +80,7 @@ namespace
     constexpr double FREQ_160M = 1836600.0;
     constexpr double FREQ_80M = 3568600.0;
     constexpr double FREQ_60M = 5287200.0;
+    constexpr double FREQ_60M_WRC15 = 5364700.0;
     constexpr double FREQ_40M = 7038600.0;
     constexpr double FREQ_30M = 10138700.0;
     constexpr double FREQ_20M = 14095600.0;
@@ -130,6 +139,15 @@ namespace
         {"70cm", FREQ_70CM},
     }};
 
+    // Qualified identities are WSPR conveniences, not new amateur bands or
+    // assertions of operating authority. The bare 60m alias deliberately
+    // retains the existing 5.2872 MHz behavior.
+    constexpr std::array<QualifiedWsprPresetDefinition, 2>
+        QUALIFIED_WSPR_PRESETS = {{
+            {"60m:legacy", "60m", FREQ_60M, true},
+            {"60m:wrc15", "60m", FREQ_60M_WRC15, false},
+        }};
+
     constexpr std::array<LegacyActualWSPRAliasDefinition, 17> LEGACY_ACTUAL_WSPR_ALIASES = {{
         {"lf", 137500.0},
         {"2200m", 137500.0},
@@ -165,6 +183,11 @@ BandLookup::BandLookup()
     {
         wsprFrequencies[normalize_key(alias.alias)] = alias.frequency_hz;
     }
+
+    for (const auto &preset : QUALIFIED_WSPR_PRESETS)
+    {
+        wsprFrequencies[normalize_key(preset.preset)] = preset.dial_frequency_hz;
+    }
 }
 
 std::vector<WsprBandCatalogEntry>
@@ -199,6 +222,35 @@ BandLookup::canonical_wspr_band_catalog() const
         catalog.push_back({
             display_name,
             static_cast<std::uint64_t>(dial_frequency_hz)});
+    }
+
+    return catalog;
+}
+
+std::vector<WsprPresetCatalogEntry>
+BandLookup::complete_wspr_preset_catalog() const
+{
+    std::vector<WsprPresetCatalogEntry> catalog;
+    catalog.reserve(
+        CANONICAL_WSPR_BAND_DEFINITIONS.size() + QUALIFIED_WSPR_PRESETS.size());
+
+    for (const auto &band : CANONICAL_WSPR_BAND_DEFINITIONS)
+    {
+        std::string canonical_band = normalize_key(band.name);
+        catalog.push_back({
+            canonical_band,
+            canonical_band,
+            static_cast<std::uint64_t>(band.default_wspr_hz),
+            true});
+    }
+
+    for (const auto &preset : QUALIFIED_WSPR_PRESETS)
+    {
+        catalog.push_back({
+            preset.preset,
+            preset.band,
+            static_cast<std::uint64_t>(preset.dial_frequency_hz),
+            preset.existing_common});
     }
 
     return catalog;

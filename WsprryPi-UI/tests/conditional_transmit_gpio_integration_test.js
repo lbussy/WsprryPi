@@ -354,6 +354,9 @@ async function browserTest() {
     ok(validateWsprFrequencyBaseToken("1.25m") &&
         validateWsprFrequencyBaseToken("70cm"),
         "authoritative 1.25 m and 70 cm WSPR aliases must validate");
+    ok(validateWsprFrequencyBaseToken("60m:legacy") &&
+        validateWsprFrequencyBaseToken("60M:WRC15"),
+        "qualified 60 m WSPR preset identities must validate case-insensitively");
 
     let matrixCases = 0;
     for (const transmit of [false, true]) {

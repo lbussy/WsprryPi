@@ -52,6 +52,14 @@ struct WsprBandCatalogEntry
     std::uint64_t dial_frequency_hz;
 };
 
+struct WsprPresetCatalogEntry
+{
+    std::string preset;
+    std::string band;
+    std::uint64_t dial_frequency_hz;
+    bool existing_common;
+};
+
 /**
  * @class BandLookup
  * @brief Provides band correlation plus separate WSPR preset conveniences.
@@ -150,6 +158,15 @@ public:
      *         represented as an integral external Hz value.
      */
     std::vector<WsprBandCatalogEntry> canonical_wspr_band_catalog() const;
+
+    /**
+     * @brief Return every built-in qualified WSPR preset in stable order.
+     *
+     * @details This is separate from the one-effective-preset-per-band catalog
+     * used by compatibility consumers. Multiple presets may correlate to the
+     * same canonical band.
+     */
+    std::vector<WsprPresetCatalogEntry> complete_wspr_preset_catalog() const;
 
     /**
      * @brief Detect whether a numeric frequency exactly matches a legacy

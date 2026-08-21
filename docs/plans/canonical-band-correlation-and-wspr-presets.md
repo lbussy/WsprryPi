@@ -89,13 +89,12 @@ identity.
 
 A band has one correlation identity but may have multiple WSPR frequency
 presets. A common convention can use the bare band name, while a convention that
-needs disambiguation uses a qualified WSPR-only preset identifier, for example:
+needs disambiguation uses a qualified WSPR-only preset identifier. The first
+implemented qualified identities are:
 
 ```text
-60m:legacy
-60m:wrc15
-60m:us
-60m:uk
+60m:legacy = 5,287,200 Hz USB dial
+60m:wrc15  = 5,364,700 Hz USB dial
 ```
 
 All of these correlate to the same `60m` band. Qualified preset names do not
@@ -106,8 +105,12 @@ bare `60m` unless the operator selects another WSPR frequency profile or local
 preference. The current convention should also receive an explicit stable name,
 such as `60m:legacy`, during migration.
 
-Do not add regional variants speculatively. Each built-in preset must have a
-maintained source and a demonstrated operator-convenience need.
+The current WSPRnet frequency list publishes both 60 m dial frequencies, while
+the retained WSPRnet QRG reference identifies 5,287.2 kHz as the established
+60 m dial frequency. The qualified names describe those WSPR conventions; they
+do not claim that either frequency is authorized in a particular jurisdiction.
+Do not add country labels such as `:us` or `:uk` without a maintained source and
+a demonstrated operator-convenience need.
 
 ## WSPR frequency profiles and local preferences
 
@@ -134,8 +137,7 @@ Frequency Profile = Existing/Common
 ```
 
 User-defined local presets may later supply a band, integral USB dial frequency,
-and label. The exact INI/JSON/UI schema is unresolved until the post-#401
-configuration-lifecycle review.
+and label. The exact INI/JSON/UI schema remains a separate implementation slice.
 
 WSPR frequency resolution precedence is:
 
@@ -180,3 +182,12 @@ The implementation must preserve these reviewed findings:
 
 Implementation remains subject to repository safety, tests, documentation
 review, and hardware-free validation boundaries.
+
+## Frequency references
+
+- WSPRnet, current "Frequencies" list:
+  <https://www.wsprnet.org/drupal/WSPRnet/map>
+- WSPRnet, "WSPR Frequencies" retained QRG reference:
+  <https://www.wsprnet.org/drupal/sites/wsprnet.org/files/wspr-qrg.pdf>
+- IARU Region 1, WRC-15 5 MHz allocation context:
+  <https://www.iaru-r1.org/about-us/committees-and-working-groups/hf-committee-c4/news/cept-licenses-do-not-allow-operation-at-60-meters-in-portugal/>

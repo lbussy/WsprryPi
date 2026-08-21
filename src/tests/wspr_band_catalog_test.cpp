@@ -115,6 +115,27 @@ int main()
                 "lookup catalog must expose only authoritative WSPR display rows");
     }
 
+    const auto presets = lookup.complete_wspr_preset_catalog();
+    require(presets.size() == expected_bands.size() + 2,
+            "complete preset catalog must add two qualified 60m identities");
+    require(
+        presets.at(expected_bands.size()).preset == "60m:legacy" &&
+            presets.at(expected_bands.size()).band == "60m" &&
+            presets.at(expected_bands.size()).dial_frequency_hz == 5287200 &&
+            presets.at(expected_bands.size()).existing_common,
+        "60m:legacy must explicitly identify the retained bare-alias convention");
+    require(
+        presets.at(expected_bands.size() + 1).preset == "60m:wrc15" &&
+            presets.at(expected_bands.size() + 1).band == "60m" &&
+            presets.at(expected_bands.size() + 1).dial_frequency_hz == 5364700 &&
+            !presets.at(expected_bands.size() + 1).existing_common,
+        "60m:wrc15 must expose the alternate sourced WSPR convention");
+    require(
+        lookup.parse_string_to_frequency("60m") == 5287200.0 &&
+            lookup.parse_string_to_frequency("60M:LEGACY") == 5287200.0 &&
+            lookup.parse_string_to_frequency("60m:wrc15") == 5364700.0,
+        "bare and qualified 60m presets must resolve case-insensitively without changing compatibility");
+
     require(
         lookup.lookup_ham_band(223500000.0) ==
             std::optional<HamBand>(HamBand::BAND_1_25M) &&
@@ -202,6 +223,16 @@ int main()
     require_catalog_response(default_response, 1500);
     require(default_response.at("bands").at(7).at("tone_frequency_hz") == 14097100,
             "20m default catalog tone frequency must be 14,097,100 Hz");
+    require(default_response.at("presets").size() == expected_bands.size() + 2,
+            "catalog response must expose the separate complete preset catalog");
+    require(
+        default_response.at("presets").at(expected_bands.size() + 1).at("preset") ==
+                "60m:wrc15" &&
+            default_response.at("presets").at(expected_bands.size() + 1).at("band") ==
+                "60m" &&
+            default_response.at("presets").at(expected_bands.size() + 1).at("dial_frequency_hz") ==
+                5364700,
+        "catalog response must keep preset identity separate from correlated band identity");
 
     const auto zero_offset_response = nlohmann::json::parse(
         build_wspr_band_catalog_response_json(lookup, 0.0));

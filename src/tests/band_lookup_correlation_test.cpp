@@ -66,6 +66,19 @@ int main()
     require(!lookup.lookup_ham_band(450000001LL).has_value(),
             "frequencies above 70cm must remain outside the catalog");
 
+    const auto presets = lookup.complete_wspr_preset_catalog();
+    require(presets.size() == 19,
+            "complete WSPR preset catalog must contain 17 bare presets and two qualified 60m presets");
+    require(lookup.parse_string_to_frequency("60m") == 5287200.0 &&
+                lookup.parse_string_to_frequency("60m:legacy") == 5287200.0,
+            "bare 60m and 60m:legacy must retain the existing convention");
+    require(lookup.parse_string_to_frequency("60M:WRC15") == 5364700.0,
+            "60m:wrc15 must resolve case-insensitively to 5,364,700 Hz");
+    require(presets.at(18).preset == "60m:wrc15" &&
+                presets.at(18).band == "60m" &&
+                !presets.at(18).existing_common,
+            "qualified preset identity must remain separate from correlated band identity");
+
     std::cout << "Band lookup correlation tests passed.\n";
     return 0;
 }

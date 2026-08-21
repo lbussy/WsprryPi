@@ -314,6 +314,7 @@ WSPR_BAND_CATALOG_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/wspr_band_catalog_test.o
 WSPR_BAND_CATALOG_TEST_DEPS := $(WSPR_BAND_CATALOG_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
 WSPR_BAND_CATALOG_TEST_OUT := wspr_band_catalog_test
 BAND_LOOKUP_CORRELATION_TEST_OUT := band_lookup_correlation_test
+WSPR_PRESET_CATALOG_RESPONSE_TEST_OUT := wspr_preset_catalog_response_test
 TEST_TONE_REQUEST_TEST_OUT := test_tone_request_test
 TEST_TONE_FREQUENCY_PLAN_TEST_OUT := test_tone_frequency_plan_test
 TEST_TONE_SELECTOR_PLAN_TEST_OUT := test_tone_selector_plan_test
@@ -708,6 +709,10 @@ $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT): $(WSPR_BAND_CATALOG_TEST_DEPS)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BIN_DIR)/$(BAND_LOOKUP_CORRELATION_TEST_OUT): tests/band_lookup_correlation_test.cpp band_lookup.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/$(WSPR_PRESET_CATALOG_RESPONSE_TEST_OUT): tests/wspr_preset_catalog_response_test.cpp band_lookup.cpp wspr_band_catalog_response.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
@@ -1174,6 +1179,9 @@ wspr-band-catalog-test: $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
 
 band-lookup-correlation-test: $(BIN_DIR)/$(BAND_LOOKUP_CORRELATION_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(BAND_LOOKUP_CORRELATION_TEST_OUT)
+
+wspr-preset-catalog-response-test: $(BIN_DIR)/$(WSPR_PRESET_CATALOG_RESPONSE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(WSPR_PRESET_CATALOG_RESPONSE_TEST_OUT)
 
 test-tone-request-test: $(BIN_DIR)/$(TEST_TONE_REQUEST_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(TEST_TONE_REQUEST_TEST_OUT)

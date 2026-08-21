@@ -4174,6 +4174,8 @@ function validateWsprFrequencyBaseToken(token) {
         "160m",
         "80m",
         "60m",
+        "60m:legacy",
+        "60m:wrc15",
         "40m",
         "30m",
         "20m",
@@ -4262,7 +4264,7 @@ function validateFrequencies() {
     fld.setCustomValidity(
         valid
             ? ""
-            : "Enter WSPR band names like 20m or 2200m, numeric frequencies or 0, separated by spaces or commas. Optional @GPIO, @GPIOH, or @GPIOL suffixes are supported."
+            : "Enter WSPR presets such as 20m, 60m:legacy, or 60m:wrc15; numeric frequencies; or 0. Separate entries with spaces or commas. Optional @GPIO, @GPIOH, or @GPIOL suffixes are supported."
     );
 
     setFieldValidationState(fld, valid);
