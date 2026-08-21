@@ -56,8 +56,10 @@ int main() {
     assert(applied.applied());
     assert(applied.status_text() == "NETWORK SAFETY OFF");
     assert(calls.size() == 2);
-    assert(calls[0][0] == "/mock/apache2ctl");
-    assert(calls[0][1] == "configtest");
+    assert(calls[0] == std::vector<std::string>({
+        "/mock/apache2ctl", "-t", "-C",
+        "Include \"" + policy.string() + ".candidate." +
+            std::to_string(static_cast<long long>(::getpid())) + "\""}));
     assert(calls[1] == std::vector<std::string>(
         {"/mock/systemctl", "reload", "apache2"}));
     assert(read_privileged_network_ini_value(*read_text_file(ini.string())) ==

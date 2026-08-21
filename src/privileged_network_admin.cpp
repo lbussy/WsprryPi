@@ -234,7 +234,7 @@ bool PrivilegedNetworkAdmin::validate_apache_candidate(
     const std::string candidate = paths_.apache_policy_file + ".candidate." +
         std::to_string(static_cast<long long>(::getpid()));
     if (!write_text_file_atomically(candidate, policy)) return false;
-    const bool valid = runner_({paths_.apache_control, "configtest", "-C",
+    const bool valid = runner_({paths_.apache_control, "-t", "-C",
                                 "Include \"" + candidate + "\""});
     (void)::unlink(candidate.c_str());
     return valid;
