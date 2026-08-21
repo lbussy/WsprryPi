@@ -62,11 +62,15 @@ int main(int argc, char **argv) {
     const std::string installer = read_file(source_root / "../scripts/install.sh");
     assert(stock_vhost.find("ProxyPreserveHost On") != std::string::npos);
     assert(stock_vhost.find("ProxyPass        /wsprrypi/config") != std::string::npos);
+    assert(stock_vhost.find("ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version") != std::string::npos);
     assert(stock_vhost.find("ProxyPass        /wsprrypi/socket") != std::string::npos);
     assert(installer.find("# BEGIN WsprryPi proxy configuration") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/config") != std::string::npos);
+    assert(installer.find("ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/socket") != std::string::npos);
     for (const std::string *source : {&stock_vhost, &installer}) {
+        assert(source->find("ProxyPass        /wsprrypi/ui-version.php") == std::string::npos);
+        assert(source->find("ProxyPass        /wsprrypi/ui-manifest.php") == std::string::npos);
         assert(source->find("RequestHeader set Host") == std::string::npos);
         assert(source->find("RequestHeader set Origin") == std::string::npos);
         assert(source->find("RemoteIPHeader") == std::string::npos);

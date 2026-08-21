@@ -338,14 +338,14 @@ async function runBuildPriorityCase({
 
     const originalGetElementById = context.document.getElementById;
     let promptAttempts = 0;
-    let promptReturnValue = false;
-    context.window.WSPRRYPI_UI_BUILD_ID = "loaded-build";
-    context.window.WSPRRYPI_UI_VERSION = "3.0.0";
+    let promptOptions = null;
+    let refreshModalVisible = false;
+    context.window.WSPRRYPI_INSTALLED_UI_BUILD_ID = "loaded-build";
     context.document.getElementById = (id) => {
         if (id === "confirmModal") {
             return {
                 classList: {
-                    contains: () => false,
+                    contains: () => refreshModalVisible,
                 },
             };
         }
@@ -353,27 +353,65 @@ async function runBuildPriorityCase({
     };
     context.showConfirmationDialog = (options) => {
         promptAttempts += 1;
+        promptOptions = options;
         assert.strictEqual(options.title, "UI refresh required");
         assert.strictEqual(options.confirmLabel, "Refresh");
-        promptReturnValue = promptAttempts > 1;
-        return promptReturnValue;
+        refreshModalVisible = true;
+        return true;
     };
 
     context.maybePromptForUiRefresh({
-        ui_build_id: "server-build",
-        ui_version: "3.0.1",
+        installed_ui_build_id: "loaded-build",
     });
-    assert.strictEqual(promptAttempts, 1);
+    assert.strictEqual(promptAttempts, 0, "a stable installed identity must not prompt");
 
     context.maybePromptForUiRefresh({
-        ui_build_id: "server-build",
-        ui_version: "3.0.1",
+        ui_build_id: "service-build",
+        ui_version: "9.9.9",
     });
-    assert.strictEqual(
-        promptAttempts,
-        2,
-        "polling must retry the UI refresh prompt when the first modal show attempt does not become active"
-    );
+    assert.strictEqual(promptAttempts, 0, "service version metadata must not prompt");
+
+    context.maybePromptForUiRefresh({
+        installed_ui_build_id: "changed-build",
+    });
+    assert.strictEqual(promptAttempts, 1, "an installed-file change must prompt once");
+    context.maybePromptForUiRefresh({ installed_ui_build_id: "changed-build" });
+    assert.strictEqual(promptAttempts, 1, "an active prompt must not repeat");
+
+    let replacedUrl = "";
+    context.window.location.replace = (url) => { replacedUrl = url; };
+    promptOptions.onConfirm();
+    assert.ok(replacedUrl.includes("ui_refresh=changed-build"), "refresh must cache-bust with the new installed identity");
+
+    refreshModalVisible = false;
+    promptOptions.onCancel();
+    context.maybePromptForUiRefresh({ installed_ui_build_id: "changed-build" });
+    assert.strictEqual(promptAttempts, 1, "a dismissed identity must stay suppressed while stable");
+
+    let historyUrl = "";
+    context.window.history = { replaceState: (_state, _title, url) => { historyUrl = url; } };
+    context.window.location.href = "http://localhost/?ui_refresh=loaded-build";
+    assert.strictEqual(context.checkUiRefreshConvergence(), true);
+    assert.ok(!historyUrl.includes("ui_refresh"), "successful convergence must remove the refresh token");
+
+    let diagnosticMessage = "";
+    let diagnosticShown = false;
+    const diagnostic = {
+        classList: { remove: (name) => { diagnosticShown = name === "d-none"; } },
+        querySelector: () => ({
+            set textContent(value) { diagnosticMessage = value; },
+        }),
+    };
+    context.document.getElementById = (id) => id === "uiConsistencyDiagnostic"
+        ? diagnostic
+        : originalGetElementById(id);
+    context.window.location.href = "http://localhost/?ui_refresh=requested-build";
+    assert.strictEqual(context.checkUiRefreshConvergence(), false);
+    assert.strictEqual(diagnosticShown, true);
+    assert.ok(diagnosticMessage.includes("requested-build"));
+    assert.ok(diagnosticMessage.includes("loaded-build"));
+    context.maybePromptForUiRefresh({ installed_ui_build_id: "another-build" });
+    assert.strictEqual(promptAttempts, 1, "a convergence diagnostic must replace further prompts");
 
     context.document.getElementById = originalGetElementById;
 

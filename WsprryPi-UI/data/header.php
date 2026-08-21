@@ -12,6 +12,8 @@ $pathConfig = [
     'basePath' => $basePath,
     'configPath' => $basePath . '/config',
     'versionPath' => $basePath . '/version',
+    'uiIdentityPath' => $basePath . '/ui-version.php',
+    'uiManifestPath' => $basePath . '/ui-manifest.php',
     'repairPath' => $basePath . '/config/repair',
     'supportBundlesPath' => $basePath . '/api/support-bundles',
     'supportIntakePath' => $basePath . '/api/support-intake',
@@ -25,8 +27,7 @@ $pathConfig = [
     window.currentPage = <?= json_encode($legacyCurrentPage) ?>;
     window.WSPRRYPI_VIEW = <?= json_encode($activeView) ?>;
     window.WSPRRYPI_PATHS = <?= json_encode($pathConfig, JSON_UNESCAPED_SLASHES) ?>;
-    window.WSPRRYPI_UI_VERSION = <?= json_encode(getWsprryPiUiVersion()) ?>;
-    window.WSPRRYPI_UI_BUILD_ID = <?= json_encode(getWsprryPiUiBuildId()) ?>;
+    window.WSPRRYPI_INSTALLED_UI_BUILD_ID = <?= json_encode(getWsprryPiInstalledUiBuildId()) ?>;
 </script>
 <script>
     (function () {
@@ -49,11 +50,11 @@ $pathConfig = [
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="<?= htmlspecialchars(wsprrypiAssetUrl('vendor/fonts/google/fonts.css')) ?>">
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-<link rel="manifest" href="site.webmanifest">
-<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="<?= htmlspecialchars(wsprrypiAssetUrl('apple-touch-icon.png')) ?>">
+<link rel="icon" type="image/png" sizes="32x32" href="<?= htmlspecialchars(wsprrypiAssetUrl('favicon-32x32.png')) ?>">
+<link rel="icon" type="image/png" sizes="16x16" href="<?= htmlspecialchars(wsprrypiAssetUrl('favicon-16x16.png')) ?>">
+<link rel="manifest" href="<?= htmlspecialchars(wsprrypiAssetUrl('site.webmanifest')) ?>">
+<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(wsprrypiAssetUrl('favicon.ico')) ?>">
 
 <!-- Bootswatch Zephyr CSS -->
 <link
