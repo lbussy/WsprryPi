@@ -1266,6 +1266,10 @@ int main()
         read_repo_text_file("/WsprryPi-UI/data/html_cache_headers.php");
     const std::string version_endpoint_source =
         read_repo_text_file("/WsprryPi-UI/data/version.php");
+    const std::string ui_identity_endpoint_source =
+        read_repo_text_file("/WsprryPi-UI/data/ui-version.php");
+    const std::string ui_manifest_endpoint_source =
+        read_repo_text_file("/WsprryPi-UI/data/ui-manifest.php");
     const std::string fetch_spots_source =
         read_repo_text_file("/WsprryPi-UI/data/fetch_spots.php");
     const std::string log_stream_source =
@@ -1282,26 +1286,40 @@ int main()
         "footer markup must keep the native click-based About disclosure and provide a site-global update-check toggle for disabling or re-enabling checks");
     require(
         header_source.find("window.WSPRRYPI_UI_VERSION = <?= json_encode(getWsprryPiUiVersion()) ?>;") != std::string::npos &&
-            header_source.find("window.WSPRRYPI_UI_BUILD_ID = <?= json_encode(getWsprryPiUiBuildId()) ?>;") != std::string::npos &&
+            header_source.find("window.WSPRRYPI_INSTALLED_UI_BUILD_ID = <?= json_encode(getWsprryPiInstalledUiBuildId()) ?>;") != std::string::npos &&
+            header_source.find("window.WSPRRYPI_UI_BUILD_ID = window.WSPRRYPI_INSTALLED_UI_BUILD_ID;") != std::string::npos &&
+            header_source.find("'uiIdentityPath' => $basePath . '/ui-version.php'") != std::string::npos &&
+            header_source.find("'uiManifestPath' => $basePath . '/ui-manifest.php'") != std::string::npos &&
             ui_version_source.find("function getWsprryPiUiVersion(): string") != std::string::npos &&
-            ui_version_source.find("function wsprrypiUiBuildFileRecords(): array") != std::string::npos &&
+            ui_version_source.find("function wsprrypiUiBuildFileRecords(?string $uiRoot = null): array") != std::string::npos &&
+            ui_version_source.find("function wsprrypiUiIdentityStatus(") != std::string::npos &&
+            ui_version_source.find("function getWsprryPiInstalledUiBuildId(): string") != std::string::npos &&
             ui_version_source.find("function getWsprryPiUiBuildId(): string") != std::string::npos &&
-            ui_version_source.find("'view_diag_logs.php' => true") != std::string::npos &&
-            ui_version_source.find("'cache' => true") != std::string::npos &&
-            ui_version_source.find("'%s|%d|%d'") != std::string::npos &&
-            ui_version_source.find("'mtime-' . substr(hash('sha256', implode(\"\\n\", $records)), 0, 16)") != std::string::npos &&
+            ui_version_source.find("WSPRRYPI_UI_IDENTITY_DOMAIN") != std::string::npos &&
+            ui_version_source.find("hash_file('sha256'") != std::string::npos &&
+            ui_version_source.find("'cache', 'backups'") != std::string::npos &&
+            ui_version_source.find("'installed_state' => $state") != std::string::npos &&
+            ui_version_source.find("'modified_files' => $modifiedFiles") != std::string::npos &&
+            ui_version_source.find("'added_files' => $addedFiles") != std::string::npos &&
+            ui_version_source.find("'missing_files' => $missingFiles") != std::string::npos &&
             ui_version_source.find("function wsprrypiAssetUrl(string $path): string") != std::string::npos &&
             ui_version_source.find("'v=' . rawurlencode($buildId)") != std::string::npos &&
             version_endpoint_source.find("'ui_build_id' => $uiBuildId") != std::string::npos &&
             version_endpoint_source.find("Cache-Control") != std::string::npos &&
             version_endpoint_source.find("no-store") != std::string::npos &&
+            ui_identity_endpoint_source.find("wsprrypiUiIdentityStatus()") != std::string::npos &&
+            ui_identity_endpoint_source.find("Cache-Control: no-store") != std::string::npos &&
+            ui_manifest_endpoint_source.find("wsprrypiUiLoadManifest($manifestPath)") != std::string::npos &&
+            ui_manifest_endpoint_source.find("Cache-Control: no-store") != std::string::npos &&
             header_source.find("wsprrypiAssetUrl('site.css')") != std::string::npos &&
+            header_source.find("wsprrypiAssetUrl('site.webmanifest')") != std::string::npos &&
+            header_source.find("wsprrypiAssetUrl('favicon.ico')") != std::string::npos &&
             footer_source.find("wsprrypiAssetUrl('site.js')") != std::string::npos &&
             index_page_source.find("wsprrypiAssetUrl($stylesheet)") != std::string::npos &&
             index_page_source.find("wsprrypiAssetUrl($script)") != std::string::npos &&
             script_include_source.find("wsprrypiAssetUrl('vendor/js/jquery-3.7.1.min.js')") != std::string::npos &&
             script_include_source.find("wsprrypiAssetUrl('vendor/js/bootstrap.bundle-5.3.8.min.js')") != std::string::npos,
-        "PHP template assets must use the centralized WsprryPi UI build id query string for CSS and JS cache busting, and /version must expose the same no-store UI build id while excluding diagnostic logs and transient paths");
+        "PHP pages and UI-owned endpoints must use the installed content identity for asset cache busting and report packaged, modified, added, missing, and unknown state without replacing the running-service /version contract");
     require(
         html_cache_headers_source.find("header('Cache-Control: no-cache, must-revalidate');") != std::string::npos &&
             index_page_source.find("<?php require_once __DIR__ . '/html_cache_headers.php'; ?>") == 0 &&
@@ -1309,6 +1327,8 @@ int main()
             diagnostic_logs_source.find("require_once __DIR__ . '/html_cache_headers.php';") < diagnostic_logs_source.find("<!doctype html>") &&
             read_repo_text_file("/WsprryPi-UI/data/template.php").find("<?php require_once __DIR__ . '/html_cache_headers.php'; ?>") == 0 &&
             version_endpoint_source.find("html_cache_headers.php") == std::string::npos &&
+            ui_identity_endpoint_source.find("html_cache_headers.php") == std::string::npos &&
+            ui_manifest_endpoint_source.find("html_cache_headers.php") == std::string::npos &&
             fetch_spots_source.find("html_cache_headers.php") == std::string::npos &&
             log_stream_source.find("html_cache_headers.php") == std::string::npos,
         "HTML PHP shell pages must send no-cache revalidation headers before output while JSON/API endpoints keep their existing cache behavior");

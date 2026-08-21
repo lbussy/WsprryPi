@@ -7,8 +7,7 @@ It is installed with the current application installation.
 
 `scripts/generate_ui_manifest.py` generates and validates the schema-v1,
 content-addressed manifest used to identify a packaged UI artifact. Generation
-is build-time infrastructure only; the installer and runtime do not consume the
-manifest yet.
+is build-time infrastructure; installation integration is handled separately.
 
 The identity covers every regular file below the selected UI root except the
 top-level runtime `cache/` and `backups/` directories, `ui-manifest.json`
@@ -34,5 +33,17 @@ The same module provides the read-only `classify_installed_ui()` comparison
 layer. It validates the immutable packaged manifest, calculates the identity
 of the covered files currently present, and returns `packaged`,
 `locally_modified`, or fail-closed `unknown` state with deterministic modified,
-added, and missing path lists. Classification does not alter the installed
-files and is not connected to the browser or installer yet.
+added, and missing path lists. Classification does not alter installed files.
+
+## Installed UI identity
+
+The UI-owned `/wsprrypi/ui-version.php` endpoint compares the installed UI to
+the immutable manifest and reports its installed and packaged identities,
+classification state, and modified, added, and missing path lists. The
+`/wsprrypi/ui-manifest.php` endpoint exposes the validated packaged manifest.
+Both responses disable caching.
+
+Every rendered page embeds the installed identity and uses it as the cache key
+for UI assets. These endpoints are ordinary Apache/PHP UI resources; they are
+not proxied to the running service. `/wsprrypi/version` remains the service
+version endpoint. Refresh-dialog and installer behavior are outside this slice.

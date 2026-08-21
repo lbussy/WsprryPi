@@ -225,13 +225,14 @@ def load_manifest(path: Path) -> dict[str, Any]:
 def unknown_installation_classification(
     error: str,
     packaged_ui_build_id_value: str | None = None,
+    installed_ui_build_id_value: str | None = None,
 ) -> dict[str, Any]:
     """Return a fail-closed result when either UI identity is unavailable."""
     return {
         "schema_version": SCHEMA_VERSION,
         "installed_state": "unknown",
         "packaged_ui_build_id": packaged_ui_build_id_value,
-        "installed_ui_build_id": None,
+        "installed_ui_build_id": installed_ui_build_id_value,
         "modified_files": [],
         "added_files": [],
         "missing_files": [],
@@ -247,15 +248,19 @@ def classify_installed_ui(ui_root: Path, manifest_path: Path) -> dict[str, Any]:
     packaged or locally modified.
     """
     try:
+        installed_records = collect_file_records(ui_root)
+    except (ManifestError, OSError, UnicodeError) as error:
+        return unknown_installation_classification(str(error))
+    installed_id = packaged_ui_build_id(installed_records)
+
+    try:
         manifest = load_manifest(manifest_path)
     except ManifestError as error:
-        return unknown_installation_classification(str(error))
+        return unknown_installation_classification(
+            str(error), installed_ui_build_id_value=installed_id
+        )
 
     packaged_id = manifest["packaged_ui_build_id"]
-    try:
-        installed_records = collect_file_records(ui_root)
-    except (ManifestError, OSError) as error:
-        return unknown_installation_classification(str(error), packaged_id)
 
     packaged_by_path = {
         record["path"]: record["sha256"] for record in manifest["files"]
@@ -280,7 +285,6 @@ def classify_installed_ui(ui_root: Path, manifest_path: Path) -> dict[str, Any]:
         packaged_paths - installed_paths,
         key=lambda path: path.encode("utf-8"),
     )
-    installed_id = packaged_ui_build_id(installed_records)
     installed_state = (
         "packaged"
         if installed_id == packaged_id
@@ -328,7 +332,7 @@ def main() -> int:
             args.ui_root, args.source_commit, args.application_version
         )
         write_atomic(args.output, serialize_manifest(manifest))
-    except (ManifestError, OSError) as error:
+    except (ManifestError, OSError, UnicodeError) as error:
         print(f"UI manifest generation failed: {error}", file=os.sys.stderr)
         return 1
 

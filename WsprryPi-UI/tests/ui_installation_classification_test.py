@@ -44,9 +44,14 @@ class UiInstallationClassificationTest(unittest.TestCase):
     def classify(self):
         return manifest_module.classify_installed_ui(self.root, self.manifest_path)
 
-    def assert_unknown(self, result) -> None:
+    def assert_unknown(self, result, installed_identity_available=True) -> None:
         self.assertEqual(result["installed_state"], "unknown")
-        self.assertIsNone(result["installed_ui_build_id"])
+        if installed_identity_available:
+            self.assertRegex(
+                result["installed_ui_build_id"], r"^sha256:[0-9a-f]{64}$"
+            )
+        else:
+            self.assertIsNone(result["installed_ui_build_id"])
         self.assertTrue(result["error"])
         self.assertEqual(result["modified_files"], [])
         self.assertEqual(result["added_files"], [])
@@ -115,11 +120,8 @@ class UiInstallationClassificationTest(unittest.TestCase):
             side_effect=PermissionError("installed file permission denied"),
         ):
             result = self.classify()
-        self.assert_unknown(result)
-        self.assertEqual(
-            result["packaged_ui_build_id"],
-            self.packaged_manifest["packaged_ui_build_id"],
-        )
+        self.assert_unknown(result, installed_identity_available=False)
+        self.assertIsNone(result["packaged_ui_build_id"])
 
     def test_unreadable_installed_directory_is_unknown(self) -> None:
         def denied_walk(*args, **kwargs):
@@ -128,11 +130,8 @@ class UiInstallationClassificationTest(unittest.TestCase):
 
         with mock.patch.object(manifest_module.os, "walk", side_effect=denied_walk):
             result = self.classify()
-        self.assert_unknown(result)
-        self.assertEqual(
-            result["packaged_ui_build_id"],
-            self.packaged_manifest["packaged_ui_build_id"],
-        )
+        self.assert_unknown(result, installed_identity_available=False)
+        self.assertIsNone(result["packaged_ui_build_id"])
 
     def test_malformed_json_is_unknown(self) -> None:
         self.manifest_path.write_text("{not json\n", encoding="utf-8")
