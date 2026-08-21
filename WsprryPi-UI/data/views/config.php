@@ -2,7 +2,7 @@
 $defaultLedGpio = 'GPIO18';
 $defaultShutdownGpio = 'GPIO19';
 $defaultAmpGpio = '';
-$bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '22m', '20m', '17m', '15m', '12m', '10m', '6m', '4m', '2m', '1.25m', '70cm'];
+$bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '8m', '6m', '5m', '4m', '2m', '1.25m', '70cm'];
 ?>
 
             <div class="card-header pb-0">
@@ -169,7 +169,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '22m', '2
                                                 spellcheck="false"
                                                 aria-describedby="frequencies-hint"
                                                 data-bs-toggle="tooltip"
-                                                title="Enter one or more WSPR dial frequencies as numeric values with optional Hz/kHz/MHz/GHz units, or as band aliases such as 20m, 22m, 2200m, or 630m. Separate entries with spaces or commas. A 0 skips a transmission window. Append @GPIO, @GPIOH, or @GPIOL to override the selector for one entry."
+                                                title="Enter one or more WSPR dial frequencies as numeric values with optional Hz/kHz/MHz/GHz units, or as available WSPR band aliases such as 20m, 2200m, or 630m. Separate entries with spaces or commas. A 0 skips a transmission window. Append @GPIO, @GPIOH, or @GPIOL to override the selector for one entry."
                                                 required />
                                             <div id="frequencies-hint" class="form-text mt-2">
                                                 Separate entries with spaces or commas. Use band names such as `20m`, numeric values, or `0` to skip a slot. Optional `@GPIO`, `@GPIOH`, or `@GPIOL` suffixes are supported.

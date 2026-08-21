@@ -1,6 +1,6 @@
 /**
- * @file wspr_band_lookup.cpp
- * @brief Implements WSPR frequency lookup and band correlation.
+ * @file band_lookup.cpp
+ * @brief Implements band correlation and WSPR frequency conveniences.
  *
  * This file centralizes amateur band edge buckets used for feature
  * correlation, such as LPF GPIO selection, and default WSPR dial frequencies used
@@ -31,7 +31,8 @@
  * SOFTWARE.
  */
 
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
+#include "Band-Lookup/include/amateur_band_catalog.hpp"
 
 #include <algorithm>
 #include <array>
@@ -45,25 +46,10 @@
 
 namespace
 {
-    struct BandDefinition
-    {
-        const char *name;
-        HamBand ham_band;
-        long long lower_hz;
-        long long upper_hz;
-    };
-
     struct CanonicalWsprBandDefinition
     {
         const char *name;
         double default_wspr_hz;
-    };
-
-    struct GenericBandDefinition
-    {
-        const char *name;
-        long long lower_hz;
-        long long upper_hz;
     };
 
     struct WSPRAliasDefinition
@@ -88,7 +74,6 @@ namespace
     constexpr double FREQ_60M = 5287200.0;
     constexpr double FREQ_40M = 7038600.0;
     constexpr double FREQ_30M = 10138700.0;
-    constexpr double FREQ_22M = 13551500.0;
     constexpr double FREQ_20M = 14095600.0;
     constexpr double FREQ_17M = 18104600.0;
     constexpr double FREQ_15M = 21094600.0;
@@ -100,30 +85,9 @@ namespace
     constexpr double FREQ_1_25M = 222100000.0;
     constexpr double FREQ_70CM = 432300000.0;
 
-    constexpr std::array<BandDefinition, HAM_BAND_COUNT> BAND_DEFINITIONS = {{
-        {"2200M", HamBand::BAND_2200M, 135700LL, 137800LL},
-        {"630M", HamBand::BAND_630M, 472000LL, 479000LL},
-        {"160M", HamBand::BAND_160M, 1800000LL, 2000000LL},
-        {"80M", HamBand::BAND_80M, 3500000LL, 3800000LL},
-        {"60M", HamBand::BAND_60M, 5250000LL, 5450000LL},
-        {"40M", HamBand::BAND_40M, 7000000LL, 7200000LL},
-        {"30M", HamBand::BAND_30M, 10100000LL, 10150000LL},
-        {"22M", HamBand::BAND_22M, 13000000LL, 13600000LL},
-        {"20M", HamBand::BAND_20M, 14000000LL, 14350000LL},
-        {"17M", HamBand::BAND_17M, 18068000LL, 18168000LL},
-        {"15M", HamBand::BAND_15M, 21000000LL, 21450000LL},
-        {"12M", HamBand::BAND_12M, 24890000LL, 24990000LL},
-        {"10M", HamBand::BAND_10M, 28000000LL, 29700000LL},
-        {"6M", HamBand::BAND_6M, 50000000LL, 52000000LL},
-        {"4M", HamBand::BAND_4M, 70000000LL, 71000000LL},
-        {"2M", HamBand::BAND_2M, 144000000LL, 148000000LL},
-        {"1.25M", HamBand::BAND_1_25M, 222000000LL, 225000000LL},
-        {"70CM", HamBand::BAND_70CM, 420000000LL, 450000000LL},
-    }};
-
     // A canonical HamBand does not imply an authoritative WSPR dial-frequency
     // alias.  This table contains only the project's established WSPR defaults.
-    constexpr std::array<CanonicalWsprBandDefinition, 18>
+    constexpr std::array<CanonicalWsprBandDefinition, 17>
         CANONICAL_WSPR_BAND_DEFINITIONS = {{
             {"2200M", FREQ_2200M},
             {"630M", FREQ_630M},
@@ -132,7 +96,6 @@ namespace
             {"60M", FREQ_60M},
             {"40M", FREQ_40M},
             {"30M", FREQ_30M},
-            {"22M", FREQ_22M},
             {"20M", FREQ_20M},
             {"17M", FREQ_17M},
             {"15M", FREQ_15M},
@@ -145,19 +108,7 @@ namespace
             {"70CM", FREQ_70CM},
         }};
 
-    constexpr std::array<GenericBandDefinition, 8> GENERIC_BAND_DEFINITIONS =
-        {{
-            {"33CM", 902000000LL, 928000000LL},
-            {"23CM", 1240000000LL, 1300000000LL},
-            {"13CM", 2300000000LL, 2450000000LL},
-            {"9CM", 3300000000LL, 3500000000LL},
-            {"6CM", 5650000000LL, 5925000000LL},
-            {"3CM", 10000000000LL, 10500000000LL},
-            {"1.25CM", 24000000000LL, 24250000000LL},
-            {"1MM", 241000000000LL, 250000000000LL},
-        }};
-
-    constexpr std::array<WSPRAliasDefinition, 20> WSPR_ALIASES = {{
+    constexpr std::array<WSPRAliasDefinition, 19> WSPR_ALIASES = {{
         {"lf", FREQ_2200M},
         {"2200m", FREQ_2200M},
         {"mf", FREQ_630M},
@@ -167,7 +118,6 @@ namespace
         {"60m", FREQ_60M},
         {"40m", FREQ_40M},
         {"30m", FREQ_30M},
-        {"22m", FREQ_22M},
         {"20m", FREQ_20M},
         {"17m", FREQ_17M},
         {"15m", FREQ_15M},
@@ -180,7 +130,7 @@ namespace
         {"70cm", FREQ_70CM},
     }};
 
-    constexpr std::array<LegacyActualWSPRAliasDefinition, 18> LEGACY_ACTUAL_WSPR_ALIASES = {{
+    constexpr std::array<LegacyActualWSPRAliasDefinition, 17> LEGACY_ACTUAL_WSPR_ALIASES = {{
         {"lf", 137500.0},
         {"2200m", 137500.0},
         {"mf", 475700.0},
@@ -190,7 +140,6 @@ namespace
         {"60m", 5288700.0},
         {"40m", 7040100.0},
         {"30m", 10140200.0},
-        {"22m", 13553000.0},
         {"20m", 14097100.0},
         {"17m", 18106100.0},
         {"15m", 21096100.0},
@@ -202,27 +151,8 @@ namespace
     }};
 }
 
-WSPRBandLookup::WSPRBandLookup()
+BandLookup::BandLookup()
 {
-    validHamFrequencies.reserve(
-        BAND_DEFINITIONS.size() + GENERIC_BAND_DEFINITIONS.size());
-
-    for (const auto &band : BAND_DEFINITIONS)
-    {
-        validHamFrequencies.emplace_back(
-            band.lower_hz,
-            band.upper_hz,
-            band.name);
-    }
-
-    for (const auto &band : GENERIC_BAND_DEFINITIONS)
-    {
-        validHamFrequencies.emplace_back(
-            band.lower_hz,
-            band.upper_hz,
-            band.name);
-    }
-
     wsprFrequencies.reserve(
         CANONICAL_WSPR_BAND_DEFINITIONS.size() + WSPR_ALIASES.size());
 
@@ -238,7 +168,7 @@ WSPRBandLookup::WSPRBandLookup()
 }
 
 std::vector<WsprBandCatalogEntry>
-WSPRBandLookup::canonical_wspr_band_catalog() const
+BandLookup::canonical_wspr_band_catalog() const
 {
     std::vector<WsprBandCatalogEntry> catalog;
     catalog.reserve(CANONICAL_WSPR_BAND_DEFINITIONS.size());
@@ -274,7 +204,7 @@ WSPRBandLookup::canonical_wspr_band_catalog() const
     return catalog;
 }
 
-long long WSPRBandLookup::parse_frequency_string(const std::string &freq_str) const
+long long BandLookup::parse_frequency_string(const std::string &freq_str) const
 {
     const std::regex pattern(
         R"(^\s*([\d\.]+)\s*(GHz|MHz|kHz|Hz)?\s*$)",
@@ -309,7 +239,7 @@ long long WSPRBandLookup::parse_frequency_string(const std::string &freq_str) co
     throw std::invalid_argument("Invalid frequency format: " + freq_str);
 }
 
-std::string WSPRBandLookup::normalize_key(const std::string &key) const
+std::string BandLookup::normalize_key(const std::string &key) const
 {
     std::string lower_key = key;
     std::transform(
@@ -323,25 +253,18 @@ std::string WSPRBandLookup::normalize_key(const std::string &key) const
     return lower_key;
 }
 
-std::optional<HamBand> WSPRBandLookup::lookup_ham_band(long long frequency) const
+std::optional<HamBand> BandLookup::lookup_ham_band(long long frequency) const
 {
-    for (const auto &band : BAND_DEFINITIONS)
-    {
-        if (frequency >= band.lower_hz && frequency <= band.upper_hz)
-        {
-            return band.ham_band;
-        }
-    }
-
-    return std::nullopt;
+    const auto index = wsprrypi::bands::find_index(static_cast<double>(frequency));
+    return index ? std::optional<HamBand>(static_cast<HamBand>(*index)) : std::nullopt;
 }
 
-std::optional<HamBand> WSPRBandLookup::lookup_ham_band(double frequency) const
+std::optional<HamBand> BandLookup::lookup_ham_band(double frequency) const
 {
     return lookup_ham_band(static_cast<long long>(frequency));
 }
 
-std::string WSPRBandLookup::validate_frequency(long long frequency) const
+std::string BandLookup::validate_frequency(long long frequency) const
 {
     const auto ham_band = lookup_ham_band(frequency);
     if (ham_band.has_value())
@@ -349,19 +272,10 @@ std::string WSPRBandLookup::validate_frequency(long long frequency) const
         return std::string(band_to_string(*ham_band));
     }
 
-    for (const auto &range : validHamFrequencies)
-    {
-        if (frequency >= std::get<0>(range) &&
-            frequency <= std::get<1>(range))
-        {
-            return std::get<2>(range);
-        }
-    }
-
     return "Invalid Frequency";
 }
 
-std::string WSPRBandLookup::freq_display_string(long long frequency) const
+std::string BandLookup::freq_display_string(long long frequency) const
 {
     std::ostringstream ss;
 
@@ -388,7 +302,7 @@ std::string WSPRBandLookup::freq_display_string(long long frequency) const
     return ss.str();
 }
 
-std::variant<double, std::string> WSPRBandLookup::lookup(
+std::variant<double, std::string> BandLookup::lookup(
     const std::variant<std::string, double, int> &input) const
 {
     if (std::holds_alternative<double>(input))
@@ -409,13 +323,18 @@ std::variant<double, std::string> WSPRBandLookup::lookup(
         {
             return it->second;
         }
+        if (normalized_key == "22m")
+        {
+            throw std::invalid_argument(
+                "Unsupported band: 22m is not in the amateur correlation catalog");
+        }
         throw std::invalid_argument("Key not found: " + normalized_key);
     }
 
     throw std::invalid_argument("Unsupported input type.");
 }
 
-double WSPRBandLookup::parse_string_to_frequency(
+double BandLookup::parse_string_to_frequency(
     std::string_view input,
     bool validate) const
 {
@@ -504,7 +423,7 @@ double WSPRBandLookup::parse_string_to_frequency(
     throw std::invalid_argument("Invalid frequency format: " + input_str);
 }
 
-std::optional<std::string> WSPRBandLookup::legacy_actual_wspr_alias_for_frequency(
+std::optional<std::string> BandLookup::legacy_actual_wspr_alias_for_frequency(
     double frequency) const
 {
     for (const auto &alias : LEGACY_ACTUAL_WSPR_ALIASES)
@@ -518,7 +437,7 @@ std::optional<std::string> WSPRBandLookup::legacy_actual_wspr_alias_for_frequenc
     return std::nullopt;
 }
 
-void WSPRBandLookup::print_wspr_frequencies() const
+void BandLookup::print_wspr_frequencies() const
 {
     for (const auto &entry : wsprFrequencies)
     {
@@ -546,8 +465,6 @@ const char *ham_band_to_string(HamBand band)
         return "40m";
     case HamBand::BAND_30M:
         return "30m";
-    case HamBand::BAND_22M:
-        return "22m";
     case HamBand::BAND_20M:
         return "20m";
     case HamBand::BAND_17M:
@@ -558,8 +475,12 @@ const char *ham_band_to_string(HamBand band)
         return "12m";
     case HamBand::BAND_10M:
         return "10m";
+    case HamBand::BAND_8M:
+        return "8m";
     case HamBand::BAND_6M:
         return "6m";
+    case HamBand::BAND_5M:
+        return "5m";
     case HamBand::BAND_4M:
         return "4m";
     case HamBand::BAND_2M:

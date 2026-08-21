@@ -1,5 +1,5 @@
 #include "../test_tone_request.hpp"
-#include "../wspr_band_lookup.hpp"
+#include "../band_lookup.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -71,7 +71,7 @@ int main()
                 "valid legacy exact RF");
     }
 
-    for (const auto &entry : WSPRBandLookup().canonical_wspr_band_catalog())
+    for (const auto &entry : BandLookup().canonical_wspr_band_catalog())
     {
         const auto band_request = parse_test_tone_request(
             json{{"frequency_source", "wspr_band"}, {"band", entry.band}});

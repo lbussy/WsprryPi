@@ -63,7 +63,7 @@ debug issues efficiently.
 
 - `src/scheduling.cpp` --- Central orchestration logic
 - `src/scheduling.hpp` --- Public scheduler interface
-- `src/wspr_band_lookup.cpp` --- Frequency and band resolution
+- `src/band_lookup.cpp` --- Frequency and band resolution
 - `src/band_gpio*.cpp` --- Band GPIO handling
 
 Responsibilities:
@@ -274,7 +274,7 @@ Only the request contract is shared.
 8. `src/WSPR-Reference/src/wspr/wspr_ref_plan.cpp`
 9. `src/WSPR-Reference/src/wspr/wspr_ref_encoder.cpp`
 10. `src/config_handler.cpp`
-11. `src/wspr_band_lookup.cpp`
+11. `src/band_lookup.cpp`
 12. `src/PPM-Manager/src/ppm_manager.cpp`
 
 ------------------------------------------------------------------------

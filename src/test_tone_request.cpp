@@ -1,5 +1,5 @@
 #include "test_tone_request.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 #include <algorithm>
 #include <cctype>
 #include <limits>
@@ -37,7 +37,7 @@ std::optional<std::uint64_t> parse_legacy_exact_rf(
         return std::nullopt;
     }
 
-    const WSPRBandLookup lookup;
+    const BandLookup lookup;
     const auto validation = lookup.lookup(
         static_cast<double>(candidate_frequency_hz));
     const auto *validation_text = std::get_if<std::string>(&validation);
@@ -64,7 +64,7 @@ TestToneRequestParseResult parse_test_tone_request(const nlohmann::json &j)
     }
     if (!j["frequency_source"].is_string()) return fail("frequency_source must be a string");
     const auto source=j["frequency_source"].get<std::string>();
-    WSPRBandLookup lookup;
+    BandLookup lookup;
     if (source=="wspr_band") {
         if (has_frequency || !has_band || !j["band"].is_string()) return fail("wspr_band requires only band");
         const auto band=j["band"].get<std::string>();

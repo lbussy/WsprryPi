@@ -8,10 +8,10 @@
 
 #include <string>
 
-class WSPRBandLookup;
+class BandLookup;
 
 std::string build_wspr_band_catalog_response_json(
-    const WSPRBandLookup &lookup,
+    const BandLookup &lookup,
     double audio_offset_hz);
 
 #endif // WSPR_BAND_CATALOG_RESPONSE_HPP

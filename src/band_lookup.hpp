@@ -1,6 +1,6 @@
 /**
- * @file wspr_band_lookup.hpp
- * @brief Provides WSPR frequency lookup, formatting, and band correlation.
+ * @file band_lookup.hpp
+ * @brief Provides general band correlation and WSPR frequency conveniences.
  *
  * This class translates frequencies to band names, band names to default WSPR
  * dial frequencies, and frequency strings to Hz. Band edge definitions are used to
@@ -32,15 +32,14 @@
  * SOFTWARE.
  */
 
-#ifndef WSPR_BAND_LOOKUP_HPP
-#define WSPR_BAND_LOOKUP_HPP
+#ifndef BAND_LOOKUP_HPP
+#define BAND_LOOKUP_HPP
 
 #include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -54,27 +53,16 @@ struct WsprBandCatalogEntry
 };
 
 /**
- * @class WSPRBandLookup
- * @brief Provides methods for WSPR frequency lookup, validation, and display.
+ * @class BandLookup
+ * @brief Provides band correlation plus separate WSPR preset conveniences.
  */
-class WSPRBandLookup
+class BandLookup
 {
 private:
-    /**
-     * @brief Defines a frequency range tuple of lower edge, upper edge, and
-     *        display name.
-     */
-    using FrequencyRange = std::tuple<long long, long long, std::string>;
-
     /**
      * @brief Stores default WSPR dial frequencies by normalized band name or alias.
      */
     std::unordered_map<std::string, double> wsprFrequencies;
-
-    /**
-     * @brief Stores band ranges used to correlate a frequency to a band.
-     */
-    std::vector<FrequencyRange> validHamFrequencies;
 
 protected:
     /**
@@ -97,7 +85,7 @@ public:
     /**
      * @brief Constructs the lookup object and initializes band tables.
      */
-    WSPRBandLookup();
+    BandLookup();
 
     /**
      * @brief Return the correlated HamBand for a numeric frequency.
@@ -194,4 +182,4 @@ public:
  */
 const char *ham_band_to_string(HamBand band);
 
-#endif // WSPR_BAND_LOOKUP_HPP
+#endif // BAND_LOOKUP_HPP

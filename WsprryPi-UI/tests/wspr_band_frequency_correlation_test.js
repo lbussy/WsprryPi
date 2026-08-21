@@ -458,7 +458,7 @@ function resetScenarioEnvironment() {
     resetTimers();
     resetElements();
     bridge.clearConnectionRecoveryState();
-    bridge.setConfiguration("WSPR", "22m", 0);
+    bridge.setConfiguration("WSPR", "30m", 0);
     bridge.functions.bindTestToneControls();
     assert.equal(FakeWebSocket.instances.length, 0,
         "each scenario must begin with no fake WebSocket instances");
@@ -577,12 +577,12 @@ assert.equal(handlerCount(jqueryDuplicateProbe, "click"), 0,
     "namespaced off must remove every matching duplicate registration");
 
 const canonicalBands = [
-    "2200m", "630m", "160m", "80m", "60m", "40m", "30m", "22m",
+    "2200m", "630m", "160m", "80m", "60m", "40m", "30m",
     "20m", "17m", "15m", "12m", "10m", "6m", "4m", "2m", "1.25m", "70cm"
 ];
 function validCatalog(offset = 1500) {
     const dialFrequenciesHz = [
-        136000, 474200, 1836600, 3568600, 5287200, 7038600, 10138700, 13551500,
+        136000, 474200, 1836600, 3568600, 5287200, 7038600, 10138700,
         14095600, 18104600, 21094600, 24924600, 28124600, 50293000, 70091000,
         144489000, 222100000, 432300000,
     ];
@@ -611,7 +611,7 @@ const operationSnapshotBeforeCatalog = context.createOperationConfigSnapshot({
     enableOnBoot: "Never",
     callsign: "NXXX",
     gridsquare: "ZZ99",
-    wsprFrequencyValue: "22m",
+    wsprFrequencyValue: "30m",
     cwBaseFrequencyHz: 14096900,
     cwOffsetHz: 5,
 });
@@ -619,7 +619,7 @@ assert.equal(operationSnapshotBeforeCatalog.wsprFrequencyHz, 0,
     "Operation config loading must use a safe unavailable WSPR frequency before catalog validation");
 assert.equal(operationSnapshotBeforeCatalog.cwBaseFrequencyHz, 14096900,
     "Operation config loading must preserve the configured CW base frequency");
-assert.equal(context.parseConfiguredWsprFrequencyHz("22m"), 0,
+assert.equal(context.parseConfiguredWsprFrequencyHz("30m"), 0,
     "catalog aliases must remain unavailable before validation");
 assert.equal(context.parseConfiguredWsprFrequencyHz("14.0956MHz"), 14095600,
     "numeric configured frequencies remain independent of catalog aliases");
@@ -672,22 +672,22 @@ const operationSnapshotAfterCatalog = context.createOperationConfigSnapshot({
     enableOnBoot: "Never",
     callsign: "NXXX",
     gridsquare: "ZZ99",
-    wsprFrequencyValue: "22m",
+    wsprFrequencyValue: "30m",
     cwBaseFrequencyHz: 14096900,
     cwOffsetHz: 5,
 });
-assert.equal(operationSnapshotAfterCatalog.wsprFrequencyHz, 13551500,
+assert.equal(operationSnapshotAfterCatalog.wsprFrequencyHz, 10138700,
     "Operation config loading must resolve the configured WSPR band from the validated catalog");
 assert.equal(JSON.stringify(selectionCatalog), selectionCatalogBefore,
     "selection must not mutate the validated catalog input");
 
 const bandPreview = context.createTestToneSelectionPreview(
-    context.createTestToneSelection("wspr_band", "22m", selectionCatalog)
+    context.createTestToneSelection("wspr_band", "30m", selectionCatalog)
 );
 assert.equal(bandPreview.valid, true, "band preview must be presentation-ready");
-assert.equal(bandPreview.band, "22m", "band preview must retain the canonical band");
+assert.equal(bandPreview.band, "30m", "band preview must retain the canonical band");
 assert.equal(bandPreview.audioOffsetHz, 2750, "band preview must retain the non-default backend offset");
-assert.equal(bandPreview.toneFrequencyHz, 13554250, "band preview must retain the final RF tone");
+assert.equal(bandPreview.toneFrequencyHz, 10141450, "band preview must retain the final RF tone");
 assert.match(bandPreview.text, /WSPR dial .*\+ 2750 Hz offset/, "band preview must explain dial and offset");
 
 const customSelection = context.createTestToneSelection("custom_rf", "14097123", selectionCatalog);
@@ -773,15 +773,15 @@ assert.equal(context.parseConfiguredWsprFrequencyHz("lf"), 136000,
     "lf redirects through the validated 2200m catalog row");
 assert.equal(context.parseConfiguredWsprFrequencyHz("mf"), 474200,
     "mf redirects through the validated 630m catalog row");
-assert.equal(context.parseConfiguredWsprFrequencyHz("22m"), 13551500,
+assert.equal(context.parseConfiguredWsprFrequencyHz("30m"), 10138700,
     "canonical aliases resolve through the validated catalog");
-assert.equal(context.testToneDefaultTransmitFrequencyHz(), 13554250,
+assert.equal(context.testToneDefaultTransmitFrequencyHz(), 10141450,
     "non-default catalog offset is applied exactly once");
 assert.equal(buttons["#testToneStart"].disabled, false, "Start enables only after current validation");
 assert.deepEqual(elements.testToneBand.options.map((option) => option.value), ["", ...canonicalBands],
     "band selector must contain exactly the canonical catalog order without aliases");
-assert.equal(elements.testToneSourceBand.checked, true, "configured 22m defaults to band mode");
-assert.equal(elements.testToneBand.value, "22m", "configured 22m selects its canonical catalog row");
+assert.equal(elements.testToneSourceBand.checked, true, "configured 30m defaults to band mode");
+assert.equal(elements.testToneBand.value, "30m", "configured 30m selects its canonical catalog row");
 assert.match(elements.testToneSelectionPreview.textContent, /WSPR dial .*\+ 2750 Hz offset/,
     "band mode preview must show the catalog dial and non-default offset");
 
@@ -1035,10 +1035,10 @@ context.handleTestToneCommandResponse({
     command: "tone_start",
     started: true,
     frequency_source: "wspr_band",
-    band: "22m",
-    dial_frequency_hz: 13551500,
+    band: "30m",
+    dial_frequency_hz: 10138700,
     audio_offset_hz: 1500,
-    actual_rf_frequency_hz: 13553000,
+    actual_rf_frequency_hz: 10140200,
     selector_gpio_enabled: false,
 });
 assert.match(elements.testToneExecutionResult.textContent, /Selector: disabled/, "selector-disabled success must be explicit");
@@ -1414,7 +1414,7 @@ assert.equal(JSON.stringify(context.testToneStartSnapshot()), JSON.stringify({
     quarantined: false,
     timeoutHandle: null,
 }), "disconnect must discard timed-out context and quarantine belonging to the old socket");
-assert.equal(context.parseConfiguredWsprFrequencyHz("22m"), 13551500,
+assert.equal(context.parseConfiguredWsprFrequencyHz("30m"), 10138700,
     "last-valid catalog remains available only for display/configuration continuity");
 
 const second = context.openConnection();

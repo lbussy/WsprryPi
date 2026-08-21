@@ -37,7 +37,7 @@
 #include "scheduling.hpp"
 #include "test_tone_request.hpp"
 #include "test_tone_response.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 #include "wspr_band_catalog_response.hpp"
 #include "wspr_transmit.hpp"
 
@@ -468,7 +468,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
         {
             try
             {
-                const WSPRBandLookup lookup;
+                const BandLookup lookup;
                 reply = json::parse(build_wspr_band_catalog_response_json(
                     lookup,
                     current_wspr_audio_offset_hz()));

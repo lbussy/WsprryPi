@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 
+#include "../../Band-Lookup/include/amateur_band_catalog.hpp"
 #include "execution_plan.hpp"
 #include "transmission_request.hpp"
 
@@ -42,34 +43,6 @@ inline const char* qualification_state_name(QualificationState state) noexcept
 
 namespace detail
 {
-struct BandRange { std::string_view name; double lower_hz; double upper_hz; };
-
-// Union of the project's recognized US and international amateur-band buckets.
-// These are safety-policy buckets, not a statement of an operator's authority.
-inline constexpr std::array<BandRange, 26> amateur_bands{{
-    {"2200 m",135700,137800},{"630 m",472000,479000},
-    {"160 m",1800000,2000000},{"80 m",3500000,4000000},
-    {"60 m",5250000,5450000},{"40 m",7000000,7300000},
-    {"30 m",10100000,10150000},{"22 m",13000000,13600000},
-    {"20 m",14000000,14350000},{"17 m",18068000,18168000},
-    {"15 m",21000000,21450000},{"12 m",24890000,24990000},
-    {"10 m",28000000,29700000},{"6 m",50000000,54000000},
-    {"4 m",70000000,71000000},{"2 m",144000000,148000000},
-    {"1.25 m",222000000,225000000},{"70 cm",420000000,450000000},
-    {"33 cm",902000000,928000000},{"23 cm",1240000000,1300000000},
-    {"13 cm",2300000000,2450000000},{"9 cm",3300000000,3500000000},
-    {"6 cm",5650000000,5925000000},{"3 cm",10000000000,10500000000},
-    {"1.25 cm",24000000000,24250000000},{"1 mm",241000000000,250000000000}
-}};
-
-inline const BandRange* find_band(double frequency_hz) noexcept
-{
-    for (const auto& band : amateur_bands)
-        if (frequency_hz >= band.lower_hz && frequency_hz <= band.upper_hz)
-            return &band;
-    return nullptr;
-}
-
 inline QualificationState qualification_for(
     BackendKind backend, HardwareProfile profile, TransmissionMode mode,
     std::string_view band) noexcept
@@ -79,15 +52,17 @@ inline QualificationState qualification_for(
 
     if (backend == BackendKind::SI5351)
     {
-        if (band == "1.25 m")
+        if (band == "1.25m" || band == "70cm")
             return QualificationState::UNAVAILABLE;
+        if (band == "8m" || band == "5m")
+            return QualificationState::UNTESTED;
         return QualificationState::QUALIFIED;
     }
 
     if (backend != BackendKind::RPI_CLOCK_GPIO && backend != BackendKind::RP1_GPCLK)
         return QualificationState::UNAVAILABLE;
 
-    if (band == "2200 m")
+    if (band == "2200m")
     {
         if (profile == HardwareProfile::BCM2711_750_MHZ_PLLD ||
             profile == HardwareProfile::RP1_GPCLK)
@@ -103,16 +78,17 @@ inline QualificationState qualification_for(
         return QualificationState::UNQUALIFIED;
     }
 
-    const bool questionable = band == "12 m" || band == "6 m" || band == "4 m" ||
-        band == "2 m" || band == "1.25 m" || band == "70 cm";
+    const bool questionable = band == "12m" || band == "8m" || band == "6m" ||
+        band == "5m" || band == "4m" || band == "2m" ||
+        band == "1.25m" || band == "70cm";
     if (!questionable)
         return QualificationState::QUALIFIED;
 
     if (profile == HardwareProfile::BCM2711_750_MHZ_PLLD)
     {
-        if (band == "1.25 m" || band == "70 cm")
+        if (band == "1.25m" || band == "70cm")
             return QualificationState::UNAVAILABLE;
-        if (band == "6 m" &&
+        if (band == "6m" &&
             (mode == TransmissionMode::TONE || mode == TransmissionMode::QRSS ||
              mode == TransmissionMode::FSKCW || mode == TransmissionMode::DFCW))
             return QualificationState::QUALIFIED;
@@ -140,7 +116,7 @@ inline FrequencyPolicyDecision evaluate_frequency_policy(
     if (!std::isfinite(frequency_hz) || frequency_hz <= 0.0)
         return decision; // Numeric/backend validation remains authoritative.
 
-    const auto* band = detail::find_band(frequency_hz);
+    const auto* band = bands::find(frequency_hz);
     decision.amateur_allocation = band != nullptr;
     if (band == nullptr)
     {
@@ -149,13 +125,14 @@ inline FrequencyPolicyDecision evaluate_frequency_policy(
             return decision;
         decision.allowed = false;
         decision.error =
-            "Transmission is outside recognized US and international amateur bands. "
+            "Transmission is outside the recognized worldwide amateur-band catalog. "
             "Both --allow-unqualified-frequency and --allow-non-amateur-frequency are required.";
         return decision;
     }
 
-    decision.band = std::string(band->name);
-    decision.qualification = detail::qualification_for(backend, profile, mode, band->name);
+    decision.band = std::string(band->canonical_name);
+    decision.qualification = detail::qualification_for(
+        backend, profile, mode, band->canonical_name);
     if (decision.qualification == QualificationState::QUALIFIED)
         return decision;
     if (decision.qualification != QualificationState::UNAVAILABLE &&

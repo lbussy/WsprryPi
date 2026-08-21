@@ -4176,7 +4176,6 @@ function validateWsprFrequencyBaseToken(token) {
         "60m",
         "40m",
         "30m",
-        "22m",
         "20m",
         "17m",
         "15m",

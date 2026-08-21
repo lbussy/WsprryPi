@@ -379,7 +379,7 @@ int main()
             ui_source.find("function validateWsprFrequencyToken(token)") != std::string::npos &&
             ui_source.find("\"2200m\",") != std::string::npos &&
             ui_source.find("\"630m\",") != std::string::npos &&
-            ui_source.find("\"22m\",") != std::string::npos &&
+            ui_source.find("\"22m\",") == std::string::npos &&
             ui_source.find("@GPIO, @GPIOH, or @GPIOL") != std::string::npos &&
             ui_source.find(".replace(/,/g, \" \")") != std::string::npos &&
             ui_source.find("const numericRx = /^-?(?:(?:\\\\d+(?:\\\\.\\\\d*)?)|(?:\\\\.\\\\d+))(?:hz|khz|mhz|ghz)?$/i;") == std::string::npos &&

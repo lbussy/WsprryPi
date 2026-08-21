@@ -1,9 +1,9 @@
 #include "test_tone_frequency_plan.hpp"
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 #include <cmath>
 #include <limits>
 TestToneFrequencyPlanResult plan_explicit_test_tone_frequency(const ParsedTestToneRequest&r,double offset){
- auto fail=[](const char*s){return TestToneFrequencyPlanResult{{},s};}; WSPRBandLookup l;
+ auto fail=[](const char*s){return TestToneFrequencyPlanResult{{},s};}; BandLookup l;
  if(r.source!=TestToneRequestSource::WsprBand&&r.source!=TestToneRequestSource::CustomRf)return fail("legacy request is not handled by explicit planner");
  if(r.source==TestToneRequestSource::CustomRf){if(!r.frequency_hz||!l.lookup_ham_band(static_cast<double>(*r.frequency_hz)))return fail("custom RF is outside supported amateur bands"); auto b=*l.lookup_ham_band(static_cast<double>(*r.frequency_hz));return {{TestToneFrequencyPlan{r.source,ham_band_to_string(b),{}, {},*r.frequency_hz}}, {}};}
  const double uint64_exclusive_upper_bound=std::ldexp(1.0,std::numeric_limits<std::uint64_t>::digits);

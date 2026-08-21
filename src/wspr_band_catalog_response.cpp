@@ -5,7 +5,7 @@
 
 #include "wspr_band_catalog_response.hpp"
 
-#include "wspr_band_lookup.hpp"
+#include "band_lookup.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -36,7 +36,7 @@ namespace
 }
 
 std::string build_wspr_band_catalog_response_json(
-    const WSPRBandLookup &lookup,
+    const BandLookup &lookup,
     double audio_offset_hz)
 {
     using json = nlohmann::json;
