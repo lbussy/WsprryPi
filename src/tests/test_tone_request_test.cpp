@@ -115,6 +115,7 @@ int main()
         {"object wspr_band band", {{"frequency_source", "wspr_band"}, {"band", json::object()}}, "band"},
         {"empty wspr_band band", {{"frequency_source", "wspr_band"}, {"band", ""}}, "band"},
         {"unknown wspr_band band", {{"frequency_source", "wspr_band"}, {"band", "unknown"}}, "band"},
+        {"removed 22m wspr_band", {{"frequency_source", "wspr_band"}, {"band", "22m"}}, "22m"},
         {"lf wspr_band alias", {{"frequency_source", "wspr_band"}, {"band", "lf"}}, "band"},
         {"mf wspr_band alias", {{"frequency_source", "wspr_band"}, {"band", "mf"}}, "band"},
         {"noncanonical wspr_band case", {{"frequency_source", "wspr_band"}, {"band", "20M"}}, "band"},

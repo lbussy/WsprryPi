@@ -70,6 +70,8 @@ TestToneRequestParseResult parse_test_tone_request(const nlohmann::json &j)
         const auto band=j["band"].get<std::string>();
         for (const auto &entry: lookup.canonical_wspr_band_catalog()) if (entry.band==band)
             return {{ParsedTestToneRequest{TestToneRequestSource::WsprBand,band,std::nullopt}},{}};
+        if (band == "22m")
+            return fail("22m is not in the amateur correlation catalog");
         return fail("band must be canonical");
     }
     if (source=="custom_rf") {
