@@ -10,5 +10,6 @@ TestToneFrequencyPlanResult plan_explicit_test_tone_frequency(const ParsedTestTo
  if(!std::isfinite(offset)||offset<0||std::trunc(offset)!=offset||offset>=uint64_exclusive_upper_bound)return fail("audio offset must be a non-negative integral Hz value");
  const auto offset_hz=static_cast<std::uint64_t>(offset);
  for(const auto&e:l.canonical_wspr_band_catalog(profile,preferences))if(e.band==r.band){if(offset_hz>std::numeric_limits<std::uint64_t>::max()-e.dial_frequency_hz)return fail("audio offset overflows RF frequency");return {TestToneFrequencyPlan{r.source,e.band,e.dial_frequency_hz,offset_hz,e.dial_frequency_hz+offset_hz}, {}};}
+ if(r.band=="22m")return fail("22m is not in the amateur correlation catalog");
  return fail("band must be canonical");
 }
