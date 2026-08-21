@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import stat
 import tempfile
 import unittest
 from unittest import mock
+from contextlib import redirect_stdout
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -49,6 +52,7 @@ class UiPublicationTest(unittest.TestCase):
         self.temporary.cleanup()
 
     def publish(self, **kwargs):
+        kwargs.setdefault("backup_parent", self.root / "external-backups")
         return PUBLISHER.publish_ui(
             self.source,
             self.target,
@@ -64,7 +68,7 @@ class UiPublicationTest(unittest.TestCase):
         validated = MANIFEST.load_manifest(manifest_path)
         installed = MANIFEST.classify_installed_ui(self.target, manifest_path)
 
-        self.assertEqual(status["installed_state"], "packaged")
+        self.assertEqual(status["final_installed_state"], "packaged")
         self.assertEqual(installed["installed_state"], "packaged")
         self.assertEqual(
             installed["installed_ui_build_id"],
@@ -96,7 +100,7 @@ class UiPublicationTest(unittest.TestCase):
         self.assertEqual(
             installed["packaged_ui_build_id"], installed["installed_ui_build_id"]
         )
-        self.assertEqual(status["installed_ui_build_id"], installed["installed_ui_build_id"])
+        self.assertEqual(status["final_installed_ui_build_id"], installed["installed_ui_build_id"])
 
     def test_runtime_and_backup_paths_do_not_change_identity(self):
         status = self.publish()
@@ -107,8 +111,122 @@ class UiPublicationTest(unittest.TestCase):
         )
         self.assertEqual(installed["installed_state"], "packaged")
         self.assertEqual(
-            installed["installed_ui_build_id"], status["installed_ui_build_id"]
+            installed["installed_ui_build_id"], status["final_installed_ui_build_id"]
         )
+
+    def test_locally_modified_files_are_backed_up_and_replaced(self):
+        self.publish()
+        prior_manifest = (self.target / "ui-manifest.json").read_bytes()
+        (self.target / "index.php").chmod(0o644)
+        (self.target / "index.php").write_text("locally modified\n")
+        (self.target / "custom.php").write_text("custom addition\n")
+        (self.target / "site.css").unlink()
+
+        result = self.publish(backup_parent=self.root / "external-backups")
+        backup = Path(result["backup_directory"])
+        self.assertEqual(result["prior_state"], "locally_modified")
+        self.assertEqual(result["modified_files"], ["index.php"])
+        self.assertEqual(result["added_files"], ["custom.php"])
+        self.assertEqual(result["missing_files"], ["site.css"])
+        self.assertEqual((backup / "files" / "index.php").read_text(), "locally modified\n")
+        self.assertEqual((backup / "files" / "custom.php").read_text(), "custom addition\n")
+        self.assertEqual(Path(result["prior_manifest_backup"]).read_bytes(), prior_manifest)
+        report = json.loads(Path(result["modification_report_path"]).read_text())
+        self.assertTrue(report["backup_verified"])
+        self.assertTrue(report["replacement_completed"])
+        self.assertTrue(result["replacement_completed"])
+        self.assertFalse((self.target / "custom.php").exists())
+        final = MANIFEST.classify_installed_ui(self.target, self.target / "ui-manifest.json")
+        self.assertEqual(final["installed_state"], "packaged")
+
+    def test_unknown_prior_state_backs_up_complete_covered_tree(self):
+        self.target.mkdir(parents=True)
+        (self.target / "index.php").write_text("unknown old index\n")
+        (self.target / "custom.php").write_text("unknown custom\n")
+        (self.target / "cache").mkdir()
+        (self.target / "cache" / "runtime").write_text("excluded\n")
+        result = self.publish(backup_parent=self.root / "external-backups")
+        backup = Path(result["backup_directory"])
+        self.assertEqual(result["prior_state"], "unknown")
+        self.assertEqual((backup / "files" / "index.php").read_text(), "unknown old index\n")
+        self.assertEqual((backup / "files" / "custom.php").read_text(), "unknown custom\n")
+        self.assertFalse((backup / "files" / "cache").exists())
+
+    def test_backup_failure_prevents_replacement(self):
+        self.publish()
+        live_file = self.target / "index.php"
+        live_file.chmod(0o644)
+        live_file.write_text("must survive\n")
+        with mock.patch.object(
+            PUBLISHER, "_copy_verified", side_effect=OSError("injected backup failure")
+        ):
+            with self.assertRaises(PUBLISHER.UiPublicationError) as caught:
+                self.publish(backup_parent=self.root / "external-backups")
+        self.assertEqual(live_file.read_text(), "must survive\n")
+        self.assertFalse(caught.exception.result["replacement_completed"])
+        self.assertFalse(caught.exception.result["backup_verified"])
+
+    def test_live_churn_during_backup_prevents_replacement(self):
+        self.publish()
+        live_file = self.target / "index.php"
+        live_file.chmod(0o644)
+        live_file.write_text("must survive\n")
+        real_copy = PUBLISHER._copy_verified
+
+        def copy_then_change(*args):
+            real_copy(*args)
+            (self.target / "late-change.php").write_text("arrived during backup\n")
+
+        with mock.patch.object(PUBLISHER, "_copy_verified", side_effect=copy_then_change):
+            with self.assertRaisesRegex(PUBLISHER.UiPublicationError, "changed while") as caught:
+                self.publish(backup_parent=self.root / "external-backups")
+        self.assertEqual(live_file.read_text(), "must survive\n")
+        self.assertTrue((self.target / "late-change.php").exists())
+        self.assertFalse(caught.exception.result["replacement_completed"])
+
+    def test_fail_on_modifications_refuses_replacement(self):
+        self.publish()
+        live_file = self.target / "index.php"
+        live_file.chmod(0o644)
+        live_file.write_text("must survive\n")
+        with self.assertRaisesRegex(PUBLISHER.UiPublicationError, "replacement refused"):
+            self.publish(
+                backup_parent=self.root / "external-backups",
+                fail_on_ui_modifications=True,
+            )
+        self.assertEqual(live_file.read_text(), "must survive\n")
+
+    def test_final_renderer_relists_inventory_and_actual_completion(self):
+        result = PUBLISHER._new_result()
+        result.update({
+            "prior_state": "locally_modified",
+            "modified_files": ["index.php"],
+            "added_files": ["custom.php"],
+            "missing_files": ["site.css"],
+            "prior_manifest_backup": "/backup/prior-manifest.json",
+            "modification_report_path": "/backup/modification-report.json",
+            "backup_directory": "/backup",
+            "backup_verified": True,
+            "replacement_completed": False,
+            "error": "publication stopped",
+        })
+        result_path = self.root / "result.json"
+        PUBLISHER._write_json_atomic(result_path, result)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(PUBLISHER.render_result(result_path), 0)
+        rendered = output.getvalue()
+        for expected in (
+            "Modified files:\n    - index.php",
+            "Added files:\n    - custom.php",
+            "Missing files:\n    - site.css",
+            "Prior manifest backup: /backup/prior-manifest.json",
+            "Modification report: /backup/modification-report.json",
+            "Backup directory: /backup",
+            "Replacement completed: no",
+            "Error: publication stopped",
+        ):
+            self.assertIn(expected, rendered)
 
     def test_validation_failure_leaves_live_tree_untouched(self):
         self.target.mkdir(parents=True)
@@ -206,6 +324,24 @@ class UiPublicationTest(unittest.TestCase):
             with self.assertRaises(PUBLISHER.UiPublicationError):
                 self.publish()
         self.assertEqual(old_file.read_text(encoding="utf-8"), "old live UI\n")
+
+    def test_postpublication_cleanup_failure_reports_replacement_truthfully(self):
+        self.target.mkdir(parents=True)
+        (self.target / "index.php").write_text("unknown old UI\n")
+        real_rmtree = PUBLISHER.shutil.rmtree
+
+        def fail_previous_cleanup(path, *args, **kwargs):
+            if ".wsprrypi.previous." in Path(path).name:
+                raise OSError("injected prior-tree cleanup failure")
+            return real_rmtree(path, *args, **kwargs)
+
+        with mock.patch.object(PUBLISHER.shutil, "rmtree", side_effect=fail_previous_cleanup):
+            with self.assertRaises(PUBLISHER.UiPublicationError) as caught:
+                self.publish()
+        self.assertTrue(caught.exception.result["replacement_completed"])
+        self.assertEqual(caught.exception.result["final_installed_state"], "packaged")
+        final = MANIFEST.classify_installed_ui(self.target, self.target / "ui-manifest.json")
+        self.assertEqual(final["installed_state"], "packaged")
 
     def test_postvalidation_change_is_not_published(self):
         self.target.mkdir(parents=True)

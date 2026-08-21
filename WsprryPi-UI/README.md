@@ -62,4 +62,12 @@ or executable version changes do not participate in UI refresh decisions.
 The published manifest is read-only and owned outside the Apache/PHP runtime
 account. Top-level `cache/` and `backups/` content remains excluded from the
 identity and may be runtime-owned without changing the packaged classification.
-Policy for replacing a locally modified live installation is a later slice.
+
+Before replacing a locally modified installation, the publisher creates a
+unique verified backup below `/var/backups/wsprrypi/ui`. It preserves modified
+and added files plus the prior manifest, and records missing files in
+`modification-report.json`. If prior state is unknown, it backs up the complete
+covered UI tree. Backup failure prevents replacement; customizations are never
+merged automatically. `--fail-on-ui-modifications` makes the installer refuse
+replacement instead. The installer relists the affected files, backup and
+report locations, and actual replacement status as its final output block.

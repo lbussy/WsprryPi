@@ -220,6 +220,9 @@ declare GIT_TAG="${GIT_TAG:-v$SEM_VER}"
 declare GIT_RAW_BASE="https://raw.githubusercontent.com"
 declare GIT_API_BASE="https://api.github.com/repos"
 declare GIT_CLONE_BASE="https://github.com"
+declare FAIL_ON_UI_MODIFICATIONS="${FAIL_ON_UI_MODIFICATIONS:-false}"
+declare UI_PUBLICATION_ATTEMPTED="false"
+declare UI_PUBLICATION_RESULT_FILE=""
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -972,7 +975,9 @@ declare REBOOT=${REBOOT:-false}
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
 egress() {
-    true
+    local status=$?
+    report_ui_publication_result
+    return "$status"
 }
 
 # -----------------------------------------------------------------------------
@@ -5129,6 +5134,7 @@ OPTIONS_LIST=(
     "-v|--version 0 print_version Display $WSPR_SERVICE version 1"
     "--no-web 0 set_no_web Disable web UI installation and Apache integration (service will run with --no-web) 0"
     "--release 0 set_release_build Build as release regardless of branch 0"
+    "--fail-on-ui-modifications 0 set_fail_on_ui_modifications Refuse to replace a modified or unknown installed UI 0"
 )
 
 # -----------------------------------------------------------------------------
@@ -5198,6 +5204,16 @@ set_no_web() {
 
     NO_WEB="true"
 
+    debug_end "$debug"
+    return 0
+}
+
+# shellcheck disable=SC2329
+set_fail_on_ui_modifications() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+    FAIL_ON_UI_MODIFICATIONS="true"
     debug_end "$debug"
     return 0
 }
@@ -6553,6 +6569,7 @@ manage_web() {
     local retval=0 # Initialize return value
     local publisher="${LOCAL_REPO_DIR}/scripts/copy_ui.py"
     local source_commit=""
+    local publisher_args=()
 
     if [[ "$ACTION" == "install" ]]; then
         # Validate source directory exists
@@ -6574,18 +6591,31 @@ manage_web() {
             return 1
         }
 
+        UI_PUBLICATION_RESULT_FILE="/run/wsprrypi-ui-publication-${$}.json"
+        if [[ "$DRY_RUN" != "true" ]]; then
+            UI_PUBLICATION_ATTEMPTED="true"
+            rm -f "$UI_PUBLICATION_RESULT_FILE"
+        fi
+        publisher_args=(
+            --source "$source_path"
+            --target "$target_path"
+            --source-commit "$source_commit"
+            --application-version "$SEM_VER"
+            --owner www-data
+            --group www-data
+            --result-file "$UI_PUBLICATION_RESULT_FILE"
+        )
+        if [[ "$FAIL_ON_UI_MODIFICATIONS" == "true" ]]; then
+            publisher_args+=(--fail-on-ui-modifications)
+        fi
+
         debug_print "Staging, validating, and publishing web files from '$source_path' to '$target_path'." "$debug"
         if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: $publisher --source $source_path --target $target_path --source-commit $source_commit --application-version $SEM_VER --owner www-data --group www-data"
+            logD "Exec: $publisher ${publisher_args[*]}"
         else
             exec_command "Publish validated UI artifact" \
                 "$publisher" \
-                --source "$source_path" \
-                --target "$target_path" \
-                --source-commit "$source_commit" \
-                --application-version "$SEM_VER" \
-                --owner www-data \
-                --group www-data \
+                "${publisher_args[@]}" \
                 "$debug" || retval=1
             if [[ "$retval" -eq 0 ]]; then
                 exec_command "Set log permissions" \
@@ -7797,6 +7827,20 @@ flag_need_reboot() {
 }
 
 # -----------------------------------------------------------------------------
+report_ui_publication_result() {
+    if [[ "$UI_PUBLICATION_ATTEMPTED" != "true" ]]; then
+        return 0
+    fi
+    if [[ -n "$UI_PUBLICATION_RESULT_FILE" && -f "$UI_PUBLICATION_RESULT_FILE" ]]; then
+        python3 "${LOCAL_REPO_DIR}/scripts/copy_ui.py" \
+            --render-result "$UI_PUBLICATION_RESULT_FILE" || true
+    else
+        printf "\nUI replacement report\n"
+        printf "  Result unavailable: the UI publisher did not create its result file.\n"
+        printf "  Replacement completed: unknown\n"
+    fi
+}
+
 # @brief Finalizes the installation or uninstallation process.
 # @details Logs and displays a completion message based on whether the install
 #          or uninstall was successful or failed. It also provides follow-up

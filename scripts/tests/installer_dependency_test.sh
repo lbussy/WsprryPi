@@ -76,6 +76,24 @@ if ! grep -Fq -- '--source-commit "$source_commit"' "$INSTALLER" ||
     exit 1
 fi
 
+for required in \
+    '"--fail-on-ui-modifications 0 set_fail_on_ui_modifications' \
+    '--result-file "$UI_PUBLICATION_RESULT_FILE"' \
+    'publisher_args+=(--fail-on-ui-modifications)' \
+    'report_ui_publication_result' \
+    'trap egress EXIT'
+do
+    if ! grep -Fq -- "$required" "$INSTALLER"; then
+        echo "install.sh is missing UI modification/reporting contract: $required" >&2
+        exit 1
+    fi
+done
+
+if ! awk '/egress\(\)/,/^}/' "$INSTALLER" | grep -Fq 'report_ui_publication_result'; then
+    echo "the UI replacement report must be emitted from the final EXIT trap" >&2
+    exit 1
+fi
+
 if awk '/manage_web\(\)/,/^}/' "$INSTALLER" | grep -Eq 'cp -r .*source_path|chown -R .*target_path'; then
     echo "manage_web must not copy or mutate the live UI tree incrementally" >&2
     exit 1

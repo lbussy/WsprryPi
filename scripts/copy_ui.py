@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import pwd
@@ -21,6 +24,51 @@ MANIFEST_FILENAME = "ui-manifest.json"
 
 class UiPublicationError(RuntimeError):
     """Raised when a UI artifact cannot be staged, validated, or published."""
+
+    def __init__(self, message: str, result: dict | None = None):
+        super().__init__(message)
+        self.result = result
+
+
+def _write_json_atomic(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _new_result() -> dict:
+    return {
+        "schema_version": 1,
+        "prior_state": "not_installed",
+        "modified_files": [],
+        "added_files": [],
+        "missing_files": [],
+        "prior_manifest_backup": None,
+        "modification_report_path": None,
+        "backup_directory": None,
+        "backup_verified": None,
+        "replacement_completed": False,
+        "final_installed_state": None,
+        "final_installed_ui_build_id": None,
+        "error": None,
+    }
 
 
 def get_git_root() -> Path | None:
@@ -125,6 +173,88 @@ def _set_tree_permissions(root: Path, owner: str | None, group: str | None) -> N
         os.chown(manifest, 0, 0)
 
 
+def _copy_verified(source_root: Path, backup_root: Path, paths: list[str]) -> None:
+    for relative in paths:
+        source = source_root / relative
+        destination = backup_root / "files" / relative
+        if not source.is_file() or source.is_symlink():
+            raise UiPublicationError(f"unable to back up covered UI file: {relative}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        if _sha256(source) != _sha256(destination):
+            raise UiPublicationError(f"backup verification failed for: {relative}")
+
+
+def _create_modification_backup(
+    target: Path,
+    classification: dict,
+    manifest_module,
+    backup_parent: Path,
+    result: dict,
+) -> None:
+    backup_parent = backup_parent.resolve(strict=False)
+    if backup_parent == target or backup_parent in target.parents or target in backup_parent.parents:
+        raise UiPublicationError("UI backup directory must be outside the live web root")
+    backup_parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = Path(tempfile.mkdtemp(prefix=f"ui-backup-{timestamp}-", dir=backup_parent))
+    result["backup_directory"] = str(backup)
+    try:
+        if classification["installed_state"] == "unknown":
+            paths = [record["path"] for record in manifest_module.collect_file_records(target)]
+        else:
+            paths = sorted(
+                set(classification["modified_files"] + classification["added_files"]),
+                key=lambda value: value.encode("utf-8"),
+            )
+        _copy_verified(target, backup, paths)
+
+        prior_manifest = target / MANIFEST_FILENAME
+        if prior_manifest.is_file() and not prior_manifest.is_symlink():
+            manifest_backup = backup / "prior-manifest.json"
+            shutil.copy2(prior_manifest, manifest_backup)
+            if _sha256(prior_manifest) != _sha256(manifest_backup):
+                raise UiPublicationError("prior manifest backup verification failed")
+            result["prior_manifest_backup"] = str(manifest_backup)
+
+        report_path = backup / "modification-report.json"
+        result["modification_report_path"] = str(report_path)
+        result["backup_verified"] = True
+        _write_json_atomic(report_path, result)
+
+        for relative in paths:
+            if _sha256(target / relative) != _sha256(backup / "files" / relative):
+                raise UiPublicationError(f"final backup verification failed for: {relative}")
+        if result["prior_manifest_backup"] and (
+            _sha256(prior_manifest) != _sha256(Path(result["prior_manifest_backup"]))
+        ):
+            raise UiPublicationError("final prior manifest verification failed")
+        confirmed = manifest_module.classify_installed_ui(
+            target, target / MANIFEST_FILENAME
+        )
+        for field in (
+            "installed_state",
+            "installed_ui_build_id",
+            "packaged_ui_build_id",
+            "modified_files",
+            "added_files",
+            "missing_files",
+        ):
+            if confirmed.get(field) != classification.get(field):
+                raise UiPublicationError(
+                    "live UI changed while its modification backup was being verified"
+                )
+    except Exception as error:
+        result["backup_verified"] = False
+        result["error"] = str(error)
+        if result["modification_report_path"]:
+            try:
+                _write_json_atomic(Path(result["modification_report_path"]), result)
+            except Exception:
+                pass
+        raise
+
+
 def publish_ui(
     source: Path,
     target: Path,
@@ -134,6 +264,8 @@ def publish_ui(
     manifest_module,
     owner: str | None = None,
     group: str | None = None,
+    backup_parent: Path = Path("/var/backups/wsprrypi/ui"),
+    fail_on_ui_modifications: bool = False,
     before_publish: Callable[[Path], None] | None = None,
 ) -> dict:
     """Publish one validated UI directory tree without exposing partial staging."""
@@ -142,6 +274,7 @@ def publish_ui(
     stage = Path(tempfile.mkdtemp(prefix=f".{target.name}.stage.", dir=target.parent))
     previous = target.parent / f".{target.name}.previous.{os.getpid()}"
     previous_created = False
+    result = _new_result()
 
     try:
         shutil.copytree(source, stage, dirs_exist_ok=True, symlinks=True)
@@ -162,6 +295,26 @@ def publish_ui(
             or installed.get("installed_ui_build_id") != validated["packaged_ui_build_id"]
         ):
             raise UiPublicationError("staged UI identity does not match its manifest")
+
+        if target.exists():
+            classification = manifest_module.classify_installed_ui(
+                target, target / MANIFEST_FILENAME
+            )
+            result["prior_state"] = classification["installed_state"]
+            for field in ("modified_files", "added_files", "missing_files"):
+                result[field] = list(classification[field])
+            requires_backup = classification["installed_state"] in {
+                "locally_modified", "unknown"
+            }
+            if fail_on_ui_modifications and requires_backup:
+                raise UiPublicationError(
+                    f"existing UI state is {classification['installed_state']}; replacement refused",
+                    result,
+                )
+            if requires_backup:
+                _create_modification_backup(
+                    target, classification, manifest_module, backup_parent, result
+                )
 
         _set_tree_permissions(stage, owner, group)
         if before_publish:
@@ -186,14 +339,28 @@ def publish_ui(
                 os.replace(previous, target)
                 previous_created = False
             raise
+        final_status = manifest_module.classify_installed_ui(
+            target, target / MANIFEST_FILENAME
+        )
+        result["replacement_completed"] = True
+        result["final_installed_state"] = final_status["installed_state"]
+        result["final_installed_ui_build_id"] = final_status["installed_ui_build_id"]
         if previous_created:
             shutil.rmtree(previous)
             previous_created = False
-        return installed
-    except UiPublicationError:
+        if final_status["installed_state"] != "packaged":
+            raise UiPublicationError("published UI did not classify as packaged", result)
+        if result["modification_report_path"]:
+            _write_json_atomic(Path(result["modification_report_path"]), result)
+        return result
+    except UiPublicationError as error:
+        if error.result is None:
+            error.result = result
+        result["error"] = str(error)
         raise
     except Exception as error:
-        raise UiPublicationError(str(error)) from error
+        result["error"] = str(error)
+        raise UiPublicationError(str(error), result) from error
     finally:
         if stage.exists():
             shutil.rmtree(stage)
@@ -209,20 +376,62 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--application-version")
     parser.add_argument("--owner", default="www-data")
     parser.add_argument("--group", default="www-data")
+    parser.add_argument("--backup-directory", type=Path, default=Path("/var/backups/wsprrypi/ui"))
+    parser.add_argument("--fail-on-ui-modifications", action="store_true")
+    parser.add_argument("--result-file", type=Path)
+    parser.add_argument("--render-result", type=Path)
     return parser.parse_args(argv)
+
+
+def render_result(path: Path) -> int:
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print("\nUI replacement report")
+        print(f"  Result unavailable: {error}")
+        return 1
+    print("\nUI replacement report")
+    print(f"  Prior state: {result.get('prior_state') or 'unknown'}")
+    for label, field in (
+        ("Modified files", "modified_files"),
+        ("Added files", "added_files"),
+        ("Missing files", "missing_files"),
+    ):
+        values = result.get(field) or []
+        print(f"  {label}:")
+        if values:
+            for value in values:
+                print(f"    - {value}")
+        else:
+            print("    - (none)")
+    print(f"  Prior manifest backup: {result.get('prior_manifest_backup') or '(none)'}")
+    print(f"  Modification report: {result.get('modification_report_path') or '(none)'}")
+    print(f"  Backup directory: {result.get('backup_directory') or '(none)'}")
+    backup_verified = result.get("backup_verified")
+    print(
+        "  Backup verified: "
+        + ("not required" if backup_verified is None else ("yes" if backup_verified else "no"))
+    )
+    print(f"  Replacement completed: {'yes' if result.get('replacement_completed') else 'no'}")
+    if result.get("error"):
+        print(f"  Error: {result['error']}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.render_result:
+        return render_result(args.render_result)
     git_root = get_git_root()
     if git_root is None:
         print("Error: Not inside a Git repository.", file=sys.stderr)
         return 1
     source = args.source or git_root / "WsprryPi-UI" / "data"
+    result = _new_result()
     try:
         source_commit = args.source_commit or get_source_commit(git_root)
         application_version = args.application_version or get_application_version(git_root)
-        status = publish_ui(
+        result = publish_ui(
             source,
             args.target,
             source_commit=source_commit,
@@ -230,13 +439,25 @@ def main(argv: list[str] | None = None) -> int:
             manifest_module=load_manifest_module(git_root),
             owner=args.owner or None,
             group=args.group or None,
+            backup_parent=args.backup_directory,
+            fail_on_ui_modifications=args.fail_on_ui_modifications,
         )
     except (OSError, KeyError, UiPublicationError) as error:
+        if isinstance(error, UiPublicationError) and error.result is not None:
+            result = error.result
+        result["error"] = str(error)
+        if args.result_file:
+            try:
+                _write_json_atomic(args.result_file, result)
+            except OSError as report_error:
+                print(f"Error: unable to write UI result: {report_error}", file=sys.stderr)
         print(f"Error: UI publication failed: {error}", file=sys.stderr)
         return 1
+    if args.result_file:
+        _write_json_atomic(args.result_file, result)
     print(
         "Deployment successful: "
-        f"{status['installed_ui_build_id']} ({status['installed_state']})."
+        f"{result['final_installed_ui_build_id']} ({result['final_installed_state']})."
     )
     return 0
 
