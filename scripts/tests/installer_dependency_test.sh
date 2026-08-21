@@ -65,4 +65,20 @@ if grep -Eiq 'rp1[-_]gpclk|live_output|kernel_2712_phase|dtoverlay=rp1' "$INSTAL
     exit 1
 fi
 
+if ! grep -Fq 'exec_command "Publish validated UI artifact"' "$INSTALLER"; then
+    echo "install.sh must publish the UI through the validated artifact publisher" >&2
+    exit 1
+fi
+
+if ! grep -Fq -- '--source-commit "$source_commit"' "$INSTALLER" ||
+    ! grep -Fq -- '--application-version "$SEM_VER"' "$INSTALLER"; then
+    echo "install.sh must bind the UI manifest to the exact source commit and application version" >&2
+    exit 1
+fi
+
+if awk '/manage_web\(\)/,/^}/' "$INSTALLER" | grep -Eq 'cp -r .*source_path|chown -R .*target_path'; then
+    echo "manage_web must not copy or mutate the live UI tree incrementally" >&2
+    exit 1
+fi
+
 echo "installer dependency tests: PASS"

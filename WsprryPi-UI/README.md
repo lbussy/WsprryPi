@@ -7,7 +7,11 @@ It is installed with the current application installation.
 
 `scripts/generate_ui_manifest.py` generates and validates the schema-v1,
 content-addressed manifest used to identify a packaged UI artifact. Generation
-is build-time infrastructure; installation integration is handled separately.
+is build-time infrastructure. The normal installer copies the exact UI source
+into a sibling staging directory, generates and validates the manifest there,
+confirms that the staged installed and packaged identities match, and only then
+publishes the complete directory tree. Failed staging or validation does not
+replace the live UI.
 
 The identity covers every regular file below the selected UI root except the
 top-level runtime `cache/` and `backups/` directories, `ui-manifest.json`
@@ -54,4 +58,8 @@ A page that loads with the requested identity has converged; a mismatch instead
 shows a persistent consistency diagnostic and suppresses further prompts. A
 stable packaged or locally modified installation does not prompt, and service
 or executable version changes do not participate in UI refresh decisions.
-Installer behavior remains outside this component.
+
+The published manifest is read-only and owned outside the Apache/PHP runtime
+account. Top-level `cache/` and `backups/` content remains excluded from the
+identity and may be runtime-owned without changing the packaged classification.
+Policy for replacing a locally modified live installation is a later slice.
