@@ -58,13 +58,29 @@ async function waitFor(check, description, timeoutMs = 12000) {
     throw new Error(`Timed out waiting for ${description}${lastError ? `: ${lastError.message}` : ""}`);
 }
 
+function waitForExit(child, timeoutMs) {
+    if (child.exitCode !== null) return Promise.resolve(true);
+    return new Promise((resolve) => {
+        let timer;
+        const finish = (exited) => {
+            clearTimeout(timer);
+            child.off("exit", onExit);
+            resolve(exited);
+        };
+        const onExit = () => finish(true);
+        child.once("exit", onExit);
+        timer = setTimeout(() => finish(child.exitCode !== null), timeoutMs);
+    });
+}
+
 async function terminate(child) {
     if (!child || child.exitCode !== null) return;
     child.kill("SIGTERM");
-    await new Promise((resolve) => {
-        child.once("exit", resolve);
-        setTimeout(resolve, 2000);
-    });
+    if (await waitForExit(child, 2000)) return;
+    child.kill("SIGKILL");
+    if (!await waitForExit(child, 2000)) {
+        throw new Error(`Child process ${child.pid} did not terminate`);
+    }
 }
 
 async function removeProfileDirectory(profileDir, options = {}) {
