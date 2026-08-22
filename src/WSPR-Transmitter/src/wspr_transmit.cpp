@@ -161,20 +161,6 @@ namespace
         return false;
     }
 
-    wsprrypi::BackendKind initial_compiled_backend() noexcept
-    {
-#if WSPRRYPI_BACKEND_RPI_GPIO
-        return wsprrypi::BackendKind::RPI_CLOCK_GPIO;
-#elif WSPRRYPI_BACKEND_RP1_GPCLK
-        return wsprrypi::BackendKind::RP1_GPCLK;
-#elif WSPRRYPI_BACKEND_SI5351
-        return wsprrypi::BackendKind::SI5351;
-#else
-        static_assert(WSPRRYPI_BACKEND_SIMULATED, "at least one backend is required");
-        return wsprrypi::BackendKind::SIMULATED;
-#endif
-    }
-
     static wsprrypi::ClockSource si5351_clock_source_from_index(int output) noexcept
     {
         switch (output)
@@ -406,7 +392,6 @@ WsprTransmitter::WsprTransmitter()
     {
         spin_ns_ = 0; // or 50'000 if you want a tiny spin
     }
-    selectBackend(initial_compiled_backend());
     callback_thread_ = std::thread(&WsprTransmitter::callback_worker_loop, this);
 }
 
@@ -476,6 +461,11 @@ void WsprTransmitter::selectBackend(
         std::make_unique<wsprrypi::TransmissionController>(
             execution_plan_compiler_,
             *backend_);
+}
+
+bool WsprTransmitter::hasSelectedBackend() const noexcept
+{
+    return backend_ != nullptr && transmission_controller_ != nullptr;
 }
 
 std::unique_ptr<wsprrypi::ITransmissionBackend> WsprTransmitter::createBackend(
@@ -685,12 +675,19 @@ void WsprTransmitter::clearExecutionStateAfterStop() noexcept
     current_cw_message_.clear();
     current_cw_active_char_index_.store(-1, std::memory_order_release);
     scheduled_start_rt_ns_.store(0, std::memory_order_release);
-    transmission_controller_->reset();
+    if (transmission_controller_ != nullptr)
+        transmission_controller_->reset();
 }
 
 void WsprTransmitter::configureExecution(
     const TransmissionRequest &request)
 {
+    if (!hasSelectedBackend())
+    {
+        throw std::logic_error(
+            "Transmission execution requires an explicitly selected backend.");
+    }
+
     if (!request.isSkipWindow())
     {
         const auto policy = wsprrypi::evaluate_gpio_band_policy(
@@ -827,6 +824,12 @@ void WsprTransmitter::configureExecution(
     const wsprrypi::TransmissionRequest& request,
     const TransmissionRequest& legacy_request)
 {
+    if (!hasSelectedBackend())
+    {
+        throw std::logic_error(
+            "Transmission execution requires an explicitly selected backend.");
+    }
+
     if (request.mode == wsprrypi::TransmissionMode::TONE &&
         request.output.backend != wsprrypi::BackendKind::SI5351)
     {

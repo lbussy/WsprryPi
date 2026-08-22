@@ -324,6 +324,7 @@ public:
         wsprrypi::BackendKind backend_kind,
         const Si5351RuntimeConfig &si5351_config,
         const SimulatedRuntimeConfig &simulated_config);
+    bool hasSelectedBackend() const noexcept;
 
     /**
      * Place the selected backend into its safe startup state before any
@@ -1071,6 +1072,9 @@ private:
     wsprrypi::ExecutionPlanCompiler execution_plan_compiler_{};
     std::unique_ptr<wsprrypi::ITransmissionBackend> backend_;
     WsprRpiBackend *rpi_backend_{nullptr};
+    // A backend is created only after the application has validated its
+    // platform and explicit runtime selection. In particular, global
+    // construction must never instantiate the legacy DMA backend on Pi 5.
     wsprrypi::BackendKind selected_backend_{wsprrypi::BackendKind::RPI_CLOCK_GPIO};
     Si5351RuntimeConfig selected_si5351_config_{};
     SimulatedRuntimeConfig selected_simulated_config_{};

@@ -30,6 +30,26 @@ bool compiled(wsprrypi::BackendKind backend)
 int main()
 {
     WsprTransmitter transmitter;
+    if (transmitter.hasSelectedBackend())
+        throw std::runtime_error(
+            "transmitter construction selected a backend before platform validation");
+    transmitter.clearExecutionStateAfterStop();
+    TransmissionRequest unselected_request;
+    unselected_request.skip_window = true;
+    bool rejected_unselected_execution = false;
+    try
+    {
+        transmitter.configureExecution(unselected_request);
+    }
+    catch (const std::logic_error &error)
+    {
+        rejected_unselected_execution =
+            std::string(error.what()).find("explicitly selected backend") !=
+            std::string::npos;
+    }
+    if (!rejected_unselected_execution)
+        throw std::runtime_error(
+            "execution without an explicitly selected backend did not fail closed");
     constexpr std::array backends{
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::BackendKind::RP1_GPCLK,
@@ -44,6 +64,8 @@ int main()
             transmitter.selectBackend(backend);
             if (!compiled(backend))
                 throw std::runtime_error("omitted backend selection unexpectedly succeeded");
+            if (!transmitter.hasSelectedBackend())
+                throw std::runtime_error("explicit backend selection did not create a backend");
         }
         catch (const std::invalid_argument &error)
         {
