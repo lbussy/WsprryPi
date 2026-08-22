@@ -1446,6 +1446,7 @@ int main(int argc, char *argv[])
 
     {
         WsprTransmitter transmitter;
+        transmitter.selectBackend(wsprrypi::BackendKind::SIMULATED);
 
         wsprrypi::TransmissionRequest controller_request;
         controller_request.mode = wsprrypi::TransmissionMode::TONE;
@@ -1975,6 +1976,7 @@ int main(int argc, char *argv[])
 
     {
         WsprTransmitter transmitter;
+        transmitter.selectBackend(wsprrypi::BackendKind::SIMULATED);
 
         TransmissionRequest committed_request;
         committed_request.mode = TransmissionMode::WSPR;

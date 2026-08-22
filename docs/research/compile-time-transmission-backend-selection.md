@@ -203,10 +203,12 @@ Transmission backend GPIO is unavailable in this build. Compiled backends: si535
 ```
 
 There is no automatic fallback to Si5351, simulated, or any other backend.
-Construction selects the first enabled backend in canonical order as an
-explicit, generated default. The default all-backend profile therefore retains
-legacy GPIO startup behavior, while reduced profiles do not acquire an omitted
-backend dependency. Factory tests cover both enabled and omitted selections.
+Construction does not select or instantiate any backend. After platform and
+configuration validation, the application explicitly constructs only the
+selected backend. This is a hardware-safety boundary: a Pi 5 selecting Si5351
+or RP1 GPCLK never constructs the legacy mailbox/MMIO/DMA backend, even
+transiently during process startup. Factory tests cover this unselected initial
+state as well as enabled and omitted explicit selections.
 
 ### Capability reporting
 
