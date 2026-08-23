@@ -1,4 +1,5 @@
 #include "rp1_gpclk_linux_provider.hpp"
+#include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_uapi.h"
 
 #include <cerrno>
@@ -17,12 +18,6 @@ constexpr std::uint64_t kKnownCapabilities =
     RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
     RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
     RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE;
-constexpr char kRequiredModuleId[] = "rp1-gpclk-dkms";
-constexpr char kRequiredBuildId[] = "1.1.2";
-constexpr char kGpio4CompatibilityId[] =
-    "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2";
-constexpr char kGpio20CompatibilityId[] =
-    "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r2";
 
 std::uint32_t driveMask(std::uint32_t drive_ma)
 {
@@ -178,10 +173,10 @@ bool Rp1GpclkLinuxProvider::queryOpen(
     {
         error = "RP1 GPCLK provider returned an empty or unterminated identity."; return false;
     }
-    const char* expected_compatibility = identity.route == RP1_GPCLK_ROUTE_GPIO4
-        ? kGpio4CompatibilityId : kGpio20CompatibilityId;
-    if (identity.module_id != kRequiredModuleId || identity.build_id != kRequiredBuildId ||
-        identity.compatibility_id != expected_compatibility)
+    const auto expected = rp1GpclkExpectedDevelopmentIdentity(identity.route);
+    if (!expected || identity.module_id != expected->module_id ||
+        identity.build_id != expected->build_id ||
+        identity.compatibility_id != expected->compatibility_id)
     {
         error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r2 development identity."; return false;
     }

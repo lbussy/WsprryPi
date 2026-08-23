@@ -54,6 +54,8 @@ public:
         Rp1GpclkProviderEventState& state,
         std::string& error) const;
     bool release(std::string& error) noexcept override;
+    std::uint64_t leaseId() const noexcept override { return lease_id_; }
+    std::string endpoint() const override { return device_; }
 
 private:
     bool queryOpen(

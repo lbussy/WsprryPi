@@ -1121,12 +1121,17 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test
 .PHONY: qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test rp1-gpclk-development-policy-test rp1-gpclk-route-runtime-wiring-test rp1-gpclk-route-service-test
-.PHONY: rp1-gpclk-diagnostics-test
+.PHONY: rp1-gpclk-diagnostics-test rp1-gpclk-step4-plans-test
 DEBUG: debug
 RELEASE: release
 
 rp1-gpclk-diagnostics-test:
 	$(Q)python3 ../scripts/tests/rp1_gpclk_diagnostics_test.py
+
+rp1-gpclk-step4-plans-test:
+	$(Q)python3 ../scripts/tests/rp1_gpclk_step4_plans_test.py \
+		../../WsprryPi-Qualification-Harness/.venv/bin/wsprrypi-qualification \
+		18246c76d2918dbbf2358ba01df0872839856d53
 	$(Q)if [ -x /usr/bin/bash ] && stat -c %a ../scripts/collect-support-bundle.sh >/dev/null 2>&1; then \
 		/usr/bin/bash ../scripts/tests/collect-support-bundle_test.sh; \
 	else \
@@ -1488,7 +1493,7 @@ rp1-gpclk-backend-test: $(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT)
 	$(Q)echo "Running clock-disabled RP1 GPCLK production backend contract tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_linux_provider_test.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp
+$(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_linux_provider_test.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
 
@@ -1526,7 +1531,7 @@ rp1-gpclk-transmit-backend-test: $(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OU
 	$(Q)echo "Running RP1 GPCLK scheduler backend tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_ADMIN_PROBE_OUT): WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp
+$(BIN_DIR)/$(RP1_GPCLK_ADMIN_PROBE_OUT): WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
 

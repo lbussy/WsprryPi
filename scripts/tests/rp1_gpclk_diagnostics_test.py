@@ -15,6 +15,17 @@ for evidence in ("rp1-gpclk-gpio4.dtbo", "rp1-gpclk-gpio20.dtbo",
 for evidence in ("Persisted route", "Active route and live eligibility",
                  "Cleanup evidence", "Journal evidence", "rp1_gpclk_boot_route"):
     assert evidence in collector, evidence
+assert "9ec6bb617d8259df50b376bb08f0e5973a8fee41" in collector
+assert "9ec6bb617d8259df50b376bb08f0e5973a8fee41" in runtime
+for identity in ("rp1-gpclk-dkms 1.1.2, ABI v2",
+                 "no package hash is accepted",
+                 "Qualification: unvalidated"):
+    assert identity in collector, identity
+for identity in ("module=rp1-gpclk-dkms/1.1.2", "uapi_abi=2",
+                 "package=unreleased", "qualification=unvalidated"):
+    assert identity in runtime, identity
+assert "dkms status -m rp1-gpclk-dkms -v 1.1.2" in collector
+assert "package_sha256=247bd7da" not in runtime
 for field in ("rp1_package_expected", "rp1_route_requested", "rp1_route_persisted",
               "rp1_route_configured", "rp1_route_active", "rp1_eligibility",
               "rp1_cleanup_state", "rp1_journal_state"):

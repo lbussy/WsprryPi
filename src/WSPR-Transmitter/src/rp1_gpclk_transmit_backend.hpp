@@ -12,8 +12,40 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 
 class IControllerBridge;
+
+namespace wsprrypi
+{
+struct Rp1GpclkOperationRecord
+{
+    std::uint32_t schema_version{1};
+    std::string operation_id;
+    std::string module_id;
+    std::string module_version;
+    std::string compatibility_id;
+    std::uint16_t uapi_abi{0};
+    std::uint32_t route{0};
+    std::string endpoint{"/dev/rp1-gpclk"};
+    std::uint64_t lease{0};
+    std::uint64_t generation{0};
+    std::string state{"idle"};
+    std::uint32_t terminal_reason{0};
+    bool cancellation_requested{false};
+    bool cleanup_attempted{false};
+    bool cleanup_complete{false};
+    bool endpoint_closed{true};
+    bool execution_authorized{false};
+    bool qualification_claim{false};
+    std::uint64_t process_id{0};
+    std::string executable{"wsprrypi"};
+    std::uint64_t started_monotonic_ns{0};
+    std::uint64_t finished_monotonic_ns{0};
+};
+
+Rp1GpclkOperationRecord rp1GpclkOperationRecordSnapshot();
+}
 
 class WsprRp1GpclkBackend final : public wsprrypi::ITransmissionBackend
 {

@@ -24,6 +24,7 @@ chmod +x "$TEMP_DIR/bin/apt-cache"
 run_check() {
     env \
         PATH="$TEMP_DIR/bin:$PATH" \
+        RP1_GPCLK_HISTORICAL_PREDECESSOR_FIXTURE=true \
         INSTALL_RP1_GPCLK_DKMS=true \
         RP1_TEST_KERNEL_RELEASE="${RP1_TEST_KERNEL_RELEASE:-$KERNEL}" \
         RP1_TEST_ARCHITECTURE="${RP1_TEST_ARCHITECTURE:-arm64}" \
@@ -32,7 +33,13 @@ run_check() {
         "$INSTALLER" check
 }
 
+if INSTALL_RP1_GPCLK_DKMS=true "$INSTALLER" check >/dev/null 2>&1; then
+    echo "historical 1.1.1 installer must reject current consumer use" >&2
+    exit 1
+fi
+
 if env PATH="$TEMP_DIR/bin:$PATH" \
+    RP1_GPCLK_HISTORICAL_PREDECESSOR_FIXTURE=true \
     RP1_TEST_KERNEL_RELEASE="$KERNEL" \
     RP1_TEST_ARCHITECTURE=arm64 \
     RP1_TEST_MODEL_PATH="$MODEL_PATH" \

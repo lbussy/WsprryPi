@@ -8171,6 +8171,11 @@ _main() {
     check_arch "$debug"        # Validate Raspberry Pi model compatibility
     check_internet "$debug"    # Verify internet connectivity if required
 
+    if [[ "$ACTION" != "uninstall" && "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+        logE "RP1-GPCLK-DKMS 1.1.2 is an unreleased development source identity; WsprryPi has no authorized immutable package to install."
+        return 1
+    fi
+
     # The optional RP1 package must validate immutable Pi-5 identity before
     # any package-management mutation. Package installation is route-neutral.
     if [[ "$ACTION" != "uninstall" && "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then

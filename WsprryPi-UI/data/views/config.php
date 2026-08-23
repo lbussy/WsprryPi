@@ -769,14 +769,18 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                                 <div><dt>Persisted</dt><dd id="rp1-route-persisted">—</dd></div>
                                                 <div><dt>Boot configured</dt><dd id="rp1-route-configured">—</dd></div>
                                                 <div><dt>Active</dt><dd id="rp1-route-active">—</dd></div>
+                                                <div><dt>Module reported</dt><dd id="rp1-route-module">—</dd></div>
                                                 <div><dt>Reconciled</dt><dd id="rp1-route-reconciled">No</dd></div>
+                                                <div><dt>Module / ABI</dt><dd id="rp1-module-contract">Unavailable</dd></div>
+                                                <div><dt>Compatibility</dt><dd id="rp1-compatibility">Unavailable</dd></div>
                                                 <div><dt>Boot ownership</dt><dd id="rp1-route-boot-ownership">—</dd></div>
                                                 <div><dt>Pending transaction</dt><dd id="rp1-route-pending">Unknown</dd></div>
                                                 <div><dt>Fixed services</dt><dd id="rp1-route-services">Not reported</dd></div>
                                                 <div><dt>Endpoint</dt><dd id="rp1-route-endpoint">Not inspected</dd></div>
                                                 <div><dt>live_output</dt><dd id="rp1-route-live-output">Unknown</dd></div>
                                                 <div><dt>Development policy</dt><dd id="rp1-development-policy">Disabled</dd></div>
-                                                <div><dt>Output-inhibited evidence</dt><dd id="rp1-route-compatible">Unavailable</dd></div>
+                                                <div><dt>Operation lifecycle</dt><dd id="rp1-operation-lifecycle">No active lease or generation</dd></div>
+                                                <div><dt>Predecessor evidence</dt><dd id="rp1-route-compatible">Historical only</dd></div>
                                                 <div><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
                                             </dl>
                                             <div id="rp1-route-feedback" class="rp1-route-feedback" role="status" aria-live="polite" aria-atomic="true">Checking the installed provider and active route…</div>

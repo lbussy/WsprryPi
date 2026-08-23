@@ -68,6 +68,7 @@ public:
     wsprrypi::Rp1GpclkCompletionState state(std::uint64_t) const noexcept override { return state_value; }
     wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override { return {state_value,current_event,0}; }
     bool release(std::string&) noexcept override { released=true; return true; }
+    std::uint64_t leaseId() const noexcept override { return 41; }
     std::uint32_t acquired_route{}; std::uint64_t required_capabilities{};
     bool acquired{},submitted{},stopped{},released{};
     bool fail_acquire{},fail_submit{};
@@ -185,6 +186,19 @@ int main()
         "GPIO4 route must be carried independently into acquisition");
     expect(observed->program.symbols[0]==0 && observed->program.symbols[1]==1,"symbol order must preserve tone indexes");
     expect(observed->program.tones[0].lower_divider_word != observed->program.tones[1].lower_divider_word,"frame must carry distinct tone plans");
+    const auto operation_record=wsprrypi::rp1GpclkOperationRecordSnapshot();
+    expect(operation_record.schema_version==1, "operation record schema must be stable");
+    expect(operation_record.operation_id=="test-operation", "operation record must preserve operation identity");
+    expect(operation_record.module_version=="1.1.2", "operation record must preserve module version");
+    expect(operation_record.route==RP1_GPCLK_ROUTE_GPIO4, "operation record must preserve route");
+    expect(operation_record.generation==1, "operation record must preserve generation");
+    expect(operation_record.state=="complete", "operation record must preserve terminal completion");
+    expect(operation_record.cleanup_attempted && operation_record.cleanup_complete,
+        "operation record must preserve cleanup completion");
+    expect(operation_record.endpoint_closed && operation_record.lease==0,
+        "operation record must preserve endpoint closure and lease release");
+    expect(!operation_record.qualification_claim,
+        "operation record must remain explicitly nonqualifying");
 
     auto event_provider=std::make_unique<Provider>();
     Provider* event_observed=event_provider.get();
@@ -250,6 +264,11 @@ int main()
         "acquire failure must preserve provider error text");
     expect(!acquire_failure_observed->released,
         "failed acquire must not release ownership that was never acquired");
+    const auto acquire_failure_record=wsprrypi::rp1GpclkOperationRecordSnapshot();
+    expect(acquire_failure_record.state=="acquire-failed" &&
+        acquire_failure_record.cleanup_attempted && acquire_failure_record.cleanup_complete &&
+        acquire_failure_record.endpoint_closed && acquire_failure_record.lease==0,
+        "acquisition failure must leave a terminal closed-endpoint record");
 
     auto submit_failure_provider=std::make_unique<Provider>();
     Provider* submit_failure_observed=submit_failure_provider.get();
@@ -263,6 +282,11 @@ int main()
         "submit failure must preserve provider error text");
     expect(submit_failure_observed->acquired && submit_failure_observed->released,
         "submit failure must release acquired provider ownership");
+    const auto submit_failure_record=wsprrypi::rp1GpclkOperationRecordSnapshot();
+    expect(submit_failure_record.state=="submit-failed" &&
+        submit_failure_record.cleanup_attempted && submit_failure_record.cleanup_complete &&
+        submit_failure_record.endpoint_closed && submit_failure_record.lease==0,
+        "submission failure must leave a terminal closed-endpoint record");
     if (failures) return 1;
     std::cout << "RP1 GPCLK scheduler backend tests passed\n";
 }

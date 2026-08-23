@@ -12,9 +12,8 @@ nlohmann::json state(const std::string &configured = "gpio4",
   return {
       {"identity",
        {{"package", "rp1-gpclk-dkms"},
-        {"debianVersion", "1.1.1-1"},
         {"module", "rp1_gpclk_dkms"},
-        {"moduleVersion", "1.1.1"},
+        {"moduleVersion", "1.1.2"},
         {"uapiSha256",
          "998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384"},
         {"overlaySha256",
@@ -77,15 +76,16 @@ int main() {
 
   const auto query = service.query();
   assert(query.at("ok") == true);
-  assert(query.at("outputInhibitedValidated") == true);
+  assert(query.at("outputInhibitedValidated") == false);
+  assert(query.at("compatible") == true);
   assert(query.at("eligible") == false);
   assert(query.at("liveQualification") == "Unavailable");
-  assert(query.at("outputInhibitedEvidence")
+  assert(query.at("historicalPredecessorOutputInhibitedEvidence")
              .at("gpio4Initial")
              .at("transaction") == "48ef743c-e127-45e1-9994-901006283a2d");
-  assert(query.at("outputInhibitedEvidence").at("gpio20").at("journalSha256") ==
+  assert(query.at("historicalPredecessorOutputInhibitedEvidence").at("gpio20").at("journalSha256") ==
          "212177a69d4f8d702fd5d0e6f9c25033adc1178b37814ac3996a7ea2310aa168");
-  assert(query.at("outputInhibitedEvidence")
+  assert(query.at("historicalPredecessorOutputInhibitedEvidence")
              .at("gpio4Restored")
              .at("transaction") == "7197a0b1-3f69-4bbd-9220-47ac9abc5e2c");
   assert(query.at("requested") == "GPIO4");
@@ -119,7 +119,7 @@ int main() {
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   unsafe = state();
-  unsafe["identity"]["debianVersion"] = "1.1.1-1-superseded";
+  unsafe["identity"]["moduleVersion"] = "1.1.1";
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
 

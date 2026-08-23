@@ -19,8 +19,9 @@ namespace {
 constexpr const char *kSocket = "/run/rp1-gpclk-dkms/route-manager.sock";
 #endif
 constexpr const char *kContract = "rp1-gpclk-route-manager-v1";
-constexpr const char *kPackageSha256 =
-    "247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d";
+const std::string kDevelopmentSourceIdentity =
+    "RP1-GPCLK-DKMS@" + std::string(kRp1GpclkDevelopmentSourceRevision) +
+    "; package-unreleased";
 constexpr const char *kEvidenceArchiveSha256 =
     "af4bb75d7d747a6e9bab067c563fba4031db08c1ed1800c3cb4c8c4d2587561e";
 constexpr const char *kEvidenceManifestSha256 =
@@ -118,12 +119,10 @@ bool exactIdentity(const nlohmann::json &state) {
   if (!state.contains("identity") || !state["identity"].is_object())
     return false;
   const auto &identity = state["identity"];
-  if (field(identity, "package") != "rp1-gpclk-dkms" ||
-      field(identity, "debianVersion") != "1.1.1-1" ||
+  if (field(identity, "package") != kRp1GpclkDevelopmentModuleId.data() ||
       field(identity, "module") != "rp1_gpclk_dkms" ||
-      field(identity, "moduleVersion") != "1.1.1" ||
-      field(identity, "uapiSha256") !=
-          "998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384" ||
+      field(identity, "moduleVersion") != kRp1GpclkDevelopmentModuleVersion.data() ||
+      field(identity, "uapiSha256") != kRp1GpclkDevelopmentUapiSha256.data() ||
       !identity.contains("overlaySha256") ||
       !identity["overlaySha256"].is_object())
     return false;
@@ -171,7 +170,7 @@ nlohmann::json Rp1GpclkRouteService::failure(const std::string &result,
           {"outputInhibitedValidated", false},
           {"eligible", false},
           {"liveQualification", "Unavailable"},
-          {"packageIdentity", kPackageSha256},
+          {"packageIdentity", kDevelopmentSourceIdentity},
           {"contractIdentity", kContract},
           {"bootOwnership", "unknown"},
           {"journal", "unknown"},
@@ -216,8 +215,7 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
   const bool identity_matches = exactIdentity(state);
   const bool aligned =
       !persisted.empty() && persisted == configured && persisted == active;
-  const bool output_inhibited_validated =
-      identity_matches && (configured == "GPIO4" || configured == "GPIO20");
+  const bool output_inhibited_validated = false;
   std::string ui = pending ? "pending"
                    : aligned && output_inhibited_validated
                        ? "output-inhibited-validated"
@@ -256,11 +254,16 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
           {"preflightValidated", preflight_safe},
           {"eligible", false},
           {"liveQualification", "Unavailable"},
-          {"packageIdentity", kPackageSha256},
+          {"packageIdentity", kDevelopmentSourceIdentity},
           {"contractIdentity", kContract},
-          {"evidenceArchiveSha256", kEvidenceArchiveSha256},
-          {"evidenceManifestSha256", kEvidenceManifestSha256},
-          {"outputInhibitedEvidence", outputInhibitedEvidenceBindings()},
+          {"moduleVersion", kRp1GpclkDevelopmentModuleVersion.data()},
+          {"uapiAbi", 2},
+          {"compatibilityState", "Experimental"},
+          {"moduleRoute", active},
+          {"historicalPredecessorEvidenceArchiveSha256", kEvidenceArchiveSha256},
+          {"historicalPredecessorEvidenceManifestSha256", kEvidenceManifestSha256},
+          {"historicalPredecessorOutputInhibitedEvidence",
+           outputInhibitedEvidenceBindings()},
           {"bootOwnership", field(state, "bootOwnership")},
           {"bootId", field(state, "bootId")},
           {"journal", pending ? "pending" : "none"},
@@ -301,12 +304,12 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     auto rendered = render(raw, route);
     if (!rendered.value("ok", false))
       return rendered;
-    if (!rendered.value("outputInhibitedValidated", false) ||
+    if (!rendered.value("compatible", false) ||
         !rendered.value("preflightValidated", false)) {
       rendered["ok"] = false;
       rendered["result"] = "preflight_failed";
       rendered["message"] =
-          "Preflight did not confirm the exact package identity, endpoint "
+          "Preflight did not confirm the exact 1.1.2 development identity, endpoint "
           "closure, ownership, and live_output=0.";
       return rendered;
     }
@@ -314,8 +317,8 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     preflight_route_ = executor_route;
     rendered["generation"] = generation_;
     rendered["message"] =
-        "Exact-package output-inhibited preflight passed. Live and RF "
-        "qualification remain unavailable.";
+        "Exact 1.1.2 development preflight passed. Operation-scoped policy "
+        "confirmation is still required; product and RF qualification remain unavailable.";
     return rendered;
   }
   if (operation == "apply-and-reboot") {

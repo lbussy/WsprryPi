@@ -1087,7 +1087,7 @@ if command -v dpkg-query >/dev/null 2>&1; then
   run_cmd rp1_gpclk_package dpkg-query -W -f='Package: ${Package}\nVersion: ${Version}\nStatus: ${Status}\nArchitecture: ${Architecture}\n' rp1-gpclk-dkms
 fi
 if command -v dkms >/dev/null 2>&1; then
-  run_cmd rp1_gpclk_dkms dkms status -m rp1-gpclk-dkms -v 1.1.1
+  run_cmd rp1_gpclk_dkms dkms status -m rp1-gpclk-dkms -v 1.1.2
 fi
 if command -v modinfo >/dev/null 2>&1; then
   run_cmd rp1_gpclk_modinfo modinfo rp1_gpclk_dkms
@@ -1107,13 +1107,15 @@ for rp1_overlay in \
 done
 copy_if_exists /boot/firmware/config.txt "${OUT_DIR}/hardware/rp1-gpclk"
 {
-  echo "Expected package: rp1-gpclk-dkms=1.1.1-1"
-  echo "Expected package SHA-256: 247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d"
-  echo "Expected package member inventory SHA-256: 888807e4b14dffda75c20e264671d2cfe41437612ec76093618224940a698d70"
+  echo "Expected development source commit: 9ec6bb617d8259df50b376bb08f0e5973a8fee41"
+  echo "Expected module/UAPI: rp1-gpclk-dkms 1.1.2, ABI v2"
+  echo "Expected package: unreleased; no package hash is accepted for this development slice"
+  echo "Expected compatibility: route-specific GPIO4/GPIO20 development-candidate-r2, Experimental"
   echo "Persisted route: GPIO$(ini_value "$INSTALLED_INI" "GPIO" "Transmit Pin" "unavailable")"
   echo "Configured overlay evidence: see the RP1-GPCLK-DKMS owned block in config.txt"
-  echo "Output-inhibited evidence: validated independently for GPIO4 and GPIO20; restored GPIO4 validated"
-  echo "Active route and live eligibility: not inferred; liveEligible=false"
+  echo "Historical predecessor evidence: 1.1.1 output-inhibited GPIO4/GPIO20/restored-GPIO4; not current evidence"
+  echo "Active route and live eligibility: must be reported by the module; never inferred"
+  echo "Qualification: unvalidated; Step 4 is hardware-free application-plan integration only"
   echo "Cleanup evidence: see rp1_gpclk_module_state command report"
   echo "Journal evidence: see the rp1_gpclk_route_journals command report"
 } > "${OUT_DIR}/hardware/rp1-gpclk/evidence-summary.txt"

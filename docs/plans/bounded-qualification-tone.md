@@ -65,7 +65,9 @@ immediately invokes Test Tone cleanup and reports an error.
 
 ## Remaining integration boundary
 
-The Qualification Harness does not consume this command yet. A later reviewed
+The Qualification Harness consumes this command through the external ABI-v2
+RP1 application-plan contract pinned in
+`docs/research/issue-412-step4-dual-route-integration.md`. A later reviewed
 slice must add the SSH-authenticated helper, launch or select an explicitly
 loopback-contained WsprryPi process, correlate both response events, enforce its
 own outer deadline, and preserve cleanup evidence. That helper remains defense

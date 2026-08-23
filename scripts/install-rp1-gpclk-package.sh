@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
+if [[ "${RP1_GPCLK_HISTORICAL_PREDECESSOR_FIXTURE:-false}" != "true" ]]; then
+    printf '%s\n' \
+        'RP1 GPCLK optional install: ERROR: the 1.1.1 installer is historical-only; no frozen 1.1.2 development package identity exists' >&2
+    exit 1
+fi
+
 readonly EXPECTED_PACKAGE_NAME="rp1-gpclk-dkms"
 readonly EXPECTED_UAPI_SHA256="998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384"
 readonly EXPECTED_PACKAGE_SHA256="247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d"

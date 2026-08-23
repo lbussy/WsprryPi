@@ -27,6 +27,9 @@
  */
 
 #include "web_socket.hpp"
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+#include "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.hpp"
+#endif
 #include "support_request_guard.hpp"
 #include "privileged_network_runtime.hpp"
 #include "websocket_upgrade_guard.hpp"
@@ -58,6 +61,38 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
+
+namespace
+{
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+nlohmann::json rp1_operation_record_json()
+{
+    const auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+    return {{"schemaVersion", record.schema_version},
+            {"operationId", record.operation_id},
+            {"moduleId", record.module_id},
+            {"moduleVersion", record.module_version},
+            {"compatibilityId", record.compatibility_id},
+            {"uapiAbi", record.uapi_abi},
+            {"route", record.route == 1 ? "GPIO4" : record.route == 2 ? "GPIO20" : "unknown"},
+            {"endpoint", record.endpoint},
+            {"lease", record.lease},
+            {"generation", record.generation},
+            {"state", record.state},
+            {"terminalReason", record.terminal_reason},
+            {"cancellationRequested", record.cancellation_requested},
+            {"cleanupAttempted", record.cleanup_attempted},
+            {"cleanupComplete", record.cleanup_complete},
+            {"endpointClosed", record.endpoint_closed},
+            {"executionAuthorized", record.execution_authorized},
+            {"processId", record.process_id},
+            {"executable", record.executable},
+            {"startedMonotonicNs", record.started_monotonic_ns},
+            {"finishedMonotonicNs", record.finished_monotonic_ns},
+            {"qualificationClaim", false}};
+}
+#endif
+}
 
 // Connect with wscat -c ws://localhost:31416
 
@@ -728,6 +763,9 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                         reply["command"] = "bounded_tone";
                         reply["request_id"] = parsed.request->request_id;
                         reply["duration_ms"] = parsed.request->duration_ms;
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+                        reply["rp1_operation_record"] = rp1_operation_record_json();
+#endif
                         if (start_result.started)
                         {
                             if (bounded_tone_watchdog_.joinable())
@@ -776,6 +814,10 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                                             {"status", stopped.stopped
                                                 ? "ok" : "error"},
                                             {"message", stopped.message}};
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+                                        terminal["rp1_operation_record"] =
+                                            rp1_operation_record_json();
+#endif
                                         if (running_)
                                             sendAllClients(terminal.dump());
                                     });

@@ -118,6 +118,8 @@ public:
     virtual Rp1GpclkCompletionState state(std::uint64_t generation) const noexcept = 0;
     virtual Rp1GpclkProviderEventState eventState(std::uint64_t generation) const noexcept = 0;
     virtual bool release(std::string& error) noexcept = 0;
+    virtual std::uint64_t leaseId() const noexcept { return 0; }
+    virtual std::string endpoint() const { return "/dev/rp1-gpclk"; }
 };
 
 class Rp1GpclkBackend

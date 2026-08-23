@@ -7,12 +7,31 @@
 #include <chrono>
 #include <cmath>
 #include <thread>
+#include <mutex>
+#include <unistd.h>
 
 namespace
 {
 constexpr double kRp1ParentFrequencyHz = 50000000.0;
 constexpr double kWsprSymbolSeconds = 8192.0 / 12000.0;
 constexpr double kWsprToneSpacingHz = 1.0 / kWsprSymbolSeconds;
+std::mutex operation_record_mutex;
+wsprrypi::Rp1GpclkOperationRecord operation_record;
+
+void update_record(const wsprrypi::Rp1GpclkOperationRecord& value)
+{
+    std::lock_guard<std::mutex> lock(operation_record_mutex);
+    operation_record = value;
+}
+}
+
+namespace wsprrypi
+{
+Rp1GpclkOperationRecord rp1GpclkOperationRecordSnapshot()
+{
+    std::lock_guard<std::mutex> lock(operation_record_mutex);
+    return operation_record;
+}
 }
 
 WsprRp1GpclkBackend::WsprRp1GpclkBackend(IControllerBridge& owner)
@@ -299,15 +318,49 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             result.error = std::string(decision.code) + ": " + decision.explanation;
             return result;
         }
+        wsprrypi::Rp1GpclkOperationRecord record;
+        record.operation_id = current_policy.operation_id;
+        record.module_id = current_policy.identity.module_id;
+        record.module_version = current_policy.identity.build_id;
+        record.compatibility_id = current_policy.identity.compatibility_id;
+        record.uapi_abi = wsprrypi::kRp1GpclkDevelopmentUapiAbi;
+        record.route = configured_->route;
+        record.endpoint = provider_->endpoint();
+        record.state = "authorized";
+        record.execution_authorized = true;
+        record.process_id = static_cast<std::uint64_t>(::getpid());
+        record.started_monotonic_ns = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        record.endpoint_closed = true;
+        update_record(record);
+        const auto record_failure = [&](const std::string& state,
+                                        bool cleanup_attempted,
+                                        bool cleanup_complete) {
+            record.state = state;
+            record.cleanup_attempted = cleanup_attempted;
+            record.cleanup_complete = cleanup_complete;
+            record.endpoint_closed = cleanup_complete;
+            record.lease = cleanup_complete ? 0 : provider_->leaseId();
+            record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            update_record(record);
+        };
         if (!backend_->prepare(
                 configured_->drive_ma,
                 configured_->route,
                 configured_->required_capabilities,
                 error))
         {
+            record_failure("acquire-failed", true, true);
             result.error = error;
             return result;
         }
+        record.lease = provider_->leaseId();
+        record.endpoint_closed = false;
+        record.state = "acquired";
+        update_record(record);
         const bool submitted = configured_->tone
             ? backend_->emitTone(configured_->tone_program, error)
             : configured_->finite_events
@@ -317,12 +370,18 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         {
             const std::string submit_error = error;
             std::string cleanup_error;
-            if (!backend_->cleanup(cleanup_error) && !cleanup_error.empty())
+            const bool cleanup_ok = backend_->cleanup(cleanup_error);
+            record_failure(cleanup_ok ? "submit-failed" : "cleanup-fault",
+                true, cleanup_ok);
+            if (!cleanup_ok && !cleanup_error.empty())
                 result.error = submit_error + " Cleanup failed: " + cleanup_error;
             else
                 result.error = submit_error;
             return result;
         }
+        record.generation = backend_->generation();
+        record.state = "running";
+        update_record(record);
     }
 
     bool stop_sent = false;
@@ -345,6 +404,10 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 return result;
             }
             stop_sent = true;
+            auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+            record.cancellation_requested = true;
+            record.state = "draining";
+            update_record(record);
             drain_deadline = std::chrono::steady_clock::now() +
                 std::chrono::seconds{5};
         }
@@ -360,6 +423,10 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 return result;
             }
             stop_sent = true;
+            auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+            record.cancellation_requested = true;
+            record.state = "draining";
+            update_record(record);
             drain_deadline = std::chrono::steady_clock::now() +
                 std::chrono::seconds{5};
         }
@@ -383,6 +450,18 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                     result.faulted = true;
                     return result;
                 }
+                auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+                record.terminal_reason = event_state.terminal_reason;
+                record.state = state == wsprrypi::Rp1GpclkCompletionState::complete
+                    ? "complete" : "failed";
+                record.cleanup_attempted = true;
+                record.cleanup_complete = true;
+                record.endpoint_closed = true;
+                record.lease = 0;
+                record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                update_record(record);
                 if (state == wsprrypi::Rp1GpclkCompletionState::failed)
                 {
                     result.error = "RP1 GPCLK provider reported frame failure.";
@@ -429,6 +508,13 @@ wsprrypi::CleanupResult WsprRp1GpclkBackend::cleanup() noexcept
     std::string error;
     std::lock_guard<std::mutex> lock(backend_mutex_);
     const bool ok = backend_->cleanup(error);
+    auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+    record.cleanup_attempted = true;
+    record.cleanup_complete = ok;
+    record.endpoint_closed = ok;
+    record.lease = ok ? 0 : record.lease;
+    if (!ok) record.state = "cleanup-fault";
+    update_record(record);
     configured_.reset();
     wsprrypi::invalidateRp1GpclkDevelopmentOperation();
     return {ok, error};

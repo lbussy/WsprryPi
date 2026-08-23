@@ -5,7 +5,7 @@ const view=fs.readFileSync(path.join(root,"data/views/config.php"),"utf8");
 const script=fs.readFileSync(path.join(root,"data/index.js"),"utf8");
 const styles=fs.readFileSync(path.join(root,"data/index.css"),"utf8");
 const header=fs.readFileSync(path.join(root,"data/header.php"),"utf8");
-assert.match(view,/Requested[\s\S]*Package[\s\S]*Contract[\s\S]*Persisted[\s\S]*Boot configured[\s\S]*Active[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*live_output[\s\S]*Development policy[\s\S]*Output-inhibited evidence[\s\S]*Product qualification/);
+assert.match(view,/Requested[\s\S]*Package[\s\S]*Contract[\s\S]*Persisted[\s\S]*Boot configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Module \/ ABI[\s\S]*Compatibility[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*live_output[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Predecessor evidence[\s\S]*Product qualification/);
 assert.match(view,/>Apply route and reboot</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
 for(const state of ["checking","output_inhibited_validated","compatible_unqualified","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
@@ -13,11 +13,13 @@ for(const state of ["checking","output_inhibited_validated","compatible_unqualif
 assert.match(script,/body:JSON\.stringify\(\{operation, route:requested, generation:this\.generation\}\)/);
 assert.match(script,/operation:"preflight"[\s\S]*operation:"apply-and-reboot"/);
 assert.match(script,/if \(rp1RouteUi && rp1RouteUi\.visible\(\)\)[\s\S]*return;[\s\S]*scheduleAutosave\(\)/);
-assert.match(script,/this\.outputValidated \? "Apply route and reboot" : "Check route"/);
+assert.match(script,/this\.developmentCompatible \? "Apply route and reboot" : "Check route"/);
 assert.match(script,/data\.outputInhibitedValidated===true/);
 assert.match(script,/rp1-development-policy/);
 assert.match(view,/id="rp1-development-policy">Disabled/);
 assert.match(view,/id="rp1-route-eligible">Unqualified/);
+assert.match(script,/1\.1\.1 output-inhibited evidence is historical only/);
+assert.match(script,/data\.moduleVersion[\s\S]*data\.uapiAbi/);
 assert.match(script,/window\.confirm/);
 assert.match(script,/wsprrypi\.service and soapyremote-server\.service/);
 assert.match(header,/'rp1RoutePath' => \$basePath \. '\/api\/rp1-gpclk-route'/);

@@ -20,6 +20,8 @@ int main() {
     const auto scheduling = read_file(root / "scheduling.cpp");
     const auto transmit = read_file(
         root / "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp");
+    const auto development_contract = read_file(
+        root / "WSPR-Transmitter/src/rp1_gpclk_development_policy.hpp");
     const auto installer = read_file(root / "../scripts/install.sh");
     assert(service.find("/run/rp1-gpclk-dkms/route-manager.sock") != std::string::npos);
     assert(service.find("rp1-gpclk-route-manager-v1") != std::string::npos);
@@ -27,7 +29,9 @@ int main() {
     assert(service.find("outputInhibitedValidated") != std::string::npos);
     assert(service.find("{\"eligible\", false}") != std::string::npos);
     assert(service.find("apply-and-reboot") != std::string::npos);
-    assert(service.find("247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d") != std::string::npos);
+    assert(service.find("kRp1GpclkDevelopmentSourceRevision") != std::string::npos);
+    assert(development_contract.find("9ec6bb617d8259df50b376bb08f0e5973a8fee41") != std::string::npos);
+    assert(service.find("247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d") == std::string::npos);
     assert(service.find("642793e04268ddb06e35f16249d09c98e4067acef93c62620307bbea50033f5a") == std::string::npos);
     assert(service.find("/boot/firmware/config.txt") == std::string::npos);
     assert(service.find("atomic_write_owned_fragment") == std::string::npos);

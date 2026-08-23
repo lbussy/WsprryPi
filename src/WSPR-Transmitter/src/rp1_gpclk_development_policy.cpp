@@ -22,9 +22,9 @@ bool known_route(std::uint32_t route) noexcept
 const char* expected_compatibility(std::uint32_t route) noexcept
 {
     return route == wsprrypi::kRp1GpclkDevelopmentRouteGpio4
-        ? "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2"
+        ? wsprrypi::kRp1GpclkDevelopmentGpio4Compatibility.data()
         : route == wsprrypi::kRp1GpclkDevelopmentRouteGpio20
-            ? "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r2" : "";
+            ? wsprrypi::kRp1GpclkDevelopmentGpio20Compatibility.data() : "";
 }
 
 std::mutex authorization_mutex;
@@ -42,8 +42,8 @@ rp1GpclkExpectedDevelopmentIdentity(std::uint32_t route)
     identity.abi_min = identity.abi_max = kRp1GpclkDevelopmentUapiAbi;
     identity.route = route;
     identity.compatibility_state = kRp1GpclkDevelopmentCompatibilityExperimental;
-    identity.module_id = "rp1-gpclk-dkms";
-    identity.build_id = "1.1.2";
+    identity.module_id = kRp1GpclkDevelopmentModuleId;
+    identity.build_id = kRp1GpclkDevelopmentModuleVersion;
     identity.compatibility_id = expected_compatibility(route);
     return identity;
 }

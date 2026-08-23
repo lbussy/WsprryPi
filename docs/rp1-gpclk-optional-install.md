@@ -2,11 +2,16 @@
 
 # Optional RP1 GPCLK package installation
 
-RP1 GPCLK support on Raspberry Pi 5 is optional. The ordinary WsprryPi
-installer does not install it unless INSTALL_RP1_GPCLK_DKMS=true is set.
-The Si5351 backend remains available without this kernel module.
+> Historical predecessor procedure
 
-Use only a released, immutable rp1-gpclk-dkms Debian package. Record its
+The commands below describe released package 1.1.1 only. Roadmap Step 4
+consumes unreleased 1.1.2 development source and deliberately has no frozen
+package identity. The ordinary installer now rejects
+`INSTALL_RP1_GPCLK_DKMS=true`; it cannot install 1.1.1 as the current
+development consumer or fabricate a 1.1.2 package. The Si5351 backend remains
+available without this kernel module.
+
+For historical reproduction only, use the released, immutable predecessor. Record its
 release version and SHA-256 from the RP1-GPCLK-DKMS release, then run the
 installer from a local WsprryPi checkout:
 

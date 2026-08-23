@@ -4847,7 +4847,7 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
 
     WsprRuntimeStatusSnapshot snapshot;
     snapshot.transmit_backend = transmit_backend_kind_to_string(config.transmit_backend);
-    snapshot.rp1_package_expected = "rp1-gpclk-dkms=1.1.1-1; package_sha256=247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d; output_inhibited=validated-gpio4-gpio20-restored-gpio4; live_rf=unvalidated";
+    snapshot.rp1_package_expected = "source_commit=9ec6bb617d8259df50b376bb08f0e5973a8fee41; module=rp1-gpclk-dkms/1.1.2; uapi_abi=2; compatibility=route-specific-development-candidate-r2; package=unreleased; qualification=unvalidated";
     const std::string configured_rp1_route =
         config.gpio_tx_pin == 4 ? "GPIO4" :
         config.gpio_tx_pin == 20 ? "GPIO20" : "unavailable";
