@@ -367,7 +367,7 @@ namespace
         config.callsign = "AA0NT";
         config.grid_square = "EM18";
         config.power_dbm = 20;
-        config.frequencies = "20m@17H";
+        config.frequencies = has_ancillary_gpio() ? "20m@17H" : "20m";
         config.transmit_backend = TransmitBackendKind::GPIO;
         config.gpio_tx_pin = 4;
         config.gpio_power_level = 7;
