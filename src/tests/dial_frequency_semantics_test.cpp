@@ -856,6 +856,7 @@ int main(int argc, char *argv[])
             "stock INI must expose both experimental frequency controls as default deny");
     }
 
+    if (has_ancillary_gpio())
     {
         const auto configure_shared_band_gpio = [](ArgParserConfig &candidate,
                                                     bool active_high) {
