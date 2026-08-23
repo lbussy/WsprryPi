@@ -662,6 +662,67 @@ int main(int argc, char *argv[])
         "Pi 4 runtime resolution must preserve the legacy GPIO power level");
     init_default_config();
 
+    {
+        set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
+        prime_valid_runtime_identity_config();
+        config.frequencies = "20m";
+        config.wspr.frequencies = config.frequencies;
+        set_frequencies(config);
+        config.gpio_tx_pin = 20;
+        resolve_backend_specific_config(config);
+
+        std::string validation_error;
+        require(
+            validate_config_candidate(config, &validation_error),
+            "Pi 5 RP1 validation must accept GPIO20 when the provider is available");
+
+        config_to_json();
+        config.gpio_tx_pin = 4;
+        resolve_backend_specific_config(config);
+        json_to_config();
+        require(
+            config.gpio_tx_pin == 20 && config.tx_pin == 20,
+            "Pi 5 GPIO20 must survive JSON parsing and runtime resolution");
+
+        config.use_ini = true;
+        config.ini_filename = "/tmp/rp1_gpio20_route_persistence.ini";
+        config_to_json();
+        write_text_file(config.ini_filename, "");
+        iniFile.set_filename(config.ini_filename);
+        json_to_ini();
+        require(
+            iniFile.getData().at("GPIO").at("Transmit Pin") == "20",
+            "Pi 5 GPIO20 must be written to managed INI persistence");
+        config.gpio_tx_pin = 4;
+        resolve_backend_specific_config(config);
+        ini_to_json(config.ini_filename);
+        json_to_config();
+        require(
+            config.gpio_tx_pin == 20 && config.tx_pin == 20,
+            "Pi 5 GPIO20 must survive managed INI reload");
+
+        config.use_ini = false;
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "Pi 5 GPIO20 must enter the normal scheduler planning path");
+        const TransmissionRequest gpio20_request =
+            current_transmission_request_for_test();
+        require(
+            gpio20_request.tx_gpio == 20,
+            "Pi 5 scheduling must snapshot GPIO20 into the committed request");
+        config.gpio_tx_pin = 4;
+        resolve_backend_specific_config(config);
+        require(
+            current_transmission_request_for_test().tx_gpio == 20,
+            "a committed Pi 5 schedule must retain its GPIO20 snapshot after config changes");
+        finish_runtime_planning_state_for_identity_test();
+
+        clear_rp1_gpclk_provider_available_override_for_test();
+        clear_pi_generation_override_for_scope();
+    }
+
     BandLookup lookup;
 
     require(
@@ -723,6 +784,7 @@ int main(int argc, char *argv[])
         conflict_data["Operation"]["Transmit Backend"] = "si5351";
 #elif !WSPRRYPI_BACKEND_RPI_GPIO && WSPRRYPI_BACKEND_RP1_GPCLK
         set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
 #endif
         conflict_data["GPIO"]["Use System Clock Frequency Estimate"] = "true";
         conflict_data["GPIO"]["Use NTP"] = "false";
@@ -758,6 +820,7 @@ int main(int argc, char *argv[])
             conflict_text.find("Use NTP =") == std::string::npos,
             "conflict migration must remove the retired key after retaining the canonical value");
 #if !WSPRRYPI_BACKEND_RPI_GPIO && !WSPRRYPI_BACKEND_SI5351 && WSPRRYPI_BACKEND_RP1_GPCLK
+        clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();
 #endif
     }
@@ -894,6 +957,8 @@ int main(int argc, char *argv[])
             }
         };
 
+        set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
         for (const bool transmit : {false, true})
         {
             for (const int transmit_pin : {4, 20})
@@ -940,6 +1005,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        clear_rp1_gpclk_provider_available_override_for_test();
+        clear_pi_generation_override_for_scope();
 
         for (const int retained_transmit_pin : {4, 20})
         {
@@ -1031,6 +1098,25 @@ int main(int argc, char *argv[])
         require(
             ini_candidate.valid,
             "INI configuration must accept matching shared Band GPIO assignments");
+
+        managed_ini["Band GPIO"]["22m"] = "";
+        managed_ini["Band GPIO"]["22m Active High"] = "false";
+        iniFile.setData(managed_ini);
+        prepare_ini_config_candidate("/tmp/retired_disabled_22m.ini", ini_candidate);
+        require(
+            ini_candidate.valid,
+            "INI migration must ignore the retired 22m Band GPIO pair only when disabled");
+        managed_ini["Band GPIO"]["22m"] = "5";
+        iniFile.setData(managed_ini);
+        prepare_ini_config_candidate("/tmp/retired_enabled_22m.ini", ini_candidate);
+        require(
+            !ini_candidate.valid &&
+                ini_candidate.error_reason.find("Unknown key in [Band GPIO]") !=
+                    std::string::npos &&
+                ini_candidate.error_reason.find("22m") != std::string::npos,
+            "INI migration must reject a configured retired 22m Band GPIO assignment");
+        managed_ini["Band GPIO"].erase("22m");
+        managed_ini["Band GPIO"].erase("22m Active High");
 
         managed_ini["Band GPIO"]["40m Active High"] = "false";
         iniFile.setData(managed_ini);
@@ -1184,48 +1270,45 @@ int main(int argc, char *argv[])
 
     {
         set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
         prime_valid_runtime_identity_config();
 
         std::string validation_error;
         require(
-            !validate_config_candidate(config, &validation_error),
-            "GPIO backend must be rejected on Raspberry Pi 5");
-        require(
-            validation_error.find(
-                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
-                std::string::npos,
-            "GPIO backend rejection on Raspberry Pi 5 must explain the unsupported platform");
+            validate_config_candidate(config, &validation_error),
+            "GPIO4 must be accepted on Raspberry Pi 5 when the RP1 provider is available");
 
         PreparedConfigCandidate candidate;
         iniFile.setData(make_managed_ini_data("AA0NT", "EM18", "20m", true));
         prepare_ini_config_candidate("/tmp/gpio_pi5.ini", candidate);
         require(
-            !candidate.valid,
-            "managed GPIO configuration must be rejected on Raspberry Pi 5");
-        require(
-            candidate.error_reason.find(
-                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
-                std::string::npos,
-            "managed GPIO rejection on Raspberry Pi 5 must preserve the platform error");
+            candidate.valid,
+            "managed GPIO4 configuration must be accepted on Raspberry Pi 5");
 
+        clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();
     }
 
     {
         set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
         prime_valid_runtime_identity_config();
         config.transmit = false;
 
         std::string validation_error;
         require(
-            !validate_config_candidate(config, &validation_error),
-            "GPIO backend must remain invalid on Raspberry Pi 5 even when transmit is off");
-        require(
-            validation_error.find(
-                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
-                std::string::npos,
-            "GPIO backend invalidity on Raspberry Pi 5 must not depend on transmit state");
+            validate_config_candidate(config, &validation_error),
+            "available Pi 5 RP1 GPIO backend must remain valid when transmit is off");
 
+        clear_rp1_gpclk_provider_available_override_for_test();
+
+        PreparedConfigCandidate inactive_candidate;
+        iniFile.setData(make_managed_ini_data("AA0NT", "EM18", "20m", false));
+        prepare_ini_config_candidate("/tmp/inactive_gpio_pi5.ini", inactive_candidate);
+        require(
+            inactive_candidate.valid,
+            "inactive managed GPIO configuration must load on Raspberry Pi 5 without requiring the inactive provider: " +
+                inactive_candidate.error_reason);
         clear_pi_generation_override_for_scope();
     }
 
@@ -1366,6 +1449,7 @@ int main(int argc, char *argv[])
 
     {
         set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
         reset_current_transmission_request_for_test();
         reset_getopt_state();
 
@@ -1384,18 +1468,14 @@ int main(int argc, char *argv[])
             "CLI GPIO setup on Raspberry Pi 5 must still parse before validation");
         std::string validation_error;
         require(
-            !validate_config_data_for_test(&validation_error),
-            "CLI startup validation must fail for GPIO on Raspberry Pi 5");
-        require(
-            validation_error.find(
-                "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider") !=
-                std::string::npos,
-            "CLI startup validation on Raspberry Pi 5 must report the GPIO platform error");
+            validate_config_data_for_test(&validation_error),
+            "CLI startup validation must accept GPIO on Raspberry Pi 5 with the RP1 provider");
         require(
             current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
                 current_transmission_request_for_test().payload.frames.empty(),
-            "CLI startup failure on Raspberry Pi 5 must not commit a transmission request");
+            "Pi 5 RP1 CLI validation must not itself commit a transmission request");
 
+        clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();
     }
 
@@ -1554,12 +1634,12 @@ int main(int argc, char *argv[])
 
         require(
             threw,
-            "non-SI5351 controller tone execution must be rejected before backend preparation");
+            "legacy GPIO controller tone execution must be rejected before backend preparation");
         require(
             error_message.find(
-                "Controller tone execution is only supported for the SI5351 backend; received GPIO.") !=
+                "Controller tone execution is supported only for SI5351 or RP1 GPCLK; received GPIO.") !=
                 std::string::npos,
-            "non-SI5351 controller tone execution must fail with the specific backend-routing diagnostic");
+            "legacy GPIO controller tone execution must fail with the specific backend-routing diagnostic");
     }
 
     {

@@ -3,6 +3,7 @@
 #include "rp1_gpclk_backend.hpp"
 #include "rp1_gpclk_linux_provider.hpp"
 #include "rp1_gpclk_event_program.hpp"
+#include "rp1_gpclk_development_policy.hpp"
 #include "transmission_backend.hpp"
 
 #include <array>
@@ -41,8 +42,14 @@ private:
         wsprrypi::Rp1GpclkPlan clock_plan{};
         std::array<std::uint8_t, 162> symbols{};
         wsprrypi::Rp1GpclkProviderEventProgram event_program{};
+        wsprrypi::Rp1GpclkProviderToneProgram tone_program{};
         bool finite_events{false};
+        bool tone{false};
+        bool continuous_tone{false};
         std::uint32_t drive_ma{2};
+        std::uint32_t route{0};
+        std::uint64_t required_capabilities{0};
+        wsprrypi::Rp1GpclkDevelopmentPolicyInputs development_policy{};
     };
 
     IControllerBridge& owner_;

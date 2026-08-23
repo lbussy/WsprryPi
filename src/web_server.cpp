@@ -33,6 +33,7 @@
 #include "logging.hpp"
 #include "privileged_network_runtime.hpp"
 #include "privileged_network_admin.hpp"
+#include "rp1_gpclk_route_service.hpp"
 #include "scheduling.hpp"
 #include "support_bundle_http.hpp"
 #include "support_bundle_intake_production.hpp"
@@ -236,6 +237,10 @@ void WebServer::start(int port)
             privilegedNetworkAdmin_ = std::make_unique<PrivilegedNetworkAdmin>(
                 PrivilegedNetworkAdminPaths{config.ini_filename});
         }
+        if (!rp1GpclkRouteService_)
+        {
+            rp1GpclkRouteService_ = &wsprrypi::productionRp1GpclkRouteService();
+        }
     }
 
     llog.logS(INFO, "Web server started on port: ", config.web_port);
@@ -425,6 +430,40 @@ void WebServer::start(int port)
                     res.set_content(
                         R"({"error":"apply_failed","message":"The network safety transaction could not be completed."})",
                         "application/json");
+                }
+            });
+
+    svr->Get("/api/rp1-gpclk-route",
+            [this](const httplib::Request &, httplib::Response &res) {
+                const auto body = rp1GpclkRouteService_->query();
+                res.headers.erase("Access-Control-Allow-Origin");
+                res.set_content(body.dump(4), "application/json");
+            });
+
+    svr->Post("/api/rp1-gpclk-route",
+            [this](const httplib::Request &req, httplib::Response &res) {
+                try {
+                    const auto request = nlohmann::json::parse(req.body);
+                    if (!request.contains("operation") || !request["operation"].is_string() ||
+                        !request.contains("route") || !request["route"].is_string() ||
+                        !request.contains("generation") || !request["generation"].is_number_unsigned()) {
+                        throw std::invalid_argument("operation, route, and generation are required");
+                    }
+                    const auto body = rp1GpclkRouteService_->operate(
+                        request["operation"].get<std::string>(),
+                        request["route"].get<std::string>(),
+                        request["generation"].get<std::uint64_t>());
+                    res.status = body.value("ok", false) ? 200 : 409;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(body.dump(4), "application/json");
+                } catch (const nlohmann::json::parse_error &) {
+                    res.status = 400;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(R"({"error":"invalid_json","message":"Malformed JSON request."})", "application/json");
+                } catch (const std::exception &) {
+                    res.status = 400;
+                    res.headers.erase("Access-Control-Allow-Origin");
+                    res.set_content(R"({"error":"invalid_request","message":"A fixed operation, GPIO4 or GPIO20 route, and generation are required."})", "application/json");
                 }
             });
 

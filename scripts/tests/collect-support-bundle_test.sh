@@ -136,10 +136,11 @@ EOF
 }
 
 make_no_i2c_path() {
-  local directory="$1" command
+  local directory="$1" command target
   mkdir -p "$directory"
   for command in awk basename chmod cp cut df dirname file free getconf getent grep gzip id ldd ln ls mkdir mktemp mount perl readelf rm sha256sum sh sort stat tail tar tr uname uptime wc; do
-    ln -s "$(command -v "$command")" "$directory/$command"
+    target="$(command -v "$command" || true)"
+    [[ -n "$target" ]] && ln -s "$target" "$directory/$command"
   done
   rm "$directory/sh"
   cp "$TEST_ROOT/mocks/date" "$directory/date"

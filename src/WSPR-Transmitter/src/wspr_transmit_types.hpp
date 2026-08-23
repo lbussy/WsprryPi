@@ -32,6 +32,7 @@
 
 #include "band_gpio.hpp"
 #include "prepared_wspr_transmission.hpp"
+#include "rp1_gpclk_development_inputs.hpp"
 
 /**
  * @enum WsprTransmitState
@@ -150,6 +151,7 @@ struct TransmissionRequest
      * optional random-offset handling.
      */
     double actual_rf_frequency_hz = 0.0;
+    std::optional<std::chrono::nanoseconds> tone_duration{};
 
     /**
      * @brief PPM correction committed for this execution.
@@ -167,6 +169,7 @@ struct TransmissionRequest
      * scheduler-owned band-selector GPIO.
      */
     int tx_gpio = 4;
+    wsprrypi::Rp1GpclkDevelopmentInputs rp1_development{};
 
     /**
      * @brief Whether the scheduler enabled random WSPR offset for this slot.

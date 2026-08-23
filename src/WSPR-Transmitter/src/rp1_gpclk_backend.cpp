@@ -11,7 +11,10 @@ Rp1GpclkBackend::Rp1GpclkBackend(Rp1GpclkProvider& provider) noexcept
 Rp1GpclkBackend::~Rp1GpclkBackend()
 {
     if (acquired_ && !in_flight_)
-        provider_.release();
+    {
+        std::string ignored;
+        (void)provider_.release(ignored);
+    }
 }
 
 bool Rp1GpclkBackend::validDrive(std::uint32_t drive_ma) noexcept
@@ -19,7 +22,11 @@ bool Rp1GpclkBackend::validDrive(std::uint32_t drive_ma) noexcept
     return drive_ma == 2 || drive_ma == 4 || drive_ma == 8 || drive_ma == 12;
 }
 
-bool Rp1GpclkBackend::prepare(std::uint32_t drive_ma, std::string& error)
+bool Rp1GpclkBackend::prepare(
+    std::uint32_t drive_ma,
+    std::uint32_t expected_route,
+    std::uint64_t required_capabilities,
+    std::string& error)
 {
     if (acquired_)
     {
@@ -31,8 +38,9 @@ bool Rp1GpclkBackend::prepare(std::uint32_t drive_ma, std::string& error)
         error = "RP1 GPIO drive must be 2, 4, 8, or 12 mA.";
         return false;
     }
-    if (!provider_.acquire(drive_ma, error))
+    if (!provider_.acquire(expected_route, required_capabilities, error))
         return false;
+    drive_ma_ = drive_ma;
     acquired_ = true;
     return true;
 }
@@ -53,7 +61,8 @@ bool Rp1GpclkBackend::emitFrame(
     program.fractional_bits = plan.fractional_bits;
     program.writes_per_symbol = kWritesPerSymbol;
     program.tick_divider = kTickDivider;
-    program.generation = ++generation_;
+    program.drive_ma = drive_ma_;
+    program.generation = 0;
     for (std::size_t tone = 0; tone < plan.tones.size(); ++tone)
     {
         const auto& selected = plan.tones[tone];
@@ -61,7 +70,6 @@ bool Rp1GpclkBackend::emitFrame(
             kWritesPerSymbol)
         {
             error = "Every RP1 GPCLK symbol must contain exactly 66792 divider writes.";
-            --generation_;
             return false;
         }
         program.tones[tone] = Rp1GpclkProviderSymbol{
@@ -75,15 +83,16 @@ bool Rp1GpclkBackend::emitFrame(
         if (symbols[i] >= plan.tones.size())
         {
             error = "RP1 GPCLK frame contains an invalid tone index.";
-            --generation_;
             return false;
         }
         program.symbols[i] = symbols[i];
     }
     if (!provider_.submit(program, error))
         return false;
+    generation_ = program.generation;
     in_flight_ = true;
     in_flight_events_ = false;
+    in_flight_tone_ = false;
     return true;
 }
 
@@ -101,11 +110,35 @@ bool Rp1GpclkBackend::emitEvents(
         error = "RP1 GPCLK generation is exhausted.";
         return false;
     }
-    program.generation = ++generation_;
+    program.generation = 0;
     if (!provider_.submitEvents(program, error))
         return false;
+    generation_ = program.generation;
     in_flight_ = true;
     in_flight_events_ = true;
+    in_flight_tone_ = false;
+    return true;
+}
+
+bool Rp1GpclkBackend::emitTone(
+    Rp1GpclkProviderToneProgram program, std::string& error)
+{
+    if (!acquired_ || in_flight_)
+    {
+        error = acquired_ ? "RP1 GPCLK provider is already running."
+                          : "RP1 GPCLK provider is not prepared.";
+        return false;
+    }
+    if (generation_ == std::numeric_limits<std::uint64_t>::max())
+    { error = "RP1 GPCLK generation is exhausted."; return false; }
+    program.generation = 0;
+    program.drive_ma = drive_ma_;
+    if (!provider_.submitTone(program, error))
+        return false;
+    generation_ = program.generation;
+    in_flight_ = true;
+    in_flight_events_ = false;
+    in_flight_tone_ = true;
     return true;
 }
 
@@ -136,8 +169,11 @@ bool Rp1GpclkBackend::cleanup(std::string& error)
         }
         in_flight_ = false;
         in_flight_events_ = false;
+        in_flight_tone_ = false;
     }
-    provider_.release();
+    if (!provider_.release(error))
+        return false;
+    drive_ma_ = 0;
     acquired_ = false;
     return true;
 }

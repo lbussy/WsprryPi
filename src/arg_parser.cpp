@@ -1659,8 +1659,13 @@ void show_config_values(bool reload)
 
 bool validate_config_candidate(
     ArgParserConfig &candidate,
-    std::string *error_message)
+    std::string *error_message,
+    bool require_live_backend)
 {
+    if (error_message != nullptr)
+    {
+        error_message->clear();
+    }
     if (!transmit_backend_is_compiled(candidate.transmit_backend))
     {
         if (error_message != nullptr)
@@ -1860,7 +1865,11 @@ bool validate_config_candidate(
 
     if (candidate.transmit_backend == TransmitBackendKind::GPIO)
     {
-        if (!platform_supports_gpio_clock_transmission(error_message))
+        const bool inactive_pi5_configuration =
+            get_raspberry_pi_generation() == 5 &&
+            (!require_live_backend || !backend_validation_required);
+        if (!inactive_pi5_configuration &&
+            !platform_supports_gpio_clock_transmission(error_message))
         {
             return false;
         }
@@ -1872,16 +1881,6 @@ bool validate_config_candidate(
                 *error_message = transmit_gpio_validation_message();
             }
 
-            return false;
-        }
-
-        if (get_raspberry_pi_generation() == 5 && candidate.gpio_tx_pin != 4)
-        {
-            if (error_message != nullptr)
-            {
-                *error_message =
-                    "The RP1 GPCLK backend currently supports GPIO4 only.";
-            }
             return false;
         }
 
@@ -1983,7 +1982,7 @@ bool validate_config_candidate(
             return false;
         }
 
-        if (backend_validation_required &&
+        if (require_live_backend && backend_validation_required &&
             !backend_ready_for_transmission(candidate, error_message))
         {
             return false;

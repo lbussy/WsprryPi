@@ -30,21 +30,45 @@ class Rp1GpclkLinuxProvider final : public Rp1GpclkProvider
 public:
     explicit Rp1GpclkLinuxProvider(
         Rp1GpclkIo& io,
-        std::string device = "/dev/rp1-gpclk0") noexcept;
+        std::string device = "/dev/rp1-gpclk") noexcept;
     ~Rp1GpclkLinuxProvider() override;
 
-    bool acquire(std::uint32_t drive_ma, std::string& error) override;
-    bool submit(const Rp1GpclkProviderProgram&, std::string& error) override;
-    bool submitEvents(const Rp1GpclkProviderEventProgram&, std::string& error) override;
+    bool query(
+        std::uint32_t expected_route,
+        std::uint64_t required_capabilities,
+        bool require_live_eligible,
+        Rp1GpclkProviderIdentity& identity,
+        std::string& error) override;
+    bool acquire(
+        std::uint32_t expected_route,
+        std::uint64_t required_capabilities,
+        std::string& error) override;
+    bool submit(Rp1GpclkProviderProgram&, std::string& error) override;
+    bool submitEvents(Rp1GpclkProviderEventProgram&, std::string& error) override;
+    bool submitTone(Rp1GpclkProviderToneProgram&, std::string& error) override;
     bool requestFiniteStop(std::uint64_t generation, std::string& error) override;
     Rp1GpclkCompletionState state(std::uint64_t generation) const noexcept override;
     Rp1GpclkProviderEventState eventState(std::uint64_t generation) const noexcept override;
-    void release() noexcept override;
+    bool getState(
+        std::uint64_t generation,
+        Rp1GpclkProviderEventState& state,
+        std::string& error) const;
+    bool release(std::string& error) noexcept override;
 
 private:
+    bool queryOpen(
+        std::uint32_t expected_route,
+        std::uint64_t required_capabilities,
+        bool require_live_eligible,
+        Rp1GpclkProviderIdentity& identity,
+        std::string& error);
     bool failed(const char* operation, std::string& error) const;
     Rp1GpclkIo& io_;
     std::string device_;
     int fd_{-1};
+    std::uint64_t lease_id_{0};
+    std::uint64_t active_generation_{0};
+    mutable bool active_generation_terminal_{false};
+    std::uint32_t supported_drive_ma_mask_{0};
 };
 } // namespace wsprrypi

@@ -48,6 +48,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <stdexcept>
@@ -107,6 +108,7 @@ namespace
     constexpr double kManualPpmMax = 200.0;
 
     bool g_patch_all_from_web_runtime_apply_suppressed_for_test = false;
+    std::mutex g_config_update_mutex;
     std::atomic<double> g_published_wspr_audio_offset_hz{WSPR_AUDIO_OFFSET_HZ};
     std::shared_mutex g_test_tone_planning_snapshot_mutex;
     TestTonePlanningConfigSnapshot g_test_tone_planning_snapshot{};
@@ -1049,8 +1051,20 @@ namespace
         const std::unordered_map<std::string, std::string> &ini_section,
         nlohmann::json &patch)
     {
+        const auto retired_22m = ini_section.find("22m");
+        const auto retired_22m_active_high = ini_section.find("22m Active High");
+        const bool retired_22m_is_disabled =
+            retired_22m != ini_section.end() && trim_copy(retired_22m->second).empty() &&
+            (retired_22m_active_high == ini_section.end() ||
+             !parse_ini_bool_strict(retired_22m_active_high->second,
+                 "[Band GPIO] 22m Active High"));
         for (const auto &[key, value] : ini_section)
         {
+            if (retired_22m_is_disabled &&
+                (key == "22m" || key == "22m Active High"))
+            {
+                continue;
+            }
             bool known_key = false;
 
             for (const auto &[band, band_name] : kHamBandJsonKeys)
@@ -2772,6 +2786,7 @@ void dump_json(const nlohmann::json &j, std::string tag)
 
 void patch_all_from_web(const nlohmann::json &j)
 {
+    std::lock_guard<std::mutex> update_lock(g_config_update_mutex);
     nlohmann::json candidate_public_json = public_config_from_internal(jConfig);
     candidate_public_json.merge_patch(j);
 
@@ -2868,6 +2883,44 @@ void patch_all_from_web(const nlohmann::json &j)
 void set_patch_all_from_web_runtime_apply_suppressed_for_test(bool suppressed) noexcept
 {
     g_patch_all_from_web_runtime_apply_suppressed_for_test = suppressed;
+}
+
+bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message) noexcept
+{
+    try
+    {
+        std::lock_guard<std::mutex> update_lock(g_config_update_mutex);
+        if (gpio != 4 && gpio != 20)
+        {
+            if (error_message) *error_message = "RP1 GPCLK route must be GPIO4 or GPIO20.";
+            return false;
+        }
+        ArgParserConfig candidate = config;
+        candidate.gpio_tx_pin = gpio;
+        std::string validation_error;
+        if (!validate_config_candidate(candidate, &validation_error, false))
+        {
+            if (error_message) *error_message = validation_error;
+            return false;
+        }
+        nlohmann::json candidate_json = jConfig;
+        config_to_json_impl(candidate, candidate_json);
+        persist_config_json(candidate_json);
+        copy_config(candidate, config);
+        publish_test_tone_planning_config(config);
+        jConfig = std::move(candidate_json);
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        if (error_message) *error_message = error.what();
+        return false;
+    }
+    catch (...)
+    {
+        if (error_message) *error_message = "Unknown RP1 GPCLK persistence failure.";
+        return false;
+    }
 }
 
 void repair_from_web(bool attempt_repair)

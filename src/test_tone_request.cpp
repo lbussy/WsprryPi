@@ -112,6 +112,31 @@ BoundedTestToneRequestParseResult parse_bounded_test_tone_request(
     const TestToneRequestParseResult tone = parse_test_tone_request(j);
     if (!tone)
         return fail(tone.error);
+    ParsedTestToneRequest parsed_tone = *tone.request;
+    if (j.contains("rp1_development"))
+    {
+        const auto& value = j["rp1_development"];
+        if (!value.is_object() || value.size() != 7 ||
+            !value.value("enabled", false) ||
+            !value.contains("route") || !value["route"].is_string() ||
+            !value.value("physical_connection", false) ||
+            !value.value("attenuation_and_load", false) ||
+            !value.value("bounded_operation", false) ||
+            !value.value("non_radiating_topology", false) ||
+            !value.value("experimental_acknowledged", false))
+            return fail("rp1_development requires every explicit confirmation");
+        const std::string route = value["route"].get<std::string>();
+        parsed_tone.rp1_development.enabled = true;
+        parsed_tone.rp1_development.route_gpio = route == "GPIO4" ? 4 : route == "GPIO20" ? 20 : 0;
+        if (parsed_tone.rp1_development.route_gpio == 0)
+            return fail("rp1_development route must be GPIO4 or GPIO20");
+        parsed_tone.rp1_development.physical_connection = true;
+        parsed_tone.rp1_development.attenuation_and_load = true;
+        parsed_tone.rp1_development.bounded_operation = true;
+        parsed_tone.rp1_development.non_radiating_topology = true;
+        parsed_tone.rp1_development.experimental_acknowledged = true;
+        parsed_tone.rp1_development.operation_id = request_id;
+    }
     return {{ParsedBoundedTestToneRequest{
-        *tone.request, request_id, duration_ms}}, {}};
+        parsed_tone, request_id, duration_ms}}, {}};
 }

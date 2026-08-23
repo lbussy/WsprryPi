@@ -13,6 +13,7 @@ namespace wsprrypi
 struct TransmissionPrepareOptions
 {
     int power_level{0};
+    Rp1GpclkDevelopmentInputs rp1_development{};
 };
 
 class TransmissionController

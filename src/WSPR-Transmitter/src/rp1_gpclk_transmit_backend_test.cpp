@@ -1,4 +1,5 @@
 #include "rp1_gpclk_transmit_backend.hpp"
+#include "rp1_gpclk_uapi.h"
 #include "wspr_transmit.hpp"
 
 #include <iostream>
@@ -34,28 +35,47 @@ public:
 class Provider final : public wsprrypi::Rp1GpclkProvider
 {
 public:
-    bool acquire(std::uint32_t drive, std::string& error) override {
-        if (fail_acquire) { error=acquire_error; return false; }
-        drive_ma=drive; acquired=true; return true;
+    bool query(std::uint32_t route, std::uint64_t capabilities, bool,
+        wsprrypi::Rp1GpclkProviderIdentity& identity, std::string&) override {
+        identity.abi_min=identity.abi_max=2; identity.route=route;
+        identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
+        identity.capabilities=capabilities; identity.module_id="rp1-gpclk-dkms";
+        identity.build_id="1.1.2";
+        identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2";
+        return true;
     }
-    bool submit(const wsprrypi::Rp1GpclkProviderProgram& value, std::string& error) override {
+    bool acquire(std::uint32_t route, std::uint64_t capabilities,
+        std::string& error) override {
+        if (fail_acquire) { error=acquire_error; return false; }
+        acquired_route=route; required_capabilities=capabilities; acquired=true; return true;
+    }
+    bool submit(wsprrypi::Rp1GpclkProviderProgram& value, std::string& error) override {
         if (fail_submit) { error=submit_error; return false; }
+        value.generation=1;
         program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
     }
-    bool submitEvents(const wsprrypi::Rp1GpclkProviderEventProgram& value, std::string& error) override {
+    bool submitEvents(wsprrypi::Rp1GpclkProviderEventProgram& value, std::string& error) override {
         if (fail_submit) { error=submit_error; return false; }
+        value.generation=1;
         event_program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
+    }
+    bool submitTone(wsprrypi::Rp1GpclkProviderToneProgram& value, std::string& error) override {
+        if (fail_submit) { error=submit_error; return false; }
+        value.generation=1;
+        tone_program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
     }
     bool requestFiniteStop(std::uint64_t, std::string&) override { stopped=true; return true; }
     wsprrypi::Rp1GpclkCompletionState state(std::uint64_t) const noexcept override { return state_value; }
     wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override { return {state_value,current_event,0}; }
-    void release() noexcept override { released=true; }
-    std::uint32_t drive_ma{}; bool acquired{},submitted{},stopped{},released{};
+    bool release(std::string&) noexcept override { released=true; return true; }
+    std::uint32_t acquired_route{}; std::uint64_t required_capabilities{};
+    bool acquired{},submitted{},stopped{},released{};
     bool fail_acquire{},fail_submit{};
     std::string acquire_error{"injected acquire failure"};
     std::string submit_error{"injected submit ENOTTY"};
     wsprrypi::Rp1GpclkProviderProgram program{};
     wsprrypi::Rp1GpclkProviderEventProgram event_program{};
+    wsprrypi::Rp1GpclkProviderToneProgram tone_program{};
     std::uint32_t current_event{};
     wsprrypi::Rp1GpclkCompletionState state_value{wsprrypi::Rp1GpclkCompletionState::idle};
 };
@@ -75,6 +95,33 @@ wsprrypi::ExecutionPlan framePlan(std::size_t count=162)
         plan.events.push_back(event);
     }
     return plan;
+}
+
+wsprrypi::BackendExecutionInputs developmentInputs(int drive=2)
+{
+    wsprrypi::BackendExecutionInputs inputs;
+    inputs.power_level=drive; inputs.tx_gpio=inputs.configured_tx_gpio=4;
+    auto& d=inputs.rp1_development;
+    d.enabled=true; d.persisted_gpio=d.active_gpio=d.module_gpio=d.confirmation_gpio=4;
+    d.active_route_count=1; d.route_transaction_resolved=d.route_manager_attributable=true;
+    d.scheduler_idle=d.application_owns_operation=true;
+    d.endpoint_available=d.endpoint_closed=d.endpoint_exclusively_acquirable=true;
+    d.live_output_verified=d.physical_connection_confirmed=true;
+    d.attenuation_and_load_confirmed=d.bounded_operation_confirmed=true;
+    d.non_radiating_topology_confirmed=d.experimental_status_acknowledged=true;
+    d.confirmation_current=true; d.operation_id=d.confirmation_operation_id="test-operation";
+    d.route_transaction_generation=d.confirmation_route_transaction_generation=3;
+    wsprrypi::Rp1GpclkProviderIdentity identity;
+    identity.abi_min=identity.abi_max=2; identity.route=RP1_GPCLK_ROUTE_GPIO4;
+    identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    identity.capabilities=RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
+        RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
+        RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
+        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    identity.module_id="rp1-gpclk-dkms"; identity.build_id="1.1.2";
+    identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2";
+    d.confirmation_identity=wsprrypi::rp1GpclkDevelopmentIdentityBinding(identity);
+    return inputs;
 }
 
 wsprrypi::ExecutionPlan qrssPlan()
@@ -118,14 +165,24 @@ int main()
     Provider* observed=provider.get();
     WsprRp1GpclkBackend backend(owner,std::move(provider));
     auto short_plan=framePlan(161);
-    expect(!backend.configure(short_plan,{2,4}).ok,"short frame must be rejected");
+    expect(!backend.configure(short_plan,developmentInputs()).ok,"short frame must be rejected");
     auto plan=framePlan();
-    expect(!backend.configure(plan,{6,4}).ok,"invalid drive must be rejected");
-    expect(backend.configure(plan,{2,4}).ok,"valid frame must configure");
+    expect(!backend.configure(plan,developmentInputs(6)).ok,"invalid drive must be rejected");
+    auto default_denied_provider=std::make_unique<Provider>();
+    Provider* default_denied_observed=default_denied_provider.get();
+    WsprRp1GpclkBackend default_denied_backend(owner,std::move(default_denied_provider));
+    expect(default_denied_backend.configure(plan,{2,4}).ok,
+        "ordinary RP1 selection may compile without granting development authorization");
+    const auto default_denied=default_denied_backend.execute(plan);
+    expect(!default_denied.ok && !default_denied_observed->acquired,
+        "ordinary and direct-adapter execution must be denied before endpoint acquisition");
+    expect(backend.configure(plan,developmentInputs()).ok,"valid frame must configure");
     const auto result=backend.execute(plan);
     expect(result.ok && !result.stopped,"valid frame must execute");
     expect(observed->acquired && observed->submitted && observed->released,"provider lifecycle must complete");
-    expect(observed->drive_ma==2,"minimum drive must be carried");
+    expect(observed->program.drive_ma==2,"minimum drive must be carried in submission");
+    expect(observed->acquired_route==RP1_GPCLK_ROUTE_GPIO4,
+        "GPIO4 route must be carried independently into acquisition");
     expect(observed->program.symbols[0]==0 && observed->program.symbols[1]==1,"symbol order must preserve tone indexes");
     expect(observed->program.tones[0].lower_divider_word != observed->program.tones[1].lower_divider_word,"frame must carry distinct tone plans");
 
@@ -133,7 +190,7 @@ int main()
     Provider* event_observed=event_provider.get();
     WsprRp1GpclkBackend event_backend(owner,std::move(event_provider));
     auto qrss=qrssPlan();
-    expect(event_backend.configure(qrss,{2,4}).ok,"QRSS finite events must configure");
+    expect(event_backend.configure(qrss,developmentInputs()).ok,"QRSS finite events must configure");
     const auto event_result=event_backend.execute(qrss);
     expect(event_result.ok && event_observed->event_program.events.size()==2,
         "QRSS finite event program must execute through provider contract");
@@ -142,37 +199,50 @@ int main()
 
     auto fsk_provider=std::make_unique<Provider>(); Provider* fsk_observed=fsk_provider.get();
     WsprRp1GpclkBackend fsk_backend(owner,std::move(fsk_provider)); auto fsk=twoTonePlan(wsprrypi::TransmissionMode::FSKCW,false);
-    expect(fsk_backend.configure(fsk,{2,4}).ok && fsk_backend.execute(fsk).ok,
+    expect(fsk_backend.configure(fsk,developmentInputs()).ok && fsk_backend.execute(fsk).ok,
         "FSKCW finite events must execute");
     expect(fsk_observed->event_program.tones.size()==2 && fsk_observed->event_program.events[0].rf_on && fsk_observed->event_program.events[1].rf_on,
         "FSKCW must preserve two continuous-RF tones");
 
     auto dfcw_provider=std::make_unique<Provider>(); Provider* dfcw_observed=dfcw_provider.get();
     WsprRp1GpclkBackend dfcw_backend(owner,std::move(dfcw_provider)); auto dfcw=twoTonePlan(wsprrypi::TransmissionMode::DFCW,true);
-    expect(dfcw_backend.configure(dfcw,{2,4}).ok && dfcw_backend.execute(dfcw).ok,
+    expect(dfcw_backend.configure(dfcw,developmentInputs()).ok && dfcw_backend.execute(dfcw).ok,
         "DFCW finite events must execute");
     expect(!dfcw_observed->event_program.events[2].rf_on,
         "DFCW must preserve RF-off gaps");
 
-    auto tone_provider=std::make_unique<Provider>(); WsprRp1GpclkBackend tone_backend(owner,std::move(tone_provider));
-    auto implicit_tone=tonePlan(false); expect(!tone_backend.configure(implicit_tone,{2,4}).ok,
-        "implicit-duration TONE must be rejected");
-    auto explicit_tone=tonePlan(true); expect(tone_backend.configure(explicit_tone,{2,4}).ok,
-        "explicit-duration TONE must configure");
+    auto tone_provider=std::make_unique<Provider>(); Provider* tone_observed=tone_provider.get();
+    WsprRp1GpclkBackend tone_backend(owner,std::move(tone_provider));
+    auto implicit_tone=tonePlan(false);
+    expect(tone_backend.configure(implicit_tone,developmentInputs()).ok && tone_backend.execute(implicit_tone).ok,
+        "implicit-duration TONE must use continuous ABI v2 operation");
+    expect(tone_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_CONTINUOUS &&
+        tone_observed->tone_program.duration_ns==0 &&
+        (tone_observed->required_capabilities & RP1_GPCLK_CAP_TONE_CONTINUOUS)!=0,
+        "continuous TONE must have zero duration and require its exact capability");
+    auto finite_provider=std::make_unique<Provider>(); Provider* finite_observed=finite_provider.get();
+    WsprRp1GpclkBackend finite_backend(owner,std::move(finite_provider));
+    auto explicit_tone=tonePlan(true);
+    expect(finite_backend.configure(explicit_tone,developmentInputs()).ok && finite_backend.execute(explicit_tone).ok,
+        "explicit-duration TONE must use finite ABI v2 operation");
+    expect(finite_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&
+        finite_observed->tone_program.duration_ns==1000000000ULL &&
+        (finite_observed->required_capabilities & RP1_GPCLK_CAP_TONE_FINITE)!=0,
+        "finite TONE must preserve the kernel-owned one-second duration");
 
     auto faded=qrssPlan(); faded.events[0].envelope.fade_shape=wsprrypi::FadeShape::LINEAR;
     auto fade_provider=std::make_unique<Provider>(); WsprRp1GpclkBackend fade_backend(owner,std::move(fade_provider));
-    expect(!fade_backend.configure(faded,{2,4}).ok,"RP1 finite-event fades must be rejected, not approximated");
+    expect(!fade_backend.configure(faded,developmentInputs()).ok,"RP1 finite-event fades must be rejected, not approximated");
 
     auto cw=qrssPlan(); cw.mode=wsprrypi::TransmissionMode::CW;
     auto cw_provider=std::make_unique<Provider>(); WsprRp1GpclkBackend cw_backend(owner,std::move(cw_provider));
-    expect(!cw_backend.configure(cw,{2,4}).ok,"unimplemented canonical CW must remain rejected");
+    expect(!cw_backend.configure(cw,developmentInputs()).ok,"unimplemented canonical CW must remain rejected");
 
     auto acquire_failure_provider=std::make_unique<Provider>();
     Provider* acquire_failure_observed=acquire_failure_provider.get();
     acquire_failure_observed->fail_acquire=true;
     WsprRp1GpclkBackend acquire_failure_backend(owner,std::move(acquire_failure_provider));
-    expect(acquire_failure_backend.configure(plan,{2,4}).ok,"acquire-failure frame must configure");
+    expect(acquire_failure_backend.configure(plan,developmentInputs()).ok,"acquire-failure frame must configure");
     const auto acquire_failure=acquire_failure_backend.execute(plan);
     expect(!acquire_failure.ok && !acquire_failure.faulted,
         "acquire failure must remain an unsuccessful non-terminal-fault result");
@@ -185,7 +255,7 @@ int main()
     Provider* submit_failure_observed=submit_failure_provider.get();
     submit_failure_observed->fail_submit=true;
     WsprRp1GpclkBackend submit_failure_backend(owner,std::move(submit_failure_provider));
-    expect(submit_failure_backend.configure(plan,{2,4}).ok,"submit-failure frame must configure");
+    expect(submit_failure_backend.configure(plan,developmentInputs()).ok,"submit-failure frame must configure");
     const auto submit_failure=submit_failure_backend.execute(plan);
     expect(!submit_failure.ok && !submit_failure.faulted,
         "submit failure must remain an unsuccessful non-terminal-fault result");

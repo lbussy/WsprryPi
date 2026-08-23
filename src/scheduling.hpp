@@ -61,6 +61,8 @@
 #include <thread>
 #include <vector>
 
+#include "WSPR-Transmitter/src/rp1_gpclk_application_idle.hpp"
+
 /**
  * @brief Mutex to protect access to the shutdown flag for the WSPR loop.
  *
@@ -105,6 +107,9 @@ extern bool exitwspr_ready;
  */
 extern std::atomic<bool> shutdown_flag;
 extern std::atomic<bool> reboot_flag;
+void set_rp1_route_transaction_inhibited(bool inhibited) noexcept;
+bool rp1_route_transaction_inhibited_state() noexcept;
+wsprrypi::Rp1GpclkApplicationIdleState rp1_gpclk_application_idle_state() noexcept;
 
 /**
  * @brief Callback triggered by a shutdown GPIO event.
@@ -347,6 +352,14 @@ struct WsprRuntimeStatusSnapshot
     double gpio_frequency_residual_ppm = 0.0;
     double effective_gpio_ppm = 0.0;
     double frequency_estimate_age_seconds = 0.0;
+    std::string rp1_package_expected;
+    std::string rp1_route_requested;
+    std::string rp1_route_persisted;
+    std::string rp1_route_configured;
+    std::string rp1_route_active;
+    std::string rp1_eligibility;
+    std::string rp1_cleanup_state;
+    std::string rp1_journal_state;
 };
 
 WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot();

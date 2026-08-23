@@ -133,7 +133,11 @@ RP1_GPCLK_LIFECYCLE_TEST_OUT := rp1_gpclk_lifecycle_test
 RP1_GPCLK_TRANSITION_TEST_OUT := rp1_gpclk_transition_test
 RP1_GPCLK_BACKEND_TEST_OUT := rp1_gpclk_backend_test
 RP1_GPCLK_LINUX_PROVIDER_TEST_OUT := rp1_gpclk_linux_provider_test
+RP1_GPCLK_DEVELOPMENT_POLICY_TEST_OUT := rp1_gpclk_development_policy_test
+RP1_GPCLK_ROUTE_RUNTIME_WIRING_TEST_OUT := rp1_gpclk_route_runtime_wiring_test
+RP1_GPCLK_ROUTE_SERVICE_TEST_OUT := rp1_gpclk_route_service_test
 RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT := rp1_gpclk_transmit_backend_test
+RP1_GPCLK_ADMIN_PROBE_OUT := rp1_gpclk_admin_probe
 SELECTOR_SHUTDOWN_CLEANUP_TEST_OUT := selector_shutdown_cleanup_test
 QUALIFICATION_GPIO_TEST_MODE_TEST_OUT := qualification_gpio_test_mode_test
 SUPPORT_REQUEST_GUARD_TEST_OUT := support_request_guard_test
@@ -234,6 +238,7 @@ LOCAL_CPP_SOURCES += $(if $(filter Linux,$(HOST_OS)),./machine_power_control_lin
 COMPONENT_CPP_SOURCES := $(shell find $(COMPONENT_SRCDIRS) -type f -name '*.cpp' ! -name '._*' ! -name 'main.cpp' 2>/dev/null)
 TRANSMITTER_SHARED_CPP_SOURCES := \
 	./WSPR-Transmitter/src/execution_plan_compiler.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp \
 	./WSPR-Transmitter/src/transmission_controller.cpp \
 	./WSPR-Transmitter/src/wspr_reference_adapter.cpp \
 	./WSPR-Transmitter/src/wspr_transmit.cpp
@@ -243,9 +248,11 @@ RPI_GPIO_BACKEND_CPP_SOURCES := \
 RP1_GPCLK_BACKEND_CPP_SOURCES := \
 	./WSPR-Transmitter/src/rp1_gpclk_backend.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_event_program.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_lifecycle.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_planner.cpp \
+	./WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_transition.cpp \
 	./WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp
 SI5351_BACKEND_CPP_SOURCES := \
@@ -279,12 +286,14 @@ RP1_GPCLK_LIFECYCLE_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_lifecycle_te
 RP1_GPCLK_TRANSITION_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_transition_test.cpp
 RP1_GPCLK_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_backend_test.cpp
 RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_linux_provider_test.cpp
+RP1_GPCLK_DEVELOPMENT_POLICY_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_development_policy_test.cpp
 RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp
+RP1_GPCLK_ADMIN_PROBE_SOURCE := ./WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp
 SIMULATED_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_test.cpp
 SIMULATED_BACKEND_REALTIME_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_realtime_test.cpp
 TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./WSPR-Transmitter/src/transmission_controller_contract_test.cpp
 THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE := ./WSPR-Transmitter/src/thread_affinity_unavailable_test.cpp
-COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
+COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(RP1_GPCLK_ADMIN_PROBE_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
 COMPONENT_CPP_SOURCES := $(filter-out $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES),$(COMPONENT_CPP_SOURCES))
 
 CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(SELECTED_BACKEND_CPP_SOURCES)
@@ -1111,9 +1120,18 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test
 .PHONY: band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test
 .PHONY: qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
-.PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test
+.PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test rp1-gpclk-development-policy-test rp1-gpclk-route-runtime-wiring-test rp1-gpclk-route-service-test
+.PHONY: rp1-gpclk-diagnostics-test
 DEBUG: debug
 RELEASE: release
+
+rp1-gpclk-diagnostics-test:
+	$(Q)python3 ../scripts/tests/rp1_gpclk_diagnostics_test.py
+	$(Q)if [ -x /usr/bin/bash ] && stat -c %a ../scripts/collect-support-bundle.sh >/dev/null 2>&1; then \
+		/usr/bin/bash ../scripts/tests/collect-support-bundle_test.sh; \
+	else \
+		echo "Skipping Linux-only collector execution test on this host."; \
+	fi
 
 clean:
 	$(Q)echo "Cleaning up build artifacts."
@@ -1462,7 +1480,7 @@ rp1-gpclk-transition-test: $(BIN_DIR)/$(RP1_GPCLK_TRANSITION_TEST_OUT)
 	$(Q)echo "Running hardware-independent RP1 GPCLK transition sequencing tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_TRANSITION_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp
+$(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
 
@@ -1470,7 +1488,7 @@ rp1-gpclk-backend-test: $(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT)
 	$(Q)echo "Running clock-disabled RP1 GPCLK production backend contract tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_BACKEND_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_linux_provider_test.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp
+$(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_linux_provider_test.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
 
@@ -1478,13 +1496,42 @@ rp1-gpclk-linux-provider-test: $(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT)
 	$(Q)echo "Running address-independent RP1 GPCLK Linux provider client tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_LINUX_PROVIDER_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp WSPR-Transmitter/src/rp1_gpclk_event_program.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp
+$(BIN_DIR)/$(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_development_policy_test.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
+
+rp1-gpclk-development-policy-test: $(BIN_DIR)/$(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_OUT)
+	$(Q)echo "Running hardware-independent guarded RP1 GPCLK development policy tests."
+	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_OUT)
+
+$(BIN_DIR)/$(RP1_GPCLK_ROUTE_RUNTIME_WIRING_TEST_OUT): tests/rp1_gpclk_route_runtime_wiring_test.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $< -o $@
+
+rp1-gpclk-route-runtime-wiring-test: $(BIN_DIR)/$(RP1_GPCLK_ROUTE_RUNTIME_WIRING_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_ROUTE_RUNTIME_WIRING_TEST_OUT)
+
+$(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT): tests/rp1_gpclk_route_service_test.cpp rp1_gpclk_route_service.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) -DWSPRRYPI_ROUTE_SERVICE_TEST $^ -o $@
+
+rp1-gpclk-route-service-test: $(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
+
+$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp WSPR-Transmitter/src/rp1_gpclk_event_program.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) -pthread $^ -o $@
 
 rp1-gpclk-transmit-backend-test: $(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT)
 	$(Q)echo "Running RP1 GPCLK scheduler backend tests."
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT)
+
+$(BIN_DIR)/$(RP1_GPCLK_ADMIN_PROBE_OUT): WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
+
+rp1-gpclk-admin-probe: $(BIN_DIR)/$(RP1_GPCLK_ADMIN_PROBE_OUT)
+	$(Q)echo "Built output-disabled RP1 GPCLK administrative probe; execution requires separate authorization."
 
 ifeq ($(GPIOD_HAS_V2),1)
 gpio-loopback-test: $(BIN_DIR)/$(GPIO_LOOPBACK_TEST_OUT)

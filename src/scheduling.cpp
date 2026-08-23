@@ -40,6 +40,8 @@
 
 // Primary header for this source file
 #include "scheduling.hpp"
+#include "rp1_gpclk_route_service.hpp"
+#include "WSPR-Transmitter/src/rp1_gpclk_development_policy.hpp"
 #include "test_tone_frequency_plan.hpp"
 #include "test_tone_selector_plan.hpp"
 
@@ -277,6 +279,10 @@ static std::condition_variable tx_led_state_cv;
 static bool tx_led_active = false;
 static std::mutex transmit_gpio_lifecycle_mtx;
 static std::atomic<bool> startup_quiesce_inhibited{false};
+static std::atomic<bool> rp1_route_transaction_inhibited{false};
+// Exact-package route management is output-inhibited validated, but no
+// live-output or RF qualification is accepted by this consumer slice.
+static std::atomic<bool> rp1_live_qualification_inhibited{true};
 static std::mutex startup_quiesce_error_mtx;
 static std::string startup_quiesce_error;
 static StartupQuiesceInvokerForTest startup_quiesce_invoker_for_test{};
@@ -1151,7 +1157,9 @@ static void commit_execution_request(
         CommittedExecutionRouteForTest::NONE;
 
     if (current_transmission_request.isTone() &&
-        config.transmit_backend == TransmitBackendKind::SI5351)
+        (config.transmit_backend == TransmitBackendKind::SI5351 ||
+         (config.transmit_backend == TransmitBackendKind::GPIO &&
+          get_raspberry_pi_generation() == 5)))
     {
         wsprrypi::TransmissionRequest controller_request =
             build_controller_request_from_legacy(
@@ -1160,6 +1168,7 @@ static void commit_execution_request(
         wsprrypi::TonePayload payload;
         payload.frequency_hz =
             current_transmission_request.actual_rf_frequency_hz;
+        payload.duration = current_transmission_request.tone_duration;
         controller_request.payload = payload;
         current_controller_request_for_test_storage = controller_request;
         committed_execution_route_for_test_storage =
@@ -1558,7 +1567,11 @@ static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
 {
     return runtime_transmit_requested(cfg) &&
            !managed_reload_tx_inhibited &&
-           !startup_quiesce_inhibited.load(std::memory_order_acquire);
+           !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
+           !rp1_route_transaction_inhibited.load(std::memory_order_acquire) &&
+           !(cfg.transmit_backend == TransmitBackendKind::GPIO &&
+             get_pi_model().find("Raspberry Pi 5") != std::string::npos &&
+             rp1_live_qualification_inhibited.load(std::memory_order_acquire));
 }
 
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept
@@ -3632,6 +3645,7 @@ void reboot_system()
  */
 static void rollback_failed_test_tone_start(ModeType previous_mode) noexcept
 {
+    wsprrypi::invalidateRp1GpclkDevelopmentOperation();
     try
     {
         wsprTransmitter.stopAndJoin();
@@ -3866,6 +3880,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
     }
     TransmissionRequest request =
         make_tone_request(config, committed_ppm, actual_rf_freq, dial_freq, entry);
+    request.tone_duration = tone_request.duration;
     if (explicit_frequency_plan.has_value())
     {
         request.applied_offset_hz = explicit_frequency_plan->audio_offset_hz.has_value()
@@ -3901,6 +3916,64 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             ? "Unable to prepare the requested band selector."
             : gpio_policy.error;
         return result;
+    }
+    if (tone_request.rp1_development.enabled)
+    {
+        const auto& confirmation = tone_request.rp1_development;
+        if (to_controller_profile(config.transmit_backend) !=
+                wsprrypi::HardwareProfile::RP1_GPCLK ||
+            confirmation.route_gpio != config.gpio_tx_pin)
+        {
+            throw std::runtime_error(
+                "RP1 development confirmation does not match the selected backend and route.");
+        }
+        const nlohmann::json route =
+            wsprrypi::productionRp1GpclkRouteService().query();
+        const auto route_gpio = [](const std::string& value) {
+            return value == "GPIO4" ? 4 : value == "GPIO20" ? 20 : 0;
+        };
+        const std::uint64_t generation = route.value("generation", 0ULL);
+        auto& development = request.rp1_development;
+        development.enabled = true;
+        development.persisted_gpio = route_gpio(route.value("persisted", std::string{}));
+        development.active_gpio = route_gpio(route.value("active", std::string{}));
+        development.module_gpio = confirmation.route_gpio;
+        development.active_route_count = development.active_gpio == 0 ? 0U : 1U;
+        development.route_transaction_resolved =
+            route.value("reconciled", false) &&
+            route.value("journal", std::string{}) == "none";
+        development.route_manager_attributable =
+            route.value("contractIdentity", std::string{}) ==
+                "rp1-gpclk-route-manager-v1";
+        development.scheduler_idle = true;
+        development.application_owns_operation = true;
+        development.endpoint_available = route.value("ok", false);
+        development.endpoint_closed = !route.value("endpointOpen", true);
+        development.endpoint_exclusively_acquirable =
+            route.value("endpointOwned", false) && development.endpoint_closed;
+        development.cleanup_fault =
+            route.value("state", std::string{}) == "rollback_required";
+        development.live_output_verified =
+            route.value("liveOutput", std::string{}) == "enabled";
+        development.physical_connection_confirmed = confirmation.physical_connection;
+        development.attenuation_and_load_confirmed = confirmation.attenuation_and_load;
+        development.bounded_operation_confirmed = confirmation.bounded_operation;
+        development.non_radiating_topology_confirmed = confirmation.non_radiating_topology;
+        development.experimental_status_acknowledged = confirmation.experimental_acknowledged;
+        development.confirmation_current = true;
+        development.route_transaction_generation = generation;
+        development.confirmation_route_transaction_generation = generation;
+        development.operation_id = confirmation.operation_id;
+        development.confirmation_operation_id = confirmation.operation_id;
+        development.confirmation_gpio = confirmation.route_gpio;
+        const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(
+            confirmation.route_gpio == 4
+            ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
+            : wsprrypi::kRp1GpclkDevelopmentRouteGpio20);
+        if (!expected)
+            throw std::runtime_error("RP1 development route identity is unavailable.");
+        development.confirmation_identity =
+            wsprrypi::rp1GpclkDevelopmentIdentityBinding(*expected);
     }
     commit_execution_request(request);
     result.actual_rf_frequency_hz = static_cast<std::uint64_t>(actual_rf_freq);
@@ -3967,6 +4040,7 @@ TestToneStartResult start_test_tone(
  */
 TestToneStopResult end_test_tone()
 {
+    wsprrypi::invalidateRp1GpclkDevelopmentOperation();
     TestToneStopResult result;
     result.tone_was_active = web_test_tone.load();
 
@@ -4282,6 +4356,19 @@ bool wspr_loop()
             ERROR,
             "Startup transmission inhibition latched: ",
             startup_quiesce_error);
+    }
+
+    if (config.transmit_backend == TransmitBackendKind::GPIO &&
+        get_pi_model().find("Raspberry Pi 5") != std::string::npos)
+    {
+        const auto reconciliation =
+            wsprrypi::productionRp1GpclkRouteService().reconcileStartup();
+        if (!reconciliation.value("ok", false))
+        {
+            llog.logS(ERROR,
+                "RP1 GPCLK startup reconciliation failed; transmission remains inhibited: ",
+                reconciliation.value("message", std::string("unknown route state")));
+        }
     }
 
     const bool start_web = web_server_start_enabled(config);
@@ -4766,6 +4853,32 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
 
     WsprRuntimeStatusSnapshot snapshot;
     snapshot.transmit_backend = transmit_backend_kind_to_string(config.transmit_backend);
+    snapshot.rp1_package_expected = "rp1-gpclk-dkms=1.1.1-1; package_sha256=247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d; output_inhibited=validated-gpio4-gpio20-restored-gpio4; live_rf=unvalidated";
+    const std::string configured_rp1_route =
+        config.gpio_tx_pin == 4 ? "GPIO4" :
+        config.gpio_tx_pin == 20 ? "GPIO20" : "unavailable";
+    snapshot.rp1_route_requested = configured_rp1_route;
+    snapshot.rp1_route_persisted = configured_rp1_route;
+    snapshot.rp1_route_configured = configured_rp1_route;
+    // Active provider identity and cleanup are populated only by the bounded
+    // route API. Do not infer them from configuration or package presence.
+    snapshot.rp1_route_active = "unavailable";
+    snapshot.rp1_eligibility = "unknown";
+    snapshot.rp1_cleanup_state = "unknown";
+    snapshot.rp1_journal_state = rp1_route_transaction_inhibited_state()
+        ? "unresolved"
+        : "none-reported";
+    if (config.transmit_backend == TransmitBackendKind::GPIO &&
+        get_pi_model().find("Raspberry Pi 5") != std::string::npos)
+    {
+        const auto route = wsprrypi::productionRp1GpclkRouteService().query();
+        snapshot.rp1_route_requested = route.value("requested", std::string("Unavailable"));
+        snapshot.rp1_route_persisted = route.value("persisted", std::string("Unavailable"));
+        snapshot.rp1_route_configured = route.value("configured", std::string("Unavailable"));
+        snapshot.rp1_route_active = route.value("active", std::string("Unavailable"));
+        snapshot.rp1_eligibility = route.value("eligible", false) ? "eligible" : "unavailable";
+        snapshot.rp1_journal_state = route.value("journal", std::string("unknown"));
+    }
     {
         std::lock_guard<std::mutex> correction_lock(frequency_estimate_mutex);
         snapshot.frequency_estimate_qualification = to_string(current_gpio_correction.qualification);
@@ -5787,6 +5900,35 @@ bool managed_reload_tx_inhibited_for_test() noexcept
 bool managed_reload_tx_inhibited_state() noexcept
 {
     return managed_reload_tx_inhibited;
+}
+
+void set_rp1_route_transaction_inhibited(bool inhibited) noexcept
+{
+    rp1_route_transaction_inhibited.store(inhibited, std::memory_order_release);
+}
+
+bool rp1_route_transaction_inhibited_state() noexcept
+{
+    return rp1_route_transaction_inhibited.load(std::memory_order_acquire);
+}
+
+wsprrypi::Rp1GpclkApplicationIdleState rp1_gpclk_application_idle_state() noexcept
+{
+    wsprrypi::Rp1GpclkApplicationIdleState state;
+    const auto transmitter_state = wsprTransmitter.getState();
+    state.controller_prepared = config.transmit;
+    const bool controller_quiescent = transmitter_state == WsprTransmitState::DISABLED ||
+        transmitter_state == WsprTransmitState::COMPLETE ||
+        transmitter_state == WsprTransmitState::CANCELLED;
+    state.execution_active = !controller_quiescent || web_test_tone.load(std::memory_order_acquire);
+    state.schedule_committed = config.transmit || !active_wspr_plan.frames.empty();
+    state.stop_or_drain_active = exiting_wspr.load(std::memory_order_acquire);
+    state.cancellation_or_cleanup_active = false;
+    state.provider_lease_active = !controller_quiescent;
+    state.backend_transaction_active = !controller_quiescent;
+    state.shutdown_or_restart_active = shutdown_flag.load(std::memory_order_acquire) ||
+        reboot_flag.load(std::memory_order_acquire);
+    return state;
 }
 
 CommittedExecutionRouteForTest committed_execution_route_for_test() noexcept

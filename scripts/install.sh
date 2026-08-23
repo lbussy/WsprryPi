@@ -192,6 +192,14 @@ declare ACTION="${ACTION:-install}"
 declare DRY_RUN="${DRY_RUN:-false}"
 
 # -----------------------------------------------------------------------------
+# @var INSTALL_RP1_GPCLK_DKMS
+# @brief Explicitly opts into the Pi 5 RP1 GPCLK DKMS package workflow.
+# @details The dedicated helper requires an exact local package and SHA-256.
+#          It is never enabled by default.
+# -----------------------------------------------------------------------------
+declare INSTALL_RP1_GPCLK_DKMS="${INSTALL_RP1_GPCLK_DKMS:-false}"
+
+# -----------------------------------------------------------------------------
 # @brief Defines global repository-related variables.
 # @details These variables are used to determine the repository context,
 #          including whether the script is running inside a local Git
@@ -7492,6 +7500,8 @@ install_wsprrypi_proxy_block() {
     ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
     ProxyPass        /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
     ProxyPassReverse /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
+    ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route
+    ProxyPassReverse /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route
 
     Include /usr/local/etc/wsprrypi-apache-network-policy.conf
 
@@ -8161,6 +8171,11 @@ _main() {
     check_arch "$debug"        # Validate Raspberry Pi model compatibility
     check_internet "$debug"    # Verify internet connectivity if required
 
+    # The optional RP1 package must validate immutable Pi-5 identity before
+    # any package-management mutation. Package installation is route-neutral.
+    if [[ "$ACTION" != "uninstall" && "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+        rp1_gpclk_require_pi5 || return 1
+    fi
     # Start the script
     start_script "$debug"
 
@@ -8182,6 +8197,26 @@ _main() {
     if [[ "$ACTION" != "uninstall" ]]; then
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            if [[ "$DRY_RUN" == "true" ]]; then
+                logI "Dry run: would validate and install the exact RP1 GPCLK DKMS package."
+            elif [[ -z "${BASH_SOURCE[0]:-}" ||
+                "${BASH_SOURCE[0]}" == "bash" ]]; then
+                logE "RP1 GPCLK DKMS installation requires a local WsprryPi checkout."
+                return 1
+            else
+                local rp1_installer
+                rp1_installer="$(
+                    cd "$(dirname "${BASH_SOURCE[0]}")" &&
+                        pwd
+                )/install-rp1-gpclk-package.sh"
+                [[ -x "$rp1_installer" ]] || {
+                    logE "Missing RP1 GPCLK package installer: $rp1_installer"
+                    return 1
+                }
+                "$rp1_installer" install || return 1
+            fi
+        fi
     fi
 
     # Handle correcting timezone

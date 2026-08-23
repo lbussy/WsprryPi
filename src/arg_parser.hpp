@@ -177,7 +177,8 @@ bool validate_config_data_for_test(
 
 bool validate_config_candidate(
     ArgParserConfig &candidate,
-    std::string *error_message = nullptr);
+    std::string *error_message = nullptr,
+    bool require_live_backend = true);
 bool backend_ready_for_transmission(
     const ArgParserConfig &candidate,
     std::string *error_message = nullptr);

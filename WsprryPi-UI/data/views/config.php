@@ -753,6 +753,41 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                         <div id="tx-pin-error" class="form-text text-danger mt-2" aria-live="polite" hidden></div>
                                     </div>
 
+                                    <div class="col-12" id="rp1-route-panel" hidden>
+                                        <section class="rp1-route-panel" aria-labelledby="rp1-route-heading" aria-busy="false">
+                                            <div class="rp1-route-panel__heading">
+                                                <div>
+                                                    <h3 id="rp1-route-heading" class="cw-control-section__title mb-1">RP1 clock route</h3>
+                                                    <p class="form-text mb-0">Route management and guarded development output are separate. A saved route never authorizes output; development use requires a current, route-bound operation confirmation and every runtime safety gate.</p>
+                                                </div>
+                                                <span id="rp1-route-state" class="rp1-route-state" data-state="checking">Checking</span>
+                                            </div>
+                                            <dl class="rp1-route-identities" aria-label="RP1 clock route identities">
+                                                <div><dt>Requested</dt><dd id="rp1-route-requested">—</dd></div>
+                                                <div><dt>Package</dt><dd id="rp1-route-package">—</dd></div>
+                                                <div><dt>Contract</dt><dd id="rp1-route-contract">—</dd></div>
+                                                <div><dt>Persisted</dt><dd id="rp1-route-persisted">—</dd></div>
+                                                <div><dt>Boot configured</dt><dd id="rp1-route-configured">—</dd></div>
+                                                <div><dt>Active</dt><dd id="rp1-route-active">—</dd></div>
+                                                <div><dt>Reconciled</dt><dd id="rp1-route-reconciled">No</dd></div>
+                                                <div><dt>Boot ownership</dt><dd id="rp1-route-boot-ownership">—</dd></div>
+                                                <div><dt>Pending transaction</dt><dd id="rp1-route-pending">Unknown</dd></div>
+                                                <div><dt>Fixed services</dt><dd id="rp1-route-services">Not reported</dd></div>
+                                                <div><dt>Endpoint</dt><dd id="rp1-route-endpoint">Not inspected</dd></div>
+                                                <div><dt>live_output</dt><dd id="rp1-route-live-output">Unknown</dd></div>
+                                                <div><dt>Development policy</dt><dd id="rp1-development-policy">Disabled</dd></div>
+                                                <div><dt>Output-inhibited evidence</dt><dd id="rp1-route-compatible">Unavailable</dd></div>
+                                                <div><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
+                                            </dl>
+                                            <div id="rp1-route-feedback" class="rp1-route-feedback" role="status" aria-live="polite" aria-atomic="true">Checking the installed provider and active route…</div>
+                                            <div class="rp1-route-actions">
+                                                <button type="button" id="rp1-route-apply" class="btn btn-primary" disabled>Apply route and reboot</button>
+                                                <button type="button" id="rp1-route-cancel" class="btn btn-outline-secondary" disabled>Cancel</button>
+                                                <button type="button" id="rp1-route-rollback" class="btn btn-outline-danger" hidden>Roll back</button>
+                                            </div>
+                                        </section>
+                                    </div>
+
                                     <div class="col-12 col-lg-4" id="legacy-gpio-power-group">
                                         <label for="gpio-power-range" class="form-label">Legacy GPIO power level</label>
                                         <div class="config-range-control">

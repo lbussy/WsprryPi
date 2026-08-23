@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -85,8 +86,28 @@ do
     fi
 done
 
-if grep -Eiq 'rp1[-_]gpclk|live_output|kernel_2712_phase|dtoverlay=rp1' "$INSTALLER"; then
-    echo "standard installer must not deploy the experimental RP1 GPCLK kernel/provider path" >&2
+if grep -Eiq 'live_output|kernel_2712_phase|dtoverlay=rp1' "$INSTALLER"; then
+    echo "standard installer must not deploy historical experimental RP1 paths" >&2
+    exit 1
+fi
+if ! grep -Fq 'declare INSTALL_RP1_GPCLK_DKMS="${INSTALL_RP1_GPCLK_DKMS:-false}"' "$INSTALLER"; then
+    echo "RP1 GPCLK package installation must default to disabled" >&2
+    exit 1
+fi
+if ! grep -Fq 'RP1 GPCLK DKMS installation requires a local WsprryPi checkout.' "$INSTALLER"; then
+    echo "piped installs must fail closed for optional RP1 GPCLK support" >&2
+    exit 1
+fi
+if ! grep -Fq '"$rp1_installer" install || return 1' "$INSTALLER"; then
+    echo "opt-in RP1 GPCLK package failure must stop installation" >&2
+    exit 1
+fi
+if grep -Fq 'rp1_gpclk_validate_route_choice' "$INSTALLER"; then
+    echo "installer must not require a route to install the optional RP1 package" >&2
+    exit 1
+fi
+if grep -Eiq 'qualification.*(tar|download|install)|dtoverlay=rp1|modprobe[[:space:]]+rp1' "$INSTALLER"; then
+    echo "standard installer must not consume qualification content or activate the RP1 path" >&2
     exit 1
 fi
 

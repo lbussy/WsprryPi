@@ -4,65 +4,377 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <vector>
 
-namespace {
-static_assert(sizeof(rp1_gpclk_event_program) < 16384,
-    "v2 event ioctl must fit the common Linux ioctl size field");
+namespace
+{
 int failures;
-void expect(bool c, const char* m) { if (!c) { std::cerr << "FAIL: " << m << '\n'; ++failures; } }
+void expect(bool value, const char* message)
+{ if (!value) { std::cerr << "FAIL: " << message << '\n'; ++failures; } }
 
-class Io final : public wsprrypi::Rp1GpclkIo {
+constexpr std::uint64_t kAdministrativeCapabilities =
+    RP1_GPCLK_CAP_STABLE_STATE | RP1_GPCLK_CAP_ROUTE_IDENTITY |
+    RP1_GPCLK_CAP_COMPAT_IDENTITY | RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH;
+
+class Io final : public wsprrypi::Rp1GpclkIo
+{
 public:
- int openDevice(const char* p) noexcept override { path=p; return open_result; }
- int control(int, unsigned long r, void* a) noexcept override {
-  requests.push_back(r); if (fail_request==r) { error=EINVAL; return -1; }
-  if (r==RP1_GPCLK_IOC_ACQUIRE) std::memcpy(&acquire,a,sizeof(acquire));
-  if (r==RP1_GPCLK_IOC_SUBMIT) std::memcpy(&program,a,sizeof(program));
-  if (r==RP1_GPCLK_IOC_SUBMIT_EVENTS) std::memcpy(&event_program,a,sizeof(event_program));
-  if (r==RP1_GPCLK_IOC_STOP) std::memcpy(&stop,a,sizeof(stop));
-  if (r==RP1_GPCLK_IOC_STATE) static_cast<rp1_gpclk_generation*>(a)->state=state_value;
-  if (r==RP1_GPCLK_IOC_EVENT_STATE) { auto* s=static_cast<rp1_gpclk_event_state*>(a); s->state=state_value; s->current_event=current_event; s->terminal_reason=terminal_reason; }
-  return 0;
- }
- int closeDevice(int) noexcept override { ++closes; return 0; }
- int lastError() const noexcept override { return error; }
- int open_result{7}, error{ENOENT}, closes{0}; unsigned long fail_request{0};
- unsigned state_value{RP1_GPCLK_STATE_IDLE}; std::string path; std::vector<unsigned long> requests;
- rp1_gpclk_acquire acquire{}; rp1_gpclk_program program{}; rp1_gpclk_generation stop{};
- rp1_gpclk_event_program event_program{}; unsigned current_event{3}, terminal_reason{7};
+    int openDevice(const char* value) noexcept override
+    { path = value; ++opens; return open_result; }
+    int control(int, unsigned long request, void* argument) noexcept override
+    {
+        requests.push_back(request);
+        if (fail_request == request) { error = fail_error; return -1; }
+        if (request == RP1_GPCLK_IOC_QUERY_V2)
+        {
+            auto* value = static_cast<rp1_gpclk_query_v2*>(argument);
+            const auto input = value->header;
+            *value = query;
+            value->header = input;
+            if (malformed_query_size) --value->header.size;
+            if (wrong_query_version) value->header.version = RP1_GPCLK_UAPI_ABI_V1;
+            if (unknown_query_flags) value->header.flags = 1;
+        }
+        else if (request == RP1_GPCLK_IOC_ACQUIRE)
+        {
+            acquire = *static_cast<rp1_gpclk_acquire_v1*>(argument);
+            static_cast<rp1_gpclk_acquire_v1*>(argument)->lease_id = lease_id;
+        }
+        else if (request == RP1_GPCLK_IOC_SUBMIT_WSPR) {
+            auto* value=static_cast<rp1_gpclk_submit_wspr_v1*>(argument); wspr=*value; value->generation=returned_generation; }
+        else if (request == RP1_GPCLK_IOC_SUBMIT_EVENTS) {
+            auto* value=static_cast<rp1_gpclk_submit_events_v1*>(argument); events=*value; value->generation=returned_generation; }
+        else if (request == RP1_GPCLK_IOC_SUBMIT_TONE_V2) {
+            auto* value=static_cast<rp1_gpclk_submit_tone_v2*>(argument); tone=*value; value->generation=returned_generation; }
+        else if (request == RP1_GPCLK_IOC_STOP)
+            stop = *static_cast<rp1_gpclk_stop_v1*>(argument);
+        else if (request == RP1_GPCLK_IOC_GET_STATE)
+        {
+            auto* value = static_cast<rp1_gpclk_state_v1*>(argument);
+            value->state = state;
+            value->terminal_reason = terminal_reason;
+            value->current_event = current_event;
+            value->cleanup_fault = cleanup_fault;
+            if (stale_generation) ++value->generation;
+            if (foreign_lease) ++value->lease_id;
+        }
+        else if (request == RP1_GPCLK_IOC_RELEASE)
+            release = *static_cast<rp1_gpclk_release_v1*>(argument);
+        else if (request == RP1_GPCLK_IOC_RELEASE_V2)
+            release_v2 = *static_cast<rp1_gpclk_release_v2*>(argument);
+        return 0;
+    }
+    int closeDevice(int) noexcept override { ++closes; return close_result; }
+    int lastError() const noexcept override { return error; }
+
+    Io()
+    {
+        query.header.size = sizeof(query);
+        query.header.version = RP1_GPCLK_UAPI_ABI_V2;
+        query.abi_min = RP1_GPCLK_UAPI_ABI_V1;
+        query.abi_max = RP1_GPCLK_UAPI_ABI_V2;
+        query.route = RP1_GPCLK_ROUTE_GPIO4;
+        query.compatibility_state = RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED;
+        query.compatibility_reason = RP1_GPCLK_COMPAT_REASON_ADMIN_ENROLLMENT_REQUIRED;
+        query.capabilities = kAdministrativeCapabilities |
+            RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
+            RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_TONE_CONTINUOUS |
+            RP1_GPCLK_CAP_TONE_FINITE;
+        query.max_tones = RP1_GPCLK_MAX_TONES;
+        query.wspr_symbols = RP1_GPCLK_WSPR_SYMBOLS;
+        query.max_events = RP1_GPCLK_MAX_EVENTS;
+        query.max_dither_period = RP1_GPCLK_DITHER_PERIOD_MAX;
+        query.supported_drive_ma_mask = RP1_GPCLK_DRIVE_SUPPORT_ALLOWED_MASK;
+        query.max_event_duration_ns = RP1_GPCLK_EVENT_DURATION_NS_MAX;
+        query.max_request_duration_ns = RP1_GPCLK_REQUEST_DURATION_NS_MAX;
+        query.min_tone_duration_ns = RP1_GPCLK_TONE_DURATION_NS_MIN;
+        query.max_tone_duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX;
+        std::strcpy(query.module_id, "rp1-gpclk-dkms");
+        std::strcpy(query.build_id, "1.1.2");
+        std::strcpy(query.compatibility_id,
+            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2");
+    }
+
+    rp1_gpclk_query_v2 query{};
+    rp1_gpclk_acquire_v1 acquire{};
+    rp1_gpclk_submit_wspr_v1 wspr{};
+    rp1_gpclk_submit_events_v1 events{};
+    rp1_gpclk_submit_tone_v2 tone{};
+    rp1_gpclk_stop_v1 stop{};
+    rp1_gpclk_release_v1 release{};
+    rp1_gpclk_release_v2 release_v2{};
+    std::string path;
+    std::vector<unsigned long> requests;
+    int open_result{7}, close_result{0}, error{ENOENT}, opens{}, closes{};
+    unsigned long fail_request{};
+    int fail_error{EINVAL};
+    std::uint64_t lease_id{41};
+    std::uint64_t returned_generation{9};
+    std::uint32_t state{RP1_GPCLK_STATE_IDLE};
+    std::uint32_t terminal_reason{RP1_GPCLK_REASON_NONE};
+    std::uint32_t current_event{};
+    std::uint32_t cleanup_fault{};
+    bool stale_generation{};
+    bool foreign_lease{};
+    bool malformed_query_size{};
+    bool wrong_query_version{};
+    bool unknown_query_flags{};
 };
 
-void test_wire_contract() {
- Io io; wsprrypi::Rp1GpclkLinuxProvider provider(io); std::string error;
- expect(provider.acquire(2,error), "acquire must succeed");
- expect(io.path=="/dev/rp1-gpclk0" && io.acquire.version==1 && io.acquire.size==sizeof(io.acquire) && io.acquire.drive_ma==2, "acquire must carry version, size, path, and drive");
- wsprrypi::Rp1GpclkProviderProgram p{}; p.fractional_bits=16; p.writes_per_symbol=66792; p.tick_divider=511; p.generation=9; for (std::size_t i=0;i<p.tones.size();++i) p.tones[i]={232445+(i&1),232446,66312,480}; for (std::size_t i=0;i<p.symbols.size();++i) p.symbols[i]=i%4;
- expect(provider.submit(p,error), "submit must succeed");
- expect(io.program.version==1 && io.program.size==sizeof(io.program) && io.program.tones[0].lower_divider_word==232445 && io.program.tones[1].lower_divider_word==232446 && io.program.symbols[161]==1 && io.program.fractional_bits==16, "client must send ordered logical tones and symbol indexes");
- expect(io.program.writes_per_symbol==66792 && io.program.tick_divider==511 && io.program.symbol_count==162 && io.program.tone_count==4 && io.program.generation==9, "client must preserve complete-frame descriptor contract");
- wsprrypi::Rp1GpclkProviderEventProgram events{}; events.fractional_bits=16; events.tick_divider=511; events.generation=10; events.total_duration_ns=25; events.tones.push_back({232445,232446,12,13}); events.events.push_back({25,0,true});
- expect(provider.submitEvents(events,error), "v2 event submit must succeed");
- expect(io.event_program.version==2 && io.event_program.event_count==1 && io.event_program.events[0].duration_ns==25 && io.event_program.events[0].flags==RP1_GPCLK_EVENT_RF_ON, "client must preserve v2 event wire contract");
- io.state_value=RP1_GPCLK_STATE_RUNNING; const auto event_state=provider.eventState(10);
- expect(event_state.completion==wsprrypi::Rp1GpclkCompletionState::running && event_state.current_event==3 && event_state.terminal_reason==7, "v2 event state must preserve progress and terminal reason");
- expect(provider.requestFiniteStop(9,error) && io.stop.generation==9, "stop must name generation");
- for (const auto& pair : {std::pair<unsigned,wsprrypi::Rp1GpclkCompletionState>{RP1_GPCLK_STATE_RUNNING,wsprrypi::Rp1GpclkCompletionState::running},{RP1_GPCLK_STATE_DRAINING,wsprrypi::Rp1GpclkCompletionState::draining},{RP1_GPCLK_STATE_COMPLETE,wsprrypi::Rp1GpclkCompletionState::complete},{RP1_GPCLK_STATE_FAILED,wsprrypi::Rp1GpclkCompletionState::failed}}) { io.state_value=pair.first; expect(provider.state(9)==pair.second,"wire state must map to backend state"); }
- provider.release(); expect(io.closes==1 && io.requests.back()==RP1_GPCLK_IOC_RELEASE,"release must issue ioctl before close");
+void test_query_and_fail_closed_validation()
+{
+    Io io;
+    wsprrypi::Rp1GpclkLinuxProvider provider(io);
+    wsprrypi::Rp1GpclkProviderIdentity identity;
+    std::string error;
+    expect(provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "valid ABI v2 QUERY must parse");
+    expect(io.path == "/dev/rp1-gpclk", "only the canonical endpoint may be opened");
+    expect(identity.route == RP1_GPCLK_ROUTE_GPIO4 &&
+        identity.compatibility_state == RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED,
+        "QUERY must preserve route and compatibility independently");
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO20, kAdministrativeCapabilities,
+        false, identity, error), "GPIO4 evidence must not satisfy GPIO20");
+
+    io.query.capabilities |= (1ULL << 63);
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "unknown ABI v2 capability must fail closed");
+    io.query.capabilities &= ~(1ULL << 63);
+
+    io.malformed_query_size = true;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "malformed ABI v2 QUERY size must fail closed");
+    io.malformed_query_size = false;
+    io.wrong_query_version = true;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "wrong ABI v2 QUERY version must fail closed");
+    io.wrong_query_version = false;
+    io.unknown_query_flags = true;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "unknown ABI v2 QUERY flag must fail closed");
+    io.unknown_query_flags = false;
+    io.query.reserved[0] = 1;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "nonzero ABI v2 reserved data must fail closed");
+    io.query.reserved[0] = 0;
+
+    io.query.capabilities &= ~RP1_GPCLK_CAP_TONE_CONTINUOUS;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4,
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_TONE_CONTINUOUS,
+        false, identity, error), "missing continuous TONE capability must fail closed");
+    io.query.capabilities |= RP1_GPCLK_CAP_TONE_CONTINUOUS;
+    io.query.capabilities &= ~RP1_GPCLK_CAP_TONE_FINITE;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4,
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_TONE_FINITE,
+        false, identity, error), "missing finite TONE capability must fail closed");
+    io.query.capabilities |= RP1_GPCLK_CAP_TONE_FINITE;
+
+    io.query.abi_max = RP1_GPCLK_UAPI_ABI_V1;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "ABI mismatch must fail closed");
+    io.query.abi_max = RP1_GPCLK_UAPI_ABI_V2;
+    io.query.capabilities &= ~RP1_GPCLK_CAP_STABLE_STATE;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "missing capability must fail closed");
+    io.query.capabilities |= RP1_GPCLK_CAP_STABLE_STATE;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        true, identity, error), "compatible-unqualified is not LIVE_ELIGIBLE");
+    io.query.compatibility_state = 99;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "unknown compatibility state must fail closed");
+    io.query.compatibility_state = RP1_GPCLK_COMPAT_UNAVAILABLE;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "unavailable compatibility must fail closed");
+    io.query.compatibility_state = RP1_GPCLK_COMPAT_REJECTED;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "rejected compatibility must fail closed");
+    io.query.compatibility_state = RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED;
+    std::strcpy(io.query.build_id, "1.0.1");
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "non-frozen module/build identity must fail closed");
 }
 
-void test_failures() {
- Io io; io.open_result=-1; wsprrypi::Rp1GpclkLinuxProvider p(io); std::string e; expect(!p.acquire(2,e) && e.find("No such")!=std::string::npos,"open failure must be reported");
- Io io2; io2.fail_request=RP1_GPCLK_IOC_ACQUIRE; wsprrypi::Rp1GpclkLinuxProvider p2(io2); expect(!p2.acquire(2,e) && io2.closes==1,"acquire ioctl failure must close fd");
+void test_old_module_and_tone_v2()
+{
+    Io old;
+    old.fail_request = RP1_GPCLK_IOC_QUERY_V2;
+    old.fail_error = EOPNOTSUPP;
+    wsprrypi::Rp1GpclkLinuxProvider old_provider(old);
+    wsprrypi::Rp1GpclkProviderIdentity identity;
+    std::string error;
+    expect(!old_provider.query(RP1_GPCLK_ROUTE_GPIO4,
+        kAdministrativeCapabilities, false, identity, error) &&
+        error.find("old module") != std::string::npos,
+        "old modules must receive deterministic ABI v2 rejection");
+
+    Io io;
+    io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider provider(io);
+    const auto required = kAdministrativeCapabilities |
+        RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE |
+        RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "ABI v2 TONE fixture must acquire exact capabilities");
+    wsprrypi::Rp1GpclkProviderToneProgram tone;
+    tone.tone = {1, 2, 1, 1};
+    tone.generation = 12;
+    tone.operation = RP1_GPCLK_TONE_OPERATION_CONTINUOUS;
+    tone.expected_route = RP1_GPCLK_ROUTE_GPIO4;
+    tone.fractional_bits = RP1_GPCLK_FRACTIONAL_BITS;
+    tone.tick_divider = RP1_GPCLK_TICK_DIVIDER;
+    tone.drive_ma = RP1_GPCLK_DRIVE_MA_2;
+    expect(provider.submitTone(tone, error) &&
+        io.tone.operation == RP1_GPCLK_TONE_OPERATION_CONTINUOUS &&
+        io.tone.duration_ns == 0,
+        "continuous TONE must submit with explicit zero duration");
+    tone.duration_ns = 1;
+    expect(!provider.submitTone(tone, error),
+        "continuous TONE must reject every hidden duration");
+    expect(provider.requestFiniteStop(io.returned_generation, error) &&
+        io.stop.generation == io.returned_generation,
+        "operator STOP must bind the active continuous generation");
+    expect(provider.release(error) &&
+        io.release_v2.generation == io.returned_generation,
+        "continuous TONE release must bind its generation");
+
+    Io finite_io;
+    finite_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    finite_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider finite(finite_io);
+    expect(finite.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "finite TONE fixture must acquire");
+    tone.operation = RP1_GPCLK_TONE_OPERATION_FINITE;
+    tone.duration_ns = 1000000000ULL;
+    expect(finite.submitTone(tone, error) && finite_io.tone.duration_ns == 1000000000ULL,
+        "finite TONE must preserve its exact kernel duration");
+    expect(finite.release(error), "one-second finite TONE fixture must release");
+
+    Io boundary_io;
+    boundary_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    boundary_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider boundary(boundary_io);
+    expect(boundary.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "finite boundary fixture must acquire");
+    tone.duration_ns = RP1_GPCLK_TONE_DURATION_NS_MIN;
+    expect(boundary.submitTone(tone, error), "finite minimum duration must be accepted");
+    expect(boundary.release(error), "finite minimum fixture must release");
+
+    Io maximum_io;
+    maximum_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    maximum_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider maximum(maximum_io);
+    expect(maximum.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "finite maximum fixture must acquire");
+    tone.duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX;
+    expect(maximum.submitTone(tone, error), "finite maximum duration must be accepted");
+    expect(maximum.release(error), "finite maximum fixture must release");
+
+    Io invalid_io;
+    invalid_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    invalid_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider invalid(invalid_io);
+    expect(invalid.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "finite invalid-duration fixture must acquire");
+    tone.duration_ns = 0;
+    expect(!invalid.submitTone(tone, error), "finite zero duration must fail before ioctl");
+    tone.duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX + 1;
+    expect(!invalid.submitTone(tone, error), "finite above-maximum duration must fail");
+    expect(invalid.release(error), "finite invalid-duration fixture must release");
 }
 
-void test_supported_drive_values() {
- for (const std::uint32_t drive : {2U, 4U, 8U, 12U}) {
-  Io io; wsprrypi::Rp1GpclkLinuxProvider provider(io); std::string error;
-  expect(provider.acquire(drive,error), "each supported drive must acquire");
-  expect(io.acquire.drive_ma==drive, "acquire ioctl must preserve each supported drive unchanged");
-  provider.release();
- }
+void test_acquire_state_release_and_generation()
+{
+    Io io;
+    io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider provider(io);
+    std::string error;
+    const auto required = kAdministrativeCapabilities |
+        RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_STOP_DRAIN |
+        RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        "live-eligible exact-route provider must acquire");
+    expect(io.acquire.expected_route == RP1_GPCLK_ROUTE_GPIO4 &&
+        io.acquire.required_capabilities == required,
+        "ACQUIRE must bind route and capabilities");
+
+    wsprrypi::Rp1GpclkProviderProgram program{};
+    program.fractional_bits = RP1_GPCLK_FRACTIONAL_BITS;
+    program.tick_divider = RP1_GPCLK_TICK_DIVIDER;
+    program.writes_per_symbol = RP1_GPCLK_WSPR_WRITES_PER_SYMBOL_MAX;
+    program.drive_ma = RP1_GPCLK_DRIVE_MA_2;
+    program.generation = 9;
+    expect(provider.submit(program, error), "WSPR submission must carry the lease");
+    expect(io.wspr.lease_id == io.lease_id && io.wspr.generation == 0 &&
+        program.generation == io.returned_generation &&
+        io.wspr.drive_ma == RP1_GPCLK_DRIVE_MA_2,
+        "submission must preserve lease, generation, and drive");
+    io.state = RP1_GPCLK_STATE_COMPLETE;
+    io.terminal_reason = RP1_GPCLK_REASON_COMPLETE;
+    expect(provider.state(9) == wsprrypi::Rp1GpclkCompletionState::complete,
+        "known terminal state must map exactly");
+    io.stale_generation = true;
+    expect(provider.state(9) == wsprrypi::Rp1GpclkCompletionState::failed,
+        "stale generation state must fail closed");
+    io.stale_generation = false;
+    io.foreign_lease = true;
+    expect(provider.state(9) == wsprrypi::Rp1GpclkCompletionState::failed,
+        "foreign lease state must fail closed");
+    io.foreign_lease = false;
+    io.state = RP1_GPCLK_STATE_RUNNING;
+    io.terminal_reason = RP1_GPCLK_REASON_COMPLETE;
+    expect(provider.state(9) == wsprrypi::Rp1GpclkCompletionState::failed,
+        "impossible nonterminal state/reason pair must fail closed");
+    expect(provider.requestFiniteStop(9, error) && io.stop.lease_id == io.lease_id,
+        "STOP must bind lease and generation");
+    expect(provider.release(error), "owned lease must release and close cleanly");
+    expect(io.release.lease_id == io.lease_id && io.closes == 1,
+        "terminal generation must use terminal-only RELEASE before close");
+}
+
+void test_failure_cleanup_and_historical_endpoint_rejection()
+{
+    Io missing;
+    missing.open_result = -1;
+    wsprrypi::Rp1GpclkLinuxProvider provider(missing);
+    wsprrypi::Rp1GpclkProviderIdentity identity;
+    std::string error;
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "missing canonical endpoint must fail closed");
+    expect(missing.path == "/dev/rp1-gpclk",
+        "missing canonical endpoint must never fall back to rp1-gpclk0");
+
+    Io acquire_failure;
+    acquire_failure.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    acquire_failure.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    acquire_failure.fail_request = RP1_GPCLK_IOC_ACQUIRE;
+    wsprrypi::Rp1GpclkLinuxProvider failed(acquire_failure);
+    expect(!failed.acquire(RP1_GPCLK_ROUTE_GPIO4,
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE, error) &&
+        acquire_failure.closes == 1,
+        "ACQUIRE failure must close without leaking ownership");
+
+    Io release_failure;
+    release_failure.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+    release_failure.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
+    wsprrypi::Rp1GpclkLinuxProvider cleanup(release_failure);
+    expect(cleanup.acquire(RP1_GPCLK_ROUTE_GPIO4,
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE, error),
+        "release-failure fixture must acquire");
+    release_failure.fail_request = RP1_GPCLK_IOC_RELEASE;
+    expect(!cleanup.release(error) && release_failure.closes == 1,
+        "RELEASE failure must still close and report cleanup failure");
 }
 }
-int main() { test_wire_contract(); test_supported_drive_values(); test_failures(); if(failures) return 1; std::cout << "RP1 GPCLK Linux provider client tests passed\n"; }
+
+int main()
+{
+    test_query_and_fail_closed_validation();
+    test_acquire_state_release_and_generation();
+    test_old_module_and_tone_v2();
+    test_failure_cleanup_and_historical_endpoint_rejection();
+    if (failures) return 1;
+    std::cout << "RP1 GPCLK ABI v2 Linux provider tests passed\n";
+}

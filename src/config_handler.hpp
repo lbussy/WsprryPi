@@ -817,6 +817,7 @@ nlohmann::json get_public_config_json();
  */
 void patch_all_from_web(const nlohmann::json &j);
 void set_patch_all_from_web_runtime_apply_suppressed_for_test(bool suppressed) noexcept;
+bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message = nullptr) noexcept;
 
 /**
  * @brief Repairs or restores the configuration from stock defaults.

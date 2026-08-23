@@ -28,15 +28,36 @@ int main()
     using json = nlohmann::json;
 
     {
+        const json development = {
+            {"enabled", true}, {"route", "GPIO4"},
+            {"physical_connection", true}, {"attenuation_and_load", true},
+            {"bounded_operation", true}, {"non_radiating_topology", true},
+            {"experimental_acknowledged", true}};
         const auto parsed = parse_bounded_test_tone_request(json{
             {"command", "bounded_tone"},
             {"request_id", "phase7-001"},
             {"duration_ms", 2000},
             {"frequency_source", "custom_rf"},
-            {"frequency_hz", 14097100}});
+            {"frequency_hz", 14097100},
+            {"rp1_development", development}});
         require(parsed && parsed.request->request_id == "phase7-001" &&
-                    parsed.request->duration_ms == 2000,
+                    parsed.request->duration_ms == 2000 &&
+                    parsed.request->tone.rp1_development.enabled &&
+                    parsed.request->tone.rp1_development.route_gpio == 4 &&
+                    parsed.request->tone.rp1_development.operation_id == "phase7-001",
                 "bounded request accepts correlated finite custom RF tone");
+        auto incomplete = development;
+        incomplete.erase("attenuation_and_load");
+        require(!parse_bounded_test_tone_request(json{
+                    {"request_id", "phase7-002"}, {"duration_ms", 1000},
+                    {"rp1_development", incomplete}}),
+                "development request rejects an incomplete confirmation set");
+        auto wrong_route = development;
+        wrong_route["route"] = "GPIO18";
+        require(!parse_bounded_test_tone_request(json{
+                    {"request_id", "phase7-003"}, {"duration_ms", 1000},
+                    {"rp1_development", wrong_route}}),
+                "development request rejects a non-allowlisted route");
     }
     for (const auto &candidate : std::vector<json>{
              json{{"command", "bounded_tone"}, {"duration_ms", 2000}},

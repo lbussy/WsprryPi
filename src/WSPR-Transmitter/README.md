@@ -3,6 +3,15 @@
 `WSPR-Transmitter` is a C++20 component for generating WSPR (Weak Signal
 Propagation Reporter) RF transmissions with precise symbol timing.
 
+On Raspberry Pi 5, the GPIO selection exclusively uses the canonical
+RP1-GPCLK-DKMS ABI v2 endpoint `/dev/rp1-gpclk`; it never falls back to the
+legacy DMA backend. Implemented capabilities, compatibility, and
+`LIVE_ELIGIBLE` remain independent gates, and GPIO4 and GPIO20 remain
+independent routes. See
+`../../docs/research/issue-412-rp1-gpclk-v1.1.1-consumer.md` for the current
+continuous/finite TONE, route-manager, and qualification boundary. Earlier
+consumer-contract documents remain historical audit evidence.
+
 The current production-proven path is a Raspberry Pi backend that uses Broadcom
 mailbox, DMA, PWM, and clock hardware to emit RF. The codebase has been
 refactored so transmission control and scheduling live in a generic controller,

@@ -275,7 +275,7 @@ fi
 OUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_NAME}-support-${STAMP}.XXXXXX")" || fail "Unable to create private temporary work directory."
 chmod 700 "$OUT_ROOT" || fail "Unable to secure temporary work directory."
 OUT_DIR="${OUT_ROOT}/bundle"
-mkdir -p "$OUT_DIR"/{system,project,logs,configs,hardware,web,network,commands,processes} || fail "Unable to create support-bundle work directory."
+mkdir -p "$OUT_DIR"/{system,project,logs,configs/{installed,project,systemd},hardware,web,network,commands,processes} || fail "Unable to create support-bundle work directory."
 
 cleanup() {
   [[ -n "$ARCHIVE_TMP" ]] && rm -f "$ARCHIVE_TMP"
@@ -1080,6 +1080,44 @@ if command -v ntpq >/dev/null 2>&1; then
 fi
 
 log "Collecting package information..."
+
+log "Collecting RP1 GPCLK package, module, overlay, route, cleanup, and journal evidence..."
+mkdir -p "${OUT_DIR}/hardware/rp1-gpclk"
+if command -v dpkg-query >/dev/null 2>&1; then
+  run_cmd rp1_gpclk_package dpkg-query -W -f='Package: ${Package}\nVersion: ${Version}\nStatus: ${Status}\nArchitecture: ${Architecture}\n' rp1-gpclk-dkms
+fi
+if command -v dkms >/dev/null 2>&1; then
+  run_cmd rp1_gpclk_dkms dkms status -m rp1-gpclk-dkms -v 1.1.1
+fi
+if command -v modinfo >/dev/null 2>&1; then
+  run_cmd rp1_gpclk_modinfo modinfo rp1_gpclk_dkms
+fi
+run_cmd rp1_gpclk_module_state sh -c "if [ -d /sys/module/rp1_gpclk_dkms ]; then find /sys/module/rp1_gpclk_dkms -maxdepth 2 -type f -readable -print -exec head -c 4096 {} \\; -exec printf '\\n' \\;; else echo 'module unavailable'; fi"
+run_cmd rp1_gpclk_device_state sh -c "if [ -e /dev/rp1-gpclk ]; then ls -l /dev/rp1-gpclk; else echo 'device unavailable'; fi"
+run_cmd rp1_gpclk_route_socket systemctl show rp1-gpclk-route-manager.socket --property=ActiveState,UnitFileState,FragmentPath
+run_cmd rp1_gpclk_route_journals sh -c "find /var/lib/rp1-gpclk-dkms/route-transactions -maxdepth 1 -type f -name '*.json' -printf '%f %u:%g %m %s bytes\n' 2>/dev/null | sort || true"
+for rp1_overlay in \
+  /usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio4.dtbo \
+  /usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio20.dtbo; do
+  if [[ -f "$rp1_overlay" ]]; then
+    sha256sum "$rp1_overlay" >> "${OUT_DIR}/hardware/rp1-gpclk/overlay-sha256.txt" 2>&1 || true
+  else
+    printf 'missing  %s\n' "$rp1_overlay" >> "${OUT_DIR}/hardware/rp1-gpclk/overlay-sha256.txt"
+  fi
+done
+copy_if_exists /boot/firmware/config.txt "${OUT_DIR}/hardware/rp1-gpclk"
+{
+  echo "Expected package: rp1-gpclk-dkms=1.1.1-1"
+  echo "Expected package SHA-256: 247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d"
+  echo "Expected package member inventory SHA-256: 888807e4b14dffda75c20e264671d2cfe41437612ec76093618224940a698d70"
+  echo "Persisted route: GPIO$(ini_value "$INSTALLED_INI" "GPIO" "Transmit Pin" "unavailable")"
+  echo "Configured overlay evidence: see the RP1-GPCLK-DKMS owned block in config.txt"
+  echo "Output-inhibited evidence: validated independently for GPIO4 and GPIO20; restored GPIO4 validated"
+  echo "Active route and live eligibility: not inferred; liveEligible=false"
+  echo "Cleanup evidence: see rp1_gpclk_module_state command report"
+  echo "Journal evidence: see the rp1_gpclk_route_journals command report"
+} > "${OUT_DIR}/hardware/rp1-gpclk/evidence-summary.txt"
+run_cmd rp1_gpclk_boot_route sh -c "sed -n '/^# BEGIN RP1-GPCLK-DKMS OWNED ROUTE$/,/^# END RP1-GPCLK-DKMS OWNED ROUTE$/p' /boot/firmware/config.txt 2>/dev/null || true"
 
 if command -v dpkg >/dev/null 2>&1; then
   dpkg -l > "${OUT_DIR}/system/dpkg-list.txt" 2>&1 || true

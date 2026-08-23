@@ -41,6 +41,7 @@
 
 class SupportBundleJobManager;
 class PrivilegedNetworkAdmin;
+namespace wsprrypi { class Rp1GpclkRouteService; }
 
 /**
  * @class WebServer
@@ -110,6 +111,7 @@ private:
     // Declared before svr so route captures are destroyed before the manager.
     std::unique_ptr<SupportBundleJobManager> supportBundleJobManager_;
     std::unique_ptr<PrivilegedNetworkAdmin> privilegedNetworkAdmin_;
+    wsprrypi::Rp1GpclkRouteService* rp1GpclkRouteService_ = nullptr;
     bool supportBundleRoutesRegistered_ = false;
     std::unique_ptr<httplib::Server> svr; ///< Underlying HTTP server from cpp-httplib.
     std::thread serverThread;          ///< Thread running the HTTP server.

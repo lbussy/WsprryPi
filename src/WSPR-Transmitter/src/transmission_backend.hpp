@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "execution_plan.hpp"
+#include "rp1_gpclk_development_inputs.hpp"
 
 namespace wsprrypi
 {
@@ -82,6 +83,8 @@ struct BackendExecutionInputs
 {
     int power_level{0};
     int tx_gpio{0};
+    int configured_tx_gpio{0};
+    Rp1GpclkDevelopmentInputs rp1_development;
 };
 
 struct CleanupResult

@@ -702,7 +702,9 @@ void WsprTransmitter::configureExecution(
             throw std::invalid_argument(policy.error);
     }
 
-    if (request.isTone() && selected_backend_ == wsprrypi::BackendKind::SI5351)
+    if (request.isTone() &&
+        (selected_backend_ == wsprrypi::BackendKind::SI5351 ||
+         selected_backend_ == wsprrypi::BackendKind::RP1_GPCLK))
     {
         wsprrypi::TransmissionRequest controller_request;
         controller_request.mode = wsprrypi::TransmissionMode::TONE;
@@ -720,6 +722,7 @@ void WsprTransmitter::configureExecution(
 
         wsprrypi::TonePayload payload;
         payload.frequency_hz = request.actual_rf_frequency_hz;
+        payload.duration = request.tone_duration;
         controller_request.payload = payload;
 
         configureExecution(controller_request, request);
@@ -831,11 +834,12 @@ void WsprTransmitter::configureExecution(
     }
 
     if (request.mode == wsprrypi::TransmissionMode::TONE &&
-        request.output.backend != wsprrypi::BackendKind::SI5351)
+        request.output.backend != wsprrypi::BackendKind::SI5351 &&
+        request.output.backend != wsprrypi::BackendKind::RP1_GPCLK)
     {
         throw std::invalid_argument(
             std::string(
-                "Controller tone execution is only supported for the SI5351 backend; received ") +
+                "Controller tone execution is supported only for SI5351 or RP1 GPCLK; received ") +
             backend_kind_name(request.output.backend) + ".");
     }
 
@@ -902,7 +906,8 @@ void WsprTransmitter::configureExecution(
             transmission_controller_->prepare(
                 request,
                 wsprrypi::TransmissionPrepareOptions{
-                    current_request_.power_level});
+                    current_request_.power_level,
+                    current_request_.rp1_development});
 
         if (!configure_result.ok)
         {

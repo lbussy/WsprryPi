@@ -40,9 +40,9 @@ bool validateRp1GpclkEventProgram(
         return false;
     }
     if (program.tones.empty() ||
-        program.tones.size() > RP1_GPCLK_EVENT_MAX_TONES ||
+        program.tones.size() > RP1_GPCLK_MAX_TONES ||
         program.events.empty() ||
-        program.events.size() > RP1_GPCLK_EVENT_MAX_EVENTS)
+        program.events.size() > RP1_GPCLK_MAX_EVENTS)
     {
         error = "RP1 GPCLK event program exceeds its bounded table contract.";
         return false;
@@ -85,12 +85,9 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
         return reject("Execution plan is not targeted for RP1 GPCLK.");
     if (plan.mode != TransmissionMode::QRSS &&
         plan.mode != TransmissionMode::FSKCW &&
-        plan.mode != TransmissionMode::DFCW &&
-        plan.mode != TransmissionMode::TONE)
-        return reject("RP1 GPCLK finite events support QRSS, FSKCW, DFCW, and explicit-duration TONE plans.");
-    if (plan.mode == TransmissionMode::TONE && !plan.duration_was_explicit)
-        return reject("RP1 GPCLK requires an explicit finite TONE duration.");
-    if (plan.events.empty() || plan.events.size() > RP1_GPCLK_EVENT_MAX_EVENTS)
+        plan.mode != TransmissionMode::DFCW)
+        return reject("RP1 GPCLK ABI v1 finite events support QRSS, FSKCW, and DFCW only.");
+    if (plan.events.empty() || plan.events.size() > RP1_GPCLK_MAX_EVENTS)
         return reject("RP1 GPCLK finite event count is outside the supported bound.");
     for (const auto& event : plan.events)
         if (!noFade(event.envelope))
@@ -103,9 +100,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
         return reject("RP1 GPCLK finite event plan has invalid tone spacing.");
 
     Rp1GpclkPlannerInput input;
-    input.center_frequency_hz = plan.mode == TransmissionMode::TONE
-        ? plan.reference_frequency_hz + 1.5 * spacing
-        : plan.reference_frequency_hz;
+    input.center_frequency_hz = plan.reference_frequency_hz;
     input.tone_spacing_hz = spacing;
     input.parent_frequency_hz = kParentHz;
     input.source_rate_ppm = plan.calibration.ppm;
@@ -118,6 +113,9 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     Rp1GpclkProviderEventProgram program;
     program.fractional_bits = planned.plan.fractional_bits;
     program.tick_divider = Rp1GpclkBackend::kTickDivider;
+    program.mode = plan.mode == TransmissionMode::QRSS ? RP1_GPCLK_MODE_QRSS :
+        plan.mode == TransmissionMode::FSKCW ? RP1_GPCLK_MODE_FSKCW :
+        RP1_GPCLK_MODE_DFCW;
 
     auto toneForFrequency = [&](double frequency) -> std::size_t {
         std::size_t best = 0;
@@ -143,7 +141,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
         if (std::find(planned_indexes.begin(), planned_indexes.end(), planned_index) ==
             planned_indexes.end())
         {
-            if (planned_indexes.size() == RP1_GPCLK_EVENT_MAX_TONES)
+            if (planned_indexes.size() == RP1_GPCLK_MAX_TONES)
                 return reject("RP1 GPCLK finite event plan contains too many tones.");
             planned_indexes.push_back(planned_index);
             const auto& tone = planned.plan.tones[planned_index];

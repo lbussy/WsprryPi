@@ -148,6 +148,8 @@ BackendExecutionInputs TransmissionController::build_backend_inputs(
     BackendExecutionInputs inputs;
     inputs.power_level = options.power_level;
     inputs.tx_gpio = request.output.gpio;
+    inputs.configured_tx_gpio = request.output.gpio;
+    inputs.rp1_development = options.rp1_development;
     return inputs;
 }
 

@@ -610,6 +610,14 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             reply["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
             reply["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
             reply["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
+            reply["rp1_package_expected"] = snapshot.rp1_package_expected;
+            reply["rp1_route_requested"] = snapshot.rp1_route_requested;
+            reply["rp1_route_persisted"] = snapshot.rp1_route_persisted;
+            reply["rp1_route_configured"] = snapshot.rp1_route_configured;
+            reply["rp1_route_active"] = snapshot.rp1_route_active;
+            reply["rp1_eligibility"] = snapshot.rp1_eligibility;
+            reply["rp1_cleanup_state"] = snapshot.rp1_cleanup_state;
+            reply["rp1_journal_state"] = snapshot.rp1_journal_state;
             auto now = std::chrono::system_clock::now();
             auto now_t = std::chrono::system_clock::to_time_t(now);
             std::tm tm_utc{};
@@ -710,8 +718,11 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                     }
                     else
                     {
+                        TestToneRequest bounded_request = parsed.request->tone;
+                        bounded_request.duration = std::chrono::milliseconds(
+                            parsed.request->duration_ms);
                         const TestToneStartResult start_result =
-                            start_test_tone(parsed.request->tone);
+                            start_test_tone(bounded_request);
                         reply = build_test_tone_response(
                             parsed.request->tone, start_result);
                         reply["command"] = "bounded_tone";

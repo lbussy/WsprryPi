@@ -566,14 +566,14 @@ bool platform_supports_gpio_clock_transmission(
         const bool rp1_provider_available =
             g_rp1_gpclk_provider_available_override.value_or(
                 !g_pi_generation_override.has_value() &&
-                ::access("/dev/rp1-gpclk0", R_OK | W_OK) == 0);
+                ::access("/dev/rp1-gpclk", R_OK | W_OK) == 0);
         if (generation == 5 && rp1_provider_available)
         {
             return true;
         }
 
         std::string message = generation == 5
-            ? "GPIO transmission on Raspberry Pi 5 requires the RP1 GPCLK provider at /dev/rp1-gpclk0."
+            ? "GPIO transmission on Raspberry Pi 5 requires the canonical RP1 GPCLK provider at /dev/rp1-gpclk."
             : "GPIO transmission mode is unsupported beyond Raspberry Pi 5.";
         const std::string model = get_pi_model();
         if (!model.empty())
