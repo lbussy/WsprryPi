@@ -18,6 +18,8 @@ int main() {
     const auto service_header = read_file(root / "rp1_gpclk_route_service.hpp");
     const auto http = read_file(root / "web_server.cpp");
     const auto scheduling = read_file(root / "scheduling.cpp");
+    const auto transmit = read_file(
+        root / "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp");
     const auto installer = read_file(root / "../scripts/install.sh");
     assert(service.find("/run/rp1-gpclk-dkms/route-manager.sock") != std::string::npos);
     assert(service.find("rp1-gpclk-route-manager-v1") != std::string::npos);
@@ -34,7 +36,8 @@ int main() {
     assert(http.find("svr->Post(\"/api/rp1-gpclk-route\"") != std::string::npos);
     assert(scheduling.find("productionRp1GpclkRouteService().reconcileStartup()") != std::string::npos);
     assert(scheduling.find("rp1_gpclk_application_idle_state") != std::string::npos);
-    assert(scheduling.find("rp1_live_qualification_inhibited{true}") != std::string::npos);
+    assert(scheduling.find("rp1_live_qualification_inhibited") == std::string::npos);
+    assert(transmit.find("decideRp1GpclkDevelopmentUse(current_policy)") != std::string::npos);
     assert(scheduling.find("productionRp1GpclkRouteService().query()") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route") != std::string::npos);
     assert(service.find("std::system(") == std::string::npos && service.find("popen(") == std::string::npos);

@@ -280,9 +280,6 @@ static bool tx_led_active = false;
 static std::mutex transmit_gpio_lifecycle_mtx;
 static std::atomic<bool> startup_quiesce_inhibited{false};
 static std::atomic<bool> rp1_route_transaction_inhibited{false};
-// Exact-package route management is output-inhibited validated, but no
-// live-output or RF qualification is accepted by this consumer slice.
-static std::atomic<bool> rp1_live_qualification_inhibited{true};
 static std::mutex startup_quiesce_error_mtx;
 static std::string startup_quiesce_error;
 static StartupQuiesceInvokerForTest startup_quiesce_invoker_for_test{};
@@ -1568,10 +1565,7 @@ static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
     return runtime_transmit_requested(cfg) &&
            !managed_reload_tx_inhibited &&
            !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
-           !rp1_route_transaction_inhibited.load(std::memory_order_acquire) &&
-           !(cfg.transmit_backend == TransmitBackendKind::GPIO &&
-             get_pi_model().find("Raspberry Pi 5") != std::string::npos &&
-             rp1_live_qualification_inhibited.load(std::memory_order_acquire));
+           !rp1_route_transaction_inhibited.load(std::memory_order_acquire);
 }
 
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept
