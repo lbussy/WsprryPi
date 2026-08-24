@@ -419,6 +419,19 @@ void test_reset_to_stock(IniFile &config, const std::string &filename)
     config.set_int_value("Common", "TX Power", 42);
     config.commit_changes();
 
+    std::ofstream retired_keys(filename, std::ios::app);
+    if (!retired_keys.is_open())
+    {
+        throw std::runtime_error("Cannot append retired keys to test ini file " +
+                                 filename + ".");
+    }
+    retired_keys << "22m = 17\n22m Active High = True\n";
+    retired_keys.close();
+    config.set_filename(filename);
+
+    require_file_contains(filename, "22m = 17");
+    require_file_contains(filename, "22m Active High = True");
+
     std::cout << "Modified values before reset." << std::endl;
     std::cout << "Common   | Call Sign: "
               << config.get_string_value("Common", "Call Sign") << std::endl;
@@ -450,6 +463,9 @@ void test_reset_to_stock(IniFile &config, const std::string &filename)
         throw std::runtime_error("reset_to_stock() did not restore TX Power.");
     }
 
+    require_file_not_contains(filename, "22m =");
+    require_file_not_contains(filename, "22m Active High =");
+
     std::cout << "reset_to_stock() verification passed." << std::endl;
 }
 
@@ -480,7 +496,13 @@ void test_repair_from_stock(IniFile &config, const std::string &filename)
         << "TX Power = 33\n"
         << "\n"
         << "[Extended]\n"
-        << "PPM = 2.5\n";
+        << "PPM = 2.5\n"
+        << "\n"
+        << "[Band GPIO]\n"
+        << "20m = 23\n"
+        << "20m Active High = true\n"
+        << "22m = 17\n"
+        << "22m Active High = true\n";
     damaged_file.close();
 
     config.set_filename(filename);
@@ -548,6 +570,16 @@ void test_repair_from_stock(IniFile &config, const std::string &filename)
         throw std::runtime_error("repair_from_stock() did not restore "
                                  "Socket Port.");
     }
+
+    if (config.get_int_value("Band GPIO", "20m") != 23 ||
+        !config.get_bool_value("Band GPIO", "20m Active High"))
+    {
+        throw std::runtime_error("repair_from_stock() did not preserve "
+                                 "current-schema Band GPIO values.");
+    }
+
+    require_file_not_contains(filename, "22m =");
+    require_file_not_contains(filename, "22m Active High =");
 
     std::cout << "repair_from_stock() verification passed." << std::endl;
 }
