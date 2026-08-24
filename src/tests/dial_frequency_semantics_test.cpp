@@ -1258,6 +1258,9 @@ int main(int argc, char *argv[])
         require(
             websocket_server_start_enabled(config),
             "startup gating must allow the websocket server by default");
+        require(
+            privileged_network_reconciliation_required(config),
+            "default externally reachable listeners must require network reconciliation");
     }
 
     {
@@ -1289,6 +1292,9 @@ int main(int argc, char *argv[])
         require(
             !websocket_server_start_enabled(config),
             "startup gating must skip the websocket server when --no-web is present");
+        require(
+            !privileged_network_reconciliation_required(config),
+            "disabled listeners must not require network reconciliation");
     }
 
     {
