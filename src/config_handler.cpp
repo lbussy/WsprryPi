@@ -1167,6 +1167,7 @@ void init_default_config()
     config.web_port = 31415;
     config.socket_port = 31416;
     config.socket_loopback_only = false;
+    config.socket_loopback_family = WebSocketLoopbackFamily::Auto;
     config.use_shutdown = false;
     config.shutdown_pin = 19;
 
@@ -2109,6 +2110,7 @@ namespace
         target.web_port = source.web_port;
         target.socket_port = source.socket_port;
         target.socket_loopback_only = source.socket_loopback_only;
+        target.socket_loopback_family = source.socket_loopback_family;
         target.use_shutdown = source.use_shutdown;
         target.shutdown_pin = source.shutdown_pin;
         target.use_journald = source.use_journald;

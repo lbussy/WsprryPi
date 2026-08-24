@@ -42,6 +42,7 @@
 #include "wspr_transmit.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -49,6 +50,7 @@
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <system_error>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -104,8 +106,8 @@ WebSocketServer::~WebSocketServer()
 /**
  * @brief Starts the WebSocket server on a specified port.
  *
- * Creates an IPv6 socket configured to accept both IPv6 and IPv4 connections,
- * binds to the specified port, and begins listening for client connections.
+ * Creates either the existing IPv6 wildcard listener or a literal loopback
+ * listener under the requested family policy, then begins accepting clients.
  * Spawns the main server thread and, optionally, a keep-alive ping thread.
  *
  * @param port The TCP port to bind to (must be between 1024 and 49151).
@@ -115,81 +117,230 @@ WebSocketServer::~WebSocketServer()
  * @return true if the server started successfully.
  * @return false if socket creation, binding, or listening fails.
  *
- * @note Uses IPv6 dual-stack by setting IPV6_V6ONLY to 0, allowing both IPv4
- *       and IPv6 clients to connect.
+ * @note The wildcard listener retains its IPv6 dual-stack behavior. A loopback
+ *       listener binds exactly `::1` or `127.0.0.1`.
  */
+void WebSocketServer::closeFailedListener() noexcept
+{
+    if (listen_fd_ >= 0)
+    {
+        close(listen_fd_);
+        listen_fd_ = -1;
+    }
+    listening_address_.clear();
+}
+
+WebSocketServer::StartupAttempt WebSocketServer::startLoopbackCandidate(
+    uint16_t port,
+    WebSocketLoopbackFamily family)
+{
+    if (startup_attempt_override_)
+    {
+        const auto overridden = startup_attempt_override_(family);
+        if (overridden)
+            return *overridden;
+    }
+
+    const bool ipv6 = family == WebSocketLoopbackFamily::IPv6;
+    const int address_family = ipv6 ? AF_INET6 : AF_INET;
+    listen_fd_ = socket(address_family, SOCK_STREAM, 0);
+    if (listen_fd_ < 0)
+        return {false, StartupFailureStage::Socket, errno};
+
+    int opt = 1;
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        const int error_number = errno;
+        closeFailedListener();
+        return {false, StartupFailureStage::ReuseAddress, error_number};
+    }
+
+    if (ipv6)
+    {
+        if (setsockopt(listen_fd_, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) < 0)
+        {
+            const int error_number = errno;
+            closeFailedListener();
+            return {false, StartupFailureStage::IPv6Only, error_number};
+        }
+        sockaddr_in6 address{};
+        address.sin6_family = AF_INET6;
+        address.sin6_addr = in6addr_loopback;
+        address.sin6_port = htons(port);
+        if (bind(listen_fd_, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0)
+        {
+            const int error_number = errno;
+            closeFailedListener();
+            return {false, StartupFailureStage::Bind, error_number};
+        }
+        listening_address_ = "::1";
+    }
+    else
+    {
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = htons(port);
+        if (bind(listen_fd_, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0)
+        {
+            const int error_number = errno;
+            closeFailedListener();
+            return {false, StartupFailureStage::Bind, error_number};
+        }
+        listening_address_ = "127.0.0.1";
+    }
+
+    if (listen(listen_fd_, 10) < 0)
+    {
+        const int error_number = errno;
+        closeFailedListener();
+        return {false, StartupFailureStage::Listen, error_number};
+    }
+    return {true, StartupFailureStage::None, 0};
+}
+
+WebSocketServer::StartupAttempt WebSocketServer::startWildcard(uint16_t port)
+{
+    listen_fd_ = socket(AF_INET6, SOCK_STREAM, 0);
+    if (listen_fd_ < 0)
+        return {false, StartupFailureStage::Socket, errno};
+
+    int opt = 1;
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        const int error_number = errno;
+        closeFailedListener();
+        return {false, StartupFailureStage::ReuseAddress, error_number};
+    }
+
+    int off = 0;
+    if (setsockopt(listen_fd_, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off)) < 0)
+        std::perror("setsockopt IPV6_V6ONLY");
+
+    sockaddr_in6 address{};
+    address.sin6_family = AF_INET6;
+    address.sin6_addr = in6addr_any;
+    address.sin6_port = htons(port);
+    if (bind(listen_fd_, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0)
+    {
+        const int error_number = errno;
+        closeFailedListener();
+        return {false, StartupFailureStage::Bind, error_number};
+    }
+    listening_address_ = "::";
+
+    if (listen(listen_fd_, 10) < 0)
+    {
+        const int error_number = errno;
+        closeFailedListener();
+        return {false, StartupFailureStage::Listen, error_number};
+    }
+    return {true, StartupFailureStage::None, 0};
+}
+
+bool WebSocketServer::ipv6Unavailable(const StartupAttempt &attempt) noexcept
+{
+    if (attempt.stage == StartupFailureStage::Socket)
+    {
+        return attempt.error_number == EAFNOSUPPORT ||
+#ifdef EPROTONOSUPPORT
+               attempt.error_number == EPROTONOSUPPORT ||
+#endif
+#ifdef EPFNOSUPPORT
+               attempt.error_number == EPFNOSUPPORT ||
+#endif
+               false;
+    }
+    return attempt.stage == StartupFailureStage::Bind &&
+           attempt.error_number == EADDRNOTAVAIL;
+}
+
+bool WebSocketServer::finishStart(uint32_t keep_alive_secs)
+{
+    keep_alive_secs_ = keep_alive_secs;
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        client_registration_closed_ = false;
+    }
+    running_ = true;
+    try
+    {
+        server_thread_ = std::thread(&WebSocketServer::serverLoop, this);
+        if (keep_alive_secs_ > 0)
+            keep_alive_thread_ = std::thread(&WebSocketServer::keepAliveLoop, this, keep_alive_secs_);
+    }
+    catch (const std::system_error &error)
+    {
+        llog.logE(ERROR, "Unable to start WebSocket listener threads: ", error.what());
+        stop();
+        return false;
+    }
+    return true;
+}
+
 bool WebSocketServer::start(
     uint16_t port,
     uint32_t keep_alive_secs,
-    bool loopback_only)
+    bool loopback_only,
+    WebSocketLoopbackFamily loopback_family)
 {
     if (port < 1024 || port > 49151)
     {
         llog.logE(ERROR, "Port must be between 1024 and 49151: ", port);
         return false;
     }
-    keep_alive_secs_ = keep_alive_secs;
+    if (running_ || server_thread_.joinable() || keep_alive_thread_.joinable() || listen_fd_ >= 0)
+    {
+        llog.logE(ERROR, "Socket server is already started.");
+        return false;
+    }
     loopback_only_ = loopback_only;
 
-    // Create an IPv6 socket.
-    listen_fd_ = socket(AF_INET6, SOCK_STREAM, 0);
-    if (listen_fd_ < 0)
+    StartupAttempt attempt;
+    if (!loopback_only)
     {
-        std::perror("socket");
+        if (loopback_family != WebSocketLoopbackFamily::Auto)
+        {
+            llog.logE(ERROR, "A WebSocket loopback family requires loopback-only mode.");
+            return false;
+        }
+        attempt = startWildcard(port);
+    }
+    else if (loopback_family == WebSocketLoopbackFamily::IPv4)
+    {
+        attempt = startLoopbackCandidate(port, WebSocketLoopbackFamily::IPv4);
+    }
+    else
+    {
+        attempt = startLoopbackCandidate(port, WebSocketLoopbackFamily::IPv6);
+        if (!attempt.started && loopback_family == WebSocketLoopbackFamily::Auto &&
+            ipv6Unavailable(attempt))
+        {
+            llog.logS(WARN, "IPv6 loopback unavailable; falling back to 127.0.0.1.");
+            attempt = startLoopbackCandidate(port, WebSocketLoopbackFamily::IPv4);
+        }
+    }
+
+    if (!attempt.started)
+    {
+        errno = attempt.error_number;
+        std::perror("WebSocket listener startup");
         return false;
     }
 
-    // Allow reuse of the address.
-    int opt = 1;
-    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    {
-        std::perror("setsockopt");
+    if (!finishStart(keep_alive_secs))
         return false;
-    }
-
-    // Disable IPV6_V6ONLY to accept both IPv6 and IPv4 connections.
-    int off = 0;
-    if (setsockopt(listen_fd_, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off)) < 0)
-    {
-        std::perror("setsockopt IPV6_V6ONLY");
-        // Not a fatal error on some systems, so you may continue.
-    }
-
-    // Bind to the unspecified IPv6 address (this accepts all addresses)
-    struct sockaddr_in6 addr;
-    std::memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    addr.sin6_addr = loopback_only ? in6addr_loopback : in6addr_any;
-    addr.sin6_port = htons(port);
-    if (bind(listen_fd_, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
-    {
-        std::perror("bind");
-        return false;
-    }
-
-    if (listen(listen_fd_, 10) < 0)
-    {
-        std::perror("listen");
-        return false;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(clients_mutex_);
-        client_registration_closed_ = false;
-    }
-    running_ = true;
-    server_thread_ = std::thread(&WebSocketServer::serverLoop, this);
-    if (keep_alive_secs_ > 0)
-    {
-        keep_alive_thread_ = std::thread(&WebSocketServer::keepAliveLoop, this, keep_alive_secs_);
-    }
 
     llog.logS(
         INFO,
-        "Socket server started on ",
-        loopback_only ? "loopback port: " : "port: ",
-        port);
+        "Socket server started on address ", listening_address_, ":", port,
+        loopback_only ? " (loopback only)" : "");
     return true;
+}
+
+const std::string &WebSocketServer::listening_address() const noexcept
+{
+    return listening_address_;
 }
 
 /**
@@ -273,6 +424,8 @@ void WebSocketServer::stop()
     // Join the keep-alive ping thread
     if (keep_alive_thread_.joinable())
         keep_alive_thread_.join();
+
+    listening_address_.clear();
 
 }
 

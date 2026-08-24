@@ -47,6 +47,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "websocket_listener_config.hpp"
+
 inline constexpr int kTransmitGpioUnset = -1;
 inline constexpr int kDefaultTransmitGpio = 4;
 inline constexpr int kDefaultRp1GpioDriveMa = 2;
@@ -310,6 +312,7 @@ struct ArgParserConfig
     int web_port;      ///< Web server port number.
     int socket_port;   ///< Socket server port number.
     bool socket_loopback_only; ///< Restrict WebSocket control to loopback.
+    WebSocketLoopbackFamily socket_loopback_family; ///< Command-line-only loopback family policy.
     bool use_shutdown; ///< Enable GPIO-based shutdown feature.
     int shutdown_pin;  ///< GPIO pin used to signal shutdown.
 
@@ -393,6 +396,7 @@ struct ArgParserConfig
           web_port(-1),
           socket_port(-1),
           socket_loopback_only(false),
+          socket_loopback_family(WebSocketLoopbackFamily::Auto),
           use_shutdown(false),
           shutdown_pin(-1),
           use_journald(false),
@@ -482,6 +486,7 @@ struct ArgParserConfig
         web_port = other.web_port;
         socket_port = other.socket_port;
         socket_loopback_only = other.socket_loopback_only;
+        socket_loopback_family = other.socket_loopback_family;
         use_shutdown = other.use_shutdown;
         shutdown_pin = other.shutdown_pin;
         use_journald = other.use_journald;

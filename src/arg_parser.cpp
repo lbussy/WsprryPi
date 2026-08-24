@@ -1546,6 +1546,8 @@ void print_usage(const std::string &message, int exit_code)
               << "  -w, --web-port <port>              HTTP REST/Web UI port. Default: 31415.\n"
               << "  -k, --socket-port <port>           WebSocket server port. Default: 31416.\n"
               << "      --socket-loopback-only        Bind WebSocket control to loopback only.\n"
+              << "      --socket-loopback-family <auto|ipv6|ipv4>\n"
+              << "                                     Select loopback family; auto prefers IPv6.\n"
               << "  -l, --led_pin <gpio>               Enable the TX LED on the given GPIO.\n"
               << "      --led-pin <gpio>               Alias for --led_pin.\n"
               << "      --use-led, --no-led            Enable or disable the TX LED using the configured/default pin.\n"
@@ -3083,6 +3085,7 @@ bool parse_command_line(int argc, char *argv[])
     clear_dfcw_startup_request();
 
     bool explicit_cw_start_second = false;
+    bool explicit_socket_loopback_family = false;
     for (int i = 1; i < argc; ++i)
     {
         const std::string arg = argv[i];
@@ -3320,6 +3323,7 @@ bool parse_command_line(int argc, char *argv[])
         {"web-port", required_argument, nullptr, 'w'},    // Via: [Server] Port = 31415
         {"socket-port", required_argument, nullptr, 'k'}, // Via: [Server] Port = 31416
         {"socket-loopback-only", no_argument, nullptr, 1060},
+        {"socket-loopback-family", required_argument, nullptr, 1062},
         {nullptr, 0, nullptr, 0}};
 
     while (true)
@@ -3344,6 +3348,20 @@ bool parse_command_line(int argc, char *argv[])
         case 1061:
             config.enable_http = false;
             break;
+        case 1062:
+        {
+            explicit_socket_loopback_family = true;
+            const std::string family = optarg;
+            if (family == "auto")
+                config.socket_loopback_family = WebSocketLoopbackFamily::Auto;
+            else if (family == "ipv6")
+                config.socket_loopback_family = WebSocketLoopbackFamily::IPv6;
+            else if (family == "ipv4")
+                config.socket_loopback_family = WebSocketLoopbackFamily::IPv4;
+            else
+                print_usage("Socket loopback family must be auto, ipv6, or ipv4.", EXIT_FAILURE);
+            break;
+        }
         case 'h': // Help/Usage
         case '?':
         {
@@ -4524,6 +4542,9 @@ bool parse_command_line(int argc, char *argv[])
             sync_wspr_mode_config(config);
         }
     }
+    if (explicit_socket_loopback_family && !config.socket_loopback_only)
+        print_usage("--socket-loopback-family requires --socket-loopback-only.", EXIT_FAILURE);
+
     resolve_backend_specific_config(config);
 
     if (config.mode == ModeType::WSPR)
