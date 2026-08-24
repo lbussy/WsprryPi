@@ -7835,9 +7835,9 @@ report_ui_publication_result() {
         python3 "${LOCAL_REPO_DIR}/scripts/copy_ui.py" \
             --render-result "$UI_PUBLICATION_RESULT_FILE" || true
     else
-        printf "\nUI replacement report\n"
-        printf "  Result unavailable: the UI publisher did not create its result file.\n"
-        printf "  Replacement completed: unknown\n"
+        printf "\nUI replacement issue\n"
+        printf "  Publication details are unavailable because the UI publisher did not create its result file.\n"
+        printf "  Confirm the installed UI state before retrying.\n"
     fi
 }
 

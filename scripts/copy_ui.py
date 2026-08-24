@@ -387,34 +387,61 @@ def render_result(path: Path) -> int:
     try:
         result = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        print("\nUI replacement report")
-        print(f"  Result unavailable: {error}")
+        print("\nUI replacement issue")
+        print(f"  Publication details are unavailable: {error}")
         return 1
-    print("\nUI replacement report")
-    print(f"  Prior state: {result.get('prior_state') or 'unknown'}")
-    for label, field in (
-        ("Modified files", "modified_files"),
-        ("Added files", "added_files"),
-        ("Missing files", "missing_files"),
+
+    if not isinstance(result, dict) or any(
+        not isinstance(result.get(field, []), list)
+        for field in ("modified_files", "added_files", "missing_files")
     ):
-        values = result.get(field) or []
-        print(f"  {label}:")
-        if values:
-            for value in values:
-                print(f"    - {value}")
+        print("\nUI replacement issue")
+        print("  Publication details are unavailable: the result file has an invalid format.")
+        return 1
+
+    error = result.get("error")
+    backup_directory = result.get("backup_directory")
+    if not error and not backup_directory:
+        return 0
+
+    counts = []
+    for label, field in (
+        ("modified", "modified_files"),
+        ("added", "added_files"),
+        ("missing", "missing_files"),
+    ):
+        count = len(result.get(field) or [])
+        if count:
+            counts.append(f"{count} {label}")
+
+    if error:
+        print("\nUI replacement issue")
+        print(f"  UI publication failed: {error}")
+        if counts:
+            print(f"  Existing changes: {', '.join(counts)}")
+        if backup_directory:
+            verification = "verified" if result.get("backup_verified") else "not verified"
+            print(f"  Backup ({verification}): {backup_directory}")
+        if result.get("modification_report_path"):
+            print(f"  Details: {result['modification_report_path']}")
+        if result.get("replacement_completed"):
+            print("  Stock UI installation completed before this error.")
         else:
-            print("    - (none)")
-    print(f"  Prior manifest backup: {result.get('prior_manifest_backup') or '(none)'}")
-    print(f"  Modification report: {result.get('modification_report_path') or '(none)'}")
-    print(f"  Backup directory: {result.get('backup_directory') or '(none)'}")
-    backup_verified = result.get("backup_verified")
-    print(
-        "  Backup verified: "
-        + ("not required" if backup_verified is None else ("yes" if backup_verified else "no"))
-    )
-    print(f"  Replacement completed: {'yes' if result.get('replacement_completed') else 'no'}")
-    if result.get("error"):
-        print(f"  Error: {result['error']}")
+            print("  Stock UI installation did not complete.")
+        return 0
+
+    if result.get("prior_state") == "locally_modified":
+        print("\nCustomized UI backed up")
+        print("  The installer saved your UI changes and installed the stock UI.")
+    else:
+        print("\nExisting UI backed up")
+        print("  The installer could not verify the prior UI, so it saved the existing files")
+        print("  before installing the stock UI.")
+    if counts:
+        print(f"  Changes: {', '.join(counts)}")
+    print(f"  Backup: {backup_directory}")
+    if result.get("modification_report_path"):
+        print(f"  Details: {result['modification_report_path']}")
     return 0
 
 
