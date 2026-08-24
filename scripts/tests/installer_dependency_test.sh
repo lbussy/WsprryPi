@@ -4,6 +4,31 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INSTALLER="${SCRIPT_DIR}/../install.sh"
 
+if grep -Eq '^[[:space:]]*22m([[:space:]]|Active High[[:space:]])*=' "${SCRIPT_DIR}/../../config/wsprrypi.ini"; then
+    echo "the canonical INI must not contain retired 22m Band GPIO keys" >&2
+    exit 1
+fi
+
+stock_capture_line="$(grep -nF 'stock_source_path="$source_path"' "$INSTALLER" | head -1 | cut -d: -f1)"
+merge_switch_line="$(grep -nF 'source_path="$merged_ini"' "$INSTALLER" | head -1 | cut -d: -f1)"
+
+if [[ -z "$stock_capture_line" || -z "$merge_switch_line" || "$stock_capture_line" -ge "$merge_switch_line" ]]; then
+    echo "install.sh must retain the current canonical INI before selecting merged upgrade output" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'cp -f "${stock_source_path}" "${stock_config_path}"' "$INSTALLER"; then
+    echo "install.sh must install .stock from the untouched current canonical INI" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'upgrade_ini "$old_path" "$source_path" "$merged_ini"' "$INSTALLER"; then
+    echo "install.sh upgrades must merge old values into the current canonical INI schema" >&2
+    exit 1
+fi
+
+python3 "${SCRIPT_DIR}/ini_upgrade_schema_test.py"
+
 if ! awk '
     /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
     in_packages && /^\)/ { exit }
