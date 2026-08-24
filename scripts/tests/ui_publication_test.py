@@ -196,7 +196,27 @@ class UiPublicationTest(unittest.TestCase):
             )
         self.assertEqual(live_file.read_text(), "must survive\n")
 
-    def test_final_renderer_relists_inventory_and_actual_completion(self):
+    def render(self, result):
+        result_path = self.root / "result.json"
+        PUBLISHER._write_json_atomic(result_path, result)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = PUBLISHER.render_result(result_path)
+        return status, output.getvalue()
+
+    def test_final_renderer_suppresses_routine_success(self):
+        for prior_state in ("packaged", "not_installed"):
+            with self.subTest(prior_state=prior_state):
+                result = PUBLISHER._new_result()
+                result.update({
+                    "prior_state": prior_state,
+                    "replacement_completed": True,
+                })
+                status, rendered = self.render(result)
+                self.assertEqual(status, 0)
+                self.assertEqual(rendered, "")
+
+    def test_final_renderer_summarizes_successful_backup(self):
         result = PUBLISHER._new_result()
         result.update({
             "prior_state": "locally_modified",
@@ -207,26 +227,73 @@ class UiPublicationTest(unittest.TestCase):
             "modification_report_path": "/backup/modification-report.json",
             "backup_directory": "/backup",
             "backup_verified": True,
+            "replacement_completed": True,
+        })
+        status, rendered = self.render(result)
+        self.assertEqual(status, 0)
+        for expected in (
+            "Customized UI backed up",
+            "saved your UI changes and installed the stock UI",
+            "Changes: 1 modified, 1 added, 1 missing",
+            "Backup: /backup",
+            "Details: /backup/modification-report.json",
+        ):
+            self.assertIn(expected, rendered)
+        self.assertNotIn("Prior state", rendered)
+        self.assertNotIn("Prior manifest", rendered)
+        self.assertNotIn("Replacement completed", rendered)
+
+    def test_final_renderer_reports_unknown_state_backup_without_inventory(self):
+        result = PUBLISHER._new_result()
+        result.update({
+            "prior_state": "unknown",
+            "backup_directory": "/backup",
+            "backup_verified": True,
+            "replacement_completed": True,
+        })
+        status, rendered = self.render(result)
+        self.assertEqual(status, 0)
+        self.assertIn("Existing UI backed up", rendered)
+        self.assertIn("could not verify the prior UI", rendered)
+        self.assertIn("Backup: /backup", rendered)
+        self.assertNotIn("Changes:", rendered)
+
+    def test_final_renderer_always_reports_publication_error(self):
+        result = PUBLISHER._new_result()
+        result.update({
+            "prior_state": "locally_modified",
+            "modified_files": ["index.php"],
+            "backup_directory": "/backup",
+            "backup_verified": False,
             "replacement_completed": False,
             "error": "publication stopped",
         })
-        result_path = self.root / "result.json"
-        PUBLISHER._write_json_atomic(result_path, result)
+        status, rendered = self.render(result)
+        self.assertEqual(status, 0)
+        self.assertIn("UI replacement issue", rendered)
+        self.assertIn("UI publication failed: publication stopped", rendered)
+        self.assertIn("Existing changes: 1 modified", rendered)
+        self.assertIn("Backup (not verified): /backup", rendered)
+        self.assertIn("Stock UI installation did not complete", rendered)
+
+    def test_final_renderer_reports_unreadable_result(self):
+        missing = self.root / "missing-result.json"
         output = io.StringIO()
         with redirect_stdout(output):
-            self.assertEqual(PUBLISHER.render_result(result_path), 0)
-        rendered = output.getvalue()
-        for expected in (
-            "Modified files:\n    - index.php",
-            "Added files:\n    - custom.php",
-            "Missing files:\n    - site.css",
-            "Prior manifest backup: /backup/prior-manifest.json",
-            "Modification report: /backup/modification-report.json",
-            "Backup directory: /backup",
-            "Replacement completed: no",
-            "Error: publication stopped",
-        ):
-            self.assertIn(expected, rendered)
+            status = PUBLISHER.render_result(missing)
+        self.assertEqual(status, 1)
+        self.assertIn("UI replacement issue", output.getvalue())
+        self.assertIn("Publication details are unavailable", output.getvalue())
+
+    def test_final_renderer_reports_structurally_invalid_result(self):
+        invalid = self.root / "invalid-result.json"
+        invalid.write_text("[]\n", encoding="utf-8")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            status = PUBLISHER.render_result(invalid)
+        self.assertEqual(status, 1)
+        self.assertIn("UI replacement issue", output.getvalue())
+        self.assertIn("invalid format", output.getvalue())
 
     def test_validation_failure_leaves_live_tree_untouched(self):
         self.target.mkdir(parents=True)
