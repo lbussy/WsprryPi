@@ -1564,6 +1564,7 @@ static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept
 {
     return cfg.enable_web &&
+           cfg.enable_http &&
            cfg.web_port >= 1024 &&
            cfg.web_port <= 49151;
 }
@@ -1573,6 +1574,14 @@ bool websocket_server_start_enabled(const ArgParserConfig &cfg) noexcept
     return cfg.enable_web &&
            cfg.socket_port >= 1024 &&
            cfg.socket_port <= 49151;
+}
+
+bool privileged_network_reconciliation_required(
+    const ArgParserConfig &cfg) noexcept
+{
+    return web_server_start_enabled(cfg) ||
+           (websocket_server_start_enabled(cfg) &&
+            !cfg.socket_loopback_only);
 }
 
 static wsprrypi::BackendKind to_controller_backend(
@@ -4278,7 +4287,9 @@ bool wspr_loop()
     const bool start_web = web_server_start_enabled(config);
     const bool start_websocket = websocket_server_start_enabled(config);
     bool network_safety_ready = true;
-    if (start_web || start_websocket)
+    const bool external_listener_requested =
+        privileged_network_reconciliation_required(config);
+    if (external_listener_requested)
     {
         const auto reconciliation = reconcile_privileged_network_policy(
             PrivilegedNetworkAdminPaths{config.ini_filename});
@@ -4287,7 +4298,7 @@ bool wspr_loop()
         {
             llog.logS(
                 ERROR,
-                "Privileged network policy reconciliation failed; HTTP and WebSocket listeners remain disabled.");
+                "Privileged network policy reconciliation failed; external HTTP and WebSocket listeners remain disabled.");
         }
         else if (reconciliation.status_text() == "NETWORK SAFETY OFF")
         {
@@ -4311,7 +4322,8 @@ bool wspr_loop()
     }
 
     // Start socket server and set priority
-    if (start_websocket && network_safety_ready)
+    if (start_websocket &&
+        (config.socket_loopback_only || network_safety_ready))
     {
         socketServer.start(
             config.socket_port,

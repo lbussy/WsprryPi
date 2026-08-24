@@ -378,6 +378,8 @@ std::chrono::system_clock::time_point next_non_wspr_schedule_time_for_test(
 std::uint64_t non_wspr_schedule_generation_for_test() noexcept;
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept;
 bool websocket_server_start_enabled(const ArgParserConfig &cfg) noexcept;
+bool privileged_network_reconciliation_required(
+    const ArgParserConfig &cfg) noexcept;
 bool transmitter_reload_should_defer() noexcept;
 std::string transmitter_reload_defer_debug_snapshot();
 void transmitter_cb(WsprTransmissionCallbackEvent event,

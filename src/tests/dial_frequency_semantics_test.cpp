@@ -1258,6 +1258,9 @@ int main(int argc, char *argv[])
         require(
             websocket_server_start_enabled(config),
             "startup gating must allow the websocket server by default");
+        require(
+            privileged_network_reconciliation_required(config),
+            "default externally reachable listeners must require network reconciliation");
     }
 
     {
@@ -1289,6 +1292,47 @@ int main(int argc, char *argv[])
         require(
             !websocket_server_start_enabled(config),
             "startup gating must skip the websocket server when --no-web is present");
+        require(
+            !privileged_network_reconciliation_required(config),
+            "disabled listeners must not require network reconciliation");
+    }
+
+    {
+        init_config_json();
+        json_to_config();
+        config.use_ini = false;
+        reset_getopt_state();
+
+        std::vector<std::string> args = {
+            "wsprrypi",
+            "--no-http",
+            "--socket-loopback-only",
+            "--transmit-gpio",
+            "4",
+            "AA0NT",
+            "EM18",
+            "20",
+            "20m"};
+        std::vector<char *> argv = argv_for(args);
+
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()),
+            "CLI parsing with --no-http must succeed");
+        require(
+            config.enable_web && !config.enable_http,
+            "--no-http must disable HTTP without disabling WebSocket control");
+        require(
+            !web_server_start_enabled(config),
+            "startup gating must skip HTTP when --no-http is present");
+        require(
+            websocket_server_start_enabled(config),
+            "startup gating must retain WebSocket control when --no-http is present");
+        require(
+            config.socket_loopback_only,
+            "loopback-only WebSocket control must remain selected");
+        require(
+            !privileged_network_reconciliation_required(config),
+            "HTTP-disabled loopback WebSocket control must not require external-network reconciliation");
     }
 
     {
