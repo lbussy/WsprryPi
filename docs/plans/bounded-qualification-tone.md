@@ -16,9 +16,16 @@ power, spectral purity, cabling, attenuation, or receiver behavior.
 
 Start WsprryPi with `--no-http --socket-loopback-only` for a qualification
 session. The HTTP listener stays disabled while the WebSocket listener binds to
-IPv6 loopback rather than the wildcard address. Because this combination does
-not expose a network listener, it does not require privileged external-network
-policy reconciliation.
+a literal loopback address rather than the wildcard address. The
+command-line-only `--socket-loopback-family auto|ipv6|ipv4` policy defaults to
+`auto`: it prefers
+IPv6 `::1` and falls back to IPv4 `127.0.0.1` only when the operating system
+specifically reports that IPv6 or its loopback address is unavailable. Port
+conflicts, permission failures, socket-option failures, listen failures, and
+unexpected errors fail closed without changing families. Qualification plans
+that require a deterministic endpoint select `ipv6` or `ipv4` explicitly. Because
+this combination does not expose a network listener, it does not require
+privileged external-network policy reconciliation.
 The `bounded_tone` command fails closed unless that mode was selected. Existing
 `tone_start`, `tone_end`, and default browser-facing binding behavior are
 unchanged.

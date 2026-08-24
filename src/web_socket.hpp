@@ -32,10 +32,14 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "websocket_listener_config.hpp"
 
 /**
  * @brief Default keep-alive interval for WebSocket ping frames (in seconds).
@@ -80,13 +84,19 @@ public:
      *
      * @param port Port number to bind (must be between 1024 and 49151).
      * @param keep_alive_secs Keep-alive ping interval in seconds (0 disables ping).
+     * @param loopback_only Restrict the listener to a literal loopback address.
+     * @param loopback_family Family policy used only for a loopback listener.
      * @return true if the server started successfully.
      * @return false if startup failed (e.g. bind or listen error).
      */
     bool start(
         uint16_t port,
         uint32_t keep_alive_secs = 30,
-        bool loopback_only = false);
+        bool loopback_only = false,
+        WebSocketLoopbackFamily loopback_family = WebSocketLoopbackFamily::Auto);
+
+    /** Returns the exact bound literal while the listener is running. */
+    const std::string &listening_address() const noexcept;
 
     /**
      * @brief Stops the server and closes any open connections.
@@ -145,6 +155,35 @@ private:
     std::string bounded_tone_request_id_;
     std::thread bounded_tone_watchdog_;
     bool loopback_only_{false};
+    std::string listening_address_;
+
+    enum class StartupFailureStage
+    {
+        None,
+        Socket,
+        ReuseAddress,
+        IPv6Only,
+        Bind,
+        Listen
+    };
+
+    struct StartupAttempt
+    {
+        bool started{false};
+        StartupFailureStage stage{StartupFailureStage::None};
+        int error_number{0};
+    };
+
+    std::function<std::optional<StartupAttempt>(WebSocketLoopbackFamily)>
+        startup_attempt_override_;
+
+    StartupAttempt startLoopbackCandidate(
+        uint16_t port,
+        WebSocketLoopbackFamily family);
+    StartupAttempt startWildcard(uint16_t port);
+    bool finishStart(uint32_t keep_alive_secs);
+    void closeFailedListener() noexcept;
+    static bool ipv6Unavailable(const StartupAttempt &attempt) noexcept;
 
     std::condition_variable keep_alive_cv_; ///< Conditional to break from loop
     std::mutex keep_alive_mutex_;           ///< Mutex to control loop break

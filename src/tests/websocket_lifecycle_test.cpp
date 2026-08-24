@@ -1,6 +1,7 @@
 #include "../web_socket.hpp"
 #include <arpa/inet.h>
 #include <cassert>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -64,18 +65,113 @@ class WebSocketLifecycleTest {
     }
     static void verify_loopback_binding(unsigned short port) {
         WebSocketServer local;
-        assert(local.start(port, 0, true));
+        assert(local.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
         sockaddr_in6 address{};
         socklen_t size = sizeof(address);
         assert(getsockname(
             local.listen_fd_, reinterpret_cast<sockaddr *>(&address), &size) == 0);
         assert(address.sin6_family == AF_INET6);
         assert(IN6_IS_ADDR_LOOPBACK(&address.sin6_addr));
+        assert(local.listening_address() == "::1");
         local.stop();
+        assert(local.listening_address().empty());
+    }
+    static void verify_ipv4_loopback_binding(unsigned short port) {
+        WebSocketServer local;
+        assert(local.start(port, 0, true, WebSocketLoopbackFamily::IPv4));
+        sockaddr_in address{};
+        socklen_t size = sizeof(address);
+        assert(getsockname(
+            local.listen_fd_, reinterpret_cast<sockaddr *>(&address), &size) == 0);
+        assert(address.sin_family == AF_INET);
+        assert(ntohl(address.sin_addr.s_addr) == INADDR_LOOPBACK);
+        assert(local.listening_address() == "127.0.0.1");
+        local.stop();
+    }
+    static void verify_auto_prefers_ipv6(unsigned short port) {
+        WebSocketServer local;
+        assert(local.start(port, 0, true, WebSocketLoopbackFamily::Auto));
+        assert(local.listening_address() == "::1");
+        local.stop();
+    }
+    static void verify_bounded_fallback(unsigned short port) {
+        WebSocketServer local;
+        local.startup_attempt_override_ = [](WebSocketLoopbackFamily family)
+            -> std::optional<WebSocketServer::StartupAttempt> {
+            if (family == WebSocketLoopbackFamily::IPv6)
+                return WebSocketServer::StartupAttempt{
+                    false,
+                    WebSocketServer::StartupFailureStage::Socket,
+                    EAFNOSUPPORT};
+            return std::nullopt;
+        };
+        assert(local.start(port, 0, true, WebSocketLoopbackFamily::Auto));
+        assert(local.listening_address() == "127.0.0.1");
+        local.stop();
+
+        local.startup_attempt_override_ = [](WebSocketLoopbackFamily family)
+            -> std::optional<WebSocketServer::StartupAttempt> {
+            if (family == WebSocketLoopbackFamily::IPv6)
+                return WebSocketServer::StartupAttempt{
+                    false,
+                    WebSocketServer::StartupFailureStage::Bind,
+                    EADDRNOTAVAIL};
+            return std::nullopt;
+        };
+        assert(local.start(port, 0, true, WebSocketLoopbackFamily::Auto));
+        assert(local.listening_address() == "127.0.0.1");
+        local.stop();
+    }
+    static void verify_prohibited_fallback(unsigned short port) {
+        WebSocketServer local;
+        local.startup_attempt_override_ = [](WebSocketLoopbackFamily family)
+            -> std::optional<WebSocketServer::StartupAttempt> {
+            if (family == WebSocketLoopbackFamily::IPv6)
+                return WebSocketServer::StartupAttempt{
+                    false,
+                    WebSocketServer::StartupFailureStage::Bind,
+                    EADDRINUSE};
+            return std::nullopt;
+        };
+        assert(!local.start(port, 0, true, WebSocketLoopbackFamily::Auto));
+        assert(local.listen_fd_ == -1);
+        assert(local.listening_address().empty());
+        assert(!local.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
+        assert(local.listen_fd_ == -1);
+        assert(!local.start(port, 0, false, WebSocketLoopbackFamily::IPv4));
+
+        local.startup_attempt_override_ = [](WebSocketLoopbackFamily family)
+            -> std::optional<WebSocketServer::StartupAttempt> {
+            if (family == WebSocketLoopbackFamily::IPv6)
+                return WebSocketServer::StartupAttempt{
+                    false,
+                    WebSocketServer::StartupFailureStage::Socket,
+                    EAFNOSUPPORT};
+            return std::nullopt;
+        };
+        assert(!local.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
+        assert(local.listen_fd_ == -1);
+        assert(local.listening_address().empty());
+    }
+    static void verify_failed_bind_cleanup(unsigned short port) {
+        WebSocketServer owner;
+        WebSocketServer blocked;
+        assert(owner.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
+        assert(!blocked.start(port, 0, true, WebSocketLoopbackFamily::Auto));
+        assert(blocked.listen_fd_ == -1);
+        assert(blocked.listening_address().empty());
+        owner.stop();
+        assert(blocked.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
+        blocked.stop();
     }
 public:
     static int run() {
         verify_loopback_binding(39518);
+        verify_ipv4_loopback_binding(39520);
+        verify_auto_prefers_ipv6(39524);
+        verify_bounded_fallback(39521);
+        verify_prohibited_fallback(39522);
+        verify_failed_bind_cleanup(39523);
         WebSocketServer s; verify_test_tone_transaction_lock(s); const unsigned short p=39519; assert(s.start(p,0));
         int raw=socket(AF_INET,SOCK_STREAM,0); assert(raw>=0); sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(p); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr); assert(connect(raw,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
         assert(wait_handshake(s)); std::thread incomplete_stopper([&]{s.stop();}); incomplete_stopper.join(); close(raw);

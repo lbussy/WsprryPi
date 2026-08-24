@@ -1307,6 +1307,8 @@ int main(int argc, char *argv[])
             "wsprrypi",
             "--no-http",
             "--socket-loopback-only",
+            "--socket-loopback-family",
+            "ipv4",
             "--transmit-gpio",
             "4",
             "AA0NT",
@@ -1331,8 +1333,35 @@ int main(int argc, char *argv[])
             config.socket_loopback_only,
             "loopback-only WebSocket control must remain selected");
         require(
+            config.socket_loopback_family == WebSocketLoopbackFamily::IPv4,
+            "explicit IPv4 loopback selection must remain command-line bound");
+        require(
             !privileged_network_reconciliation_required(config),
             "HTTP-disabled loopback WebSocket control must not require external-network reconciliation");
+    }
+
+    {
+        require_cli_parse_rejected(
+            {
+                "wsprrypi",
+                "--socket-loopback-family",
+                "ipv4",
+                "AA0NT",
+                "EM18",
+                "20",
+                "20m"},
+            "loopback family without loopback-only mode");
+        require_cli_parse_rejected(
+            {
+                "wsprrypi",
+                "--socket-loopback-only",
+                "--socket-loopback-family",
+                "localhost",
+                "AA0NT",
+                "EM18",
+                "20",
+                "20m"},
+            "invalid loopback family");
     }
 
     {
@@ -2338,6 +2367,7 @@ int main(int argc, char *argv[])
                 help_output.find("--journald") != std::string::npos &&
                 help_output.find("--date-time-log") != std::string::npos &&
                 help_output.find("--terminate <count>") != std::string::npos &&
+                help_output.find("--socket-loopback-family <auto|ipv6|ipv4>") != std::string::npos &&
                 help_output.find("--planner-preference <auto|prefer_paired|require_paired>") != std::string::npos &&
                 help_output.find("--qrss-message/--qrss-frequency/--qrss-dot-seconds") != std::string::npos &&
                 help_output.find("--fskcw-message/--fskcw-mark-frequency/--fskcw-space-frequency/--fskcw-dot-seconds") != std::string::npos &&

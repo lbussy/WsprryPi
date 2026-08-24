@@ -4325,10 +4325,16 @@ bool wspr_loop()
     if (start_websocket &&
         (config.socket_loopback_only || network_safety_ready))
     {
-        socketServer.start(
-            config.socket_port,
-            SOCKET_KEEPALIVE,
-            config.socket_loopback_only);
+        if (!socketServer.start(
+                config.socket_port,
+                SOCKET_KEEPALIVE,
+                config.socket_loopback_only,
+                config.socket_loopback_family))
+        {
+            llog.logE(ERROR, "WebSocket listener failed to start.");
+            stop_runtime_components_for_process_exit();
+            return false;
+        }
         socketServer.setThreadPriority(SCHED_RR, 10);
     }
     else
