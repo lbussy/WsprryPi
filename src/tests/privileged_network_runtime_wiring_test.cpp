@@ -28,7 +28,7 @@ int main() {
     assert(http.find("svr->Post(\"/api/network-safety\"") != std::string::npos);
     assert(http.find("Access-Control-Allow-Origin\", \"*\"") == std::string::npos);
     assert(scheduling.find("reconcile_privileged_network_policy(") != std::string::npos);
-    assert(scheduling.find("HTTP and WebSocket listeners remain disabled") !=
+    assert(scheduling.find("external HTTP and WebSocket listeners remain disabled") !=
            std::string::npos);
     assert(stock_ini.find("[Security]") != std::string::npos);
     assert(stock_ini.find("Privileged Network Safety = enforced") != std::string::npos);

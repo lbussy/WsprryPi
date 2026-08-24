@@ -14,8 +14,11 @@ power, spectral purity, cabling, attenuation, or receiver behavior.
 
 ## Containment
 
-Start WsprryPi with `--socket-loopback-only` for a qualification session. The
-WebSocket listener then binds to IPv6 loopback rather than the wildcard address.
+Start WsprryPi with `--no-http --socket-loopback-only` for a qualification
+session. The HTTP listener stays disabled while the WebSocket listener binds to
+IPv6 loopback rather than the wildcard address. Because this combination does
+not expose a network listener, it does not require privileged external-network
+policy reconciliation.
 The `bounded_tone` command fails closed unless that mode was selected. Existing
 `tone_start`, `tone_end`, and default browser-facing binding behavior are
 unchanged.

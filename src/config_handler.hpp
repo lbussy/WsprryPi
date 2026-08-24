@@ -306,6 +306,7 @@ struct ArgParserConfig
 
     // Runtime
     bool enable_web;   ///< Enable the HTTP web UI and WebSocket server.
+    bool enable_http;  ///< Enable the HTTP web UI independently of WebSocket control.
     int web_port;      ///< Web server port number.
     int socket_port;   ///< Socket server port number.
     bool socket_loopback_only; ///< Restrict WebSocket control to loopback.
@@ -388,6 +389,7 @@ struct ArgParserConfig
           amp_pin(-1),
           amp_pin_active_high(false),
           enable_web(true),
+          enable_http(true),
           web_port(-1),
           socket_port(-1),
           socket_loopback_only(false),
@@ -476,6 +478,7 @@ struct ArgParserConfig
         amp_pin = other.amp_pin;
         amp_pin_active_high = other.amp_pin_active_high;
         enable_web = other.enable_web;
+        enable_http = other.enable_http;
         web_port = other.web_port;
         socket_port = other.socket_port;
         socket_loopback_only = other.socket_loopback_only;

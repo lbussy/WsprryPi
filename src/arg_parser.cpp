@@ -1542,6 +1542,7 @@ void print_usage(const std::string &message, int exit_code)
               << "                                     Legacy transient DFCW startup options; all four are required together.\n\n"
               << "GPIO Controls And Service Ports:\n"
               << "  --no-web                           Disable the HTTP web UI and WebSocket server for this run.\n"
+              << "  --no-http                          Disable only the HTTP web UI for this run.\n"
               << "  -w, --web-port <port>              HTTP REST/Web UI port. Default: 31415.\n"
               << "  -k, --socket-port <port>           WebSocket server port. Default: 31416.\n"
               << "      --socket-loopback-only        Bind WebSocket control to loopback only.\n"
@@ -3244,6 +3245,7 @@ bool parse_command_line(int argc, char *argv[])
         {"allow-non-amateur-frequency", no_argument, nullptr, 1058},
         {"no-allow-non-amateur-frequency", no_argument, nullptr, 1059},
         {"no-web", no_argument, nullptr, 1020},
+        {"no-http", no_argument, nullptr, 1061},
         {"no-offset", no_argument, nullptr, 1021},
         {"no-system-clock-frequency-estimate", no_argument, nullptr, 1022},
         {"gpio-frequency-residual-ppm", required_argument, nullptr, 1051},
@@ -3338,6 +3340,9 @@ bool parse_command_line(int argc, char *argv[])
         // No arguments
         case 1060:
             config.socket_loopback_only = true;
+            break;
+        case 1061:
+            config.enable_http = false;
             break;
         case 'h': // Help/Usage
         case '?':
