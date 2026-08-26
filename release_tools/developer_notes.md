@@ -448,6 +448,12 @@ The operational installer manages these runtime and installation packages:
 - `libgpiod-dev`
 - `libsystemd-dev`
 - `libssl-dev`
+- `age`
+
+The encrypted support-bundle workflow requires the distribution-provided
+`/usr/bin/age` and `/usr/bin/age-keygen` executables. The full installer installs
+the `age` package and fails closed if those fixed executables are unavailable or
+unsafe.
 
 Source development additionally needs the compiler/build toolchain, Python,
 Node.js, npm, PHP CLI, and—when running the browser integration suite—Chromium.
@@ -458,7 +464,7 @@ running the full installer:
 ```bash
 sudo apt update && sudo apt install -y \
     git build-essential cmake pkg-config python3 \
-    libgpiod-dev libsystemd-dev libssl-dev \
+    libgpiod-dev libsystemd-dev libssl-dev age \
     nodejs npm php-cli chromium
 ```
 
