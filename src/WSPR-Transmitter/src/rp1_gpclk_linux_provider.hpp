@@ -10,7 +10,7 @@ class Rp1GpclkIo
 {
 public:
     virtual ~Rp1GpclkIo() = default;
-    virtual int openDevice(const char* path) noexcept = 0;
+    virtual int openDevice(const char* path, int flags) noexcept = 0;
     virtual int control(int fd, unsigned long request, void* argument) noexcept = 0;
     virtual int closeDevice(int fd) noexcept = 0;
     virtual int lastError() const noexcept = 0;
@@ -19,7 +19,7 @@ public:
 class Rp1GpclkPosixIo final : public Rp1GpclkIo
 {
 public:
-    int openDevice(const char* path) noexcept override;
+    int openDevice(const char* path, int flags) noexcept override;
     int control(int fd, unsigned long request, void* argument) noexcept override;
     int closeDevice(int fd) noexcept override;
     int lastError() const noexcept override;
@@ -53,6 +53,7 @@ public:
         std::uint64_t generation,
         Rp1GpclkProviderEventState& state,
         std::string& error) const;
+    bool passiveSnapshot(Rp1GpclkPassiveSnapshot& snapshot, std::string& error) const;
     bool release(std::string& error) noexcept override;
     std::uint64_t leaseId() const noexcept override { return lease_id_; }
     std::string endpoint() const override { return device_; }

@@ -37,11 +37,11 @@ class Provider final : public wsprrypi::Rp1GpclkProvider
 public:
     bool query(std::uint32_t route, std::uint64_t capabilities, bool,
         wsprrypi::Rp1GpclkProviderIdentity& identity, std::string&) override {
-        identity.abi_min=identity.abi_max=2; identity.route=route;
+        identity.abi_min=1; identity.abi_max=3; identity.route=route;
         identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
         identity.capabilities=capabilities; identity.module_id="rp1-gpclk-dkms";
         identity.build_id="1.1.2";
-        identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2";
+        identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3";
         return true;
     }
     bool acquire(std::uint32_t route, std::uint64_t capabilities,
@@ -113,14 +113,14 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2)
     d.confirmation_current=true; d.operation_id=d.confirmation_operation_id="test-operation";
     d.route_transaction_generation=d.confirmation_route_transaction_generation=3;
     wsprrypi::Rp1GpclkProviderIdentity identity;
-    identity.abi_min=identity.abi_max=2; identity.route=RP1_GPCLK_ROUTE_GPIO4;
+    identity.abi_min=1; identity.abi_max=3; identity.route=RP1_GPCLK_ROUTE_GPIO4;
     identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
     identity.capabilities=RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
         RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
         RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     identity.module_id="rp1-gpclk-dkms"; identity.build_id="1.1.2";
-    identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2";
+    identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3";
     d.confirmation_identity=wsprrypi::rp1GpclkDevelopmentIdentityBinding(identity);
     return inputs;
 }

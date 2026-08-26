@@ -5,6 +5,7 @@ root = Path(__file__).resolve().parents[2]
 collector = (root / "scripts/collect-support-bundle.sh").read_text()
 runtime = (root / "src/scheduling.cpp").read_text()
 websocket = (root / "src/web_socket.cpp").read_text()
+admin_probe = (root / "src/WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp").read_text()
 
 for command in ("dpkg-query", "dkms status", "modinfo", "overlay-sha256.txt"):
     assert command in collector, command
@@ -15,13 +16,13 @@ for evidence in ("rp1-gpclk-gpio4.dtbo", "rp1-gpclk-gpio20.dtbo",
 for evidence in ("Persisted route", "Active route and live eligibility",
                  "Cleanup evidence", "Journal evidence", "rp1_gpclk_boot_route"):
     assert evidence in collector, evidence
-assert "9ec6bb617d8259df50b376bb08f0e5973a8fee41" in collector
-assert "9ec6bb617d8259df50b376bb08f0e5973a8fee41" in runtime
-for identity in ("rp1-gpclk-dkms 1.1.2, ABI v2",
+assert "eb384beefcb1a0253062cffdfc3f6364594faa56" in collector
+assert "eb384beefcb1a0253062cffdfc3f6364594faa56" in runtime
+for identity in ("rp1-gpclk-dkms 1.1.2, ABI v3 passive snapshot",
                  "no package hash is accepted",
                  "Qualification: unvalidated"):
     assert identity in collector, identity
-for identity in ("module=rp1-gpclk-dkms/1.1.2", "uapi_abi=2",
+for identity in ("module=rp1-gpclk-dkms/1.1.2", "uapi_abi=3",
                  "package=unreleased", "qualification=unvalidated"):
     assert identity in runtime, identity
 assert "dkms status -m rp1-gpclk-dkms -v 1.1.2" in collector
@@ -32,4 +33,10 @@ for field in ("rp1_package_expected", "rp1_route_requested", "rp1_route_persiste
     assert field in runtime and field in websocket, field
 assert 'snapshot.rp1_route_active = "unavailable"' in runtime
 assert 'snapshot.rp1_eligibility = "unknown"' in runtime
+assert "provider.passiveSnapshot" in admin_probe
+for prohibited in ("provider.acquire", "provider.release", "provider.submit", "O_RDWR"):
+    assert prohibited not in admin_probe, prohibited
+for evidence in ("read_only=true", "lease_token_exposed=false",
+                 "indeterminate safety observation", "exact r3 development identity mismatch"):
+    assert evidence in admin_probe, evidence
 print("rp1_gpclk_diagnostics_test passed")

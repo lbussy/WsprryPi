@@ -94,6 +94,39 @@ struct Rp1GpclkProviderEventState
     std::uint32_t terminal_reason{0};
 };
 
+struct Rp1GpclkPassiveSnapshot
+{
+    std::uint16_t snapshot_version{0};
+    std::uint16_t abi_min{0};
+    std::uint16_t abi_max{0};
+    std::uint32_t route{0};
+    std::uint32_t compatibility_state{0};
+    std::uint32_t compatibility_reason{0};
+    std::uint32_t operation_state{0};
+    std::uint32_t terminal_reason{0};
+    std::uint32_t current_event{0};
+    std::uint32_t validity_flags{0};
+    std::uint32_t cleanup_fault{0};
+    std::uint32_t owner_present{0};
+    std::uint32_t lease_present{0};
+    std::uint32_t live_output{0};
+    std::uint32_t live_eligible{0};
+    std::uint32_t drain_state{0};
+    std::uint32_t gpio_safe{0};
+    std::uint32_t clock_quiescent{0};
+    std::uint32_t dma_quiescent{0};
+    std::uint32_t stable{0};
+    std::uint64_t capabilities{0};
+    std::uint64_t generation{0};
+    std::uint64_t elapsed_ns{0};
+    std::uint64_t remaining_ns{0};
+    std::uint64_t min_tone_duration_ns{0};
+    std::uint64_t max_tone_duration_ns{0};
+    std::string module_id;
+    std::string build_id;
+    std::string compatibility_id;
+};
+
 /** Provider-owned RP1 clock/DMA boundary.  Implementations must serialize
  * access with the RP1 clock provider and must not prepare or enable clk_gp0.
  */

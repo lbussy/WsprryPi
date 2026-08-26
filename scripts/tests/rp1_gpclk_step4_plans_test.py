@@ -42,8 +42,8 @@ def main() -> int:
                 assert not record["execution_authorized"] and not record["qualification_claim"]
             wrong = json.loads((output / "tone-application-plan.json").read_text())
             wrong["backend_contract"]["compatibility_id"] = (
-                "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r2"
-                if gpio == 4 else "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2"
+                "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3"
+                if gpio == 4 else "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3"
             )
             altered = root / f"gpio{gpio}-wrong.json"
             altered.write_text(json.dumps(wrong))

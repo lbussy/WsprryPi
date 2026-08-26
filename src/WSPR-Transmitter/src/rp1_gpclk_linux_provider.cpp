@@ -17,7 +17,8 @@ constexpr std::uint64_t kKnownCapabilities =
     RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
     RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
     RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-    RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE;
+    RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE |
+    RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
 
 std::uint32_t driveMask(std::uint32_t drive_ma)
 {
@@ -60,6 +61,10 @@ bool knownRoute(std::uint32_t value)
 bool knownState(std::uint32_t value) { return value <= RP1_GPCLK_STATE_DEAD; }
 bool knownTerminalReason(std::uint32_t value)
 { return value <= RP1_GPCLK_REASON_INTERNAL_ERROR; }
+bool knownObservation(std::uint32_t value)
+{ return value <= RP1_GPCLK_OBSERVATION_TRUE; }
+bool knownDrainState(std::uint32_t value)
+{ return value <= RP1_GPCLK_DRAIN_COMPLETE; }
 bool validStateReason(std::uint32_t state, std::uint32_t reason)
 {
     if (state == RP1_GPCLK_STATE_IDLE || state == RP1_GPCLK_STATE_RUNNING ||
@@ -71,8 +76,8 @@ bool validStateReason(std::uint32_t state, std::uint32_t reason)
 }
 }
 
-int Rp1GpclkPosixIo::openDevice(const char* path) noexcept
-{ return ::open(path, O_RDWR | O_CLOEXEC); }
+int Rp1GpclkPosixIo::openDevice(const char* path, int flags) noexcept
+{ return ::open(path, flags | O_CLOEXEC); }
 int Rp1GpclkPosixIo::control(int fd, unsigned long request, void* argument) noexcept
 { return ::ioctl(fd, request, argument); }
 int Rp1GpclkPosixIo::closeDevice(int fd) noexcept { return ::close(fd); }
@@ -178,7 +183,7 @@ bool Rp1GpclkLinuxProvider::queryOpen(
         identity.build_id != expected->build_id ||
         identity.compatibility_id != expected->compatibility_id)
     {
-        error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r2 development identity."; return false;
+        error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r3 development identity."; return false;
     }
     return true;
 }
@@ -189,14 +194,150 @@ bool Rp1GpclkLinuxProvider::query(
     std::string& error)
 {
     if (fd_ >= 0) { error = "RP1 GPCLK provider query requires no active lease."; return false; }
-    fd_ = io_.openDevice(device_.c_str());
+    fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
-    const bool ok = queryOpen(expected_route, required_capabilities,
+    const auto v2_required = required_capabilities & ~RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
+    const bool ok = queryOpen(expected_route, v2_required,
         require_live_eligible, identity, error);
     const int close_result = io_.closeDevice(fd_);
     fd_ = -1;
     if (close_result < 0) { error = "Could not close RP1 GPCLK provider after QUERY."; return false; }
-    return ok;
+    if (!ok) return false;
+    Rp1GpclkPassiveSnapshot snapshot;
+    if (!passiveSnapshot(snapshot, error)) return false;
+    if (snapshot.route != identity.route ||
+        snapshot.compatibility_state != identity.compatibility_state ||
+        snapshot.compatibility_reason != identity.compatibility_reason ||
+        snapshot.module_id != identity.module_id || snapshot.build_id != identity.build_id ||
+        snapshot.compatibility_id != identity.compatibility_id)
+    {
+        error = "RP1 GPCLK QUERY and passive snapshot identities disagree: query=" +
+            std::to_string(identity.route) + "/" +
+            std::to_string(identity.compatibility_state) + "/" +
+            std::to_string(identity.compatibility_reason) + "/" + identity.module_id +
+            "/" + identity.build_id + "/" + identity.compatibility_id +
+            "; snapshot=" + std::to_string(snapshot.route) + "/" +
+            std::to_string(snapshot.compatibility_state) + "/" +
+            std::to_string(snapshot.compatibility_reason) + "/" + snapshot.module_id +
+            "/" + snapshot.build_id + "/" + snapshot.compatibility_id;
+        return false;
+    }
+    identity.abi_min = snapshot.abi_min;
+    identity.abi_max = snapshot.abi_max;
+    identity.capabilities |= snapshot.capabilities;
+    if ((identity.capabilities & required_capabilities) != required_capabilities)
+    {
+        error = "RP1 GPCLK provider is missing a required passive capability.";
+        return false;
+    }
+    return true;
+}
+
+bool Rp1GpclkLinuxProvider::passiveSnapshot(
+    Rp1GpclkPassiveSnapshot& result, std::string& error) const
+{
+    if (fd_ >= 0)
+    {
+        error = "Passive RP1 GPCLK inspection requires no owned provider descriptor.";
+        return false;
+    }
+    const int descriptor = io_.openDevice(device_.c_str(), O_RDONLY | O_NONBLOCK);
+    if (descriptor < 0) return failed("Could not open canonical RP1 GPCLK provider read-only", error);
+    rp1_gpclk_snapshot_v3 request{};
+    request.header.size = sizeof(request);
+    request.header.version = RP1_GPCLK_UAPI_ABI_V3;
+    const int control_result = io_.control(
+        descriptor, RP1_GPCLK_IOC_GET_SNAPSHOT_V3, &request);
+    const int saved_error = io_.lastError();
+    const int close_result = io_.closeDevice(descriptor);
+    if (control_result < 0)
+    {
+        error = saved_error == EOPNOTSUPP || saved_error == ENOTTY
+            ? "RP1 GPCLK provider does not support the passive ABI v3 snapshot."
+            : "Could not read passive RP1 GPCLK ABI v3 snapshot: " +
+                std::string(std::strerror(saved_error));
+        return false;
+    }
+    if (close_result < 0)
+    {
+        error = "Could not close RP1 GPCLK passive inspector descriptor.";
+        return false;
+    }
+    if (request.header.size != sizeof(request) ||
+        request.header.version != RP1_GPCLK_UAPI_ABI_V3 ||
+        request.header.flags != 0 || request.abi_min > RP1_GPCLK_UAPI_ABI_V3 ||
+        request.abi_max < RP1_GPCLK_UAPI_ABI_V3 ||
+        !knownRoute(request.route) ||
+        !knownCompatibility(request.compatibility_state) ||
+        !knownReason(request.compatibility_reason) ||
+        !knownState(request.operation_state) ||
+        !knownTerminalReason(request.terminal_reason) ||
+        !validStateReason(request.operation_state, request.terminal_reason) ||
+        !knownDrainState(request.drain_state) ||
+        request.snapshot_flags & ~RP1_GPCLK_SNAPSHOT_F_ALLOWED_MASK ||
+        request.capabilities & ~kKnownCapabilities ||
+        (request.capabilities & RP1_GPCLK_CAP_PASSIVE_SNAPSHOT) == 0 ||
+        request.reserved0 != 0)
+    {
+        error = "RP1 GPCLK provider returned malformed or unknown passive snapshot data.";
+        return false;
+    }
+    for (const auto value : request.reserved)
+        if (value != 0)
+        {
+            error = "RP1 GPCLK provider returned nonzero passive snapshot reserved data.";
+            return false;
+        }
+    for (const auto value : {request.cleanup_fault, request.owner_present,
+            request.lease_present, request.live_output, request.live_eligible,
+            request.gpio_safe, request.clock_quiescent, request.dma_quiescent,
+            request.stable})
+        if (!knownObservation(value))
+        {
+            error = "RP1 GPCLK provider returned an unknown passive safety observation.";
+            return false;
+        }
+    if ((request.snapshot_flags & RP1_GPCLK_SNAPSHOT_F_REMAINING_VALID) &&
+        request.remaining_ns > RP1_GPCLK_REQUEST_DURATION_NS_MAX)
+    {
+        error = "RP1 GPCLK provider returned an out-of-bounds remaining duration.";
+        return false;
+    }
+    result = {};
+    result.snapshot_version = request.header.version;
+    result.abi_min = request.abi_min; result.abi_max = request.abi_max;
+    result.route = request.route;
+    result.compatibility_state = request.compatibility_state;
+    result.compatibility_reason = request.compatibility_reason;
+    result.operation_state = request.operation_state;
+    result.terminal_reason = request.terminal_reason;
+    result.current_event = request.current_event;
+    result.validity_flags = request.snapshot_flags;
+    result.cleanup_fault = request.cleanup_fault;
+    result.owner_present = request.owner_present;
+    result.lease_present = request.lease_present;
+    result.live_output = request.live_output;
+    result.live_eligible = request.live_eligible;
+    result.drain_state = request.drain_state;
+    result.gpio_safe = request.gpio_safe;
+    result.clock_quiescent = request.clock_quiescent;
+    result.dma_quiescent = request.dma_quiescent;
+    result.stable = request.stable;
+    result.capabilities = request.capabilities;
+    result.generation = request.generation;
+    result.elapsed_ns = request.elapsed_ns;
+    result.remaining_ns = request.remaining_ns;
+    result.min_tone_duration_ns = request.min_tone_duration_ns;
+    result.max_tone_duration_ns = request.max_tone_duration_ns;
+    if (!boundedIdentity(request.module_id, sizeof(request.module_id), result.module_id) ||
+        !boundedIdentity(request.build_id, sizeof(request.build_id), result.build_id) ||
+        !boundedIdentity(request.compatibility_id, sizeof(request.compatibility_id),
+            result.compatibility_id))
+    {
+        error = "RP1 GPCLK provider returned an empty or unterminated passive identity.";
+        return false;
+    }
+    return true;
 }
 
 bool Rp1GpclkLinuxProvider::acquire(
@@ -204,7 +345,7 @@ bool Rp1GpclkLinuxProvider::acquire(
     std::string& error)
 {
     if (fd_ >= 0) { error = "RP1 GPCLK provider is already acquired."; return false; }
-    fd_ = io_.openDevice(device_.c_str());
+    fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
     Rp1GpclkProviderIdentity identity;
     const bool require_live =

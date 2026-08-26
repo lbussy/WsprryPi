@@ -3,6 +3,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -20,8 +21,8 @@ constexpr std::uint64_t kAdministrativeCapabilities =
 class Io final : public wsprrypi::Rp1GpclkIo
 {
 public:
-    int openDevice(const char* value) noexcept override
-    { path = value; ++opens; return open_result; }
+    int openDevice(const char* value, int value_flags) noexcept override
+    { path = value; flags.push_back(value_flags); ++opens; return open_result; }
     int control(int, unsigned long request, void* argument) noexcept override
     {
         requests.push_back(request);
@@ -35,6 +36,23 @@ public:
             if (malformed_query_size) --value->header.size;
             if (wrong_query_version) value->header.version = RP1_GPCLK_UAPI_ABI_V1;
             if (unknown_query_flags) value->header.flags = 1;
+        }
+        else if (request == RP1_GPCLK_IOC_GET_SNAPSHOT_V3)
+        {
+            auto* value = static_cast<rp1_gpclk_snapshot_v3*>(argument);
+            const auto input = value->header;
+            *value = snapshot;
+            value->header = input;
+            if (unknown_snapshot_flags) value->header.flags = 1;
+            value->route = query.route;
+            value->compatibility_state = query.compatibility_state;
+            value->compatibility_reason = query.compatibility_reason;
+            value->capabilities = query.capabilities | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
+            value->live_eligible = query.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE
+                ? RP1_GPCLK_OBSERVATION_TRUE : RP1_GPCLK_OBSERVATION_FALSE;
+            std::strcpy(value->module_id, query.module_id);
+            std::strcpy(value->build_id, query.build_id);
+            std::strcpy(value->compatibility_id, query.compatibility_id);
         }
         else if (request == RP1_GPCLK_IOC_ACQUIRE)
         {
@@ -93,10 +111,30 @@ public:
         std::strcpy(query.module_id, "rp1-gpclk-dkms");
         std::strcpy(query.build_id, "1.1.2");
         std::strcpy(query.compatibility_id,
-            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2");
+            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3");
+        snapshot.header.size = sizeof(snapshot);
+        snapshot.header.version = RP1_GPCLK_UAPI_ABI_V3;
+        snapshot.abi_min = RP1_GPCLK_UAPI_ABI_V1;
+        snapshot.abi_max = RP1_GPCLK_UAPI_ABI_V3;
+        snapshot.operation_state = RP1_GPCLK_STATE_IDLE;
+        snapshot.terminal_reason = RP1_GPCLK_REASON_NONE;
+        snapshot.cleanup_fault = RP1_GPCLK_OBSERVATION_FALSE;
+        snapshot.owner_present = RP1_GPCLK_OBSERVATION_FALSE;
+        snapshot.lease_present = RP1_GPCLK_OBSERVATION_FALSE;
+        snapshot.live_output = RP1_GPCLK_OBSERVATION_FALSE;
+        snapshot.live_eligible = RP1_GPCLK_OBSERVATION_FALSE;
+        snapshot.drain_state = RP1_GPCLK_DRAIN_NONE;
+        snapshot.gpio_safe = RP1_GPCLK_OBSERVATION_TRUE;
+        snapshot.clock_quiescent = RP1_GPCLK_OBSERVATION_TRUE;
+        snapshot.dma_quiescent = RP1_GPCLK_OBSERVATION_TRUE;
+        snapshot.stable = RP1_GPCLK_OBSERVATION_TRUE;
+        snapshot.capabilities = query.capabilities | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
+        snapshot.min_tone_duration_ns = RP1_GPCLK_TONE_DURATION_NS_MIN;
+        snapshot.max_tone_duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX;
     }
 
     rp1_gpclk_query_v2 query{};
+    rp1_gpclk_snapshot_v3 snapshot{};
     rp1_gpclk_acquire_v1 acquire{};
     rp1_gpclk_submit_wspr_v1 wspr{};
     rp1_gpclk_submit_events_v1 events{};
@@ -105,6 +143,7 @@ public:
     rp1_gpclk_release_v1 release{};
     rp1_gpclk_release_v2 release_v2{};
     std::string path;
+    std::vector<int> flags;
     std::vector<unsigned long> requests;
     int open_result{7}, close_result{0}, error{ENOENT}, opens{}, closes{};
     unsigned long fail_request{};
@@ -120,6 +159,7 @@ public:
     bool malformed_query_size{};
     bool wrong_query_version{};
     bool unknown_query_flags{};
+    bool unknown_snapshot_flags{};
 };
 
 void test_query_and_fail_closed_validation()
@@ -284,6 +324,54 @@ void test_old_module_and_tone_v2()
     expect(invalid.release(error), "finite invalid-duration fixture must release");
 }
 
+void test_passive_snapshot_is_read_only_and_fail_closed()
+{
+    Io io;
+    wsprrypi::Rp1GpclkLinuxProvider provider(io);
+    wsprrypi::Rp1GpclkPassiveSnapshot snapshot;
+    std::string error;
+    expect(provider.passiveSnapshot(snapshot, error),
+        "valid ABI v3 passive snapshot must parse");
+    expect(io.opens == 1 && io.closes == 1 && !io.flags.empty() &&
+        (io.flags.back() & O_ACCMODE) == O_RDONLY,
+        "passive inspection must use one read-only descriptor and close it");
+    expect(snapshot.generation == 0 &&
+        snapshot.owner_present == RP1_GPCLK_OBSERVATION_FALSE &&
+        snapshot.lease_present == RP1_GPCLK_OBSERVATION_FALSE,
+        "initial passive snapshot must preserve generation zero and no ownership");
+
+    io.snapshot.owner_present = RP1_GPCLK_OBSERVATION_TRUE;
+    io.snapshot.lease_present = RP1_GPCLK_OBSERVATION_TRUE;
+    io.snapshot.operation_state = RP1_GPCLK_STATE_RUNNING;
+    expect(provider.passiveSnapshot(snapshot, error) &&
+        snapshot.owner_present == RP1_GPCLK_OBSERVATION_TRUE &&
+        snapshot.lease_present == RP1_GPCLK_OBSERVATION_TRUE,
+        "passive inspection must report presence without exposing a token");
+
+    io.snapshot.owner_present = RP1_GPCLK_OBSERVATION_FALSE;
+    io.snapshot.lease_present = RP1_GPCLK_OBSERVATION_FALSE;
+    io.snapshot.operation_state = RP1_GPCLK_STATE_IDLE;
+    io.snapshot.stable = 99;
+    expect(!provider.passiveSnapshot(snapshot, error),
+        "unknown passive safety observations must fail closed");
+    io.snapshot.stable = RP1_GPCLK_OBSERVATION_TRUE;
+    io.unknown_snapshot_flags = true;
+    expect(!provider.passiveSnapshot(snapshot, error),
+        "unknown passive header flags must fail closed");
+    io.unknown_snapshot_flags = false;
+    io.snapshot.reserved[0] = 1;
+    expect(!provider.passiveSnapshot(snapshot, error),
+        "nonzero passive reserved data must fail closed");
+    io.snapshot.reserved[0] = 0;
+    io.fail_request = RP1_GPCLK_IOC_GET_SNAPSHOT_V3;
+    io.fail_error = ENOTTY;
+    const auto closes_before = io.closes;
+    expect(!provider.passiveSnapshot(snapshot, error) &&
+        error.find("does not support") != std::string::npos &&
+        io.closes == closes_before + 1,
+        "unsupported passive ioctl must close its descriptor");
+}
+
 void test_acquire_state_release_and_generation()
 {
     Io io;
@@ -374,7 +462,8 @@ int main()
     test_query_and_fail_closed_validation();
     test_acquire_state_release_and_generation();
     test_old_module_and_tone_v2();
+    test_passive_snapshot_is_read_only_and_fail_closed();
     test_failure_cleanup_and_historical_endpoint_rejection();
     if (failures) return 1;
-    std::cout << "RP1 GPCLK ABI v2 Linux provider tests passed\n";
+    std::cout << "RP1 GPCLK ABI v2 execution and ABI v3 passive provider tests passed\n";
 }

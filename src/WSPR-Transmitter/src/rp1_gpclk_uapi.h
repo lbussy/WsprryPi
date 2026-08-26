@@ -7,6 +7,7 @@
 
 #define RP1_GPCLK_UAPI_ABI_V1 1U
 #define RP1_GPCLK_UAPI_ABI_V2 2U
+#define RP1_GPCLK_UAPI_ABI_V3 3U
 #define RP1_GPCLK_IOC_MAGIC 0xb8
 
 #define RP1_GPCLK_MODULE_ID_MAX 64U
@@ -115,6 +116,27 @@ enum rp1_gpclk_terminal_reason {
 #define RP1_GPCLK_CAP_LIVE_ELIGIBLE (1ULL << 7)
 #define RP1_GPCLK_CAP_TONE_CONTINUOUS (1ULL << 8)
 #define RP1_GPCLK_CAP_TONE_FINITE (1ULL << 9)
+#define RP1_GPCLK_CAP_PASSIVE_SNAPSHOT (1ULL << 10)
+
+enum rp1_gpclk_observation {
+    RP1_GPCLK_OBSERVATION_UNKNOWN = 0,
+    RP1_GPCLK_OBSERVATION_FALSE = 1,
+    RP1_GPCLK_OBSERVATION_TRUE = 2,
+};
+
+enum rp1_gpclk_drain_state {
+    RP1_GPCLK_DRAIN_NONE = 0,
+    RP1_GPCLK_DRAIN_ACTIVE = 1,
+    RP1_GPCLK_DRAIN_COMPLETE = 2,
+};
+
+#define RP1_GPCLK_SNAPSHOT_F_CURRENT_EVENT_VALID (1U << 0)
+#define RP1_GPCLK_SNAPSHOT_F_ELAPSED_VALID (1U << 1)
+#define RP1_GPCLK_SNAPSHOT_F_REMAINING_VALID (1U << 2)
+#define RP1_GPCLK_SNAPSHOT_F_ALLOWED_MASK \
+    (RP1_GPCLK_SNAPSHOT_F_CURRENT_EVENT_VALID | \
+     RP1_GPCLK_SNAPSHOT_F_ELAPSED_VALID | \
+     RP1_GPCLK_SNAPSHOT_F_REMAINING_VALID)
 
 #define RP1_GPCLK_DRIVE_MA_2 2U
 #define RP1_GPCLK_DRIVE_MA_4 4U
@@ -285,6 +307,41 @@ struct rp1_gpclk_release_v1 {
     __aligned_u64 reserved[4];
 };
 
+/* ABI v3: passive, non-owning, single-observation module state. */
+struct rp1_gpclk_snapshot_v3 {
+    struct rp1_gpclk_uapi_header header;
+    __u16 abi_min;
+    __u16 abi_max;
+    __u32 route;
+    __u32 compatibility_state;
+    __u32 compatibility_reason;
+    __u32 operation_state;
+    __u32 terminal_reason;
+    __u32 current_event;
+    __u32 snapshot_flags;
+    __u32 cleanup_fault;
+    __u32 owner_present;
+    __u32 lease_present;
+    __u32 live_output;
+    __u32 live_eligible;
+    __u32 drain_state;
+    __u32 gpio_safe;
+    __u32 clock_quiescent;
+    __u32 dma_quiescent;
+    __u32 stable;
+    __u32 reserved0;
+    __aligned_u64 capabilities;
+    __aligned_u64 generation;
+    __aligned_u64 elapsed_ns;
+    __aligned_u64 remaining_ns;
+    __aligned_u64 min_tone_duration_ns;
+    __aligned_u64 max_tone_duration_ns;
+    char module_id[RP1_GPCLK_MODULE_ID_MAX];
+    char build_id[RP1_GPCLK_BUILD_ID_MAX];
+    char compatibility_id[RP1_GPCLK_COMPAT_ID_MAX];
+    __aligned_u64 reserved[8];
+};
+
 #define RP1_GPCLK_IOC_QUERY \
     _IOWR(RP1_GPCLK_IOC_MAGIC, 0x20, struct rp1_gpclk_query_v1)
 #define RP1_GPCLK_IOC_ACQUIRE \
@@ -305,5 +362,7 @@ struct rp1_gpclk_release_v1 {
     _IOWR(RP1_GPCLK_IOC_MAGIC, 0x28, struct rp1_gpclk_submit_tone_v2)
 #define RP1_GPCLK_IOC_RELEASE_V2 \
     _IOW(RP1_GPCLK_IOC_MAGIC, 0x29, struct rp1_gpclk_release_v2)
+#define RP1_GPCLK_IOC_GET_SNAPSHOT_V3 \
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x2a, struct rp1_gpclk_snapshot_v3)
 
 #endif /* _UAPI_LINUX_RP1_GPCLK_H */

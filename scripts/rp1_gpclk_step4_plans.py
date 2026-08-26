@@ -52,7 +52,7 @@ def backend_contract(gpio: int) -> dict[str, Any]:
         "gpio_pin": gpio,
         "module_id": MODULE_ID,
         "module_version": MODULE_VERSION,
-        "uapi_abi": 2,
+        "uapi_abi": 3,
         "uapi_sha256": UAPI_SHA256,
         "compatibility_id": COMPATIBILITY[gpio],
         "compatibility_state": "Experimental",

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "rp1_gpclk_linux_provider.hpp"
+#include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_uapi.h"
 
 #include <cstdlib>
@@ -8,22 +9,14 @@
 
 namespace
 {
-constexpr std::uint64_t kAdministrativeCapabilities =
-    RP1_GPCLK_CAP_STABLE_STATE | RP1_GPCLK_CAP_ROUTE_IDENTITY |
-    RP1_GPCLK_CAP_COMPAT_IDENTITY | RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH;
-
-const char* completionName(wsprrypi::Rp1GpclkCompletionState value)
+const char* observationName(std::uint32_t value)
 {
     switch (value)
     {
-    case wsprrypi::Rp1GpclkCompletionState::idle: return "idle";
-    case wsprrypi::Rp1GpclkCompletionState::running: return "running";
-    case wsprrypi::Rp1GpclkCompletionState::draining: return "draining";
-    case wsprrypi::Rp1GpclkCompletionState::complete: return "complete";
-    case wsprrypi::Rp1GpclkCompletionState::failed: return "failed";
-    case wsprrypi::Rp1GpclkCompletionState::dead: return "dead";
+    case RP1_GPCLK_OBSERVATION_FALSE: return "false";
+    case RP1_GPCLK_OBSERVATION_TRUE: return "true";
+    default: return "unknown";
     }
-    return "unknown";
 }
 }
 
@@ -38,40 +31,59 @@ int main(int argc, char** argv)
         ? RP1_GPCLK_ROUTE_GPIO4 : RP1_GPCLK_ROUTE_GPIO20;
     wsprrypi::Rp1GpclkPosixIo io;
     wsprrypi::Rp1GpclkLinuxProvider provider(io);
-    wsprrypi::Rp1GpclkProviderIdentity identity;
     std::string error;
-    if (!provider.query(route, kAdministrativeCapabilities, false, identity, error))
+    wsprrypi::Rp1GpclkPassiveSnapshot snapshot;
+    if (!provider.passiveSnapshot(snapshot, error))
     {
-        std::cerr << "query=failed\nerror=" << error << '\n';
+        std::cerr << "passive_snapshot=failed\nerror=" << error << '\n';
         return EXIT_FAILURE;
     }
-    std::cout << "query=ok\nroute=" << identity.route
-              << "\ncompatibility_state=" << identity.compatibility_state
-              << "\ncompatibility_reason=" << identity.compatibility_reason
-              << "\ncapabilities=" << identity.capabilities
-              << "\nlive_eligible="
-              << ((identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) ? "yes" : "no")
-              << "\nmodule_id=" << identity.module_id
-              << "\nbuild_id=" << identity.build_id
-              << "\ncompatibility_id=" << identity.compatibility_id << '\n';
-
-    if (!provider.acquire(route, kAdministrativeCapabilities, error))
+    const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(route);
+    if (!expected || snapshot.route != route ||
+        snapshot.abi_min > wsprrypi::kRp1GpclkDevelopmentUapiAbi ||
+        snapshot.abi_max < wsprrypi::kRp1GpclkDevelopmentUapiAbi ||
+        snapshot.compatibility_state !=
+            wsprrypi::kRp1GpclkDevelopmentCompatibilityExperimental ||
+        snapshot.module_id != expected->module_id ||
+        snapshot.build_id != expected->build_id ||
+        snapshot.compatibility_id != expected->compatibility_id)
     {
-        std::cout << "acquire=rejected\nerror=" << error << '\n';
-        return EXIT_SUCCESS;
-    }
-    wsprrypi::Rp1GpclkProviderEventState state;
-    std::cout << "acquire=ok\n";
-    if (provider.getState(0, state, error))
-        std::cout << "state=" << completionName(state.completion)
-                  << "\ngeneration=0\nterminal_reason=" << state.terminal_reason << '\n';
-    else
-        std::cout << "state=rejected\nstate_error=" << error << '\n';
-    if (!provider.release(error))
-    {
-        std::cerr << "release=failed\nerror=" << error << '\n';
+        std::cerr << "passive_snapshot=rejected\nerror=exact r3 development identity mismatch\n";
         return EXIT_FAILURE;
     }
-    std::cout << "release=ok\n";
+    for (const auto observation : {snapshot.cleanup_fault, snapshot.owner_present,
+            snapshot.lease_present, snapshot.live_output, snapshot.live_eligible,
+            snapshot.gpio_safe, snapshot.clock_quiescent,
+            snapshot.dma_quiescent, snapshot.stable})
+    {
+        if (observation == RP1_GPCLK_OBSERVATION_UNKNOWN)
+        {
+            std::cerr << "passive_snapshot=rejected\nerror=indeterminate safety observation\n";
+            return EXIT_FAILURE;
+        }
+    }
+    std::cout << "passive_snapshot=ok"
+              << "\nroute=" << snapshot.route
+              << "\ncompatibility_state=" << snapshot.compatibility_state
+              << "\ncompatibility_reason=" << snapshot.compatibility_reason
+              << "\ncapabilities=" << snapshot.capabilities
+              << "\nlive_eligible=" << observationName(snapshot.live_eligible)
+              << "\nmodule_id=" << snapshot.module_id
+              << "\nbuild_id=" << snapshot.build_id
+              << "\ncompatibility_id=" << snapshot.compatibility_id
+              << "\nsnapshot_version=" << snapshot.snapshot_version
+              << "\noperation_state=" << snapshot.operation_state
+              << "\nterminal_reason=" << snapshot.terminal_reason
+              << "\ndrain_state=" << snapshot.drain_state
+              << "\ngeneration=" << snapshot.generation
+              << "\nowner_present=" << observationName(snapshot.owner_present)
+              << "\nlease_present=" << observationName(snapshot.lease_present)
+              << "\nlive_output=" << observationName(snapshot.live_output)
+              << "\nstable=" << observationName(snapshot.stable)
+              << "\ncleanup_fault=" << observationName(snapshot.cleanup_fault)
+              << "\ngpio_safe=" << observationName(snapshot.gpio_safe)
+              << "\nclock_quiescent=" << observationName(snapshot.clock_quiescent)
+              << "\ndma_quiescent=" << observationName(snapshot.dma_quiescent)
+              << "\nread_only=true\nlease_token_exposed=false\n";
     return EXIT_SUCCESS;
 }
