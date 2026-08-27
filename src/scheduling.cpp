@@ -216,6 +216,8 @@ static void deassert_transmit_gpio_outputs(
     const char *context) noexcept;
 static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept;
 static bool runtime_transmit_requested(const ArgParserConfig &cfg) noexcept;
+static bool runtime_transmit_preparation_enabled(
+    const ArgParserConfig &cfg) noexcept;
 static void log_startup_quiesce_inhibited_skip();
 static bool apply_direct_rp1_development_confirmation(
     const ArgParserConfig &cfg,
@@ -1602,6 +1604,25 @@ static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
            !managed_reload_tx_inhibited &&
            !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
            !rp1_route_transaction_inhibited.load(std::memory_order_acquire);
+}
+
+static bool runtime_transmit_preparation_enabled(
+    const ArgParserConfig &cfg) noexcept
+{
+    if (runtime_transmit_enabled(cfg))
+        return true;
+
+    // A transient positional WSPR request must first bind its supplied
+    // confirmation to the concrete frame request. That reconciliation is what
+    // resolves the RP1 route transaction; all other runtime gates remain
+    // authoritative before request preparation.
+    return runtime_transmit_requested(cfg) &&
+           !cfg.use_ini &&
+           cfg.mode == ModeType::WSPR &&
+           cfg.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
+           !managed_reload_tx_inhibited &&
+           !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
+           rp1_route_transaction_inhibited.load(std::memory_order_acquire);
 }
 
 static std::string direct_tone_inhibition_reason(const ArgParserConfig &cfg)
@@ -3354,6 +3375,15 @@ static bool configure_current_wspr_transmission(
                 cfg, request_out, &development_error))
         {
             throw std::runtime_error(development_error);
+        }
+
+        if (request_out.rp1_development.enabled)
+        {
+            llog.logS(
+                INFO,
+                "RP1 confirmation accepted and bounded positional WSPR frame request prepared for operation ",
+                request_out.rp1_development.operation_id,
+                ".");
         }
 
         if (plan.frameCount() > 1U)
@@ -5798,7 +5828,7 @@ bool set_config(bool force)
                 non_wspr_schedule_generation.fetch_add(1, std::memory_order_acq_rel);
             }
 
-            if (!runtime_transmit_enabled(working_config))
+            if (!runtime_transmit_preparation_enabled(working_config))
             {
                 if (newer_reload_arrived())
                 {
@@ -5977,6 +6007,20 @@ bool set_config(bool force)
                     return false;
                 }
 
+                if (!runtime_transmit_enabled(working_config))
+                {
+                    log_transmit_disabled_skip(working_config);
+                    wsprTransmitter.stopAndJoin();
+                    deassert_transmit_gpio_outputs(
+                        &config,
+                        false,
+                        "WSPR request authorization failure");
+                    release_idle_selector_gpio_reservations();
+                    current_transmission_request = TransmissionRequest{};
+                    ini_reload_pending.store(false, std::memory_order_relaxed);
+                    return false;
+                }
+
                 next_transmission_request.applied_offset_hz = applied_offset_hz;
 
                 BandGPIOResolution selector_resolution;
@@ -6088,6 +6132,14 @@ bool set_config(bool force)
             last_frequency_entry = next_current_frequency_entry;
             log_scheduler_path_selection(working_config.mode);
             commit_execution_request(next_transmission_request);
+            if (next_transmission_request.rp1_development.enabled)
+            {
+                llog.logS(
+                    INFO,
+                    "Bounded positional RP1 WSPR frame request committed for operation ",
+                    next_transmission_request.rp1_development.operation_id,
+                    ".");
+            }
 
             if (suppress_scheduler_execution_for_test)
             {

@@ -7296,6 +7296,80 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        reset_managed_reload_runtime_for_test();
+        reset_current_transmission_request_for_test();
+        reset_committed_execution_route_for_test();
+        set_scheduler_execution_suppressed_for_test(true);
+        config.transmit = false;
+        const std::string confirmation_json = R"({
+            "enabled": true,
+            "route": "GPIO4",
+            "operation_id": "wspr-frame-operation-43",
+            "physical_connection_confirmed": true,
+            "attenuation_and_load_confirmed": true,
+            "bounded_operation_confirmed": true,
+            "non_radiating_topology_confirmed": true,
+            "experimental_status_acknowledged": true
+        })";
+        reset_getopt_state();
+        std::vector<std::string> args = {
+            "wsprrypi",
+            "--backend", "rp1-gpclk",
+            "--transmit-gpio", "4",
+            "--rp1-development-confirmation-json", confirmation_json,
+            "-x", "3",
+            "AA0NT", "EM18", "20", "20m"};
+        std::vector<char *> argv = argv_for(args);
+        std::string validation_error;
+        require(
+            parse_command_line(static_cast<int>(argv.size()), argv.data()) &&
+                validate_config_data_for_test(&validation_error),
+            "bounded positional RP1 WSPR CLI must parse and validate: " +
+                validation_error);
+        set_rp1_route_transaction_inhibited(true);
+        int reconcile_calls = 0;
+        set_rp1_development_reconcile_invoker_for_test(
+            [&reconcile_calls](const std::string &route) {
+                ++reconcile_calls;
+                require(route == "GPIO4",
+                    "positional RP1 WSPR must reconcile the confirmed route");
+                set_rp1_route_transaction_inhibited(false);
+                return nlohmann::json{
+                    {"ok", true},
+                    {"generation", 43},
+                    {"persisted", "GPIO4"},
+                    {"active", "GPIO4"},
+                    {"reconciled", true},
+                    {"journal", "none"},
+                    {"contractIdentity", "rp1-gpclk-route-manager-v1"},
+                    {"endpointOpen", false},
+                    {"endpointOwned", true},
+                    {"state", "idle"},
+                    {"liveOutput", "disabled"}};
+            });
+
+        const bool configured = set_config(true);
+        const TransmissionRequest committed =
+            current_transmission_request_for_test();
+        require(
+            configured && reconcile_calls == 1 &&
+                committed.mode == TransmissionMode::WSPR &&
+                committed.rp1_development.enabled &&
+                committed.rp1_development.operation_id ==
+                    "wspr-frame-operation-43" &&
+                committed.rp1_development.route_transaction_generation == 43 &&
+                committed.rp1_development.confirmation_gpio == 4 &&
+                !config.transmit && !config.loop_tx &&
+                config.tx_iterations.load() == 3,
+            "bounded positional RP1 WSPR must reconcile before its runtime gate, bind and commit the frame request, and preserve transient iteration semantics");
+
+        reset_rp1_development_reconcile_invoker_for_test();
+        set_rp1_route_transaction_inhibited(false);
+        set_scheduler_execution_suppressed_for_test(false);
+    }
+
+    {
+        init_default_config();
         config.use_ini = false;
         config.mode = ModeType::TONE;
         config.transmit = false;

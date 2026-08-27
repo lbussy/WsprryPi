@@ -81,6 +81,19 @@ int main() {
         "apply_direct_rp1_development_confirmation(", wspr_request);
     const auto wspr_request_return = scheduling.find(
         "return true;", wspr_confirmation);
+    const auto scheduler_set_config = scheduling.find(
+        "bool set_config(bool force)");
+    const auto wspr_preparation_gate = scheduling.find(
+        "if (!runtime_transmit_preparation_enabled(working_config))",
+        scheduler_set_config);
+    const auto scheduler_wspr_configuration = scheduling.find(
+        "if (!configure_current_wspr_transmission(", wspr_preparation_gate);
+    const auto wspr_post_confirmation_gate = scheduling.find(
+        "if (!runtime_transmit_enabled(working_config))",
+        scheduler_wspr_configuration);
+    const auto scheduler_wspr_commit = scheduling.find(
+        "commit_execution_request(next_transmission_request)",
+        wspr_post_confirmation_gate);
     assert(arg_parser.find("rp1-development-confirmation-json") != std::string::npos);
     assert(direct_confirmation != std::string::npos);
     assert(tone_request_builder != std::string::npos);
@@ -103,6 +116,14 @@ int main() {
     assert(wspr_request_return != std::string::npos);
     assert(wspr_request < wspr_confirmation);
     assert(wspr_confirmation < wspr_request_return);
+    assert(scheduler_set_config != std::string::npos);
+    assert(wspr_preparation_gate != std::string::npos);
+    assert(scheduler_wspr_configuration != std::string::npos);
+    assert(wspr_post_confirmation_gate != std::string::npos);
+    assert(scheduler_wspr_commit != std::string::npos);
+    assert(wspr_preparation_gate < scheduler_wspr_configuration);
+    assert(scheduler_wspr_configuration < wspr_post_confirmation_gate);
+    assert(wspr_post_confirmation_gate < scheduler_wspr_commit);
     assert(scheduling.find("physical_connection_confirmed") != std::string::npos);
     assert(scheduling.find("confirmation_operation_id") != std::string::npos);
     assert(scheduling.find("? cfg.rp1_gpio_drive_ma") != std::string::npos);
