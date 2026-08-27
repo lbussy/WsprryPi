@@ -33,6 +33,14 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
 
 int main()
 {
+    const auto expected_gpio4 =
+        rp1GpclkExpectedDevelopmentIdentity(kRp1GpclkDevelopmentRouteGpio4);
+    assert(expected_gpio4.has_value());
+    assert(expected_gpio4->abi_min == kRp1GpclkDevelopmentUapiAbiMin);
+    assert(expected_gpio4->abi_max == kRp1GpclkDevelopmentUapiAbi);
+    assert(rp1GpclkDevelopmentIdentityBinding(*expected_gpio4) ==
+        rp1GpclkDevelopmentIdentityBinding(allowed(
+            kRp1GpclkDevelopmentRouteGpio4).identity));
     Rp1GpclkDevelopmentPolicyInputs defaults;
     assert(!decideRp1GpclkDevelopmentUse(defaults).allowed);
     for (auto route : {kRp1GpclkDevelopmentRouteGpio4, kRp1GpclkDevelopmentRouteGpio20})

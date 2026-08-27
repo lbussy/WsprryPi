@@ -11,6 +11,7 @@
 namespace wsprrypi
 {
 inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbi = 4;
+inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbiMin = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio4 = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio20 = 2;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentCompatibilityExperimental = 2;

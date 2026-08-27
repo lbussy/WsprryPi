@@ -39,7 +39,8 @@ rp1GpclkExpectedDevelopmentIdentity(std::uint32_t route)
     if (!known_route(route))
         return std::nullopt;
     Rp1GpclkProviderIdentity identity;
-    identity.abi_min = identity.abi_max = kRp1GpclkDevelopmentUapiAbi;
+    identity.abi_min = kRp1GpclkDevelopmentUapiAbiMin;
+    identity.abi_max = kRp1GpclkDevelopmentUapiAbi;
     identity.route = route;
     identity.compatibility_state = kRp1GpclkDevelopmentCompatibilityExperimental;
     identity.module_id = kRp1GpclkDevelopmentModuleId;
@@ -126,7 +127,7 @@ Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
         return deny(D::version_uapi_mismatch, "version-uapi-mismatch", "The module must report the exact reviewed 1.1.2 ABI v4 development identity.");
     if (i.identity.route != i.requested_route ||
         i.identity.compatibility_id != expected->compatibility_id)
-        return deny(D::route_identity_mismatch, "route-identity-mismatch", "The exact r3 compatibility identity does not match the selected route.");
+        return deny(D::route_identity_mismatch, "route-identity-mismatch", "The exact r4 compatibility identity does not match the selected route.");
     if (i.identity.compatibility_state != kRp1GpclkDevelopmentCompatibilityExperimental)
         return deny(D::compatibility_not_experimental, "compatibility-not-experimental", "The reviewed development identity must be reported as Experimental.");
     if ((i.identity.capabilities & kRp1GpclkDevelopmentCapabilityLiveEligible) == 0 ||

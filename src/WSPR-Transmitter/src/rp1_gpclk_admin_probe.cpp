@@ -48,7 +48,7 @@ int main(int argc, char** argv)
         snapshot.build_id != expected->build_id ||
         snapshot.compatibility_id != expected->compatibility_id)
     {
-        std::cerr << "passive_snapshot=rejected\nerror=exact r3 development identity mismatch\n";
+        std::cerr << "passive_snapshot=rejected\nerror=exact r4 development identity mismatch\n";
         return EXIT_FAILURE;
     }
     for (const auto observation : {snapshot.cleanup_fault, snapshot.owner_present,
