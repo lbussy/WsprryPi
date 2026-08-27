@@ -18,6 +18,7 @@ int main() {
     const auto service_header = read_file(root / "rp1_gpclk_route_service.hpp");
     const auto http = read_file(root / "web_server.cpp");
     const auto scheduling = read_file(root / "scheduling.cpp");
+    const auto arg_parser = read_file(root / "arg_parser.cpp");
     const auto transmit = read_file(
         root / "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp");
     const auto development_contract = read_file(
@@ -54,6 +55,27 @@ int main() {
     assert(idle_startup < listener_start);
     assert(bounded_request < development_reconciliation);
     assert(development_reconciliation < request_commit);
+    const auto direct_confirmation = scheduling.find(
+        "apply_direct_rp1_development_confirmation(");
+    const auto direct_start = scheduling.find(
+        "static bool start_non_wspr_transmission_now(");
+    const auto direct_reconciliation = scheduling.find(
+        "apply_direct_rp1_development_confirmation(", direct_start);
+    const auto direct_runtime_gate = scheduling.find(
+        "runtime_transmit_enabled(cfg)", direct_reconciliation);
+    const auto direct_commit = scheduling.find(
+        "prepare_and_commit_non_wspr_request(", direct_runtime_gate);
+    assert(arg_parser.find("rp1-development-confirmation-json") != std::string::npos);
+    assert(direct_confirmation != std::string::npos);
+    assert(direct_start != std::string::npos);
+    assert(direct_reconciliation != std::string::npos);
+    assert(direct_runtime_gate != std::string::npos);
+    assert(direct_commit != std::string::npos);
+    assert(direct_start < direct_reconciliation);
+    assert(direct_reconciliation < direct_runtime_gate);
+    assert(direct_runtime_gate < direct_commit);
+    assert(scheduling.find("physical_connection_confirmed") != std::string::npos);
+    assert(scheduling.find("confirmation_operation_id") != std::string::npos);
     assert(scheduling.find("rp1GpclkDevelopmentOperationArmedForRoute(route)") == std::string::npos);
     assert(scheduling.find("Legacy transmission output") == std::string::npos);
     assert(scheduling.find("rp1_gpclk_application_idle_state") != std::string::npos);

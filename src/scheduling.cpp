@@ -2451,6 +2451,100 @@ static WsprFrequencyEntry make_non_wspr_band_gpio_frequency_entry(
     return entry;
 }
 
+static bool apply_direct_rp1_development_confirmation(
+    const ArgParserConfig &cfg,
+    TransmissionRequest &request,
+    std::string *error_message)
+{
+    if (to_controller_profile(cfg.transmit_backend) !=
+        wsprrypi::HardwareProfile::RP1_GPCLK)
+    {
+        return true;
+    }
+    try
+    {
+        const auto confirmation = nlohmann::json::parse(
+            cfg.rp1_development_confirmation_json);
+        const std::string route = confirmation.at("route").get<std::string>();
+        const int route_gpio = route == "GPIO4" ? 4 : route == "GPIO20" ? 20 : 0;
+        const std::string operation_id = confirmation.at("operation_id").get<std::string>();
+        if (!confirmation.at("enabled").get<bool>() || route_gpio == 0 ||
+            route_gpio != cfg.gpio_tx_pin || operation_id.size() < 8 ||
+            operation_id.size() > 64 ||
+            !confirmation.at("physical_connection_confirmed").get<bool>() ||
+            !confirmation.at("attenuation_and_load_confirmed").get<bool>() ||
+            !confirmation.at("bounded_operation_confirmed").get<bool>() ||
+            !confirmation.at("non_radiating_topology_confirmed").get<bool>() ||
+            !confirmation.at("experimental_status_acknowledged").get<bool>())
+        {
+            throw std::runtime_error(
+                "RP1 direct-CLI development confirmation is incomplete or mismatched.");
+        }
+        const nlohmann::json observed =
+            wsprrypi::productionRp1GpclkRouteService().reconcileDevelopmentStartup(route);
+        if (!observed.value("ok", false))
+        {
+            throw std::runtime_error(observed.value(
+                "message", std::string("RP1 source-development route reconciliation failed.")));
+        }
+        const auto observed_gpio = [](const std::string &value) {
+            return value == "GPIO4" ? 4 : value == "GPIO20" ? 20 : 0;
+        };
+        const std::uint64_t generation = observed.value("generation", 0ULL);
+        auto &development = request.rp1_development;
+        development.enabled = true;
+        development.persisted_gpio = observed_gpio(observed.value("persisted", std::string{}));
+        development.active_gpio = observed_gpio(observed.value("active", std::string{}));
+        development.module_gpio = route_gpio;
+        development.active_route_count = development.active_gpio == 0 ? 0U : 1U;
+        development.route_transaction_resolved =
+            observed.value("reconciled", false) &&
+            observed.value("journal", std::string{}) == "none";
+        development.route_manager_attributable =
+            observed.value("contractIdentity", std::string{}) ==
+            "rp1-gpclk-route-manager-v1";
+        development.scheduler_idle = true;
+        development.application_owns_operation = true;
+        development.endpoint_available = observed.value("ok", false);
+        development.endpoint_closed = !observed.value("endpointOpen", true);
+        development.endpoint_exclusively_acquirable =
+            observed.value("endpointOwned", false) && development.endpoint_closed;
+        development.cleanup_fault =
+            observed.value("state", std::string{}) == "rollback_required";
+        development.live_output_verified =
+            observed.value("liveOutput", std::string{}) == "disabled";
+        development.physical_connection_confirmed = true;
+        development.attenuation_and_load_confirmed = true;
+        development.bounded_operation_confirmed = true;
+        development.non_radiating_topology_confirmed = true;
+        development.experimental_status_acknowledged = true;
+        development.confirmation_current = true;
+        development.route_transaction_generation = generation;
+        development.confirmation_route_transaction_generation = generation;
+        development.operation_id = operation_id;
+        development.confirmation_operation_id = operation_id;
+        development.confirmation_gpio = route_gpio;
+        const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(
+            route_gpio == 4 ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
+                            : wsprrypi::kRp1GpclkDevelopmentRouteGpio20);
+        if (!expected)
+        {
+            throw std::runtime_error("RP1 development route identity is unavailable.");
+        }
+        development.confirmation_identity =
+            wsprrypi::rp1GpclkDevelopmentIdentityBinding(*expected);
+        return true;
+    }
+    catch (const std::exception &error)
+    {
+        if (error_message != nullptr)
+        {
+            *error_message = error.what();
+        }
+        return false;
+    }
+}
+
 static bool prepare_and_commit_non_wspr_request(
     const ArgParserConfig &cfg,
     const wsprrypi::TransmissionRequest &controller_request,
@@ -2561,15 +2655,6 @@ bool validate_non_wspr_repeat_interval_policy(
 
 static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 {
-    if (!runtime_transmit_enabled(cfg))
-    {
-        if (startup_quiesce_inhibited.load(std::memory_order_acquire))
-            log_startup_quiesce_inhibited_skip();
-        else
-            log_transmit_disabled_skip();
-        return true;
-    }
-
     const double committed_ppm = cfg.ppm;
     std::string policy_error;
     if (!validate_non_wspr_repeat_interval_policy(cfg, &policy_error))
@@ -2580,6 +2665,24 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::QRSS)
     {
+        const auto controller_request =
+            make_qrss_controller_request(cfg, committed_ppm);
+        auto legacy_request = make_qrss_legacy_request(cfg, committed_ppm);
+        std::string development_error;
+        if (!apply_direct_rp1_development_confirmation(
+                cfg, legacy_request, &development_error))
+        {
+            llog.logE(ERROR, development_error);
+            return false;
+        }
+        if (!runtime_transmit_enabled(cfg))
+        {
+            if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+                log_startup_quiesce_inhibited_skip();
+            else
+                log_transmit_disabled_skip();
+            return true;
+        }
         std::string message;
         double frequency_hz = 0.0;
         double dot_seconds = 0.0;
@@ -2595,8 +2698,8 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
                 frequency_hz);
         if (!prepare_and_commit_non_wspr_request(
                 cfg,
-                make_qrss_controller_request(cfg, committed_ppm),
-                make_qrss_legacy_request(cfg, committed_ppm),
+                controller_request,
+                std::move(legacy_request),
                 selector_entry))
         {
             llog.logE(ERROR, "QRSS mode could not prepare band GPIO selector.");
@@ -2628,6 +2731,24 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::FSKCW)
     {
+        const auto controller_request =
+            make_fskcw_controller_request(cfg, committed_ppm);
+        auto legacy_request = make_fskcw_legacy_request(cfg, committed_ppm);
+        std::string development_error;
+        if (!apply_direct_rp1_development_confirmation(
+                cfg, legacy_request, &development_error))
+        {
+            llog.logE(ERROR, development_error);
+            return false;
+        }
+        if (!runtime_transmit_enabled(cfg))
+        {
+            if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+                log_startup_quiesce_inhibited_skip();
+            else
+                log_transmit_disabled_skip();
+            return true;
+        }
         std::string message;
         double mark_frequency_hz = 0.0;
         double space_frequency_hz = 0.0;
@@ -2649,8 +2770,8 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
                 mark_frequency_hz);
         if (!prepare_and_commit_non_wspr_request(
                 cfg,
-                make_fskcw_controller_request(cfg, committed_ppm),
-                make_fskcw_legacy_request(cfg, committed_ppm),
+                controller_request,
+                std::move(legacy_request),
                 selector_entry))
         {
             llog.logE(ERROR, "FSKCW mode could not prepare band GPIO selector.");
@@ -2690,6 +2811,24 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::DFCW)
     {
+        const auto controller_request =
+            make_dfcw_controller_request(cfg, committed_ppm);
+        auto legacy_request = make_dfcw_legacy_request(cfg, committed_ppm);
+        std::string development_error;
+        if (!apply_direct_rp1_development_confirmation(
+                cfg, legacy_request, &development_error))
+        {
+            llog.logE(ERROR, development_error);
+            return false;
+        }
+        if (!runtime_transmit_enabled(cfg))
+        {
+            if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+                log_startup_quiesce_inhibited_skip();
+            else
+                log_transmit_disabled_skip();
+            return true;
+        }
         std::string message;
         double dot_frequency_hz = 0.0;
         double dash_frequency_hz = 0.0;
@@ -2711,8 +2850,8 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
                 dot_frequency_hz);
         if (!prepare_and_commit_non_wspr_request(
                 cfg,
-                make_dfcw_controller_request(cfg, committed_ppm),
-                make_dfcw_legacy_request(cfg, committed_ppm),
+                controller_request,
+                std::move(legacy_request),
                 selector_entry))
         {
             llog.logE(ERROR, "DFCW mode could not prepare band GPIO selector.");

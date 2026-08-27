@@ -1506,6 +1506,8 @@ void print_usage(const std::string &message, int exit_code)
               << "      Si5351: 1-4\n"
               << "  --gpio-power-level <0-7>           Set GPIO backend RF power level.\n"
               << "  --rp1-gpio-drive-ma <2|4|8|12>    Set Raspberry Pi 5 RP1 pad drive. Default: 2 mA.\n"
+              << "  --rp1-development-confirmation-json <json>\n"
+              << "                                     Confirm one exact direct-CLI RP1 development operation.\n"
               << "  --si5351-power-level <1-4>         Set Si5351 drive-strength level.\n\n"
               << "GPIO Backend:\n"
               << "  -a, --transmit-gpio <4|20>         Select the RF transmit GPIO.\n"
@@ -3339,6 +3341,7 @@ bool parse_command_line(int argc, char *argv[])
         {"socket-port", required_argument, nullptr, 'k'}, // Via: [Server] Port = 31416
         {"socket-loopback-only", no_argument, nullptr, 1060},
         {"socket-loopback-family", required_argument, nullptr, 1062},
+        {"rp1-development-confirmation-json", required_argument, nullptr, 1063},
         {nullptr, 0, nullptr, 0}};
 
     while (true)
@@ -3377,6 +3380,9 @@ bool parse_command_line(int argc, char *argv[])
                 print_usage("Socket loopback family must be auto, ipv6, or ipv4.", EXIT_FAILURE);
             break;
         }
+        case 1063:
+            config.rp1_development_confirmation_json = optarg;
+            break;
         case 'h': // Help/Usage
         case '?':
         {

@@ -332,6 +332,7 @@ struct ArgParserConfig
     bool debug_logging;             ///< Enable DEBUG-level application logging.
     bool allow_unqualified_frequency; ///< Permit unqualified backend/mode combinations.
     bool allow_non_amateur_frequency; ///< Permit frequencies outside recognized amateur allocations when combined with the unqualified override.
+    std::string rp1_development_confirmation_json; ///< One direct-CLI RP1 operation confirmation.
     WsprPlannerPreference wspr_planner_preference; ///< Preferred planner behavior for Type 2/3 pairing.
     bool loop_tx;                   ///< Repeat transmission cycle.
     std::atomic<int> tx_iterations; ///< Number of transmission iterations (0 = infinite).
@@ -414,6 +415,7 @@ struct ArgParserConfig
           debug_logging(false),
           allow_unqualified_frequency(false),
           allow_non_amateur_frequency(false),
+          rp1_development_confirmation_json(""),
           wspr_planner_preference(WsprPlannerPreference::Auto),
           loop_tx(false),
           tx_iterations(0),
