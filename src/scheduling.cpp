@@ -215,6 +215,12 @@ static void deassert_transmit_gpio_outputs(
     bool keep_selector_gpio_initialized,
     const char *context) noexcept;
 static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept;
+static bool runtime_transmit_requested(const ArgParserConfig &cfg) noexcept;
+static void log_startup_quiesce_inhibited_skip();
+static bool apply_direct_rp1_development_confirmation(
+    const ArgParserConfig &cfg,
+    TransmissionRequest &request,
+    std::string *error_message);
 
 /**
  * @brief Mutex to protect access to the shutdown flag for the WSPR loop.
@@ -354,6 +360,10 @@ static bool managed_reload_tx_inhibited = false;
 static bool suppress_scheduler_execution_for_test = false;
 static TestToneCommitInvokerForTest test_tone_commit_invoker_for_test{};
 static DirectToneStartInvokerForTest direct_tone_start_invoker_for_test{};
+static Rp1DevelopmentReconcileInvokerForTest
+    rp1_development_reconcile_invoker_for_test{};
+static std::mutex direct_tone_confirmation_mtx;
+static std::optional<std::string> claimed_direct_tone_confirmation;
 static std::atomic<std::uint64_t> non_wspr_schedule_generation{0};
 
 std::uint64_t non_wspr_schedule_generation_for_test() noexcept
@@ -1497,9 +1507,36 @@ static bool is_managed_persistent_mode() noexcept
     return config.use_ini;
 }
 
-static void log_transmit_disabled_skip()
+static void log_transmit_disabled_skip(const ArgParserConfig &cfg)
 {
-    llog.logS(INFO, "Transmit disabled, skipping transmission and scheduling.");
+    if (!runtime_transmit_requested(cfg))
+    {
+        llog.logS(
+            INFO,
+            "No transmission requested; skipping transmission and scheduling.");
+    }
+    else if (managed_reload_tx_inhibited)
+    {
+        llog.logS(
+            ERROR,
+            "Transmission requested but inhibited during managed configuration reload.");
+    }
+    else if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+    {
+        log_startup_quiesce_inhibited_skip();
+    }
+    else if (rp1_route_transaction_inhibited.load(std::memory_order_acquire))
+    {
+        llog.logS(
+            ERROR,
+            "Transmission requested but inhibited because the RP1 route transaction is unresolved.");
+    }
+    else
+    {
+        llog.logS(
+            ERROR,
+            "Transmission requested but inhibited by an unknown runtime gate.");
+    }
 }
 
 static void log_startup_quiesce_inhibited_skip()
@@ -1565,6 +1602,23 @@ static bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
            !managed_reload_tx_inhibited &&
            !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
            !rp1_route_transaction_inhibited.load(std::memory_order_acquire);
+}
+
+static std::string direct_tone_inhibition_reason(const ArgParserConfig &cfg)
+{
+    if (cfg.use_ini)
+        return "Direct CLI tone request is unavailable in managed INI mode.";
+    if (managed_reload_tx_inhibited)
+        return "Direct CLI tone request is inhibited during managed configuration reload.";
+    if (startup_quiesce_inhibited.load(std::memory_order_acquire))
+    {
+        std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
+        return "Direct CLI tone request is inhibited because startup hardware could not be quiesced: " +
+            startup_quiesce_error;
+    }
+    if (rp1_route_transaction_inhibited.load(std::memory_order_acquire))
+        return "Direct CLI tone request is inhibited because the RP1 route transaction is unresolved.";
+    return {};
 }
 
 bool web_server_start_enabled(const ArgParserConfig &cfg) noexcept
@@ -2178,6 +2232,43 @@ static bool start_direct_tone_execution(
         actual_rf_frequency_hz,
         actual_rf_frequency_hz,
         entry);
+    std::string development_error;
+    if (!apply_direct_rp1_development_confirmation(
+            cfg, request, &development_error))
+    {
+        if (error_message != nullptr)
+        {
+            *error_message =
+                "RP1 direct-operation confirmation rejected: " +
+                development_error;
+        }
+        return false;
+    }
+
+    if (request.rp1_development.enabled)
+    {
+        std::lock_guard<std::mutex> lock(direct_tone_confirmation_mtx);
+        if (claimed_direct_tone_confirmation.has_value())
+        {
+            if (error_message != nullptr)
+            {
+                *error_message =
+                    "RP1 direct-operation confirmation rejected: confirmation replay is not permitted.";
+            }
+            return false;
+        }
+        claimed_direct_tone_confirmation =
+            request.rp1_development.operation_id;
+    }
+
+    const std::string inhibition_reason = direct_tone_inhibition_reason(cfg);
+    if (!inhibition_reason.empty())
+    {
+        if (error_message != nullptr)
+            *error_message = inhibition_reason;
+        return false;
+    }
+
     BandGPIOResolution selector_resolution;
     const BandGPIOPrepareStatus selector_status =
         prepare_band_gpio_for_frequency_or_log(
@@ -2202,6 +2293,10 @@ static bool start_direct_tone_execution(
         selector_resolution,
         selector_status);
     commit_execution_request(request);
+
+    llog.logS(
+        INFO,
+        "Direct tone request committed; transmission start initiated.");
 
     if (direct_tone_start_invoker_for_test)
     {
@@ -2489,8 +2584,10 @@ static bool apply_direct_rp1_development_confirmation(
             throw std::runtime_error(
                 "RP1 direct-CLI development confirmation is incomplete or mismatched.");
         }
-        const nlohmann::json observed =
-            wsprrypi::productionRp1GpclkRouteService().reconcileDevelopmentStartup(route);
+        const nlohmann::json observed = rp1_development_reconcile_invoker_for_test
+            ? rp1_development_reconcile_invoker_for_test(route)
+            : wsprrypi::productionRp1GpclkRouteService()
+                  .reconcileDevelopmentStartup(route);
         if (!observed.value("ok", false))
         {
             throw std::runtime_error(observed.value(
@@ -2689,7 +2786,7 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
             if (startup_quiesce_inhibited.load(std::memory_order_acquire))
                 log_startup_quiesce_inhibited_skip();
             else
-                log_transmit_disabled_skip();
+                log_transmit_disabled_skip(cfg);
             return true;
         }
         std::string message;
@@ -2755,7 +2852,7 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
             if (startup_quiesce_inhibited.load(std::memory_order_acquire))
                 log_startup_quiesce_inhibited_skip();
             else
-                log_transmit_disabled_skip();
+                log_transmit_disabled_skip(cfg);
             return true;
         }
         std::string message;
@@ -2835,7 +2932,7 @@ static bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
             if (startup_quiesce_inhibited.load(std::memory_order_acquire))
                 log_startup_quiesce_inhibited_skip();
             else
-                log_transmit_disabled_skip();
+                log_transmit_disabled_skip(cfg);
             return true;
         }
         std::string message;
@@ -2921,7 +3018,7 @@ static void schedule_next_non_wspr_launch(const ArgParserConfig &cfg)
         if (startup_quiesce_inhibited.load(std::memory_order_acquire))
             log_startup_quiesce_inhibited_skip();
         else
-            log_transmit_disabled_skip();
+            log_transmit_disabled_skip(cfg);
         return;
     }
 
@@ -4298,19 +4395,6 @@ TestToneStopResult end_test_tone()
     }
 
     validate_config_data();
-    if (!runtime_transmit_enabled(config))
-    {
-        if (startup_quiesce_inhibited.load(std::memory_order_acquire))
-            log_startup_quiesce_inhibited_skip();
-        else
-            log_transmit_disabled_skip();
-        result.stopped = true;
-        result.message = startup_quiesce_inhibited.load(std::memory_order_acquire)
-            ? "Test tone is inhibited because startup hardware could not be quiesced."
-            : "Test tone stopped with transmit disabled.";
-        return result;
-    }
-
     std::string restoration_error;
     if (!start_direct_tone_execution(
             config,
@@ -4640,28 +4724,18 @@ bool wspr_loop()
             return false;
         }
 
-        if (!runtime_transmit_enabled(config))
+        std::string startup_error;
+        if (!start_direct_tone_execution(
+                config,
+                entry,
+                actual_rf_frequency_hz,
+                &startup_error))
         {
-            if (startup_quiesce_inhibited.load(std::memory_order_acquire))
-                log_startup_quiesce_inhibited_skip();
-            else
-                log_transmit_disabled_skip();
+            llog.logS(ERROR, startup_error);
+            stop_runtime_components_for_process_exit();
+            return false;
         }
-        else
-        {
-            std::string startup_error;
-            if (!start_direct_tone_execution(
-                    config,
-                    entry,
-                    actual_rf_frequency_hz,
-                    &startup_error))
-            {
-                llog.logS(ERROR, startup_error);
-                stop_runtime_components_for_process_exit();
-                return false;
-            }
-            llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
-        }
+        llog.logS(INFO, "transmitting tone, hit Ctrl-C to terminate tone.");
     }
     else if (config.mode == ModeType::QRSS)
     {
@@ -5579,7 +5653,7 @@ bool set_config(bool force)
 
             if (!runtime_transmit_enabled(working_config))
             {
-                log_transmit_disabled_skip();
+                log_transmit_disabled_skip(working_config);
                 if (!finalize_reload_pending())
                 {
                     continue;
@@ -5788,7 +5862,7 @@ bool set_config(bool force)
                 last_frequency_entry = next_current_frequency_entry;
                 if (!runtime_transmit_requested(working_config))
                 {
-                    log_transmit_disabled_skip();
+                    log_transmit_disabled_skip(working_config);
                 }
                 else
                 {
@@ -6431,6 +6505,19 @@ void set_direct_tone_start_invoker_for_test(
 void reset_direct_tone_start_invoker_for_test() noexcept
 {
     direct_tone_start_invoker_for_test = {};
+}
+
+void set_rp1_development_reconcile_invoker_for_test(
+    Rp1DevelopmentReconcileInvokerForTest invoker)
+{
+    rp1_development_reconcile_invoker_for_test = std::move(invoker);
+}
+
+void reset_rp1_development_reconcile_invoker_for_test() noexcept
+{
+    rp1_development_reconcile_invoker_for_test = {};
+    std::lock_guard<std::mutex> lock(direct_tone_confirmation_mtx);
+    claimed_direct_tone_confirmation.reset();
 }
 
 bool start_direct_tone_execution_for_test(

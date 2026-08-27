@@ -7258,6 +7258,113 @@ int main(int argc, char *argv[])
 
     {
         init_default_config();
+        config.use_ini = false;
+        config.mode = ModeType::TONE;
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
+        config.tx_pin = 4;
+        config.gpio_tx_pin = 4;
+        config.rp1_development_confirmation_json = R"({
+            "enabled": true,
+            "route": "GPIO4",
+            "operation_id": "tone-operation-42",
+            "physical_connection_confirmed": true,
+            "attenuation_and_load_confirmed": true,
+            "bounded_operation_confirmed": true,
+            "non_radiating_topology_confirmed": true,
+            "experimental_status_acknowledged": true
+        })";
+        const nlohmann::json valid_confirmation = nlohmann::json::parse(
+            config.rp1_development_confirmation_json);
+        const bool persistent_transmit_before = config.transmit;
+        set_rp1_route_transaction_inhibited(true);
+        set_rp1_development_reconcile_invoker_for_test(
+            [](const std::string &route) {
+                require(route == "GPIO4",
+                    "direct RP1 tone must reconcile the confirmed route");
+                set_rp1_route_transaction_inhibited(false);
+                return nlohmann::json{
+                    {"ok", true},
+                    {"generation", 42},
+                    {"persisted", "GPIO4"},
+                    {"active", "GPIO4"},
+                    {"reconciled", true},
+                    {"journal", "none"},
+                    {"contractIdentity", "rp1-gpclk-route-manager-v1"},
+                    {"endpointOpen", false},
+                    {"endpointOwned", true},
+                    {"state", "idle"},
+                    {"liveOutput", "disabled"}};
+            });
+        reset_current_transmission_request_for_test();
+        reset_committed_execution_route_for_test();
+        int start_async_calls = 0;
+        set_direct_tone_start_invoker_for_test(
+            [&start_async_calls] { ++start_async_calls; });
+
+        WsprFrequencyEntry entry;
+        entry.token = "20m";
+        entry.dial_frequency_hz = 14097100.0;
+        std::string error;
+        const bool started = start_direct_tone_execution_for_test(
+            config, entry, entry.dial_frequency_hz, &error);
+        const TransmissionRequest committed =
+            current_transmission_request_for_test();
+        require(
+            started && error.empty() && start_async_calls == 1 &&
+                committed.rp1_development.enabled &&
+                committed.rp1_development.operation_id == "tone-operation-42" &&
+                committed.rp1_development.route_transaction_generation == 42 &&
+                committed.rp1_development.confirmation_gpio == 4 &&
+                config.transmit == persistent_transmit_before,
+            "valid direct RP1 tone confirmation must reconcile before gating, bind the committed request, start once, and not mutate persistent transmit");
+
+        set_rp1_route_transaction_inhibited(true);
+        error.clear();
+        const bool replay_started = start_direct_tone_execution_for_test(
+            config, entry, entry.dial_frequency_hz, &error);
+        require(
+            !replay_started && error.find("replay") != std::string::npos &&
+                start_async_calls == 1 && config.transmit == persistent_transmit_before,
+            "direct RP1 tone confirmation must not be reusable after its first bounded request");
+
+        std::vector<std::string> rejected_confirmations = {"not-json", "{}"};
+        for (const auto& [field, value] : std::vector<std::pair<std::string, nlohmann::json>>{
+                 {"enabled", false},
+                 {"route", "GPIO20"},
+                 {"operation_id", "short"},
+                 {"physical_connection_confirmed", false},
+                 {"attenuation_and_load_confirmed", false},
+                 {"bounded_operation_confirmed", false},
+                 {"non_radiating_topology_confirmed", false},
+                 {"experimental_status_acknowledged", false}})
+        {
+            nlohmann::json rejected = valid_confirmation;
+            rejected[field] = value;
+            rejected_confirmations.push_back(rejected.dump());
+        }
+        for (const std::string& rejected : rejected_confirmations)
+        {
+            config.rp1_development_confirmation_json = rejected;
+            set_rp1_route_transaction_inhibited(true);
+            error.clear();
+            const bool malformed_started = start_direct_tone_execution_for_test(
+                config, entry, entry.dial_frequency_hz, &error);
+            require(
+                !malformed_started &&
+                    error.find("confirmation rejected") != std::string::npos &&
+                    start_async_calls == 1 &&
+                    config.transmit == persistent_transmit_before,
+                "malformed or mismatched direct RP1 confirmation must fail before commit or start without changing persistent transmit");
+        }
+
+        reset_rp1_development_reconcile_invoker_for_test();
+        reset_direct_tone_start_invoker_for_test();
+        set_rp1_route_transaction_inhibited(false);
+    }
+
+    {
+        init_default_config();
         config.transmit_backend = TransmitBackendKind::GPIO;
         config.allow_unqualified_frequency = true;
         config.allow_non_amateur_frequency = true;

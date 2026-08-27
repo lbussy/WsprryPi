@@ -57,6 +57,16 @@ int main() {
     assert(development_reconciliation < request_commit);
     const auto direct_confirmation = scheduling.find(
         "apply_direct_rp1_development_confirmation(");
+    const auto tone_request_builder = scheduling.find(
+        "static TransmissionRequest make_tone_request(");
+    const auto direct_tone_start = scheduling.find(
+        "static bool start_direct_tone_execution(", tone_request_builder);
+    const auto direct_tone_confirmation = scheduling.find(
+        "apply_direct_rp1_development_confirmation(", direct_tone_start);
+    const auto direct_tone_gate = scheduling.find(
+        "direct_tone_inhibition_reason(cfg)", direct_tone_confirmation);
+    const auto direct_tone_commit = scheduling.find(
+        "commit_execution_request(request)", direct_tone_gate);
     const auto direct_start = scheduling.find(
         "static bool start_non_wspr_transmission_now(");
     const auto direct_reconciliation = scheduling.find(
@@ -73,6 +83,14 @@ int main() {
         "return true;", wspr_confirmation);
     assert(arg_parser.find("rp1-development-confirmation-json") != std::string::npos);
     assert(direct_confirmation != std::string::npos);
+    assert(tone_request_builder != std::string::npos);
+    assert(direct_tone_start != std::string::npos);
+    assert(direct_tone_confirmation != std::string::npos);
+    assert(direct_tone_gate != std::string::npos);
+    assert(direct_tone_commit != std::string::npos);
+    assert(direct_tone_start < direct_tone_confirmation);
+    assert(direct_tone_confirmation < direct_tone_gate);
+    assert(direct_tone_gate < direct_tone_commit);
     assert(direct_start != std::string::npos);
     assert(direct_reconciliation != std::string::npos);
     assert(direct_runtime_gate != std::string::npos);
