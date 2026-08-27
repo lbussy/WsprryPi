@@ -19,6 +19,8 @@ namespace {
 constexpr const char *kSocket = "/run/rp1-gpclk-dkms/route-manager.sock";
 #endif
 constexpr const char *kContract = "rp1-gpclk-route-manager-v1";
+constexpr const char *kPackageSha256 =
+    "247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d";
 const std::string kDevelopmentSourceIdentity =
     "RP1-GPCLK-DKMS@" + std::string(kRp1GpclkDevelopmentSourceRevision) +
     "; package-unreleased";
@@ -115,14 +117,16 @@ std::string field(const nlohmann::json &value, const char *name) {
              ? value[name].get<std::string>()
              : std::string{};
 }
-bool exactIdentity(const nlohmann::json &state) {
+bool exactPackagedIdentity(const nlohmann::json &state) {
   if (!state.contains("identity") || !state["identity"].is_object())
     return false;
   const auto &identity = state["identity"];
-  if (field(identity, "package") != kRp1GpclkDevelopmentModuleId.data() ||
+  if (field(identity, "package") != "rp1-gpclk-dkms" ||
+      field(identity, "debianVersion") != "1.1.1-1" ||
       field(identity, "module") != "rp1_gpclk_dkms" ||
-      field(identity, "moduleVersion") != kRp1GpclkDevelopmentModuleVersion.data() ||
-      field(identity, "uapiSha256") != kRp1GpclkDevelopmentUapiSha256.data() ||
+      field(identity, "moduleVersion") != "1.1.1" ||
+      field(identity, "uapiSha256") !=
+          "998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384" ||
       !identity.contains("overlaySha256") ||
       !identity["overlaySha256"].is_object())
     return false;
@@ -170,7 +174,7 @@ nlohmann::json Rp1GpclkRouteService::failure(const std::string &result,
           {"outputInhibitedValidated", false},
           {"eligible", false},
           {"liveQualification", "Unavailable"},
-          {"packageIdentity", kDevelopmentSourceIdentity},
+          {"packageIdentity", kPackageSha256},
           {"contractIdentity", kContract},
           {"bootOwnership", "unknown"},
           {"journal", "unknown"},
@@ -212,10 +216,11 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
                     persisted = routeForGpio(operations_.persisted_gpio());
   const bool pending = state.contains("pendingTransaction") &&
                        !state["pendingTransaction"].is_null();
-  const bool identity_matches = exactIdentity(state);
+  const bool identity_matches = exactPackagedIdentity(state);
   const bool aligned =
       !persisted.empty() && persisted == configured && persisted == active;
-  const bool output_inhibited_validated = false;
+  const bool output_inhibited_validated =
+      identity_matches && (configured == "GPIO4" || configured == "GPIO20");
   std::string ui = pending ? "pending"
                    : aligned && output_inhibited_validated
                        ? "output-inhibited-validated"
@@ -254,11 +259,11 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
           {"preflightValidated", preflight_safe},
           {"eligible", false},
           {"liveQualification", "Unavailable"},
-          {"packageIdentity", kDevelopmentSourceIdentity},
+          {"packageIdentity", kPackageSha256},
           {"contractIdentity", kContract},
-          {"moduleVersion", kRp1GpclkDevelopmentModuleVersion.data()},
-          {"uapiAbi", 2},
-          {"compatibilityState", "Experimental"},
+          {"moduleVersion", "1.1.1"},
+          {"uapiAbi", 1},
+          {"compatibilityState", "Unavailable"},
           {"moduleRoute", active},
           {"historicalPredecessorEvidenceArchiveSha256", kEvidenceArchiveSha256},
           {"historicalPredecessorEvidenceManifestSha256", kEvidenceManifestSha256},
@@ -309,7 +314,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       rendered["ok"] = false;
       rendered["result"] = "preflight_failed";
       rendered["message"] =
-          "Preflight did not confirm the exact 1.1.2 development identity, endpoint "
+          "Preflight did not confirm the exact packaged identity, endpoint "
           "closure, ownership, and live_output=0.";
       return rendered;
     }
@@ -317,8 +322,8 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     preflight_route_ = executor_route;
     rendered["generation"] = generation_;
     rendered["message"] =
-        "Exact 1.1.2 development preflight passed. Operation-scoped policy "
-        "confirmation is still required; product and RF qualification remain unavailable.";
+        "Exact packaged route-manager preflight passed. Product and RF "
+        "qualification remain unavailable.";
     return rendered;
   }
   if (operation == "apply-and-reboot") {
@@ -361,6 +366,10 @@ nlohmann::json Rp1GpclkRouteService::reconcileStartup() {
   invalidateRp1GpclkDevelopmentOperation();
   operations_.set_transmission_inhibited(
       true, "RP1 GPCLK exact-package reconciliation is pending");
+  if (startup_failure_latched_)
+    return failure("startup_failure_latched",
+                   "A prior RP1 GPCLK startup reconciliation failure keeps "
+                   "transmission inhibited for this process lifetime.");
   const auto raw =
       request({{"schemaVersion", 1},
                {"operation", "reconcile"},
@@ -370,9 +379,63 @@ nlohmann::json Rp1GpclkRouteService::reconcileStartup() {
   auto rendered = render(raw);
   const bool reconciled = rendered.value("ok", false) &&
                           rendered.value("reconciled", false) &&
+                          rendered.value("compatible", false) &&
                           rendered.value("journal", std::string{}) == "none";
+  rendered["ok"] = reconciled;
+  if (!reconciled) {
+    rendered["result"] = "startup_reconciliation_failed";
+    rendered["message"] =
+        "Exact packaged startup reconciliation is incomplete or mismatched.";
+  }
+  startup_failure_latched_ = !reconciled;
   operations_.set_transmission_inhibited(
       !reconciled, reconciled ? "" : "RP1 GPCLK reconciliation is incomplete");
+  return rendered;
+}
+nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
+    const std::string &route) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  operations_.set_transmission_inhibited(
+      true, "RP1 GPCLK source-development reconciliation is pending");
+  if (startup_failure_latched_)
+    return failure("startup_failure_latched",
+                   "A prior RP1 GPCLK startup reconciliation failure keeps "
+                   "transmission inhibited for this process lifetime.");
+  const std::string expected = routeForGpio(gpioForRoute(route));
+  if (expected.empty()) {
+    startup_failure_latched_ = true;
+    return failure("invalid_route",
+                   "Source-development startup requires GPIO4 or GPIO20.");
+  }
+
+  auto rendered = render(request({{"schemaVersion", 1},
+                                  {"operation", "query"}}), expected);
+  const bool reconciled = rendered.value("ok", false) &&
+                          rendered.value("reconciled", false) &&
+                          rendered.value("requested", std::string{}) == expected &&
+                          rendered.value("persisted", std::string{}) == expected &&
+                          rendered.value("configured", std::string{}) == expected &&
+                          rendered.value("active", std::string{}) == expected &&
+                          rendered.value("journal", std::string{}) == "none" &&
+                          rendered.value("bootOwnership", std::string{}) == "current";
+  rendered["policyDomain"] = "source-development";
+  rendered["developmentSourceIdentity"] = kDevelopmentSourceIdentity;
+  rendered["developmentModuleVersion"] =
+      kRp1GpclkDevelopmentModuleVersion.data();
+  rendered["developmentUapiAbi"] = 3;
+  rendered["developmentCompatibilityState"] = "Experimental";
+  rendered["packageIdentityRequired"] = false;
+  rendered["developmentIdentityRequired"] = true;
+  rendered["ok"] = reconciled;
+  rendered["result"] = reconciled ? "development_route_reconciled"
+                                    : "development_route_failed";
+  rendered["message"] = reconciled
+      ? "Exact-source development route state reconciled; provider identity and operation authorization remain required."
+      : "Exact-source development route state is incomplete, stale, ambiguous, or mismatched.";
+  startup_failure_latched_ = !reconciled;
+  operations_.set_transmission_inhibited(
+      !reconciled,
+      reconciled ? "" : "RP1 GPCLK source-development reconciliation is incomplete");
   return rendered;
 }
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST

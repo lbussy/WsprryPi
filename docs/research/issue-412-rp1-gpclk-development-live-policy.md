@@ -3,7 +3,7 @@
 
 Status: hardware-free implementation; target validation and qualification not established.
 
-WsprryPi treats the unreleased RP1-GPCLK-DKMS 1.1.2 GPIO4 r2 and GPIO20 r2
+WsprryPi treats the unreleased RP1-GPCLK-DKMS 1.1.2 GPIO4 r3 and GPIO20 r3
 identities as independent `Experimental` development candidates. Ordinary
 backend selection, startup, a saved route, package installation, or prior
 evidence never authorizes output.
@@ -14,8 +14,8 @@ machine-readable reason, an operator explanation, and an `Experimental`
 warning. Unknown and incomplete values deny in deterministic gate order.
 
 The last pre-acquisition check requires deliberate development enablement;
-one explicit and consistently reported GPIO4 or GPIO20 route; the exact ABI v2,
-module 1.1.2, route-specific r2 identity and `Experimental` state; affirmative
+one explicit and consistently reported GPIO4 or GPIO20 route; the exact ABI v3,
+module 1.1.2, route-specific r3 identity and `Experimental` state; affirmative
 `live_output=1` evidence; a resolved attributable route transaction; idle
 scheduling and application ownership; a closed, exclusively acquirable
 endpoint; no cleanup fault; and current physical-topology confirmation bound to
@@ -23,8 +23,19 @@ the exact operation and route.
 
 The exact compatibility identities are:
 
-- GPIO4: `v1.1.2-pi5-gpio4-6.18.34-development-candidate-r2`
-- GPIO20: `v1.1.2-pi5-gpio20-6.18.34-development-candidate-r2`
+- GPIO4: `v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3`
+- GPIO20: `v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3`
+
+The exact source revision for both routes is
+`7421605e0a0e41c19c6d7142a9fa87ea3a42eb98`. At Raspberry Pi 5 startup, an
+armed development operation performs a passive route-manager query and requires
+the persisted, configured, and active route to agree with current boot ownership
+and no pending transaction. It does not apply the predecessor package identity
+to the source-development candidate and it does not consume or invalidate the
+one-use authorization. The provider still authenticates the ABI-v3 development
+identity immediately before endpoint acquisition. Ordinary packaged operation
+continues to execute exact-package reconciliation and requires the complete
+released 1.1.1-1 identity.
 
 Changing route, operation identity, module identity, transaction state, or
 confirmation route invalidates the decision. The decision is recomputed after

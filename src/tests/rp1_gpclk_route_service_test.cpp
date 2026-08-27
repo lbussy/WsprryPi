@@ -1,4 +1,5 @@
 #include "../rp1_gpclk_route_service.hpp"
+#include "../WSPR-Transmitter/src/rp1_gpclk_development_policy.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -12,8 +13,9 @@ nlohmann::json state(const std::string &configured = "gpio4",
   return {
       {"identity",
        {{"package", "rp1-gpclk-dkms"},
+        {"debianVersion", "1.1.1-1"},
         {"module", "rp1_gpclk_dkms"},
-        {"moduleVersion", "1.1.2"},
+        {"moduleVersion", "1.1.1"},
         {"uapiSha256",
          "998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384"},
         {"overlaySha256",
@@ -50,6 +52,46 @@ nlohmann::json response(const std::string &operation, const std::string &status,
 
 wsprrypi::Rp1GpclkApplicationIdleState idle() { return {}; }
 
+wsprrypi::Rp1GpclkDevelopmentPolicyInputs armed_for(std::uint32_t route) {
+  wsprrypi::Rp1GpclkDevelopmentPolicyInputs inputs;
+  inputs.development_testing_enabled = true;
+  inputs.rp1_backend_selected = true;
+  inputs.requested_route = route;
+  return inputs;
+}
+
+struct StartupOutcome {
+  nlohmann::json result;
+  std::vector<nlohmann::json> requests;
+  bool inhibited{false};
+};
+
+StartupOutcome startup(const nlohmann::json &next, int persisted,
+                       const std::string &development_route = {}) {
+  StartupOutcome outcome;
+  wsprrypi::Rp1GpclkRouteService service(
+      {[&](const nlohmann::json &request) {
+         outcome.requests.push_back(request);
+         return next;
+       },
+       idle, [persisted] { return persisted; },
+       [](int, std::string *) { return true; },
+       [&](bool value, const std::string &) { outcome.inhibited = value; }});
+  outcome.result = development_route.empty()
+      ? service.reconcileStartup()
+      : service.reconcileDevelopmentStartup(development_route);
+  if (!outcome.result.value("ok", false)) {
+    const auto request_count = outcome.requests.size();
+    const auto second = development_route.empty()
+        ? service.reconcileStartup()
+        : service.reconcileDevelopmentStartup(development_route);
+    assert(second.at("result") == "startup_failure_latched");
+    assert(outcome.requests.size() == request_count);
+    assert(outcome.inhibited);
+  }
+  return outcome;
+}
+
 } // namespace
 
 int main() {
@@ -76,7 +118,7 @@ int main() {
 
   const auto query = service.query();
   assert(query.at("ok") == true);
-  assert(query.at("outputInhibitedValidated") == false);
+  assert(query.at("outputInhibitedValidated") == true);
   assert(query.at("compatible") == true);
   assert(query.at("eligible") == false);
   assert(query.at("liveQualification") == "Unavailable");
@@ -119,7 +161,7 @@ int main() {
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   unsafe = state();
-  unsafe["identity"]["moduleVersion"] = "1.1.1";
+  unsafe["identity"]["moduleVersion"] = "1.1.2";
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
 
@@ -154,29 +196,84 @@ int main() {
   next = response("reconcile", "complete", state("gpio20", "gpio20"));
   const auto reconciled = service.reconcileStartup();
   assert(reconciled.at("reconciled") == true);
+  assert(reconciled.at("compatible") == true);
   assert(inhibited == false);
+
+  auto wrong_package = state("gpio20", "gpio20");
+  wrong_package["identity"]["moduleVersion"] = "1.1.2";
+  wsprrypi::armRp1GpclkDevelopmentOperation(
+      armed_for(wsprrypi::kRp1GpclkDevelopmentRouteGpio20));
+  const auto packaged_mismatch =
+      startup(response("reconcile", "complete", wrong_package), 20);
+  assert(packaged_mismatch.result.at("compatible") == false);
+  assert(packaged_mismatch.inhibited);
+  assert(!wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(
+      wsprrypi::kRp1GpclkDevelopmentRouteGpio20));
 
   auto pending = state("gpio20", "gpio4");
   pending["pendingTransaction"] = {{"status", "awaiting-reboot"}};
-  next = response("reconcile", "awaiting-reboot", pending);
-  const auto awaiting = service.reconcileStartup();
-  assert(awaiting.at("ok") == false);
-  assert(awaiting.at("journal") == "pending");
-  assert(inhibited == true);
+  const auto awaiting =
+      startup(response("reconcile", "awaiting-reboot", pending), 20);
+  assert(awaiting.result.at("ok") == false);
+  assert(awaiting.result.at("journal") == "pending");
+  assert(awaiting.inhibited);
 
-  next = response("reconcile", "mismatch", state("gpio20", "gpio4"));
-  const auto mismatch = service.reconcileStartup();
-  assert(mismatch.at("ok") == false);
-  assert(mismatch.at("state") == "mismatch");
-  assert(inhibited == true);
+  const auto mismatch =
+      startup(response("reconcile", "mismatch", state("gpio20", "gpio4")), 20);
+  assert(mismatch.result.at("ok") == false);
+  assert(mismatch.result.at("state") == "mismatch");
+  assert(mismatch.inhibited);
 
   auto recovery_state = state("gpio20", "gpio4");
   recovery_state["pendingTransaction"] = {{"status", "interrupted"}};
-  next = response("reconcile", "recovery-required", recovery_state);
-  const auto recovery = service.reconcileStartup();
-  assert(recovery.at("ok") == false);
-  assert(recovery.at("state") == "rollback_required");
-  assert(inhibited == true);
+  const auto recovery = startup(
+      response("reconcile", "recovery-required", recovery_state), 20);
+  assert(recovery.result.at("ok") == false);
+  assert(recovery.result.at("state") == "rollback_required");
+  assert(recovery.inhibited);
+
+  auto predecessor = state();
+  predecessor["identity"]["debianVersion"] = "1.0.0-1";
+  predecessor["identity"]["moduleVersion"] = "1.0.0";
+  for (const auto &route : {std::string("GPIO4"), std::string("GPIO20")}) {
+    const int gpio = route == "GPIO4" ? 4 : 20;
+    auto route_state = predecessor;
+    route_state["configuredRoute"] = gpio == 4 ? "gpio4" : "gpio20";
+    route_state["activeRoute"] = gpio == 4 ? "gpio4" : "gpio20";
+    const auto development_route = gpio == 4
+        ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
+        : wsprrypi::kRp1GpclkDevelopmentRouteGpio20;
+    wsprrypi::armRp1GpclkDevelopmentOperation(armed_for(development_route));
+    const auto development =
+        startup(response("query", "ok", route_state), gpio, route);
+    assert(development.result.at("ok") == true);
+    assert(development.result.at("policyDomain") == "source-development");
+    assert(development.result.at("packageIdentityRequired") == false);
+    assert(development.result.at("developmentIdentityRequired") == true);
+    assert(development.result.at("developmentUapiAbi") == 3);
+    assert(development.result.at("developmentCompatibilityState") ==
+           "Experimental");
+    assert(development.requests.size() == 1);
+    assert(development.requests.front().at("operation") == "query");
+    assert(!development.requests.front().contains("execute"));
+    assert(!development.inhibited);
+    assert(wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(
+        development_route));
+    wsprrypi::invalidateRp1GpclkDevelopmentOperation();
+  }
+
+  const auto wrong_development_route =
+      startup(response("query", "ok", state("gpio20", "gpio20")), 20,
+              "GPIO4");
+  assert(wrong_development_route.result.at("ok") == false);
+  assert(wrong_development_route.inhibited);
+
+  auto ambiguous = state();
+  ambiguous["pendingTransaction"] = {{"status", "awaiting-reboot"}};
+  const auto ambiguous_development =
+      startup(response("query", "ok", ambiguous), 4, "GPIO4");
+  assert(ambiguous_development.result.at("ok") == false);
+  assert(ambiguous_development.inhibited);
 
   next = response("rollback", "rolled-back", state("gpio4", "gpio4"));
   const auto rolled_back = service.operate("rollback", "GPIO4", 7);

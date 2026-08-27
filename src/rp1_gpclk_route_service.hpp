@@ -20,6 +20,7 @@ public:
   nlohmann::json operate(const std::string &, const std::string &,
                          std::uint64_t);
   nlohmann::json reconcileStartup();
+  nlohmann::json reconcileDevelopmentStartup(const std::string &route);
 
 private:
   nlohmann::json request(const nlohmann::json &);
@@ -34,6 +35,7 @@ private:
   std::mutex mutex_;
   std::uint64_t generation_{0};
   std::string preflight_route_;
+  bool startup_failure_latched_{false};
 };
 Rp1GpclkRouteService &productionRp1GpclkRouteService();
 } // namespace wsprrypi

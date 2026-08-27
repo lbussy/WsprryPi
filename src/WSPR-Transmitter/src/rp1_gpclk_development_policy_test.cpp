@@ -81,7 +81,12 @@ int main()
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4);
     armRp1GpclkDevelopmentOperation(i);
+    assert(rp1GpclkDevelopmentOperationArmedForRoute(i.requested_route));
+    assert(!rp1GpclkDevelopmentOperationArmedForRoute(
+        kRp1GpclkDevelopmentRouteGpio20));
+    assert(!rp1GpclkDevelopmentOperationArmedForRoute(0));
     invalidateRp1GpclkDevelopmentOperation();
+    assert(!rp1GpclkDevelopmentOperationArmedForRoute(i.requested_route));
     assert(!consumeRp1GpclkDevelopmentOperation(
         i.operation_id, i.requested_route, i.identity).has_value());
     armRp1GpclkDevelopmentOperation(i);
@@ -90,6 +95,7 @@ int main()
     armRp1GpclkDevelopmentOperation(i);
     assert(consumeRp1GpclkDevelopmentOperation(
         i.operation_id, i.requested_route, i.identity).has_value());
+    assert(!rp1GpclkDevelopmentOperationArmedForRoute(i.requested_route));
     assert(!consumeRp1GpclkDevelopmentOperation(
         i.operation_id, i.requested_route, i.identity).has_value());
     std::cout << "RP1 GPCLK guarded development policy tests passed\n";

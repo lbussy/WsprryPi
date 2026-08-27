@@ -4355,13 +4355,28 @@ bool wspr_loop()
     if (config.transmit_backend == TransmitBackendKind::GPIO &&
         get_pi_model().find("Raspberry Pi 5") != std::string::npos)
     {
-        const auto reconciliation =
-            wsprrypi::productionRp1GpclkRouteService().reconcileStartup();
+        const std::uint32_t route = config.gpio_tx_pin == 4
+            ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
+            : config.gpio_tx_pin == 20
+                ? wsprrypi::kRp1GpclkDevelopmentRouteGpio20 : 0;
+        const bool source_development =
+            wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(route);
+        const auto reconciliation = source_development
+            ? wsprrypi::productionRp1GpclkRouteService()
+                  .reconcileDevelopmentStartup(
+                      config.gpio_tx_pin == 4 ? "GPIO4" : "GPIO20")
+            : wsprrypi::productionRp1GpclkRouteService().reconcileStartup();
         if (!reconciliation.value("ok", false))
         {
             llog.logS(ERROR,
                 "RP1 GPCLK startup reconciliation failed; transmission remains inhibited: ",
                 reconciliation.value("message", std::string("unknown route state")));
+        }
+        else if (source_development)
+        {
+            llog.logS(INFO,
+                "RP1 GPCLK exact-source development startup route reconciled; "
+                "provider identity and operation-scoped authorization remain required.");
         }
     }
 

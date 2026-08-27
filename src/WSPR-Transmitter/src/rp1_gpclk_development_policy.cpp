@@ -89,6 +89,17 @@ void invalidateRp1GpclkDevelopmentOperation() noexcept
     armed_operation.reset();
 }
 
+bool rp1GpclkDevelopmentOperationArmedForRoute(
+    std::uint32_t requested_route) noexcept
+{
+    std::lock_guard<std::mutex> lock(authorization_mutex);
+    return armed_operation &&
+        armed_operation->development_testing_enabled &&
+        armed_operation->rp1_backend_selected &&
+        known_route(requested_route) &&
+        armed_operation->requested_route == requested_route;
+}
+
 Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
     const Rp1GpclkDevelopmentPolicyInputs& i) noexcept
 {

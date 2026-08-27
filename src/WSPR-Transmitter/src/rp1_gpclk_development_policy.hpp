@@ -16,7 +16,7 @@ inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio20 = 2;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentCompatibilityExperimental = 2;
 inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityLiveEligible = 1ULL << 7;
 inline constexpr std::string_view kRp1GpclkDevelopmentSourceRevision =
-    "eb384beefcb1a0253062cffdfc3f6364594faa56";
+    "7421605e0a0e41c19c6d7142a9fa87ea3a42eb98";
 inline constexpr std::string_view kRp1GpclkDevelopmentModuleId = "rp1-gpclk-dkms";
 inline constexpr std::string_view kRp1GpclkDevelopmentModuleVersion = "1.1.2";
 inline constexpr std::string_view kRp1GpclkDevelopmentUapiSha256 =
@@ -111,4 +111,6 @@ consumeRp1GpclkDevelopmentOperation(
     std::uint32_t requested_route,
     const Rp1GpclkProviderIdentity& identity);
 void invalidateRp1GpclkDevelopmentOperation() noexcept;
+bool rp1GpclkDevelopmentOperationArmedForRoute(
+    std::uint32_t requested_route) noexcept;
 } // namespace wsprrypi
