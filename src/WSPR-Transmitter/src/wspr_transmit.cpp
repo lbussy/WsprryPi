@@ -1753,7 +1753,8 @@ void WsprTransmitter::transmit()
 
     if (activeExecutionIsTone())
     {
-        if (selected_backend_ == wsprrypi::BackendKind::SI5351)
+        if (selected_backend_ == wsprrypi::BackendKind::SI5351 ||
+            selected_backend_ == wsprrypi::BackendKind::RP1_GPCLK)
         {
             state_.store(State::TRANSMITTING, std::memory_order_release);
             fire_transmit_cb(TransmissionCallbackEvent::STARTING,
