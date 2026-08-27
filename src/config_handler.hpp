@@ -506,6 +506,8 @@ struct ArgParserConfig
         debug_logging = other.debug_logging;
         allow_unqualified_frequency = other.allow_unqualified_frequency;
         allow_non_amateur_frequency = other.allow_non_amateur_frequency;
+        rp1_development_confirmation_json =
+            other.rp1_development_confirmation_json;
         wspr_planner_preference = other.wspr_planner_preference;
         loop_tx = other.loop_tx;
         tx_iterations.store(other.tx_iterations.load());

@@ -706,6 +706,43 @@ int main(int argc, char *argv[])
             "Pi 5 GPIO20 must survive managed INI reload");
 
         config.use_ini = false;
+        config.rp1_development_confirmation_json = R"({
+            "enabled": true,
+            "route": "GPIO20",
+            "operation_id": "wspr-frame-operation-20",
+            "physical_connection_confirmed": true,
+            "attenuation_and_load_confirmed": true,
+            "bounded_operation_confirmed": true,
+            "non_radiating_topology_confirmed": true,
+            "experimental_status_acknowledged": true
+        })";
+        set_rp1_development_reconcile_invoker_for_test(
+            [](const std::string &route) {
+                require(route == "GPIO20",
+                    "GPIO20 WSPR planning must reconcile the confirmed route");
+                set_rp1_route_transaction_inhibited(false);
+                return nlohmann::json{
+                    {"ok", true},
+                    {"generation", 20},
+                    {"persisted", "GPIO20"},
+                    {"active", "GPIO20"},
+                    {"reconciled", true},
+                    {"journal", "none"},
+                    {"contractIdentity", "rp1-gpclk-route-manager-v1"},
+                    {"endpointOpen", false},
+                    {"endpointOwned", true},
+                    {"state", "idle"},
+                    {"liveOutput", "disabled"}};
+            });
+        const ArgParserConfig copied_confirmation_config = config;
+        require(
+            copied_confirmation_config.rp1_development_confirmation_json ==
+                config.rp1_development_confirmation_json,
+            "WSPR runtime configuration copies must retain transient RP1 confirmation");
+        config_to_json();
+        require(
+            jConfig.dump().find("wspr-frame-operation-20") == std::string::npos,
+            "transient RP1 confirmation must never enter persisted JSON configuration");
         reset_runtime_planning_state_for_identity_test();
         require(
             set_config(true),
@@ -721,6 +758,7 @@ int main(int argc, char *argv[])
             current_transmission_request_for_test().tx_gpio == 20,
             "a committed Pi 5 schedule must retain its GPIO20 snapshot after config changes");
         finish_runtime_planning_state_for_identity_test();
+        reset_rp1_development_reconcile_invoker_for_test();
 
         clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();

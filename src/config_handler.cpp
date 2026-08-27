@@ -2137,6 +2137,8 @@ namespace
         target.debug_logging = source.debug_logging;
         target.allow_unqualified_frequency = source.allow_unqualified_frequency;
         target.allow_non_amateur_frequency = source.allow_non_amateur_frequency;
+        target.rp1_development_confirmation_json =
+            source.rp1_development_confirmation_json;
         target.wspr_planner_preference = source.wspr_planner_preference;
         target.loop_tx = source.loop_tx;
         target.tx_iterations.store(source.tx_iterations.load());
