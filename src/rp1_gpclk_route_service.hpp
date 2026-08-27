@@ -20,6 +20,7 @@ public:
   nlohmann::json operate(const std::string &, const std::string &,
                          std::uint64_t);
   nlohmann::json reconcileStartup();
+  nlohmann::json reconcileIdleStartup(const std::string &route);
   nlohmann::json reconcileDevelopmentStartup(const std::string &route);
 
 private:

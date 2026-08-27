@@ -60,6 +60,43 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs armed_for(std::uint32_t route) {
   return inputs;
 }
 
+wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
+    std::uint32_t route, std::uint64_t generation) {
+  auto inputs = armed_for(route);
+  inputs.persisted_route = route;
+  inputs.configured_route = route;
+  inputs.active_route = route;
+  inputs.module_route = route;
+  inputs.active_route_count = 1;
+  inputs.route_transaction_resolved = true;
+  inputs.route_manager_attributable = true;
+  inputs.scheduler_idle = true;
+  inputs.application_owns_operation = true;
+  inputs.endpoint_available = true;
+  inputs.endpoint_closed = true;
+  inputs.endpoint_exclusively_acquirable = true;
+  inputs.live_output_verified = true;
+  inputs.physical_connection_confirmed = true;
+  inputs.attenuation_and_load_confirmed = true;
+  inputs.bounded_operation_confirmed = true;
+  inputs.non_radiating_topology_confirmed = true;
+  inputs.experimental_status_acknowledged = true;
+  inputs.confirmation_current = true;
+  inputs.route_transaction_generation = generation;
+  inputs.confirmation_route_transaction_generation = generation;
+  inputs.operation_id = "post-start-bounded-tone";
+  inputs.confirmation_operation_id = inputs.operation_id;
+  inputs.confirmation_route = route;
+  const auto identity = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(route);
+  assert(identity.has_value());
+  inputs.identity = *identity;
+  inputs.identity.capabilities =
+      wsprrypi::kRp1GpclkDevelopmentCapabilityLiveEligible;
+  inputs.confirmation_identity =
+      wsprrypi::rp1GpclkDevelopmentIdentityBinding(*identity);
+  return inputs;
+}
+
 struct StartupOutcome {
   nlohmann::json result;
   std::vector<nlohmann::json> requests;
@@ -67,7 +104,8 @@ struct StartupOutcome {
 };
 
 StartupOutcome startup(const nlohmann::json &next, int persisted,
-                       const std::string &development_route = {}) {
+                       const std::string &development_route = {},
+                       bool idle_startup = false) {
   StartupOutcome outcome;
   wsprrypi::Rp1GpclkRouteService service(
       {[&](const nlohmann::json &request) {
@@ -77,14 +115,18 @@ StartupOutcome startup(const nlohmann::json &next, int persisted,
        idle, [persisted] { return persisted; },
        [](int, std::string *) { return true; },
        [&](bool value, const std::string &) { outcome.inhibited = value; }});
-  outcome.result = development_route.empty()
-      ? service.reconcileStartup()
-      : service.reconcileDevelopmentStartup(development_route);
+  outcome.result = idle_startup
+      ? service.reconcileIdleStartup(development_route)
+      : development_route.empty()
+          ? service.reconcileStartup()
+          : service.reconcileDevelopmentStartup(development_route);
   if (!outcome.result.value("ok", false)) {
     const auto request_count = outcome.requests.size();
-    const auto second = development_route.empty()
-        ? service.reconcileStartup()
-        : service.reconcileDevelopmentStartup(development_route);
+    const auto second = idle_startup
+        ? service.reconcileIdleStartup(development_route)
+        : development_route.empty()
+            ? service.reconcileStartup()
+            : service.reconcileDevelopmentStartup(development_route);
     assert(second.at("result") == "startup_failure_latched");
     assert(outcome.requests.size() == request_count);
     assert(outcome.inhibited);
@@ -235,6 +277,93 @@ int main() {
   auto predecessor = state();
   predecessor["identity"]["debianVersion"] = "1.0.0-1";
   predecessor["identity"]["moduleVersion"] = "1.0.0";
+
+  {
+    nlohmann::json lifecycle_next = response("query", "ok", predecessor);
+    std::vector<nlohmann::json> lifecycle_requests;
+    bool lifecycle_inhibited = false;
+    wsprrypi::Rp1GpclkRouteService lifecycle(
+        {[&](const nlohmann::json &request) {
+           lifecycle_requests.push_back(request);
+           return lifecycle_next;
+         },
+         idle, [] { return 4; },
+         [](int, std::string *) { return true; },
+         [&](bool value, const std::string &) {
+           lifecycle_inhibited = value;
+         }});
+    wsprrypi::invalidateRp1GpclkDevelopmentOperation();
+    const auto idle_result = lifecycle.reconcileIdleStartup("GPIO4");
+    assert(idle_result.at("ok") == true);
+    assert(idle_result.at("executionAuthorized") == false);
+    assert(!wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(
+        wsprrypi::kRp1GpclkDevelopmentRouteGpio4));
+
+    const auto development = lifecycle.reconcileDevelopmentStartup("GPIO4");
+    assert(development.at("ok") == true);
+    assert(development.at("generation").get<std::uint64_t>() != 0);
+    auto authorization = authorized_for(
+        wsprrypi::kRp1GpclkDevelopmentRouteGpio4,
+        development.at("generation").get<std::uint64_t>());
+    wsprrypi::armRp1GpclkDevelopmentOperation(authorization);
+    auto consumed = wsprrypi::consumeRp1GpclkDevelopmentOperation(
+        authorization.operation_id, authorization.requested_route,
+        authorization.identity);
+    assert(consumed.has_value());
+    assert(wsprrypi::decideRp1GpclkDevelopmentUse(*consumed).allowed);
+    assert(!wsprrypi::consumeRp1GpclkDevelopmentOperation(
+        authorization.operation_id, authorization.requested_route,
+        authorization.identity).has_value());
+    assert(lifecycle_requests.size() == 2);
+    assert(lifecycle_requests[0].at("operation") == "query");
+    assert(lifecycle_requests[1].at("operation") == "query");
+    assert(!lifecycle_inhibited);
+  }
+
+  for (const auto &route : {std::string("GPIO4"), std::string("GPIO20")}) {
+    const int gpio = route == "GPIO4" ? 4 : 20;
+    auto route_state = predecessor;
+    route_state["configuredRoute"] = gpio == 4 ? "gpio4" : "gpio20";
+    route_state["activeRoute"] = gpio == 4 ? "gpio4" : "gpio20";
+    wsprrypi::invalidateRp1GpclkDevelopmentOperation();
+    const auto idle_result =
+        startup(response("query", "ok", route_state), gpio, route, true);
+    assert(idle_result.result.at("ok") == true);
+    assert(idle_result.result.at("policyDomain") == "startup-idle");
+    assert(idle_result.result.at("executionAuthorized") == false);
+    assert(idle_result.result.at("developmentAuthorizationRequired") == true);
+    assert(idle_result.requests.size() == 1);
+    assert(idle_result.requests.front().at("operation") == "query");
+    assert(!wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(
+        gpio == 4 ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
+                  : wsprrypi::kRp1GpclkDevelopmentRouteGpio20));
+    assert(idle_result.inhibited);
+  }
+
+  const auto packaged_idle =
+      startup(response("query", "ok", state()), 4, "GPIO4", true);
+  assert(packaged_idle.result.at("ok") == true);
+  assert(packaged_idle.result.at("policyDomain") == "packaged");
+  assert(packaged_idle.result.at("executionAuthorized") == false);
+  assert(packaged_idle.requests.size() == 2);
+  assert(packaged_idle.requests.front().at("operation") == "query");
+  assert(packaged_idle.requests.back().at("operation") == "reconcile");
+  assert(packaged_idle.requests.back().at("execute") == true);
+
+  auto idle_pending = predecessor;
+  idle_pending["pendingTransaction"] = {{"status", "awaiting-reboot"}};
+  const auto pending_idle = startup(
+      response("query", "ok", idle_pending), 4, "GPIO4", true);
+  assert(pending_idle.result.at("ok") == false);
+  assert(pending_idle.inhibited);
+
+  auto idle_endpoint_open = predecessor;
+  idle_endpoint_open["safety"]["endpointOpen"] = true;
+  const auto unsafe_idle = startup(
+      response("query", "ok", idle_endpoint_open), 4, "GPIO4", true);
+  assert(unsafe_idle.result.at("result") == "idle_startup_endpoint_unsafe");
+  assert(unsafe_idle.inhibited);
+
   for (const auto &route : {std::string("GPIO4"), std::string("GPIO20")}) {
     const int gpio = route == "GPIO4" ? 4 : 20;
     auto route_state = predecessor;
@@ -267,6 +396,13 @@ int main() {
               "GPIO4");
   assert(wrong_development_route.result.at("ok") == false);
   assert(wrong_development_route.inhibited);
+
+  auto development_endpoint_open = predecessor;
+  development_endpoint_open["safety"]["endpointOpen"] = true;
+  const auto unsafe_development = startup(
+      response("query", "ok", development_endpoint_open), 4, "GPIO4");
+  assert(unsafe_development.result.at("ok") == false);
+  assert(unsafe_development.inhibited);
 
   auto ambiguous = state();
   ambiguous["pendingTransaction"] = {{"status", "awaiting-reboot"}};

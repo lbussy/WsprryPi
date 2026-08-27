@@ -38,9 +38,23 @@ int main() {
     assert(service.find("reboot_system()") == std::string::npos);
     assert(http.find("svr->Get(\"/api/rp1-gpclk-route\"") != std::string::npos);
     assert(http.find("svr->Post(\"/api/rp1-gpclk-route\"") != std::string::npos);
-    assert(scheduling.find(".reconcileDevelopmentStartup(") != std::string::npos);
-    assert(scheduling.find(".reconcileStartup()") != std::string::npos);
-    assert(scheduling.find("rp1GpclkDevelopmentOperationArmedForRoute(route)") != std::string::npos);
+    const auto idle_startup = scheduling.find(".reconcileIdleStartup(");
+    const auto bounded_request = scheduling.find("if (tone_request.rp1_development.enabled)");
+    const auto development_reconciliation =
+        scheduling.find(".reconcileDevelopmentStartup(", bounded_request);
+    const auto request_commit =
+        scheduling.find("commit_execution_request(request)", bounded_request);
+    const auto listener_start =
+        scheduling.find("const bool start_web =", idle_startup);
+    assert(idle_startup != std::string::npos);
+    assert(bounded_request != std::string::npos);
+    assert(development_reconciliation != std::string::npos);
+    assert(request_commit != std::string::npos);
+    assert(listener_start != std::string::npos);
+    assert(idle_startup < listener_start);
+    assert(bounded_request < development_reconciliation);
+    assert(development_reconciliation < request_commit);
+    assert(scheduling.find("rp1GpclkDevelopmentOperationArmedForRoute(route)") == std::string::npos);
     assert(scheduling.find("Legacy transmission output") == std::string::npos);
     assert(scheduling.find("rp1_gpclk_application_idle_state") != std::string::npos);
     assert(scheduling.find("rp1_live_qualification_inhibited") == std::string::npos);

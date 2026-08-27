@@ -3922,7 +3922,15 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
                 "RP1 development confirmation does not match the selected backend and route.");
         }
         const nlohmann::json route =
-            wsprrypi::productionRp1GpclkRouteService().query();
+            wsprrypi::productionRp1GpclkRouteService()
+                .reconcileDevelopmentStartup(
+                    confirmation.route_gpio == 4 ? "GPIO4" : "GPIO20");
+        if (!route.value("ok", false))
+        {
+            throw std::runtime_error(route.value(
+                "message",
+                std::string("RP1 source-development route reconciliation failed.")));
+        }
         const auto route_gpio = [](const std::string& value) {
             return value == "GPIO4" ? 4 : value == "GPIO20" ? 20 : 0;
         };
@@ -4355,28 +4363,21 @@ bool wspr_loop()
     if (config.transmit_backend == TransmitBackendKind::GPIO &&
         get_pi_model().find("Raspberry Pi 5") != std::string::npos)
     {
-        const std::uint32_t route = config.gpio_tx_pin == 4
-            ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
-            : config.gpio_tx_pin == 20
-                ? wsprrypi::kRp1GpclkDevelopmentRouteGpio20 : 0;
-        const bool source_development =
-            wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(route);
-        const auto reconciliation = source_development
-            ? wsprrypi::productionRp1GpclkRouteService()
-                  .reconcileDevelopmentStartup(
-                      config.gpio_tx_pin == 4 ? "GPIO4" : "GPIO20")
-            : wsprrypi::productionRp1GpclkRouteService().reconcileStartup();
+        const auto reconciliation =
+            wsprrypi::productionRp1GpclkRouteService().reconcileIdleStartup(
+                config.gpio_tx_pin == 4 ? "GPIO4" : "GPIO20");
         if (!reconciliation.value("ok", false))
         {
             llog.logS(ERROR,
                 "RP1 GPCLK startup reconciliation failed; transmission remains inhibited: ",
                 reconciliation.value("message", std::string("unknown route state")));
         }
-        else if (source_development)
+        else if (reconciliation.value("policyDomain", std::string{}) ==
+                 "startup-idle")
         {
             llog.logS(INFO,
-                "RP1 GPCLK exact-source development startup route reconciled; "
-                "provider identity and operation-scoped authorization remain required.");
+                "RP1 GPCLK route reconciled for safe idle startup; exact provider "
+                "identity and operation-scoped authorization remain required.");
         }
     }
 

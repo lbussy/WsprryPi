@@ -392,6 +392,90 @@ nlohmann::json Rp1GpclkRouteService::reconcileStartup() {
       !reconciled, reconciled ? "" : "RP1 GPCLK reconciliation is incomplete");
   return rendered;
 }
+nlohmann::json Rp1GpclkRouteService::reconcileIdleStartup(
+    const std::string &route) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  operations_.set_transmission_inhibited(
+      true, "RP1 GPCLK idle startup reconciliation is pending");
+  if (startup_failure_latched_)
+    return failure("startup_failure_latched",
+                   "A prior RP1 GPCLK startup reconciliation failure keeps "
+                   "transmission inhibited for this process lifetime.");
+  const std::string expected = routeForGpio(gpioForRoute(route));
+  if (expected.empty()) {
+    startup_failure_latched_ = true;
+    return failure("invalid_route",
+                   "RP1 GPCLK idle startup requires GPIO4 or GPIO20.");
+  }
+
+  auto rendered = render(request({{"schemaVersion", 1},
+                                  {"operation", "query"}}), expected);
+  const auto exact_route_state = [&expected](const nlohmann::json &value) {
+    return value.value("ok", false) &&
+           value.value("reconciled", false) &&
+           value.value("requested", std::string{}) == expected &&
+           value.value("persisted", std::string{}) == expected &&
+           value.value("configured", std::string{}) == expected &&
+           value.value("active", std::string{}) == expected &&
+           value.value("journal", std::string{}) == "none" &&
+           value.value("bootOwnership", std::string{}) == "current";
+  };
+  if (!exact_route_state(rendered)) {
+    startup_failure_latched_ = true;
+    rendered["ok"] = false;
+    rendered["result"] = "idle_startup_reconciliation_failed";
+    rendered["message"] =
+        "RP1 GPCLK idle startup route state is incomplete, stale, ambiguous, or mismatched.";
+    return rendered;
+  }
+
+  if (rendered.value("compatible", false)) {
+    const auto raw = request({{"schemaVersion", 1},
+                              {"operation", "reconcile"},
+                              {"execute", true},
+                              {"requestId", requestId("reconcile", ++generation_)},
+                              {"actor", "wsprrypi.service"}});
+    rendered = render(raw, expected);
+    const bool reconciled = exact_route_state(rendered) &&
+                            rendered.value("compatible", false);
+    rendered["ok"] = reconciled;
+    rendered["policyDomain"] = "packaged";
+    rendered["executionAuthorized"] = false;
+    if (!reconciled) {
+      startup_failure_latched_ = true;
+      rendered["result"] = "startup_reconciliation_failed";
+      rendered["message"] =
+          "Exact packaged startup reconciliation is incomplete or mismatched.";
+    }
+    operations_.set_transmission_inhibited(
+        !reconciled,
+        reconciled ? "" : "RP1 GPCLK reconciliation is incomplete");
+    return rendered;
+  }
+
+  if (!rendered.value("endpointOwned", false) ||
+      rendered.value("endpointOpen", true)) {
+    startup_failure_latched_ = true;
+    rendered["ok"] = false;
+    rendered["result"] = "idle_startup_endpoint_unsafe";
+    rendered["message"] =
+        "RP1 GPCLK idle startup requires the endpoint to be correctly owned and closed.";
+    return rendered;
+  }
+
+  rendered["ok"] = true;
+  rendered["result"] = "idle_route_reconciled";
+  rendered["policyDomain"] = "startup-idle";
+  rendered["executionAuthorized"] = false;
+  rendered["developmentAuthorizationRequired"] = true;
+  rendered["message"] =
+      "RP1 GPCLK route is reconciled for safe idle startup; an exact "
+      "operation-scoped authorization remains required for source-development output.";
+  operations_.set_transmission_inhibited(
+      true,
+      "RP1 GPCLK source-development output awaits an exact bounded authorization");
+  return rendered;
+}
 nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
     const std::string &route) {
   std::lock_guard<std::mutex> guard(mutex_);
@@ -408,6 +492,7 @@ nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
                    "Source-development startup requires GPIO4 or GPIO20.");
   }
 
+  ++generation_;
   auto rendered = render(request({{"schemaVersion", 1},
                                   {"operation", "query"}}), expected);
   const bool reconciled = rendered.value("ok", false) &&
@@ -417,7 +502,9 @@ nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
                           rendered.value("configured", std::string{}) == expected &&
                           rendered.value("active", std::string{}) == expected &&
                           rendered.value("journal", std::string{}) == "none" &&
-                          rendered.value("bootOwnership", std::string{}) == "current";
+                          rendered.value("bootOwnership", std::string{}) == "current" &&
+                          rendered.value("endpointOwned", false) &&
+                          !rendered.value("endpointOpen", true);
   rendered["policyDomain"] = "source-development";
   rendered["developmentSourceIdentity"] = kDevelopmentSourceIdentity;
   rendered["developmentModuleVersion"] =

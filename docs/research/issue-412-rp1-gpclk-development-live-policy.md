@@ -27,15 +27,22 @@ The exact compatibility identities are:
 - GPIO20: `v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3`
 
 The exact source revision for both routes is
-`7421605e0a0e41c19c6d7142a9fa87ea3a42eb98`. At Raspberry Pi 5 startup, an
-armed development operation performs a passive route-manager query and requires
-the persisted, configured, and active route to agree with current boot ownership
-and no pending transaction. It does not apply the predecessor package identity
-to the source-development candidate and it does not consume or invalidate the
-one-use authorization. The provider still authenticates the ABI-v3 development
-identity immediately before endpoint acquisition. Ordinary packaged operation
-continues to execute exact-package reconciliation and requires the complete
-released 1.1.1-1 identity.
+`7421605e0a0e41c19c6d7142a9fa87ea3a42eb98`. At Raspberry Pi 5 process startup,
+WsprryPi first establishes an output-unauthorized idle route. An exact packaged
+identity continues into packaged route-manager reconciliation. A different
+package identity is accepted only as a passive idle state when the persisted,
+configured, active, and requested routes agree, boot ownership is current, and
+no transaction is pending. This startup state never authorizes output.
+The route transaction remains transmission-inhibiting until a validated bounded
+request completes its fresh development reconciliation.
+
+After the loopback-only bounded request is parsed and every development
+confirmation is validated, WsprryPi performs a fresh passive development-route
+reconciliation and binds its generation to that exact request. Backend
+configuration then arms the one-use authorization. The provider authenticates
+the ABI-v3 development identity and consumes that authorization immediately
+before endpoint acquisition. Ordinary packaged operation continues to require
+the complete released 1.1.1-1 identity.
 
 Changing route, operation identity, module identity, transaction state, or
 confirmation route invalidates the decision. The decision is recomputed after
