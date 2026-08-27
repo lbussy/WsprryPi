@@ -455,6 +455,19 @@ void test_acquire_state_release_and_generation()
         "impossible nonterminal state/reason pair must fail closed");
     expect(provider.requestFiniteStop(9, error) && io.stop.lease_id == io.lease_id,
         "STOP must bind lease and generation");
+    io.fail_request = RP1_GPCLK_IOC_STOP;
+    io.fail_error = EALREADY;
+    io.state = RP1_GPCLK_STATE_COMPLETE;
+    io.terminal_reason = RP1_GPCLK_REASON_COMPLETE;
+    error.clear();
+    expect(provider.requestFiniteStop(9, error),
+        "STOP EALREADY must be idempotent only for authenticated terminal state");
+    io.state = RP1_GPCLK_STATE_RUNNING;
+    io.terminal_reason = RP1_GPCLK_REASON_NONE;
+    error.clear();
+    expect(!provider.requestFiniteStop(9, error),
+        "STOP EALREADY must fail closed for nonterminal state");
+    io.fail_request = 0;
     expect(provider.release(error), "owned lease must release and close cleanly");
     expect(io.release.lease_id == io.lease_id && io.closes == 2,
         "terminal generation must use terminal-only RELEASE before close");

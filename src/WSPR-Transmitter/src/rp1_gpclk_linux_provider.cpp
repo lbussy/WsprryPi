@@ -522,8 +522,21 @@ bool Rp1GpclkLinuxProvider::requestFiniteStop(std::uint64_t generation, std::str
 {
     rp1_gpclk_stop_v1 request{}; initializeHeaderV1(request);
     request.lease_id = lease_id_; request.generation = generation;
-    if (fd_ < 0 || lease_id_ == 0 || io_.control(fd_, RP1_GPCLK_IOC_STOP, &request) < 0)
+    if (fd_ < 0 || lease_id_ == 0)
         return failed("Could not request RP1 GPCLK finite stop", error);
+    if (io_.control(fd_, RP1_GPCLK_IOC_STOP, &request) < 0)
+    {
+        if (io_.lastError() != EALREADY)
+            return failed("Could not request RP1 GPCLK finite stop", error);
+        Rp1GpclkProviderEventState state_result;
+        if (!getState(generation, state_result, error) ||
+            state_result.completion != Rp1GpclkCompletionState::complete)
+        {
+            if (error.empty())
+                error = "RP1 GPCLK finite stop reported an already-finished operation without authenticated terminal state.";
+            return false;
+        }
+    }
     return true;
 }
 
