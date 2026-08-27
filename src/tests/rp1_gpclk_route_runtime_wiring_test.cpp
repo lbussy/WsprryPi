@@ -65,6 +65,12 @@ int main() {
         "runtime_transmit_enabled(cfg)", direct_reconciliation);
     const auto direct_commit = scheduling.find(
         "prepare_and_commit_non_wspr_request(", direct_runtime_gate);
+    const auto wspr_request = scheduling.find(
+        "request_out = make_wspr_request(");
+    const auto wspr_confirmation = scheduling.find(
+        "apply_direct_rp1_development_confirmation(", wspr_request);
+    const auto wspr_request_return = scheduling.find(
+        "return true;", wspr_confirmation);
     assert(arg_parser.find("rp1-development-confirmation-json") != std::string::npos);
     assert(direct_confirmation != std::string::npos);
     assert(direct_start != std::string::npos);
@@ -74,6 +80,11 @@ int main() {
     assert(direct_start < direct_reconciliation);
     assert(direct_reconciliation < direct_runtime_gate);
     assert(direct_runtime_gate < direct_commit);
+    assert(wspr_request != std::string::npos);
+    assert(wspr_confirmation != std::string::npos);
+    assert(wspr_request_return != std::string::npos);
+    assert(wspr_request < wspr_confirmation);
+    assert(wspr_confirmation < wspr_request_return);
     assert(scheduling.find("physical_connection_confirmed") != std::string::npos);
     assert(scheduling.find("confirmation_operation_id") != std::string::npos);
     assert(scheduling.find("? cfg.rp1_gpio_drive_ma") != std::string::npos);

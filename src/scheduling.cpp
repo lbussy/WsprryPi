@@ -3252,6 +3252,13 @@ static bool configure_current_wspr_transmission(
             frequency_entry,
             0.0);
 
+        std::string development_error;
+        if (!apply_direct_rp1_development_confirmation(
+                cfg, request_out, &development_error))
+        {
+            throw std::runtime_error(development_error);
+        }
+
         if (plan.frameCount() > 1U)
         {
             llog.logS(
