@@ -468,6 +468,10 @@ void test_acquire_state_release_and_generation()
     expect(!provider.requestFiniteStop(9, error),
         "STOP EALREADY must fail closed for nonterminal state");
     io.fail_request = 0;
+    io.state = RP1_GPCLK_STATE_COMPLETE;
+    io.terminal_reason = RP1_GPCLK_REASON_COMPLETE;
+    expect(provider.state(9) == wsprrypi::Rp1GpclkCompletionState::complete,
+        "terminal state must be reauthenticated after the negative STOP case");
     expect(provider.release(error), "owned lease must release and close cleanly");
     expect(io.release.lease_id == io.lease_id && io.closes == 2,
         "terminal generation must use terminal-only RELEASE before close");
