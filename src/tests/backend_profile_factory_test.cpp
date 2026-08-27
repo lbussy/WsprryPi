@@ -82,6 +82,7 @@ int main()
 
     constexpr std::array config_backends{
         TransmitBackendKind::GPIO,
+        TransmitBackendKind::RP1_GPCLK,
         TransmitBackendKind::SI5351,
         TransmitBackendKind::SIMULATED,
     };
@@ -101,6 +102,8 @@ int main()
 
     if (!transmit_backend_requires_root(TransmitBackendKind::GPIO))
         throw std::runtime_error("GPIO backend unexpectedly permits non-root execution");
+    if (!transmit_backend_requires_root(TransmitBackendKind::RP1_GPCLK))
+        throw std::runtime_error("RP1 GPCLK backend unexpectedly permits non-root execution");
     if (transmit_backend_requires_root(TransmitBackendKind::SIMULATED))
         throw std::runtime_error("simulated backend unexpectedly requires root");
 

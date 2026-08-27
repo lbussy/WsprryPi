@@ -140,9 +140,17 @@ enum class WsprPlannerPreference
 enum class TransmitBackendKind
 {
     GPIO = 0,
+    RP1_GPCLK,
     SI5351,
     SIMULATED
 };
+
+inline constexpr bool transmit_backend_uses_gpio_output(
+    TransmitBackendKind backend) noexcept
+{
+    return backend == TransmitBackendKind::GPIO ||
+        backend == TransmitBackendKind::RP1_GPCLK;
+}
 
 enum class EnableOnBootBehavior
 {
@@ -158,6 +166,8 @@ inline constexpr const char *transmit_backend_kind_to_string(
     {
     case TransmitBackendKind::GPIO:
         return "gpio";
+    case TransmitBackendKind::RP1_GPCLK:
+        return "rp1-gpclk";
     case TransmitBackendKind::SI5351:
         return "si5351";
     case TransmitBackendKind::SIMULATED:

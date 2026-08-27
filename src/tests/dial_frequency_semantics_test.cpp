@@ -645,16 +645,17 @@ int main(int argc, char *argv[])
         config.rp1_gpio_drive_ma == 12,
         "RP1 GPIO drive must survive managed INI reload");
     set_raspberry_pi_generation_override_for_test(5);
-    config.transmit_backend = TransmitBackendKind::GPIO;
+    config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
     for (const int drive_ma : {2, 4, 8, 12})
     {
         config.rp1_gpio_drive_ma = drive_ma;
         resolve_backend_specific_config(config);
         require(
             config.power_level == drive_ma,
-            "Pi 5 runtime resolution must consume each committed RP1 drive unchanged");
+            "explicit RP1 runtime resolution must consume each committed drive unchanged");
     }
     set_raspberry_pi_generation_override_for_test(4);
+    config.transmit_backend = TransmitBackendKind::GPIO;
     config.gpio_power_level = 7;
     resolve_backend_specific_config(config);
     require(
@@ -663,9 +664,11 @@ int main(int argc, char *argv[])
     init_default_config();
 
     {
+#if WSPRRYPI_BACKEND_RP1_GPCLK
         set_raspberry_pi_generation_override_for_test(5);
         set_rp1_gpclk_provider_available_override_for_test(true);
         prime_valid_runtime_identity_config();
+        config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
         config.frequencies = "20m";
         config.wspr.frequencies = config.frequencies;
         set_frequencies(config);
@@ -721,6 +724,7 @@ int main(int argc, char *argv[])
 
         clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();
+#endif
     }
 
     BandLookup lookup;
@@ -973,7 +977,7 @@ int main(int argc, char *argv[])
                 {
                     prime_valid_runtime_identity_config();
                     config.transmit = transmit;
-                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
                     config.gpio_tx_pin = transmit_pin;
                     resolve_backend_specific_config(config);
                     assign_ordinary_gpio(config, role, transmit_pin, true);
@@ -986,7 +990,7 @@ int main(int argc, char *argv[])
 
                     prime_valid_runtime_identity_config();
                     config.transmit = transmit;
-                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
                     config.gpio_tx_pin = transmit_pin;
                     resolve_backend_specific_config(config);
                     assign_ordinary_gpio(config, role, available_pin, true);
@@ -996,7 +1000,7 @@ int main(int argc, char *argv[])
 
                     prime_valid_runtime_identity_config();
                     config.transmit = transmit;
-                    config.transmit_backend = TransmitBackendKind::GPIO;
+                    config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
                     config.gpio_tx_pin = transmit_pin;
                     resolve_backend_specific_config(config);
                     assign_ordinary_gpio(config, role, transmit_pin, false);
@@ -1273,6 +1277,7 @@ int main(int argc, char *argv[])
         set_raspberry_pi_generation_override_for_test(5);
         set_rp1_gpclk_provider_available_override_for_test(true);
         prime_valid_runtime_identity_config();
+        config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
 
         std::string validation_error;
         require(
@@ -1280,7 +1285,10 @@ int main(int argc, char *argv[])
             "GPIO4 must be accepted on Raspberry Pi 5 when the RP1 provider is available");
 
         PreparedConfigCandidate candidate;
-        iniFile.setData(make_managed_ini_data("AA0NT", "EM18", "20m", true));
+        auto managed_rp1_ini =
+            make_managed_ini_data("AA0NT", "EM18", "20m", true);
+        managed_rp1_ini["Operation"]["Transmit Backend"] = "rp1-gpclk";
+        iniFile.setData(managed_rp1_ini);
         prepare_ini_config_candidate("/tmp/gpio_pi5.ini", candidate);
         require(
             candidate.valid,
@@ -1294,6 +1302,7 @@ int main(int argc, char *argv[])
         set_raspberry_pi_generation_override_for_test(5);
         set_rp1_gpclk_provider_available_override_for_test(true);
         prime_valid_runtime_identity_config();
+        config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
         config.transmit = false;
 
         std::string validation_error;
@@ -1304,7 +1313,10 @@ int main(int argc, char *argv[])
         clear_rp1_gpclk_provider_available_override_for_test();
 
         PreparedConfigCandidate inactive_candidate;
-        iniFile.setData(make_managed_ini_data("AA0NT", "EM18", "20m", false));
+        auto inactive_managed_rp1_ini =
+            make_managed_ini_data("AA0NT", "EM18", "20m", false);
+        inactive_managed_rp1_ini["Operation"]["Transmit Backend"] = "rp1-gpclk";
+        iniFile.setData(inactive_managed_rp1_ini);
         prepare_ini_config_candidate("/tmp/inactive_gpio_pi5.ini", inactive_candidate);
         require(
             inactive_candidate.valid,
@@ -1457,7 +1469,7 @@ int main(int argc, char *argv[])
         std::vector<std::string> args = {
             "wsprrypi",
             "--backend",
-            "gpio",
+            "rp1-gpclk",
             "AA0NT",
             "EM18",
             "20",
@@ -1466,15 +1478,20 @@ int main(int argc, char *argv[])
 
         require(
             parse_command_line(static_cast<int>(argv.size()), argv.data()),
-            "CLI GPIO setup on Raspberry Pi 5 must still parse before validation");
+            "explicit CLI RP1 GPCLK setup on Raspberry Pi 5 must parse before validation");
         std::string validation_error;
         require(
             validate_config_data_for_test(&validation_error),
-            "CLI startup validation must accept GPIO on Raspberry Pi 5 with the RP1 provider");
+            "CLI startup validation must accept the explicit RP1 GPCLK backend on Raspberry Pi 5");
+        require(
+            config.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
+                std::string(transmit_backend_kind_to_string(config.transmit_backend)) ==
+                    "rp1-gpclk",
+            "explicit RP1 GPCLK CLI selection must retain its distinct runtime identity");
         require(
             current_transmission_request_for_test().actual_rf_frequency_hz == 0.0 &&
                 current_transmission_request_for_test().payload.frames.empty(),
-            "Pi 5 RP1 CLI validation must not itself commit a transmission request");
+            "RP1 GPCLK CLI validation must not itself commit a transmission request");
 
         clear_rp1_gpclk_provider_available_override_for_test();
         clear_pi_generation_override_for_scope();

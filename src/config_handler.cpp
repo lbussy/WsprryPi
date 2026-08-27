@@ -64,9 +64,9 @@ bool transmit_backend_is_compiled(TransmitBackendKind backend) noexcept
     switch (backend)
     {
     case TransmitBackendKind::GPIO:
-        return get_raspberry_pi_generation() == 5
-            ? WSPRRYPI_BACKEND_RP1_GPCLK
-            : WSPRRYPI_BACKEND_RPI_GPIO;
+        return WSPRRYPI_BACKEND_RPI_GPIO;
+    case TransmitBackendKind::RP1_GPCLK:
+        return WSPRRYPI_BACKEND_RP1_GPCLK;
     case TransmitBackendKind::SI5351:
         return WSPRRYPI_BACKEND_SI5351;
     case TransmitBackendKind::SIMULATED:
@@ -84,6 +84,7 @@ bool transmit_backend_requires_root(TransmitBackendKind backend) noexcept
     case TransmitBackendKind::SI5351:
         return build_has_physical_gpio_capability();
     case TransmitBackendKind::GPIO:
+    case TransmitBackendKind::RP1_GPCLK:
         return true;
     }
     return true;
@@ -228,12 +229,16 @@ namespace
         {
             return TransmitBackendKind::SI5351;
         }
+        if (lowered == "rp1-gpclk")
+        {
+            return TransmitBackendKind::RP1_GPCLK;
+        }
         if (lowered == "simulated")
             throw std::runtime_error(
                 "Operation.Transmit Backend 'simulated' is transient and cannot be persisted.");
 
         throw std::runtime_error(
-            "Invalid Operation.Transmit Backend. Expected 'gpio' or 'si5351'; simulated is CLI-only.");
+            "Invalid Operation.Transmit Backend. Expected 'gpio', 'rp1-gpclk', or 'si5351'; simulated is CLI-only.");
     }
 
     EnableOnBootBehavior parse_enable_on_boot_behavior(
@@ -1225,7 +1230,7 @@ void resolve_backend_specific_config(ArgParserConfig &config) noexcept
         return;
     }
 
-    config.power_level = get_raspberry_pi_generation() == 5
+    config.power_level = config.transmit_backend == TransmitBackendKind::RP1_GPCLK
         ? config.rp1_gpio_drive_ma
         : config.gpio_power_level;
     config.use_system_clock_frequency_estimate = config.gpio_use_system_clock_frequency_estimate;
@@ -1663,7 +1668,7 @@ namespace
             gpio.contains("Transmit Pin")
                 ? gpio.at("Transmit Pin").get<int>()
                 : kDefaultTransmitGpio;
-        if (target.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(target.transmit_backend))
         {
             target.gpio_tx_pin = normalize_gpio_transmit_pin(target.gpio_tx_pin);
         }

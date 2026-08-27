@@ -1155,8 +1155,7 @@ static void commit_execution_request(
 
     if (current_transmission_request.isTone() &&
         (config.transmit_backend == TransmitBackendKind::SI5351 ||
-         (config.transmit_backend == TransmitBackendKind::GPIO &&
-          get_raspberry_pi_generation() == 5)))
+         config.transmit_backend == TransmitBackendKind::RP1_GPCLK))
     {
         wsprrypi::TransmissionRequest controller_request =
             build_controller_request_from_legacy(
@@ -1253,9 +1252,9 @@ static wsprrypi::HardwareProfile to_controller_profile(
         return wsprrypi::HardwareProfile::SI5351;
     if (backend == TransmitBackendKind::SIMULATED)
         return wsprrypi::HardwareProfile::UNSPECIFIED;
-    const int generation = get_raspberry_pi_generation();
-    if (generation == 5)
+    if (backend == TransmitBackendKind::RP1_GPCLK)
         return wsprrypi::HardwareProfile::RP1_GPCLK;
+    const int generation = get_raspberry_pi_generation();
     if (generation == 4)
         return wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD;
     return wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD;
@@ -1598,9 +1597,9 @@ static wsprrypi::BackendKind to_controller_backend(
         return wsprrypi::BackendKind::SI5351;
     if (backend == TransmitBackendKind::SIMULATED)
         return wsprrypi::BackendKind::SIMULATED;
-    return get_raspberry_pi_generation() == 5
-        ? wsprrypi::BackendKind::RP1_GPCLK
-        : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
+    if (backend == TransmitBackendKind::RP1_GPCLK)
+        return wsprrypi::BackendKind::RP1_GPCLK;
+    return wsprrypi::BackendKind::RPI_CLOCK_GPIO;
 }
 
 static wsprrypi::ClockSource to_controller_clock_source(
@@ -3865,7 +3864,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             lookup.freq_display_string(actual_rf_freq));
     }
     double committed_ppm = config.ppm;
-    if (config.transmit_backend == TransmitBackendKind::GPIO)
+    if (transmit_backend_uses_gpio_output(config.transmit_backend))
     {
         const GpioFrequencyCorrection selected_correction =
             select_and_publish_gpio_correction(config);
@@ -4360,8 +4359,7 @@ bool wspr_loop()
             startup_quiesce_error);
     }
 
-    if (config.transmit_backend == TransmitBackendKind::GPIO &&
-        get_pi_model().find("Raspberry Pi 5") != std::string::npos)
+    if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
     {
         const auto reconciliation =
             wsprrypi::productionRp1GpclkRouteService().reconcileIdleStartup(
@@ -4878,8 +4876,7 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
     snapshot.rp1_journal_state = rp1_route_transaction_inhibited_state()
         ? "unresolved"
         : "none-reported";
-    if (config.transmit_backend == TransmitBackendKind::GPIO &&
-        get_pi_model().find("Raspberry Pi 5") != std::string::npos)
+    if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
     {
         const auto route = wsprrypi::productionRp1GpclkRouteService().query();
         snapshot.rp1_route_requested = route.value("requested", std::string("Unavailable"));
@@ -5242,7 +5239,7 @@ bool set_config(bool force)
             working_config.use_system_clock_frequency_estimate && ppm_running;
         bool runtime_ppm_changed = false;
         double committed_ppm = working_config.ppm;
-        if (working_config.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(working_config.transmit_backend))
         {
             if (ppm_update_pending || ppm_manager_authoritative)
             {

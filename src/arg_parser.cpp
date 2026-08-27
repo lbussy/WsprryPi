@@ -398,7 +398,7 @@ static bool validate_pi_io_gpio_assignments(
     }
 
     const bool gpio_rf_output_reserved =
-        candidate.transmit_backend == TransmitBackendKind::GPIO &&
+        transmit_backend_uses_gpio_output(candidate.transmit_backend) &&
         is_supported_transmit_gpio(candidate.gpio_tx_pin);
 
     if (gpio_rf_output_reserved)
@@ -509,6 +509,11 @@ bool backend_ready_for_transmission(
     if (candidate.transmit_backend == TransmitBackendKind::GPIO)
     {
         return platform_supports_gpio_clock_transmission(error_message);
+    }
+
+    if (candidate.transmit_backend == TransmitBackendKind::RP1_GPCLK)
+    {
+        return true;
     }
 
     if (candidate.transmit_backend == TransmitBackendKind::SI5351)
@@ -634,6 +639,15 @@ static TransmitBackendKind parse_transmit_backend_option(
         return TransmitBackendKind::GPIO;
     }
 
+    if (lowered == "rp1-gpclk")
+    {
+        if (require_compiled &&
+            !transmit_backend_is_compiled(TransmitBackendKind::RP1_GPCLK))
+            throw std::invalid_argument(
+                transmit_backend_unavailable_message(TransmitBackendKind::RP1_GPCLK));
+        return TransmitBackendKind::RP1_GPCLK;
+    }
+
     if (lowered == "si5351")
     {
         if (require_compiled &&
@@ -653,7 +667,7 @@ static TransmitBackendKind parse_transmit_backend_option(
     }
 
     throw std::invalid_argument(
-        "Invalid backend. Expected 'gpio', 'si5351', or 'simulated'.");
+        "Invalid backend. Expected 'gpio', 'rp1-gpclk', 'si5351', or 'simulated'.");
 }
 
 static int parse_integer_option(
@@ -1481,9 +1495,10 @@ void print_usage(const std::string &message, int exit_code)
               << "Backend Selection:\n"
               << "  Compiled backends: " << get_compiled_backends() << "\n"
               << "  Ancillary GPIO: " << (has_ancillary_gpio() ? "enabled" : "disabled") << "\n"
-              << "  --backend <gpio|si5351|simulated>  Select the backend. Default: gpio.\n"
+              << "  --backend <gpio|rp1-gpclk|si5351|simulated>\n"
+              << "                                     Select the backend. Default: gpio.\n"
               << "                                     simulated is transient, non-RF, and never persisted.\n"
-              << "                                     GPIO uses the RP1 provider on Raspberry Pi 5.\n"
+              << "                                     rp1-gpclk is an explicit Experimental Pi 5 backend and never a gpio fallback.\n"
               << "  --power-level <level>\n"
               << "    Set transmit power level for the active backend:\n"
               << "      GPIO: 0-7\n"
@@ -1630,7 +1645,7 @@ void show_config_values(bool reload)
         DEBUG,
         config.transmit_backend == TransmitBackendKind::SI5351
             ? "Si5351 Drive Level: "
-            : get_raspberry_pi_generation() == 5
+            : config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                 ? "RP1 GPIO Drive mA: "
                 : "GPIO Power Level: ",
         config.power_level);
@@ -1863,12 +1878,13 @@ bool validate_config_candidate(
         return false;
     }
 
-    if (candidate.transmit_backend == TransmitBackendKind::GPIO)
+    if (transmit_backend_uses_gpio_output(candidate.transmit_backend))
     {
-        const bool inactive_pi5_configuration =
-            get_raspberry_pi_generation() == 5 &&
+        const bool inactive_rp1_configuration =
+            candidate.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
             (!require_live_backend || !backend_validation_required);
-        if (!inactive_pi5_configuration &&
+        if (candidate.transmit_backend == TransmitBackendKind::GPIO &&
+            !inactive_rp1_configuration &&
             !platform_supports_gpio_clock_transmission(error_message))
         {
             return false;
@@ -1884,7 +1900,7 @@ bool validate_config_candidate(
             return false;
         }
 
-        if (get_raspberry_pi_generation() == 5 &&
+        if (candidate.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
             !is_supported_rp1_gpio_drive_ma(candidate.rp1_gpio_drive_ma))
         {
             if (error_message != nullptr)
@@ -1895,7 +1911,7 @@ bool validate_config_candidate(
             return false;
         }
 
-        if (get_raspberry_pi_generation() != 5 &&
+        if (candidate.transmit_backend == TransmitBackendKind::GPIO &&
             (candidate.gpio_power_level < 0 || candidate.gpio_power_level > 7))
         {
             if (error_message != nullptr)
@@ -2152,7 +2168,7 @@ void apply_runtime_config_side_effects()
             ? wsprrypi::BackendKind::SIMULATED
             : config.transmit_backend == TransmitBackendKind::SI5351
                 ? wsprrypi::BackendKind::SI5351
-                : get_raspberry_pi_generation() == 5
+                : config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                     ? wsprrypi::BackendKind::RP1_GPCLK
                     : wsprrypi::BackendKind::RPI_CLOCK_GPIO;
     WsprTransmitter::Si5351RuntimeConfig si5351_config;
@@ -2334,11 +2350,11 @@ void apply_runtime_config_side_effects()
             "- Base Freq: ",
             lookup.freq_display_string(frequency_hz));
         log_startup_config_message(INFO, "- Dot Timing: ", dot_seconds, "s");
-        if (config.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(config.transmit_backend))
         {
             log_startup_config_message(
                 INFO,
-                get_raspberry_pi_generation() == 5
+                config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                     ? "- RP1 GPIO Drive mA: "
                     : "- GPIO Transmit Power: ",
                 config.power_level);
@@ -2388,11 +2404,11 @@ void apply_runtime_config_side_effects()
             "- Space Freq: ",
             lookup.freq_display_string(space_frequency_hz));
         log_startup_config_message(INFO, "- Dot Timing: ", dot_seconds, "s");
-        if (config.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(config.transmit_backend))
         {
             log_startup_config_message(
                 INFO,
-                get_raspberry_pi_generation() == 5
+                config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                     ? "- RP1 GPIO Drive mA: "
                     : "- GPIO Transmit Power: ",
                 config.power_level);
@@ -2442,11 +2458,11 @@ void apply_runtime_config_side_effects()
             "- Dash Freq: ",
             lookup.freq_display_string(dash_frequency_hz));
         log_startup_config_message(INFO, "- Dot Timing: ", dot_seconds, "s");
-        if (config.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(config.transmit_backend))
         {
             log_startup_config_message(
                 INFO,
-                get_raspberry_pi_generation() == 5
+                config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                     ? "- RP1 GPIO Drive mA: "
                     : "- GPIO Transmit Power: ",
                 config.power_level);
@@ -2472,11 +2488,11 @@ void apply_runtime_config_side_effects()
         log_startup_config_message(INFO, "- Callsign: ", config.callsign);
         log_startup_config_message(INFO, "- Locator: ", config.grid_square);
         log_startup_config_message(INFO, "- Power: ", config.power_dbm, " dBm");
-        if (config.transmit_backend == TransmitBackendKind::GPIO)
+        if (transmit_backend_uses_gpio_output(config.transmit_backend))
         {
             log_startup_config_message(
                 INFO,
-                get_raspberry_pi_generation() == 5
+                config.transmit_backend == TransmitBackendKind::RP1_GPCLK
                     ? "- RP1 GPIO Drive mA: "
                     : "- GPIO Transmit Power: ",
                 config.power_level);
@@ -2658,7 +2674,7 @@ bool validate_config_data()
             (void)platform_supports_gpio_clock_transmission(&platform_error);
             llog.logE(ERROR, " - ", platform_error);
         }
-        if (config.transmit_backend == TransmitBackendKind::GPIO &&
+        if (transmit_backend_uses_gpio_output(config.transmit_backend) &&
             !is_valid_runtime_transmit_gpio(config.tx_pin))
         {
             llog.logE(ERROR, " - ", transmit_gpio_validation_message());
@@ -4202,7 +4218,7 @@ bool parse_command_line(int argc, char *argv[])
                         config.si5351_power_level = power;
                     }
                 }
-                else if (get_raspberry_pi_generation() == 5)
+                else if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
                 {
                     config.rp1_gpio_drive_ma =
                         is_supported_rp1_gpio_drive_ma(power)
@@ -4227,7 +4243,7 @@ bool parse_command_line(int argc, char *argv[])
                     llog.logE(WARN, "Invalid Si5351 power level, defaulting to 1.");
                     config.si5351_power_level = 1;
                 }
-                else if (get_raspberry_pi_generation() == 5)
+                else if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
                 {
                     llog.logE(WARN, "Invalid RP1 GPIO drive, defaulting to 2 mA.");
                     config.rp1_gpio_drive_ma = kDefaultRp1GpioDriveMa;
