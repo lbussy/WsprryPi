@@ -113,6 +113,7 @@ bool Rp1GpclkBackend::emitEvents(
         return false;
     }
     program.generation = 0;
+    program.drive_ma = drive_ma_;
     if (!provider_.submitEvents(program, error))
         return false;
     generation_ = program.generation;

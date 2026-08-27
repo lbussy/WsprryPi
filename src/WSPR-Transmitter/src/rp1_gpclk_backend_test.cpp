@@ -74,7 +74,9 @@ void test_event_program_submission() {
  wsprrypi::Rp1GpclkProviderEventProgram program; program.fractional_bits=16; program.tick_divider=511; program.total_duration_ns=10;
  program.tones.push_back({1,2,1,1}); program.events.push_back({10,0,true});
  expect(prepare(b,2,e) && b.emitEvents(program,e), "finite event program must submit");
- expect(p.event_programs.size()==1 && p.event_programs[0].generation==1, "event submission must assign generation");
+ expect(p.event_programs.size()==1 && p.event_programs[0].generation==1 &&
+  p.event_programs[0].drive_ma==2,
+  "event submission must bind generation and prepared drive");
  p.current=wsprrypi::Rp1GpclkCompletionState::complete;
  expect(b.cleanup(e), "completed event program must release");
 }
