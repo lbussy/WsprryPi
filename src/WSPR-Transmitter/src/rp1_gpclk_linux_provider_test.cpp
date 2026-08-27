@@ -45,10 +45,13 @@ public:
             value->header = input;
             if (unknown_snapshot_flags) value->header.flags = 1;
             value->route = query.route;
-            value->compatibility_state = query.compatibility_state;
+            value->compatibility_state = independent_safe_idle_snapshot
+                ? RP1_GPCLK_COMPAT_EXPERIMENTAL : query.compatibility_state;
             value->compatibility_reason = query.compatibility_reason;
-            value->capabilities = query.capabilities | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
-            value->live_eligible = query.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE
+            value->capabilities = query.capabilities | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
+                (independent_safe_idle_snapshot ? RP1_GPCLK_CAP_LIVE_ELIGIBLE : 0);
+            value->live_eligible = independent_safe_idle_snapshot ||
+                query.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE
                 ? RP1_GPCLK_OBSERVATION_TRUE : RP1_GPCLK_OBSERVATION_FALSE;
             std::strcpy(value->module_id, query.module_id);
             std::strcpy(value->build_id, query.build_id);
@@ -160,6 +163,7 @@ public:
     bool wrong_query_version{};
     bool unknown_query_flags{};
     bool unknown_snapshot_flags{};
+    bool independent_safe_idle_snapshot{};
 };
 
 void test_query_and_fail_closed_validation()
@@ -233,6 +237,25 @@ void test_query_and_fail_closed_validation()
     std::strcpy(io.query.build_id, "1.0.1");
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
         false, identity, error), "non-frozen module/build identity must fail closed");
+}
+
+void test_safe_idle_query_projection_uses_authenticated_passive_identity()
+{
+    Io io;
+    io.query.compatibility_reason = RP1_GPCLK_COMPAT_REASON_NONE;
+    io.independent_safe_idle_snapshot = true;
+    wsprrypi::Rp1GpclkLinuxProvider provider(io);
+    wsprrypi::Rp1GpclkProviderIdentity identity;
+    std::string error;
+    expect(provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error),
+        "safe-idle ABI v2 projection must reconcile with passive ABI v3 eligibility");
+    expect(identity.compatibility_state == RP1_GPCLK_COMPAT_EXPERIMENTAL &&
+        (identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) != 0,
+        "passive ABI v3 identity must become authoritative after reconciliation");
+    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        true, identity, error),
+        "safe-idle projection must not satisfy an already-live query");
 }
 
 void test_old_module_and_tone_v2()
@@ -460,6 +483,7 @@ void test_failure_cleanup_and_historical_endpoint_rejection()
 int main()
 {
     test_query_and_fail_closed_validation();
+    test_safe_idle_query_projection_uses_authenticated_passive_identity();
     test_acquire_state_release_and_generation();
     test_old_module_and_tone_v2();
     test_passive_snapshot_is_read_only_and_fail_closed();

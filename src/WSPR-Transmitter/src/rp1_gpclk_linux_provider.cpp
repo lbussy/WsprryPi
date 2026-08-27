@@ -205,8 +205,16 @@ bool Rp1GpclkLinuxProvider::query(
     if (!ok) return false;
     Rp1GpclkPassiveSnapshot snapshot;
     if (!passiveSnapshot(snapshot, error)) return false;
+    const bool safe_idle_eligibility_projection =
+        !require_live_eligible &&
+        identity.compatibility_state == RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED &&
+        (identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0 &&
+        snapshot.compatibility_state == RP1_GPCLK_COMPAT_EXPERIMENTAL &&
+        snapshot.live_output == RP1_GPCLK_OBSERVATION_FALSE &&
+        snapshot.live_eligible == RP1_GPCLK_OBSERVATION_TRUE;
     if (snapshot.route != identity.route ||
-        snapshot.compatibility_state != identity.compatibility_state ||
+        (snapshot.compatibility_state != identity.compatibility_state &&
+            !safe_idle_eligibility_projection) ||
         snapshot.compatibility_reason != identity.compatibility_reason ||
         snapshot.module_id != identity.module_id || snapshot.build_id != identity.build_id ||
         snapshot.compatibility_id != identity.compatibility_id)
@@ -224,6 +232,7 @@ bool Rp1GpclkLinuxProvider::query(
     }
     identity.abi_min = snapshot.abi_min;
     identity.abi_max = snapshot.abi_max;
+    identity.compatibility_state = snapshot.compatibility_state;
     identity.capabilities |= snapshot.capabilities;
     if ((identity.capabilities & required_capabilities) != required_capabilities)
     {
