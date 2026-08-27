@@ -2342,7 +2342,10 @@ static TransmissionRequest make_qrss_legacy_request(
     request.dial_frequency_hz = cfg.qrss.frequency_hz;
     request.actual_rf_frequency_hz = cfg.qrss.frequency_hz;
     request.ppm = committed_ppm;
-    request.power_level = cfg.power_level;
+    request.power_level =
+        cfg.transmit_backend == TransmitBackendKind::RP1_GPCLK
+            ? cfg.rp1_gpio_drive_ma
+            : cfg.power_level;
     request.tx_gpio = cfg.tx_pin;
     request.frequency_entry_label = "qrss-cli-test";
     return request;
@@ -2385,7 +2388,10 @@ static TransmissionRequest make_fskcw_legacy_request(
     request.dial_frequency_hz = cfg.fskcw.mark_frequency_hz;
     request.actual_rf_frequency_hz = cfg.fskcw.mark_frequency_hz;
     request.ppm = committed_ppm;
-    request.power_level = cfg.power_level;
+    request.power_level =
+        cfg.transmit_backend == TransmitBackendKind::RP1_GPCLK
+            ? cfg.rp1_gpio_drive_ma
+            : cfg.power_level;
     request.tx_gpio = cfg.tx_pin;
     request.applied_offset_hz =
         cfg.fskcw.mark_frequency_hz - cfg.fskcw.space_frequency_hz;
@@ -2430,7 +2436,10 @@ static TransmissionRequest make_dfcw_legacy_request(
     request.dial_frequency_hz = cfg.dfcw.dot_frequency_hz;
     request.actual_rf_frequency_hz = cfg.dfcw.dot_frequency_hz;
     request.ppm = committed_ppm;
-    request.power_level = cfg.power_level;
+    request.power_level =
+        cfg.transmit_backend == TransmitBackendKind::RP1_GPCLK
+            ? cfg.rp1_gpio_drive_ma
+            : cfg.power_level;
     request.tx_gpio = cfg.tx_pin;
     request.applied_offset_hz =
         cfg.dfcw.dash_frequency_hz - cfg.dfcw.dot_frequency_hz;

@@ -76,6 +76,7 @@ int main() {
     assert(direct_runtime_gate < direct_commit);
     assert(scheduling.find("physical_connection_confirmed") != std::string::npos);
     assert(scheduling.find("confirmation_operation_id") != std::string::npos);
+    assert(scheduling.find("? cfg.rp1_gpio_drive_ma") != std::string::npos);
     assert(scheduling.find("rp1GpclkDevelopmentOperationArmedForRoute(route)") == std::string::npos);
     assert(scheduling.find("Legacy transmission output") == std::string::npos);
     assert(scheduling.find("rp1_gpclk_application_idle_state") != std::string::npos);
