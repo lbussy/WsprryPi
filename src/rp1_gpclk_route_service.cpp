@@ -509,7 +509,7 @@ nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
   rendered["developmentSourceIdentity"] = kDevelopmentSourceIdentity;
   rendered["developmentModuleVersion"] =
       kRp1GpclkDevelopmentModuleVersion.data();
-  rendered["developmentUapiAbi"] = 3;
+  rendered["developmentUapiAbi"] = 4;
   rendered["developmentCompatibilityState"] = "Experimental";
   rendered["packageIdentityRequired"] = false;
   rendered["developmentIdentityRequired"] = true;

@@ -91,7 +91,8 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
   assert(identity.has_value());
   inputs.identity = *identity;
   inputs.identity.capabilities =
-      wsprrypi::kRp1GpclkDevelopmentCapabilityLiveEligible;
+      wsprrypi::kRp1GpclkDevelopmentCapabilityLiveEligible |
+      wsprrypi::kRp1GpclkDevelopmentCapabilityOperationLiveGate;
   inputs.confirmation_identity =
       wsprrypi::rp1GpclkDevelopmentIdentityBinding(*identity);
   return inputs;
@@ -379,7 +380,7 @@ int main() {
     assert(development.result.at("policyDomain") == "source-development");
     assert(development.result.at("packageIdentityRequired") == false);
     assert(development.result.at("developmentIdentityRequired") == true);
-    assert(development.result.at("developmentUapiAbi") == 3);
+    assert(development.result.at("developmentUapiAbi") == 4);
     assert(development.result.at("developmentCompatibilityState") ==
            "Experimental");
     assert(development.requests.size() == 1);

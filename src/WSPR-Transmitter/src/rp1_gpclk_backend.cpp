@@ -26,6 +26,7 @@ bool Rp1GpclkBackend::prepare(
     std::uint32_t drive_ma,
     std::uint32_t expected_route,
     std::uint64_t required_capabilities,
+    const std::array<std::uint8_t, 32>& authorization_digest,
     std::string& error)
 {
     if (acquired_)
@@ -38,7 +39,8 @@ bool Rp1GpclkBackend::prepare(
         error = "RP1 GPIO drive must be 2, 4, 8, or 12 mA.";
         return false;
     }
-    if (!provider_.acquire(expected_route, required_capabilities, error))
+    if (!provider_.acquire(
+            expected_route, required_capabilities, authorization_digest, error))
         return false;
     drive_ma_ = drive_ma;
     acquired_ = true;

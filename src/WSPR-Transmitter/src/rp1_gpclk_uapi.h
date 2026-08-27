@@ -8,6 +8,7 @@
 #define RP1_GPCLK_UAPI_ABI_V1 1U
 #define RP1_GPCLK_UAPI_ABI_V2 2U
 #define RP1_GPCLK_UAPI_ABI_V3 3U
+#define RP1_GPCLK_UAPI_ABI_V4 4U
 #define RP1_GPCLK_IOC_MAGIC 0xb8
 
 #define RP1_GPCLK_MODULE_ID_MAX 64U
@@ -117,6 +118,12 @@ enum rp1_gpclk_terminal_reason {
 #define RP1_GPCLK_CAP_TONE_CONTINUOUS (1ULL << 8)
 #define RP1_GPCLK_CAP_TONE_FINITE (1ULL << 9)
 #define RP1_GPCLK_CAP_PASSIVE_SNAPSHOT (1ULL << 10)
+#define RP1_GPCLK_CAP_OPERATION_LIVE_GATE (1ULL << 11)
+
+#define RP1_GPCLK_OPERATION_AUTHORIZATION_DIGEST_SIZE 32U
+#define RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE (1U << 0)
+#define RP1_GPCLK_ACQUIRE_V4_F_ALLOWED_MASK \
+    RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE
 
 enum rp1_gpclk_observation {
     RP1_GPCLK_OBSERVATION_UNKNOWN = 0,
@@ -204,6 +211,17 @@ struct rp1_gpclk_acquire_v1 {
     __u32 reserved0;
     __aligned_u64 required_capabilities;
     __aligned_u64 lease_id;
+    __aligned_u64 reserved[4];
+};
+
+/* ABI v4: acquire one lease with an application-bound live authorization. */
+struct rp1_gpclk_acquire_v4 {
+    struct rp1_gpclk_uapi_header header;
+    __u32 expected_route;
+    __u32 authorization_flags;
+    __aligned_u64 required_capabilities;
+    __aligned_u64 lease_id;
+    __u8 authorization_digest[RP1_GPCLK_OPERATION_AUTHORIZATION_DIGEST_SIZE];
     __aligned_u64 reserved[4];
 };
 
@@ -364,5 +382,7 @@ struct rp1_gpclk_snapshot_v3 {
     _IOW(RP1_GPCLK_IOC_MAGIC, 0x29, struct rp1_gpclk_release_v2)
 #define RP1_GPCLK_IOC_GET_SNAPSHOT_V3 \
     _IOWR(RP1_GPCLK_IOC_MAGIC, 0x2a, struct rp1_gpclk_snapshot_v3)
+#define RP1_GPCLK_IOC_ACQUIRE_V4 \
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x2b, struct rp1_gpclk_acquire_v4)
 
 #endif /* _UAPI_LINUX_RP1_GPCLK_H */

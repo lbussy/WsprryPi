@@ -14,7 +14,8 @@ machine-readable reason, an operator explanation, and an `Experimental`
 warning. Unknown and incomplete values deny in deterministic gate order.
 
 The last pre-acquisition check requires deliberate development enablement;
-one explicit and consistently reported GPIO4 or GPIO20 route; the exact ABI v3,
+one explicit and consistently reported GPIO4 or GPIO20 route; the exact ABI v4
+operation-scoped gate and ABI v3 passive snapshot,
 module 1.1.2, route-specific r3 identity and `Experimental` state; affirmative
 `live_output=1` evidence; a resolved attributable route transaction; idle
 scheduling and application ownership; a closed, exclusively acquirable
@@ -23,11 +24,11 @@ the exact operation and route.
 
 The exact compatibility identities are:
 
-- GPIO4: `v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3`
-- GPIO20: `v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3`
+- GPIO4: `v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4`
+- GPIO20: `v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4`
 
 The exact source revision for both routes is
-`7421605e0a0e41c19c6d7142a9fa87ea3a42eb98`. At Raspberry Pi 5 process startup,
+`0509909bd916ee738b14a8479d3be47863c6ac72`. At Raspberry Pi 5 process startup,
 WsprryPi first establishes an output-unauthorized idle route. An exact packaged
 identity continues into packaged route-manager reconciliation. A different
 package identity is accepted only as a passive idle state when the persisted,

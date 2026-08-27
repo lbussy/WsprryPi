@@ -143,6 +143,7 @@ public:
     virtual bool acquire(
         std::uint32_t expected_route,
         std::uint64_t required_capabilities,
+        const std::array<std::uint8_t, 32>& authorization_digest,
         std::string& error) = 0;
     virtual bool submit(Rp1GpclkProviderProgram&, std::string& error) = 0;
     virtual bool submitEvents(Rp1GpclkProviderEventProgram&, std::string& error) = 0;
@@ -169,6 +170,7 @@ public:
         std::uint32_t drive_ma,
         std::uint32_t expected_route,
         std::uint64_t required_capabilities,
+        const std::array<std::uint8_t, 32>& authorization_digest,
         std::string& error);
     bool emitFrame(
         const Rp1GpclkPlan&,

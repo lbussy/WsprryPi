@@ -10,21 +10,22 @@
 
 namespace wsprrypi
 {
-inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbi = 3;
+inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbi = 4;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio4 = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio20 = 2;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentCompatibilityExperimental = 2;
 inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityLiveEligible = 1ULL << 7;
+inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityOperationLiveGate = 1ULL << 11;
 inline constexpr std::string_view kRp1GpclkDevelopmentSourceRevision =
-    "7421605e0a0e41c19c6d7142a9fa87ea3a42eb98";
+    "0509909bd916ee738b14a8479d3be47863c6ac72";
 inline constexpr std::string_view kRp1GpclkDevelopmentModuleId = "rp1-gpclk-dkms";
 inline constexpr std::string_view kRp1GpclkDevelopmentModuleVersion = "1.1.2";
 inline constexpr std::string_view kRp1GpclkDevelopmentUapiSha256 =
-    "f0af5ffda91f4ba82285dc278452eae28b2eeffa635ebd6ee473bf7393a6a54e";
+    "23f0d7626fe51ef58f11bcb48bf880d885acf7abfdca5f186e044a0fb1d786e1";
 inline constexpr std::string_view kRp1GpclkDevelopmentGpio4Compatibility =
-    "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3";
+    "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
 inline constexpr std::string_view kRp1GpclkDevelopmentGpio20Compatibility =
-    "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3";
+    "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
 
 enum class Rp1GpclkDevelopmentDenial
 {

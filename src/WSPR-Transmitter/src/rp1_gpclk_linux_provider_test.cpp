@@ -14,6 +14,13 @@ int failures;
 void expect(bool value, const char* message)
 { if (!value) { std::cerr << "FAIL: " << message << '\n'; ++failures; } }
 
+std::array<std::uint8_t, 32> authorizationDigest()
+{
+    std::array<std::uint8_t, 32> value{};
+    value.front() = 1;
+    return value;
+}
+
 constexpr std::uint64_t kAdministrativeCapabilities =
     RP1_GPCLK_CAP_STABLE_STATE | RP1_GPCLK_CAP_ROUTE_IDENTITY |
     RP1_GPCLK_CAP_COMPAT_IDENTITY | RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH;
@@ -49,7 +56,11 @@ public:
                 ? RP1_GPCLK_COMPAT_EXPERIMENTAL : query.compatibility_state;
             value->compatibility_reason = query.compatibility_reason;
             value->capabilities = query.capabilities | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
-                (independent_safe_idle_snapshot ? RP1_GPCLK_CAP_LIVE_ELIGIBLE : 0);
+                RP1_GPCLK_CAP_OPERATION_LIVE_GATE |
+                (independent_safe_idle_snapshot
+                    ? RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+                        RP1_GPCLK_CAP_OPERATION_LIVE_GATE
+                    : 0);
             value->live_eligible = independent_safe_idle_snapshot ||
                 query.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE
                 ? RP1_GPCLK_OBSERVATION_TRUE : RP1_GPCLK_OBSERVATION_FALSE;
@@ -57,10 +68,10 @@ public:
             std::strcpy(value->build_id, query.build_id);
             std::strcpy(value->compatibility_id, query.compatibility_id);
         }
-        else if (request == RP1_GPCLK_IOC_ACQUIRE)
+        else if (request == RP1_GPCLK_IOC_ACQUIRE_V4)
         {
-            acquire = *static_cast<rp1_gpclk_acquire_v1*>(argument);
-            static_cast<rp1_gpclk_acquire_v1*>(argument)->lease_id = lease_id;
+            acquire_v4 = *static_cast<rp1_gpclk_acquire_v4*>(argument);
+            static_cast<rp1_gpclk_acquire_v4*>(argument)->lease_id = lease_id;
         }
         else if (request == RP1_GPCLK_IOC_SUBMIT_WSPR) {
             auto* value=static_cast<rp1_gpclk_submit_wspr_v1*>(argument); wspr=*value; value->generation=returned_generation; }
@@ -114,11 +125,11 @@ public:
         std::strcpy(query.module_id, "rp1-gpclk-dkms");
         std::strcpy(query.build_id, "1.1.2");
         std::strcpy(query.compatibility_id,
-            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3");
+            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4");
         snapshot.header.size = sizeof(snapshot);
         snapshot.header.version = RP1_GPCLK_UAPI_ABI_V3;
         snapshot.abi_min = RP1_GPCLK_UAPI_ABI_V1;
-        snapshot.abi_max = RP1_GPCLK_UAPI_ABI_V3;
+        snapshot.abi_max = RP1_GPCLK_UAPI_ABI_V4;
         snapshot.operation_state = RP1_GPCLK_STATE_IDLE;
         snapshot.terminal_reason = RP1_GPCLK_REASON_NONE;
         snapshot.cleanup_fault = RP1_GPCLK_OBSERVATION_FALSE;
@@ -139,6 +150,7 @@ public:
     rp1_gpclk_query_v2 query{};
     rp1_gpclk_snapshot_v3 snapshot{};
     rp1_gpclk_acquire_v1 acquire{};
+    rp1_gpclk_acquire_v4 acquire_v4{};
     rp1_gpclk_submit_wspr_v1 wspr{};
     rp1_gpclk_submit_events_v1 events{};
     rp1_gpclk_submit_tone_v2 tone{};
@@ -277,8 +289,9 @@ void test_old_module_and_tone_v2()
     wsprrypi::Rp1GpclkLinuxProvider provider(io);
     const auto required = kAdministrativeCapabilities |
         RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE |
-        RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
-    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+        RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
+    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "ABI v2 TONE fixture must acquire exact capabilities");
     wsprrypi::Rp1GpclkProviderToneProgram tone;
     tone.tone = {1, 2, 1, 1};
@@ -306,7 +319,7 @@ void test_old_module_and_tone_v2()
     finite_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     finite_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
     wsprrypi::Rp1GpclkLinuxProvider finite(finite_io);
-    expect(finite.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+    expect(finite.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "finite TONE fixture must acquire");
     tone.operation = RP1_GPCLK_TONE_OPERATION_FINITE;
     tone.duration_ns = 1000000000ULL;
@@ -318,7 +331,7 @@ void test_old_module_and_tone_v2()
     boundary_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     boundary_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
     wsprrypi::Rp1GpclkLinuxProvider boundary(boundary_io);
-    expect(boundary.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+    expect(boundary.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "finite boundary fixture must acquire");
     tone.duration_ns = RP1_GPCLK_TONE_DURATION_NS_MIN;
     expect(boundary.submitTone(tone, error), "finite minimum duration must be accepted");
@@ -328,7 +341,7 @@ void test_old_module_and_tone_v2()
     maximum_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     maximum_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
     wsprrypi::Rp1GpclkLinuxProvider maximum(maximum_io);
-    expect(maximum.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+    expect(maximum.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "finite maximum fixture must acquire");
     tone.duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX;
     expect(maximum.submitTone(tone, error), "finite maximum duration must be accepted");
@@ -338,7 +351,7 @@ void test_old_module_and_tone_v2()
     invalid_io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     invalid_io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
     wsprrypi::Rp1GpclkLinuxProvider invalid(invalid_io);
-    expect(invalid.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+    expect(invalid.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "finite invalid-duration fixture must acquire");
     tone.duration_ns = 0;
     expect(!invalid.submitTone(tone, error), "finite zero duration must fail before ioctl");
@@ -404,11 +417,13 @@ void test_acquire_state_release_and_generation()
     std::string error;
     const auto required = kAdministrativeCapabilities |
         RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_STOP_DRAIN |
-        RP1_GPCLK_CAP_LIVE_ELIGIBLE;
-    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, error),
+        RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+        RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
+    expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "live-eligible exact-route provider must acquire");
-    expect(io.acquire.expected_route == RP1_GPCLK_ROUTE_GPIO4 &&
-        io.acquire.required_capabilities == required,
+    expect(io.acquire_v4.expected_route == RP1_GPCLK_ROUTE_GPIO4 &&
+        io.acquire_v4.required_capabilities == required &&
+        io.acquire_v4.authorization_digest[0] == 1,
         "ACQUIRE must bind route and capabilities");
 
     wsprrypi::Rp1GpclkProviderProgram program{};
@@ -441,7 +456,7 @@ void test_acquire_state_release_and_generation()
     expect(provider.requestFiniteStop(9, error) && io.stop.lease_id == io.lease_id,
         "STOP must bind lease and generation");
     expect(provider.release(error), "owned lease must release and close cleanly");
-    expect(io.release.lease_id == io.lease_id && io.closes == 1,
+    expect(io.release.lease_id == io.lease_id && io.closes == 2,
         "terminal generation must use terminal-only RELEASE before close");
 }
 
@@ -460,11 +475,13 @@ void test_failure_cleanup_and_historical_endpoint_rejection()
     Io acquire_failure;
     acquire_failure.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     acquire_failure.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
-    acquire_failure.fail_request = RP1_GPCLK_IOC_ACQUIRE;
+    acquire_failure.fail_request = RP1_GPCLK_IOC_ACQUIRE_V4;
     wsprrypi::Rp1GpclkLinuxProvider failed(acquire_failure);
     expect(!failed.acquire(RP1_GPCLK_ROUTE_GPIO4,
-        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE, error) &&
-        acquire_failure.closes == 1,
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE,
+        authorizationDigest(), error) &&
+        acquire_failure.closes == 2,
         "ACQUIRE failure must close without leaking ownership");
 
     Io release_failure;
@@ -472,10 +489,12 @@ void test_failure_cleanup_and_historical_endpoint_rejection()
     release_failure.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
     wsprrypi::Rp1GpclkLinuxProvider cleanup(release_failure);
     expect(cleanup.acquire(RP1_GPCLK_ROUTE_GPIO4,
-        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE, error),
+        kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE,
+        authorizationDigest(), error),
         "release-failure fixture must acquire");
     release_failure.fail_request = RP1_GPCLK_IOC_RELEASE;
-    expect(!cleanup.release(error) && release_failure.closes == 1,
+    expect(!cleanup.release(error) && release_failure.closes == 2,
         "RELEASE failure must still close and report cleanup failure");
 }
 }

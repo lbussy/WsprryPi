@@ -8,6 +8,7 @@
 #include <cmath>
 #include <thread>
 #include <mutex>
+#include <openssl/sha.h>
 #include <unistd.h>
 
 namespace
@@ -22,6 +23,20 @@ void update_record(const wsprrypi::Rp1GpclkOperationRecord& value)
 {
     std::lock_guard<std::mutex> lock(operation_record_mutex);
     operation_record = value;
+}
+
+std::array<std::uint8_t, 32> operation_authorization_digest(
+    const wsprrypi::Rp1GpclkDevelopmentPolicyInputs& policy)
+{
+    const std::string material = policy.operation_id + "\n" +
+        policy.confirmation_identity + "\n" +
+        std::to_string(policy.requested_route) + "\n" +
+        std::to_string(policy.route_transaction_generation);
+    std::array<std::uint8_t, 32> digest{};
+    SHA256(
+        reinterpret_cast<const unsigned char*>(material.data()),
+        material.size(), digest.data());
+    return digest;
 }
 }
 
@@ -168,7 +183,8 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
                                    : RP1_GPCLK_CAP_TONE_FINITE) |
             RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
             RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
         frame.development_policy = make_policy();
         if (frame.development_policy.development_testing_enabled)
             wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
@@ -204,7 +220,8 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         frame.required_capabilities = RP1_GPCLK_CAP_SUBMIT_EVENTS |
             RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
             RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
         frame.development_policy = make_policy();
         if (frame.development_policy.development_testing_enabled)
             wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
@@ -242,7 +259,8 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
     frame.required_capabilities = RP1_GPCLK_CAP_SUBMIT_WSPR |
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
         RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE;
+        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
     frame.development_policy = make_policy();
     if (frame.development_policy.development_testing_enabled)
         wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
@@ -351,6 +369,7 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 configured_->drive_ma,
                 configured_->route,
                 configured_->required_capabilities,
+                operation_authorization_digest(current_policy),
                 error))
         {
             record_failure("acquire-failed", true, true);

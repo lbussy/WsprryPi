@@ -123,13 +123,16 @@ Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
         i.identity.abi_max < kRp1GpclkDevelopmentUapiAbi ||
         i.identity.module_id != expected->module_id ||
         i.identity.build_id != expected->build_id)
-        return deny(D::version_uapi_mismatch, "version-uapi-mismatch", "The module must report the exact reviewed 1.1.2 ABI v3 development identity.");
+        return deny(D::version_uapi_mismatch, "version-uapi-mismatch", "The module must report the exact reviewed 1.1.2 ABI v4 development identity.");
     if (i.identity.route != i.requested_route ||
         i.identity.compatibility_id != expected->compatibility_id)
         return deny(D::route_identity_mismatch, "route-identity-mismatch", "The exact r3 compatibility identity does not match the selected route.");
     if (i.identity.compatibility_state != kRp1GpclkDevelopmentCompatibilityExperimental)
         return deny(D::compatibility_not_experimental, "compatibility-not-experimental", "The reviewed development identity must be reported as Experimental.");
-    if ((i.identity.capabilities & kRp1GpclkDevelopmentCapabilityLiveEligible) == 0 || !i.live_output_verified)
+    if ((i.identity.capabilities & kRp1GpclkDevelopmentCapabilityLiveEligible) == 0 ||
+        (i.identity.capabilities &
+            kRp1GpclkDevelopmentCapabilityOperationLiveGate) == 0 ||
+        !i.live_output_verified)
         return deny(D::live_output_unverified, "live-output-unverified", "The exact module instance must affirmatively report live eligibility with live_output=1.");
     if (!i.route_transaction_resolved || !i.route_manager_attributable)
         return deny(D::unresolved_route_transaction, "unresolved-route-transaction", "Route-manager state is unresolved or cannot be attributed.");

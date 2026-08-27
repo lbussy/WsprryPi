@@ -2,6 +2,7 @@
 #include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_uapi.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -18,7 +19,8 @@ constexpr std::uint64_t kKnownCapabilities =
     RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
     RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
     RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE |
-    RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
+    RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
+    RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
 
 std::uint32_t driveMask(std::uint32_t drive_ma)
 {
@@ -183,7 +185,7 @@ bool Rp1GpclkLinuxProvider::queryOpen(
         identity.build_id != expected->build_id ||
         identity.compatibility_id != expected->compatibility_id)
     {
-        error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r3 development identity."; return false;
+        error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r4 development identity."; return false;
     }
     return true;
 }
@@ -196,7 +198,10 @@ bool Rp1GpclkLinuxProvider::query(
     if (fd_ >= 0) { error = "RP1 GPCLK provider query requires no active lease."; return false; }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
-    const auto v2_required = required_capabilities & ~RP1_GPCLK_CAP_PASSIVE_SNAPSHOT;
+    const auto v2_required = required_capabilities &
+        ~(RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
+          RP1_GPCLK_CAP_OPERATION_LIVE_GATE |
+          RP1_GPCLK_CAP_LIVE_ELIGIBLE);
     const bool ok = queryOpen(expected_route, v2_required,
         require_live_eligible, identity, error);
     const int close_result = io_.closeDevice(fd_);
@@ -351,29 +356,55 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
 
 bool Rp1GpclkLinuxProvider::acquire(
     std::uint32_t expected_route, std::uint64_t required_capabilities,
+    const std::array<std::uint8_t, 32>& authorization_digest,
     std::string& error)
 {
     if (fd_ >= 0) { error = "RP1 GPCLK provider is already acquired."; return false; }
+    if (std::all_of(
+            authorization_digest.begin(), authorization_digest.end(),
+            [](std::uint8_t value) { return value == 0; }))
+    {
+        error = "RP1 GPCLK operation authorization digest is empty.";
+        return false;
+    }
+    Rp1GpclkPassiveSnapshot snapshot;
+    if (!passiveSnapshot(snapshot, error)) return false;
+    if (snapshot.abi_max < RP1_GPCLK_UAPI_ABI_V4 ||
+        snapshot.route != expected_route ||
+        snapshot.compatibility_state != RP1_GPCLK_COMPAT_EXPERIMENTAL ||
+        snapshot.live_eligible != RP1_GPCLK_OBSERVATION_TRUE ||
+        (snapshot.capabilities & required_capabilities) != required_capabilities)
+    {
+        error = "RP1 GPCLK provider is not eligible for exact ABI v4 operation-scoped acquisition.";
+        return false;
+    }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
     Rp1GpclkProviderIdentity identity;
-    const bool require_live =
-        (required_capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) != 0;
-    if (!queryOpen(expected_route, required_capabilities, require_live, identity, error))
+    const auto query_required = required_capabilities &
+        ~(RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
+          RP1_GPCLK_CAP_OPERATION_LIVE_GATE |
+          RP1_GPCLK_CAP_LIVE_ELIGIBLE);
+    if (!queryOpen(expected_route, query_required, false, identity, error))
     {
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
-    rp1_gpclk_acquire_v1 request{};
-    initializeHeaderV1(request);
+    rp1_gpclk_acquire_v4 request{};
+    request.header.size = sizeof(request);
+    request.header.version = RP1_GPCLK_UAPI_ABI_V4;
     request.expected_route = expected_route;
+    request.authorization_flags = RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE;
     request.required_capabilities = required_capabilities;
-    if (io_.control(fd_, RP1_GPCLK_IOC_ACQUIRE, &request) < 0)
+    std::copy(
+        authorization_digest.begin(), authorization_digest.end(),
+        request.authorization_digest);
+    if (io_.control(fd_, RP1_GPCLK_IOC_ACQUIRE_V4, &request) < 0)
     {
-        failed("Could not acquire RP1 GPCLK provider", error);
+        failed("Could not acquire RP1 GPCLK ABI v4 operation lease", error);
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
     if (request.header.size != sizeof(request) ||
-        request.header.version != RP1_GPCLK_UAPI_ABI_V1 ||
+        request.header.version != RP1_GPCLK_UAPI_ABI_V4 ||
         request.header.flags != 0 || request.lease_id == 0)
     {
         error = "RP1 GPCLK provider returned an invalid lease identity.";

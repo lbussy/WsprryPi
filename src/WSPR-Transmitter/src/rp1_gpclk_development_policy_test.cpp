@@ -19,13 +19,14 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
         i.confirmation_current = true;
     i.route_transaction_generation = i.confirmation_route_transaction_generation = 17;
     i.operation_id = i.confirmation_operation_id = "bounded-operation-7"; i.confirmation_route = route;
-    i.identity.abi_min = 1; i.identity.abi_max = 3; i.identity.route = route;
+    i.identity.abi_min = 1; i.identity.abi_max = 4; i.identity.route = route;
     i.identity.compatibility_state = kRp1GpclkDevelopmentCompatibilityExperimental;
-    i.identity.capabilities = kRp1GpclkDevelopmentCapabilityLiveEligible;
+    i.identity.capabilities = kRp1GpclkDevelopmentCapabilityLiveEligible |
+        kRp1GpclkDevelopmentCapabilityOperationLiveGate;
     i.identity.module_id = "rp1-gpclk-dkms"; i.identity.build_id = "1.1.2";
     i.identity.compatibility_id = route == kRp1GpclkDevelopmentRouteGpio4
-        ? "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r3"
-        : "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3";
+        ? "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4"
+        : "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
     i.confirmation_identity = rp1GpclkDevelopmentIdentityBinding(i.identity);
     return i;
 }
@@ -37,7 +38,7 @@ int main()
     for (auto route : {kRp1GpclkDevelopmentRouteGpio4, kRp1GpclkDevelopmentRouteGpio20})
         assert(decideRp1GpclkDevelopmentUse(allowed(route)).allowed);
     auto i = allowed(kRp1GpclkDevelopmentRouteGpio4);
-    i.identity.compatibility_id = "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r3";
+    i.identity.compatibility_id = "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::route_identity_mismatch);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.confirmation_route = kRp1GpclkDevelopmentRouteGpio20;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);

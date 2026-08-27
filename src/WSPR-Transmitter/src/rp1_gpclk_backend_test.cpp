@@ -12,7 +12,8 @@ void expect(bool value, const char* message) { if (!value) { std::cerr << "FAIL:
 class Provider final : public wsprrypi::Rp1GpclkProvider {
 public:
  bool query(std::uint32_t, std::uint64_t, bool, wsprrypi::Rp1GpclkProviderIdentity&, std::string&) override { return true; }
- bool acquire(std::uint32_t route, std::uint64_t caps, std::string&) override { routes.push_back(route); capabilities.push_back(caps); next_generation=1; return acquire_ok; }
+ bool acquire(std::uint32_t route, std::uint64_t caps,
+     const std::array<std::uint8_t,32>&, std::string&) override { routes.push_back(route); capabilities.push_back(caps); next_generation=1; return acquire_ok; }
  bool submit(wsprrypi::Rp1GpclkProviderProgram& p, std::string&) override { p.generation=next_generation++; programs.push_back(p); current = wsprrypi::Rp1GpclkCompletionState::running; return submit_ok; }
  bool submitEvents(wsprrypi::Rp1GpclkProviderEventProgram& p, std::string&) override { p.generation=next_generation++; event_programs.push_back(p); current = wsprrypi::Rp1GpclkCompletionState::running; return submit_ok; }
  bool submitTone(wsprrypi::Rp1GpclkProviderToneProgram& p, std::string&) override { p.generation=next_generation++; tone_programs.push_back(p); current = wsprrypi::Rp1GpclkCompletionState::running; return submit_ok; }
@@ -30,7 +31,7 @@ public:
 };
 
 bool prepare(wsprrypi::Rp1GpclkBackend& backend, std::uint32_t drive, std::string& error)
-{ return backend.prepare(drive, RP1_GPCLK_ROUTE_GPIO4, RP1_GPCLK_CAP_LIVE_ELIGIBLE, error); }
+{ std::array<std::uint8_t,32> digest{}; digest[0]=1; return backend.prepare(drive, RP1_GPCLK_ROUTE_GPIO4, RP1_GPCLK_CAP_LIVE_ELIGIBLE, digest, error); }
 
 wsprrypi::Rp1GpclkPlan plan() {
  wsprrypi::Rp1GpclkPlannerInput in; in.center_frequency_hz=14097100; in.tone_spacing_hz=1.46484375; in.parent_frequency_hz=50000000; in.dither_sequence_length=66792;

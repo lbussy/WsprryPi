@@ -3955,7 +3955,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         development.cleanup_fault =
             route.value("state", std::string{}) == "rollback_required";
         development.live_output_verified =
-            route.value("liveOutput", std::string{}) == "enabled";
+            route.value("liveOutput", std::string{}) == "disabled";
         development.physical_connection_confirmed = confirmation.physical_connection;
         development.attenuation_and_load_confirmed = confirmation.attenuation_and_load;
         development.bounded_operation_confirmed = confirmation.bounded_operation;
