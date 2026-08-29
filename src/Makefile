@@ -115,6 +115,8 @@ EXE_NAME := $(shell echo $(PRJ) | tr '[:upper:]' '[:lower:]')
 OUT := $(strip $(EXE_NAME))
 TEST_OUT := $(strip $(EXE_NAME)_debug)
 SEMANTICS_TEST_OUT := dial_frequency_semantics_test
+LEGACY_GPIO_CLOCK_MODEL_TEST_OUT := legacy_gpio_clock_model_test
+LEGACY_GPIO_CLOCK_MODEL_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
 UI_SOURCE_REGRESSION_TEST_OUT := ui_source_regression_test
 GUARDED_MODE_CHANGE_PERSISTENCE_TEST_OUT := guarded_mode_change_persistence_test
 BAND_GPIO_DEFAULT_CONVERGENCE_TEST_OUT := band_gpio_default_convergence_test
@@ -278,6 +280,7 @@ SI5351_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_backend_harness.cpp
 SI5351_PLANNER_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_planner_test.cpp
 SI5351_TRANSITION_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_transition_test.cpp
 STARTUP_QUIESCE_TEST_SOURCE := ./WSPR-Transmitter/src/startup_quiesce_test.cpp
+LEGACY_GPIO_CLOCK_MODEL_TEST_SOURCE := ./WSPR-Transmitter/src/legacy_gpio_clock_model_test.cpp
 SI5351_QUALIFICATION_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification.cpp
 SI5351_QUALIFICATION_MAIN_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification_main.cpp
 SI5351_QUALIFICATION_TEST_SOURCE := ./WSPR-Transmitter/src/si5351_startup_quiesce_qualification_test.cpp
@@ -293,7 +296,7 @@ SIMULATED_BACKEND_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backe
 SIMULATED_BACKEND_REALTIME_TEST_SOURCE := ./WSPR-Transmitter/src/simulated_transmit_backend_realtime_test.cpp
 TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE := ./WSPR-Transmitter/src/transmission_controller_contract_test.cpp
 THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE := ./WSPR-Transmitter/src/thread_affinity_unavailable_test.cpp
-COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(RP1_GPCLK_ADMIN_PROBE_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
+COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(LEGACY_GPIO_CLOCK_MODEL_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(RP1_GPCLK_ADMIN_PROBE_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
 COMPONENT_CPP_SOURCES := $(filter-out $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES),$(COMPONENT_CPP_SOURCES))
 
 CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(SELECTED_BACKEND_CPP_SOURCES)
@@ -1099,7 +1102,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 # ─────────────────────────────────────────────────────────────────────────────
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
-.PHONY: semantics-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
+.PHONY: semantics-test legacy-gpio-clock-model-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
 .PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
@@ -1187,7 +1190,7 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test: legacy-gpio-clock-model-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1202,6 +1205,14 @@ semantics-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_
 	$(Q)node tests/update_check_comparison_test.js
 	$(Q)echo "Running coherent UI publication tests."
 	$(Q)python3 ../scripts/tests/ui_publication_test.py
+
+$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT): WSPR-Transmitter/src/legacy_gpio_clock_model_test.cpp WSPR-Transmitter/src/legacy_gpio_clock_model.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(LEGACY_GPIO_CLOCK_MODEL_TEST_FLAGS) $^ -o $@
+
+legacy-gpio-clock-model-test: $(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
+	$(Q)echo "Running hardware-independent legacy GPIO clock-model tests."
+	$(Q)./$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
 
 websocket-lifecycle-test: $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
