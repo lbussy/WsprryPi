@@ -267,7 +267,7 @@ for available hardware are derived by the conducted procedure below:
 |---|---|---:|---:|---|
 | BCM2835 / RPi1 | PLLD | 500 MHz | `-2.5 PPM` | Authoritative historical legacy model; no current device available |
 | BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | To be derived; zero is the discovery baseline | Legacy excludes the BCM2835 constant; Zero 2 W available as the accepted representative |
-| BCM2711 / RPi4 | PLLD | 750 MHz | To be derived; zero is the discovery baseline | RPi4 available as the accepted representative |
+| BCM2711 / RPi4 | PLLD | 750 MHz | `+0.153768 PPM` | Promoted from the authorized GPIO20 conducted ten-band discovery on the representative RPi4 |
 | BCM2711 / RPi4 | oscillator | 54 MHz | To be derived independently; zero is the discovery baseline | Distinct RPi4 parent path available for validation |
 
 Intrinsic profile correction is part of frequency generation regardless of
@@ -435,11 +435,12 @@ before calculating corrected rates and divider words.
 
 The scheduler composes the intrinsic and selected-additional corrections once
 before request creation. BCM2835 therefore always includes its historical
-`-2.5 PPM`; later 500 MHz and both BCM2711 parent models retain their separate
-zero discovery baselines. The backend verifies and decomposes the frozen final
-scalar without reapplying the intrinsic component. The stranded constructor
-expression and fallback-to-generic-500-MHz behavior are removed. RP1 and
-Si5351 correction paths remain isolated.
+`-2.5 PPM`; the later 500 MHz and BCM2711 oscillator models retain their
+separate zero discovery baselines. The BCM2711 PLLD model uses its promoted
+conducted `+0.153768 PPM` intrinsic value. The backend verifies and decomposes
+the frozen final scalar without reapplying the intrinsic component. The
+stranded constructor expression and fallback-to-generic-500-MHz behavior are
+removed. RP1 and Si5351 correction paths remain isolated.
 
 ### Phase 4 implementation status
 
@@ -454,9 +455,34 @@ not rewrite the committed record, and active state is asserted only while the
 transmitter reports that it is transmitting. Cleanup clears the committed
 record rather than allowing stale execution provenance to survive.
 
-This reporting does not qualify RF accuracy or promote any discovery baseline.
-Physical discovery, closure, and constant promotion remain Phases 5 and 6 and
-require their separate authorization and evidence gates.
+This reporting does not itself qualify RF accuracy or promote a discovery
+baseline. The BCM2711 PLLD value was subsequently promoted by operator
+direction from the authorized ten-band GPIO20 conducted discovery described
+below. Other physical discovery, closure, and constant promotion remain Phases
+5 and 6 and require their separate authorization and evidence gates.
+
+### BCM2711 PLLD conducted promotion
+
+The promoted BCM2711 750 MHz PLLD intrinsic value is `+0.153768 PPM`. It was
+derived from one coherent conducted campaign on the representative Raspberry
+Pi 4 using GPIO20, a `-20 dB` conducted path, and SDRplay RSP1B serial
+`2404058C60`. Chrony supplied a qualified and frozen `S = 9.626 PPM` with a
+stable four-source signature. The campaign covered 630 m, 160 m, 80 m, 60 m,
+40 m, 30 m, 20 m, 17 m, 15 m, and 10 m. Every capture retained 3,500,000
+samples with no timeout, overflow, or clipping and verified receiver cleanup.
+
+The receiver inverse calibration was applied exactly once. A proportional
+least-squares fit across all ten calibrated carrier errors produced
+`+0.153767747233 PPM`, rounded to six decimal places for the promoted model.
+An independent longer-window analysis agreed within `0.000426 PPM`. The raw
+captures and metadata are retained on the authorized acquisition host under
+`/home/pi/wsprrypi-phase5-plld-final-20260829`.
+
+This operator-directed promotion does not claim that closure or signed
+perturbation runs have passed. Those remain required before the broader Issue
+429 Phase 6 evidence record can be declared complete. The value does not apply
+to the distinct BCM2711 54 MHz oscillator parent or another processor, GPIO
+route, receiver, or backend.
 
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator

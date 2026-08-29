@@ -23,7 +23,8 @@ namespace wsprrypi
     enum class LegacyGpioIntrinsicEvidence
     {
         HistoricalAuthoritative,
-        DiscoveryBaseline
+        DiscoveryBaseline,
+        ConductedPromoted
     };
 
     struct LegacyGpioClockModel

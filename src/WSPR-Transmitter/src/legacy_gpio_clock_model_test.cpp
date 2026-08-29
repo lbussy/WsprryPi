@@ -80,8 +80,10 @@ namespace
             bcm2711PllD.processor == LegacyGpioProcessorProfile::Bcm2711 &&
                 bcm2711PllD.parent == LegacyGpioClockParent::PllD &&
                 bcm2711PllD.nominal_rate_hz == 750000000.0 &&
-                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.0,
-            "BCM2711 PLLD must use its independent 750 MHz discovery baseline");
+                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.153768 &&
+                bcm2711PllD.intrinsic_evidence ==
+                    LegacyGpioIntrinsicEvidence::ConductedPromoted,
+            "BCM2711 PLLD must use its promoted conducted 750 MHz intrinsic value");
         expect(
             bcm2711Oscillator.processor ==
                     LegacyGpioProcessorProfile::Bcm2711 &&

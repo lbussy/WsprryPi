@@ -1246,7 +1246,14 @@ int main(int argc, char *argv[])
                 provenance.gpio_correction_candidate.processor_profile == "BCM2711" &&
                 provenance.gpio_correction_candidate.selected_parent == "PLLD" &&
                 provenance.gpio_correction_candidate.nominal_rate_hz == 750000000.0 &&
-                provenance.gpio_correction_candidate.final_ppm == 0.0,
+                nearly_equal(
+                    provenance.gpio_correction_candidate.intrinsic_ppm,
+                    0.153768,
+                    1.0e-9) &&
+                nearly_equal(
+                    provenance.gpio_correction_candidate.final_ppm,
+                    0.153768,
+                    1.0e-9),
             "candidate provenance must expose the exact planned BCM2711 parent and correction");
         require(
             provenance.gpio_correction_committed.available &&
@@ -1254,6 +1261,14 @@ int main(int argc, char *argv[])
                 provenance.gpio_correction_committed.processor_profile == "BCM2711" &&
                 provenance.gpio_correction_committed.selected_parent == "PLLD" &&
                 provenance.gpio_correction_committed.nominal_rate_hz == 750000000.0 &&
+                nearly_equal(
+                    provenance.gpio_correction_committed.intrinsic_ppm,
+                    0.153768,
+                    1.0e-9) &&
+                nearly_equal(
+                    provenance.gpio_correction_committed.final_ppm,
+                    0.153768,
+                    1.0e-9) &&
                 !provenance.gpio_correction_committed.execution_identity.empty(),
             "committed provenance must freeze exact plan identity without claiming idle work is active");
 
@@ -2844,7 +2859,7 @@ int main(int argc, char *argv[])
                 nearly_equal(first_request.actual_rf_frequency_hz, 10140200.0),
             "runtime repeated skip regression must start on the valid 30m slot");
         require(
-            nearly_equal(first_request.ppm, 12.5),
+            nearly_equal(first_request.ppm, 12.653768),
             "runtime repeated skip regression must snapshot PPM into the committed 30m request");
         require(
             first_request.hasSelectorGPIO() &&
@@ -2872,7 +2887,7 @@ int main(int argc, char *argv[])
                 nearly_equal(first_skip_request.actual_rf_frequency_hz, 0.0),
             "runtime repeated skip regression must commit the first 0 Hz slot as a skip-window request");
         require(
-            nearly_equal(first_skip_request.ppm, 12.5),
+            nearly_equal(first_skip_request.ppm, 12.653768),
             "runtime repeated skip regression must snapshot PPM into committed skip requests");
         require(
             !first_skip_request.hasSelectorGPIO(),
@@ -2935,7 +2950,7 @@ int main(int argc, char *argv[])
                 nearly_equal(wrapped_request.actual_rf_frequency_hz, 10140200.0),
             "runtime repeated skip regression must wrap back to the valid 30m slot after three skips");
         require(
-            nearly_equal(wrapped_request.ppm, 12.5),
+            nearly_equal(wrapped_request.ppm, 12.653768),
             "runtime repeated skip regression must preserve the committed PPM snapshot when the valid slot resumes");
         require(
             wrapped_request.hasSelectorGPIO() &&
@@ -3910,7 +3925,7 @@ int main(int argc, char *argv[])
         set_frequencies(config);
 
         ppm_reload_pending.store(true, std::memory_order_relaxed);
-        const double expected_ppm = 12.5;
+        const double expected_ppm = 12.653768;
 
         require(
             set_config(true),
@@ -5639,8 +5654,8 @@ int main(int argc, char *argv[])
         const TransmissionRequest residual_tone_request =
             current_transmission_request_for_test();
         require(
-            nearly_equal(residual_tone_request.ppm, 12.073) &&
-                nearly_equal(config.ppm, 12.073),
+            nearly_equal(residual_tone_request.ppm, 12.226768) &&
+                nearly_equal(config.ppm, 12.226768),
             "GPIO test tone commit must select the current estimate plus residual instead of a stale cached PPM");
         require(
             end_test_tone().stopped,
