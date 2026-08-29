@@ -1,5 +1,6 @@
 #include "rp1_gpclk_event_program.hpp"
 
+#include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_planner.hpp"
 #include "rp1_gpclk_uapi.h"
 
@@ -11,7 +12,6 @@ namespace wsprrypi
 {
 namespace
 {
-constexpr double kParentHz = 50000000.0;
 constexpr double kWsprSpacingHz = 12000.0 / 8192.0;
 
 Rp1GpclkEventCompileResult reject(std::string error)
@@ -102,7 +102,8 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     Rp1GpclkPlannerInput input;
     input.center_frequency_hz = plan.reference_frequency_hz;
     input.tone_spacing_hz = spacing;
-    input.parent_frequency_hz = kParentHz;
+    input.parent_frequency_hz =
+        kRp1GpclkDevelopmentNominalParentFrequencyHz;
     input.source_rate_ppm = plan.calibration.ppm;
     input.maximum_output_hz = 40000000.0;
     input.dither_sequence_length = Rp1GpclkBackend::kWritesPerSymbol;

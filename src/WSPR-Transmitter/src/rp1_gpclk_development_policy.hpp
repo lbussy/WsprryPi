@@ -27,6 +27,12 @@ inline constexpr std::string_view kRp1GpclkDevelopmentGpio4Compatibility =
     "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
 inline constexpr std::string_view kRp1GpclkDevelopmentGpio20Compatibility =
     "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
+// The reviewed r4 compatibility artifact plans GPCLK divider words from its
+// 200 MHz nominal parent.  ABI v4 does not expose this value in QUERY, so keep
+// it explicitly bound to the exact module/UAPI identity above until a future
+// ABI supplies the parent rate directly.
+inline constexpr double kRp1GpclkDevelopmentNominalParentFrequencyHz =
+    200000000.0;
 
 enum class Rp1GpclkDevelopmentDenial
 {

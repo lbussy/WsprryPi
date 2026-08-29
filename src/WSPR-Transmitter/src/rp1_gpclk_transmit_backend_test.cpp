@@ -1,7 +1,9 @@
 #include "rp1_gpclk_transmit_backend.hpp"
+#include "rp1_gpclk_planner.hpp"
 #include "rp1_gpclk_uapi.h"
 #include "wspr_transmit.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -90,6 +92,7 @@ wsprrypi::ExecutionPlan framePlan(std::size_t count=162)
     plan.id.value=7; plan.backend=wsprrypi::BackendKind::RP1_GPCLK;
     plan.mode=wsprrypi::TransmissionMode::WSPR;
     plan.reference_frequency_hz=14097100.0;
+    plan.calibration.ppm=3.802;
     for (std::size_t i=0;i<count;++i) {
         wsprrypi::RfEvent event; event.rf_on=true;
         event.offset_from_start=duration*i; event.duration=duration;
@@ -133,6 +136,7 @@ wsprrypi::ExecutionPlan qrssPlan()
     plan.backend=wsprrypi::BackendKind::RP1_GPCLK;
     plan.mode=wsprrypi::TransmissionMode::QRSS;
     plan.reference_frequency_hz=14097100.0+1.5*(12000.0/8192.0);
+    plan.calibration.ppm=-4.25;
     wsprrypi::RfEvent on; on.rf_on=true; on.duration=std::chrono::seconds(1); on.frequency_hz=14097100.0;
     wsprrypi::RfEvent off; off.rf_on=false; off.offset_from_start=on.duration; off.duration=std::chrono::seconds(1); off.frequency_hz=14097100.0;
     plan.events={on,off}; plan.summary.event_count=2; plan.summary.total_duration=std::chrono::seconds(2); plan.summary.min_frequency_hz=plan.summary.max_frequency_hz=14097100.0;
@@ -158,6 +162,29 @@ wsprrypi::ExecutionPlan tonePlan(bool explicit_duration)
     auto plan=qrssPlan(); plan.id.value=10; plan.mode=wsprrypi::TransmissionMode::TONE;
     plan.reference_frequency_hz=14097100.0; plan.duration_was_explicit=explicit_duration;
     return plan;
+}
+
+wsprrypi::Rp1GpclkPlan expectedPlan(
+    double center_frequency_hz, double spacing_hz, double source_rate_ppm=0.0)
+{
+    wsprrypi::Rp1GpclkPlannerInput input;
+    input.center_frequency_hz=center_frequency_hz;
+    input.tone_spacing_hz=spacing_hz;
+    input.parent_frequency_hz=
+        wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
+    input.source_rate_ppm=source_rate_ppm;
+    input.maximum_output_hz=40000000.0;
+    input.dither_sequence_length=wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
+    const auto result=wsprrypi::planRp1GpclkWspr(input);
+    expect(result.ok,"200 MHz compatibility parent must produce a valid plan");
+    expect(result.plan.nominal_parent_frequency_hz==200000000.0,
+        "compatibility parent must remain explicitly fixed at 200 MHz");
+    const double required_corrected_parent=
+        200000000.0*(1.0+source_rate_ppm/1000000.0);
+    expect(std::fabs(result.plan.corrected_parent_frequency_hz-
+            required_corrected_parent)<0.001,
+        "corrected parent must apply source-rate PPM to the 200 MHz nominal rate");
+    return result.plan;
 }
 }
 
@@ -187,7 +214,22 @@ int main()
     expect(observed->acquired_route==RP1_GPCLK_ROUTE_GPIO4,
         "GPIO4 route must be carried independently into acquisition");
     expect(observed->program.symbols[0]==0 && observed->program.symbols[1]==1,"symbol order must preserve tone indexes");
-    expect(observed->program.tones[0].lower_divider_word != observed->program.tones[1].lower_divider_word,"frame must carry distinct tone plans");
+    expect(observed->program.tones[0].lower_divider_word !=
+            observed->program.tones[1].lower_divider_word ||
+        observed->program.tones[0].upper_divider_word !=
+            observed->program.tones[1].upper_divider_word ||
+        observed->program.tones[0].lower_count !=
+            observed->program.tones[1].lower_count ||
+        observed->program.tones[0].upper_count !=
+            observed->program.tones[1].upper_count,
+        "frame must carry distinct complete tone plans");
+    const auto expected_wspr=expectedPlan(
+        plan.reference_frequency_hz,12000.0/8192.0,plan.calibration.ppm);
+    expect(observed->program.tones[0].lower_divider_word==
+            expected_wspr.tones[0].lower_divider_word &&
+        observed->program.tones[0].upper_divider_word==
+            expected_wspr.tones[0].upper_divider_word,
+        "WSPR must plan divider words from the 200 MHz compatibility parent");
     const auto operation_record=wsprrypi::rp1GpclkOperationRecordSnapshot();
     expect(operation_record.schema_version==1, "operation record schema must be stable");
     expect(operation_record.operation_id=="test-operation", "operation record must preserve operation identity");
@@ -212,6 +254,13 @@ int main()
         "QRSS finite event program must execute through provider contract");
     expect(event_observed->event_program.events[0].rf_on && !event_observed->event_program.events[1].rf_on,
         "QRSS RF gating must be preserved");
+    const auto expected_qrss=expectedPlan(
+        qrss.reference_frequency_hz,12000.0/8192.0,qrss.calibration.ppm);
+    expect(event_observed->event_program.tones[0].lower_divider_word==
+            expected_qrss.tones[0].lower_divider_word &&
+        event_observed->event_program.tones[0].upper_divider_word==
+            expected_qrss.tones[0].upper_divider_word,
+        "finite events must plan divider words from the 200 MHz compatibility parent");
 
     auto fsk_provider=std::make_unique<Provider>(); Provider* fsk_observed=fsk_provider.get();
     WsprRp1GpclkBackend fsk_backend(owner,std::move(fsk_provider)); auto fsk=twoTonePlan(wsprrypi::TransmissionMode::FSKCW,false);
@@ -236,6 +285,14 @@ int main()
         tone_observed->tone_program.duration_ns==0 &&
         (tone_observed->required_capabilities & RP1_GPCLK_CAP_TONE_CONTINUOUS)!=0,
         "continuous TONE must have zero duration and require its exact capability");
+    const auto expected_tone=expectedPlan(
+        implicit_tone.reference_frequency_hz+1.5*(12000.0/8192.0),
+        12000.0/8192.0,implicit_tone.calibration.ppm);
+    expect(tone_observed->tone_program.tone.lower_divider_word==
+            expected_tone.tones[0].lower_divider_word &&
+        tone_observed->tone_program.tone.upper_divider_word==
+            expected_tone.tones[0].upper_divider_word,
+        "TONE must plan divider words from the 200 MHz compatibility parent");
     auto finite_provider=std::make_unique<Provider>(); Provider* finite_observed=finite_provider.get();
     WsprRp1GpclkBackend finite_backend(owner,std::move(finite_provider));
     auto explicit_tone=tonePlan(true);

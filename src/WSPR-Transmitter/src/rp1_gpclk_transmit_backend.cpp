@@ -13,7 +13,6 @@
 
 namespace
 {
-constexpr double kRp1ParentFrequencyHz = 50000000.0;
 constexpr double kWsprSymbolSeconds = 8192.0 / 12000.0;
 constexpr double kWsprToneSpacingHz = 1.0 / kWsprSymbolSeconds;
 std::mutex operation_record_mutex;
@@ -165,7 +164,8 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         planner_input.center_frequency_hz =
             plan.reference_frequency_hz + 1.5 * kWsprToneSpacingHz;
         planner_input.tone_spacing_hz = kWsprToneSpacingHz;
-        planner_input.parent_frequency_hz = kRp1ParentFrequencyHz;
+        planner_input.parent_frequency_hz =
+            wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
         planner_input.source_rate_ppm = plan.calibration.ppm;
         planner_input.maximum_output_hz = 40000000.0;
         planner_input.dither_sequence_length = wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
@@ -239,7 +239,8 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
     wsprrypi::Rp1GpclkPlannerInput planner_input;
     planner_input.center_frequency_hz = plan.reference_frequency_hz;
     planner_input.tone_spacing_hz = kWsprToneSpacingHz;
-    planner_input.parent_frequency_hz = kRp1ParentFrequencyHz;
+    planner_input.parent_frequency_hz =
+        wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
     planner_input.source_rate_ppm = plan.calibration.ppm;
     planner_input.maximum_output_hz = 40000000.0;
     planner_input.dither_sequence_length =
