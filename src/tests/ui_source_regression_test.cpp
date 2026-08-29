@@ -1402,10 +1402,17 @@ int main()
     require(
         operation_view_source.find("id=\"gpio_frequency_correction_panel\"") != std::string::npos &&
             operation_view_source.find("id=\"gpio_frequency_correction_value\"") != std::string::npos &&
+            operation_view_source.find("GPIO correction provenance") != std::string::npos &&
+            operation_css_source.find("#gpio_frequency_correction_panel {\n    grid-column: 1 / -1;") != std::string::npos &&
             site_source.find("function renderGpioFrequencyCorrection(status)") != std::string::npos &&
-            site_source.find("frequencyEstimateQualification") != std::string::npos &&
-            site_source.find("effectiveGpioPpm") != std::string::npos,
-        "Operation view must show read-only GPIO provider qualification and effective-correction status");
+            site_source.find("gpioCorrectionCandidate") != std::string::npos &&
+            site_source.find("gpioCorrectionCommitted") != std::string::npos &&
+            site_source.find("Candidate refreshes do not alter a committed transmission.") != std::string::npos &&
+            websocket_source.find("reply[\"gpio_correction_candidate\"]") != std::string::npos &&
+            websocket_source.find("reply[\"gpio_correction_committed\"]") != std::string::npos &&
+            scheduling_source.find("j[\"gpio_correction_candidate\"]") != std::string::npos &&
+            scheduling_source.find("j[\"gpio_correction_committed\"]") != std::string::npos,
+        "Operation view must distinguish current candidate correction provenance from the frozen committed execution");
     require(
         config_view_source.find("config-runtime-item config-runtime-item--switch") == std::string::npos,
         "Runtime state body must no longer dedicate a body tile to the Transmit enabled control");

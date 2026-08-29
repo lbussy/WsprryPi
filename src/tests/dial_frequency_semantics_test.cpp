@@ -1240,8 +1240,28 @@ int main(int argc, char *argv[])
         require(
             current_transmission_request_for_test().mode == TransmissionMode::WSPR,
             "scheduler must commit a normal WSPR request for GPIO on Raspberry Pi 4");
+        const auto provenance = current_tx_runtime_status_snapshot();
+        require(
+            provenance.gpio_correction_candidate.available &&
+                provenance.gpio_correction_candidate.processor_profile == "BCM2711" &&
+                provenance.gpio_correction_candidate.selected_parent == "PLLD" &&
+                provenance.gpio_correction_candidate.nominal_rate_hz == 750000000.0 &&
+                provenance.gpio_correction_candidate.final_ppm == 0.0,
+            "candidate provenance must expose the exact planned BCM2711 parent and correction");
+        require(
+            provenance.gpio_correction_committed.available &&
+                !provenance.gpio_correction_committed.active &&
+                provenance.gpio_correction_committed.processor_profile == "BCM2711" &&
+                provenance.gpio_correction_committed.selected_parent == "PLLD" &&
+                provenance.gpio_correction_committed.nominal_rate_hz == 750000000.0 &&
+                !provenance.gpio_correction_committed.execution_identity.empty(),
+            "committed provenance must freeze exact plan identity without claiming idle work is active");
 
         finish_runtime_planning_state_for_identity_test();
+        reset_current_transmission_request_for_test();
+        require(
+            !current_tx_runtime_status_snapshot().gpio_correction_committed.available,
+            "cleared execution state must not expose stale committed provenance");
         clear_pi_generation_override_for_scope();
     }
 

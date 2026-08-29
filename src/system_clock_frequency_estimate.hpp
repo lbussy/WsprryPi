@@ -45,6 +45,7 @@ struct SystemClockFrequencyEstimate
     bool leap_normal = false;
     std::string source_provenance;
     std::string source_signature;
+    std::chrono::system_clock::time_point snapshot_time{};
     std::size_t retained_source_samples = 0;
     double source_stability_span_seconds = 0.0;
     std::string reason;
@@ -57,6 +58,7 @@ struct GpioFrequencyCorrection
     GpioCorrectionMode mode = GpioCorrectionMode::Uncalibrated;
     std::string provider_name;
     std::string source_provenance;
+    std::string source_signature;
     std::string reason;
     std::optional<double> estimate_ppm;
     double residual_ppm = 0.0;
@@ -64,6 +66,7 @@ struct GpioFrequencyCorrection
     double additional_ppm = 0.0;
     double effective_ppm = 0.0;
     double estimate_age_seconds = 0.0;
+    std::chrono::system_clock::time_point snapshot_time{};
 };
 
 struct GpioFrequencyCorrectionComposition

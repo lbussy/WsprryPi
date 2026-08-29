@@ -36,6 +36,8 @@ namespace
         value.skew_ppm = 0.2;
         value.residual_frequency_ppm = 0.05;
         value.source_signature = "ntp.example";
+        value.snapshot_time = std::chrono::system_clock::time_point{
+            std::chrono::seconds{1700000000}};
         value.retained_source_samples = 8;
         value.source_stability_span_seconds = 512.0;
         return value;
@@ -197,8 +199,11 @@ namespace
         expect(
             qualified.valid &&
                 qualified.mode == GpioCorrectionMode::QualifiedEstimate &&
-                qualified.effective_ppm == 1.25,
-            "qualified provider selection must exclude the configured manual fallback");
+                qualified.effective_ppm == 1.25 &&
+                qualified.source_signature == "ntp.example" &&
+                qualified.snapshot_time.time_since_epoch() ==
+                    std::chrono::seconds{1700000000},
+            "qualified provider selection must exclude manual fallback and retain snapshot identity");
 
         SystemClockFrequencyEstimate unavailable;
         unavailable.qualification = FrequencyEstimateQualification::Unavailable;
@@ -207,8 +212,8 @@ namespace
             true, 0.25, -3.0, unavailable);
         expect(
             manual.valid && manual.mode == GpioCorrectionMode::FixedManual &&
-                manual.effective_ppm == -3.0,
-            "manual correction must be selected only when provider fallback is unavailable");
+                manual.effective_ppm == -3.0 && manual.residual_ppm == 0.25,
+            "manual correction must remain exclusive while retaining the configured residual as unapplied provenance");
 
         auto stale = provider(1.0, FrequencyEstimateQualification::Stale);
         stale.age_seconds = 600.0;
@@ -224,6 +229,35 @@ namespace
         expect(
             !select_gpio_frequency_correction(true, 0.0, 8.0, stale).valid,
             "malformed stale age must fail rather than silently selecting manual or zero");
+    }
+
+    void testStaleFallbackRetainsQualifiedSnapshotIdentity()
+    {
+        FrequencyEstimateQualifier qualifier;
+        auto original = provider(1.0);
+        original.source_provenance = "original source";
+        SystemClockFrequencyEstimate qualified;
+        for (int i = 0; i < 3; ++i)
+            qualified = qualifier.evaluate(original);
+        expect(
+            qualified.qualification == FrequencyEstimateQualification::Qualified,
+            "stable provider fixture must qualify before fallback identity testing");
+
+        auto changed = provider(2.0);
+        changed.source_signature = "replacement.example";
+        changed.source_provenance = "replacement source";
+        changed.snapshot_time += std::chrono::hours{1};
+        changed.synchronized = false;
+        const auto fallback = qualifier.evaluate(changed);
+        const auto selected = select_gpio_frequency_correction(
+            true, 0.0, 0.0, fallback);
+        expect(
+            selected.mode == GpioCorrectionMode::StaleEstimate &&
+                selected.effective_ppm == 1.0 &&
+                selected.source_signature == "ntp.example" &&
+                selected.source_provenance == "original source" &&
+                selected.snapshot_time == original.snapshot_time,
+            "stale numeric fallback must retain the same qualified source identity and snapshot time");
     }
 
     void testIntrinsicCompositionAndFreezing()
@@ -283,6 +317,7 @@ int main()
     testFinalSelectionBounds();
     testProviderMetadataValidation();
     testFallbackExclusivityAndStaleValidation();
+    testStaleFallbackRetainsQualifiedSnapshotIdentity();
     testIntrinsicCompositionAndFreezing();
 
     if (failures != 0)

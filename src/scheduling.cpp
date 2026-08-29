@@ -132,6 +132,36 @@ namespace
     FrequencyEstimateQualifier frequency_estimate_qualifier;
     SystemClockFrequencyEstimate current_frequency_estimate{};
     GpioFrequencyCorrection current_gpio_correction{};
+    WsprRuntimeStatusSnapshot::GpioCorrectionProvenance
+        current_gpio_candidate_provenance{};
+    WsprRuntimeStatusSnapshot::GpioCorrectionProvenance
+        committed_gpio_correction_provenance{};
+    std::uint64_t committed_gpio_execution_sequence = 0;
+
+    const char *legacy_processor_name(
+        wsprrypi::LegacyGpioProcessorProfile profile) noexcept
+    {
+        switch (profile)
+        {
+        case wsprrypi::LegacyGpioProcessorProfile::Bcm2835: return "BCM2835";
+        case wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837:
+            return "BCM2836/BCM2837";
+        case wsprrypi::LegacyGpioProcessorProfile::Bcm2711: return "BCM2711";
+        }
+        return "unavailable";
+    }
+
+    std::string utc_timestamp(std::chrono::system_clock::time_point value)
+    {
+        if (value.time_since_epoch().count() == 0)
+            return {};
+        const std::time_t raw = std::chrono::system_clock::to_time_t(value);
+        std::tm utc{};
+        gmtime_r(&raw, &utc);
+        std::ostringstream out;
+        out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
+        return out.str();
+    }
 
     std::optional<wsprrypi::LegacyGpioProcessorProfile>
     resolve_legacy_gpio_processor_profile() noexcept
@@ -161,6 +191,12 @@ namespace
         sample.leap_normal = provider.leap_normal;
         sample.source_provenance = provider.source_provenance;
         sample.source_signature = provider.source_signature;
+        if (std::isfinite(provider.age_seconds) && provider.age_seconds >= 0.0)
+        {
+            sample.snapshot_time = std::chrono::system_clock::now() -
+                std::chrono::duration_cast<std::chrono::system_clock::duration>(
+                    std::chrono::duration<double>(provider.age_seconds));
+        }
         sample.retained_source_samples = provider.retained_source_samples;
         sample.source_stability_span_seconds = provider.source_stability_span_seconds;
         sample.reason = provider.error_reason;
@@ -214,6 +250,27 @@ namespace
             selected.additional_ppm = selected.effective_ppm;
         }
         current_gpio_correction = selected;
+        current_gpio_candidate_provenance = {};
+        if (selected.valid && cfg.transmit_backend == TransmitBackendKind::GPIO)
+        {
+            const auto processor = resolve_legacy_gpio_processor_profile();
+            if (processor.has_value())
+            {
+                auto &candidate = current_gpio_candidate_provenance;
+                candidate.available = true;
+                candidate.processor_profile = legacy_processor_name(*processor);
+                candidate.selected_parent = "pending execution plan";
+                candidate.intrinsic_ppm = selected.intrinsic_ppm;
+                candidate.selected_component_ppm =
+                    selected.estimate_ppm.value_or(selected.additional_ppm);
+                candidate.conducted_residual_ppm = selected.residual_ppm;
+                candidate.final_ppm = selected.effective_ppm;
+                candidate.correction_mode = to_string(selected.mode);
+                candidate.provider_name = selected.provider_name;
+                candidate.provider_source_signature = selected.source_signature;
+                candidate.provider_snapshot_time = utc_timestamp(selected.snapshot_time);
+            }
+        }
         return current_gpio_correction;
     }
 
@@ -1199,6 +1256,68 @@ static wsprrypi::TransmissionRequest build_controller_request_from_legacy(
     return controller_request;
 }
 
+static void freeze_gpio_correction_provenance(
+    const TransmissionRequest &request,
+    std::optional<std::pair<double, double>> exact_frequency_range = std::nullopt)
+{
+    committed_gpio_correction_provenance = {};
+    if (config.transmit_backend != TransmitBackendKind::GPIO ||
+        request.isSkipWindow() || request.actual_rf_frequency_hz <= 0.0)
+    {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(frequency_estimate_mutex);
+    if (!current_gpio_candidate_provenance.available ||
+        !current_gpio_correction.valid)
+    {
+        return;
+    }
+    const auto processor = resolve_legacy_gpio_processor_profile();
+    if (!processor.has_value() ||
+        !wsprrypi::legacyHardwareProfileMatches(
+            request.hardware_profile, *processor))
+    {
+        return;
+    }
+
+    double minimum_hz = exact_frequency_range.has_value()
+        ? exact_frequency_range->first
+        : request.actual_rf_frequency_hz;
+    double maximum_hz = exact_frequency_range.has_value()
+        ? exact_frequency_range->second
+        : request.actual_rf_frequency_hz;
+    if (!exact_frequency_range.has_value() && !request.payload.empty())
+        maximum_hz += 1.5 * (12000.0 / 8192.0);
+    if (!exact_frequency_range.has_value() && request.applied_offset_hz != 0.0)
+    {
+        minimum_hz = std::min(minimum_hz,
+            request.actual_rf_frequency_hz + request.applied_offset_hz);
+        maximum_hz = std::max(maximum_hz,
+            request.actual_rf_frequency_hz + request.applied_offset_hz);
+    }
+
+    const auto selection = wsprrypi::selectLegacyGpioClock(
+        *processor, minimum_hz, maximum_hz, request.ppm);
+    auto frozen = current_gpio_candidate_provenance;
+    frozen.active = false;
+    frozen.selected_parent =
+        selection.model.parent == wsprrypi::LegacyGpioClockParent::PllD
+            ? "PLLD"
+            : "oscillator";
+    frozen.nominal_rate_hz = selection.model.nominal_rate_hz;
+    frozen.intrinsic_ppm = selection.correction.intrinsic_ppm;
+    frozen.selected_component_ppm =
+        current_gpio_correction.estimate_ppm.value_or(
+            selection.correction.additional_ppm);
+    frozen.final_ppm = selection.correction.effective_ppm;
+    frozen.execution_identity =
+        "gpio-execution-" + std::to_string(++committed_gpio_execution_sequence);
+    committed_gpio_correction_provenance = frozen;
+    current_gpio_candidate_provenance.selected_parent = frozen.selected_parent;
+    current_gpio_candidate_provenance.nominal_rate_hz = frozen.nominal_rate_hz;
+}
+
 /**
  * @brief Commit the single execution request consumed by the transmitter.
  *
@@ -1212,6 +1331,7 @@ static void commit_execution_request(
     const TransmissionRequest &request)
 {
     current_transmission_request = request;
+    freeze_gpio_correction_provenance(current_transmission_request);
     current_controller_request_for_test_storage.reset();
     committed_execution_route_for_test_storage =
         CommittedExecutionRouteForTest::NONE;
@@ -1328,6 +1448,34 @@ static void commit_execution_request(
     const TransmissionRequest &legacy_request)
 {
     current_transmission_request = legacy_request;
+    current_transmission_request.hardware_profile =
+        controller_request.policy.hardware_profile;
+    std::pair<double, double> exact_range{
+        current_transmission_request.actual_rf_frequency_hz,
+        current_transmission_request.actual_rf_frequency_hz};
+    switch (controller_request.mode)
+    {
+    case wsprrypi::TransmissionMode::FSKCW:
+    {
+        const auto &payload = std::get<wsprrypi::FskcwPayload>(
+            controller_request.payload);
+        exact_range = std::minmax(
+            payload.mark_frequency_hz, payload.space_frequency_hz);
+        break;
+    }
+    case wsprrypi::TransmissionMode::DFCW:
+    {
+        const auto &payload = std::get<wsprrypi::DfcwPayload>(
+            controller_request.payload);
+        exact_range = std::minmax(
+            payload.dot_frequency_hz, payload.dash_frequency_hz);
+        break;
+    }
+    default:
+        break;
+    }
+    freeze_gpio_correction_provenance(
+        current_transmission_request, exact_range);
     current_controller_request_for_test_storage = controller_request;
     if (suppress_scheduler_execution_for_test)
     {
@@ -1351,6 +1499,7 @@ static void clear_committed_execution_request() noexcept
     current_controller_request_for_test_storage.reset();
     committed_execution_route_for_test_storage =
         CommittedExecutionRouteForTest::NONE;
+    committed_gpio_correction_provenance = {};
 }
 
 static bool resolve_qrss_runtime_request(
@@ -5056,6 +5205,27 @@ void send_ws_message(
         j["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
         j["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
         j["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
+        const auto provenance_json = [](const auto &value)
+        {
+            return nlohmann::json{
+                {"available", value.available}, {"active", value.active},
+                {"processor_profile", value.processor_profile},
+                {"selected_parent", value.selected_parent},
+                {"nominal_rate_hz", value.nominal_rate_hz},
+                {"intrinsic_ppm", value.intrinsic_ppm},
+                {"selected_component_ppm", value.selected_component_ppm},
+                {"conducted_residual_ppm", value.conducted_residual_ppm},
+                {"final_ppm", value.final_ppm},
+                {"correction_mode", value.correction_mode},
+                {"provider_name", value.provider_name},
+                {"provider_source_signature", value.provider_source_signature},
+                {"provider_snapshot_time", value.provider_snapshot_time},
+                {"execution_identity", value.execution_identity}};
+        };
+        j["gpio_correction_candidate"] =
+            provenance_json(snapshot.gpio_correction_candidate);
+        j["gpio_correction_committed"] =
+            provenance_json(snapshot.gpio_correction_committed);
     }
 
     if (!message.empty())
@@ -5212,9 +5382,19 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
         snapshot.gpio_frequency_residual_ppm = current_gpio_correction.residual_ppm;
         snapshot.effective_gpio_ppm = current_gpio_correction.effective_ppm;
         snapshot.frequency_estimate_age_seconds = current_gpio_correction.estimate_age_seconds;
+        snapshot.gpio_correction_candidate = current_gpio_candidate_provenance;
+        snapshot.gpio_correction_committed = committed_gpio_correction_provenance;
     }
     snapshot.tx_state = wsprTransmitter.stateToStringLower(
         wsprTransmitter.getState());
+    snapshot.gpio_correction_committed.active =
+        snapshot.gpio_correction_committed.available &&
+        snapshot.tx_state == "transmitting";
+    if (current_transmission_request.actual_rf_frequency_hz <= 0.0 ||
+        current_transmission_request.isSkipWindow())
+    {
+        snapshot.gpio_correction_committed = {};
+    }
     const auto runtime_status = wsprTransmitter.runtimeExecutionStatusSnapshot();
     if (snapshot.tx_state == "transmitting")
     {

@@ -34,6 +34,10 @@ SystemClockFrequencyEstimate FrequencyEstimateQualifier::evaluate(
         {
             sample.last_qualified_frequency_ppm = last_qualified_->frequency_ppm;
             sample.last_qualified_age_seconds = age;
+            sample.provider_name = last_qualified_->provider_name;
+            sample.source_provenance = last_qualified_->source_provenance;
+            sample.source_signature = last_qualified_->source_signature;
+            sample.snapshot_time = last_qualified_->snapshot_time;
         }
     };
     sample.qualification = FrequencyEstimateQualification::Unavailable;
@@ -179,8 +183,10 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     result.qualification = estimate.qualification;
     result.provider_name = estimate.provider_name;
     result.source_provenance = estimate.source_provenance;
+    result.source_signature = estimate.source_signature;
     result.reason = estimate.reason;
     result.estimate_age_seconds = estimate.age_seconds;
+    result.snapshot_time = estimate.snapshot_time;
     result.residual_ppm = residual_ppm;
 
     if (use_estimate && estimate.frequency_ppm.has_value() &&

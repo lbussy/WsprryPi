@@ -439,8 +439,24 @@ before request creation. BCM2835 therefore always includes its historical
 zero discovery baselines. The backend verifies and decomposes the frozen final
 scalar without reapplying the intrinsic component. The stranded constructor
 expression and fallback-to-generic-500-MHz behavior are removed. RP1 and
-Si5351 correction paths remain isolated. Expanded active status provenance is
-still Phase 4.
+Si5351 correction paths remain isolated.
+
+### Phase 4 implementation status
+
+Phase 4 exposes separate current-candidate and committed-execution GPIO clock
+provenance through the runtime status API and Operation view. The candidate
+tracks the latest qualified selection, while the committed record freezes the
+processor profile, selected parent, nominal rate, intrinsic difference,
+selected provider or manual component, conducted residual, final correction,
+provider source signature and snapshot time, and a distinct execution identity
+at the scheduler-to-transmitter commit boundary. A later provider refresh does
+not rewrite the committed record, and active state is asserted only while the
+transmitter reports that it is transmitting. Cleanup clears the committed
+record rather than allowing stale execution provenance to survive.
+
+This reporting does not qualify RF accuracy or promote any discovery baseline.
+Physical discovery, closure, and constant promotion remain Phases 5 and 6 and
+require their separate authorization and evidence gates.
 
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
