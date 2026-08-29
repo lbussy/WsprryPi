@@ -310,6 +310,57 @@ the relevant physical clock runs fast and would place an uncorrected carrier
 high; negative means it runs slow. Calculations may retain exact rate ratios,
 but reported and composed values use PPM and must declare rounding precision.
 
+### Campaign-only SDR calibration
+
+All discovery, perturbation, and closure analysis shall use this supplied SDR
+calibration:
+
+```text
+detected_frequency_hz - reference_frequency_hz =
+    0.4484 Hz + reference_frequency_hz * 1.01012 PPM
+```
+
+The exact inverse applied to every raw detected carrier is:
+
+```text
+calibrated_sdr_hz =
+    (raw_detected_sdr_hz - 0.4484 Hz)
+    / (1 + 1.01012 * 10^-6)
+
+calibrated_rf_error_hz = calibrated_sdr_hz - requested_rf_hz
+
+calibrated_rf_error_ppm =
+    calibrated_rf_error_hz / requested_rf_hz * 10^6
+```
+
+The inverse, rather than an approximate subtraction, is authoritative for
+these campaigns. The intercept and proportional term are applied exactly once
+before `P`, `D`, discovery error, closure error, or acceptance is calculated.
+Both the raw detected frequency and calibrated result must be retained.
+
+When the receiver observes a harmonic, calibration occurs at the raw detected
+harmonic frequency before translation to the transmitter fundamental:
+
+```text
+calibrated_harmonic_hz =
+    (raw_detected_harmonic_hz - 0.4484 Hz)
+    / (1 + 1.01012 * 10^-6)
+
+calibrated_fundamental_hz = calibrated_harmonic_hz / harmonic_number
+```
+
+Dividing before removing the affine intercept would scale the `0.4484 Hz`
+term incorrectly. The harmonic number and requested fundamental must be
+authenticated campaign inputs, not inferred from the nearest apparent tone.
+
+This calibration corrects the measurement instrument only. It is required
+campaign methodology and evidence metadata, but it must never become a
+WsprryPi runtime setting, chipset/parent constant, intrinsic `D`, provider
+residual, manual correction, configuration default, or production frequency
+calculation. It applies only to the SDR and receiver configuration for which
+the user declares it authoritative. Another receiver or changed configuration
+requires separately supplied calibration evidence.
+
 The preferred discovery run applies `S` while the intrinsic and configured
 residuals are zero. After receiver correction is applied exactly once, the
 remaining signed carrier error directly estimates `D`. An equivalent analysis
@@ -330,18 +381,23 @@ constants from separate discovery and closure runs.
 
 The campaign must retain the exact NTP snapshot and qualification, source
 signature, selected parent and nominal rate, executable and source revision,
-requested fundamental and harmonic relationship, GPIO route, SDR identity,
-receiver correction, reference identity, temperature/time context, raw
-captures, repeated-frequency results, and final calculation. Provider changes
-during a run do not alter the frozen execution correction.
+requested fundamental and authenticated harmonic relationship, GPIO route,
+SDR identity and configuration, the exact calibration equation, raw detected
+frequency, calibrated SDR frequency, receiver correction application count,
+reference identity, temperature/time context, raw captures,
+repeated-frequency results, and final calculation. Provider changes during a
+run do not alter the frozen execution correction.
 
 ## Phased resolution path
 
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
    parents; define `D = P - S`; specify discovery, closure, sign-perturbation,
-   repetition, receiver-correction, and evidence rules; and independently bind
-   selection and composition in hardware-free tests.
+   repetition, SDR inverse-calibration, harmonic-ordering, one-time receiver
+   correction, and evidence rules; and independently bind selection and
+   composition in hardware-free tests. Measurement-analysis fixtures must use
+   known synthetic raw frequencies to prove the exact inverse and demonstrate
+   that calibration-before-harmonic-division is enforced.
 2. **Harden correction selection.** Validate provider metadata and the final
    composed value; remove inconsistent clamping; preserve provider/manual
    precedence; and prove one-time application and execution-level freezing.
@@ -359,13 +415,16 @@ during a run do not alter the frozen execution correction.
    independently derive and close `D` for both 750 MHz PLLD and 54 MHz
    oscillator generation, covering all parent-selection regions, transition
    boundaries, positive/negative perturbations, bounded keyed modes, and
-   cleanup. Hardware activity requires separate explicit authorization and a
-   predeclared conducted plan.
+   cleanup. Every result and acceptance decision uses the calibrated SDR value,
+   while retaining the raw detection. Hardware activity requires separate
+   explicit authorization and a predeclared conducted plan.
 6. **Promote and close the evidence record.** Promote a constant only after its
-   discovery and closure evidence passes. Retain BCM2835 as historically
-   authoritative but not modern-hardware-revalidated. Record Zero 2 W and RPi4
-   constants separately without transferring them to another processor,
-   parent, route, RP1, or Si5351.
+   calibrated discovery and calibrated closure evidence passes. Retain BCM2835
+   as historically authoritative but not modern-hardware-revalidated. Record
+   Zero 2 W and RPi4 constants separately without transferring them to another
+   processor, parent, route, RP1, or Si5351. Retain the SDR calibration as
+   evidence methodology only; do not promote it or any component of it into
+   WsprryPi production state.
 
 ## Unknowns and next gate
 
