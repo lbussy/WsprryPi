@@ -390,6 +390,23 @@ run do not alter the frozen execution correction.
 
 ## Phased resolution path
 
+### Phase 1 implementation status
+
+Phase 1 is implemented on the Issue 429 branch as a hardware-independent
+clock-model and campaign-math boundary in
+`src/WSPR-Transmitter/src/legacy_gpio_clock_model.{hpp,cpp}`. It records the
+three distinct processor profiles, valid parent pairings, nominal rates,
+BCM2835's authoritative historical `-2.5 PPM` intrinsic difference, the three
+independent discovery baselines, `D = P - S`, the exact wspr5 inverse, and
+calibration-before-harmonic-division. A focused test target independently
+asserts those contracts and malformed-input rejection.
+
+This phase does not select a runtime processor or parent, compose production
+corrections, activate the BCM2835 intrinsic value in transmission planning,
+publish provenance, or authorize measurement activity. Those remain gated by
+Phases 2 through 6 below. The SDR equation remains campaign-only analysis and
+is not application configuration or production frequency-generation state.
+
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
    parents; define `D = P - S`; specify discovery, closure, sign-perturbation,
