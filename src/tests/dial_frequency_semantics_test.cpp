@@ -1295,6 +1295,21 @@ int main(int argc, char *argv[])
             set_config(true),
             "BCM2711 2200 m WSPR regression must plan a scheduler request");
         const auto bcm2711_legacy_request = current_transmission_request_for_test();
+        const auto bcm2711_2200m_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(bcm2711_legacy_request.ppm, -15.035290) &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.available &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.selected_parent ==
+                    "oscillator" &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.nominal_rate_hz ==
+                    54000000.0 &&
+                nearly_equal(
+                    bcm2711_2200m_provenance.gpio_correction_candidate.intrinsic_ppm,
+                    -15.035290) &&
+                nearly_equal(
+                    bcm2711_2200m_provenance.gpio_correction_candidate.final_ppm,
+                    -15.035290),
+            "BCM2711 2200 m planning must commit and publish the promoted oscillator intrinsic value");
         auto bcm2711_request = controller_request_from_legacy_for_test(
             bcm2711_legacy_request,
             wsprrypi::TransmissionMode::WSPR);

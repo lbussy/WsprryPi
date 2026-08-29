@@ -81,6 +81,16 @@ namespace wsprrypi
         double effective_ppm);
 
     /**
+     * Select a parent while composing that parent's intrinsic with one
+     * additional correction.
+     */
+    LegacyGpioClockSelection selectLegacyGpioClockForAdditionalCorrection(
+        LegacyGpioProcessorProfile processor,
+        double minimum_tone_hz,
+        double maximum_tone_hz,
+        double additional_ppm);
+
+    /**
      * Derive the intrinsic system-to-RF difference D = P - S.
      * All inputs use the positive-fast source-rate convention.
      */

@@ -1257,7 +1257,7 @@ static wsprrypi::TransmissionRequest build_controller_request_from_legacy(
 }
 
 static void freeze_gpio_correction_provenance(
-    const TransmissionRequest &request,
+    TransmissionRequest &request,
     std::optional<std::pair<double, double>> exact_frequency_range = std::nullopt)
 {
     committed_gpio_correction_provenance = {};
@@ -1297,8 +1297,17 @@ static void freeze_gpio_correction_provenance(
             request.actual_rf_frequency_hz + request.applied_offset_hz);
     }
 
-    const auto selection = wsprrypi::selectLegacyGpioClock(
-        *processor, minimum_hz, maximum_hz, request.ppm);
+    const auto selection =
+        wsprrypi::selectLegacyGpioClockForAdditionalCorrection(
+            *processor,
+            minimum_hz,
+            maximum_hz,
+            current_gpio_correction.additional_ppm);
+    request.ppm = selection.correction.effective_ppm;
+    current_gpio_correction.intrinsic_ppm =
+        selection.correction.intrinsic_ppm;
+    current_gpio_correction.effective_ppm =
+        selection.correction.effective_ppm;
     auto frozen = current_gpio_candidate_provenance;
     frozen.active = false;
     frozen.selected_parent =
@@ -1316,6 +1325,8 @@ static void freeze_gpio_correction_provenance(
     committed_gpio_correction_provenance = frozen;
     current_gpio_candidate_provenance.selected_parent = frozen.selected_parent;
     current_gpio_candidate_provenance.nominal_rate_hz = frozen.nominal_rate_hz;
+    current_gpio_candidate_provenance.intrinsic_ppm = frozen.intrinsic_ppm;
+    current_gpio_candidate_provenance.final_ppm = frozen.final_ppm;
 }
 
 /**

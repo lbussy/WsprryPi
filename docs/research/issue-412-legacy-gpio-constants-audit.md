@@ -268,7 +268,7 @@ for available hardware are derived by the conducted procedure below:
 | BCM2835 / RPi1 | PLLD | 500 MHz | `-2.5 PPM` | Authoritative historical legacy model; no current device available |
 | BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | To be derived; zero is the discovery baseline | Legacy excludes the BCM2835 constant; Zero 2 W available as the accepted representative |
 | BCM2711 / RPi4 | PLLD | 750 MHz | `+0.153768 PPM` | Promoted from the authorized GPIO20 conducted ten-band discovery on the representative RPi4 |
-| BCM2711 / RPi4 | oscillator | 54 MHz | To be derived independently; zero is the discovery baseline | Distinct RPi4 parent path available for validation |
+| BCM2711 / RPi4 | oscillator | 54 MHz | `-15.035290 PPM` | Promoted from the authorized GPIO20 conducted 2200 m discovery and closure on the representative RPi4 |
 
 Intrinsic profile correction is part of frequency generation regardless of
 whether the operator selects a provider estimate, a manual alternative, or no
@@ -435,10 +435,11 @@ before calculating corrected rates and divider words.
 
 The scheduler composes the intrinsic and selected-additional corrections once
 before request creation. BCM2835 therefore always includes its historical
-`-2.5 PPM`; the later 500 MHz and BCM2711 oscillator models retain their
-separate zero discovery baselines. The BCM2711 PLLD model uses its promoted
-conducted `+0.153768 PPM` intrinsic value. The backend verifies and decomposes
-the frozen final scalar without reapplying the intrinsic component. The
+`-2.5 PPM`, while the later 500 MHz model retains its separate zero discovery
+baseline. The BCM2711 PLLD and oscillator models use their independently
+promoted conducted `+0.153768 PPM` and `-15.035290 PPM` intrinsic values. The
+backend verifies and decomposes the frozen final scalar without reapplying the
+intrinsic component. The
 stranded constructor expression and fallback-to-generic-500-MHz behavior are
 removed. RP1 and Si5351 correction paths remain isolated.
 
@@ -483,6 +484,26 @@ perturbation runs have passed. Those remain required before the broader Issue
 429 Phase 6 evidence record can be declared complete. The value does not apply
 to the distinct BCM2711 54 MHz oscillator parent or another processor, GPIO
 route, receiver, or backend.
+
+### BCM2711 oscillator conducted promotion
+
+The promoted BCM2711 54 MHz oscillator intrinsic value is `-15.035290 PPM`.
+It was derived on the representative Raspberry Pi 4 at the 2200 m WSPR
+frequency using GPIO20, a `-20 dB` conducted path, and SDRplay RSP1B serial
+`2404058C60`. Chrony completed three qualified observations before RF work and
+supplied the frozen discovery correction `S = 9.616 PPM`.
+
+Three independent discovery captures produced longer-window estimates of
+`-15.132360 PPM`, `-15.080798 PPM`, and `-15.055137 PPM`. Their mean candidate
+was closed, its remaining signed residual was used for one refinement, and a
+final closure at `-15.035290 PPM` measured `-0.005270 PPM` (`-0.000725 Hz`). A
+second estimator measured `-0.006791 PPM` (`-0.000934 Hz`). All five captures
+retained 3,500,000 samples with no timeout, overflow, or clipping and verified
+receiver cleanup. Evidence is retained on the acquisition host under
+`/home/pi/wsprrypi-phase5-oscillator-final-20260829/2200m`.
+
+This value is confined to the BCM2711 54 MHz oscillator parent. It does not
+apply to BCM2711 PLLD, another processor, GPIO route, receiver, or backend.
 
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator

@@ -90,8 +90,25 @@ namespace
                 bcm2711Oscillator.parent ==
                     LegacyGpioClockParent::Oscillator &&
                 bcm2711Oscillator.nominal_rate_hz == 54000000.0 &&
-                bcm2711Oscillator.intrinsic_system_to_rf_difference_ppm == 0.0,
-            "BCM2711 oscillator must use its independent 54 MHz discovery baseline");
+                bcm2711Oscillator.intrinsic_system_to_rf_difference_ppm ==
+                    -15.035290 &&
+                bcm2711Oscillator.intrinsic_evidence ==
+                    LegacyGpioIntrinsicEvidence::ConductedPromoted,
+            "BCM2711 oscillator must use its promoted conducted 54 MHz intrinsic value");
+
+        const auto selectedOscillator =
+            selectLegacyGpioClockForAdditionalCorrection(
+                LegacyGpioProcessorProfile::Bcm2711,
+                137500.0,
+                137502.0,
+                9.616);
+        expect(
+            selectedOscillator.model.parent ==
+                    LegacyGpioClockParent::Oscillator &&
+                selectedOscillator.correction.intrinsic_ppm == -15.035290 &&
+                selectedOscillator.correction.additional_ppm == 9.616 &&
+                selectedOscillator.correction.effective_ppm == -5.419290,
+            "parent-aware composition must apply the oscillator intrinsic exactly once");
 
         expectInvalid(
             [] {

@@ -13,6 +13,7 @@ namespace wsprrypi
         constexpr double kBcm2711OscillatorHz = 54000000.0;
         constexpr double kBcm2835IntrinsicPpm = -2.5;
         constexpr double kBcm2711PllDIntrinsicPpm = 0.153768;
+        constexpr double kBcm2711OscillatorIntrinsicPpm = -15.035290;
         constexpr double kDiscoveryBaselinePpm = 0.0;
 
         constexpr double kIssue429SdrInterceptHz = 0.4484;
@@ -78,8 +79,8 @@ namespace wsprrypi
                     processor,
                     parent,
                     kBcm2711OscillatorHz,
-                    kDiscoveryBaselinePpm,
-                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
+                    kBcm2711OscillatorIntrinsicPpm,
+                    LegacyGpioIntrinsicEvidence::ConductedPromoted};
             }
             break;
         }
@@ -167,6 +168,50 @@ namespace wsprrypi
             const double additional_ppm =
                 effective_ppm -
                 model.intrinsic_system_to_rf_difference_ppm;
+            const auto correction = composeLegacyGpioCorrection(
+                model.intrinsic_system_to_rf_difference_ppm,
+                additional_ppm);
+            if (!correction.valid)
+                throw std::invalid_argument(
+                    "Legacy GPIO correction composition is invalid.");
+            const double corrected_rate_hz =
+                model.nominal_rate_hz *
+                (1.0 + correction.effective_ppm * 1.0e-6);
+            if (legacyGpioClockCanRepresent(
+                    corrected_rate_hz,
+                    minimum_tone_hz,
+                    maximum_tone_hz))
+            {
+                return LegacyGpioClockSelection{
+                    model,
+                    correction,
+                    corrected_rate_hz};
+            }
+            return std::nullopt;
+        };
+
+        if (const auto plld = try_parent(LegacyGpioClockParent::PllD))
+            return *plld;
+        if (processor == LegacyGpioProcessorProfile::Bcm2711)
+        {
+            if (const auto oscillator =
+                    try_parent(LegacyGpioClockParent::Oscillator))
+                return *oscillator;
+        }
+        throw std::out_of_range(
+            "Legacy GPIO frequency cannot be represented by an available parent.");
+    }
+
+    LegacyGpioClockSelection selectLegacyGpioClockForAdditionalCorrection(
+        LegacyGpioProcessorProfile processor,
+        double minimum_tone_hz,
+        double maximum_tone_hz,
+        double additional_ppm)
+    {
+        const auto try_parent = [&](LegacyGpioClockParent parent)
+            -> std::optional<LegacyGpioClockSelection>
+        {
+            const auto model = legacyGpioClockModel(processor, parent);
             const auto correction = composeLegacyGpioCorrection(
                 model.intrinsic_system_to_rf_difference_ppm,
                 additional_ppm);
