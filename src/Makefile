@@ -1217,7 +1217,7 @@ legacy-gpio-clock-model-test: $(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
 	$(Q)echo "Running hardware-independent legacy GPIO clock-model tests."
 	$(Q)./$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
 
-$(BIN_DIR)/$(GPIO_FREQUENCY_CORRECTION_TEST_OUT): tests/gpio_frequency_correction_test.cpp system_clock_frequency_estimate.cpp
+$(BIN_DIR)/$(GPIO_FREQUENCY_CORRECTION_TEST_OUT): tests/gpio_frequency_correction_test.cpp system_clock_frequency_estimate.cpp WSPR-Transmitter/src/legacy_gpio_clock_model.cpp
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(GPIO_FREQUENCY_CORRECTION_TEST_FLAGS) $^ -o $@
 

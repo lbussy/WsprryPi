@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 namespace wsprrypi
 {
@@ -41,6 +42,42 @@ namespace wsprrypi
     LegacyGpioClockModel legacyGpioClockModel(
         LegacyGpioProcessorProfile processor,
         LegacyGpioClockParent parent);
+
+    /** Decode the processor field from a Raspberry Pi revision value. */
+    std::optional<LegacyGpioProcessorProfile>
+    legacyGpioProcessorProfileFromRevision(std::uint32_t revision) noexcept;
+
+    inline constexpr double kMaximumLegacyGpioCorrectionPpm = 200.0;
+
+    struct LegacyGpioCorrectionComposition
+    {
+        bool valid = false;
+        double intrinsic_ppm = 0.0;
+        double additional_ppm = 0.0;
+        double effective_ppm = 0.0;
+    };
+
+    LegacyGpioCorrectionComposition composeLegacyGpioCorrection(
+        double intrinsic_ppm,
+        double additional_ppm) noexcept;
+
+    struct LegacyGpioClockSelection
+    {
+        LegacyGpioClockModel model;
+        LegacyGpioCorrectionComposition correction;
+        double corrected_rate_hz = 0.0;
+    };
+
+    bool legacyGpioClockCanRepresent(
+        double source_hz,
+        double minimum_tone_hz,
+        double maximum_tone_hz) noexcept;
+
+    LegacyGpioClockSelection selectLegacyGpioClock(
+        LegacyGpioProcessorProfile processor,
+        double minimum_tone_hz,
+        double maximum_tone_hz,
+        double effective_ppm);
 
     /**
      * Derive the intrinsic system-to-RF difference D = P - S.

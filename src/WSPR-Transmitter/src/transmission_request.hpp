@@ -6,6 +6,7 @@
 #include <string>
 
 #include "transmission_payloads.hpp"
+#include "legacy_gpio_clock_model.hpp"
 
 namespace wsprrypi
 {
@@ -30,11 +31,34 @@ enum class ClockSource
 enum class HardwareProfile
 {
     UNSPECIFIED,
-    LEGACY_500_MHZ_PLLD,
-    BCM2711_750_MHZ_PLLD,
+    BCM2835,
+    BCM2836_BCM2837,
+    BCM2711,
     RP1_GPCLK,
     SI5351
 };
+
+inline HardwareProfile legacyHardwareProfile(
+    LegacyGpioProcessorProfile processor) noexcept
+{
+    switch (processor)
+    {
+    case LegacyGpioProcessorProfile::Bcm2835:
+        return HardwareProfile::BCM2835;
+    case LegacyGpioProcessorProfile::Bcm2836Bcm2837:
+        return HardwareProfile::BCM2836_BCM2837;
+    case LegacyGpioProcessorProfile::Bcm2711:
+        return HardwareProfile::BCM2711;
+    }
+    return HardwareProfile::UNSPECIFIED;
+}
+
+inline bool legacyHardwareProfileMatches(
+    HardwareProfile committed_profile,
+    LegacyGpioProcessorProfile detected_processor) noexcept
+{
+    return committed_profile == legacyHardwareProfile(detected_processor);
+}
 
 struct RequestId
 {

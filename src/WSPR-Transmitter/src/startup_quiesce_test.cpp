@@ -715,7 +715,7 @@ namespace
 
         const auto pi4_2200m_range = tone_range(137500.0);
         const auto pi4_2200m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             0.0);
@@ -726,7 +726,7 @@ namespace
 
         const auto pi4_630m_range = tone_range(475700.0);
         const auto pi4_630m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_630m_range.first,
             pi4_630m_range.second,
             0.0);
@@ -735,7 +735,7 @@ namespace
                "Pi 4 630 m must retain the preferred 750 MHz PLLD source");
 
         const auto legacy_2200m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Legacy500Mhz,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             0.0);
@@ -743,15 +743,47 @@ namespace
                    legacy_2200m.nominal_hz == 500e6,
                "500 MHz processors must retain PLLD for representable 2200 m output");
 
+        const auto bcm2835 = gpioPlanRfClock(
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2835,
+            14097100.0,
+            14097100.0,
+            -1.5);
+        expect(
+            bcm2835.parent == wsprrypi::LegacyGpioClockParent::PllD &&
+                bcm2835.nominal_hz == 500e6 &&
+                bcm2835.intrinsic_ppm == -2.5 &&
+                bcm2835.additional_ppm == 1.0 &&
+                bcm2835.effective_ppm == -1.5 &&
+                bcm2835.corrected_hz == 500e6 * (1.0 - 1.5e-6),
+            "BCM2835 planning must apply its intrinsic correction exactly once");
+
+        expect(
+            gpioHardwareProfileMatchesProcessor(
+                wsprrypi::HardwareProfile::BCM2835,
+                wsprrypi::LegacyGpioProcessorProfile::Bcm2835) &&
+                gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2836_BCM2837,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837) &&
+                gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2711,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2711) &&
+                !gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2835,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2711) &&
+                !gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::UNSPECIFIED,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2835),
+            "backend profile agreement must accept exact identity and reject contradictions");
+
         constexpr double pi4_plld_boundary_hz =
             750e6 / (static_cast<double>(0x00FFFFFFu) / 4096.0);
         const auto below_boundary = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_plld_boundary_hz - 100.0,
             pi4_plld_boundary_hz - 100.0,
             0.0);
         const auto above_boundary = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_plld_boundary_hz + 100.0,
             pi4_plld_boundary_hz + 100.0,
             0.0);
@@ -760,7 +792,7 @@ namespace
                "Pi 4 source selection must switch safely across the PLLD divisor boundary");
 
         const auto ppm_plan = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             100.0);

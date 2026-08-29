@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "WSPR-Transmitter/src/legacy_gpio_clock_model.hpp"
+
 enum class FrequencyEstimateQualification
 {
     Qualified,
@@ -24,7 +26,8 @@ enum class GpioCorrectionMode
     Uncalibrated
 };
 
-inline constexpr double kMaximumGpioFrequencyCorrectionPpm = 200.0;
+inline constexpr double kMaximumGpioFrequencyCorrectionPpm =
+    wsprrypi::kMaximumLegacyGpioCorrectionPpm;
 
 struct SystemClockFrequencyEstimate
 {
@@ -57,6 +60,8 @@ struct GpioFrequencyCorrection
     std::string reason;
     std::optional<double> estimate_ppm;
     double residual_ppm = 0.0;
+    double intrinsic_ppm = 0.0;
+    double additional_ppm = 0.0;
     double effective_ppm = 0.0;
     double estimate_age_seconds = 0.0;
 };

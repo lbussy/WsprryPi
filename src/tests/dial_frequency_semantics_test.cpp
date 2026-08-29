@@ -1272,7 +1272,7 @@ int main(int argc, char *argv[])
             !bcm2711_request.policy.allow_unqualified_frequency &&
                 !bcm2711_request.policy.allow_non_amateur_frequency &&
                 bcm2711_request.policy.hardware_profile ==
-                    wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD &&
+                    wsprrypi::HardwareProfile::BCM2711 &&
                 wsprrypi::evaluate_gpio_band_policy(
                     wsprrypi::ExecutionPlanCompiler{}.compile(bcm2711_request)).allowed,
             "direct WSPR controller requests must preserve the qualified BCM2711 2200 m profile");
@@ -1303,7 +1303,7 @@ int main(int argc, char *argv[])
             legacy_override_request.policy.allow_unqualified_frequency &&
                 !legacy_override_request.policy.allow_non_amateur_frequency &&
                 legacy_override_request.policy.hardware_profile ==
-                    wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD &&
+                    wsprrypi::HardwareProfile::BCM2836_BCM2837 &&
                 wsprrypi::evaluate_gpio_band_policy(
                     wsprrypi::ExecutionPlanCompiler{}.compile(legacy_override_request)).allowed,
             "direct WSPR controller requests must preserve the legacy unqualified-frequency override");

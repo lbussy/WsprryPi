@@ -424,6 +424,24 @@ processor/parent selection does not consume that intrinsic component yet;
 that activation remains Phase 3. Each request continues to receive one frozen
 scalar, and invalid selection now blocks a new request before backend planning.
 
+### Phase 3 implementation status
+
+Phase 3 is implemented on the Issue 429 branch. The scheduler now commits an
+exact BCM2835, BCM2836/BCM2837, or BCM2711 processor profile and fails closed
+when no supported legacy identity is available. The backend uses the shared
+revision decoder, requires its detected processor to match the committed
+profile, and selects PLLD or the BCM2711 oscillator from the Phase 1 model
+before calculating corrected rates and divider words.
+
+The scheduler composes the intrinsic and selected-additional corrections once
+before request creation. BCM2835 therefore always includes its historical
+`-2.5 PPM`; later 500 MHz and both BCM2711 parent models retain their separate
+zero discovery baselines. The backend verifies and decomposes the frozen final
+scalar without reapplying the intrinsic component. The stranded constructor
+expression and fallback-to-generic-500-MHz behavior are removed. RP1 and
+Si5351 correction paths remain isolated. Expanded active status provenance is
+still Phase 4.
+
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
    parents; define `D = P - S`; specify discovery, closure, sign-perturbation,

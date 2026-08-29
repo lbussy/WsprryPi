@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "transmission_backend.hpp"
+#include "legacy_gpio_clock_model.hpp"
 #include "wspr_transmit_backend.hpp"
 #include "wspr_transmit.hpp"
 
@@ -116,12 +117,6 @@ makeProductionRpiStartupQuiesceAccess();
  */
 double gpioCorrectedPlldFrequency(double nominal_hz, double source_rate_ppm);
 
-enum class GpioProcessorClockProfile
-{
-    Legacy500Mhz,
-    Bcm2711
-};
-
 enum class GpioRfClockSource : std::uint32_t
 {
     Oscillator = 1,
@@ -130,16 +125,27 @@ enum class GpioRfClockSource : std::uint32_t
 
 struct GpioRfClockPlan
 {
+    wsprrypi::LegacyGpioProcessorProfile processor{
+        wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837};
+    wsprrypi::LegacyGpioClockParent parent{
+        wsprrypi::LegacyGpioClockParent::PllD};
     GpioRfClockSource source{GpioRfClockSource::PllD};
     double nominal_hz{0.0};
+    double intrinsic_ppm{0.0};
+    double additional_ppm{0.0};
+    double effective_ppm{0.0};
     double corrected_hz{0.0};
 };
 
 GpioRfClockPlan gpioPlanRfClock(
-    GpioProcessorClockProfile profile,
+    wsprrypi::LegacyGpioProcessorProfile profile,
     double minimum_tone_hz,
     double maximum_tone_hz,
     double source_rate_ppm);
+
+bool gpioHardwareProfileMatchesProcessor(
+    wsprrypi::HardwareProfile committed_profile,
+    wsprrypi::LegacyGpioProcessorProfile detected_processor) noexcept;
 
 std::uint32_t gpioBuildDividerWord(
     double source_hz,
@@ -334,7 +340,7 @@ private:
         double plld_clock_frequency;
         double gpclk_nominal_freq;
         double gpclk_clock_frequency;
-        GpioProcessorClockProfile processor_profile;
+        wsprrypi::LegacyGpioProcessorProfile processor_profile;
         GpioRfClockSource gpclk_source;
         volatile uint8_t *peripheral_base_virtual;
         uint32_t orig_gp0ctl;

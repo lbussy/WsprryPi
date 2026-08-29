@@ -282,8 +282,11 @@ GpioFrequencyCorrectionComposition compose_gpio_frequency_correction(
         return result;
     }
 
-    result.effective_ppm = intrinsic_ppm + selected_additional.effective_ppm;
-    if (!finite_bounded(result.effective_ppm))
+    const auto composition = wsprrypi::composeLegacyGpioCorrection(
+        intrinsic_ppm,
+        selected_additional.effective_ppm);
+    result.effective_ppm = composition.effective_ppm;
+    if (!composition.valid)
     {
         result.reason =
             "Intrinsic plus additional GPIO correction is outside +/-200 PPM.";

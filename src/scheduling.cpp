@@ -133,6 +133,19 @@ namespace
     SystemClockFrequencyEstimate current_frequency_estimate{};
     GpioFrequencyCorrection current_gpio_correction{};
 
+    std::optional<wsprrypi::LegacyGpioProcessorProfile>
+    resolve_legacy_gpio_processor_profile() noexcept
+    {
+        const int generation = get_raspberry_pi_generation();
+        if (generation == 1)
+            return wsprrypi::LegacyGpioProcessorProfile::Bcm2835;
+        if (generation == 2 || generation == 3)
+            return wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837;
+        if (generation == 4)
+            return wsprrypi::LegacyGpioProcessorProfile::Bcm2711;
+        return std::nullopt;
+    }
+
     SystemClockFrequencyEstimate qualify_provider_snapshot(
         const PPMProviderSnapshot &provider)
     {
@@ -158,11 +171,49 @@ namespace
         const ArgParserConfig &cfg)
     {
         std::lock_guard<std::mutex> lock(frequency_estimate_mutex);
-        current_gpio_correction = select_gpio_frequency_correction(
+        GpioFrequencyCorrection selected = select_gpio_frequency_correction(
             cfg.use_system_clock_frequency_estimate,
             cfg.gpio_frequency_residual_ppm,
             cfg.gpio_manual_ppm,
             current_frequency_estimate);
+        if (selected.valid && cfg.transmit_backend == TransmitBackendKind::GPIO)
+        {
+            const auto processor = resolve_legacy_gpio_processor_profile();
+
+            if (!processor.has_value())
+            {
+                selected.valid = false;
+                selected.reason =
+                    "Unable to resolve an exact legacy GPIO processor profile.";
+            }
+            else
+            {
+                const auto model = wsprrypi::legacyGpioClockModel(
+                    *processor,
+                    wsprrypi::LegacyGpioClockParent::PllD);
+                const double additional_ppm = selected.effective_ppm;
+                const auto composition = wsprrypi::composeLegacyGpioCorrection(
+                    model.intrinsic_system_to_rf_difference_ppm,
+                    additional_ppm);
+                if (!composition.valid)
+                {
+                    selected.valid = false;
+                    selected.reason =
+                        "Intrinsic plus additional GPIO correction is outside +/-200 PPM.";
+                }
+                else
+                {
+                    selected.intrinsic_ppm = composition.intrinsic_ppm;
+                    selected.additional_ppm = composition.additional_ppm;
+                    selected.effective_ppm = composition.effective_ppm;
+                }
+            }
+        }
+        else if (selected.valid)
+        {
+            selected.additional_ppm = selected.effective_ppm;
+        }
+        current_gpio_correction = selected;
         return current_gpio_correction;
     }
 
@@ -1266,10 +1317,10 @@ static wsprrypi::HardwareProfile to_controller_profile(
         return wsprrypi::HardwareProfile::UNSPECIFIED;
     if (backend == TransmitBackendKind::RP1_GPCLK)
         return wsprrypi::HardwareProfile::RP1_GPCLK;
-    const int generation = get_raspberry_pi_generation();
-    if (generation == 4)
-        return wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD;
-    return wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD;
+    const auto processor = resolve_legacy_gpio_processor_profile();
+    if (processor.has_value())
+        return wsprrypi::legacyHardwareProfile(*processor);
+    return wsprrypi::HardwareProfile::UNSPECIFIED;
 }
 
 static void commit_execution_request(

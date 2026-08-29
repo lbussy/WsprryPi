@@ -486,79 +486,50 @@ namespace
 {
     constexpr std::uint32_t kGpclkDividerMask = 0x00FFFFFFu;
     constexpr double kGpclkDividerScale = 4096.0;
-    constexpr double kGpclkMash3MinimumDivisor = 5.0;
 
     bool gpioClockCanRepresent(
         double source_hz,
         double minimum_tone_hz,
         double maximum_tone_hz)
     {
-        if (!std::isfinite(source_hz) || source_hz <= 0.0 ||
-            !std::isfinite(minimum_tone_hz) || minimum_tone_hz <= 0.0 ||
-            !std::isfinite(maximum_tone_hz) ||
-            maximum_tone_hz < minimum_tone_hz)
-        {
-            return false;
-        }
-
-        for (const double tone_hz : {minimum_tone_hz, maximum_tone_hz})
-        {
-            const double scaled = source_hz / tone_hz * kGpclkDividerScale;
-            const double lower = std::floor(scaled);
-            const double upper = lower + 1.0;
-            if (!std::isfinite(scaled) ||
-                lower < kGpclkMash3MinimumDivisor * kGpclkDividerScale ||
-                upper > static_cast<double>(kGpclkDividerMask))
-            {
-                return false;
-            }
-        }
-        return true;
+        return wsprrypi::legacyGpioClockCanRepresent(
+            source_hz,
+            minimum_tone_hz,
+            maximum_tone_hz);
     }
 }
 
 GpioRfClockPlan gpioPlanRfClock(
-    GpioProcessorClockProfile profile,
+    wsprrypi::LegacyGpioProcessorProfile profile,
     double minimum_tone_hz,
     double maximum_tone_hz,
     double source_rate_ppm)
 {
-    const double plld_nominal_hz =
-        profile == GpioProcessorClockProfile::Bcm2711 ? 750e6 : 500e6;
-    const double corrected_plld_hz =
-        gpioCorrectedPlldFrequency(plld_nominal_hz, source_rate_ppm);
-    if (gpioClockCanRepresent(
-            corrected_plld_hz,
-            minimum_tone_hz,
-            maximum_tone_hz))
-    {
-        return {
-            GpioRfClockSource::PllD,
-            plld_nominal_hz,
-            corrected_plld_hz};
-    }
+    const auto selected = wsprrypi::selectLegacyGpioClock(
+        profile,
+        minimum_tone_hz,
+        maximum_tone_hz,
+        source_rate_ppm);
+    return {
+        profile,
+        selected.model.parent,
+        selected.model.parent == wsprrypi::LegacyGpioClockParent::Oscillator
+            ? GpioRfClockSource::Oscillator
+            : GpioRfClockSource::PllD,
+        selected.model.nominal_rate_hz,
+        selected.correction.intrinsic_ppm,
+        selected.correction.additional_ppm,
+        selected.correction.effective_ppm,
+        selected.corrected_rate_hz};
+}
 
-    if (profile == GpioProcessorClockProfile::Bcm2711)
-    {
-        constexpr double oscillator_nominal_hz = 54e6;
-        const double corrected_oscillator_hz =
-            gpioCorrectedPlldFrequency(
-                oscillator_nominal_hz,
-                source_rate_ppm);
-        if (gpioClockCanRepresent(
-                corrected_oscillator_hz,
-                minimum_tone_hz,
-                maximum_tone_hz))
-        {
-            return {
-                GpioRfClockSource::Oscillator,
-                oscillator_nominal_hz,
-                corrected_oscillator_hz};
-        }
-    }
-
-    throw std::out_of_range(
-        "GPIO RF frequency cannot be represented by an available GPCLK source.");
+bool gpioHardwareProfileMatchesProcessor(
+    wsprrypi::HardwareProfile committed_profile,
+    wsprrypi::LegacyGpioProcessorProfile detected_processor) noexcept
+{
+    return wsprrypi::legacyHardwareProfileMatches(
+        committed_profile,
+        detected_processor);
 }
 
 std::uint32_t gpioBuildDividerWord(
@@ -603,11 +574,11 @@ std::int64_t gpioDitherLowerClockCount(
 }
 
 WsprRpiBackend::DMAConfig::DMAConfig()
-    : plld_nominal_freq(500000000.0 * (1 - 2.500e-6)),
+    : plld_nominal_freq(500000000.0),
       plld_clock_frequency(plld_nominal_freq),
       gpclk_nominal_freq(plld_nominal_freq),
       gpclk_clock_frequency(gpclk_nominal_freq),
-      processor_profile(GpioProcessorClockProfile::Legacy500Mhz),
+      processor_profile(wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837),
       gpclk_source(GpioRfClockSource::PllD),
       peripheral_base_virtual(nullptr),
       orig_gp0ctl(0),
@@ -699,6 +670,15 @@ wsprrypi::BackendCompileResult WsprRpiBackend::configure(
 
     if (!platform_supports_gpio_clock_transmission(&result.error))
     {
+        return result;
+    }
+
+    if (!gpioHardwareProfileMatchesProcessor(
+            plan.policy.hardware_profile,
+            dma_config_.processor_profile))
+    {
+        result.error =
+            "Committed GPIO processor profile does not match detected hardware.";
         return result;
     }
 
@@ -2134,47 +2114,23 @@ void WsprRpiBackend::get_plld()
             }
         }
         if (!cached_revision)
-        {
-            cached_revision = 0;
-        }
+            throw std::runtime_error(
+                "Unable to resolve Raspberry Pi revision for GPIO clock planning.");
     }
 
     unsigned rev = *cached_revision;
-    BCMChip proc_id;
-
-    if (rev & 0x800000)
-    {
-        auto raw = (rev & 0xF000) >> 12;
-        proc_id = static_cast<BCMChip>(raw);
-    }
-    else
-    {
-        proc_id = BCMChip::BCM_HOST_PROCESSOR_BCM2835;
-    }
-
-    double base_freq_hz = 500e6;
-    switch (proc_id)
-    {
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2835:
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2836:
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2837:
-        base_freq_hz = 500e6;
-        dma_config_.processor_profile =
-            GpioProcessorClockProfile::Legacy500Mhz;
-        break;
-
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2711:
-        base_freq_hz = 750e6;
-        dma_config_.processor_profile =
-            GpioProcessorClockProfile::Bcm2711;
-        break;
-
-    default:
+    const auto resolved_processor =
+        wsprrypi::legacyGpioProcessorProfileFromRevision(rev);
+    if (!resolved_processor.has_value())
         throw std::runtime_error(
-            std::string("Error: Unknown chipset (") +
-            std::string(to_string(proc_id)) + ")");
-    }
+            "Unsupported Raspberry Pi revision processor for GPIO clock planning.");
+    const auto processor_profile = *resolved_processor;
 
+    const auto plld_model = wsprrypi::legacyGpioClockModel(
+        processor_profile,
+        wsprrypi::LegacyGpioClockParent::PllD);
+    const double base_freq_hz = plld_model.nominal_rate_hz;
+    dma_config_.processor_profile = processor_profile;
     dma_config_.plld_nominal_freq = base_freq_hz;
     dma_config_.plld_clock_frequency = base_freq_hz;
     dma_config_.gpclk_nominal_freq = base_freq_hz;
@@ -2182,22 +2138,7 @@ void WsprRpiBackend::get_plld()
     dma_config_.gpclk_source = GpioRfClockSource::PllD;
 
     if (dma_config_.plld_clock_frequency <= 0)
-    {
-        std::ostringstream oss;
-        oss << "Error: Invalid PLLD frequency; defaulting to 500 MHz";
-        owner_.backendFireTransmitCallback(
-            WsprTransmissionCallbackEvent::LOGGING,
-            WsprTransmitLogLevel::ERROR,
-            oss.str(),
-            0.0);
-        dma_config_.plld_nominal_freq = 500e6;
-        dma_config_.plld_clock_frequency = 500e6;
-        dma_config_.gpclk_nominal_freq = 500e6;
-        dma_config_.gpclk_clock_frequency = 500e6;
-        dma_config_.processor_profile =
-            GpioProcessorClockProfile::Legacy500Mhz;
-        dma_config_.gpclk_source = GpioRfClockSource::PllD;
-    }
+        throw std::runtime_error("Resolved GPIO PLLD frequency is invalid.");
 }
 
 void WsprRpiBackend::allocate_memory_pool(unsigned numpages)
@@ -2929,10 +2870,6 @@ WsprTransmissionConfigureResult WsprRpiBackend::setup_dma_freq_table(
 
     configure_transmit_gpio(plan.tx_gpio);
 
-    dma_config_.plld_clock_frequency = gpioCorrectedPlldFrequency(
-        dma_config_.plld_nominal_freq,
-        plan.ppm);
-
     const double minimum_tone_hz =
         plan.frequency_hz - 1.5 * plan.tone_spacing_hz;
     const double maximum_tone_hz =
@@ -2942,6 +2879,19 @@ WsprTransmissionConfigureResult WsprRpiBackend::setup_dma_freq_table(
         minimum_tone_hz,
         maximum_tone_hz,
         plan.ppm);
+    const auto plld_model = wsprrypi::legacyGpioClockModel(
+        dma_config_.processor_profile,
+        wsprrypi::LegacyGpioClockParent::PllD);
+    const double plld_additional_ppm =
+        plan.ppm - plld_model.intrinsic_system_to_rf_difference_ppm;
+    const auto plld_composition = wsprrypi::composeLegacyGpioCorrection(
+        plld_model.intrinsic_system_to_rf_difference_ppm,
+        plld_additional_ppm);
+    if (!plld_composition.valid)
+        throw std::runtime_error("GPIO PLLD correction composition is invalid.");
+    dma_config_.plld_clock_frequency = gpioCorrectedPlldFrequency(
+        dma_config_.plld_nominal_freq,
+        plld_composition.effective_ppm);
     dma_config_.gpclk_nominal_freq = rf_clock.nominal_hz;
     dma_config_.gpclk_clock_frequency = rf_clock.corrected_hz;
     dma_config_.gpclk_source = rf_clock.source;
@@ -2954,6 +2904,10 @@ WsprTransmissionConfigureResult WsprRpiBackend::setup_dma_freq_table(
                     : "PLLD")
             << " nominal_hz=" << std::fixed << std::setprecision(0)
             << rf_clock.nominal_hz
+            << " intrinsic_ppm=" << std::fixed << std::setprecision(6)
+            << rf_clock.intrinsic_ppm
+            << " additional_ppm=" << rf_clock.additional_ppm
+            << " effective_ppm=" << rf_clock.effective_ppm
             << " corrected_hz=" << std::fixed << std::setprecision(3)
             << rf_clock.corrected_hz;
         owner_.backendFireTransmitCallback(

@@ -321,12 +321,12 @@ int main()
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::WSPR,
         137500.0, false, "legacy 2200 m profile", false, false,
-        wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+        wsprrypi::HardwareProfile::BCM2836_BCM2837);
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::TONE,
         137500.0, true, "legacy 2200 m TONE profile", false, false,
-        wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+        wsprrypi::HardwareProfile::BCM2836_BCM2837);
     for (const auto qualified_mode : {
              wsprrypi::TransmissionMode::QRSS,
              wsprrypi::TransmissionMode::FSKCW,
@@ -338,7 +338,7 @@ int main()
             137500.0,
             false,
             false,
-            wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+            wsprrypi::HardwareProfile::BCM2836_BCM2837);
         require(
             decision.qualification == wsprrypi::QualificationState::QUALIFIED,
             "legacy 2200 m qualified CW mode must retain qualified state");
@@ -346,13 +346,13 @@ int main()
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
             qualified_mode,
             137500.0, true, "legacy 2200 m qualified CW profile", false, false,
-            wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD);
+            wsprrypi::HardwareProfile::BCM2836_BCM2837);
     }
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::WSPR,
         137500.0, true, "BCM2711 2200 m profile", false, false,
-        wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+        wsprrypi::HardwareProfile::BCM2711);
 
     for (const auto mode : {
              wsprrypi::TransmissionMode::TONE,
@@ -364,20 +364,20 @@ int main()
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
             mode,
             50294500.0, true, "BCM2711 6 m qualified CW profile", false, false,
-            wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+            wsprrypi::HardwareProfile::BCM2711);
     }
     require_controller_policy(
         wsprrypi::BackendKind::RPI_CLOCK_GPIO,
         wsprrypi::TransmissionMode::WSPR,
         50294500.0, false, "BCM2711 6 m WSPR profile", false, false,
-        wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+        wsprrypi::HardwareProfile::BCM2711);
     for (const double unavailable_frequency : {222101500.0, 432301500.0})
     {
         require_controller_policy(
             wsprrypi::BackendKind::RPI_CLOCK_GPIO,
             wsprrypi::TransmissionMode::TONE,
             unavailable_frequency, false, "BCM2711 unavailable profile", true, true,
-            wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD);
+            wsprrypi::HardwareProfile::BCM2711);
     }
 
     for (const auto mode : exercised_modes)
