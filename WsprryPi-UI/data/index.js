@@ -2354,10 +2354,8 @@ function clickTransmitPin() {
 }
 
 const RP1_ROUTE_STATES = Object.freeze({
-    checking: ["Checking", "Checking the installed provider and active route…"],
+    checking: ["Checking", "Checking the external provider and active route…"],
     active: ["Active", "Requested and active routes match. No reboot is required."],
-    output_inhibited_validated: ["Output-inhibited validated", "The saved, configured, and active routes agree for the exact predecessor package. Development output remains disabled unless every operation-scoped gate passes."],
-    compatible_unqualified: ["Output-inhibited unvalidated", "The configured route is visible, but this exact package has no output-inhibited route evidence and cannot transmit."],
     reboot_required: ["Reboot required", "Review the requested route, then apply it and reboot or cancel the draft."],
     applying: ["Applying", "Staging the requested route. Transmission remains disabled."],
     staged: ["Staged", "The route is staged, but reboot could not be requested. Reboot or roll back before transmitting."],
@@ -2394,22 +2392,16 @@ class Rp1RouteUiController {
     }
     render(data) {
         this.persisted=this.routeValue(data.persisted); this.active=this.routeValue(data.active);
-        this.outputValidated=data.outputInhibitedValidated===true;
         this.developmentCompatible=data.compatible===true;
         this.generation=Number.isSafeInteger(data.generation) ? data.generation : 0;
         const requested=this.routeValue(data.requested || this.persisted);
         if(requested!=="Unavailable") setTxPin(Number(requested.slice(4)));
         $("#rp1-route-requested").text(requested);
-        $("#rp1-route-package").text(data.packageIdentity || "Unavailable");
-        $("#rp1-route-contract").text(data.contractIdentity || "Unavailable");
         $("#rp1-route-persisted").text(this.persisted);
         $("#rp1-route-configured").text(this.routeValue(data.configured));
         $("#rp1-route-active").text(this.active);
         $("#rp1-route-module").text(this.routeValue(data.moduleRoute));
         $("#rp1-route-reconciled").text(data.reconciled===true ? "Yes" : "No");
-        $("#rp1-module-contract").text(data.moduleVersion && data.uapiAbi
-            ? `${data.moduleVersion} / ABI v${data.uapiAbi}` : "Unavailable");
-        $("#rp1-compatibility").text(data.compatibilityState || "Unavailable");
         $("#rp1-route-boot-ownership").text(data.bootOwnership || "Unknown");
         $("#rp1-route-pending").text(data.journal || "Unknown");
         const services=data.services && typeof data.services==="object"
@@ -2426,7 +2418,6 @@ class Rp1RouteUiController {
             ? `Lease ${data.operationLifecycle.lease || "none"}; generation ${data.operationLifecycle.generation || "none"}; ${data.operationLifecycle.terminalReason || "no terminal result"}`
             : "No active lease or generation";
         $("#rp1-operation-lifecycle").text(lifecycle);
-        $("#rp1-route-compatible").text("1.1.1 output-inhibited evidence is historical only");
         $("#rp1-route-eligible").text("Unqualified");
         $("#rp1-route-apply").text(this.developmentCompatible ? "Apply route and reboot" : "Check route");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
@@ -2435,7 +2426,7 @@ class Rp1RouteUiController {
     }
     select(route) {
         const requested=this.routeValue(route); $("#rp1-route-requested").text(requested);
-        this.setState(requested === this.active ? (this.outputValidated ? "output_inhibited_validated" : "compatible_unqualified") : "reboot_required");
+        this.setState(requested === this.active ? "active" : "reboot_required");
     }
     async query() {
         this.inFlight=true; this.setState("checking");

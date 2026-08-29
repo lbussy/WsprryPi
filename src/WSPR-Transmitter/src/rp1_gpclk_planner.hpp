@@ -8,6 +8,7 @@
 
 namespace wsprrypi
 {
+inline constexpr double kRp1GpclkNominalParentFrequencyHz = 200000000.0;
 
 struct Rp1GpclkPlannerInput
 {

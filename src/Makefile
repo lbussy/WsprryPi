@@ -1121,22 +1121,12 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test
 .PHONY: qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
 .PHONY: rp1-gpclk-planner-test rp1-gpclk-lifecycle-test rp1-gpclk-transition-test rp1-gpclk-development-policy-test rp1-gpclk-route-runtime-wiring-test rp1-gpclk-route-service-test
-.PHONY: rp1-gpclk-diagnostics-test rp1-gpclk-step4-plans-test
+.PHONY: rp1-gpclk-diagnostics-test
 DEBUG: debug
 RELEASE: release
 
 rp1-gpclk-diagnostics-test:
 	$(Q)python3 ../scripts/tests/rp1_gpclk_diagnostics_test.py
-
-rp1-gpclk-step4-plans-test:
-	$(Q)python3 ../scripts/tests/rp1_gpclk_step4_plans_test.py \
-		../../WsprryPi-Qualification-Harness/.venv/bin/wsprrypi-qualification \
-		18246c76d2918dbbf2358ba01df0872839856d53
-	$(Q)if [ -x /usr/bin/bash ] && stat -c %a ../scripts/collect-support-bundle.sh >/dev/null 2>&1; then \
-		/usr/bin/bash ../scripts/tests/collect-support-bundle_test.sh; \
-	else \
-		echo "Skipping Linux-only collector execution test on this host."; \
-	fi
 
 clean:
 	$(Q)echo "Cleaning up build artifacts."

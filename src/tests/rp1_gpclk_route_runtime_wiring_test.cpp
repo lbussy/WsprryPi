@@ -27,12 +27,10 @@ int main() {
     assert(service.find("/run/rp1-gpclk-dkms/route-manager.sock") != std::string::npos);
     assert(service.find("rp1-gpclk-route-manager-v1") != std::string::npos);
     assert(service.find("SOCK_STREAM") != std::string::npos && service.find("FD_CLOEXEC") != std::string::npos);
-    assert(service.find("outputInhibitedValidated") != std::string::npos);
     assert(service.find("{\"eligible\", false}") != std::string::npos);
     assert(service.find("apply-and-reboot") != std::string::npos);
-    assert(service.find("kRp1GpclkDevelopmentSourceRevision") != std::string::npos);
-    assert(development_contract.find("0509909bd916ee738b14a8479d3be47863c6ac72") != std::string::npos);
-    assert(service.find("247bd7da35e4ad812a13828668fe03673da127bad7ed2b3e970876f3f21c002d") != std::string::npos);
+    assert(service.find("packageIdentity") == std::string::npos);
+    assert(development_contract.find("kRp1GpclkDevelopmentSourceRevision") == std::string::npos);
     assert(service.find("642793e04268ddb06e35f16249d09c98e4067acef93c62620307bbea50033f5a") == std::string::npos);
     assert(service.find("/boot/firmware/config.txt") == std::string::npos);
     assert(service.find("atomic_write_owned_fragment") == std::string::npos);

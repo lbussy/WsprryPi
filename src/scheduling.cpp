@@ -2612,7 +2612,7 @@ static bool apply_direct_rp1_development_confirmation(
         if (!observed.value("ok", false))
         {
             throw std::runtime_error(observed.value(
-                "message", std::string("RP1 source-development route reconciliation failed.")));
+                "message", std::string("RP1 route reconciliation failed.")));
         }
         const auto observed_gpio = [](const std::string &value) {
             return value == "GPIO4" ? 4 : value == "GPIO20" ? 20 : 0;
@@ -2627,9 +2627,6 @@ static bool apply_direct_rp1_development_confirmation(
         development.route_transaction_resolved =
             observed.value("reconciled", false) &&
             observed.value("journal", std::string{}) == "none";
-        development.route_manager_attributable =
-            observed.value("contractIdentity", std::string{}) ==
-            "rp1-gpclk-route-manager-v1";
         development.scheduler_idle = true;
         development.application_owns_operation = true;
         development.endpoint_available = observed.value("ok", false);
@@ -2651,15 +2648,6 @@ static bool apply_direct_rp1_development_confirmation(
         development.operation_id = operation_id;
         development.confirmation_operation_id = operation_id;
         development.confirmation_gpio = route_gpio;
-        const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(
-            route_gpio == 4 ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
-                            : wsprrypi::kRp1GpclkDevelopmentRouteGpio20);
-        if (!expected)
-        {
-            throw std::runtime_error("RP1 development route identity is unavailable.");
-        }
-        development.confirmation_identity =
-            wsprrypi::rp1GpclkDevelopmentIdentityBinding(*expected);
         return true;
     }
     catch (const std::exception &error)
@@ -4210,7 +4198,7 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         {
             throw std::runtime_error(route.value(
                 "message",
-                std::string("RP1 source-development route reconciliation failed.")));
+                std::string("RP1 route reconciliation failed.")));
         }
         const auto route_gpio = [](const std::string& value) {
             return value == "GPIO4" ? 4 : value == "GPIO20" ? 20 : 0;
@@ -4225,9 +4213,6 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         development.route_transaction_resolved =
             route.value("reconciled", false) &&
             route.value("journal", std::string{}) == "none";
-        development.route_manager_attributable =
-            route.value("contractIdentity", std::string{}) ==
-                "rp1-gpclk-route-manager-v1";
         development.scheduler_idle = true;
         development.application_owns_operation = true;
         development.endpoint_available = route.value("ok", false);
@@ -4249,14 +4234,6 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         development.operation_id = confirmation.operation_id;
         development.confirmation_operation_id = confirmation.operation_id;
         development.confirmation_gpio = confirmation.route_gpio;
-        const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(
-            confirmation.route_gpio == 4
-            ? wsprrypi::kRp1GpclkDevelopmentRouteGpio4
-            : wsprrypi::kRp1GpclkDevelopmentRouteGpio20);
-        if (!expected)
-            throw std::runtime_error("RP1 development route identity is unavailable.");
-        development.confirmation_identity =
-            wsprrypi::rp1GpclkDevelopmentIdentityBinding(*expected);
     }
     commit_execution_request(request);
     result.actual_rf_frequency_hz = static_cast<std::uint64_t>(actual_rf_freq);
@@ -5120,7 +5097,6 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
 
     WsprRuntimeStatusSnapshot snapshot;
     snapshot.transmit_backend = transmit_backend_kind_to_string(config.transmit_backend);
-    snapshot.rp1_package_expected = "source_commit=eb384beefcb1a0253062cffdfc3f6364594faa56; module=rp1-gpclk-dkms/1.1.2; uapi_abi=3; compatibility=route-specific-development-candidate-r3; package=unreleased; qualification=unvalidated";
     const std::string configured_rp1_route =
         config.gpio_tx_pin == 4 ? "GPIO4" :
         config.gpio_tx_pin == 20 ? "GPIO20" : "unavailable";

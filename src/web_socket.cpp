@@ -645,7 +645,6 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             reply["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
             reply["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
             reply["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
-            reply["rp1_package_expected"] = snapshot.rp1_package_expected;
             reply["rp1_route_requested"] = snapshot.rp1_route_requested;
             reply["rp1_route_persisted"] = snapshot.rp1_route_persisted;
             reply["rp1_route_configured"] = snapshot.rp1_route_configured;

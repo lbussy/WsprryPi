@@ -10,7 +10,7 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
     Rp1GpclkDevelopmentPolicyInputs i;
     i.development_testing_enabled = i.rp1_backend_selected = true;
     i.requested_route = i.persisted_route = i.configured_route = i.active_route = i.module_route = route;
-    i.active_route_count = 1; i.route_transaction_resolved = i.route_manager_attributable = true;
+    i.active_route_count = 1; i.route_transaction_resolved = true;
     i.scheduler_idle = i.application_owns_operation = true;
     i.endpoint_available = i.endpoint_closed = i.endpoint_exclusively_acquirable = true;
     i.live_output_verified = i.physical_connection_confirmed =
@@ -20,40 +20,27 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
     i.route_transaction_generation = i.confirmation_route_transaction_generation = 17;
     i.operation_id = i.confirmation_operation_id = "bounded-operation-7"; i.confirmation_route = route;
     i.identity.abi_min = 1; i.identity.abi_max = 4; i.identity.route = route;
-    i.identity.compatibility_state = kRp1GpclkDevelopmentCompatibilityExperimental;
+    i.identity.compatibility_state = 2;
     i.identity.capabilities = kRp1GpclkDevelopmentCapabilityLiveEligible |
         kRp1GpclkDevelopmentCapabilityOperationLiveGate;
-    i.identity.module_id = "rp1-gpclk-dkms"; i.identity.build_id = "1.1.2";
-    i.identity.compatibility_id = route == kRp1GpclkDevelopmentRouteGpio4
-        ? "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4"
-        : "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
-    i.confirmation_identity = rp1GpclkDevelopmentIdentityBinding(i.identity);
+    i.identity.module_id = "external-provider"; i.identity.build_id = "development";
+    i.identity.compatibility_id = "external-compatible-provider";
     return i;
 }
 
 int main()
 {
-    const auto expected_gpio4 =
-        rp1GpclkExpectedDevelopmentIdentity(kRp1GpclkDevelopmentRouteGpio4);
-    assert(expected_gpio4.has_value());
-    assert(expected_gpio4->abi_min == kRp1GpclkDevelopmentUapiAbiMin);
-    assert(expected_gpio4->abi_max == kRp1GpclkDevelopmentUapiAbi);
-    assert(rp1GpclkDevelopmentIdentityBinding(*expected_gpio4) ==
-        rp1GpclkDevelopmentIdentityBinding(allowed(
-            kRp1GpclkDevelopmentRouteGpio4).identity));
     Rp1GpclkDevelopmentPolicyInputs defaults;
     assert(!decideRp1GpclkDevelopmentUse(defaults).allowed);
     for (auto route : {kRp1GpclkDevelopmentRouteGpio4, kRp1GpclkDevelopmentRouteGpio20})
         assert(decideRp1GpclkDevelopmentUse(allowed(route)).allowed);
     auto i = allowed(kRp1GpclkDevelopmentRouteGpio4);
-    i.identity.compatibility_id = "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::route_identity_mismatch);
+    i.identity.compatibility_id = "another-compatible-provider";
+    assert(decideRp1GpclkDevelopmentUse(i).allowed);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.confirmation_route = kRp1GpclkDevelopmentRouteGpio20;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.build_id = "1.1.1";
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::version_uapi_mismatch);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.compatibility_state = 1;
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::compatibility_not_experimental);
+    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.build_id = "arbitrary-build";
+    assert(decideRp1GpclkDevelopmentUse(i).allowed);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.live_output_verified = false;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::live_output_unverified);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.active_route_count = 2;
@@ -70,24 +57,16 @@ int main()
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::cleanup_fault);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.physical_connection_confirmed = false;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::physical_topology_unconfirmed);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.build_id = "1.1.2-changed";
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::version_uapi_mismatch);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.confirmation_route_transaction_generation++;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.rp1_backend_selected = false;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::unsupported_backend);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.active_route_count = 0;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::zero_route_topology);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.module_id.clear();
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::unknown_identity);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.route_manager_attributable = false;
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::unresolved_route_transaction);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.application_owns_operation = false;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::transmission_owner_conflict);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.endpoint_available = false;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::endpoint_unavailable);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.confirmation_identity += "-stale";
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4);
     armRp1GpclkDevelopmentOperation(i);
     assert(rp1GpclkDevelopmentOperationArmedForRoute(i.requested_route));

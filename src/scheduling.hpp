@@ -352,7 +352,6 @@ struct WsprRuntimeStatusSnapshot
     double gpio_frequency_residual_ppm = 0.0;
     double effective_gpio_ppm = 0.0;
     double frequency_estimate_age_seconds = 0.0;
-    std::string rp1_package_expected;
     std::string rp1_route_requested;
     std::string rp1_route_persisted;
     std::string rp1_route_configured;

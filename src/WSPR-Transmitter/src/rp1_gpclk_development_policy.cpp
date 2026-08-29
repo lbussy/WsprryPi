@@ -19,46 +19,12 @@ bool known_route(std::uint32_t route) noexcept
         route == wsprrypi::kRp1GpclkDevelopmentRouteGpio20;
 }
 
-const char* expected_compatibility(std::uint32_t route) noexcept
-{
-    return route == wsprrypi::kRp1GpclkDevelopmentRouteGpio4
-        ? wsprrypi::kRp1GpclkDevelopmentGpio4Compatibility.data()
-        : route == wsprrypi::kRp1GpclkDevelopmentRouteGpio20
-            ? wsprrypi::kRp1GpclkDevelopmentGpio20Compatibility.data() : "";
-}
-
 std::mutex authorization_mutex;
 std::optional<wsprrypi::Rp1GpclkDevelopmentPolicyInputs> armed_operation;
 } // namespace
 
 namespace wsprrypi
 {
-std::optional<Rp1GpclkProviderIdentity>
-rp1GpclkExpectedDevelopmentIdentity(std::uint32_t route)
-{
-    if (!known_route(route))
-        return std::nullopt;
-    Rp1GpclkProviderIdentity identity;
-    identity.abi_min = kRp1GpclkDevelopmentUapiAbiMin;
-    identity.abi_max = kRp1GpclkDevelopmentUapiAbi;
-    identity.route = route;
-    identity.compatibility_state = kRp1GpclkDevelopmentCompatibilityExperimental;
-    identity.module_id = kRp1GpclkDevelopmentModuleId;
-    identity.build_id = kRp1GpclkDevelopmentModuleVersion;
-    identity.compatibility_id = expected_compatibility(route);
-    return identity;
-}
-
-std::string rp1GpclkDevelopmentIdentityBinding(
-    const Rp1GpclkProviderIdentity& identity)
-{
-    return identity.module_id + "|" + identity.build_id + "|" +
-        identity.compatibility_id + "|" + std::to_string(identity.abi_min) +
-        "|" + std::to_string(identity.abi_max) + "|" +
-        std::to_string(identity.route) + "|" +
-        std::to_string(identity.compatibility_state);
-}
-
 void armRp1GpclkDevelopmentOperation(Rp1GpclkDevelopmentPolicyInputs inputs)
 {
     std::lock_guard<std::mutex> lock(authorization_mutex);
@@ -117,26 +83,15 @@ Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
     if (i.requested_route != i.persisted_route || i.persisted_route != i.configured_route ||
         i.configured_route != i.active_route || i.active_route != i.module_route)
         return deny(D::configured_active_mismatch, "configured-active-mismatch", "Requested, saved, boot-configured, active, and module-reported routes must agree exactly.");
-    if (i.identity.module_id.empty() || i.identity.build_id.empty() || i.identity.compatibility_id.empty())
-        return deny(D::unknown_identity, "unknown-identity", "The complete module identity could not be established.");
-    const auto expected = rp1GpclkExpectedDevelopmentIdentity(i.requested_route);
-    if (!expected || i.identity.abi_min > kRp1GpclkDevelopmentUapiAbi ||
-        i.identity.abi_max < kRp1GpclkDevelopmentUapiAbi ||
-        i.identity.module_id != expected->module_id ||
-        i.identity.build_id != expected->build_id)
-        return deny(D::version_uapi_mismatch, "version-uapi-mismatch", "The module must report the exact reviewed 1.1.2 ABI v4 development identity.");
-    if (i.identity.route != i.requested_route ||
-        i.identity.compatibility_id != expected->compatibility_id)
-        return deny(D::route_identity_mismatch, "route-identity-mismatch", "The exact r4 compatibility identity does not match the selected route.");
-    if (i.identity.compatibility_state != kRp1GpclkDevelopmentCompatibilityExperimental)
-        return deny(D::compatibility_not_experimental, "compatibility-not-experimental", "The reviewed development identity must be reported as Experimental.");
+    if (i.identity.route != i.requested_route)
+        return deny(D::configured_active_mismatch, "configured-active-mismatch", "The provider-reported route must match the selected route.");
     if ((i.identity.capabilities & kRp1GpclkDevelopmentCapabilityLiveEligible) == 0 ||
         (i.identity.capabilities &
             kRp1GpclkDevelopmentCapabilityOperationLiveGate) == 0 ||
         !i.live_output_verified)
-        return deny(D::live_output_unverified, "live-output-unverified", "The exact module instance must affirmatively report live eligibility with live_output=1.");
-    if (!i.route_transaction_resolved || !i.route_manager_attributable)
-        return deny(D::unresolved_route_transaction, "unresolved-route-transaction", "Route-manager state is unresolved or cannot be attributed.");
+        return deny(D::live_output_unverified, "live-output-unverified", "The provider must affirmatively report live eligibility with live_output=1.");
+    if (!i.route_transaction_resolved)
+        return deny(D::unresolved_route_transaction, "unresolved-route-transaction", "Route state is unresolved.");
     if (!i.scheduler_idle)
         return deny(D::scheduler_conflict, "scheduler-conflict", "Scheduling must be idle before development output.");
     if (!i.application_owns_operation)
@@ -150,8 +105,7 @@ Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
     if (!i.confirmation_current || i.operation_id.empty() ||
         i.confirmation_operation_id != i.operation_id || i.confirmation_route != i.requested_route ||
         i.route_transaction_generation == 0 ||
-        i.confirmation_route_transaction_generation != i.route_transaction_generation ||
-        i.confirmation_identity != rp1GpclkDevelopmentIdentityBinding(i.identity))
+        i.confirmation_route_transaction_generation != i.route_transaction_generation)
         return deny(D::stale_operator_confirmation, "stale-operator-confirmation", "Operator confirmation is absent, stale, or bound to another route or operation.");
     if (!i.physical_connection_confirmed || !i.attenuation_and_load_confirmed ||
         !i.bounded_operation_confirmed || !i.non_radiating_topology_confirmed ||
