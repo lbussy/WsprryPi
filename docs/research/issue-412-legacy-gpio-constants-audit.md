@@ -204,9 +204,11 @@ an unadjusted 500 MHz model. The current runtime therefore neither applies the
 historical correction to RPi1 nor exposes its provenance.
 
 Restore the correction as named BCM2835 profile data, always included when
-that exact profile is selected. Keep BCM2836/BCM2837 at zero intrinsic profile
-correction. Remove the constructor expression only after the value has been
-relocated without changing its historical meaning.
+that exact profile is selected. BCM2836/BCM2837 must not inherit it; their own
+intrinsic system-to-RF difference begins at zero for discovery and is promoted
+only through the accepted measurement procedure. Remove the constructor
+expression only after the BCM2835 value has been relocated without changing
+its historical meaning.
 
 ### L2: inconsistent CLI boundary behavior
 
@@ -230,8 +232,9 @@ Material gaps remain:
 - negative skew and age;
 - scheduler/backend profile disagreement;
 - active status versus committed correction;
-- proof that BCM2835 receives exactly `-2.5 PPM` intrinsic correction while
-  BCM2836, BCM2837, and BCM2711 receive zero;
+- proof that BCM2835 receives exactly `-2.5 PPM` while BCM2836, BCM2837, and
+  BCM2711 never inherit that value and receive only their own parent-specific
+  promoted `D`;
 - proof that intrinsic profile correction remains present with provider,
   manual, and uncalibrated-zero additional correction modes;
 - source-selection boundary and generated-frequency tests for both BCM2711
@@ -256,14 +259,16 @@ RP1 without evidence.
 
 ## Accepted frequency-generation model
 
-The implementation path shall use these intrinsic constants:
+The implementation path shall use an intrinsic system-to-RF difference for
+each processor/parent model. The historical BCM2835 value is fixed; constants
+for available hardware are derived by the conducted procedure below:
 
-| Processor profile | Parent | Nominal rate | Intrinsic profile correction | Evidence status |
+| Processor profile | Parent | Nominal rate | Intrinsic system-to-RF difference | Evidence status |
 |---|---|---:|---:|---|
 | BCM2835 / RPi1 | PLLD | 500 MHz | `-2.5 PPM` | Authoritative historical legacy model; no current device available |
-| BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | `0 PPM` | Legacy model; Zero 2 W available for exclusion and RF validation |
-| BCM2711 / RPi4 | PLLD | 750 MHz | `0 PPM` | Maintained model; RPi4 available for RF validation |
-| BCM2711 / RPi4 | oscillator | 54 MHz | `0 PPM` | Maintained low-frequency fallback; RPi4 available for RF validation |
+| BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | To be derived; zero is the discovery baseline | Legacy excludes the BCM2835 constant; Zero 2 W available as the accepted representative |
+| BCM2711 / RPi4 | PLLD | 750 MHz | To be derived; zero is the discovery baseline | RPi4 available as the accepted representative |
+| BCM2711 / RPi4 | oscillator | 54 MHz | To be derived independently; zero is the discovery baseline | Distinct RPi4 parent path available for validation |
 
 Intrinsic profile correction is part of frequency generation regardless of
 whether the operator selects a provider estimate, a manual alternative, or no
@@ -285,12 +290,58 @@ profile model unconditional. The implementation must not apply provider and
 manual values together. It must validate the final sum, freeze it for the
 bounded execution, and publish every component separately.
 
+### Deriving a transportable intrinsic difference
+
+The purpose of the empirical campaign is not to promote one board's absolute
+uncorrected clock error into a chipset constant. The target quantity is the
+stable difference between the RF parent-clock error and the simultaneous local
+system-clock estimate:
+
+```text
+S = frozen qualified NTP system-clock correction in PPM
+P = RF parent-clock error inferred from receiver-corrected carrier measurement
+D = intrinsic system-to-RF difference for the processor/parent model
+
+D = P - S
+```
+
+All three quantities use the current source-rate convention: positive means
+the relevant physical clock runs fast and would place an uncorrected carrier
+high; negative means it runs slow. Calculations may retain exact rate ratios,
+but reported and composed values use PPM and must declare rounding precision.
+
+The preferred discovery run applies `S` while the intrinsic and configured
+residuals are zero. After receiver correction is applied exactly once, the
+remaining signed carrier error directly estimates `D`. An equivalent analysis
+may measure `P` without correction and subtract the simultaneous frozen `S`,
+but the preferred run exercises the real provider-composition path.
+
+Every discovery requires a closure run. The second bounded transmission
+applies `S + D` and must move the receiver-corrected carrier to the requested
+frequency within the declared tolerance. Positive and negative perturbations
+must independently confirm the sign and prove that neither `S` nor `D` is
+applied twice.
+
+The representative-board assumption is explicit: the derived `D` is accepted
+as authoritative for that processor/parent model even though only one board is
+measured. It must not cross parent, processor, GPIO route, receiver/reference,
+or backend boundaries. BCM2711 PLLD and oscillator therefore produce separate
+constants from separate discovery and closure runs.
+
+The campaign must retain the exact NTP snapshot and qualification, source
+signature, selected parent and nominal rate, executable and source revision,
+requested fundamental and harmonic relationship, GPIO route, SDR identity,
+receiver correction, reference identity, temperature/time context, raw
+captures, repeated-frequency results, and final calculation. Provider changes
+during a run do not alter the frozen execution correction.
+
 ## Phased resolution path
 
-1. **Freeze the model contract.** Define distinct BCM2835, BCM2836/BCM2837,
-   and BCM2711 profiles; define BCM2711 PLLD and oscillator parents; name the
-   constants above; and independently bind their selection and composition in
-   hardware-free tests.
+1. **Freeze the model and measurement contract.** Define distinct BCM2835,
+   BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
+   parents; define `D = P - S`; specify discovery, closure, sign-perturbation,
+   repetition, receiver-correction, and evidence rules; and independently bind
+   selection and composition in hardware-free tests.
 2. **Harden correction selection.** Validate provider metadata and the final
    composed value; remove inconsistent clamping; preserve provider/manual
    precedence; and prove one-time application and execution-level freezing.
@@ -302,15 +353,19 @@ bounded execution, and publish every component separately.
    including processor profile, parent, nominal rate, intrinsic correction,
    provider/manual component, conducted residual, final correction, and
    snapshot identity.
-5. **Validate the available legacy hardware.** On the Zero 2 W, prove the
-   BCM2835 residual is excluded from the later 500 MHz profile. On the RPi4,
-   validate both 750 MHz PLLD and 54 MHz oscillator generation, all frequencies
-   that select each parent, transition boundaries, positive/negative/zero
-   additional correction, bounded keyed modes, and cleanup. Hardware activity
-   requires separate explicit authorization and a predeclared conducted plan.
-6. **Close the evidence record.** Retain BCM2835 as historically authoritative
-   but not modern-hardware-revalidated; record route-specific Zero 2 W and RPi4
-   results without transferring them to BCM2835, RP1, Si5351, or another route.
+5. **Run NTP-relative discovery and closure on available legacy hardware.** On
+   the Zero 2 W, prove the BCM2835 residual is excluded, freeze qualified `S`,
+   derive the 500 MHz profile's `D`, and verify `S + D` by closure. On the RPi4,
+   independently derive and close `D` for both 750 MHz PLLD and 54 MHz
+   oscillator generation, covering all parent-selection regions, transition
+   boundaries, positive/negative perturbations, bounded keyed modes, and
+   cleanup. Hardware activity requires separate explicit authorization and a
+   predeclared conducted plan.
+6. **Promote and close the evidence record.** Promote a constant only after its
+   discovery and closure evidence passes. Retain BCM2835 as historically
+   authoritative but not modern-hardware-revalidated. Record Zero 2 W and RPi4
+   constants separately without transferring them to another processor,
+   parent, route, RP1, or Si5351.
 
 ## Unknowns and next gate
 
