@@ -24,6 +24,8 @@ enum class GpioCorrectionMode
     Uncalibrated
 };
 
+inline constexpr double kMaximumGpioFrequencyCorrectionPpm = 200.0;
+
 struct SystemClockFrequencyEstimate
 {
     std::string provider_name;
@@ -47,6 +49,7 @@ struct SystemClockFrequencyEstimate
 
 struct GpioFrequencyCorrection
 {
+    bool valid = true;
     FrequencyEstimateQualification qualification = FrequencyEstimateQualification::Unavailable;
     GpioCorrectionMode mode = GpioCorrectionMode::Uncalibrated;
     std::string provider_name;
@@ -56,6 +59,15 @@ struct GpioFrequencyCorrection
     double residual_ppm = 0.0;
     double effective_ppm = 0.0;
     double estimate_age_seconds = 0.0;
+};
+
+struct GpioFrequencyCorrectionComposition
+{
+    bool valid = false;
+    double intrinsic_ppm = 0.0;
+    double additional_ppm = 0.0;
+    double effective_ppm = 0.0;
+    std::string reason;
 };
 
 class FrequencyEstimateQualifier
@@ -84,6 +96,10 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     double residual_ppm,
     double manual_ppm,
     const SystemClockFrequencyEstimate &estimate);
+
+GpioFrequencyCorrectionComposition compose_gpio_frequency_correction(
+    double intrinsic_ppm,
+    const GpioFrequencyCorrection &selected_additional);
 
 const char *to_string(FrequencyEstimateQualification value) noexcept;
 const char *to_string(GpioCorrectionMode value) noexcept;

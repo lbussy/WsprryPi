@@ -407,6 +407,23 @@ publish provenance, or authorize measurement activity. Those remain gated by
 Phases 2 through 6 below. The SDR equation remains campaign-only analysis and
 is not application configuration or production frequency-generation state.
 
+### Phase 2 implementation status
+
+Phase 2 is implemented on the Issue 429 branch in the shared system-clock
+qualification and GPIO correction-selection boundary. Provider metadata now
+rejects negative or non-finite age, skew, and stability-span values; final
+qualified and stale provider-plus-residual sums are validated against the
+same `+/-200 PPM` contract as their inputs; invalid manual and residual values
+fail explicitly; and the compatibility CLI no longer clamps an out-of-range
+manual correction.
+
+The hardware-independent composition contract also validates intrinsic plus
+selected-additional correction and proves that the BCM2835 `-2.5 PPM`
+component survives provider, manual, and zero-additional modes. Runtime
+processor/parent selection does not consume that intrinsic component yet;
+that activation remains Phase 3. Each request continues to receive one frozen
+scalar, and invalid selection now blocks a new request before backend planning.
+
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
    parents; define `D = P - S`; specify discovery, closure, sign-perturbation,

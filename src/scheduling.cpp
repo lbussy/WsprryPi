@@ -4150,6 +4150,10 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
     {
         const GpioFrequencyCorrection selected_correction =
             select_and_publish_gpio_correction(config);
+        if (!selected_correction.valid)
+        {
+            throw std::runtime_error(selected_correction.reason);
+        }
         committed_ppm = selected_correction.effective_ppm;
         config.ppm = committed_ppm;
     }
@@ -5506,6 +5510,38 @@ bool set_config(bool force)
             }
             const GpioFrequencyCorrection selected_correction =
                 select_and_publish_gpio_correction(working_config);
+            if (!selected_correction.valid)
+            {
+                const std::string correction_error =
+                    selected_correction.reason.empty()
+                        ? "GPIO frequency correction is invalid."
+                        : selected_correction.reason;
+                llog.logS(ERROR, correction_error);
+                if (working_config.use_ini)
+                {
+                    send_ws_message(
+                        "configuration",
+                        "reload_failed",
+                        correction_error);
+                    set_managed_reload_tx_inhibited(true, correction_error);
+                    if (wsprTransmitter.getState() !=
+                        WsprTransmitter::State::TRANSMITTING)
+                    {
+                        wsprTransmitter.stopAndJoin();
+                        deassert_transmit_gpio_outputs(
+                            &config,
+                            false,
+                            "invalid GPIO frequency correction");
+                        release_idle_selector_gpio_reservations();
+                        current_transmission_request = TransmissionRequest{};
+                    }
+                }
+                if (!finalize_reload_pending())
+                {
+                    continue;
+                }
+                return working_config.use_ini;
+            }
             committed_ppm = selected_correction.effective_ppm;
             working_config.ppm = committed_ppm;
             if (ppm_update_pending)

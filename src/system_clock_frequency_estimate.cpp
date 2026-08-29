@@ -7,7 +7,17 @@ namespace
 {
 bool finite_bounded(double value)
 {
-    return std::isfinite(value) && value >= -200.0 && value <= 200.0;
+    return std::isfinite(value) &&
+        value >= -kMaximumGpioFrequencyCorrectionPpm &&
+        value <= kMaximumGpioFrequencyCorrectionPpm;
+}
+
+GpioFrequencyCorrection invalid_correction(std::string reason)
+{
+    GpioFrequencyCorrection result;
+    result.valid = false;
+    result.reason = std::move(reason);
+    return result;
 }
 }
 
@@ -34,9 +44,43 @@ SystemClockFrequencyEstimate FrequencyEstimateQualifier::evaluate(
         attach_stale_fallback();
         return sample;
     }
+    if (!std::isfinite(sample.age_seconds) || sample.age_seconds < 0.0)
+    {
+        sample.reason = "Provider estimate age is malformed.";
+        attach_stale_fallback();
+        return sample;
+    }
+    if (!std::isfinite(sample.source_stability_span_seconds) ||
+        sample.source_stability_span_seconds < 0.0)
+    {
+        sample.reason = "Provider source stability span is malformed.";
+        attach_stale_fallback();
+        return sample;
+    }
+    if (!sample.skew_ppm.has_value() || !std::isfinite(*sample.skew_ppm) ||
+        *sample.skew_ppm < 0.0)
+    {
+        sample.reason = "Provider skew metadata is malformed.";
+        attach_stale_fallback();
+        return sample;
+    }
+    if (!sample.residual_frequency_ppm.has_value() ||
+        !std::isfinite(*sample.residual_frequency_ppm))
+    {
+        sample.reason = "Provider residual-frequency metadata is malformed.";
+        attach_stale_fallback();
+        return sample;
+    }
+
     if (!sample.synchronized || !sample.selected_source || !sample.leap_normal)
     {
         sample.reason = "Provider is not synchronized to a selected source with normal leap status.";
+        attach_stale_fallback();
+        return sample;
+    }
+    if (sample.source_signature.empty())
+    {
+        sample.reason = "Provider source signature is missing.";
         attach_stale_fallback();
         return sample;
     }
@@ -46,25 +90,14 @@ SystemClockFrequencyEstimate FrequencyEstimateQualifier::evaluate(
         attach_stale_fallback();
         return sample;
     }
-    if (sample.age_seconds > kCurrentMaximumAgeSeconds)
-    {
-        sample.qualification = FrequencyEstimateQualification::Stale;
-        sample.reason = "The last qualified provider estimate is stale.";
-        sample.last_qualified_frequency_ppm = sample.frequency_ppm;
-        sample.last_qualified_age_seconds = sample.age_seconds;
-        return sample;
-    }
-    if (!sample.skew_ppm.has_value() || !std::isfinite(*sample.skew_ppm) ||
-        *sample.skew_ppm > kMaximumSkewPpm)
+    if (*sample.skew_ppm > kMaximumSkewPpm)
     {
         sample.qualification = FrequencyEstimateQualification::Converging;
         sample.reason = "Provider skew exceeds the qualification limit.";
         attach_stale_fallback();
         return sample;
     }
-    if (!sample.residual_frequency_ppm.has_value() ||
-        !std::isfinite(*sample.residual_frequency_ppm) ||
-        std::abs(*sample.residual_frequency_ppm) > kMaximumResidualFrequencyPpm)
+    if (std::abs(*sample.residual_frequency_ppm) > kMaximumResidualFrequencyPpm)
     {
         sample.qualification = FrequencyEstimateQualification::Converging;
         sample.reason = "Provider residual frequency exceeds the qualification limit.";
@@ -79,7 +112,16 @@ SystemClockFrequencyEstimate FrequencyEstimateQualifier::evaluate(
         return sample;
     }
 
-    if (sample.source_signature.empty() || sample.source_signature != source_signature_)
+    if (sample.age_seconds > kCurrentMaximumAgeSeconds)
+    {
+        sample.qualification = FrequencyEstimateQualification::Stale;
+        sample.reason = "The provider estimate is stale.";
+        sample.last_qualified_frequency_ppm = sample.frequency_ppm;
+        sample.last_qualified_age_seconds = sample.age_seconds;
+        return sample;
+    }
+
+    if (sample.source_signature != source_signature_)
     {
         source_signature_ = sample.source_signature;
         frequency_history_.clear();
@@ -122,6 +164,17 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     double manual_ppm,
     const SystemClockFrequencyEstimate &estimate)
 {
+    if (!finite_bounded(residual_ppm))
+    {
+        return invalid_correction(
+            "Configured GPIO conducted residual PPM is non-finite or outside +/-200.");
+    }
+    if (!finite_bounded(manual_ppm))
+    {
+        return invalid_correction(
+            "Configured GPIO manual PPM is non-finite or outside +/-200.");
+    }
+
     GpioFrequencyCorrection result;
     result.qualification = estimate.qualification;
     result.provider_name = estimate.provider_name;
@@ -133,8 +186,18 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     if (use_estimate && estimate.frequency_ppm.has_value() &&
         estimate.qualification == FrequencyEstimateQualification::Qualified)
     {
+        if (!finite_bounded(*estimate.frequency_ppm))
+        {
+            return invalid_correction(
+                "Qualified provider estimate PPM is non-finite or outside +/-200.");
+        }
         result.estimate_ppm = estimate.frequency_ppm;
         result.effective_ppm = *estimate.frequency_ppm + residual_ppm;
+        if (!finite_bounded(result.effective_ppm))
+        {
+            return invalid_correction(
+                "Qualified provider estimate plus conducted residual is outside +/-200 PPM.");
+        }
         result.mode = GpioCorrectionMode::QualifiedEstimate;
         return result;
     }
@@ -145,11 +208,29 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
             : estimate.last_qualified_frequency_ppm;
     if (use_estimate && stale_estimate.has_value())
     {
+        if (!finite_bounded(*stale_estimate))
+        {
+            return invalid_correction(
+                "Stale provider estimate PPM is non-finite or outside +/-200.");
+        }
+        const double stale_age =
+            estimate.qualification == FrequencyEstimateQualification::Stale
+                ? estimate.age_seconds
+                : estimate.last_qualified_age_seconds;
+        if (!std::isfinite(stale_age) || stale_age < 0.0 ||
+            stale_age > FrequencyEstimateQualifier::kStaleMaximumAgeSeconds)
+        {
+            return invalid_correction(
+                "Stale provider estimate age is malformed or expired.");
+        }
         result.estimate_ppm = stale_estimate;
-        result.estimate_age_seconds = estimate.qualification == FrequencyEstimateQualification::Stale
-            ? estimate.age_seconds
-            : estimate.last_qualified_age_seconds;
+        result.estimate_age_seconds = stale_age;
         result.effective_ppm = *stale_estimate + residual_ppm;
+        if (!finite_bounded(result.effective_ppm))
+        {
+            return invalid_correction(
+                "Stale provider estimate plus conducted residual is outside +/-200 PPM.");
+        }
         result.mode = GpioCorrectionMode::StaleEstimate;
         return result;
     }
@@ -170,6 +251,46 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     result.effective_ppm = 0.0;
     result.mode = GpioCorrectionMode::Uncalibrated;
     result.reason = "No valid provider estimate or fixed manual correction is available.";
+    return result;
+}
+
+GpioFrequencyCorrectionComposition compose_gpio_frequency_correction(
+    double intrinsic_ppm,
+    const GpioFrequencyCorrection &selected_additional)
+{
+    GpioFrequencyCorrectionComposition result;
+    result.intrinsic_ppm = intrinsic_ppm;
+    result.additional_ppm = selected_additional.effective_ppm;
+
+    if (!selected_additional.valid)
+    {
+        result.reason = selected_additional.reason.empty()
+            ? "Selected additional GPIO correction is invalid."
+            : selected_additional.reason;
+        return result;
+    }
+    if (!finite_bounded(intrinsic_ppm))
+    {
+        result.reason =
+            "Intrinsic GPIO system-to-RF difference is non-finite or outside +/-200 PPM.";
+        return result;
+    }
+    if (!finite_bounded(selected_additional.effective_ppm))
+    {
+        result.reason =
+            "Selected additional GPIO correction is non-finite or outside +/-200 PPM.";
+        return result;
+    }
+
+    result.effective_ppm = intrinsic_ppm + selected_additional.effective_ppm;
+    if (!finite_bounded(result.effective_ppm))
+    {
+        result.reason =
+            "Intrinsic plus additional GPIO correction is outside +/-200 PPM.";
+        return result;
+    }
+
+    result.valid = true;
     return result;
 }
 
