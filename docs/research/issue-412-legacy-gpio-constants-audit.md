@@ -8,6 +8,7 @@ Short name: **Legacy GPIO Constants Audit**
 - Audited branch: `codex/issue-412-external-rp1-provider`
 - Audited commit: `f7b20f8d100ead23afa99d789da713681e9e76c3`
 - Audit date: 2026-08-29
+- Historical review added: 2026-08-29, `Legacy_1.2.3`
 - Retained on: `devel`
 - Hardware, host, network, GPIO, service, transmission, and RF activity: none
 
@@ -39,9 +40,10 @@ behavior. The highest-risk results are:
    profile using different evidence and fallback rules.
 4. **Medium:** nominal 500 MHz, 750 MHz, and 54 MHz rates are compiled-in
    profile policy rather than authoritative observations of the active clock.
-5. **Low:** an inherited `500 MHz * (1 - 2.5 PPM)` constructor default remains
-   as misleading latent state even though successful processor detection
-   overwrites it.
+5. **Medium:** the authoritative historical BCM2835/RPi1 `-2.5 PPM` profile
+   correction survives only as an ineffective constructor initializer. The
+   current runtime overwrites it and therefore no longer honors the original
+   RPi1-only frequency-generation model.
 
 A future device-specific calibration facility should not be implemented as
 another unqualified generic `ppm` value. Final-composition bounds and the
@@ -49,16 +51,18 @@ identity/provenance model should be resolved first.
 
 ## Source-to-RF dataflow
 
-### Legacy 500 MHz PLLD profile
+### Legacy 500 MHz PLLD profiles
 
 ```text
 Pi model/generation and CPU revision
-  -> scheduler labels LEGACY_500_MHZ_PLLD
-  -> backend maps BCM2835/2836/2837 to nominal 500 MHz PLLD
-  -> provider snapshot qualification
-  -> qualified/stale estimate + residual, else manual, else uncalibrated zero
-  -> effective signed PPM frozen into TransmissionRequest.calibration.ppm
-  -> corrected source = 500 MHz * (1 + ppm * 10^-6)
+  -> select BCM2835 or BCM2836/BCM2837 hardware profile
+  -> select nominal 500 MHz PLLD
+  -> apply intrinsic profile correction: BCM2835=-2.5 PPM; later profiles=0
+  -> select qualified/stale provider estimate or manual alternative
+  -> add explicitly configured conducted residual
+  -> validate the final signed correction
+  -> freeze the complete correction model into the execution request
+  -> corrected source = 500 MHz * (1 + effective_ppm * 10^-6)
   -> 12.12 GPCLK lower/upper divisors
   -> PWM-derived pacing and divider dithering
   -> one committed plan used for the bounded execution
@@ -69,11 +73,28 @@ Primary evidence: `src/system_clock_frequency_estimate.cpp:119-173`,
 `src/scheduling.cpp:157-166`, `src/scheduling.cpp:1129-1148`, and
 `src/WSPR-Transmitter/src/wspr_transmit_backend_rpi.cpp:463-482,2924-2995`.
 
+The `Legacy_1.2.3` implementation documents the missing profile distinction in
+`src/wspr.cpp:310-339`. It describes a measured 2.5 PPM difference on RPi1
+between the converged NTP correction and the crystal's RF-relevant frequency
+offset, says the difference was absent on RPi2, RPi3, and RPi4, and applies
+`500000000.0 * (1 - 2.500e-6)` only to RPi1. RPi2 and RPi3 retain an exact
+500 MHz model and RPi4 uses 750 MHz. The adjustment predates the retained 1.0
+through 1.2 release history; raw measurement artifacts are not retained.
+
+For this work, that legacy behavior is accepted as the authoritative
+historically accurate BCM2835/RPi1 frequency-generation model. It is not a
+universal 500 MHz correction and is not contingent on whether NTP, manual, or
+other additional correction is selected. Modern empirical revalidation is not
+possible without a BCM2835 device and is not required to preserve the model.
+
 ### BCM2711 750 MHz PLLD profile
 
 The flow is identical except BCM2711 selects nominal 750 MHz PLLD. If its
-12.12 divider cannot represent the requested range, planning tries a compiled
-54 MHz oscillator and applies the same signed PPM to that selected source.
+12.12 divider cannot represent the requested range, planning selects the
+compiled 54 MHz oscillator and applies the correction model to that selected
+source. PLLD and oscillator are distinct parent paths and both require
+hardware validation, including frequencies immediately around every
+source-selection boundary.
 
 Primary evidence:
 `src/WSPR-Transmitter/src/wspr_transmit_backend_rpi.cpp:526-558,2166-2182`.
@@ -98,7 +119,7 @@ evidence that calibrations can transfer between backends.
 | C01 | `500e6` | `wspr_transmit_backend_rpi.cpp:526-529,2155-2163` | Pi 1-3 | Hardware-profile data | Centralize and bind to authoritative identity |
 | C02 | `750e6` | `wspr_transmit_backend_rpi.cpp:526-529,2166-2169` | BCM2711 | Hardware-profile data | Centralize and bind to authoritative identity |
 | C03 | `54e6` | `wspr_transmit_backend_rpi.cpp:541-557` | BCM2711 low-frequency fallback | Hardware-profile data | Name the parent and provenance explicitly |
-| C04 | `500000000 * (1 - 2.5e-6)` | `wspr_transmit_backend_rpi.cpp:605-611` | Constructor | Obsolete latent behavior | Remove separately; initialize neutral or invalid |
+| C04 | `500000000 * (1 - 2.5e-6)` | Current constructor `wspr_transmit_backend_rpi.cpp:605-611`; authoritative origin `Legacy_1.2.3:src/wspr.cpp:310-339` | BCM2835/RPi1 only | Authoritative historical profile correction stranded in ineffective initialization | Preserve as explicit BCM2835 intrinsic profile data; remove only the misleading constructor encoding |
 | C05 | `nominal * (1 + ppm * 1e-6)` | `wspr_transmit_backend_rpi.cpp:463-482` | Legacy GPIO | Appropriate invariant | Retain positive-fast contract |
 | C06 | `+/-200 PPM` | `system_clock_frequency_estimate.cpp:8-11`; backend `:465-476` | Shared GPIO | Duplicated policy | Centralize and validate the composed result |
 | C07 | `estimate + residual` | `system_clock_frequency_estimate.cpp:133-153` | Legacy and RP1 flow | Correct formula, incomplete validation | Reject final values outside bounds |
@@ -152,15 +173,17 @@ identity.
 Resolve one typed profile, require agreement at the backend boundary, and fail
 closed on unknown or contradictory hardware.
 
-### M2: parent rates are assumptions, not observed state
+### M2: parent rates are model constants that still need runtime identity
 
 The legacy backend does not query an authoritative clock provider for active
 parent identity and rate. It assumes 500 MHz for BCM2835/36/37, 750 MHz PLLD
 for BCM2711, and a BCM2711-only 54 MHz oscillator fallback. These values have
 historical and qualification support but remain board-class assumptions.
 
-Keep expected rates as explicit profile data and, where available, validate
-the active source and rate through provider/readback evidence.
+Keep these rates as explicit frequency-generation profile data. Where
+available, validate active source identity and rate through provider/readback
+evidence. Additional NTP, manual, or conducted corrections refine the selected
+profile model; they do not define or replace its constants.
 
 ### M3: current status can differ from the active committed correction
 
@@ -172,11 +195,18 @@ in the active plan.
 Publish current-candidate and active-committed correction separately, including
 profile, parent, nominal rate, mode, source signature, and snapshot time.
 
-### L1: inherited constructor calibration
+### M4: authoritative BCM2835 correction is no longer active
 
-The constructor's `-2.5 PPM` adjustment is overwritten during successful
-processor detection, but encodes an obsolete sign convention and an
-unidentified device calibration. Remove it in separately authorized cleanup.
+The current constructor's `-2.5 PPM` adjustment is overwritten during
+successful processor detection. The legacy source establishes that the value
+was an intentional RPi1-only frequency-model correction, while RPi2/RPi3 used
+an unadjusted 500 MHz model. The current runtime therefore neither applies the
+historical correction to RPi1 nor exposes its provenance.
+
+Restore the correction as named BCM2835 profile data, always included when
+that exact profile is selected. Keep BCM2836/BCM2837 at zero intrinsic profile
+correction. Remove the constructor expression only after the value has been
+relocated without changing its historical meaning.
 
 ### L2: inconsistent CLI boundary behavior
 
@@ -200,7 +230,12 @@ Material gaps remain:
 - negative skew and age;
 - scheduler/backend profile disagreement;
 - active status versus committed correction;
-- proof that the constructor's `-2.5 PPM` is unobservable;
+- proof that BCM2835 receives exactly `-2.5 PPM` intrinsic correction while
+  BCM2836, BCM2837, and BCM2711 receive zero;
+- proof that intrinsic profile correction remains present with provider,
+  manual, and uncalibrated-zero additional correction modes;
+- source-selection boundary and generated-frequency tests for both BCM2711
+  750 MHz PLLD and 54 MHz oscillator paths;
 - authoritative active-parent identity/rate;
 - explicit non-transfer tests among legacy GPIO, RP1, and Si5351 provenance.
 
@@ -219,6 +254,64 @@ both configured and active provenance. No calibration may transfer between
 GPIO4 and GPIO20, between different parent selections, or between legacy and
 RP1 without evidence.
 
+## Accepted frequency-generation model
+
+The implementation path shall use these intrinsic constants:
+
+| Processor profile | Parent | Nominal rate | Intrinsic profile correction | Evidence status |
+|---|---|---:|---:|---|
+| BCM2835 / RPi1 | PLLD | 500 MHz | `-2.5 PPM` | Authoritative historical legacy model; no current device available |
+| BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | `0 PPM` | Legacy model; Zero 2 W available for exclusion and RF validation |
+| BCM2711 / RPi4 | PLLD | 750 MHz | `0 PPM` | Maintained model; RPi4 available for RF validation |
+| BCM2711 / RPi4 | oscillator | 54 MHz | `0 PPM` | Maintained low-frequency fallback; RPi4 available for RF validation |
+
+Intrinsic profile correction is part of frequency generation regardless of
+whether the operator selects a provider estimate, a manual alternative, or no
+additional correction. Conceptually:
+
+```text
+effective_ppm =
+    intrinsic_profile_ppm
+  + selected_additional_correction_ppm
+
+selected_additional_correction_ppm =
+    usable_provider_ppm + configured_conducted_residual_ppm
+  or configured_manual_ppm
+  or 0
+```
+
+This preserves current provider/manual precedence while making the intrinsic
+profile model unconditional. The implementation must not apply provider and
+manual values together. It must validate the final sum, freeze it for the
+bounded execution, and publish every component separately.
+
+## Phased resolution path
+
+1. **Freeze the model contract.** Define distinct BCM2835, BCM2836/BCM2837,
+   and BCM2711 profiles; define BCM2711 PLLD and oscillator parents; name the
+   constants above; and independently bind their selection and composition in
+   hardware-free tests.
+2. **Harden correction selection.** Validate provider metadata and the final
+   composed value; remove inconsistent clamping; preserve provider/manual
+   precedence; and prove one-time application and execution-level freezing.
+3. **Unify profile and parent selection.** Resolve processor identity once,
+   fail closed on unknown or contradictory identity, select the parent before
+   correction, and remove the stranded constructor encoding only after the
+   BCM2835 rule is active in profile data.
+4. **Expose provenance.** Report current candidate and active committed values,
+   including processor profile, parent, nominal rate, intrinsic correction,
+   provider/manual component, conducted residual, final correction, and
+   snapshot identity.
+5. **Validate the available legacy hardware.** On the Zero 2 W, prove the
+   BCM2835 residual is excluded from the later 500 MHz profile. On the RPi4,
+   validate both 750 MHz PLLD and 54 MHz oscillator generation, all frequencies
+   that select each parent, transition boundaries, positive/negative/zero
+   additional correction, bounded keyed modes, and cleanup. Hardware activity
+   requires separate explicit authorization and a predeclared conducted plan.
+6. **Close the evidence record.** Retain BCM2835 as historically authoritative
+   but not modern-hardware-revalidated; record route-specific Zero 2 W and RPi4
+   results without transferring them to BCM2835, RP1, Si5351, or another route.
+
 ## Unknowns and next gate
 
 Source review cannot establish actual firmware parent rates, active parent
@@ -226,10 +319,15 @@ selection, device-to-device source error, conducted RF accuracy, phase noise,
 spurs, timing, or stability across temperature, boot, parent, route, and
 provider versions.
 
-The next hardware-free step is typed identity, final-composition validation,
-and active-plan observability design. Physical validation remains a separate
-authorization requiring route-specific conducted measurements with a
-calibrated receiver/reference, parent-rate readback, bounded execution, and
+The BCM2835 `-2.5 PPM` value cannot be modern-hardware-revalidated with the
+available Zero 2 W or RPi4; it is retained as the authoritative historical
+model. The Zero 2 W can validate the later 500 MHz exclusion path. The RPi4 can
+validate both maintained clock-parent paths, including selection boundaries.
+
+The next gate is approval of the phased hardware-free implementation plan.
+Physical validation remains separately authorized work requiring exact host,
+GPIO route, frequencies, parent-selection expectations, calibrated
+receiver/reference, bounded modes and durations, stopping procedure, and
 verified cleanup.
 
 ## Adversarial reassessment
