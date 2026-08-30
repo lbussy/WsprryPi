@@ -204,9 +204,11 @@ an unadjusted 500 MHz model. The current runtime therefore neither applies the
 historical correction to RPi1 nor exposes its provenance.
 
 Restore the correction as named BCM2835 profile data, always included when
-that exact profile is selected. Keep BCM2836/BCM2837 at zero intrinsic profile
-correction. Remove the constructor expression only after the value has been
-relocated without changing its historical meaning.
+that exact profile is selected. BCM2836/BCM2837 must not inherit it; their own
+intrinsic system-to-RF difference begins at zero for discovery and is promoted
+only through the accepted measurement procedure. Remove the constructor
+expression only after the BCM2835 value has been relocated without changing
+its historical meaning.
 
 ### L2: inconsistent CLI boundary behavior
 
@@ -230,8 +232,9 @@ Material gaps remain:
 - negative skew and age;
 - scheduler/backend profile disagreement;
 - active status versus committed correction;
-- proof that BCM2835 receives exactly `-2.5 PPM` intrinsic correction while
-  BCM2836, BCM2837, and BCM2711 receive zero;
+- proof that BCM2835 receives exactly `-2.5 PPM` while BCM2836, BCM2837, and
+  BCM2711 never inherit that value and receive only their own parent-specific
+  promoted `D`;
 - proof that intrinsic profile correction remains present with provider,
   manual, and uncalibrated-zero additional correction modes;
 - source-selection boundary and generated-frequency tests for both BCM2711
@@ -256,14 +259,16 @@ RP1 without evidence.
 
 ## Accepted frequency-generation model
 
-The implementation path shall use these intrinsic constants:
+The implementation path shall use an intrinsic system-to-RF difference for
+each processor/parent model. The historical BCM2835 value is fixed; constants
+for available hardware are derived by the conducted procedure below:
 
-| Processor profile | Parent | Nominal rate | Intrinsic profile correction | Evidence status |
+| Processor profile | Parent | Nominal rate | Intrinsic system-to-RF difference | Evidence status |
 |---|---|---:|---:|---|
 | BCM2835 / RPi1 | PLLD | 500 MHz | `-2.5 PPM` | Authoritative historical legacy model; no current device available |
-| BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | `0 PPM` | Legacy model; Zero 2 W available for exclusion and RF validation |
-| BCM2711 / RPi4 | PLLD | 750 MHz | `0 PPM` | Maintained model; RPi4 available for RF validation |
-| BCM2711 / RPi4 | oscillator | 54 MHz | `0 PPM` | Maintained low-frequency fallback; RPi4 available for RF validation |
+| BCM2836 / BCM2837 class, including Zero 2 W | PLLD | 500 MHz | To be derived; zero is the discovery baseline | Legacy excludes the BCM2835 constant; Zero 2 W available as the accepted representative |
+| BCM2711 / RPi4 | PLLD | 750 MHz | `0 PPM` | Conservative product baseline; nonzero conducted candidates were not stable against contemporaneous system-clock estimation and await GPS-referenced reassessment |
+| BCM2711 / RPi4 | oscillator | 54 MHz | `0 PPM` | Conservative product baseline; the former promoted value failed fresh GPSDO-bracketed closure and awaits GPS-referenced reassessment |
 
 Intrinsic profile correction is part of frequency generation regardless of
 whether the operator selects a provider estimate, a manual alternative, or no
@@ -285,6 +290,104 @@ profile model unconditional. The implementation must not apply provider and
 manual values together. It must validate the final sum, freeze it for the
 bounded execution, and publish every component separately.
 
+### Deriving a transportable intrinsic difference
+
+The purpose of the empirical campaign is not to promote one board's absolute
+uncorrected clock error into a chipset constant. The target quantity is the
+stable difference between the RF parent-clock error and the simultaneous local
+system-clock estimate:
+
+```text
+S = frozen qualified NTP system-clock correction in PPM
+P = RF parent-clock error inferred from receiver-corrected carrier measurement
+D = intrinsic system-to-RF difference for the processor/parent model
+
+D = P - S
+```
+
+All three quantities use the current source-rate convention: positive means
+the relevant physical clock runs fast and would place an uncorrected carrier
+high; negative means it runs slow. Calculations may retain exact rate ratios,
+but reported and composed values use PPM and must declare rounding precision.
+
+### Campaign-only SDR calibration
+
+All discovery, perturbation, and closure analysis shall use this supplied SDR
+calibration:
+
+```text
+detected_frequency_hz - reference_frequency_hz =
+    0.4484 Hz + reference_frequency_hz * 1.01012 PPM
+```
+
+The exact inverse applied to every raw detected carrier is:
+
+```text
+calibrated_sdr_hz =
+    (raw_detected_sdr_hz - 0.4484 Hz)
+    / (1 + 1.01012 * 10^-6)
+
+calibrated_rf_error_hz = calibrated_sdr_hz - requested_rf_hz
+
+calibrated_rf_error_ppm =
+    calibrated_rf_error_hz / requested_rf_hz * 10^6
+```
+
+The inverse, rather than an approximate subtraction, is authoritative for
+these campaigns. The intercept and proportional term are applied exactly once
+before `P`, `D`, discovery error, closure error, or acceptance is calculated.
+Both the raw detected frequency and calibrated result must be retained.
+
+When the receiver observes a harmonic, calibration occurs at the raw detected
+harmonic frequency before translation to the transmitter fundamental:
+
+```text
+calibrated_harmonic_hz =
+    (raw_detected_harmonic_hz - 0.4484 Hz)
+    / (1 + 1.01012 * 10^-6)
+
+calibrated_fundamental_hz = calibrated_harmonic_hz / harmonic_number
+```
+
+Dividing before removing the affine intercept would scale the `0.4484 Hz`
+term incorrectly. The harmonic number and requested fundamental must be
+authenticated campaign inputs, not inferred from the nearest apparent tone.
+
+This calibration corrects the measurement instrument only. It is required
+campaign methodology and evidence metadata, but it must never become a
+WsprryPi runtime setting, chipset/parent constant, intrinsic `D`, provider
+residual, manual correction, configuration default, or production frequency
+calculation. It applies only to the SDR and receiver configuration for which
+the user declares it authoritative. Another receiver or changed configuration
+requires separately supplied calibration evidence.
+
+The preferred discovery run applies `S` while the intrinsic and configured
+residuals are zero. After receiver correction is applied exactly once, the
+remaining signed carrier error directly estimates `D`. An equivalent analysis
+may measure `P` without correction and subtract the simultaneous frozen `S`,
+but the preferred run exercises the real provider-composition path.
+
+Every discovery requires a closure run. The second bounded transmission
+applies `S + D` and must move the receiver-corrected carrier to the requested
+frequency within the declared tolerance. Positive and negative perturbations
+must independently confirm the sign and prove that neither `S` nor `D` is
+applied twice.
+
+The representative-board assumption is explicit: the derived `D` is accepted
+as authoritative for that processor/parent model even though only one board is
+measured. It must not cross parent, processor, GPIO route, receiver/reference,
+or backend boundaries. BCM2711 PLLD and oscillator therefore produce separate
+constants from separate discovery and closure runs.
+
+The campaign must retain the exact NTP snapshot and qualification, source
+signature, selected parent and nominal rate, executable and source revision,
+requested fundamental and authenticated harmonic relationship, GPIO route,
+SDR identity and configuration, the exact calibration equation, raw detected
+frequency, calibrated SDR frequency, receiver correction application count,
+reference identity, temperature/time context, raw captures,
+repeated-frequency results, and final calculation. Provider changes during a
+run do not alter the frozen execution correction.
+
 ## Phased resolution path
 
 ### Phase 1 implementation status
@@ -303,6 +406,115 @@ corrections, activate the BCM2835 intrinsic value in transmission planning,
 publish provenance, or authorize measurement activity. Those remain gated by
 Phases 2 through 6 below. The SDR equation remains campaign-only analysis and
 is not application configuration or production frequency-generation state.
+
+### Phase 2 implementation status
+
+Phase 2 is implemented on the Issue 429 branch in the shared system-clock
+qualification and GPIO correction-selection boundary. Provider metadata now
+rejects negative or non-finite age, skew, and stability-span values; final
+qualified and stale provider-plus-residual sums are validated against the
+same `+/-200 PPM` contract as their inputs; invalid manual and residual values
+fail explicitly; and the compatibility CLI no longer clamps an out-of-range
+manual correction.
+
+The hardware-independent composition contract also validates intrinsic plus
+selected-additional correction and proves that the BCM2835 `-2.5 PPM`
+component survives provider, manual, and zero-additional modes. Runtime
+processor/parent selection does not consume that intrinsic component yet;
+that activation remains Phase 3. Each request continues to receive one frozen
+scalar, and invalid selection now blocks a new request before backend planning.
+
+### Phase 3 implementation status
+
+Phase 3 is implemented on the Issue 429 branch. The scheduler now commits an
+exact BCM2835, BCM2836/BCM2837, or BCM2711 processor profile and fails closed
+when no supported legacy identity is available. The backend uses the shared
+revision decoder, requires its detected processor to match the committed
+profile, and selects PLLD or the BCM2711 oscillator from the Phase 1 model
+before calculating corrected rates and divider words.
+
+The scheduler composes the intrinsic and selected-additional corrections once
+before request creation. BCM2835 therefore always includes its historical
+`-2.5 PPM`, while the later 500 MHz model retains its separate zero discovery
+baseline. Both BCM2711 parents use conservative zero baselines pending a
+GPS-referenced reassessment. The
+backend verifies and decomposes the frozen final scalar without reapplying the
+intrinsic component. The
+stranded constructor expression and fallback-to-generic-500-MHz behavior are
+removed. RP1 and Si5351 correction paths remain isolated.
+
+### Phase 4 implementation status
+
+Phase 4 exposes separate current-candidate and committed-execution GPIO clock
+provenance through the runtime status API and Operation view. The candidate
+tracks the latest qualified selection, while the committed record freezes the
+processor profile, selected parent, nominal rate, intrinsic difference,
+selected provider or manual component, conducted residual, final correction,
+provider source signature and snapshot time, and a distinct execution identity
+at the scheduler-to-transmitter commit boundary. A later provider refresh does
+not rewrite the committed record, and active state is asserted only while the
+transmitter reports that it is transmitting. Cleanup clears the committed
+record rather than allowing stale execution provenance to survive.
+
+This reporting does not itself qualify RF accuracy or promote a discovery
+baseline. The earlier BCM2711 PLLD promotion was subsequently superseded by
+operator direction after repeated GPSDO-bracketed campaigns could not separate
+the PLLD residual from a changing network-derived system-clock estimate.
+BCM2711 PLLD therefore remains at zero until GPS-referenced reassessment.
+Other physical discovery, closure, and constant promotion remain Phases 5 and
+6 and require their separate authorization and evidence gates.
+
+### BCM2711 PLLD conducted promotion (superseded)
+
+The former BCM2711 750 MHz PLLD intrinsic value was `+0.153768 PPM`. It was
+derived from one coherent conducted campaign on the representative Raspberry
+Pi 4 using GPIO20, a `-20 dB` conducted path, and SDRplay RSP1B serial
+`2404058C60`. Chrony supplied a qualified and frozen `S = 9.626 PPM` with a
+stable four-source signature. The campaign covered 630 m, 160 m, 80 m, 60 m,
+40 m, 30 m, 20 m, 17 m, 15 m, and 10 m. Every capture retained 3,500,000
+samples with no timeout, overflow, or clipping and verified receiver cleanup.
+
+The receiver inverse calibration was applied exactly once. A proportional
+least-squares fit across all ten calibrated carrier errors produced
+`+0.153767747233 PPM`, rounded to six decimal places for the promoted model.
+An independent longer-window analysis agreed within `0.000426 PPM`. The raw
+captures and metadata are retained on the authorized acquisition host under
+`/home/pi/wsprrypi-phase5-plld-final-20260829`.
+
+Later Issue 429 GPSDO-bracketed discovery, closure, repeatability, and short
+per-capture Chrony campaigns produced incompatible nonzero candidates because
+the network-derived system-clock estimate changed during and between runs.
+Operator direction therefore superseded the nonzero promotion with a
+conservative `0 PPM` product baseline until a GPS-referenced system-clock
+measurement is available. Neither the former value nor the zero baseline
+applies to the distinct BCM2711 54 MHz oscillator parent, another processor,
+GPIO route, receiver, or backend.
+
+### BCM2711 oscillator conducted promotion (superseded)
+
+The former BCM2711 54 MHz oscillator intrinsic value was `-15.035290 PPM`.
+It was derived on the representative Raspberry Pi 4 at the 2200 m WSPR
+frequency using GPIO20, a `-20 dB` conducted path, and SDRplay RSP1B serial
+`2404058C60`. Chrony completed three qualified observations before RF work and
+supplied the frozen discovery correction `S = 9.616 PPM`.
+
+Three independent discovery captures produced longer-window estimates of
+`-15.132360 PPM`, `-15.080798 PPM`, and `-15.055137 PPM`. Their mean candidate
+was closed, its remaining signed residual was used for one refinement, and a
+final closure at `-15.035290 PPM` measured `-0.005270 PPM` (`-0.000725 Hz`). A
+second estimator measured `-0.006791 PPM` (`-0.000934 Hz`). All five captures
+retained 3,500,000 samples with no timeout, overflow, or clipping and verified
+receiver cleanup. Evidence is retained on the acquisition host under
+`/home/pi/wsprrypi-phase5-oscillator-final-20260829/2200m`.
+
+Fresh Issue 429 GPSDO-bracketed closure repeated the former value three times
+and measured a consistent mean residual of `-2.213501 Hz` at 137500 Hz. An
+emulated same-board correction near `-31.25 PPM` closed within `0.019 Hz`, but
+is not demonstrated to transfer across Pi 4 boards. Operator direction
+therefore superseded the former promotion with a conservative `0 PPM` product
+baseline until GPS-referenced qualification is available. Neither historical
+value applies to BCM2711 PLLD, another processor, GPIO route, receiver, or
+backend.
 
 1. **Freeze the model and measurement contract.** Define distinct BCM2835,
    BCM2836/BCM2837, and BCM2711 profiles; define BCM2711 PLLD and oscillator
@@ -323,15 +535,22 @@ is not application configuration or production frequency-generation state.
    including processor profile, parent, nominal rate, intrinsic correction,
    provider/manual component, conducted residual, final correction, and
    snapshot identity.
-5. **Validate the available legacy hardware.** On the Zero 2 W, prove the
-   BCM2835 residual is excluded from the later 500 MHz profile. On the RPi4,
-   validate both 750 MHz PLLD and 54 MHz oscillator generation, all frequencies
-   that select each parent, transition boundaries, positive/negative/zero
-   additional correction, bounded keyed modes, and cleanup. Hardware activity
-   requires separate explicit authorization and a predeclared conducted plan.
-6. **Close the evidence record.** Retain BCM2835 as historically authoritative
-   but not modern-hardware-revalidated; record route-specific Zero 2 W and RPi4
-   results without transferring them to BCM2835, RP1, Si5351, or another route.
+5. **Run NTP-relative discovery and closure on available legacy hardware.** On
+   the Zero 2 W, prove the BCM2835 residual is excluded, freeze qualified `S`,
+   derive the 500 MHz profile's `D`, and verify `S + D` by closure. On the RPi4,
+   independently derive and close `D` for both 750 MHz PLLD and 54 MHz
+   oscillator generation, covering all parent-selection regions, transition
+   boundaries, positive/negative perturbations, bounded keyed modes, and
+   cleanup. Every result and acceptance decision uses the calibrated SDR value,
+   while retaining the raw detection. Hardware activity requires separate
+   explicit authorization and a predeclared conducted plan.
+6. **Promote and close the evidence record.** Promote a constant only after its
+   calibrated discovery and calibrated closure evidence passes. Retain BCM2835
+   as historically authoritative but not modern-hardware-revalidated. Record
+   Zero 2 W and RPi4 constants separately without transferring them to another
+   processor, parent, route, RP1, or Si5351. Retain the SDR calibration as
+   evidence methodology only; do not promote it or any component of it into
+   WsprryPi production state.
 
 ## Unknowns and next gate
 
@@ -359,3 +578,13 @@ H2, M1, M3, and L2. It found no current evidence of double application,
 residual replacement, mid-frame mutation of a committed plan, Si5351 leakage,
 production use of 19.2 MHz, or a repository default containing the provisional
 RP1 measurement.
+## Current integration note
+
+The Issue 430 merge preserves the shared `src/Chipset-Offsets` selector:
+BCM2835 -2.5 ppm, BCM2836/BCM2837 and BCM2711 0 ppm, RP1 -46.245 ppm.
+Earlier promotion proposals and scheduler-owned total corrections above are
+historical. Current requests carry additional correction only; physical backends
+add intrinsic correction once. Status freezes and reports both components and
+their total. Inputs remain independently bounded to +/-200 ppm, and intrinsic
+RF correction does not change the PWM/DMA timebase. Hardware-free integration
+tests are not post-change RF qualification.

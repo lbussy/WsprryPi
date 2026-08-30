@@ -37,6 +37,7 @@
 #include "privileged_network_runtime.hpp"
 #include "scheduling.hpp"
 #include "signal_handler.hpp"
+#include "system_clock_frequency_estimate.hpp"
 #include "band_lookup.hpp"
 #include "wspr_transmit.hpp"
 #include "version.hpp"
@@ -4082,15 +4083,15 @@ bool parse_command_line(int argc, char *argv[])
                 {
                     print_usage("GPIO manual PPM must be a finite number.", EXIT_FAILURE);
                 }
-                double clamped_ppm = std::clamp(ppm, -200.0, 200.0);
-
-                if (ppm != clamped_ppm)
+                if (ppm < -kMaximumGpioFrequencyCorrectionPpm ||
+                    ppm > kMaximumGpioFrequencyCorrectionPpm)
                 {
-                    llog.logE(ERROR, "PPM value is outside bounds (-200 to 200), applying clamped value: ", clamped_ppm);
+                    print_usage(
+                        "GPIO manual PPM must be within -200 to 200.",
+                        EXIT_FAILURE);
                 }
 
-                // Apply the clamped value
-                config.gpio_manual_ppm = clamped_ppm;
+                config.gpio_manual_ppm = ppm;
                 config.gpio_use_system_clock_frequency_estimate = false;
                 resolve_backend_specific_config(config);
             }

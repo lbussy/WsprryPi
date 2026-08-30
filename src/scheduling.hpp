@@ -352,6 +352,25 @@ struct WsprRuntimeStatusSnapshot
     double gpio_frequency_residual_ppm = 0.0;
     double effective_gpio_ppm = 0.0;
     double frequency_estimate_age_seconds = 0.0;
+    struct GpioCorrectionProvenance
+    {
+        bool available = false;
+        bool active = false;
+        std::string processor_profile;
+        std::string selected_parent;
+        double nominal_rate_hz = 0.0;
+        double intrinsic_ppm = 0.0;
+        double selected_component_ppm = 0.0;
+        double conducted_residual_ppm = 0.0;
+        double final_ppm = 0.0;
+        std::string correction_mode;
+        std::string provider_name;
+        std::string provider_source_signature;
+        std::string provider_snapshot_time;
+        std::string execution_identity;
+    };
+    GpioCorrectionProvenance gpio_correction_candidate;
+    GpioCorrectionProvenance gpio_correction_committed;
     std::string rp1_package_expected;
     std::string rp1_route_requested;
     std::string rp1_route_persisted;

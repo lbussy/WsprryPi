@@ -32,8 +32,12 @@ Positive PPM means the source runs fast. The physical parent remains nominally
 200 MHz; this software correction does not retune the parent or alter the DKMS
 set/restore lifecycle. The manual/Chrony selection policy and persisted values
 are unchanged; their selected value is now an additional correction to the
-RP1 baseline. Existing status fields report that selected caller correction,
-not the intrinsic baseline. A previous manual value representing the entire
+RP1 baseline. Backend requests carry only that additional correction; the
+physical backend adds the intrinsic value once. Candidate and committed status
+report both components and their total (`effective_gpio_ppm`), with the selected
+parent and source provenance. Refreshing a candidate does not change a committed
+request. Each correction input retains its independent +/-200 ppm bound; their
+sum may exceed that bound. A previous manual value representing the entire
 RP1 source error must have the new intrinsic value subtracted to avoid counting
 it twice (for example, a previous total of -46.245 becomes manual 0).
 The same accounting applies to Pi1's -2.5 ppm baseline: a manually entered

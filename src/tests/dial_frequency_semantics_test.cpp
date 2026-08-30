@@ -1279,8 +1279,43 @@ int main(int argc, char *argv[])
         require(
             current_transmission_request_for_test().mode == TransmissionMode::WSPR,
             "scheduler must commit a normal WSPR request for GPIO on Raspberry Pi 4");
+        const auto provenance = current_tx_runtime_status_snapshot();
+        require(
+            provenance.gpio_correction_candidate.available &&
+                provenance.gpio_correction_candidate.processor_profile == "BCM2711" &&
+                provenance.gpio_correction_candidate.selected_parent == "PLLD" &&
+                provenance.gpio_correction_candidate.nominal_rate_hz == 750000000.0 &&
+                nearly_equal(
+                    provenance.gpio_correction_candidate.intrinsic_ppm,
+                    0.0,
+                    1.0e-9) &&
+                nearly_equal(
+                    provenance.gpio_correction_candidate.final_ppm,
+                    0.0,
+                    1.0e-9),
+            "candidate provenance must expose the exact planned BCM2711 parent and correction");
+        require(
+            provenance.gpio_correction_committed.available &&
+                !provenance.gpio_correction_committed.active &&
+                provenance.gpio_correction_committed.processor_profile == "BCM2711" &&
+                provenance.gpio_correction_committed.selected_parent == "PLLD" &&
+                provenance.gpio_correction_committed.nominal_rate_hz == 750000000.0 &&
+                nearly_equal(
+                    provenance.gpio_correction_committed.intrinsic_ppm,
+                    0.0,
+                    1.0e-9) &&
+                nearly_equal(
+                    provenance.gpio_correction_committed.final_ppm,
+                    0.0,
+                    1.0e-9) &&
+                !provenance.gpio_correction_committed.execution_identity.empty(),
+            "committed provenance must freeze exact plan identity without claiming idle work is active");
 
         finish_runtime_planning_state_for_identity_test();
+        reset_current_transmission_request_for_test();
+        require(
+            !current_tx_runtime_status_snapshot().gpio_correction_committed.available,
+            "cleared execution state must not expose stale committed provenance");
         clear_pi_generation_override_for_scope();
     }
 
@@ -1299,6 +1334,21 @@ int main(int argc, char *argv[])
             set_config(true),
             "BCM2711 2200 m WSPR regression must plan a scheduler request");
         const auto bcm2711_legacy_request = current_transmission_request_for_test();
+        const auto bcm2711_2200m_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(bcm2711_legacy_request.ppm, 0.0) &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.available &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.selected_parent ==
+                    "oscillator" &&
+                bcm2711_2200m_provenance.gpio_correction_candidate.nominal_rate_hz ==
+                    54000000.0 &&
+                nearly_equal(
+                    bcm2711_2200m_provenance.gpio_correction_candidate.intrinsic_ppm,
+                    0.0) &&
+                nearly_equal(
+                    bcm2711_2200m_provenance.gpio_correction_candidate.final_ppm,
+                    0.0),
+            "BCM2711 2200 m planning must commit and publish the conservative oscillator zero baseline");
         auto bcm2711_request = controller_request_from_legacy_for_test(
             bcm2711_legacy_request,
             wsprrypi::TransmissionMode::WSPR);
@@ -1311,7 +1361,7 @@ int main(int argc, char *argv[])
             !bcm2711_request.policy.allow_unqualified_frequency &&
                 !bcm2711_request.policy.allow_non_amateur_frequency &&
                 bcm2711_request.policy.hardware_profile ==
-                    wsprrypi::HardwareProfile::BCM2711_750_MHZ_PLLD &&
+                    wsprrypi::HardwareProfile::BCM2711 &&
                 wsprrypi::evaluate_gpio_band_policy(
                     wsprrypi::ExecutionPlanCompiler{}.compile(bcm2711_request)).allowed,
             "direct WSPR controller requests must preserve the qualified BCM2711 2200 m profile");
@@ -1342,7 +1392,7 @@ int main(int argc, char *argv[])
             legacy_override_request.policy.allow_unqualified_frequency &&
                 !legacy_override_request.policy.allow_non_amateur_frequency &&
                 legacy_override_request.policy.hardware_profile ==
-                    wsprrypi::HardwareProfile::LEGACY_500_MHZ_PLLD &&
+                    wsprrypi::HardwareProfile::BCM2836_BCM2837 &&
                 wsprrypi::evaluate_gpio_band_policy(
                     wsprrypi::ExecutionPlanCompiler{}.compile(legacy_override_request)).allowed,
             "direct WSPR controller requests must preserve the legacy unqualified-frequency override");
@@ -1360,6 +1410,96 @@ int main(int argc, char *argv[])
         require(
             validate_config_candidate(config, &validation_error),
             "GPIO4 must be accepted on Raspberry Pi 5 when the RP1 provider is available");
+
+        // This is a hardware-free planning fixture, including route confirmation.
+        config.rp1_development_confirmation_json = R"({
+            "enabled": true, "route": "GPIO4", "operation_id": "ppm-planning-fixture",
+            "physical_connection_confirmed": true,
+            "attenuation_and_load_confirmed": true,
+            "bounded_operation_confirmed": true,
+            "non_radiating_topology_confirmed": true,
+            "experimental_status_acknowledged": true
+        })";
+        set_rp1_development_reconcile_invoker_for_test(
+            [](const std::string &) {
+                set_rp1_route_transaction_inhibited(false);
+                return nlohmann::json{
+                    {"ok", true}, {"generation", 20},
+                    {"persisted", "GPIO4"}, {"active", "GPIO4"},
+                    {"reconciled", true}, {"journal", "none"},
+                    {"contractIdentity", "rp1-gpclk-route-manager-v1"},
+                    {"endpointOpen", false}, {"endpointOwned", true},
+                    {"state", "idle"}, {"liveOutput", "disabled"}};
+            });
+        config.gpio_use_system_clock_frequency_estimate = false;
+        config.use_system_clock_frequency_estimate = false;
+        config.gpio_manual_ppm = 12.5;
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "RP1 scheduler must accept a manual GPIO correction");
+        auto rp1_manual_request = current_transmission_request_for_test();
+        auto rp1_manual_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(rp1_manual_request.ppm, 12.5) &&
+                rp1_manual_provenance.gpio_correction_committed.available &&
+                rp1_manual_provenance.gpio_correction_committed.processor_profile ==
+                    "RP1" &&
+                rp1_manual_provenance.gpio_correction_committed.selected_parent ==
+                    "PLL_SYS" &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.nominal_rate_hz,
+                    200000000.0) &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.intrinsic_ppm,
+                    -46.245) &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.final_ppm,
+                    -33.745),
+            "RP1 must freeze only additional PPM for the backend and report the shared intrinsic plus manual correction");
+        config.gpio_manual_ppm = -200.0;
+        require(set_config(true), "RP1 must retain the full additional correction range");
+        require(nearly_equal(current_transmission_request_for_test().ppm, -200.0) &&
+                nearly_equal(current_tx_runtime_status_snapshot().gpio_correction_committed.final_ppm, -246.245),
+            "RP1 must not clamp or apply its intrinsic offset twice at the caller boundary");
+        finish_runtime_planning_state_for_identity_test();
+
+        SystemClockFrequencyEstimate rp1_estimate;
+        rp1_estimate.provider_name = "chrony";
+        rp1_estimate.qualification = FrequencyEstimateQualification::Qualified;
+        rp1_estimate.frequency_ppm = 10.0;
+        rp1_estimate.synchronized = true;
+        rp1_estimate.selected_source = true;
+        rp1_estimate.leap_normal = true;
+        config.gpio_use_system_clock_frequency_estimate = true;
+        config.use_system_clock_frequency_estimate = true;
+        config.gpio_frequency_residual_ppm = 1.25;
+        config.transmit = false;
+        config.loop_tx = true;
+        wsprTransmitter.backendSetStateValue(WsprTransmitter::State::DISABLED);
+        reset_current_transmission_request_for_test();
+        reset_committed_execution_route_for_test();
+        set_current_frequency_estimate_for_test(rp1_estimate);
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            start_test_tone(14097100).started,
+            "RP1 tone planning must accept the injected qualified system-clock estimate");
+        const auto rp1_estimate_request = current_transmission_request_for_test();
+        const auto rp1_estimate_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(rp1_estimate_request.ppm, 11.25) &&
+                nearly_equal(
+                    rp1_estimate_provenance.gpio_correction_committed
+                        .conducted_residual_ppm,
+                    1.25) &&
+                nearly_equal(
+                    rp1_estimate_provenance.gpio_correction_committed.final_ppm,
+                    -34.995),
+            "RP1 must report its shared intrinsic plus qualified estimate and conducted residual exactly once");
+        require(end_test_tone().stopped, "RP1 planning fixture must stop its suppressed tone");
+        finish_runtime_planning_state_for_identity_test();
+        reset_rp1_development_reconcile_invoker_for_test();
+        set_current_frequency_estimate_for_test(SystemClockFrequencyEstimate{});
 
         PreparedConfigCandidate candidate;
         auto managed_rp1_ini =
@@ -7429,6 +7569,7 @@ int main(int argc, char *argv[])
         })";
         const nlohmann::json valid_confirmation = nlohmann::json::parse(
             config.rp1_development_confirmation_json);
+        set_scheduler_execution_suppressed_for_test(true);
         const bool persistent_transmit_before = config.transmit;
         set_rp1_route_transaction_inhibited(true);
         set_rp1_development_reconcile_invoker_for_test(
@@ -7514,6 +7655,7 @@ int main(int argc, char *argv[])
         reset_rp1_development_reconcile_invoker_for_test();
         reset_direct_tone_start_invoker_for_test();
         set_rp1_route_transaction_inhibited(false);
+        set_scheduler_execution_suppressed_for_test(false);
     }
 
     {
@@ -7521,6 +7663,7 @@ int main(int argc, char *argv[])
         config.transmit_backend = TransmitBackendKind::GPIO;
         config.allow_unqualified_frequency = true;
         config.allow_non_amateur_frequency = true;
+        config.use_ini = false;
         set_scheduler_execution_suppressed_for_test(true);
         reset_current_transmission_request_for_test();
         reset_current_controller_request_for_test();
@@ -7547,7 +7690,7 @@ int main(int argc, char *argv[])
                 committed.selector_gpio_enabled &&
                 committed.selector_gpio_config.gpio == 17 &&
                 committed.selector_gpio_config.active_high,
-            "dual outside-band override must retain an explicit CLI selector without band inference");
+            "dual outside-band override must retain an explicit CLI selector without band inference: " + error);
 
         stop_active_transmission_selectors_for_test();
         reset_direct_tone_start_invoker_for_test();

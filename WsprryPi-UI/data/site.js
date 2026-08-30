@@ -2170,6 +2170,28 @@ function normalizeRuntimeStatus(msg) {
         ? Number(msg.cw_active_char_index)
         : -1;
 
+    const normalizeCorrectionProvenance = (value) => {
+        const source = value && typeof value === "object" ? value : {};
+        return {
+            available: source.available === true &&
+                [source.nominal_rate_hz, source.intrinsic_ppm,
+                 source.selected_component_ppm, source.conducted_residual_ppm,
+                 source.final_ppm].every(value => typeof value === "number" && Number.isFinite(value)),
+            active: source.active === true,
+            processorProfile: typeof source.processor_profile === "string" ? source.processor_profile : "",
+            selectedParent: typeof source.selected_parent === "string" ? source.selected_parent : "",
+            nominalRateHz: Number.isFinite(Number(source.nominal_rate_hz)) ? Number(source.nominal_rate_hz) : 0,
+            intrinsicPpm: Number.isFinite(Number(source.intrinsic_ppm)) ? Number(source.intrinsic_ppm) : 0,
+            selectedComponentPpm: Number.isFinite(Number(source.selected_component_ppm)) ? Number(source.selected_component_ppm) : 0,
+            conductedResidualPpm: Number.isFinite(Number(source.conducted_residual_ppm)) ? Number(source.conducted_residual_ppm) : 0,
+            finalPpm: Number.isFinite(Number(source.final_ppm)) ? Number(source.final_ppm) : 0,
+            correctionMode: typeof source.correction_mode === "string" ? source.correction_mode : "",
+            providerName: typeof source.provider_name === "string" ? source.provider_name : "",
+            providerSourceSignature: typeof source.provider_source_signature === "string" ? source.provider_source_signature : "",
+            providerSnapshotTime: typeof source.provider_snapshot_time === "string" ? source.provider_snapshot_time : "",
+            executionIdentity: typeof source.execution_identity === "string" ? source.execution_identity : ""
+        };
+    };
     return {
         eventState: typeof msg.state === "string" ? msg.state : "",
         txState:
@@ -2241,6 +2263,8 @@ function normalizeRuntimeStatus(msg) {
         frequencyEstimateAgeSeconds: Number.isFinite(Number(msg.frequency_estimate_age_seconds))
             ? Number(msg.frequency_estimate_age_seconds)
             : 0,
+        gpioCorrectionCandidate: normalizeCorrectionProvenance(msg.gpio_correction_candidate),
+        gpioCorrectionCommitted: normalizeCorrectionProvenance(msg.gpio_correction_committed),
         frameCallsign: typeof msg.frame_callsign === "string" ? msg.frame_callsign : "",
         frameLocator: typeof msg.frame_locator === "string" ? msg.frame_locator : "",
         cwMessage: typeof msg.cw_message === "string" ? msg.cw_message : "",
@@ -3045,25 +3069,35 @@ function renderGpioFrequencyCorrection(status) {
         return;
     }
 
-    const qualification = status.frequencyEstimateQualification || "unavailable";
-    const label = qualification.charAt(0).toUpperCase() + qualification.slice(1);
-    const provider = status.frequencyEstimateProvider || "No provider";
-    const estimate = status.frequencyEstimatePpm === null
-        ? "not available"
-        : `${status.frequencyEstimatePpm.toFixed(3)} PPM`;
-    valueNode.textContent = `${label} · ${status.effectiveGpioPpm.toFixed(3)} PPM effective`;
+    const formatProvenance = (label, value) => {
+        if (!value?.available) {
+            return `${label}: unavailable`;
+        }
+        const parent = value.nominalRateHz > 0
+            ? `${value.selectedParent} ${(value.nominalRateHz / 1e6).toFixed(0)} MHz`
+            : value.selectedParent;
+        const source = value.providerSourceSignature || value.providerName || "manual/zero";
+        const identity = value.executionIdentity ? ` · ${value.executionIdentity}` : "";
+        const active = value.active ? " · active" : "";
+        const residual = !["qualified_estimate_plus_residual", "stale_estimate_plus_residual"].includes(value.correctionMode)
+            ? `${value.conductedResidualPpm.toFixed(3)} residual configured, not applied`
+            : `${value.conductedResidualPpm.toFixed(3)} residual`;
+        const snapshot = value.providerSnapshotTime ? ` · sampled ${value.providerSnapshotTime}` : "";
+        return `${label}: ${value.processorProfile} · ${parent} · ` +
+            `${value.intrinsicPpm.toFixed(3)} intrinsic · ` +
+            `${value.selectedComponentPpm.toFixed(3)} selected · ` +
+            `${residual} · ${value.finalPpm.toFixed(3)} PPM final · ` +
+            `${source}${snapshot}${identity}${active}`;
+    };
 
-    const provenance = status.frequencyEstimateProvenance
-        ? ` · ${status.frequencyEstimateProvenance}`
-        : "";
-    const age = status.frequencyEstimatePpm === null
-        ? ""
-        : ` · Age ${Math.max(0, status.frequencyEstimateAgeSeconds).toFixed(0)} s`;
+    valueNode.textContent = formatProvenance(
+        "Candidate", status.gpioCorrectionCandidate);
     detailNode.textContent =
-        `${provider}${provenance} · Estimate ${estimate}${age} · ` +
-        `Residual ${status.gpioFrequencyResidualPpm.toFixed(3)} PPM · ` +
-        `Mode ${String(status.frequencyCorrectionMode || "uncalibrated").replaceAll("_", " ")}. ` +
-        `${status.frequencyEstimateReason || "Provider qualification is informational and is not RF calibration."}`;
+        `${formatProvenance("Committed", status.gpioCorrectionCommitted)}. ` +
+        "Candidate refreshes do not alter a committed transmission. " +
+        `Estimate: ${status.frequencyEstimateQualification}` +
+        (status.frequencyEstimateReason ? ` (${status.frequencyEstimateReason})` : "") +
+        ` · age ${status.frequencyEstimateAgeSeconds.toFixed(0)} s.`;
 }
 
 function applyRuntimeStatus(msg) {

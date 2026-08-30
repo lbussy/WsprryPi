@@ -1,4 +1,5 @@
 #include "legacy_gpio_clock_model.hpp"
+#include "transmission_request.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -67,7 +68,7 @@ namespace
                 later500.intrinsic_system_to_rf_difference_ppm == 0.0 &&
                 later500.intrinsic_evidence ==
                     LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
-            "BCM2836/BCM2837 PLLD must exclude the BCM2835 intrinsic constant");
+            "BCM2836/BCM2837/BCM2837B0 PLLD must use the promoted conducted 500 MHz zero intrinsic residual");
 
         const auto bcm2711PllD = legacyGpioClockModel(
             LegacyGpioProcessorProfile::Bcm2711,
@@ -79,16 +80,35 @@ namespace
             bcm2711PllD.processor == LegacyGpioProcessorProfile::Bcm2711 &&
                 bcm2711PllD.parent == LegacyGpioClockParent::PllD &&
                 bcm2711PllD.nominal_rate_hz == 750000000.0 &&
-                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.0,
-            "BCM2711 PLLD must use its independent 750 MHz discovery baseline");
+                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.0 &&
+                bcm2711PllD.intrinsic_evidence ==
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
+            "BCM2711 PLLD must use the conservative 750 MHz zero baseline pending GPS-referenced qualification");
         expect(
             bcm2711Oscillator.processor ==
                     LegacyGpioProcessorProfile::Bcm2711 &&
                 bcm2711Oscillator.parent ==
                     LegacyGpioClockParent::Oscillator &&
                 bcm2711Oscillator.nominal_rate_hz == 54000000.0 &&
-                bcm2711Oscillator.intrinsic_system_to_rf_difference_ppm == 0.0,
-            "BCM2711 oscillator must use its independent 54 MHz discovery baseline");
+                bcm2711Oscillator.intrinsic_system_to_rf_difference_ppm ==
+                    0.0 &&
+                bcm2711Oscillator.intrinsic_evidence ==
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
+            "BCM2711 oscillator must use the conservative 54 MHz zero baseline pending GPS-referenced qualification");
+
+        const auto selectedOscillator =
+            selectLegacyGpioClockForAdditionalCorrection(
+                LegacyGpioProcessorProfile::Bcm2711,
+                137500.0,
+                137502.0,
+                9.616);
+        expect(
+            selectedOscillator.model.parent ==
+                    LegacyGpioClockParent::Oscillator &&
+                selectedOscillator.correction.intrinsic_ppm == 0.0 &&
+                selectedOscillator.correction.additional_ppm == 9.616 &&
+                selectedOscillator.correction.effective_ppm == 9.616,
+            "parent-aware composition must apply the oscillator intrinsic exactly once");
 
         expectInvalid(
             [] {
@@ -146,6 +166,117 @@ namespace
                     (void)deriveLegacyGpioIntrinsicDifferencePpm(0.0, invalid);
                 },
                 "non-finite S must fail closed");
+        }
+    }
+
+    void testRevisionIdentityResolution()
+    {
+        using namespace wsprrypi;
+
+        expect(
+            !legacyGpioProcessorProfileFromRevision(0U).has_value(),
+            "missing revision identity must fail closed");
+        expect(
+            legacyGpioProcessorProfileFromRevision(0x0002U) ==
+                LegacyGpioProcessorProfile::Bcm2835,
+            "old-style nonzero revisions must retain BCM2835 identity");
+        expect(
+            legacyGpioProcessorProfileFromRevision(0x800000U) ==
+                LegacyGpioProcessorProfile::Bcm2835,
+            "new-style processor code 0 must resolve BCM2835");
+        expect(
+            legacyGpioProcessorProfileFromRevision(0x801000U) ==
+                LegacyGpioProcessorProfile::Bcm2836Bcm2837 &&
+                legacyGpioProcessorProfileFromRevision(0x802000U) ==
+                    LegacyGpioProcessorProfile::Bcm2836Bcm2837,
+            "new-style processor codes 1 and 2 must resolve the later 500 MHz class");
+        expect(
+            legacyGpioProcessorProfileFromRevision(0x803000U) ==
+                LegacyGpioProcessorProfile::Bcm2711,
+            "new-style processor code 3 must resolve BCM2711");
+        expect(
+            !legacyGpioProcessorProfileFromRevision(0x804000U).has_value() &&
+                !legacyGpioProcessorProfileFromRevision(0x80F000U).has_value(),
+            "unknown new-style processor codes must fail closed");
+        expect(
+            legacyHardwareProfile(
+                LegacyGpioProcessorProfile::Bcm2835) ==
+                    HardwareProfile::BCM2835 &&
+                legacyHardwareProfile(
+                    LegacyGpioProcessorProfile::Bcm2836Bcm2837) ==
+                    HardwareProfile::BCM2836_BCM2837 &&
+                legacyHardwareProfile(
+                    LegacyGpioProcessorProfile::Bcm2711) ==
+                    HardwareProfile::BCM2711,
+            "exact processor identities must map to exact committed profiles");
+        expect(
+            legacyHardwareProfileMatches(
+                HardwareProfile::BCM2711,
+                LegacyGpioProcessorProfile::Bcm2711) &&
+                !legacyHardwareProfileMatches(
+                    HardwareProfile::BCM2835,
+                    LegacyGpioProcessorProfile::Bcm2711) &&
+                !legacyHardwareProfileMatches(
+                    HardwareProfile::UNSPECIFIED,
+                    LegacyGpioProcessorProfile::Bcm2835),
+            "profile agreement must reject wrong and unspecified identities");
+    }
+
+    void testParentSelectionAndCorrectionBoundaries()
+    {
+        using namespace wsprrypi;
+
+        const auto bcm2835 = selectLegacyGpioClock(
+            LegacyGpioProcessorProfile::Bcm2835,
+            14097100.0,
+            14097100.0,
+            -1.5);
+        expect(
+            bcm2835.model.parent == LegacyGpioClockParent::PllD &&
+                bcm2835.correction.intrinsic_ppm == -2.5 &&
+                bcm2835.correction.additional_ppm == 1.0 &&
+                bcm2835.correction.effective_ppm == -1.5 &&
+                nearlyEqual(
+                    bcm2835.corrected_rate_hz,
+                    500000000.0 * (1.0 - 1.5e-6),
+                    1.0e-6),
+            "BCM2835 selection must apply its intrinsic correction exactly once");
+
+        const auto later = selectLegacyGpioClock(
+            LegacyGpioProcessorProfile::Bcm2836Bcm2837,
+            14097100.0,
+            14097100.0,
+            1.0);
+        expect(
+            later.correction.intrinsic_ppm == 0.0 &&
+                later.correction.additional_ppm == 1.0 &&
+                later.correction.effective_ppm == 1.0,
+            "later 500 MHz profiles must never inherit the BCM2835 intrinsic value");
+
+        constexpr double maximum_divisor = 16777215.0 / 4096.0;
+        for (const double effective_ppm : {-100.0, 0.0, 100.0})
+        {
+            const double corrected_plld_hz =
+                750000000.0 * (1.0 + effective_ppm * 1.0e-6);
+            const double transition_hz = corrected_plld_hz / maximum_divisor;
+            const auto below = selectLegacyGpioClock(
+                LegacyGpioProcessorProfile::Bcm2711,
+                transition_hz - 100.0,
+                transition_hz - 100.0,
+                effective_ppm);
+            const auto above = selectLegacyGpioClock(
+                LegacyGpioProcessorProfile::Bcm2711,
+                transition_hz + 100.0,
+                transition_hz + 100.0,
+                effective_ppm);
+            expect(
+                below.model.parent == LegacyGpioClockParent::Oscillator &&
+                    above.model.parent == LegacyGpioClockParent::PllD,
+                "BCM2711 parent transition must track zero and signed corrections");
+            expect(
+                below.model.nominal_rate_hz == 54000000.0 &&
+                    above.model.nominal_rate_hz == 750000000.0,
+                "BCM2711 parents must retain independent nominal rates across transitions");
         }
     }
 
@@ -269,6 +400,8 @@ int main()
 {
     testExactClockModels();
     testIntrinsicDifferenceSignAndValidation();
+    testRevisionIdentityResolution();
+    testParentSelectionAndCorrectionBoundaries();
     testExactSdrInverseAndRfError();
     testHarmonicCalibrationOrdering();
     testMeasurementValidation();

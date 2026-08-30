@@ -285,6 +285,9 @@ void test_integer_boundary_and_invalid_inputs()
 
 int main()
 {
+    expect(wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1) == -46.245,
+        "RP1 GPCLK must retain the shared intrinsic baseline");
+
     test_all_bands_and_parents();
     test_single_word_evidence();
     test_intrinsic_offset_composition();

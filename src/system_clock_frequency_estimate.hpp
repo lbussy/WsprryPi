@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "WSPR-Transmitter/src/legacy_gpio_clock_model.hpp"
+
 enum class FrequencyEstimateQualification
 {
     Qualified,
@@ -23,6 +25,9 @@ enum class GpioCorrectionMode
     FixedManual,
     Uncalibrated
 };
+
+inline constexpr double kMaximumGpioFrequencyCorrectionPpm =
+    wsprrypi::kMaximumLegacyGpioCorrectionPpm;
 
 struct SystemClockFrequencyEstimate
 {
@@ -40,6 +45,7 @@ struct SystemClockFrequencyEstimate
     bool leap_normal = false;
     std::string source_provenance;
     std::string source_signature;
+    std::chrono::system_clock::time_point snapshot_time{};
     std::size_t retained_source_samples = 0;
     double source_stability_span_seconds = 0.0;
     std::string reason;
@@ -47,15 +53,29 @@ struct SystemClockFrequencyEstimate
 
 struct GpioFrequencyCorrection
 {
+    bool valid = true;
     FrequencyEstimateQualification qualification = FrequencyEstimateQualification::Unavailable;
     GpioCorrectionMode mode = GpioCorrectionMode::Uncalibrated;
     std::string provider_name;
     std::string source_provenance;
+    std::string source_signature;
     std::string reason;
     std::optional<double> estimate_ppm;
     double residual_ppm = 0.0;
+    double intrinsic_ppm = 0.0;
+    double additional_ppm = 0.0;
     double effective_ppm = 0.0;
     double estimate_age_seconds = 0.0;
+    std::chrono::system_clock::time_point snapshot_time{};
+};
+
+struct GpioFrequencyCorrectionComposition
+{
+    bool valid = false;
+    double intrinsic_ppm = 0.0;
+    double additional_ppm = 0.0;
+    double effective_ppm = 0.0;
+    std::string reason;
 };
 
 class FrequencyEstimateQualifier
@@ -84,6 +104,10 @@ GpioFrequencyCorrection select_gpio_frequency_correction(
     double residual_ppm,
     double manual_ppm,
     const SystemClockFrequencyEstimate &estimate);
+
+GpioFrequencyCorrectionComposition compose_gpio_frequency_correction(
+    double intrinsic_ppm,
+    const GpioFrequencyCorrection &selected_additional);
 
 const char *to_string(FrequencyEstimateQualification value) noexcept;
 const char *to_string(GpioCorrectionMode value) noexcept;

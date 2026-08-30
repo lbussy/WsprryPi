@@ -645,6 +645,27 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
             reply["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
             reply["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
             reply["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
+            const auto provenance_json = [](const auto &value)
+            {
+                return json{
+                    {"available", value.available}, {"active", value.active},
+                    {"processor_profile", value.processor_profile},
+                    {"selected_parent", value.selected_parent},
+                    {"nominal_rate_hz", value.nominal_rate_hz},
+                    {"intrinsic_ppm", value.intrinsic_ppm},
+                    {"selected_component_ppm", value.selected_component_ppm},
+                    {"conducted_residual_ppm", value.conducted_residual_ppm},
+                    {"final_ppm", value.final_ppm},
+                    {"correction_mode", value.correction_mode},
+                    {"provider_name", value.provider_name},
+                    {"provider_source_signature", value.provider_source_signature},
+                    {"provider_snapshot_time", value.provider_snapshot_time},
+                    {"execution_identity", value.execution_identity}};
+            };
+            reply["gpio_correction_candidate"] =
+                provenance_json(snapshot.gpio_correction_candidate);
+            reply["gpio_correction_committed"] =
+                provenance_json(snapshot.gpio_correction_committed);
             reply["rp1_package_expected"] = snapshot.rp1_package_expected;
             reply["rp1_route_requested"] = snapshot.rp1_route_requested;
             reply["rp1_route_persisted"] = snapshot.rp1_route_persisted;

@@ -78,10 +78,11 @@ inline QualificationState qualification_for(
 
     if (band == "2200m")
     {
-        if (profile == HardwareProfile::BCM2711_750_MHZ_PLLD ||
+        if (profile == HardwareProfile::BCM2711 ||
             profile == HardwareProfile::RP1_GPCLK)
             return QualificationState::QUALIFIED;
-        if (profile == HardwareProfile::LEGACY_500_MHZ_PLLD)
+        if (profile == HardwareProfile::BCM2835 ||
+            profile == HardwareProfile::BCM2836_BCM2837)
         {
             if (mode == TransmissionMode::TONE ||
                 mode == TransmissionMode::QRSS ||
@@ -98,7 +99,7 @@ inline QualificationState qualification_for(
     if (!questionable)
         return QualificationState::QUALIFIED;
 
-    if (profile == HardwareProfile::BCM2711_750_MHZ_PLLD)
+    if (profile == HardwareProfile::BCM2711)
     {
         if (band == "1.25m" || band == "70cm")
             return QualificationState::UNAVAILABLE;

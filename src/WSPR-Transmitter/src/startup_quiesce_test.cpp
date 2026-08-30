@@ -708,14 +708,14 @@ namespace
     {
         for (const double ppm : {-200.0, 0.0, 2.5, 200.0})
         {
-            for (const auto profile : {GpioProcessorClockProfile::Bcm2835,
-                                       GpioProcessorClockProfile::Legacy500Mhz,
-                                       GpioProcessorClockProfile::Bcm2711})
+            for (const auto profile : {wsprrypi::LegacyGpioProcessorProfile::Bcm2835,
+                                       wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837,
+                                       wsprrypi::LegacyGpioProcessorProfile::Bcm2711})
             {
                 const auto plan = gpioPlanRfClock(profile, 14097100.0, 14097100.0, ppm);
-                const double nominal = profile == GpioProcessorClockProfile::Bcm2711
+                const double nominal = profile == wsprrypi::LegacyGpioProcessorProfile::Bcm2711
                     ? 750e6 : 500e6;
-                const double intrinsic = profile == GpioProcessorClockProfile::Bcm2835
+                const double intrinsic = profile == wsprrypi::LegacyGpioProcessorProfile::Bcm2835
                     ? -2.5 : 0.0;
                 expect(plan.nominal_hz == nominal &&
                            std::fabs(plan.corrected_hz -
@@ -733,7 +733,7 @@ namespace
             bool rejected = false;
             try
             {
-                (void)gpioPlanRfClock(GpioProcessorClockProfile::Bcm2835,
+                (void)gpioPlanRfClock(wsprrypi::LegacyGpioProcessorProfile::Bcm2835,
                                      14097100.0, 14097100.0, invalid_ppm);
             }
             catch (const std::invalid_argument&)
@@ -745,7 +745,7 @@ namespace
         bool unknown_rejected = false;
         try
         {
-            (void)gpioPlanRfClock(static_cast<GpioProcessorClockProfile>(999),
+            (void)gpioPlanRfClock(static_cast<wsprrypi::LegacyGpioProcessorProfile>(999),
                                  14097100.0, 14097100.0, 0.0);
         }
         catch (const std::invalid_argument&)
@@ -762,7 +762,7 @@ namespace
 
         const auto pi4_2200m_range = tone_range(137500.0);
         const auto pi4_2200m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             0.0);
@@ -773,7 +773,7 @@ namespace
 
         const auto pi4_630m_range = tone_range(475700.0);
         const auto pi4_630m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_630m_range.first,
             pi4_630m_range.second,
             0.0);
@@ -782,7 +782,7 @@ namespace
                "Pi 4 630 m must retain the preferred 750 MHz PLLD source");
 
         const auto legacy_2200m = gpioPlanRfClock(
-            GpioProcessorClockProfile::Legacy500Mhz,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             0.0);
@@ -790,15 +790,47 @@ namespace
                    legacy_2200m.nominal_hz == 500e6,
                "500 MHz processors must retain PLLD for representable 2200 m output");
 
+        const auto bcm2835 = gpioPlanRfClock(
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2835,
+            14097100.0,
+            14097100.0,
+            1.0);
+        expect(
+            bcm2835.parent == wsprrypi::LegacyGpioClockParent::PllD &&
+                bcm2835.nominal_hz == 500e6 &&
+                bcm2835.intrinsic_ppm == -2.5 &&
+                bcm2835.additional_ppm == 1.0 &&
+                bcm2835.effective_ppm == -1.5 &&
+                bcm2835.corrected_hz == 500e6 * (1.0 - 1.5e-6),
+            "BCM2835 planning must apply its intrinsic correction exactly once");
+
+        expect(
+            gpioHardwareProfileMatchesProcessor(
+                wsprrypi::HardwareProfile::BCM2835,
+                wsprrypi::LegacyGpioProcessorProfile::Bcm2835) &&
+                gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2836_BCM2837,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2836Bcm2837) &&
+                gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2711,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2711) &&
+                !gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::BCM2835,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2711) &&
+                !gpioHardwareProfileMatchesProcessor(
+                    wsprrypi::HardwareProfile::UNSPECIFIED,
+                    wsprrypi::LegacyGpioProcessorProfile::Bcm2835),
+            "backend profile agreement must accept exact identity and reject contradictions");
+
         constexpr double pi4_plld_boundary_hz =
             750e6 / (static_cast<double>(0x00FFFFFFu) / 4096.0);
         const auto below_boundary = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_plld_boundary_hz - 100.0,
             pi4_plld_boundary_hz - 100.0,
             0.0);
         const auto above_boundary = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_plld_boundary_hz + 100.0,
             pi4_plld_boundary_hz + 100.0,
             0.0);
@@ -807,7 +839,7 @@ namespace
                "Pi 4 source selection must switch safely across the PLLD divisor boundary");
 
         const auto ppm_plan = gpioPlanRfClock(
-            GpioProcessorClockProfile::Bcm2711,
+            wsprrypi::LegacyGpioProcessorProfile::Bcm2711,
             pi4_2200m_range.first,
             pi4_2200m_range.second,
             100.0);

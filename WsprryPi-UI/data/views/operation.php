@@ -102,12 +102,12 @@ require __DIR__ . '/../card_header.php';
                     </article>
 
                     <article class="operation-panel operation-panel--wide" id="gpio_frequency_correction_panel">
-                        <div class="operation-panel__label">GPIO frequency correction</div>
+                        <div class="operation-panel__label">GPIO correction provenance</div>
                         <div class="operation-panel__value operation-panel__value--wrap" id="gpio_frequency_correction_value" aria-live="polite" aria-atomic="true">
                             Runtime correction status is not available yet.
                         </div>
                         <div class="form-text" id="gpio_frequency_correction_detail">
-                            Provider qualification is informational; it does not by itself establish RF calibration.
+                            Candidate and committed execution values are reported separately.
                         </div>
                     </article>
                 </section>

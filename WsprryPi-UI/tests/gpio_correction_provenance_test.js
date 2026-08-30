@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const source = fs.readFileSync(path.join(__dirname, '../data/site.js'), 'utf8');
+const extract = (name, next) => source.slice(source.indexOf(`function ${name}(`), source.indexOf(`function ${next}(`));
+const nodes = Object.fromEntries(['panel', 'value', 'detail'].map(key => [`gpio_frequency_correction_${key}`, {textContent: '', hidden: false}]));
+const context = vm.createContext({document: {getElementById: id => nodes[id]}});
+vm.runInContext(extract('normalizeRuntimeStatus', 'parseOperationFrequencyWithOptionalUnits') + extract('renderGpioFrequencyCorrection', 'applyRuntimeStatus'), context);
+const provenance = {
+    available: true, processor_profile: 'RP1', selected_parent: 'PLL_SYS',
+    nominal_rate_hz: 200000000, intrinsic_ppm: -46.245,
+    selected_component_ppm: 10, conducted_residual_ppm: 1.25, final_ppm: -34.995,
+    correction_mode: 'qualified_estimate_plus_residual',
+    provider_source_signature: '<source>', provider_snapshot_time: '2026-08-30T20:00:00Z'
+};
+function render(candidate = provenance, backend = 'rp1-gpclk') {
+    context.renderGpioFrequencyCorrection(context.normalizeRuntimeStatus({
+        transmit_backend: backend, gpio_correction_candidate: candidate,
+        frequency_estimate_qualification: 'qualified', frequency_estimate_age_seconds: 2
+    }));
+}
+render();
+assert.match(nodes.gpio_frequency_correction_value.textContent, /-34.995 PPM final/);
+assert.match(nodes.gpio_frequency_correction_value.textContent, /1.250 residual ·/);
+assert.match(nodes.gpio_frequency_correction_value.textContent, /sampled 2026/);
+assert.match(nodes.gpio_frequency_correction_detail.textContent, /Committed: unavailable/);
+assert.match(nodes.gpio_frequency_correction_detail.textContent, /Estimate: qualified · age 2 s/);
+render({...provenance, correction_mode: 'fixed_manual'});
+assert.match(nodes.gpio_frequency_correction_value.textContent, /residual configured, not applied/);
+render({...provenance, final_ppm: null});
+assert.equal(nodes.gpio_frequency_correction_value.textContent, 'Candidate: unavailable');
+render(provenance, 'si5351');
+assert.equal(nodes.gpio_frequency_correction_panel.hidden, true);
+console.log('GPIO correction provenance UI tests passed');

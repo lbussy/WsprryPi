@@ -189,6 +189,10 @@
     grid-column: auto;
 }
 
+#gpio_frequency_correction_panel {
+    grid-column: 1 / -1;
+}
+
 .operation-panel--primary {
     background-color: color-mix(in srgb, var(--bs-primary) 7%, var(--bs-body-bg) 93%);
     border-color: color-mix(in srgb, var(--bs-primary) 18%, var(--bs-border-color) 82%);
