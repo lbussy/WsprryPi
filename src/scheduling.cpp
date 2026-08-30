@@ -4100,6 +4100,10 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
         selector_preparation_cfg.band_gpio = explicit_planning_snapshot->band_gpio;
         selector_preparation_cfg.transmit_backend =
             explicit_planning_snapshot->transmit_backend;
+        selector_preparation_cfg.allow_unqualified_frequency =
+            explicit_planning_snapshot->allow_unqualified_frequency;
+        selector_preparation_cfg.allow_non_amateur_frequency =
+            explicit_planning_snapshot->allow_non_amateur_frequency;
         result.band = frequency_plan.band;
         result.dial_frequency_hz = frequency_plan.dial_frequency_hz.value_or(0);
         result.audio_offset_hz = frequency_plan.audio_offset_hz.value_or(0);

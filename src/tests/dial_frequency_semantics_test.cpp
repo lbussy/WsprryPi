@@ -577,6 +577,38 @@ namespace
             message + " must not mutate live config after rejection");
     }
 
+void test_explicit_tone_experimental_policy()
+{
+    init_default_config();
+    reset_managed_reload_runtime_for_test();
+    reset_current_transmission_request_for_test();
+    set_scheduler_execution_suppressed_for_test(true);
+    config.transmit = false;
+    config.transmit_backend = TransmitBackendKind::GPIO;
+    config.mode = ModeType::QRSS;
+    set_raspberry_pi_generation_override_for_test(4);
+    for (const bool allowed : {false, true})
+    {
+        config.allow_unqualified_frequency = allowed;
+        copy_runtime_config(config, config);
+        for (const auto& request : {
+                 TestToneRequest{TestToneFrequencySource::WsprBand, "12m", std::nullopt},
+                 TestToneRequest{TestToneFrequencySource::CustomRf, "", 24926100U}})
+        {
+            const auto started = start_test_tone(request);
+            const auto committed = current_transmission_request_for_test();
+            const auto stopped = end_test_tone();
+            require(started.started == allowed && !config.transmit,
+                "explicit experimental tones must honor opt-in without enabling scheduling");
+            if (allowed)
+                require(stopped.stopped && committed.allow_unqualified_frequency,
+                    "explicit experimental tones must preserve opt-in through selector preparation");
+        }
+    }
+    set_scheduler_execution_suppressed_for_test(false);
+    clear_pi_generation_override_for_scope();
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -593,6 +625,13 @@ int main(int argc, char *argv[])
     set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
     set_si5351_detection_override_for_test(true);
     set_raspberry_pi_generation_override_for_test(4);
+
+    if (argc == 2 && std::string(argv[1]) == "--explicit-tone-policy-only")
+    {
+        test_explicit_tone_experimental_policy();
+        std::cout << "Explicit tone experimental policy tests passed" << std::endl;
+        return EXIT_SUCCESS;
+    }
 
     init_default_config();
     require(
@@ -7199,6 +7238,8 @@ int main(int argc, char *argv[])
         set_scheduler_execution_suppressed_for_test(false);
         clear_pi_generation_override_for_scope();
     }
+
+    test_explicit_tone_experimental_policy();
 
     {
         init_config_json();
