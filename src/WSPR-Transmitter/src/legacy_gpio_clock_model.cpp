@@ -14,7 +14,7 @@ namespace wsprrypi
         constexpr double kBcm2835IntrinsicPpm = -2.5;
         constexpr double kBcm2711PllDIntrinsicPpm = 0.153768;
         constexpr double kBcm2711OscillatorIntrinsicPpm = -15.035290;
-        constexpr double kDiscoveryBaselinePpm = 0.0;
+        constexpr double kLaterLegacyPllDIntrinsicPpm = 0.0;
 
         constexpr double kIssue429SdrInterceptHz = 0.4484;
         constexpr double kIssue429SdrProportionalPpm = 1.01012;
@@ -59,8 +59,8 @@ namespace wsprrypi
                     processor,
                     parent,
                     kLaterLegacyPllDHz,
-                    kDiscoveryBaselinePpm,
-                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
+                    kLaterLegacyPllDIntrinsicPpm,
+                    LegacyGpioIntrinsicEvidence::ConductedPromoted};
             }
             break;
         case LegacyGpioProcessorProfile::Bcm2711:

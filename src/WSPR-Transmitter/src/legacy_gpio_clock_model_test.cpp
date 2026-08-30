@@ -67,8 +67,8 @@ namespace
                 later500.nominal_rate_hz == 500000000.0 &&
                 later500.intrinsic_system_to_rf_difference_ppm == 0.0 &&
                 later500.intrinsic_evidence ==
-                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
-            "BCM2836/BCM2837 PLLD must exclude the BCM2835 intrinsic constant");
+                    LegacyGpioIntrinsicEvidence::ConductedPromoted,
+            "BCM2836/BCM2837/BCM2837B0 PLLD must use the promoted conducted 500 MHz zero intrinsic residual");
 
         const auto bcm2711PllD = legacyGpioClockModel(
             LegacyGpioProcessorProfile::Bcm2711,
