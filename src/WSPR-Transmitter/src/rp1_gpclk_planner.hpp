@@ -9,6 +9,9 @@
 namespace wsprrypi
 {
 
+/** Conservative RP1 GPCLK intrinsic baseline pending conducted qualification. */
+inline constexpr double kRp1GpclkIntrinsicSourceRatePpm = 0.0;
+
 struct Rp1GpclkPlannerInput
 {
     double center_frequency_hz{0.0};

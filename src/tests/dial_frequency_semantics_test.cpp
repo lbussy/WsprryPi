@@ -1372,6 +1372,64 @@ int main(int argc, char *argv[])
             validate_config_candidate(config, &validation_error),
             "GPIO4 must be accepted on Raspberry Pi 5 when the RP1 provider is available");
 
+        config.gpio_use_system_clock_frequency_estimate = false;
+        config.use_system_clock_frequency_estimate = false;
+        config.gpio_manual_ppm = 12.5;
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "RP1 scheduler must accept a manual GPIO correction");
+        auto rp1_manual_request = current_transmission_request_for_test();
+        auto rp1_manual_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(rp1_manual_request.ppm, 12.5) &&
+                rp1_manual_provenance.gpio_correction_committed.available &&
+                rp1_manual_provenance.gpio_correction_committed.processor_profile ==
+                    "RP1" &&
+                rp1_manual_provenance.gpio_correction_committed.selected_parent ==
+                    "PLL_SYS" &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.nominal_rate_hz,
+                    200000000.0) &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.intrinsic_ppm,
+                    0.0) &&
+                nearly_equal(
+                    rp1_manual_provenance.gpio_correction_committed.final_ppm,
+                    12.5),
+            "RP1 must freeze its zero intrinsic residual plus one manual correction");
+        finish_runtime_planning_state_for_identity_test();
+
+        SystemClockFrequencyEstimate rp1_estimate;
+        rp1_estimate.provider_name = "chrony";
+        rp1_estimate.qualification = FrequencyEstimateQualification::Qualified;
+        rp1_estimate.frequency_ppm = 10.0;
+        rp1_estimate.synchronized = true;
+        rp1_estimate.selected_source = true;
+        rp1_estimate.leap_normal = true;
+        config.gpio_use_system_clock_frequency_estimate = true;
+        config.use_system_clock_frequency_estimate = true;
+        config.gpio_frequency_residual_ppm = 1.25;
+        set_current_frequency_estimate_for_test(rp1_estimate);
+        reset_runtime_planning_state_for_identity_test();
+        require(
+            set_config(true),
+            "RP1 scheduler must accept a qualified system-clock estimate");
+        const auto rp1_estimate_request = current_transmission_request_for_test();
+        const auto rp1_estimate_provenance = current_tx_runtime_status_snapshot();
+        require(
+            nearly_equal(rp1_estimate_request.ppm, 11.25) &&
+                nearly_equal(
+                    rp1_estimate_provenance.gpio_correction_committed
+                        .conducted_residual_ppm,
+                    1.25) &&
+                nearly_equal(
+                    rp1_estimate_provenance.gpio_correction_committed.final_ppm,
+                    11.25),
+            "RP1 must freeze its zero intrinsic residual plus qualified estimate and conducted residual");
+        finish_runtime_planning_state_for_identity_test();
+        set_current_frequency_estimate_for_test(SystemClockFrequencyEstimate{});
+
         PreparedConfigCandidate candidate;
         auto managed_rp1_ini =
             make_managed_ini_data("AA0NT", "EM18", "20m", true);

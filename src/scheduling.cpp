@@ -42,6 +42,7 @@
 #include "scheduling.hpp"
 #include "rp1_gpclk_route_service.hpp"
 #include "WSPR-Transmitter/src/rp1_gpclk_development_policy.hpp"
+#include "WSPR-Transmitter/src/rp1_gpclk_planner.hpp"
 #include "test_tone_frequency_plan.hpp"
 #include "test_tone_selector_plan.hpp"
 
@@ -212,37 +213,41 @@ namespace
             cfg.gpio_frequency_residual_ppm,
             cfg.gpio_manual_ppm,
             current_frequency_estimate);
-        if (selected.valid && cfg.transmit_backend == TransmitBackendKind::GPIO)
+        if (selected.valid && transmit_backend_uses_gpio_output(
+                cfg.transmit_backend))
         {
-            const auto processor = resolve_legacy_gpio_processor_profile();
-
-            if (!processor.has_value())
+            double intrinsic_ppm =
+                wsprrypi::kRp1GpclkIntrinsicSourceRatePpm;
+            if (cfg.transmit_backend == TransmitBackendKind::GPIO)
             {
-                selected.valid = false;
-                selected.reason =
-                    "Unable to resolve an exact legacy GPIO processor profile.";
-            }
-            else
-            {
-                const auto model = wsprrypi::legacyGpioClockModel(
-                    *processor,
-                    wsprrypi::LegacyGpioClockParent::PllD);
-                const double additional_ppm = selected.effective_ppm;
-                const auto composition = wsprrypi::composeLegacyGpioCorrection(
-                    model.intrinsic_system_to_rf_difference_ppm,
-                    additional_ppm);
-                if (!composition.valid)
+                const auto processor = resolve_legacy_gpio_processor_profile();
+                if (!processor.has_value())
                 {
                     selected.valid = false;
                     selected.reason =
-                        "Intrinsic plus additional GPIO correction is outside +/-200 PPM.";
+                        "Unable to resolve an exact legacy GPIO processor profile.";
+                    current_gpio_correction = selected;
+                    current_gpio_candidate_provenance = {};
+                    return current_gpio_correction;
                 }
-                else
-                {
-                    selected.intrinsic_ppm = composition.intrinsic_ppm;
-                    selected.additional_ppm = composition.additional_ppm;
-                    selected.effective_ppm = composition.effective_ppm;
-                }
+                const auto model = wsprrypi::legacyGpioClockModel(
+                    *processor,
+                    wsprrypi::LegacyGpioClockParent::PllD);
+                intrinsic_ppm = model.intrinsic_system_to_rf_difference_ppm;
+            }
+            const auto composition = wsprrypi::composeLegacyGpioCorrection(
+                intrinsic_ppm, selected.effective_ppm);
+            if (!composition.valid)
+            {
+                selected.valid = false;
+                selected.reason =
+                    "Intrinsic plus additional GPIO correction is outside +/-200 PPM.";
+            }
+            else
+            {
+                selected.intrinsic_ppm = composition.intrinsic_ppm;
+                selected.additional_ppm = composition.additional_ppm;
+                selected.effective_ppm = composition.effective_ppm;
             }
         }
         else if (selected.valid)
@@ -251,24 +256,32 @@ namespace
         }
         current_gpio_correction = selected;
         current_gpio_candidate_provenance = {};
-        if (selected.valid && cfg.transmit_backend == TransmitBackendKind::GPIO)
+        if (selected.valid && transmit_backend_uses_gpio_output(
+                cfg.transmit_backend))
         {
-            const auto processor = resolve_legacy_gpio_processor_profile();
-            if (processor.has_value())
+            auto &candidate = current_gpio_candidate_provenance;
+            candidate.available = true;
+            candidate.intrinsic_ppm = selected.intrinsic_ppm;
+            candidate.selected_component_ppm =
+                selected.estimate_ppm.value_or(selected.additional_ppm);
+            candidate.conducted_residual_ppm = selected.residual_ppm;
+            candidate.final_ppm = selected.effective_ppm;
+            candidate.correction_mode = to_string(selected.mode);
+            candidate.provider_name = selected.provider_name;
+            candidate.provider_source_signature = selected.source_signature;
+            candidate.provider_snapshot_time = utc_timestamp(selected.snapshot_time);
+            if (cfg.transmit_backend == TransmitBackendKind::RP1_GPCLK)
             {
-                auto &candidate = current_gpio_candidate_provenance;
-                candidate.available = true;
+                candidate.processor_profile = "RP1";
+                candidate.selected_parent = "PLL_SYS";
+                candidate.nominal_rate_hz =
+                    wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
+            }
+            else
+            {
+                const auto processor = resolve_legacy_gpio_processor_profile();
                 candidate.processor_profile = legacy_processor_name(*processor);
                 candidate.selected_parent = "pending execution plan";
-                candidate.intrinsic_ppm = selected.intrinsic_ppm;
-                candidate.selected_component_ppm =
-                    selected.estimate_ppm.value_or(selected.additional_ppm);
-                candidate.conducted_residual_ppm = selected.residual_ppm;
-                candidate.final_ppm = selected.effective_ppm;
-                candidate.correction_mode = to_string(selected.mode);
-                candidate.provider_name = selected.provider_name;
-                candidate.provider_source_signature = selected.source_signature;
-                candidate.provider_snapshot_time = utc_timestamp(selected.snapshot_time);
             }
         }
         return current_gpio_correction;
@@ -1261,7 +1274,7 @@ static void freeze_gpio_correction_provenance(
     std::optional<std::pair<double, double>> exact_frequency_range = std::nullopt)
 {
     committed_gpio_correction_provenance = {};
-    if (config.transmit_backend != TransmitBackendKind::GPIO ||
+    if (!transmit_backend_uses_gpio_output(config.transmit_backend) ||
         request.isSkipWindow() || request.actual_rf_frequency_hz <= 0.0)
     {
         return;
@@ -1273,13 +1286,28 @@ static void freeze_gpio_correction_provenance(
     {
         return;
     }
+    if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
+    {
+        if (request.hardware_profile != wsprrypi::HardwareProfile::RP1_GPCLK)
+            return;
+
+        request.ppm = current_gpio_correction.effective_ppm;
+        auto frozen = current_gpio_candidate_provenance;
+        frozen.active = false;
+        frozen.final_ppm = current_gpio_correction.effective_ppm;
+        frozen.execution_identity =
+            "gpio-execution-" +
+            std::to_string(++committed_gpio_execution_sequence);
+        committed_gpio_correction_provenance = frozen;
+        current_gpio_candidate_provenance.final_ppm = frozen.final_ppm;
+        return;
+    }
+
     const auto processor = resolve_legacy_gpio_processor_profile();
     if (!processor.has_value() ||
         !wsprrypi::legacyHardwareProfileMatches(
             request.hardware_profile, *processor))
-    {
         return;
-    }
 
     double minimum_hz = exact_frequency_range.has_value()
         ? exact_frequency_range->first

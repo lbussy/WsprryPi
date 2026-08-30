@@ -260,6 +260,9 @@ void test_integer_boundary_and_invalid_inputs()
 
 int main()
 {
+    expect(wsprrypi::kRp1GpclkIntrinsicSourceRatePpm == 0.0,
+        "RP1 GPCLK must retain the conservative zero intrinsic baseline");
+
     test_all_bands_and_parents();
     test_single_word_evidence();
     test_calibration_direction_and_determinism();
