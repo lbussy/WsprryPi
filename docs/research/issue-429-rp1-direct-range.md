@@ -93,3 +93,58 @@ post-bracket burst. No receiver correction was applied a second time.
 mode qualification was promoted. The isolated process was stopped, RP1
 output disabled, and both GPSDO outputs disabled before pausing for module
 repair authorization.
+
+## Operation-scoped parent repair and target checks
+
+The separately authorized RP1-GPCLK-DKMS repair is commit
+`d9acd1897e79c60ea2c1a1d8daf6ebae0e601ab5` on
+`codex/issue-429-parent-contract`. All frequencies and execution modes use
+the shared 200 MHz parent setup. Setup verifies the integer-divider envelope,
+selects PLL_SYS after rate requests, and verifies the parent again before
+activation. Cleanup restores the captured parent and nominal rate after output
+is disabled. It detects reparenting during restoration, forces provider updates
+instead of accepting cached same-rate no-ops, and preserves cleanup faults
+across repeated cleanup calls. No shared PLL rate is changed.
+
+The module's complete `./tests/run-offline-checks.sh` passed, including new
+parent-switch, integer-boundary, invalid-readback, failure, bounded-retry, and
+50/200 MHz restoration cases. JSON manifest validation used the structural
+fallback because `jsonschema` was unavailable on the Mac. The stock-kernel
+build and `check_built_module.py` passed for `6.18.34+rpt-rpi-2712`, `AArch64`,
+module `1.1.2`. The module was then installed on wspr5 through its exact-source
+workflow, with `live_output=0`, and its GPIO20 current-boot binding was renewed.
+Neither boot configuration nor the installed WsprryPi executable changed.
+
+The installed compressed module SHA-256 is
+`8ca08a2ba510f1720ccc47fd667cf8e8e749ded182dacb96ab488ed445b9a4ed`;
+its decompressed ELF SHA-256 is
+`d23301be446bf1bc413f9fba4180d1ed605674b5c16764e3cf694c8369843d80`.
+Installation evidence is retained on wspr5 under
+`/home/pi/wsprrypi-qualification-runs/issue429-parent-d9acd18-install`.
+The predecessor module, source, and route-manager state were archived under
+`/tmp/issue429-parent-build.vGP7Zw` before replacement.
+
+Four authorized two-second finite TONE checks used the isolated WsprryPi
+binary identified above, GPIO20, manual PPM zero, and the attenuated path to
+the same-host SDR `2404058C60`. Both GPSDO outputs remained disabled.
+
+| Requested frequency | During tone | After tone |
+| --- | --- | --- |
+| 137500 Hz (2200 m) | PLL_SYS, 200 MHz parent | Previous XOSC parent, disabled, nominal rate 50 MHz |
+| 475700 Hz (630 m) | PLL_SYS, 200 MHz parent | Previous XOSC parent, disabled, nominal rate 50 MHz |
+| 24926100 Hz (12 m) | PLL_SYS, 200 MHz parent | Previous XOSC parent, disabled, nominal rate 50 MHz |
+| 50294500 Hz (6 m) | PLL_SYS, 200 MHz parent | Previous XOSC parent, disabled, nominal rate 50 MHz |
+
+Before/during/after snapshots, completed bounded-tone transactions, and SDR
+captures are retained under
+`/home/pi/wsprrypi-qualification-runs/issue429-parent-d9acd18-<Hz>`.
+Each capture retained 2,000,000 complex samples with no reported overflows,
+timeouts, or clipping and verified SDR cleanup. After each tone the module
+gate was `N`, its reference count was zero, and GPIO20 was input/low.
+The clock framework's cached output rate is not an RF frequency measurement
+while fractional DMA is active.
+
+These are parent-selection and restoration checks, not GPSDO-bracketed
+intrinsic-accuracy results or spectral/mode qualification. The accuracy sweep
+must be repeated with the new module. The 8-second finite-buffer finding
+remains unresolved, and 2 m remains untested without harmonic support.
