@@ -43,7 +43,9 @@ public:
         identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
         identity.capabilities=capabilities; identity.module_id="rp1-gpclk-dkms";
         identity.build_id="1.1.2";
-        identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
+        identity.compatibility_id=route==RP1_GPCLK_ROUTE_GPIO20
+            ? "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4"
+            : "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
         return true;
     }
     bool acquire(std::uint32_t route, std::uint64_t capabilities,
@@ -102,12 +104,12 @@ wsprrypi::ExecutionPlan framePlan(std::size_t count=162)
     return plan;
 }
 
-wsprrypi::BackendExecutionInputs developmentInputs(int drive=2)
+wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
 {
     wsprrypi::BackendExecutionInputs inputs;
-    inputs.power_level=drive; inputs.tx_gpio=inputs.configured_tx_gpio=4;
+    inputs.power_level=drive; inputs.tx_gpio=inputs.configured_tx_gpio=gpio;
     auto& d=inputs.rp1_development;
-    d.enabled=true; d.persisted_gpio=d.active_gpio=d.module_gpio=d.confirmation_gpio=4;
+    d.enabled=true; d.persisted_gpio=d.active_gpio=d.module_gpio=d.confirmation_gpio=gpio;
     d.active_route_count=1; d.route_transaction_resolved=d.route_manager_attributable=true;
     d.scheduler_idle=d.application_owns_operation=true;
     d.endpoint_available=d.endpoint_closed=d.endpoint_exclusively_acquirable=true;
@@ -117,7 +119,8 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2)
     d.confirmation_current=true; d.operation_id=d.confirmation_operation_id="test-operation";
     d.route_transaction_generation=d.confirmation_route_transaction_generation=3;
     wsprrypi::Rp1GpclkProviderIdentity identity;
-    identity.abi_min=1; identity.abi_max=4; identity.route=RP1_GPCLK_ROUTE_GPIO4;
+    identity.abi_min=1; identity.abi_max=4;
+    identity.route=gpio==20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_GPIO4;
     identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
     identity.capabilities=RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
@@ -125,7 +128,9 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2)
         RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
         RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
     identity.module_id="rp1-gpclk-dkms"; identity.build_id="1.1.2";
-    identity.compatibility_id="v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
+    identity.compatibility_id=gpio==20
+        ? "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4"
+        : "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
     d.confirmation_identity=wsprrypi::rp1GpclkDevelopmentIdentityBinding(identity);
     return inputs;
 }
@@ -173,7 +178,7 @@ wsprrypi::Rp1GpclkPlan expectedPlan(
     input.parent_frequency_hz=
         wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
     input.source_rate_ppm=source_rate_ppm;
-    input.maximum_output_hz=40000000.0;
+    input.maximum_output_hz=100000000.0;
     input.dither_sequence_length=wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
     const auto result=wsprrypi::planRp1GpclkWspr(input);
     expect(result.ok,"200 MHz compatibility parent must produce a valid plan");
@@ -186,10 +191,75 @@ wsprrypi::Rp1GpclkPlan expectedPlan(
         "corrected parent must apply source-rate PPM to the 200 MHz nominal rate");
     return result.plan;
 }
+
+void test_direct_band_range()
+{
+    using Mode=wsprrypi::TransmissionMode;
+    expect(wsprrypi::kRp1GpclkMaximumDirectOutputHz==100000000.0,
+        "direct-output contract must remain 100 MHz, not the parent rate");
+    for (int gpio : {4,20})
+    for (double frequency : {24926100.0,50294500.0,70092500.0,144490500.0})
+    for (double ppm : {-200.0,0.0,200.0})
+    for (Mode mode : {Mode::TONE,Mode::WSPR,Mode::QRSS,Mode::FSKCW,Mode::DFCW})
+    {
+        auto plan=mode==Mode::TONE ? tonePlan(true) :
+            mode==Mode::WSPR ? framePlan() :
+            mode==Mode::QRSS ? qrssPlan() : twoTonePlan(mode,mode==Mode::DFCW);
+        const double shift=frequency-14097100.0;
+        plan.reference_frequency_hz+=shift;
+        plan.summary.min_frequency_hz+=shift;
+        plan.summary.max_frequency_hz+=shift;
+        plan.calibration.ppm=ppm;
+        for (auto& event : plan.events) event.frequency_hz+=shift;
+        Owner owner;
+        auto provider=std::make_unique<Provider>();
+        Provider* observed=provider.get();
+        WsprRp1GpclkBackend backend(owner,std::move(provider));
+        const auto configured=backend.configure(plan,developmentInputs(2,gpio));
+        if (frequency>100000000.0)
+        {
+            expect(!configured.ok && configured.error.find("output range")!=std::string::npos,
+                "2 m must remain rejected without harmonic planning");
+            expect(!observed->acquired && !observed->submitted,
+                "out-of-range plans must not acquire or submit to the provider");
+            continue;
+        }
+        expect(configured.ok,"12 m, 6 m and 4 m must configure for every implemented mode");
+        if (!configured.ok) continue;
+        const auto executed=backend.execute(plan);
+        expect(executed.ok,"direct-band mock provider execution must complete");
+        if (!executed.ok) continue;
+        expect(observed->acquired && observed->submitted && observed->released,
+            "direct-band execution must retain acquire/submit/release lifecycle");
+        expect(observed->acquired_route==(gpio==20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_GPIO4),
+            "direct-band execution must retain the selected route");
+        if (mode!=Mode::TONE && mode!=Mode::WSPR)
+        {
+            expect(!observed->event_program.tones.empty(),
+                "direct-band event execution must submit at least one tone");
+            if (observed->event_program.tones.empty()) continue;
+        }
+        const auto tone=mode==Mode::TONE ? observed->tone_program.tone :
+            mode==Mode::WSPR ? observed->program.tones[0] : observed->event_program.tones[0];
+        const double requested=plan.events[0].frequency_hz;
+        const double parent=200000000.0*(1.0+ppm*1e-6);
+        const double average=parent*65536.0*
+            (double(tone.lower_count)/tone.lower_divider_word+
+             double(tone.upper_count)/tone.upper_divider_word)/
+            (tone.lower_count+tone.upper_count);
+        expect(std::fabs(average-requested)<=0.01,
+            "submitted divider counts must synthesize direct RF within the unchanged tolerance");
+        if (mode==Mode::TONE)
+            expect(observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&
+                observed->tone_program.duration_ns==1000000000ULL,
+                "6 m and 12 m finite tones must preserve their kernel-owned duration");
+    }
+}
 }
 
 int main()
 {
+    test_direct_band_range();
     Owner owner;
     auto provider=std::make_unique<Provider>();
     Provider* observed=provider.get();

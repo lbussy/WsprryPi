@@ -71,6 +71,11 @@ inline QualificationState qualification_for(
     if (backend != BackendKind::RPI_CLOCK_GPIO && backend != BackendKind::RP1_GPCLK)
         return QualificationState::UNAVAILABLE;
 
+    // Numerical planning support is not a mode-specific RF qualification.
+    if (backend == BackendKind::RP1_GPCLK &&
+        profile == HardwareProfile::RP1_GPCLK && (band == "6m" || band == "2m"))
+        return QualificationState::UNTESTED;
+
     if (band == "2200m")
     {
         if (profile == HardwareProfile::BCM2711_750_MHZ_PLLD ||

@@ -105,7 +105,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     input.parent_frequency_hz =
         kRp1GpclkDevelopmentNominalParentFrequencyHz;
     input.source_rate_ppm = plan.calibration.ppm;
-    input.maximum_output_hz = 40000000.0;
+    input.maximum_output_hz = kRp1GpclkMaximumDirectOutputHz;
     input.dither_sequence_length = Rp1GpclkBackend::kWritesPerSymbol;
     const auto planned = planRp1GpclkWspr(input);
     if (!planned.ok)

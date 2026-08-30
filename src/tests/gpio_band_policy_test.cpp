@@ -394,6 +394,23 @@ int main()
         }
     }
 
+    for (const auto mode : exercised_modes)
+    for (const double frequency : {50294500.0,144490500.0})
+    {
+        const auto decision=wsprrypi::evaluate_frequency_policy(
+            wsprrypi::BackendKind::RP1_GPCLK,mode,frequency,false,false,
+            wsprrypi::HardwareProfile::RP1_GPCLK);
+        require(!decision.allowed &&
+            decision.qualification==wsprrypi::QualificationState::UNTESTED,
+            "RP1 6 m and 2 m must remain untested and blocked without opt-in");
+        require_controller_policy(wsprrypi::BackendKind::RP1_GPCLK,mode,
+            frequency,false,"RP1 untested VHF",false,false,
+            wsprrypi::HardwareProfile::RP1_GPCLK);
+        require_controller_policy(wsprrypi::BackendKind::RP1_GPCLK,mode,
+            frequency,true,"RP1 VHF policy opt-in does not grant backend capability",
+            true,false,wsprrypi::HardwareProfile::RP1_GPCLK);
+    }
+
     std::cout << "gpio_band_policy_test passed" << std::endl;
     return EXIT_SUCCESS;
 }

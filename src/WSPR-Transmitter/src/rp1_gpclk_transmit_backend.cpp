@@ -167,7 +167,7 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         planner_input.parent_frequency_hz =
             wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
         planner_input.source_rate_ppm = plan.calibration.ppm;
-        planner_input.maximum_output_hz = 40000000.0;
+        planner_input.maximum_output_hz = wsprrypi::kRp1GpclkMaximumDirectOutputHz;
         planner_input.dither_sequence_length = wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
         const auto planned = wsprrypi::planRp1GpclkWspr(planner_input);
         if (!planned.ok)
@@ -242,7 +242,7 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
     planner_input.parent_frequency_hz =
         wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
     planner_input.source_rate_ppm = plan.calibration.ppm;
-    planner_input.maximum_output_hz = 40000000.0;
+    planner_input.maximum_output_hz = wsprrypi::kRp1GpclkMaximumDirectOutputHz;
     planner_input.dither_sequence_length =
         wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
     const auto planned = wsprrypi::planRp1GpclkWspr(planner_input);

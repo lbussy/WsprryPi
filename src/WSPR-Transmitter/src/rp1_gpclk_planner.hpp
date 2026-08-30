@@ -9,13 +9,17 @@
 namespace wsprrypi
 {
 
+// Direct GPCLK output only. Frequencies above this bound require a separate
+// harmonic-aware RF plan; increasing the parent rate does not remove it.
+inline constexpr double kRp1GpclkMaximumDirectOutputHz = 100000000.0;
+
 struct Rp1GpclkPlannerInput
 {
     double center_frequency_hz{0.0};
     double tone_spacing_hz{0.0};
     double parent_frequency_hz{0.0};
     double source_rate_ppm{0.0};
-    double maximum_output_hz{100000000.0};
+    double maximum_output_hz{kRp1GpclkMaximumDirectOutputHz};
     unsigned integer_bits{16};
     unsigned fractional_bits{16};
     std::uint32_t dither_sequence_length{65536};
