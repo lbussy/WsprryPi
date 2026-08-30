@@ -27,7 +27,6 @@
  */
 
 #include "mailbox.hpp"
-#include "bcm_model.hpp"
 
 // C++ Standard Library
 #include <array>
@@ -36,9 +35,9 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
-#include <vector>
 #include <optional>
 #include <system_error>
+#include <vector>
 
 // POSIX/system headers
 #include <endian.h> // for be32toh()
@@ -479,55 +478,20 @@ uint32_t Mailbox::discoverPeripheralBase()
 /**
  * @brief Determine the appropriate mailbox memory‐allocation flag for this Pi.
  *
- * Parses `/proc/cpuinfo` (cached on first call) to extract the hardware revision,
+ * Parses `/proc/cpuinfo` (cached after the first successful read) to extract
+ * the hardware revision,
  * maps that to a BCM processor ID, and then returns the correct
  * `MEM_FLAG_*` for `memAlloc()`:
  *   - BCM2835 (RPi1): non‐allocating L1 flag (0x0C)
  *   - BCM2836/37 (RPi2/3) and BCM2711 (RPi4): normal L2 alloc flag (0x04)
  *
  * @return The 32-bit flags value to pass to `memAlloc()`.
- * @throws std::runtime_error if the parsed processor ID is unrecognized.
+ * @throws std::runtime_error if the revision cannot be read or parsed, or if
+ *         the parsed processor ID is unrecognized.
  */
 uint32_t Mailbox::get_mem_flag()
 {
-    static std::optional<unsigned> cached_rev;
-    if (!cached_rev)
-    {
-        std::ifstream f("/proc/cpuinfo");
-        unsigned rev = 0;
-        if (f)
-        {
-            std::string line;
-            while (std::getline(f, line))
-            {
-                if (sscanf(line.c_str(), "Revision\t: %x", &rev) == 1)
-                {
-                    cached_rev = rev;
-                    break;
-                }
-            }
-        }
-        if (!cached_rev)
-            cached_rev = 0;
-    }
-
-    unsigned rev = *cached_rev;
-    BCMChip proc = (rev & 0x800000)
-                       ? static_cast<BCMChip>((rev & 0xF000) >> 12)
-                       : BCMChip::BCM_HOST_PROCESSOR_BCM2835;
-
-    switch (proc)
-    {
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2835:
-        return 0x0C;
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2836:
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2837:
-    case BCMChip::BCM_HOST_PROCESSOR_BCM2711:
-        return 0x04;
-    }
-    throw std::runtime_error(
-        std::string("Mailbox::get_mem_flag(): unknown chipset ") +
-        std::string(to_string(proc)));
+    return revision_resolver_.memoryFlagFromCpuInfo("/proc/cpuinfo");
 }
 
 /**

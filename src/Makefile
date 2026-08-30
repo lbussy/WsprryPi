@@ -117,6 +117,8 @@ TEST_OUT := $(strip $(EXE_NAME)_debug)
 SEMANTICS_TEST_OUT := dial_frequency_semantics_test
 LEGACY_GPIO_CLOCK_MODEL_TEST_OUT := legacy_gpio_clock_model_test
 LEGACY_GPIO_CLOCK_MODEL_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
+MAILBOX_MEMORY_FLAG_TEST_OUT := mailbox_memory_flag_test
+MAILBOX_MEMORY_FLAG_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
 GPIO_FREQUENCY_CORRECTION_TEST_OUT := gpio_frequency_correction_test
 GPIO_FREQUENCY_CORRECTION_TEST_FLAGS = $(filter-out -fmax-errors=10,$(CXX_DEBUG_FLAGS))
 UI_SOURCE_REGRESSION_TEST_OUT := ui_source_regression_test
@@ -1105,7 +1107,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 # ─────────────────────────────────────────────────────────────────────────────
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
-.PHONY: semantics-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
+.PHONY: semantics-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
 .PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
@@ -1193,7 +1195,7 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: legacy-gpio-clock-model-test gpio-frequency-correction-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test: mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1216,6 +1218,14 @@ $(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT): WSPR-Transmitter/src/legacy_gpio
 legacy-gpio-clock-model-test: $(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
 	$(Q)echo "Running hardware-independent legacy GPIO clock-model tests."
 	$(Q)./$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
+
+$(BIN_DIR)/$(MAILBOX_MEMORY_FLAG_TEST_OUT): tests/mailbox_memory_flag_test.cpp Mailbox/src/mailbox_revision.cpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(MAILBOX_MEMORY_FLAG_TEST_FLAGS) $^ -o $@
+
+mailbox-memory-flag-test: $(BIN_DIR)/$(MAILBOX_MEMORY_FLAG_TEST_OUT)
+	$(Q)echo "Running mailbox memory flag tests."
+	$(Q)./$(BIN_DIR)/$(MAILBOX_MEMORY_FLAG_TEST_OUT)
 
 $(BIN_DIR)/$(GPIO_FREQUENCY_CORRECTION_TEST_OUT): tests/gpio_frequency_correction_test.cpp system_clock_frequency_estimate.cpp WSPR-Transmitter/src/legacy_gpio_clock_model.cpp
 	$(Q)mkdir -p $(BIN_DIR)

@@ -37,6 +37,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "mailbox_revision.hpp"
+
 // POSIX/system headers
 #include <linux/ioctl.h> // for IOCTL_MBOX_PROPERTY
 
@@ -165,6 +167,7 @@ private:
     static inline constexpr char MEM_FILE_NAME[] = "/dev/mem";
 
     int fd_ = -1;
+    mailbox_detail::RevisionResolver revision_resolver_;
 
     [[nodiscard]] uint32_t get_mem_flag();
 

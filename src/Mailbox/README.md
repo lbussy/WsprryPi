@@ -18,10 +18,13 @@ src/Mailbox/
     ├── bcm_model.hpp
     ├── mailbox.cpp
     ├── mailbox.hpp
+    ├── mailbox_revision.cpp
+    ├── mailbox_revision.hpp
     └── main.cpp
 ```
 
-`mailbox.hpp`, `mailbox.cpp`, and `bcm_model.hpp` form the reusable component.
+`mailbox.hpp`, `mailbox.cpp`, `mailbox_revision.hpp`, `mailbox_revision.cpp`, and
+`bcm_model.hpp` form the reusable component.
 `main.cpp` is an explicit live-device demonstration and is not an ordinary
 unit test.
 
@@ -31,6 +34,8 @@ unit test.
 - Compile-time page, block, bus-flag, and peripheral-base constants.
 - Big-endian parsing of `/proc/device-tree/soc/ranges` for peripheral-base
   discovery.
+- Fail-closed parsing of the Raspberry Pi `Revision` field used to select
+  mailbox memory-allocation flags; failed reads are not cached.
 - Exceptions instead of process termination on failures.
 - No dependency beyond the C++20 standard library and Linux kernel interfaces.
 
@@ -57,6 +62,7 @@ From the component source directory:
 cd src/Mailbox/src
 make debug
 make test
+make -C ../.. mailbox-memory-flag-test
 ```
 
 `make test` is deliberately hardware-free: it compiles the standalone demo but
