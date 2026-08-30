@@ -351,6 +351,7 @@ struct WsprRuntimeStatusSnapshot
     bool frequency_estimate_ppm_available = false;
     double gpio_frequency_residual_ppm = 0.0;
     double effective_gpio_ppm = 0.0;
+    double additional_gpio_ppm = 0.0; // Operator-facing correction, excluding chipset compensation.
     double frequency_estimate_age_seconds = 0.0;
     struct GpioCorrectionProvenance
     {
@@ -363,6 +364,7 @@ struct WsprRuntimeStatusSnapshot
         double selected_component_ppm = 0.0;
         double conducted_residual_ppm = 0.0;
         double final_ppm = 0.0;
+        double additional_ppm = 0.0;
         std::string correction_mode;
         std::string provider_name;
         std::string provider_source_signature;

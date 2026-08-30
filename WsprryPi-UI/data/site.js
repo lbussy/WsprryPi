@@ -2174,17 +2174,15 @@ function normalizeRuntimeStatus(msg) {
         const source = value && typeof value === "object" ? value : {};
         return {
             available: source.available === true &&
-                [source.nominal_rate_hz, source.intrinsic_ppm,
-                 source.selected_component_ppm, source.conducted_residual_ppm,
-                 source.final_ppm].every(value => typeof value === "number" && Number.isFinite(value)),
+                [source.selected_component_ppm, source.conducted_residual_ppm,
+                 source.correction_ppm].every(value => typeof value === "number" && Number.isFinite(value)),
             active: source.active === true,
             processorProfile: typeof source.processor_profile === "string" ? source.processor_profile : "",
             selectedParent: typeof source.selected_parent === "string" ? source.selected_parent : "",
             nominalRateHz: Number.isFinite(Number(source.nominal_rate_hz)) ? Number(source.nominal_rate_hz) : 0,
-            intrinsicPpm: Number.isFinite(Number(source.intrinsic_ppm)) ? Number(source.intrinsic_ppm) : 0,
             selectedComponentPpm: Number.isFinite(Number(source.selected_component_ppm)) ? Number(source.selected_component_ppm) : 0,
             conductedResidualPpm: Number.isFinite(Number(source.conducted_residual_ppm)) ? Number(source.conducted_residual_ppm) : 0,
-            finalPpm: Number.isFinite(Number(source.final_ppm)) ? Number(source.final_ppm) : 0,
+            correctionPpm: Number.isFinite(Number(source.correction_ppm)) ? Number(source.correction_ppm) : 0,
             correctionMode: typeof source.correction_mode === "string" ? source.correction_mode : "",
             providerName: typeof source.provider_name === "string" ? source.provider_name : "",
             providerSourceSignature: typeof source.provider_source_signature === "string" ? source.provider_source_signature : "",
@@ -3073,20 +3071,18 @@ function renderGpioFrequencyCorrection(status) {
         if (!value?.available) {
             return `${label}: unavailable`;
         }
-        const parent = value.nominalRateHz > 0
-            ? `${value.selectedParent} ${(value.nominalRateHz / 1e6).toFixed(0)} MHz`
-            : value.selectedParent;
-        const source = value.providerSourceSignature || value.providerName || "manual/zero";
+        const usesEstimate = ["qualified_estimate_plus_residual", "stale_estimate_plus_residual"].includes(value.correctionMode);
+        const source = usesEstimate
+            ? value.providerSourceSignature || value.providerName || "estimate"
+            : value.correctionMode === "fixed_manual" ? "manual" : "no correction";
         const identity = value.executionIdentity ? ` · ${value.executionIdentity}` : "";
         const active = value.active ? " · active" : "";
-        const residual = !["qualified_estimate_plus_residual", "stale_estimate_plus_residual"].includes(value.correctionMode)
+        const residual = !usesEstimate
             ? `${value.conductedResidualPpm.toFixed(3)} residual configured, not applied`
             : `${value.conductedResidualPpm.toFixed(3)} residual`;
-        const snapshot = value.providerSnapshotTime ? ` · sampled ${value.providerSnapshotTime}` : "";
-        return `${label}: ${value.processorProfile} · ${parent} · ` +
-            `${value.intrinsicPpm.toFixed(3)} intrinsic · ` +
-            `${value.selectedComponentPpm.toFixed(3)} selected · ` +
-            `${residual} · ${value.finalPpm.toFixed(3)} PPM final · ` +
+        const snapshot = usesEstimate && value.providerSnapshotTime ? ` · sampled ${value.providerSnapshotTime}` : "";
+        return `${label}: ${value.correctionPpm.toFixed(3)} PPM correction · ` +
+            `${value.selectedComponentPpm.toFixed(3)} selected · ${residual} · ` +
             `${source}${snapshot}${identity}${active}`;
     };
 

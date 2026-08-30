@@ -10,7 +10,7 @@ vm.runInContext(extract('normalizeRuntimeStatus', 'parseOperationFrequencyWithOp
 const provenance = {
     available: true, processor_profile: 'RP1', selected_parent: 'PLL_SYS',
     nominal_rate_hz: 200000000, intrinsic_ppm: -46.245,
-    selected_component_ppm: 10, conducted_residual_ppm: 1.25, final_ppm: -34.995,
+    selected_component_ppm: 10, conducted_residual_ppm: 1.25, correction_ppm: 11.25, final_ppm: -34.995,
     correction_mode: 'qualified_estimate_plus_residual',
     provider_source_signature: '<source>', provider_snapshot_time: '2026-08-30T20:00:00Z'
 };
@@ -21,15 +21,20 @@ function render(candidate = provenance, backend = 'rp1-gpclk') {
     }));
 }
 render();
-assert.match(nodes.gpio_frequency_correction_value.textContent, /-34.995 PPM final/);
+assert.match(nodes.gpio_frequency_correction_value.textContent, /11.250 PPM correction/);
+assert.doesNotMatch(nodes.gpio_frequency_correction_value.textContent, /intrinsic|final|46\.245|34\.995|PLL_SYS/);
 assert.match(nodes.gpio_frequency_correction_value.textContent, /1.250 residual ·/);
 assert.match(nodes.gpio_frequency_correction_value.textContent, /sampled 2026/);
 assert.match(nodes.gpio_frequency_correction_detail.textContent, /Committed: unavailable/);
 assert.match(nodes.gpio_frequency_correction_detail.textContent, /Estimate: qualified · age 2 s/);
 render({...provenance, correction_mode: 'fixed_manual'});
 assert.match(nodes.gpio_frequency_correction_value.textContent, /residual configured, not applied/);
-render({...provenance, final_ppm: null});
+render({...provenance, correction_ppm: null});
 assert.equal(nodes.gpio_frequency_correction_value.textContent, 'Candidate: unavailable');
+render({...provenance, correction_ppm: 0, selected_component_ppm: 0,
+    correction_mode: 'uncalibrated'});
+assert.match(nodes.gpio_frequency_correction_value.textContent, /0.000 PPM correction/);
+assert.doesNotMatch(nodes.gpio_frequency_correction_value.textContent, /46\.245|34\.995/);
 render(provenance, 'si5351');
 assert.equal(nodes.gpio_frequency_correction_panel.hidden, true);
 console.log('GPIO correction provenance UI tests passed');

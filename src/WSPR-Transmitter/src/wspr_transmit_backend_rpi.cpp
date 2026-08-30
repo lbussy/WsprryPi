@@ -2896,12 +2896,8 @@ WsprTransmissionConfigureResult WsprRpiBackend::setup_dma_freq_table(
                     : "PLLD")
             << " nominal_hz=" << std::fixed << std::setprecision(0)
             << rf_clock.nominal_hz
-            << " intrinsic_ppm=" << std::fixed << std::setprecision(6)
-            << rf_clock.intrinsic_ppm
-            << " additional_ppm=" << rf_clock.additional_ppm
-            << " effective_ppm=" << rf_clock.effective_ppm
-            << " corrected_hz=" << std::fixed << std::setprecision(3)
-            << rf_clock.corrected_hz;
+            << " correction_ppm=" << std::fixed << std::setprecision(6)
+            << rf_clock.additional_ppm;
         owner_.backendFireTransmitCallback(
             WsprTransmissionCallbackEvent::LOGGING,
             WsprTransmitLogLevel::DEBUG,

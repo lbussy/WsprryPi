@@ -1,5 +1,10 @@
 # Issue 430 reconciliation into devel
 
+Follow-up operator requirement: intrinsic compensation and composed RF totals
+are internal only. The UI, status payloads, and correction logs show additional
+correction, never the intrinsic offset. The original merge description below
+records its earlier reporting design and is superseded on that point.
+
 This integration merges `codex/issue-430` (`923a2ac`) into the shared-chipset
 offset implementation on `devel` (`b2b6a40`). It restores the unmerged Issue 429
 clock-model, correction-validation and provenance work together with Issue 430

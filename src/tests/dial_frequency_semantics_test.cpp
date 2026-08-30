@@ -1442,6 +1442,8 @@ int main(int argc, char *argv[])
         auto rp1_manual_provenance = current_tx_runtime_status_snapshot();
         require(
             nearly_equal(rp1_manual_request.ppm, 12.5) &&
+                nearly_equal(rp1_manual_provenance.additional_gpio_ppm, 12.5) &&
+                nearly_equal(rp1_manual_provenance.gpio_correction_committed.additional_ppm, 12.5) &&
                 rp1_manual_provenance.gpio_correction_committed.available &&
                 rp1_manual_provenance.gpio_correction_committed.processor_profile ==
                     "RP1" &&
@@ -1488,6 +1490,8 @@ int main(int argc, char *argv[])
         const auto rp1_estimate_provenance = current_tx_runtime_status_snapshot();
         require(
             nearly_equal(rp1_estimate_request.ppm, 11.25) &&
+                nearly_equal(rp1_estimate_provenance.additional_gpio_ppm, 11.25) &&
+                nearly_equal(rp1_estimate_provenance.gpio_correction_committed.additional_ppm, 11.25) &&
                 nearly_equal(
                     rp1_estimate_provenance.gpio_correction_committed
                         .conducted_residual_ppm,

@@ -621,7 +621,7 @@ int main()
             websocket_source.find("reply[\"selector_gpio_active_high\"] = snapshot.selector_gpio_active_high;") != std::string::npos &&
             websocket_source.find("reply[\"power_dbm\"] = snapshot.power_dbm;") != std::string::npos &&
             websocket_source.find("reply[\"frequency_estimate_qualification\"] = snapshot.frequency_estimate_qualification;") != std::string::npos &&
-            websocket_source.find("reply[\"effective_gpio_ppm\"] = snapshot.effective_gpio_ppm;") != std::string::npos &&
+            websocket_source.find("reply[\"effective_gpio_ppm\"] = snapshot.additional_gpio_ppm;") != std::string::npos &&
             scheduling_source.find("j[\"frequency_hz\"] = snapshot.frequency_hz;") != std::string::npos &&
             scheduling_source.find("j[\"offset_hz\"] = snapshot.offset_hz;") != std::string::npos &&
             scheduling_source.find("j[\"frequency_is_skip\"] = snapshot.frequency_is_skip;") != std::string::npos &&
@@ -630,7 +630,7 @@ int main()
             scheduling_source.find("j[\"selector_gpio_active_high\"] = snapshot.selector_gpio_active_high;") != std::string::npos &&
             scheduling_source.find("j[\"power_dbm\"] = snapshot.power_dbm;") != std::string::npos &&
             scheduling_source.find("j[\"frequency_correction_mode\"] = snapshot.frequency_correction_mode;") != std::string::npos &&
-            scheduling_source.find("j[\"effective_gpio_ppm\"] = snapshot.effective_gpio_ppm;") != std::string::npos &&
+            scheduling_source.find("j[\"effective_gpio_ppm\"] = snapshot.additional_gpio_ppm;") != std::string::npos &&
             scheduling_source.find("snapshot.selector_gpio_enabled =\n        current_transmission_request.hasSelectorGPIO();") != std::string::npos &&
             scheduling_source.find("snapshot.power_dbm = plan.power_dbm;") != std::string::npos &&
             scheduling_source.find("if (snapshot.tx_state == \"transmitting\")") != std::string::npos &&
@@ -1402,7 +1402,7 @@ int main()
     require(
         operation_view_source.find("id=\"gpio_frequency_correction_panel\"") != std::string::npos &&
             operation_view_source.find("id=\"gpio_frequency_correction_value\"") != std::string::npos &&
-            operation_view_source.find("GPIO correction provenance") != std::string::npos &&
+            operation_view_source.find("GPIO frequency correction") != std::string::npos &&
             operation_css_source.find("#gpio_frequency_correction_panel {\n    grid-column: 1 / -1;") != std::string::npos &&
             site_source.find("function renderGpioFrequencyCorrection(status)") != std::string::npos &&
             site_source.find("gpioCorrectionCandidate") != std::string::npos &&
@@ -1413,6 +1413,16 @@ int main()
             scheduling_source.find("j[\"gpio_correction_candidate\"]") != std::string::npos &&
             scheduling_source.find("j[\"gpio_correction_committed\"]") != std::string::npos,
         "Operation view must distinguish current candidate correction provenance from the frozen committed execution");
+    require(
+        site_source.find("intrinsicPpm") == std::string::npos &&
+            site_source.find("finalPpm") == std::string::npos &&
+            websocket_source.find("{\"intrinsic_ppm\"") == std::string::npos &&
+            websocket_source.find("{\"final_ppm\"") == std::string::npos &&
+            scheduling_source.find("{\"intrinsic_ppm\"") == std::string::npos &&
+            scheduling_source.find("{\"final_ppm\"") == std::string::npos &&
+            websocket_source.find("{\"correction_ppm\", value.additional_ppm}") != std::string::npos &&
+            scheduling_source.find("{\"correction_ppm\", value.additional_ppm}") != std::string::npos,
+        "operator UI and status payloads must exclude internal chipset compensation and composed totals");
     require(
         config_view_source.find("config-runtime-item config-runtime-item--switch") == std::string::npos,
         "Runtime state body must no longer dedicate a body tile to the Transmit enabled control");

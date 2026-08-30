@@ -33,9 +33,11 @@ Positive PPM means the source runs fast. The physical parent remains nominally
 set/restore lifecycle. The manual/Chrony selection policy and persisted values
 are unchanged; their selected value is now an additional correction to the
 RP1 baseline. Backend requests carry only that additional correction; the
-physical backend adds the intrinsic value once. Candidate and committed status
-report both components and their total (`effective_gpio_ppm`), with the selected
-parent and source provenance. Refreshing a candidate does not change a committed
+physical backend adds the intrinsic value once. Intrinsic compensation and the
+composed RF total remain internal, not operator settings or displayed values.
+Operator candidate and committed status report only the additional correction
+(`correction_ppm`; the existing `effective_gpio_ppm` field likewise excludes
+intrinsic compensation), with estimate/residual provenance. Refreshing a candidate does not change a committed
 request. Each correction input retains its independent +/-200 ppm bound; their
 sum may exceed that bound. A previous manual value representing the entire
 RP1 source error must have the new intrinsic value subtracted to avoid counting

@@ -643,7 +643,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                 ? json(snapshot.frequency_estimate_ppm)
                 : json(nullptr);
             reply["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
-            reply["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
+            reply["effective_gpio_ppm"] = snapshot.additional_gpio_ppm;
             reply["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
             const auto provenance_json = [](const auto &value)
             {
@@ -652,10 +652,9 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                     {"processor_profile", value.processor_profile},
                     {"selected_parent", value.selected_parent},
                     {"nominal_rate_hz", value.nominal_rate_hz},
-                    {"intrinsic_ppm", value.intrinsic_ppm},
                     {"selected_component_ppm", value.selected_component_ppm},
                     {"conducted_residual_ppm", value.conducted_residual_ppm},
-                    {"final_ppm", value.final_ppm},
+                    {"correction_ppm", value.additional_ppm},
                     {"correction_mode", value.correction_mode},
                     {"provider_name", value.provider_name},
                     {"provider_source_signature", value.provider_source_signature},

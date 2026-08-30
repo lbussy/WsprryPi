@@ -267,6 +267,7 @@ namespace
                 selected.estimate_ppm.value_or(selected.additional_ppm);
             candidate.conducted_residual_ppm = selected.residual_ppm;
             candidate.final_ppm = selected.effective_ppm;
+            candidate.additional_ppm = selected.additional_ppm;
             candidate.correction_mode = to_string(selected.mode);
             candidate.provider_name = selected.provider_name;
             candidate.provider_source_signature = selected.source_signature;
@@ -1351,6 +1352,7 @@ static void freeze_gpio_correction_provenance(
         current_gpio_correction.estimate_ppm.value_or(
             selection.correction.additional_ppm);
     frozen.final_ppm = selection.correction.effective_ppm;
+    frozen.additional_ppm = selection.correction.additional_ppm;
     frozen.execution_identity =
         "gpio-execution-" + std::to_string(++committed_gpio_execution_sequence);
     committed_gpio_correction_provenance = frozen;
@@ -5249,7 +5251,7 @@ void send_ws_message(
             ? nlohmann::json(snapshot.frequency_estimate_ppm)
             : nlohmann::json(nullptr);
         j["gpio_frequency_residual_ppm"] = snapshot.gpio_frequency_residual_ppm;
-        j["effective_gpio_ppm"] = snapshot.effective_gpio_ppm;
+        j["effective_gpio_ppm"] = snapshot.additional_gpio_ppm;
         j["frequency_estimate_age_seconds"] = snapshot.frequency_estimate_age_seconds;
         const auto provenance_json = [](const auto &value)
         {
@@ -5258,10 +5260,9 @@ void send_ws_message(
                 {"processor_profile", value.processor_profile},
                 {"selected_parent", value.selected_parent},
                 {"nominal_rate_hz", value.nominal_rate_hz},
-                {"intrinsic_ppm", value.intrinsic_ppm},
                 {"selected_component_ppm", value.selected_component_ppm},
                 {"conducted_residual_ppm", value.conducted_residual_ppm},
-                {"final_ppm", value.final_ppm},
+                {"correction_ppm", value.additional_ppm},
                 {"correction_mode", value.correction_mode},
                 {"provider_name", value.provider_name},
                 {"provider_source_signature", value.provider_source_signature},
@@ -5427,6 +5428,7 @@ WsprRuntimeStatusSnapshot current_tx_runtime_status_snapshot()
         snapshot.frequency_estimate_ppm = current_gpio_correction.estimate_ppm.value_or(0.0);
         snapshot.gpio_frequency_residual_ppm = current_gpio_correction.residual_ppm;
         snapshot.effective_gpio_ppm = current_gpio_correction.effective_ppm;
+        snapshot.additional_gpio_ppm = current_gpio_correction.additional_ppm;
         snapshot.frequency_estimate_age_seconds = current_gpio_correction.estimate_age_seconds;
         snapshot.gpio_correction_candidate = current_gpio_candidate_provenance;
         snapshot.gpio_correction_committed = committed_gpio_correction_provenance;
@@ -5834,7 +5836,7 @@ bool set_config(bool force)
                     ", residual_ppm=",
                     selected_correction.residual_ppm,
                     ", effective_ppm=",
-                    selected_correction.effective_ppm,
+                    selected_correction.additional_ppm,
                     ", qualification=",
                     to_string(selected_correction.qualification));
                 runtime_ppm_changed = true;
