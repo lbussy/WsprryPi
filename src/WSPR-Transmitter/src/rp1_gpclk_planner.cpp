@@ -48,6 +48,11 @@ Rp1GpclkPlanResult planRp1GpclkWspr(const Rp1GpclkPlannerInput& input)
     {
         return reject("RP1 GPCLK source-rate PPM must be finite and within +/-200.");
     }
+    if (!std::isfinite(input.intrinsic_source_rate_ppm) ||
+        std::fabs(input.intrinsic_source_rate_ppm) > kMaximumSourceRatePpm)
+    {
+        return reject("RP1 GPCLK intrinsic PPM must be finite and within +/-200.");
+    }
     if (input.integer_bits == 0 || input.fractional_bits == 0 ||
         input.integer_bits + input.fractional_bits > 63)
     {
@@ -65,7 +70,8 @@ Rp1GpclkPlanResult planRp1GpclkWspr(const Rp1GpclkPlannerInput& input)
         (maximum_integer << input.fractional_bits) | (scale - 1);
     const long double corrected_parent =
         static_cast<long double>(input.parent_frequency_hz) *
-        (1.0L + static_cast<long double>(input.source_rate_ppm) * 1.0e-6L);
+        (1.0L + (static_cast<long double>(input.source_rate_ppm) +
+                 static_cast<long double>(input.intrinsic_source_rate_ppm)) * 1.0e-6L);
 
     if (!std::isfinite(static_cast<double>(corrected_parent)) ||
         corrected_parent <= 0.0L)

@@ -1,5 +1,17 @@
 # Issue 429: RP1 direct-frequency range
 
+Latest conducted accuracy evidence: the post-USB-reset GPIO20 sweep completed
+all fourteen planned direct-output points, 2200 m through 4 m, including
+12 m and 6 m. See the [complete sweep report](issue-429-rp1-accuracy/README.md)
+for per-band results, exact identities, retained captures, and limitations.
+The observations span -46.2674 to -46.1747 ppm at zero transmitter correction.
+They do not qualify modulation modes or spectral quality; 2 m remains untested
+without its required harmonic implementation. Earlier attempts below are
+historical evidence, not substitutes for the restarted sweep.
+
+Issue closeout must also document comparative RP1/Pi4/PiZero2W consistency and
+temporal stability using the [recorded comparison plan](issue-429-rp1-accuracy/stability-comparison-plan.md).
+
 RP1 TONE, WSPR, QRSS, FSKCW, and DFCW now use the numerical planner's shared
 100 MHz direct-output ceiling instead of a separate 40 MHz application cap.
 The nominal parent remains 200 MHz, source-rate PPM is applied once, and the
@@ -148,3 +160,18 @@ These are parent-selection and restoration checks, not GPSDO-bracketed
 intrinsic-accuracy results or spectral/mode qualification. The accuracy sweep
 must be repeated with the new module. The 8-second finite-buffer finding
 remains unresolved, and 2 m remains untested without harmonic support.
+
+## Historical interrupted accuracy sweep
+
+The subsequent sweep exposed a nearest-rate parent-selection cycle at 80 m.
+It is repaired by DKMS commit `c6d4da8fca36484df4f87079d35f52cc8e3fcdb5`,
+with a regression that fails against the preceding source. Fresh current-build
+brackets on 2200 m, 630 m, and 80 m span -46.3811 to -46.3619 ppm. They remain
+single-bracket diagnostics, not an adopted correction.
+
+This attempt then stopped on recurring GPSDO USB-control failures, including a
+disable-command timeout. Both outputs were subsequently verified off. The
+remaining accuracy points, explicitly including 12 m, were pending at that time.
+The subsequent completed sweep is summarized at the top of this document.
+See the [complete sweep report and reproducible audit](issue-429-rp1-accuracy/README.md)
+for exact builds, successful/aborted evidence, and unresolved findings.

@@ -1,4 +1,5 @@
 #include "legacy_gpio_clock_model.hpp"
+#include "chipset_offsets.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -11,8 +12,6 @@ namespace wsprrypi
         constexpr double kLaterLegacyPllDHz = 500000000.0;
         constexpr double kBcm2711PllDHz = 750000000.0;
         constexpr double kBcm2711OscillatorHz = 54000000.0;
-        constexpr double kBcm2835IntrinsicPpm = -2.5;
-        constexpr double kDiscoveryBaselinePpm = 0.0;
 
         constexpr double kIssue429SdrInterceptHz = 0.4484;
         constexpr double kIssue429SdrProportionalPpm = 1.01012;
@@ -43,7 +42,7 @@ namespace wsprrypi
                     processor,
                     parent,
                     kBcm2835PllDHz,
-                    kBcm2835IntrinsicPpm,
+                    chipsetIntrinsicOffsetPpm(ClockChipset::Bcm2835),
                     LegacyGpioIntrinsicEvidence::HistoricalAuthoritative};
             }
             break;
@@ -54,7 +53,7 @@ namespace wsprrypi
                     processor,
                     parent,
                     kLaterLegacyPllDHz,
-                    kDiscoveryBaselinePpm,
+                    chipsetIntrinsicOffsetPpm(ClockChipset::Bcm2836Bcm2837),
                     LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
             }
             break;
@@ -65,7 +64,7 @@ namespace wsprrypi
                     processor,
                     parent,
                     kBcm2711PllDHz,
-                    kDiscoveryBaselinePpm,
+                    chipsetIntrinsicOffsetPpm(ClockChipset::Bcm2711),
                     LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
             }
             if (parent == LegacyGpioClockParent::Oscillator)
@@ -74,7 +73,7 @@ namespace wsprrypi
                     processor,
                     parent,
                     kBcm2711OscillatorHz,
-                    kDiscoveryBaselinePpm,
+                    chipsetIntrinsicOffsetPpm(ClockChipset::Bcm2711),
                     LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
             }
             break;

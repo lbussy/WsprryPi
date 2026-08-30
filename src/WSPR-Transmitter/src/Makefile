@@ -172,6 +172,7 @@ CXXFLAGS += $(COMMON_FLAGS) $(COMM_CXX_FLAGS)
 
 # Include paths
 CXXFLAGS += -I$(abspath .)
+CXXFLAGS += -I$(abspath ../../Chipset-Offsets/src)
 CXXFLAGS += -I$(abspath ../..)
 CXXFLAGS += $(foreach dir,$(COMPONENT_SRCDIRS),-I$(abspath $(dir)))
 CXXFLAGS += -I$(abspath ../../WSPR-Reference/src/wspr)

@@ -24,6 +24,7 @@
  */
 
 #include "wspr_transmit_backend_rpi.hpp"
+#include "chipset_offsets.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -523,10 +524,32 @@ GpioRfClockPlan gpioPlanRfClock(
     double maximum_tone_hz,
     double source_rate_ppm)
 {
+    wsprrypi::ClockChipset chipset;
+    switch (profile)
+    {
+    case GpioProcessorClockProfile::Bcm2835:
+        chipset = wsprrypi::ClockChipset::Bcm2835;
+        break;
+    case GpioProcessorClockProfile::Legacy500Mhz:
+        chipset = wsprrypi::ClockChipset::Bcm2836Bcm2837;
+        break;
+    case GpioProcessorClockProfile::Bcm2711:
+        chipset = wsprrypi::ClockChipset::Bcm2711;
+        break;
+    default:
+        throw std::invalid_argument("Unsupported GPIO clock profile.");
+    }
+    const double intrinsic_ppm = wsprrypi::chipsetIntrinsicOffsetPpm(chipset);
+    const auto corrected_rf_hz = [source_rate_ppm, intrinsic_ppm](double nominal_hz) {
+        // Validate the caller independently; the intrinsic offset must not
+        // shrink its +/-200 ppm contract or alter the separate PWM clock.
+        (void)gpioCorrectedPlldFrequency(nominal_hz, source_rate_ppm);
+        return nominal_hz * (1.0 + (source_rate_ppm + intrinsic_ppm) * 1.0e-6);
+    };
     const double plld_nominal_hz =
         profile == GpioProcessorClockProfile::Bcm2711 ? 750e6 : 500e6;
     const double corrected_plld_hz =
-        gpioCorrectedPlldFrequency(plld_nominal_hz, source_rate_ppm);
+        corrected_rf_hz(plld_nominal_hz);
     if (gpioClockCanRepresent(
             corrected_plld_hz,
             minimum_tone_hz,
@@ -542,9 +565,7 @@ GpioRfClockPlan gpioPlanRfClock(
     {
         constexpr double oscillator_nominal_hz = 54e6;
         const double corrected_oscillator_hz =
-            gpioCorrectedPlldFrequency(
-                oscillator_nominal_hz,
-                source_rate_ppm);
+            corrected_rf_hz(oscillator_nominal_hz);
         if (gpioClockCanRepresent(
                 corrected_oscillator_hz,
                 minimum_tone_hz,
@@ -2156,6 +2177,9 @@ void WsprRpiBackend::get_plld()
     switch (proc_id)
     {
     case BCMChip::BCM_HOST_PROCESSOR_BCM2835:
+        base_freq_hz = 500e6;
+        dma_config_.processor_profile = GpioProcessorClockProfile::Bcm2835;
+        break;
     case BCMChip::BCM_HOST_PROCESSOR_BCM2836:
     case BCMChip::BCM_HOST_PROCESSOR_BCM2837:
         base_freq_hz = 500e6;

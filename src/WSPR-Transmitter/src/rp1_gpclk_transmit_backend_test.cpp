@@ -178,6 +178,7 @@ wsprrypi::Rp1GpclkPlan expectedPlan(
     input.parent_frequency_hz=
         wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
     input.source_rate_ppm=source_rate_ppm;
+    input.intrinsic_source_rate_ppm=-46.245;
     input.maximum_output_hz=100000000.0;
     input.dither_sequence_length=wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
     const auto result=wsprrypi::planRp1GpclkWspr(input);
@@ -185,7 +186,7 @@ wsprrypi::Rp1GpclkPlan expectedPlan(
     expect(result.plan.nominal_parent_frequency_hz==200000000.0,
         "compatibility parent must remain explicitly fixed at 200 MHz");
     const double required_corrected_parent=
-        200000000.0*(1.0+source_rate_ppm/1000000.0);
+        200000000.0*(1.0+(source_rate_ppm-46.245)/1000000.0);
     expect(std::fabs(result.plan.corrected_parent_frequency_hz-
             required_corrected_parent)<0.001,
         "corrected parent must apply source-rate PPM to the 200 MHz nominal rate");
@@ -198,7 +199,9 @@ void test_direct_band_range()
     expect(wsprrypi::kRp1GpclkMaximumDirectOutputHz==100000000.0,
         "direct-output contract must remain 100 MHz, not the parent rate");
     for (int gpio : {4,20})
-    for (double frequency : {24926100.0,50294500.0,70092500.0,144490500.0})
+    for (double frequency : {137500.0,475700.0,1838100.0,3570100.0,
+        5288700.0,7040100.0,10140200.0,14097100.0,18106100.0,21096100.0,
+        24926100.0,28126100.0,50294500.0,70092500.0,144490500.0})
     for (double ppm : {-200.0,0.0,200.0})
     for (Mode mode : {Mode::TONE,Mode::WSPR,Mode::QRSS,Mode::FSKCW,Mode::DFCW})
     {
@@ -242,7 +245,9 @@ void test_direct_band_range()
         const auto tone=mode==Mode::TONE ? observed->tone_program.tone :
             mode==Mode::WSPR ? observed->program.tones[0] : observed->event_program.tones[0];
         const double requested=plan.events[0].frequency_hz;
-        const double parent=200000000.0*(1.0+ppm*1e-6);
+        // Independent literal/formula: catches missing, doubled, wrong-sign,
+        // or multiplicatively applied intrinsic offsets in every adapter path.
+        const double parent=200000000.0*(1.0+(ppm-46.245)*1e-6);
         const double average=parent*65536.0*
             (double(tone.lower_count)/tone.lower_divider_word+
              double(tone.upper_count)/tone.upper_divider_word)/

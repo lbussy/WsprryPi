@@ -119,7 +119,8 @@ double gpioCorrectedPlldFrequency(double nominal_hz, double source_rate_ppm);
 enum class GpioProcessorClockProfile
 {
     Legacy500Mhz,
-    Bcm2711
+    Bcm2711,
+    Bcm2835
 };
 
 enum class GpioRfClockSource : std::uint32_t

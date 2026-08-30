@@ -94,6 +94,7 @@ BACKEND_PROFILE_KEY := $(subst $(comma),+,$(BACKENDS))+ancillary-gpio$(ANCILLARY
 # ─────────────────────────────────────────────────────────────────────────────
 
 COMPONENT_SRCDIRS :=
+COMPONENT_SRCDIRS += $(wildcard ./Chipset-Offsets/src)
 COMPONENT_SRCDIRS += $(wildcard ./Mailbox/src)
 COMPONENT_SRCDIRS += $(wildcard ./INI-Handler/src)
 COMPONENT_SRCDIRS += $(wildcard ./LCBLog/src)
@@ -1190,7 +1191,7 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: legacy-gpio-clock-model-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test: chipset-offsets-test legacy-gpio-clock-model-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1206,9 +1207,13 @@ semantics-test: legacy-gpio-clock-model-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(
 	$(Q)echo "Running coherent UI publication tests."
 	$(Q)python3 ../scripts/tests/ui_publication_test.py
 
-$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT): WSPR-Transmitter/src/legacy_gpio_clock_model_test.cpp WSPR-Transmitter/src/legacy_gpio_clock_model.cpp
+$(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT): WSPR-Transmitter/src/legacy_gpio_clock_model_test.cpp WSPR-Transmitter/src/legacy_gpio_clock_model.cpp Chipset-Offsets/src/chipset_offsets.hpp
 	$(Q)mkdir -p $(BIN_DIR)
-	$(Q)$(CXX) $(LEGACY_GPIO_CLOCK_MODEL_TEST_FLAGS) $^ -o $@
+	$(Q)$(CXX) $(LEGACY_GPIO_CLOCK_MODEL_TEST_FLAGS) $(filter %.cpp,$^) -o $@
+
+.PHONY: chipset-offsets-test
+chipset-offsets-test:
+	$(Q)$(MAKE) -C Chipset-Offsets test
 
 legacy-gpio-clock-model-test: $(BIN_DIR)/$(LEGACY_GPIO_CLOCK_MODEL_TEST_OUT)
 	$(Q)echo "Running hardware-independent legacy GPIO clock-model tests."
@@ -1472,9 +1477,9 @@ gpio-band-policy-test: $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running GPIO band fail-closed policy tests."
 	$(Q)./$(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_PLANNER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_planner_test.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp
+$(BIN_DIR)/$(RP1_GPCLK_PLANNER_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_planner_test.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp Chipset-Offsets/src/chipset_offsets.hpp
 	$(Q)mkdir -p $(BIN_DIR)
-	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $^ -o $@
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $(filter %.cpp,$^) -o $@
 
 rp1-gpclk-planner-test: $(BIN_DIR)/$(RP1_GPCLK_PLANNER_TEST_OUT)
 	$(Q)echo "Running hardware-independent RP1 GPCLK planner tests."
@@ -1534,9 +1539,9 @@ $(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT): tests/rp1_gpclk_route_service_te
 rp1-gpclk-route-service-test: $(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
 
-$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp WSPR-Transmitter/src/rp1_gpclk_event_program.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp
+$(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp WSPR-Transmitter/src/rp1_gpclk_event_program.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp Chipset-Offsets/src/chipset_offsets.hpp
 	$(Q)mkdir -p $(BIN_DIR)
-	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $(OPENSSL_CFLAGS) -pthread $^ $(OPENSSL_LIBS) -o $@
+	$(Q)$(CXX) $(RP1_GPCLK_PLANNER_TEST_FLAGS) $(OPENSSL_CFLAGS) -pthread $(filter %.cpp,$^) $(OPENSSL_LIBS) -o $@
 
 rp1-gpclk-transmit-backend-test: $(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT)
 	$(Q)echo "Running RP1 GPCLK scheduler backend tests."

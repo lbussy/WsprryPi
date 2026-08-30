@@ -12,6 +12,40 @@ independent routes. See
 continuous/finite TONE, route-manager, and qualification boundary. Earlier
 consumer-contract documents remain historical audit evidence.
 
+### Shared chipset clock offsets
+
+The reusable `../Chipset-Offsets` component owns the single intrinsic offset
+selector: BCM2835 (Pi1) -2.5 ppm, BCM2836/BCM2837 and BCM2711 0 ppm, and RP1
+-46.245 ppm. Both physical GPIO backends and the historical GPIO clock-model
+API consume it; no offset table is owned by `WSPR-Transmitter`.
+The live DMA backend now distinguishes BCM2835 from the later 500 MHz chipsets
+and applies the Pi1 baseline to RF divider planning. Its separate PWM/DMA
+timing correction is unchanged.
+
+All RP1 WSPR, finite/continuous TONE, QRSS, FSKCW, and DFCW divider plans use
+the shared intrinsic baseline **-46.245 ppm**, on both GPIO4 and GPIO20. It is
+added once to the caller's selected correction before computing divider words:
+
+`corrected_parent_hz = 200000000 * (1 + (caller_ppm - 46.245) / 1000000)`
+
+Positive PPM means the source runs fast. The physical parent remains nominally
+200 MHz; this software correction does not retune the parent or alter the DKMS
+set/restore lifecycle. The manual/Chrony selection policy and persisted values
+are unchanged; their selected value is now an additional correction to the
+RP1 baseline. Existing status fields report that selected caller correction,
+not the intrinsic baseline. A previous manual value representing the entire
+RP1 source error must have the new intrinsic value subtracted to avoid counting
+it twice (for example, a previous total of -46.245 becomes manual 0).
+The same accounting applies to Pi1's -2.5 ppm baseline: a manually entered
+total correction of -2.5 becomes an additional correction of 0. No persisted
+value is rewritten automatically.
+
+The baseline is the operator-approved, rounded equal-band mean of the Issue 429
+fourteen-point wspr5 GPIO20 sweep, applied as a shared RP1 default. It is not
+evidence that every board or GPIO4 was measured. Si5351 behavior is unchanged.
+Corrected live RF measurements remain required for these runtime changes;
+the earlier zero-correction sweep is not post-change validation.
+
 The current production-proven path is a Raspberry Pi backend that uses Broadcom
 mailbox, DMA, PWM, and clock hardware to emit RF. The codebase has been
 refactored so transmission control and scheduling live in a generic controller,

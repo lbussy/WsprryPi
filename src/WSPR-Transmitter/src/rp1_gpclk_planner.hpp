@@ -24,6 +24,10 @@ struct Rp1GpclkPlannerInput
     unsigned fractional_bits{16};
     std::uint32_t dither_sequence_length{65536};
     double maximum_average_error_hz{0.01};
+    // Separate from caller correction so its existing +/-200 ppm range remains
+    // valid. Physical adapters supply the shared RP1 baseline exactly once;
+    // standalone numerical experiments retain an explicit zero default.
+    double intrinsic_source_rate_ppm{0.0};
 };
 
 struct Rp1GpclkTonePlan

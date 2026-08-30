@@ -1,4 +1,5 @@
 #include "rp1_gpclk_planner.hpp"
+#include "chipset_offsets.hpp"
 
 #include <algorithm>
 #include <array>
@@ -104,6 +105,27 @@ void test_single_word_evidence()
            "20 m dither averages must restore distinct ordered tones");
 }
 
+void test_intrinsic_offset_composition()
+{
+    expect(wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1) == -46.245,
+           "RP1 intrinsic baseline must retain its approved value and sign");
+    for (double ppm : {-200.0, 0.0, 46.245, 200.0})
+    {
+        auto input = inputFor(14097100.0);
+        input.source_rate_ppm = ppm;
+        input.intrinsic_source_rate_ppm =
+            wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1);
+        const auto result = wsprrypi::planRp1GpclkWspr(input);
+        expect(result.ok, "intrinsic offset must preserve the full caller PPM range");
+        if (!result.ok) continue;
+        expect(result.plan.nominal_parent_frequency_hz == 200000000.0,
+               "intrinsic correction must not change nominal parent identity");
+        const double expected = 200000000.0 * (1.0 + (ppm - 46.245) * 1e-6);
+        expect(std::fabs(result.plan.corrected_parent_frequency_hz - expected) < 1e-6,
+               "intrinsic and caller PPM must add once, not multiply or change sign");
+    }
+}
+
 void test_calibration_direction_and_determinism()
 {
     auto zero_input = inputFor(14097100.0);
@@ -204,6 +226,9 @@ void test_integer_boundary_and_invalid_inputs()
         auto candidate = base;
         candidate.source_rate_ppm = ppm;
         invalid.push_back(candidate);
+        candidate = base;
+        candidate.intrinsic_source_rate_ppm = ppm;
+        invalid.push_back(candidate);
     }
     {
         auto candidate = base;
@@ -262,6 +287,7 @@ int main()
 {
     test_all_bands_and_parents();
     test_single_word_evidence();
+    test_intrinsic_offset_composition();
     test_calibration_direction_and_determinism();
     test_sequence_lengths_and_tolerance();
     test_integer_boundary_and_invalid_inputs();

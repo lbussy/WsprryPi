@@ -1,4 +1,5 @@
 #include "rp1_gpclk_event_program.hpp"
+#include "chipset_offsets.hpp"
 
 #include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_planner.hpp"
@@ -105,6 +106,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     input.parent_frequency_hz =
         kRp1GpclkDevelopmentNominalParentFrequencyHz;
     input.source_rate_ppm = plan.calibration.ppm;
+    input.intrinsic_source_rate_ppm = chipsetIntrinsicOffsetPpm(ClockChipset::Rp1);
     input.maximum_output_hz = kRp1GpclkMaximumDirectOutputHz;
     input.dither_sequence_length = Rp1GpclkBackend::kWritesPerSymbol;
     const auto planned = planRp1GpclkWspr(input);

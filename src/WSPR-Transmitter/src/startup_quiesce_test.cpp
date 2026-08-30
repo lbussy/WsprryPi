@@ -706,6 +706,53 @@ namespace
 
     void test_gpio_rf_clock_planning_and_divider_bounds()
     {
+        for (const double ppm : {-200.0, 0.0, 2.5, 200.0})
+        {
+            for (const auto profile : {GpioProcessorClockProfile::Bcm2835,
+                                       GpioProcessorClockProfile::Legacy500Mhz,
+                                       GpioProcessorClockProfile::Bcm2711})
+            {
+                const auto plan = gpioPlanRfClock(profile, 14097100.0, 14097100.0, ppm);
+                const double nominal = profile == GpioProcessorClockProfile::Bcm2711
+                    ? 750e6 : 500e6;
+                const double intrinsic = profile == GpioProcessorClockProfile::Bcm2835
+                    ? -2.5 : 0.0;
+                expect(plan.nominal_hz == nominal &&
+                           std::fabs(plan.corrected_hz -
+                               nominal * (1.0 + (ppm + intrinsic) / 1e6)) < 1e-6,
+                       "RF planning must add the chipset offset exactly once at caller PPM bounds");
+                expect(gpioCorrectedPlldFrequency(nominal, ppm) ==
+                           nominal * (1.0 + ppm * 1e-6),
+                       "RF intrinsic offset must not change PWM timing correction");
+            }
+        }
+        for (const double invalid_ppm : {-200.000001, 200.000001,
+                 std::numeric_limits<double>::infinity(),
+                 std::numeric_limits<double>::quiet_NaN()})
+        {
+            bool rejected = false;
+            try
+            {
+                (void)gpioPlanRfClock(GpioProcessorClockProfile::Bcm2835,
+                                     14097100.0, 14097100.0, invalid_ppm);
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            expect(rejected, "intrinsic offset must not admit invalid caller PPM");
+        }
+        bool unknown_rejected = false;
+        try
+        {
+            (void)gpioPlanRfClock(static_cast<GpioProcessorClockProfile>(999),
+                                 14097100.0, 14097100.0, 0.0);
+        }
+        catch (const std::invalid_argument&)
+        {
+            unknown_rejected = true;
+        }
+        expect(unknown_rejected, "unknown GPIO clock profile must fail closed");
         constexpr double spacing_hz = 12000.0 / 8192.0;
         const auto tone_range = [spacing_hz](double center_hz) {
             return std::pair<double, double>{
