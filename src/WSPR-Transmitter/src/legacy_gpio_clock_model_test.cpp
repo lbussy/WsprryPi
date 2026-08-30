@@ -80,10 +80,10 @@ namespace
             bcm2711PllD.processor == LegacyGpioProcessorProfile::Bcm2711 &&
                 bcm2711PllD.parent == LegacyGpioClockParent::PllD &&
                 bcm2711PllD.nominal_rate_hz == 750000000.0 &&
-                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.153768 &&
+                bcm2711PllD.intrinsic_system_to_rf_difference_ppm == 0.0 &&
                 bcm2711PllD.intrinsic_evidence ==
-                    LegacyGpioIntrinsicEvidence::ConductedPromoted,
-            "BCM2711 PLLD must use its promoted conducted 750 MHz intrinsic value");
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
+            "BCM2711 PLLD must use the conservative 750 MHz zero baseline pending GPS-referenced qualification");
         expect(
             bcm2711Oscillator.processor ==
                     LegacyGpioProcessorProfile::Bcm2711 &&
@@ -91,10 +91,10 @@ namespace
                     LegacyGpioClockParent::Oscillator &&
                 bcm2711Oscillator.nominal_rate_hz == 54000000.0 &&
                 bcm2711Oscillator.intrinsic_system_to_rf_difference_ppm ==
-                    -15.035290 &&
+                    0.0 &&
                 bcm2711Oscillator.intrinsic_evidence ==
-                    LegacyGpioIntrinsicEvidence::ConductedPromoted,
-            "BCM2711 oscillator must use its promoted conducted 54 MHz intrinsic value");
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline,
+            "BCM2711 oscillator must use the conservative 54 MHz zero baseline pending GPS-referenced qualification");
 
         const auto selectedOscillator =
             selectLegacyGpioClockForAdditionalCorrection(
@@ -105,9 +105,9 @@ namespace
         expect(
             selectedOscillator.model.parent ==
                     LegacyGpioClockParent::Oscillator &&
-                selectedOscillator.correction.intrinsic_ppm == -15.035290 &&
+                selectedOscillator.correction.intrinsic_ppm == 0.0 &&
                 selectedOscillator.correction.additional_ppm == 9.616 &&
-                selectedOscillator.correction.effective_ppm == -5.419290,
+                selectedOscillator.correction.effective_ppm == 9.616,
             "parent-aware composition must apply the oscillator intrinsic exactly once");
 
         expectInvalid(

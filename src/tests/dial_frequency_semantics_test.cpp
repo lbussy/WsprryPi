@@ -1248,11 +1248,11 @@ int main(int argc, char *argv[])
                 provenance.gpio_correction_candidate.nominal_rate_hz == 750000000.0 &&
                 nearly_equal(
                     provenance.gpio_correction_candidate.intrinsic_ppm,
-                    0.153768,
+                    0.0,
                     1.0e-9) &&
                 nearly_equal(
                     provenance.gpio_correction_candidate.final_ppm,
-                    0.153768,
+                    0.0,
                     1.0e-9),
             "candidate provenance must expose the exact planned BCM2711 parent and correction");
         require(
@@ -1263,11 +1263,11 @@ int main(int argc, char *argv[])
                 provenance.gpio_correction_committed.nominal_rate_hz == 750000000.0 &&
                 nearly_equal(
                     provenance.gpio_correction_committed.intrinsic_ppm,
-                    0.153768,
+                    0.0,
                     1.0e-9) &&
                 nearly_equal(
                     provenance.gpio_correction_committed.final_ppm,
-                    0.153768,
+                    0.0,
                     1.0e-9) &&
                 !provenance.gpio_correction_committed.execution_identity.empty(),
             "committed provenance must freeze exact plan identity without claiming idle work is active");
@@ -1297,7 +1297,7 @@ int main(int argc, char *argv[])
         const auto bcm2711_legacy_request = current_transmission_request_for_test();
         const auto bcm2711_2200m_provenance = current_tx_runtime_status_snapshot();
         require(
-            nearly_equal(bcm2711_legacy_request.ppm, -15.035290) &&
+            nearly_equal(bcm2711_legacy_request.ppm, 0.0) &&
                 bcm2711_2200m_provenance.gpio_correction_candidate.available &&
                 bcm2711_2200m_provenance.gpio_correction_candidate.selected_parent ==
                     "oscillator" &&
@@ -1305,11 +1305,11 @@ int main(int argc, char *argv[])
                     54000000.0 &&
                 nearly_equal(
                     bcm2711_2200m_provenance.gpio_correction_candidate.intrinsic_ppm,
-                    -15.035290) &&
+                    0.0) &&
                 nearly_equal(
                     bcm2711_2200m_provenance.gpio_correction_candidate.final_ppm,
-                    -15.035290),
-            "BCM2711 2200 m planning must commit and publish the promoted oscillator intrinsic value");
+                    0.0),
+            "BCM2711 2200 m planning must commit and publish the conservative oscillator zero baseline");
         auto bcm2711_request = controller_request_from_legacy_for_test(
             bcm2711_legacy_request,
             wsprrypi::TransmissionMode::WSPR);

@@ -12,8 +12,8 @@ namespace wsprrypi
         constexpr double kBcm2711PllDHz = 750000000.0;
         constexpr double kBcm2711OscillatorHz = 54000000.0;
         constexpr double kBcm2835IntrinsicPpm = -2.5;
-        constexpr double kBcm2711PllDIntrinsicPpm = 0.153768;
-        constexpr double kBcm2711OscillatorIntrinsicPpm = -15.035290;
+        constexpr double kBcm2711PllDIntrinsicPpm = 0.0;
+        constexpr double kBcm2711OscillatorIntrinsicPpm = 0.0;
         constexpr double kLaterLegacyPllDIntrinsicPpm = 0.0;
 
         constexpr double kIssue429SdrInterceptHz = 0.4484;
@@ -71,7 +71,7 @@ namespace wsprrypi
                     parent,
                     kBcm2711PllDHz,
                     kBcm2711PllDIntrinsicPpm,
-                    LegacyGpioIntrinsicEvidence::ConductedPromoted};
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
             }
             if (parent == LegacyGpioClockParent::Oscillator)
             {
@@ -80,7 +80,7 @@ namespace wsprrypi
                     parent,
                     kBcm2711OscillatorHz,
                     kBcm2711OscillatorIntrinsicPpm,
-                    LegacyGpioIntrinsicEvidence::ConductedPromoted};
+                    LegacyGpioIntrinsicEvidence::DiscoveryBaseline};
             }
             break;
         }
