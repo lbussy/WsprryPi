@@ -384,5 +384,34 @@ int main() {
           {"state", state()}};
   assert(service.query().at("result") == "contract_mismatch");
 
+  next = {{"schemaVersion", 3}, {"contract", "rp1-gpclk-route-manager-runtime-v1"},
+          {"status", "ok"}, {"state", {{"profile", "runtime"}, {"activeRoute", "gpio4"},
+          {"outputEnabled", false}, {"qualification", false}, {"controller", {{"id", 9}}},
+          {"preflightToken", std::string(64, 'a')}}}};
+  assert(service.query().at("profile") == "runtime");
+  assert(inhibited);
+  auto runtime_preflight = service.operate("preflight", "GPIO20", 0);
+  assert(runtime_preflight.at("ok") == true);
+  const auto runtime_generation = runtime_preflight.at("generation").get<std::uint64_t>();
+  assert(requests.back().at("schemaVersion") == 3);
+  assert(service.operate("switch", "GPIO20", runtime_generation + 1).at("ok") == false);
+  assert(service.operate("apply-and-reboot", "GPIO20", runtime_generation).at("ok") == false);
+  next["status"] = "complete-inhibited";
+  assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == true);
+  assert(requests.back().at("operation") == "switch");
+  assert(requests.back().at("preflightToken") == std::string(64, 'a'));
+  assert(inhibited);
+  assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == false);
+  next["status"] = "error";
+  next["error"] = {{"message", "overlay removal failed"}, {"kernelError", -16}, {"overlayId", 9}};
+  const auto runtime_failure = service.operate("recover", "GPIO20", 0);
+  assert(runtime_failure.at("ok") == false);
+  assert(runtime_failure.at("error").at("kernelError") == -16);
+  assert(runtime_failure.at("error").at("overlayId") == 9);
+  assert(inhibited);
+  next = response("query", "ok", state());
+  assert(service.query().at("result") == "contract_mismatch");
+  assert(inhibited);
+
   std::cout << "rp1_gpclk_route_service_test: PASS\n";
 }

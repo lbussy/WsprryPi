@@ -18,6 +18,7 @@ namespace {
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST
 constexpr const char *kSocket = "/run/rp1-gpclk-dkms/route-manager.sock";
 #endif
+constexpr const char *kRuntimeContract = "rp1-gpclk-route-manager-runtime-v1";
 constexpr const char *kContract = "rp1-gpclk-route-manager-v1";
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST
 nlohmann::json socketRequest(const nlohmann::json &request) {
@@ -29,6 +30,12 @@ nlohmann::json socketRequest(const nlohmann::json &request) {
     ::close(fd);
     throw std::runtime_error(
         "Could not secure the RP1 GPCLK route-manager socket.");
+  }
+  const timeval timeout{30, 0};
+  if (::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+      ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout))) {
+    ::close(fd);
+    throw std::runtime_error("Could not bound the route-manager connection.");
   }
   sockaddr_un address{};
   address.sun_family = AF_UNIX;
@@ -118,7 +125,8 @@ nlohmann::json Rp1GpclkRouteService::failure(const std::string &result,
                                              const std::string &message) const {
   return {{"ok", false},
           {"result", result},
-          {"state", "unavailable"},
+          {"state", runtime_profile_ ? "runtime_recovery" : "unavailable"},
+          {"profile", runtime_profile_ ? "runtime" : "legacy"},
           {"message", message},
           {"generation", generation_},
           {"requested", "Unavailable"},
@@ -140,7 +148,15 @@ nlohmann::json Rp1GpclkRouteService::failure(const std::string &result,
 nlohmann::json Rp1GpclkRouteService::request(const nlohmann::json &value) {
   try {
     const auto response = operations_.request(value);
-    if (!response.is_object() || response.value("schemaVersion", 0) != 1 ||
+    if (response.is_object() && response.value("schemaVersion", 0) == 3 &&
+        response.value("contract", std::string{}) == kRuntimeContract &&
+        response.contains("status") &&
+        (response.contains("state") || response.contains("error"))) {
+      runtime_profile_ = true;
+      operations_.set_transmission_inhibited(true, "Runtime route administration is output-disabled");
+      return response;
+    }
+    if (runtime_profile_ || !response.is_object() || response.value("schemaVersion", 0) != 1 ||
         response.value("contract", std::string{}) != kContract ||
         !response.contains("status") ||
         (response.contains("state") == response.contains("error")))
@@ -163,6 +179,41 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
     return failure("route_manager_error", message);
   }
   const auto &state = response["state"];
+  if (runtime_profile_) {
+    auto result = failure("runtime_inhibited", "Runtime administration keeps transmission disabled. Switching stops and masks Wsprry Pi; use the operator client to verify completion.");
+    const bool valid = state.is_object() && state.value("profile", std::string{}) == "runtime" &&
+        state.contains("outputEnabled") && state["outputEnabled"] == false &&
+        state.contains("qualification") && state["qualification"] == false &&
+        state.contains("controller") && state["controller"].is_object();
+    result["profile"] = "runtime";
+    result["contractIdentity"] = kRuntimeContract;
+    result["ok"] = valid && status != "error";
+    result["compatible"] = valid;
+    result["state"] = status == "error" ? "runtime_recovery" : "runtime_inhibited";
+    result["active"] = routeForGpio(gpioForRoute(field(state, "activeRoute")));
+    result["requested"] = requested.empty() ? routeForGpio(operations_.persisted_gpio()) : requested;
+    result["liveOutput"] = "Disabled";
+    result["bootOwnership"] = "runtime controller";
+    result["journal"] = state.contains("pendingTransaction") && state["pendingTransaction"].is_object()
+        ? field(state["pendingTransaction"], "phase") : "none";
+    result["preflightValidated"] = valid && status == "ok" && field(state, "preflightToken").size() == 64;
+    result["controller"] = state.value("controller", nlohmann::json::object());
+    if (valid) {
+      const auto phase = result["journal"].get<std::string>();
+      if ((state["controller"].value("flags", 0) & 1) ||
+          (phase != "none" && phase != "complete-inhibited" && phase != "recovered-inhibited"))
+        result["state"] = "runtime_recovery";
+    }
+    if (response.contains("error")) {
+      result["message"] = field(response["error"], "message");
+      result["error"] = response["error"];
+      if (response["error"].contains("kernelError") && response["error"].contains("overlayId"))
+        result["message"] = field(response["error"], "message") + " Kernel errno: " +
+            response["error"]["kernelError"].dump() + "; retained overlay ID: " +
+            response["error"]["overlayId"].dump() + ". Transmission remains inhibited.";
+    }
+    return result;
+  }
   const std::string configured = routeForGpio(
                         gpioForRoute(field(state, "configuredRoute"))),
                     active =
@@ -233,6 +284,46 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
   const std::string executor_route = gpio == 4    ? "gpio4"
                                      : gpio == 20 ? "gpio20"
                                                   : "";
+  if (runtime_profile_) {
+    if (!idle())
+      return failure("not_idle", "Runtime administration requires the complete application lifecycle to be idle.");
+    if (operation == "preflight") {
+      runtime_token_.clear();
+      preflight_route_.clear();
+      if (executor_route.empty())
+        return failure("invalid_route", "Route must be GPIO4 or GPIO20.");
+      auto raw = request({{"schemaVersion", 3}, {"operation", "preflight"}, {"route", executor_route}});
+      auto result = render(raw, route);
+      if (result.value("ok", false) && result.value("preflightValidated", false)) {
+        runtime_token_ = field(raw["state"], "preflightToken");
+        preflight_route_ = executor_route;
+        result["generation"] = ++generation_;
+      } else {
+        result["ok"] = false;
+      }
+      return result;
+    }
+    if (operation != "switch" && operation != "recover")
+      return failure("invalid_operation", "Runtime profile requires explicit switch or recover; reboot operations are not translated.");
+    if (operation == "switch" && (generation == 0 || generation != generation_ ||
+        runtime_token_.empty() || executor_route != preflight_route_))
+      return failure("generation_mismatch", "Repeat runtime preflight before switching.");
+    operations_.set_transmission_inhibited(true, "Runtime route administration in progress");
+    nlohmann::json value = {{"schemaVersion", 3}, {"operation", operation}, {"execute", true},
+        {"actor", "wsprrypi.service"}, {"requestId", requestId(operation.c_str(), ++generation_)}};
+    if (operation == "switch") {
+      value["route"] = executor_route;
+      value["preflightToken"] = runtime_token_;
+      // The token binds the ID across application restarts as well as preflights.
+      value["requestId"] = "wsprrypi-" + runtime_token_.substr(0, 48);
+      std::string error;
+      if (!operations_.persist_gpio || !operations_.persist_gpio(gpio, &error))
+        return failure("persistence_failed", error);
+    }
+    runtime_token_.clear();
+    preflight_route_.clear();
+    return render(request(value), route);
+  }
   if (operation == "preflight") {
     if (!idle())
       return failure("not_idle",

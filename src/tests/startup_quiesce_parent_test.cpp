@@ -23,6 +23,10 @@ ArgParserConfig cfg_for(EnableOnBootBehavior policy)
 {
     init_default_config();
     auto cfg = config;
+    // Exercise the non-WSPR launch gate with an explicit hardware-free profile.
+    cfg.mode = ModeType::QRSS;
+    cfg.transmit_backend = TransmitBackendKind::SIMULATED;
+    cfg.schedule_repeat_minutes = 0;
     cfg.use_ini = true;
     cfg.transmit = true;
     cfg.enable_on_boot = policy;

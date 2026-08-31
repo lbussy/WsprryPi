@@ -36,6 +36,8 @@ private:
   std::mutex mutex_;
   std::uint64_t generation_{0};
   std::string preflight_route_;
+  bool runtime_profile_{false};
+  std::string runtime_token_;
   bool startup_failure_latched_{false};
 };
 Rp1GpclkRouteService &productionRp1GpclkRouteService();
