@@ -172,6 +172,12 @@ WebServer::WebServer() : port_(0), running(false) {}
  */
 WebServer::~WebServer() { stop(); }
 
+bool WebServer::isListening()
+{
+    std::lock_guard<std::mutex> lock(mtx);
+    return svr && svr->is_running();
+}
+
 /**
  * @brief Sets the Cross-Origin Resource Sharing (CORS) headers on the HTTP
  * response.

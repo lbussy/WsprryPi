@@ -4865,6 +4865,19 @@ int main(int argc, char *argv[])
             "/tmp/enable_on_boot_startup_always.ini",
             "Enable on Boot Always must enable and persist Operation.Transmit on startup");
 
+        setenv("WSPRRYPI_ROUTE_RESTORE_IDLE", "offline-restoration", 1);
+        for (auto policy : {EnableOnBootBehavior::Never,
+                            EnableOnBootBehavior::Follow,
+                            EnableOnBootBehavior::Always})
+        {
+            exercise_startup_policy(policy, true, false,
+                "/tmp/route_restoration_startup.ini",
+                "Route restoration must persist idle startup for every boot policy");
+            require(config.enable_on_boot == policy,
+                "Route restoration must preserve the saved boot preference");
+        }
+        unsetenv("WSPRRYPI_ROUTE_RESTORE_IDLE");
+
         auto exercise_managed_startup_gate =
             [](EnableOnBootBehavior behavior,
                bool startup_config_handoff,

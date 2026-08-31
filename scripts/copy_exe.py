@@ -100,6 +100,9 @@ def main():
         run(["sudo", "systemctl", "stop", SERVICE_NAME])
 
     try:
+        run(["sudo", "install", "-d", "-o", "root", "-g", "root", "-m", "0755", "/usr/local/lib/wsprrypi"])
+        install_file(git_root / "scripts" / "route_application.py",
+                     Path("/usr/local/lib/wsprrypi/route_application.py"))
         install_file(source, INSTALL_PATH)
     finally:
         if was_active:

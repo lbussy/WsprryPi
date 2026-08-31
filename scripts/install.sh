@@ -5997,6 +5997,15 @@ manage_support_bundle_runtime() {
     debug_end "$debug"
 }
 
+# Install the application-owned route companion from the selected checkout.
+manage_route_application() {
+    if [[ "$ACTION" == "install" && "$DRY_RUN" != "true" ]]; then
+        install -d -o root -g root -m 0755 /usr/local/lib/wsprrypi || return 1
+        install -o root -g root -m 0755 "${LOCAL_REPO_DIR}/scripts/route_application.py" \
+            /usr/local/lib/wsprrypi/route_application.py || return 1
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of configuration files.
 # @details This function installs or removes a configuration file. During
@@ -7980,6 +7989,7 @@ manage_wsprry_pi() {
         "compile_binary \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
         "manage_support_bundle_runtime"
+        "manage_route_application"
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_i2c"
         "manage_service \"/usr/bin/$WSPR_EXE\" \"$service_command\" \"false\""

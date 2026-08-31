@@ -17,6 +17,7 @@ class Rp1GpclkRouteService {
 public:
   explicit Rp1GpclkRouteService(Rp1GpclkRouteExecutorOperations);
   nlohmann::json query();
+  bool acknowledgeRestoration(const std::string &token, bool transmit);
   nlohmann::json operate(const std::string &, const std::string &,
                          std::uint64_t);
   nlohmann::json reconcileStartup();

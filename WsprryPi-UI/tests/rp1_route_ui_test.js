@@ -5,7 +5,7 @@ const view=fs.readFileSync(path.join(root,"data/views/config.php"),"utf8");
 const script=fs.readFileSync(path.join(root,"data/index.js"),"utf8");
 const styles=fs.readFileSync(path.join(root,"data/index.css"),"utf8");
 const header=fs.readFileSync(path.join(root,"data/header.php"),"utf8");
-assert.match(view,/Requested[\s\S]*Persisted[\s\S]*Boot configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*live_output[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Product qualification/);
+assert.match(view,/Requested[\s\S]*Persisted[\s\S]*Configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*live_output[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Product qualification/);
 assert.match(view,/>Apply route and reboot</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
@@ -61,5 +61,10 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  context.window.confirm=()=>false;
  await controller.operate("rollback");
  assert.equal(requests.length,1,"cancelled recovery has no effect");
+ controller.render({profile:"runtime",ok:true,state:"runtime_ready",persisted:"GPIO20",active:"GPIO20"});
+ assert.equal(element("rp1-route-state").textContent,"Route ready");
+ controller.render({profile:"runtime",ok:false,state:"runtime_restoration_failed",persisted:"GPIO20",active:"GPIO4"});
+ assert.equal(element("rp1-route-apply").disabled,true,"restoration failure cannot launch another switch");
+ assert.match(element("rp1-route-feedback").textContent,/restore --execute/);
  console.log("runtime route UI behavior: PASS");
 })().catch(error=>{console.error(error);process.exitCode=1});

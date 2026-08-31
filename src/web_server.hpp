@@ -88,6 +88,9 @@ public:
      */
     void start(int port);
 
+    // True only after the HTTP listener has bound, not merely after thread start.
+    bool isListening();
+
     /**
      * @brief Stops the web server.
      *

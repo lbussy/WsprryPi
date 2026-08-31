@@ -180,7 +180,7 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
   }
   const auto &state = response["state"];
   if (runtime_profile_) {
-    auto result = failure("runtime_inhibited", "Runtime administration keeps transmission disabled. Switching stops and masks Wsprry Pi; use the operator client to verify completion.");
+    auto result = failure("runtime_inhibited", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume.");
     const bool valid = state.is_object() && state.value("profile", std::string{}) == "runtime" &&
         state.contains("outputEnabled") && state["outputEnabled"] == false &&
         state.contains("qualification") && state["qualification"] == false &&
@@ -196,13 +196,51 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
     result["bootOwnership"] = "runtime controller";
     result["journal"] = state.contains("pendingTransaction") && state["pendingTransaction"].is_object()
         ? field(state["pendingTransaction"], "phase") : "none";
-    result["preflightValidated"] = valid && status == "ok" && field(state, "preflightToken").size() == 64;
+    result["preflightValidated"] = valid && status == "ok" &&
+        state.value("applicationRestorationVersion", 0) == 1 && field(state, "preflightToken").size() == 64;
+    if (!field(state, "preflightToken").empty() && state.value("applicationRestorationVersion", 0) != 1) {
+      result["message"] = "Upgrade the route manager before switching: this version cannot restore application availability.";
+    }
     result["controller"] = state.value("controller", nlohmann::json::object());
     if (valid) {
       const auto phase = result["journal"].get<std::string>();
       if ((state["controller"].value("flags", 0) & 1) ||
           (phase != "none" && phase != "complete-inhibited" && phase != "recovered-inhibited"))
         result["state"] = "runtime_recovery";
+    }
+    if (state.contains("application") && state["application"].is_object()) {
+      const auto &application = state["application"];
+      const auto phase = field(application, "phase");
+      result["application"] = application;
+      result["services"] = {{"wsprrypi.service", phase}};
+      if ((phase == "restored" || phase == "stopped" || phase == "administrator-masked") &&
+          valid && application.value("controller", nlohmann::json::object()) == state["controller"] &&
+          state["controller"].value("flags", 0) == 6 && state["controller"].value("error", -1) == 0 &&
+          routeForGpio(operations_.persisted_gpio()) == field(result, "active") &&
+          field(application, "boot") == field(state, "bootId") &&
+          field(application, "binding") == field(state, "bindingSha256")) {
+        result["state"] = "runtime_ready";
+        result["configured"] = result["active"];
+        result["reconciled"] = true;
+        result["journal"] = "none";
+        result["message"] = phase == "restored"
+            ? "Last route switch restored Wsprry Pi in idle mode. Transmission was not resumed."
+            : phase == "stopped" ? "Route switched; Wsprry Pi remains stopped as requested by its prior state."
+            : "Route switched; the administrator's service mask is preserved.";
+      } else if (phase == "restored" || phase == "stopped" || phase == "administrator-masked") {
+        result["state"] = "runtime_recovery";
+        result["ok"] = false;
+        result["message"] = "The last restoration record does not match the current route and application configuration. Inspect the route before switching.";
+      } else if (phase == "restoration-failed") {
+        result["state"] = "runtime_restoration_failed";
+        result["ok"] = false;
+        result["message"] = "Route is installed, but application restoration failed. Run runtime_route_client.py restore --execute. " + field(application, "error");
+      } else if (phase == "route-failed" || phase == "route-recovered") {
+        result["state"] = "runtime_recovery";
+      } else {
+        result["state"] = "runtime_restoring";
+        result["message"] = "Route administration is in progress. Refresh status after Wsprry Pi reconnects.";
+      }
     }
     if (response.contains("error")) {
       result["message"] = field(response["error"], "message");
@@ -271,6 +309,20 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
                                                                  : "disabled")
                : nlohmann::json("unknown")}};
 }
+bool Rp1GpclkRouteService::acknowledgeRestoration(const std::string &token,
+                                                 bool transmit) {
+  std::lock_guard<std::mutex> guard(mutex_);
+  if (transmit || !idle() || startup_failure_latched_)
+    return false;
+  const int gpio = operations_.persisted_gpio();
+  if (gpio != 4 && gpio != 20)
+    return false;
+  const auto reply = request({{"schemaVersion", 3}, {"operation", "application-ready"},
+      {"route", gpio == 4 ? "gpio4" : "gpio20"}, {"token", token},
+      {"pid", static_cast<int>(::getpid())}, {"transmit", false}});
+  return reply.value("status", std::string{}) == "ok";
+}
+
 nlohmann::json Rp1GpclkRouteService::query() {
   std::lock_guard<std::mutex> guard(mutex_);
   return render(request({{"schemaVersion", 1}, {"operation", "query"}}));
@@ -316,9 +368,8 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       value["preflightToken"] = runtime_token_;
       // The token binds the ID across application restarts as well as preflights.
       value["requestId"] = "wsprrypi-" + runtime_token_.substr(0, 48);
-      std::string error;
-      if (!operations_.persist_gpio || !operations_.persist_gpio(gpio, &error))
-        return failure("persistence_failed", error);
+      // The privileged completion workflow persists the pin only after the
+      // overlay succeeds, independently of this application's lifetime.
     }
     runtime_token_.clear();
     preflight_route_.clear();

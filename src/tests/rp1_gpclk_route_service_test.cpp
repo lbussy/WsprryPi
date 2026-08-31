@@ -387,7 +387,7 @@ int main() {
   next = {{"schemaVersion", 3}, {"contract", "rp1-gpclk-route-manager-runtime-v1"},
           {"status", "ok"}, {"state", {{"profile", "runtime"}, {"activeRoute", "gpio4"},
           {"outputEnabled", false}, {"qualification", false}, {"controller", {{"id", 9}}},
-          {"preflightToken", std::string(64, 'a')}}}};
+          {"applicationRestorationVersion", 1}, {"preflightToken", std::string(64, 'a')}}}};
   assert(service.query().at("profile") == "runtime");
   assert(inhibited);
   auto runtime_preflight = service.operate("preflight", "GPIO20", 0);
@@ -396,9 +396,11 @@ int main() {
   assert(requests.back().at("schemaVersion") == 3);
   assert(service.operate("switch", "GPIO20", runtime_generation + 1).at("ok") == false);
   assert(service.operate("apply-and-reboot", "GPIO20", runtime_generation).at("ok") == false);
+  const int saved_before_runtime_switch = persisted;
   next["status"] = "complete-inhibited";
   assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == true);
   assert(requests.back().at("operation") == "switch");
+  assert(persisted == saved_before_runtime_switch);
   assert(requests.back().at("preflightToken") == std::string(64, 'a'));
   assert(inhibited);
   assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == false);
@@ -446,6 +448,24 @@ int main() {
   runtime["state"]["outputLifecycle"]["executionAuthorized"] = true;
   assert(runtime_service.reconcileDevelopmentStartup("GPIO20").at("ok") == false);
   assert(runtime_inhibited);
+
+  runtime["state"]["outputLifecycle"] = lifecycle;
+  assert(!runtime_service.acknowledgeRestoration("offline-token", true));
+  assert(runtime_service.acknowledgeRestoration("offline-token", false));
+  assert(runtime_requests.back().at("operation") == "application-ready");
+  assert(runtime_requests.back().at("route") == "gpio20");
+  assert(runtime_requests.back().at("transmit") == false);
+  runtime["state"]["activeRoute"] = "gpio20";
+  runtime["state"]["application"] = {{"phase","restored"}, {"controller",ctl},
+      {"boot","current-boot"}, {"binding",std::string(64,'a')}};
+  auto restored = runtime_service.query();
+  assert(restored.at("state") == "runtime_ready" && restored.at("reconciled") == true);
+  runtime["state"]["controller"]["flags"] = 7;
+  assert(runtime_service.query().at("state") == "runtime_recovery");
+  runtime["state"]["controller"] = ctl;
+  runtime["state"]["application"]["phase"] = "restoration-failed";
+  runtime["state"]["application"]["error"] = "start failed";
+  assert(runtime_service.query().at("state") == "runtime_restoration_failed");
 
   std::cout << "rp1_gpclk_route_service_test: PASS\n";
 }
