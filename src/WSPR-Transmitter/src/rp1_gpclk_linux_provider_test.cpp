@@ -125,7 +125,7 @@ public:
         std::strcpy(query.module_id, "rp1-gpclk-dkms");
         std::strcpy(query.build_id, "1.1.2");
         std::strcpy(query.compatibility_id,
-            "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4");
+            "external-provider-gpio4");
         snapshot.header.size = sizeof(snapshot);
         snapshot.header.version = RP1_GPCLK_UAPI_ABI_V3;
         snapshot.abi_min = RP1_GPCLK_UAPI_ABI_V1;
@@ -247,8 +247,9 @@ void test_query_and_fail_closed_validation()
         false, identity, error), "rejected compatibility must fail closed");
     io.query.compatibility_state = RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED;
     std::strcpy(io.query.build_id, "1.0.1");
-    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "non-frozen module/build identity must fail closed");
+    expect(provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
+        false, identity, error), "arbitrary compatible provider identity must be accepted");
+    expect(identity.build_id == "1.0.1", "provider identity must remain observable");
 }
 
 void test_safe_idle_query_projection_uses_authenticated_passive_identity()

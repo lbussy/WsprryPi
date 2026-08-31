@@ -6,33 +6,13 @@
 #include <cstdint>
 #include <string>
 #include <optional>
-#include <string_view>
 
 namespace wsprrypi
 {
-inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbi = 4;
-inline constexpr std::uint16_t kRp1GpclkDevelopmentUapiAbiMin = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio4 = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio20 = 2;
-inline constexpr std::uint32_t kRp1GpclkDevelopmentCompatibilityExperimental = 2;
 inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityLiveEligible = 1ULL << 7;
 inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityOperationLiveGate = 1ULL << 11;
-inline constexpr std::string_view kRp1GpclkDevelopmentSourceRevision =
-    "0509909bd916ee738b14a8479d3be47863c6ac72";
-inline constexpr std::string_view kRp1GpclkDevelopmentModuleId = "rp1-gpclk-dkms";
-inline constexpr std::string_view kRp1GpclkDevelopmentModuleVersion = "1.1.2";
-inline constexpr std::string_view kRp1GpclkDevelopmentUapiSha256 =
-    "23f0d7626fe51ef58f11bcb48bf880d885acf7abfdca5f186e044a0fb1d786e1";
-inline constexpr std::string_view kRp1GpclkDevelopmentGpio4Compatibility =
-    "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
-inline constexpr std::string_view kRp1GpclkDevelopmentGpio20Compatibility =
-    "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4";
-// The reviewed r4 compatibility artifact plans GPCLK divider words from its
-// 200 MHz nominal parent.  ABI v4 does not expose this value in QUERY, so keep
-// it explicitly bound to the exact module/UAPI identity above until a future
-// ABI supplies the parent rate directly.
-inline constexpr double kRp1GpclkDevelopmentNominalParentFrequencyHz =
-    200000000.0;
 
 enum class Rp1GpclkDevelopmentDenial
 {
@@ -43,10 +23,6 @@ enum class Rp1GpclkDevelopmentDenial
     zero_route_topology,
     ambiguous_topology,
     configured_active_mismatch,
-    unknown_identity,
-    version_uapi_mismatch,
-    route_identity_mismatch,
-    compatibility_not_experimental,
     live_output_unverified,
     unresolved_route_transaction,
     scheduler_conflict,
@@ -70,7 +46,6 @@ struct Rp1GpclkDevelopmentPolicyInputs
     std::uint32_t module_route{0};
     unsigned active_route_count{0};
     bool route_transaction_resolved{false};
-    bool route_manager_attributable{false};
     bool scheduler_idle{false};
     bool application_owns_operation{false};
     bool endpoint_available{false};
@@ -88,7 +63,6 @@ struct Rp1GpclkDevelopmentPolicyInputs
     std::uint64_t confirmation_route_transaction_generation{0};
     std::string operation_id;
     std::string confirmation_operation_id;
-    std::string confirmation_identity;
     std::uint32_t confirmation_route{0};
     Rp1GpclkProviderIdentity identity;
 };
@@ -106,11 +80,6 @@ struct Rp1GpclkDevelopmentDecision
 
 Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
     const Rp1GpclkDevelopmentPolicyInputs& inputs) noexcept;
-std::string rp1GpclkDevelopmentIdentityBinding(
-    const Rp1GpclkProviderIdentity& identity);
-std::optional<Rp1GpclkProviderIdentity>
-rp1GpclkExpectedDevelopmentIdentity(std::uint32_t route);
-
 void armRp1GpclkDevelopmentOperation(
     Rp1GpclkDevelopmentPolicyInputs inputs);
 std::optional<Rp1GpclkDevelopmentPolicyInputs>

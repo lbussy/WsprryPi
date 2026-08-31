@@ -14,7 +14,6 @@ struct Rp1GpclkDevelopmentInputs
     int module_gpio{0};
     unsigned active_route_count{0};
     bool route_transaction_resolved{false};
-    bool route_manager_attributable{false};
     bool scheduler_idle{false};
     bool application_owns_operation{false};
     bool endpoint_available{false};
@@ -32,7 +31,6 @@ struct Rp1GpclkDevelopmentInputs
     std::uint64_t confirmation_route_transaction_generation{0};
     std::string operation_id;
     std::string confirmation_operation_id;
-    std::string confirmation_identity;
     int confirmation_gpio{0};
 };
 } // namespace wsprrypi

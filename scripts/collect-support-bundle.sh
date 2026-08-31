@@ -1081,45 +1081,17 @@ fi
 
 log "Collecting package information..."
 
-log "Collecting RP1 GPCLK package, module, overlay, route, cleanup, and journal evidence..."
+log "Collecting RP1 GPCLK runtime endpoint and route state..."
 mkdir -p "${OUT_DIR}/hardware/rp1-gpclk"
-if command -v dpkg-query >/dev/null 2>&1; then
-  run_cmd rp1_gpclk_package dpkg-query -W -f='Package: ${Package}\nVersion: ${Version}\nStatus: ${Status}\nArchitecture: ${Architecture}\n' rp1-gpclk-dkms
-fi
-if command -v dkms >/dev/null 2>&1; then
-  run_cmd rp1_gpclk_dkms dkms status -m rp1-gpclk-dkms -v 1.1.2
-fi
-if command -v modinfo >/dev/null 2>&1; then
-  run_cmd rp1_gpclk_modinfo modinfo rp1_gpclk_dkms
-fi
-run_cmd rp1_gpclk_module_state sh -c "if [ -d /sys/module/rp1_gpclk_dkms ]; then find /sys/module/rp1_gpclk_dkms -maxdepth 2 -type f -readable -print -exec head -c 4096 {} \\; -exec printf '\\n' \\;; else echo 'module unavailable'; fi"
 run_cmd rp1_gpclk_device_state sh -c "if [ -e /dev/rp1-gpclk ]; then ls -l /dev/rp1-gpclk; else echo 'device unavailable'; fi"
 run_cmd rp1_gpclk_route_socket systemctl show rp1-gpclk-route-manager.socket --property=ActiveState,UnitFileState,FragmentPath
 run_cmd rp1_gpclk_route_journals sh -c "find /var/lib/rp1-gpclk-dkms/route-transactions -maxdepth 1 -type f -name '*.json' -printf '%f %u:%g %m %s bytes\n' 2>/dev/null | sort || true"
-for rp1_overlay in \
-  /usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio4.dtbo \
-  /usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio20.dtbo; do
-  if [[ -f "$rp1_overlay" ]]; then
-    sha256sum "$rp1_overlay" >> "${OUT_DIR}/hardware/rp1-gpclk/overlay-sha256.txt" 2>&1 || true
-  else
-    printf 'missing  %s\n' "$rp1_overlay" >> "${OUT_DIR}/hardware/rp1-gpclk/overlay-sha256.txt"
-  fi
-done
-copy_if_exists /boot/firmware/config.txt "${OUT_DIR}/hardware/rp1-gpclk"
 {
-  echo "Expected development source commit: eb384beefcb1a0253062cffdfc3f6364594faa56"
-  echo "Expected module/UAPI: rp1-gpclk-dkms 1.1.2, ABI v3 passive snapshot"
-  echo "Expected package: unreleased; no package hash is accepted for this development slice"
-  echo "Expected compatibility: route-specific GPIO4/GPIO20 development-candidate-r3, Experimental"
+  echo "Provider provisioning and package identity: external to WsprryPi"
   echo "Persisted route: GPIO$(ini_value "$INSTALLED_INI" "GPIO" "Transmit Pin" "unavailable")"
-  echo "Configured overlay evidence: see the RP1-GPCLK-DKMS owned block in config.txt"
-  echo "Historical predecessor evidence: 1.1.1 output-inhibited GPIO4/GPIO20/restored-GPIO4; not current evidence"
-  echo "Active route and live eligibility: must be reported by the module; never inferred"
-  echo "Qualification: unvalidated; Step 4 is hardware-free application-plan integration only"
-  echo "Cleanup evidence: see rp1_gpclk_module_state command report"
-  echo "Journal evidence: see the rp1_gpclk_route_journals command report"
+  echo "Active route and operation readiness: reported through the runtime provider protocol"
+  echo "Qualification: not established by this support bundle"
 } > "${OUT_DIR}/hardware/rp1-gpclk/evidence-summary.txt"
-run_cmd rp1_gpclk_boot_route sh -c "sed -n '/^# BEGIN RP1-GPCLK-DKMS OWNED ROUTE$/,/^# END RP1-GPCLK-DKMS OWNED ROUTE$/p' /boot/firmware/config.txt 2>/dev/null || true"
 
 if command -v dpkg >/dev/null 2>&1; then
   dpkg -l > "${OUT_DIR}/system/dpkg-list.txt" 2>&1 || true

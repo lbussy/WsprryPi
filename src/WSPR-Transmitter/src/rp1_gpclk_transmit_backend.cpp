@@ -29,7 +29,6 @@ std::array<std::uint8_t, 32> operation_authorization_digest(
     const wsprrypi::Rp1GpclkDevelopmentPolicyInputs& policy)
 {
     const std::string material = policy.operation_id + "\n" +
-        policy.confirmation_identity + "\n" +
         std::to_string(policy.requested_route) + "\n" +
         std::to_string(policy.route_transaction_generation);
     std::array<std::uint8_t, 32> digest{};
@@ -134,7 +133,6 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         policy.module_route = map_route(source.module_gpio);
         policy.active_route_count = source.active_route_count;
         policy.route_transaction_resolved = source.route_transaction_resolved;
-        policy.route_manager_attributable = source.route_manager_attributable;
         policy.scheduler_idle = source.scheduler_idle;
         policy.application_owns_operation = source.application_owns_operation;
         policy.endpoint_available = source.endpoint_available;
@@ -152,7 +150,6 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         policy.confirmation_route_transaction_generation = source.confirmation_route_transaction_generation;
         policy.operation_id = source.operation_id;
         policy.confirmation_operation_id = source.confirmation_operation_id;
-        policy.confirmation_identity = source.confirmation_identity;
         policy.confirmation_route = map_route(source.confirmation_gpio);
         return policy;
     };
@@ -166,7 +163,7 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
             plan.reference_frequency_hz + 1.5 * kWsprToneSpacingHz;
         planner_input.tone_spacing_hz = kWsprToneSpacingHz;
         planner_input.parent_frequency_hz =
-            wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
+            wsprrypi::kRp1GpclkNominalParentFrequencyHz;
         planner_input.source_rate_ppm = plan.calibration.ppm;
         planner_input.intrinsic_source_rate_ppm =
             wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1);
@@ -243,7 +240,7 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
     planner_input.center_frequency_hz = plan.reference_frequency_hz;
     planner_input.tone_spacing_hz = kWsprToneSpacingHz;
     planner_input.parent_frequency_hz =
-        wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
+        wsprrypi::kRp1GpclkNominalParentFrequencyHz;
     planner_input.source_rate_ppm = plan.calibration.ppm;
     planner_input.intrinsic_source_rate_ppm =
         wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1);
@@ -347,7 +344,7 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         record.module_id = current_policy.identity.module_id;
         record.module_version = current_policy.identity.build_id;
         record.compatibility_id = current_policy.identity.compatibility_id;
-        record.uapi_abi = wsprrypi::kRp1GpclkDevelopmentUapiAbi;
+        record.uapi_abi = RP1_GPCLK_UAPI_ABI_V4;
         record.route = configured_->route;
         record.endpoint = provider_->endpoint();
         record.state = "authorized";

@@ -8,6 +8,7 @@
 
 namespace wsprrypi
 {
+inline constexpr double kRp1GpclkNominalParentFrequencyHz = 200000000.0;
 
 // Direct GPCLK output only. Frequencies above this bound require a separate
 // harmonic-aware RF plan; increasing the parent rate does not remove it.

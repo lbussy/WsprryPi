@@ -665,7 +665,6 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                 provenance_json(snapshot.gpio_correction_candidate);
             reply["gpio_correction_committed"] =
                 provenance_json(snapshot.gpio_correction_committed);
-            reply["rp1_package_expected"] = snapshot.rp1_package_expected;
             reply["rp1_route_requested"] = snapshot.rp1_route_requested;
             reply["rp1_route_persisted"] = snapshot.rp1_route_persisted;
             reply["rp1_route_configured"] = snapshot.rp1_route_configured;

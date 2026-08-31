@@ -1,5 +1,4 @@
 #include "rp1_gpclk_linux_provider.hpp"
-#include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_uapi.h"
 
 #include <algorithm>
@@ -138,10 +137,9 @@ bool Rp1GpclkLinuxProvider::queryOpen(
         error = "RP1 GPCLK provider is missing required capabilities or reported unknown capabilities."; return false;
     }
     if (require_live_eligible &&
-        ((request.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0 ||
-         request.compatibility_state != RP1_GPCLK_COMPAT_EXPERIMENTAL))
+        (request.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0)
     {
-        error = "RP1 GPCLK provider lacks exact Experimental LIVE_ELIGIBLE status."; return false;
+        error = "RP1 GPCLK provider lacks LIVE_ELIGIBLE capability."; return false;
     }
     if (request.compatibility_state == RP1_GPCLK_COMPAT_UNAVAILABLE ||
         request.compatibility_state == RP1_GPCLK_COMPAT_REJECTED)
@@ -180,13 +178,6 @@ bool Rp1GpclkLinuxProvider::queryOpen(
     {
         error = "RP1 GPCLK provider returned an empty or unterminated identity."; return false;
     }
-    const auto expected = rp1GpclkExpectedDevelopmentIdentity(identity.route);
-    if (!expected || identity.module_id != expected->module_id ||
-        identity.build_id != expected->build_id ||
-        identity.compatibility_id != expected->compatibility_id)
-    {
-        error = "RP1 GPCLK provider does not match the exact route-specific 1.1.2 r4 development identity."; return false;
-    }
     return true;
 }
 
@@ -214,7 +205,8 @@ bool Rp1GpclkLinuxProvider::query(
         !require_live_eligible &&
         identity.compatibility_state == RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED &&
         (identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0 &&
-        snapshot.compatibility_state == RP1_GPCLK_COMPAT_EXPERIMENTAL &&
+        snapshot.compatibility_state != RP1_GPCLK_COMPAT_UNAVAILABLE &&
+        snapshot.compatibility_state != RP1_GPCLK_COMPAT_REJECTED &&
         snapshot.live_output == RP1_GPCLK_OBSERVATION_FALSE &&
         snapshot.live_eligible == RP1_GPCLK_OBSERVATION_TRUE;
     if (snapshot.route != identity.route ||
@@ -371,11 +363,12 @@ bool Rp1GpclkLinuxProvider::acquire(
     if (!passiveSnapshot(snapshot, error)) return false;
     if (snapshot.abi_max < RP1_GPCLK_UAPI_ABI_V4 ||
         snapshot.route != expected_route ||
-        snapshot.compatibility_state != RP1_GPCLK_COMPAT_EXPERIMENTAL ||
+        snapshot.compatibility_state == RP1_GPCLK_COMPAT_UNAVAILABLE ||
+        snapshot.compatibility_state == RP1_GPCLK_COMPAT_REJECTED ||
         snapshot.live_eligible != RP1_GPCLK_OBSERVATION_TRUE ||
         (snapshot.capabilities & required_capabilities) != required_capabilities)
     {
-        error = "RP1 GPCLK provider is not eligible for exact ABI v4 operation-scoped acquisition.";
+        error = "RP1 GPCLK provider is not eligible for ABI v4 operation-scoped acquisition.";
         return false;
     }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);

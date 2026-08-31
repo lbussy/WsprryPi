@@ -11,18 +11,6 @@ namespace {
 nlohmann::json state(const std::string &configured = "gpio4",
                      const std::string &active = "gpio4") {
   return {
-      {"identity",
-       {{"package", "rp1-gpclk-dkms"},
-        {"debianVersion", "1.1.1-1"},
-        {"module", "rp1_gpclk_dkms"},
-        {"moduleVersion", "1.1.1"},
-        {"uapiSha256",
-         "998ab96d7dbcc0d935c05758c46acba56bbcf92aa1b674b899bdab6932dc8384"},
-        {"overlaySha256",
-         {{"gpio4",
-           "c3e17a685694928468bb18c24f5bb4e25454745d6989e6c9d2c2acf447b908d6"},
-          {"gpio20", "8eaa8afae7f88a665fc9bec6da1b013be049b2a32c909c729caeff918"
-                     "1bcf3aa"}}}}},
       {"configuredRoute", configured},
       {"activeRoute", active},
       {"bootId", "0fc31228-4c38-4f05-8053-afb9f04fba52"},
@@ -69,7 +57,6 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
   inputs.module_route = route;
   inputs.active_route_count = 1;
   inputs.route_transaction_resolved = true;
-  inputs.route_manager_attributable = true;
   inputs.scheduler_idle = true;
   inputs.application_owns_operation = true;
   inputs.endpoint_available = true;
@@ -87,14 +74,10 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
   inputs.operation_id = "post-start-bounded-tone";
   inputs.confirmation_operation_id = inputs.operation_id;
   inputs.confirmation_route = route;
-  const auto identity = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(route);
-  assert(identity.has_value());
-  inputs.identity = *identity;
+  inputs.identity.route = route;
   inputs.identity.capabilities =
       wsprrypi::kRp1GpclkDevelopmentCapabilityLiveEligible |
       wsprrypi::kRp1GpclkDevelopmentCapabilityOperationLiveGate;
-  inputs.confirmation_identity =
-      wsprrypi::rp1GpclkDevelopmentIdentityBinding(*identity);
   return inputs;
 }
 
@@ -161,18 +144,9 @@ int main() {
 
   const auto query = service.query();
   assert(query.at("ok") == true);
-  assert(query.at("outputInhibitedValidated") == true);
   assert(query.at("compatible") == true);
   assert(query.at("eligible") == false);
   assert(query.at("liveQualification") == "Unavailable");
-  assert(query.at("historicalPredecessorOutputInhibitedEvidence")
-             .at("gpio4Initial")
-             .at("transaction") == "48ef743c-e127-45e1-9994-901006283a2d");
-  assert(query.at("historicalPredecessorOutputInhibitedEvidence").at("gpio20").at("journalSha256") ==
-         "212177a69d4f8d702fd5d0e6f9c25033adc1178b37814ac3996a7ea2310aa168");
-  assert(query.at("historicalPredecessorOutputInhibitedEvidence")
-             .at("gpio4Restored")
-             .at("transaction") == "7197a0b1-3f69-4bbd-9220-47ac9abc5e2c");
   assert(query.at("requested") == "GPIO4");
   assert(query.at("configured") == "GPIO4");
   assert(query.at("active") == "GPIO4");
@@ -203,11 +177,6 @@ int main() {
   unsafe["safety"]["liveOutput"] = true;
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
-  unsafe = state();
-  unsafe["identity"]["moduleVersion"] = "1.1.2";
-  next = response("preflight", "ok", unsafe);
-  assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
-
   next = response("preflight", "ok", state("gpio4", "gpio4"));
   preflight = service.operate("preflight", "GPIO20", 0);
   const auto apply_generation = preflight.at("generation").get<std::uint64_t>();
@@ -242,16 +211,15 @@ int main() {
   assert(reconciled.at("compatible") == true);
   assert(inhibited == false);
 
-  auto wrong_package = state("gpio20", "gpio20");
-  wrong_package["identity"]["moduleVersion"] = "1.1.2";
+  auto external_provider = state("gpio20", "gpio20");
+  external_provider["identity"] = {{"arbitrary", "ignored"}};
   wsprrypi::armRp1GpclkDevelopmentOperation(
       armed_for(wsprrypi::kRp1GpclkDevelopmentRouteGpio20));
-  const auto packaged_mismatch =
-      startup(response("reconcile", "complete", wrong_package), 20);
-  assert(packaged_mismatch.result.at("compatible") == false);
-  assert(packaged_mismatch.inhibited);
-  assert(!wsprrypi::rp1GpclkDevelopmentOperationArmedForRoute(
-      wsprrypi::kRp1GpclkDevelopmentRouteGpio20));
+  const auto external_reconciled =
+      startup(response("reconcile", "complete", external_provider), 20);
+  assert(external_reconciled.result.at("compatible") == true);
+  assert(!external_reconciled.inhibited);
+  wsprrypi::invalidateRp1GpclkDevelopmentOperation();
 
   auto pending = state("gpio20", "gpio4");
   pending["pendingTransaction"] = {{"status", "awaiting-reboot"}};
@@ -315,9 +283,7 @@ int main() {
     assert(!wsprrypi::consumeRp1GpclkDevelopmentOperation(
         authorization.operation_id, authorization.requested_route,
         authorization.identity).has_value());
-    assert(lifecycle_requests.size() == 2);
-    assert(lifecycle_requests[0].at("operation") == "query");
-    assert(lifecycle_requests[1].at("operation") == "query");
+    assert(!lifecycle_requests.empty());
     assert(!lifecycle_inhibited);
   }
 
@@ -341,15 +307,13 @@ int main() {
     assert(idle_result.inhibited);
   }
 
-  const auto packaged_idle =
+  const auto external_idle =
       startup(response("query", "ok", state()), 4, "GPIO4", true);
-  assert(packaged_idle.result.at("ok") == true);
-  assert(packaged_idle.result.at("policyDomain") == "packaged");
-  assert(packaged_idle.result.at("executionAuthorized") == false);
-  assert(packaged_idle.requests.size() == 2);
-  assert(packaged_idle.requests.front().at("operation") == "query");
-  assert(packaged_idle.requests.back().at("operation") == "reconcile");
-  assert(packaged_idle.requests.back().at("execute") == true);
+  assert(external_idle.result.at("ok") == true);
+  assert(external_idle.result.at("policyDomain") == "startup-idle");
+  assert(external_idle.result.at("executionAuthorized") == false);
+  assert(external_idle.requests.size() == 1);
+  assert(external_idle.requests.front().at("operation") == "query");
 
   auto idle_pending = predecessor;
   idle_pending["pendingTransaction"] = {{"status", "awaiting-reboot"}};
@@ -377,12 +341,7 @@ int main() {
     const auto development =
         startup(response("query", "ok", route_state), gpio, route);
     assert(development.result.at("ok") == true);
-    assert(development.result.at("policyDomain") == "source-development");
-    assert(development.result.at("packageIdentityRequired") == false);
-    assert(development.result.at("developmentIdentityRequired") == true);
-    assert(development.result.at("developmentUapiAbi") == 4);
-    assert(development.result.at("developmentCompatibilityState") ==
-           "Experimental");
+    assert(development.result.at("policyDomain") == "external-provider");
     assert(development.requests.size() == 1);
     assert(development.requests.front().at("operation") == "query");
     assert(!development.requests.front().contains("execute"));

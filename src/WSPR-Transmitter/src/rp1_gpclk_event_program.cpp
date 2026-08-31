@@ -104,7 +104,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     input.center_frequency_hz = plan.reference_frequency_hz;
     input.tone_spacing_hz = spacing;
     input.parent_frequency_hz =
-        kRp1GpclkDevelopmentNominalParentFrequencyHz;
+        kRp1GpclkNominalParentFrequencyHz;
     input.source_rate_ppm = plan.calibration.ppm;
     input.intrinsic_source_rate_ppm = chipsetIntrinsicOffsetPpm(ClockChipset::Rp1);
     input.maximum_output_hz = kRp1GpclkMaximumDirectOutputHz;

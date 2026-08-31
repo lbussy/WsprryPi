@@ -3,14 +3,14 @@
 `WSPR-Transmitter` is a C++20 component for generating WSPR (Weak Signal
 Propagation Reporter) RF transmissions with precise symbol timing.
 
-On Raspberry Pi 5, the GPIO selection exclusively uses the canonical
-RP1-GPCLK-DKMS ABI v2 endpoint `/dev/rp1-gpclk`; it never falls back to the
-legacy DMA backend. Implemented capabilities, compatibility, and
-`LIVE_ELIGIBLE` remain independent gates, and GPIO4 and GPIO20 remain
-independent routes. See
-`../../docs/research/issue-412-rp1-gpclk-v1.1.1-consumer.md` for the current
-continuous/finite TONE, route-manager, and qualification boundary. Earlier
-consumer-contract documents remain historical audit evidence.
+On Raspberry Pi 5, RP1 output exclusively uses the externally provisioned
+endpoint `/dev/rp1-gpclk`; it never falls back to the legacy DMA backend.
+WsprryPi does not install or attest the provider. Runtime protocol and
+capability checks, ABI v4 operation-scoped ownership, bounded execution,
+`LIVE_ELIGIBLE`, and cleanup remain required. GPIO4 and GPIO20 are independent
+routes. The provider's package version or build label is not an application
+allowlist. Earlier version-specific consumer-contract documents remain
+historical audit evidence, not the current provisioning policy.
 
 ### Shared chipset clock offsets
 

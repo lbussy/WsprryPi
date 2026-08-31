@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 #include "rp1_gpclk_linux_provider.hpp"
-#include "rp1_gpclk_development_policy.hpp"
 #include "rp1_gpclk_uapi.h"
 
 #include <cstdlib>
@@ -38,17 +37,9 @@ int main(int argc, char** argv)
         std::cerr << "passive_snapshot=failed\nerror=" << error << '\n';
         return EXIT_FAILURE;
     }
-    const auto expected = wsprrypi::rp1GpclkExpectedDevelopmentIdentity(route);
-    if (!expected || snapshot.route != route ||
-        snapshot.abi_min > wsprrypi::kRp1GpclkDevelopmentUapiAbi ||
-        snapshot.abi_max < wsprrypi::kRp1GpclkDevelopmentUapiAbi ||
-        snapshot.compatibility_state !=
-            wsprrypi::kRp1GpclkDevelopmentCompatibilityExperimental ||
-        snapshot.module_id != expected->module_id ||
-        snapshot.build_id != expected->build_id ||
-        snapshot.compatibility_id != expected->compatibility_id)
+    if (snapshot.route != route)
     {
-        std::cerr << "passive_snapshot=rejected\nerror=exact r4 development identity mismatch\n";
+        std::cerr << "passive_snapshot=rejected\nerror=provider route mismatch\n";
         return EXIT_FAILURE;
     }
     for (const auto observation : {snapshot.cleanup_fault, snapshot.owner_present,

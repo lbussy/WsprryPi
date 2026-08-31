@@ -1,7 +1,0 @@
-./
-./control
-./md5sums
-./postinst
-./postrm
-./preinst
-./prerm

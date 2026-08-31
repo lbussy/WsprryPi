@@ -44,8 +44,7 @@ public:
         identity.capabilities=capabilities; identity.module_id="rp1-gpclk-dkms";
         identity.build_id="1.1.2";
         identity.compatibility_id=route==RP1_GPCLK_ROUTE_GPIO20
-            ? "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4"
-            : "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
+            ? "external-provider-gpio20" : "external-provider-gpio4";
         return true;
     }
     bool acquire(std::uint32_t route, std::uint64_t capabilities,
@@ -110,7 +109,7 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
     inputs.power_level=drive; inputs.tx_gpio=inputs.configured_tx_gpio=gpio;
     auto& d=inputs.rp1_development;
     d.enabled=true; d.persisted_gpio=d.active_gpio=d.module_gpio=d.confirmation_gpio=gpio;
-    d.active_route_count=1; d.route_transaction_resolved=d.route_manager_attributable=true;
+    d.active_route_count=1; d.route_transaction_resolved=true;
     d.scheduler_idle=d.application_owns_operation=true;
     d.endpoint_available=d.endpoint_closed=d.endpoint_exclusively_acquirable=true;
     d.live_output_verified=d.physical_connection_confirmed=true;
@@ -129,9 +128,7 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
         RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
     identity.module_id="rp1-gpclk-dkms"; identity.build_id="1.1.2";
     identity.compatibility_id=gpio==20
-        ? "v1.1.2-pi5-gpio20-6.18.34-development-candidate-r4"
-        : "v1.1.2-pi5-gpio4-6.18.34-development-candidate-r4";
-    d.confirmation_identity=wsprrypi::rp1GpclkDevelopmentIdentityBinding(identity);
+        ? "external-provider-gpio20" : "external-provider-gpio4";
     return inputs;
 }
 
@@ -176,7 +173,7 @@ wsprrypi::Rp1GpclkPlan expectedPlan(
     input.center_frequency_hz=center_frequency_hz;
     input.tone_spacing_hz=spacing_hz;
     input.parent_frequency_hz=
-        wsprrypi::kRp1GpclkDevelopmentNominalParentFrequencyHz;
+        wsprrypi::kRp1GpclkNominalParentFrequencyHz;
     input.source_rate_ppm=source_rate_ppm;
     input.intrinsic_source_rate_ppm=-46.245;
     input.maximum_output_hz=100000000.0;

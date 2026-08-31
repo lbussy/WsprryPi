@@ -373,7 +373,6 @@ struct WsprRuntimeStatusSnapshot
     };
     GpioCorrectionProvenance gpio_correction_candidate;
     GpioCorrectionProvenance gpio_correction_committed;
-    std::string rp1_package_expected;
     std::string rp1_route_requested;
     std::string rp1_route_persisted;
     std::string rp1_route_configured;
