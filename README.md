@@ -39,14 +39,15 @@ building, explicit selection, deterministic virtual-time traces, bounded
 real-time tests, fault injection, repeated execution, Debian CI, and the limits
 of simulation evidence.
 
-RP1 GPCLK support is compiled into the application as a consumer of an
-externally provisioned `/dev/rp1-gpclk` provider. WsprryPi does not install,
-remove, package, attest, or validate the provenance of that provider. Runtime
-use still validates the provider protocol, required capabilities, selected
-route, exclusive operation ownership, bounded requests, and cleanup state.
-Those checks establish application compatibility only; they do not qualify
-installation, GPIO behavior, timing, frequency accuracy, spectral performance,
-or RF output.
+RP1 GPCLK support is compiled into the application as a consumer of the
+independently maintained `/dev/rp1-gpclk` provider. On Pi 5-family systems the
+installer can resolve and validate an eligible published provider release; it
+also supports fail-closed exact-source development selection. See the
+[RP1-GPCLK-DKMS installation contract](docs/rp1-gpclk-dkms-installation.md).
+WsprryPi preserves the provider on uninstall and never selects a route, loads
+the module, or enables output as part of provider installation. Runtime checks
+establish application compatibility only; they do not qualify installation,
+GPIO behavior, timing, frequency accuracy, spectral performance, or RF output.
 
 ## Installation
 

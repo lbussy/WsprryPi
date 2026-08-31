@@ -2,6 +2,20 @@
 
 These scripts are used for install and development orchestration.
 
+## RP1-GPCLK-DKMS provider
+
+`install.sh` uses `rp1_gpclk_dkms_install.py` to resolve and validate the
+independently owned provider before package mutation. Automatic Pi 5/CM5,
+explicit override/opt-out, published release, immutable development source,
+dry-run, existing-state refusal, and provider-preserving uninstall behavior are
+documented in [RP1-GPCLK-DKMS installation](../docs/rp1-gpclk-dkms-installation.md).
+
+Run its offline hardware-free contract coverage with:
+
+```sh
+python3 scripts/tests/rp1_gpclk_dkms_install_test.py
+```
+
 ## Support-bundle collector
 
 ### Future support-route guard

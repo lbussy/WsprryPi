@@ -223,6 +223,10 @@ declare GIT_CLONE_BASE="https://github.com"
 declare FAIL_ON_UI_MODIFICATIONS="${FAIL_ON_UI_MODIFICATIONS:-false}"
 declare UI_PUBLICATION_ATTEMPTED="false"
 declare UI_PUBLICATION_RESULT_FILE=""
+declare INSTALL_RP1_GPCLK_DKMS="${INSTALL_RP1_GPCLK_DKMS:-auto}"
+declare RP1_GPCLK_DKMS_SOURCE="${RP1_GPCLK_DKMS_SOURCE:-auto}"
+declare RP1_GPCLK_DKMS_STATE_DIR=""
+declare RP1_GPCLK_DKMS_HELPER=""
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -533,6 +537,7 @@ if [[ -z "${SUPPORTED_MODELS+x}" || ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
     SUPPORTED_MODELS=(
         # Supported models
         ["Raspberry Pi 5|5-model-b|bcm2712"]="Supported"
+        ["Raspberry Pi Compute Module 5|5-compute-module|bcm2712"]="Supported"
         ["Raspberry Pi 400|400|bcm2711"]="Supported"
         ["Raspberry Pi Compute Module 4S|4s-compute-module|bcm2711"]="Supported"
         ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Supported"
@@ -665,7 +670,9 @@ declare -ar DEPENDENCIES=(
     "whoami"
     "touch"
     "dpkg"
+    "dpkg-deb"
     "dpkg-reconfigure"
+    "python3"
     "curl"
     "wget"
     "realpath"
@@ -977,6 +984,7 @@ declare REBOOT=${REBOOT:-false}
 egress() {
     local status=$?
     report_ui_publication_result
+    cleanup_rp1_gpclk_dkms_state
     return "$status"
 }
 
@@ -2152,12 +2160,22 @@ print_model_name() {
     # Read and process the compatible string
     if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null \
         | sed -n 's/raspberrypi,//p'); then
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            warn "Platform model detection is unavailable; continuing because RP1 provider installation was explicitly requested."
+            debug_end "$debug"
+            return 0
+        fi
         debug_end "$debug"
         die 1 "Failed to read or process /proc/device-tree/compatible."
     fi
 
     # Ensure a model was detected
     if [[ -z "${detected_model:-}" ]]; then
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            warn "This system is not identified as a Raspberry Pi; continuing because RP1 provider installation was explicitly requested."
+            debug_end "$debug"
+            return 0
+        fi
         debug_end "$debug"
         die 1 "No Raspberry Pi model found in /proc/device-tree/compatible."
     fi
@@ -2172,6 +2190,12 @@ print_model_name() {
         fi
     done
 
+    if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+        warn "Detected Raspberry Pi model '$detected_model' is not recognized; continuing because RP1 provider installation was explicitly requested."
+        debug_end "$debug"
+        return 0
+    fi
+
     debug_end "$debug"
     die 1 "Detected Raspberry Pi model '$detected_model' is not recognized."
 }
@@ -2184,7 +2208,122 @@ is_pi5() {
         return 1
     fi
 
-    [[ "${detected_model:-}" == "5-model-b" ]]
+    [[ "${detected_model:-}" == "5-model-b" || \
+        "${detected_model:-}" == "5-compute-module" ]]
+}
+
+# -----------------------------------------------------------------------------
+# @brief Remove only the fresh RP1 provider planning directory from this run.
+# @details The independently owned installed provider and its operational record
+#          are deliberately preserved. This cleanup owns only mktemp output.
+# -----------------------------------------------------------------------------
+cleanup_rp1_gpclk_dkms_state() {
+    local state_dir="${RP1_GPCLK_DKMS_STATE_DIR:-}"
+    if [[ -z "$state_dir" || ! -d "$state_dir" || -L "$state_dir" ]]; then
+        return 0
+    fi
+    case "$state_dir" in
+        /tmp/wsprrypi-rp1-gpclk-dkms.*|/var/tmp/wsprrypi-rp1-gpclk-dkms.*)
+            rm -rf -- "$state_dir"
+            ;;
+        *)
+            warn "Refusing to remove unexpected RP1 provider state directory: $state_dir"
+            return 1
+            ;;
+    esac
+    RP1_GPCLK_DKMS_STATE_DIR=""
+    RP1_GPCLK_DKMS_HELPER=""
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Resolve and validate the RP1-GPCLK-DKMS installation before mutation.
+# @details Uses the checked-out helper when available. A streamed installer
+#          retrieves the helper from the exact WsprryPi source selector already
+#          chosen for this installer invocation. The helper enumerates and
+#          validates release metadata or resolves an immutable development
+#          source before any package-manager operation.
+# -----------------------------------------------------------------------------
+prepare_rp1_gpclk_dkms_installation() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+
+    RP1_GPCLK_DKMS_STATE_DIR=$(mktemp -d /tmp/wsprrypi-rp1-gpclk-dkms.XXXXXX)
+    chmod 0700 "$RP1_GPCLK_DKMS_STATE_DIR"
+
+    local script_source="${BASH_SOURCE[0]:-}"
+    local local_helper=""
+    if [[ -n "$script_source" && "$script_source" != "bash" ]]; then
+        local_helper="$(cd "$(dirname "$script_source")" && pwd -P)/rp1_gpclk_dkms_install.py"
+    fi
+
+    RP1_GPCLK_DKMS_HELPER="$RP1_GPCLK_DKMS_STATE_DIR/rp1_gpclk_dkms_install.py"
+    if [[ -n "$local_helper" && -f "$local_helper" && ! -L "$local_helper" ]]; then
+        cp -- "$local_helper" "$RP1_GPCLK_DKMS_HELPER"
+        chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+    else
+        local helper_url="${GIT_RAW_BASE}/${REPO_ORG}/${REPO_NAME}/${REPO_BRANCH}/scripts/rp1_gpclk_dkms_install.py"
+        if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --output "$RP1_GPCLK_DKMS_HELPER" "$helper_url"; then
+            warn "Unable to retrieve the RP1-GPCLK-DKMS installer helper from $helper_url."
+            cleanup_rp1_gpclk_dkms_state
+            return 1
+        fi
+        chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+    fi
+
+    local prepare_args=(
+        prepare
+        --state-dir "$RP1_GPCLK_DKMS_STATE_DIR"
+        --install "$INSTALL_RP1_GPCLK_DKMS"
+        --source "$RP1_GPCLK_DKMS_SOURCE"
+        --wsprry-source "$REPO_BRANCH"
+    )
+    if [[ "$DRY_RUN" == "true" ]]; then
+        prepare_args+=(--dry-run)
+    fi
+
+    if ! python3 "$RP1_GPCLK_DKMS_HELPER" "${prepare_args[@]}"; then
+        warn "RP1-GPCLK-DKMS installation planning failed before package mutation."
+        cleanup_rp1_gpclk_dkms_state
+        return 1
+    fi
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Apply the previously validated RP1 provider plan.
+# @details Dry runs stop after rendering the plan. Real installations revalidate
+#          prepared inputs and invoke only the package manager or the reviewed
+#          upstream exact-source lifecycle. No overlay, route, load, service,
+#          GPIO, output, transmission, or RF operation is performed.
+# -----------------------------------------------------------------------------
+apply_rp1_gpclk_dkms_installation() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: RP1-GPCLK-DKMS plan validated; no provider mutation performed."
+        debug_end "$debug"
+        return 0
+    fi
+    if [[ -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ]]; then
+        warn "RP1-GPCLK-DKMS plan state is unavailable."
+        return 1
+    fi
+    if ! python3 "$RP1_GPCLK_DKMS_HELPER" apply \
+        --state-dir "$RP1_GPCLK_DKMS_STATE_DIR"; then
+        warn "RP1-GPCLK-DKMS installation failed closed; inspect the retained installer log and provider state."
+        return 1
+    fi
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -2567,6 +2706,12 @@ validate_sys_accs() {
     # Iterate through system files
     for file in "${SYSTEM_READS[@]}"; do
         if [[ ! -r "$file" ]]; then
+            if [[ "$file" == "/proc/device-tree/compatible" && \
+                "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+                warn "Missing or unreadable platform identity: $file; continuing because RP1 provider installation was explicitly requested."
+                debug_print "Explicit RP1 provider override permits missing platform identity: $file" "$debug"
+                continue
+            fi
             warn "Missing or unreadable file: $file"
             ((missing++))
             debug_print "Missing or unreadable file: $file" "$debug"
@@ -2888,12 +3033,22 @@ check_arch() {
 
     # Read and process the compatible string
     if ! detected_model=$(tr '\0' '\n' </proc/device-tree/compatible 2>/dev/null | sed -n 's/raspberrypi,//p'); then
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            warn "Platform architecture detection is unavailable; continuing because RP1 provider installation was explicitly requested."
+            debug_end "$debug"
+            return 0
+        fi
         debug_end "$debug"
         die 1 "Failed to read or process /proc/device-tree/compatible. Ensure compatibility."
     fi
 
     # Check if the detected model is empty
     if [[ -z "${detected_model:-}" ]]; then
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            warn "This system has no recognized Raspberry Pi architecture; continuing because RP1 provider installation was explicitly requested."
+            debug_end "$debug"
+            return 0
+        fi
         debug_end "$debug"
         die 1 "No Raspberry Pi model found in /proc/device-tree/compatible. This system may not be supported."
     fi
@@ -2907,6 +3062,11 @@ check_arch() {
                 is_supported=true
                 debug_print "Model: '$full_name' ($chip) is supported." "$debug"
             else
+                if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+                    warn "Model '$full_name' ($chip) is normally unsupported; continuing because RP1 provider installation was explicitly requested."
+                    debug_end "$debug"
+                    return 0
+                fi
                 debug_end "$debug"
                 die 1 "Model: '$full_name' ($chip) is not supported."
             fi
@@ -2949,6 +3109,11 @@ check_arch() {
 
     # Log an error if no supported model was found
     if [[ "$is_supported" == false ]]; then
+        if [[ "$INSTALL_RP1_GPCLK_DKMS" == "true" ]]; then
+            warn "Detected Raspberry Pi model '$detected_model' is not recognized or supported; continuing because RP1 provider installation was explicitly requested."
+            debug_end "$debug"
+            return 0
+        fi
         debug_end "$debug"
         die 1 "Detected Raspberry Pi model '$detected_model' is not recognized or supported."
     fi
@@ -8173,6 +8338,13 @@ _main() {
     check_arch "$debug"        # Validate Raspberry Pi model compatibility
     check_internet "$debug"    # Verify internet connectivity if required
 
+    # Resolve the independently owned RP1 provider before any package-manager
+    # mutation. Automatic selection skips non-Pi-5/unknown systems, while an
+    # explicit true request is only an installation override.
+    if [[ "$ACTION" != "uninstall" ]]; then
+        prepare_rp1_gpclk_dkms_installation "$debug" || return 1
+    fi
+
     # Start the script
     start_script "$debug"
 
@@ -8194,6 +8366,7 @@ _main() {
     if [[ "$ACTION" != "uninstall" ]]; then
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
+        apply_rp1_gpclk_dkms_installation "$debug" || return 1
     fi
 
     # Handle correcting timezone

@@ -1,0 +1,1054 @@
+#!/usr/bin/env python3
+"""Resolve and install the independently owned RP1-GPCLK-DKMS provider.
+
+This helper deliberately owns only WsprryPi's orchestration and acceptance
+policy.  Package and exact-source lifecycle mechanics remain upstream.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import platform
+import re
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping, Sequence
+
+
+REPOSITORY = "WsprryPi/RP1-GPCLK-DKMS"
+REPOSITORY_URL = "https://github.com/WsprryPi/RP1-GPCLK-DKMS.git"
+API_BASE = f"https://api.github.com/repos/{REPOSITORY}"
+MANIFEST_NAME = "rp1-gpclk-dkms-installation-manifest-v1.json"
+CHECKSUMS_NAME = "SHA256SUMS"
+MANIFEST_SCHEMA = "rp1-gpclk-dkms-installation-manifest-v1"
+ADMIN_PROTOCOL = "rp1-gpclk-route-manager-v1"
+PACKAGE_NAME = "rp1-gpclk-dkms"
+DKMS_NAME = "rp1-gpclk-dkms"
+MODULE_NAME = "rp1_gpclk_dkms"
+COMPATIBILITY_IDENTITY = "v0.9.0-pi5"
+RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
+STATE_SCHEMA = "wsprrypi-rp1-gpclk-dkms-plan-v1"
+SUPPORTED_UAPI_MIN = 4
+SUPPORTED_UAPI_MAX = 4
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+SEMVER = re.compile(r"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+SAFE_VERSION = re.compile(r"^[0-9A-Za-z.+:~-]+$")
+MAX_API_BYTES = 16 * 1024 * 1024
+MAX_METADATA_BYTES = 2 * 1024 * 1024
+MAX_PACKAGE_BYTES = 256 * 1024 * 1024
+MAX_PACKAGE_MEMBERS = 20000
+MAX_PACKAGE_MEMBER_BYTES = 64 * 1024 * 1024
+MAX_EXPANDED_TAR_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_PATH_BYTES = 1024
+
+
+class ContractError(RuntimeError):
+    """A fail-closed contract refusal."""
+
+
+def canonical(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ContractError(message)
+
+
+def require_exact_keys(value: Mapping[str, Any], required: Iterable[str], where: str) -> None:
+    required_set = set(required)
+    missing = sorted(required_set - set(value))
+    require(not missing, f"{where} is missing required fields: {', '.join(missing)}")
+    unexpected = sorted(set(value) - required_set)
+    require(not unexpected, f"{where} contains unsupported fields: {', '.join(unexpected)}")
+
+
+def parse_semver(tag: str) -> tuple[int, int, int]:
+    match = SEMVER.fullmatch(tag)
+    if not match:
+        raise ContractError(f"release tag is not an immutable semantic version: {tag!r}")
+    return tuple(int(match.group(index)) for index in range(1, 4))
+
+
+def normalize_repository_url(url: str) -> str:
+    if url in {
+        REPOSITORY_URL,
+        "https://github.com/WsprryPi/RP1-GPCLK-DKMS",
+        "git@github.com:WsprryPi/RP1-GPCLK-DKMS.git",
+        "ssh://git@github.com/WsprryPi/RP1-GPCLK-DKMS.git",
+    }:
+        return REPOSITORY_URL
+    return url
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    stdout: str
+    stderr: str
+    returncode: int
+
+
+class Runner:
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        check: bool = True,
+        cwd: pathlib.Path | None = None,
+    ) -> CommandResult:
+        try:
+            process = subprocess.run(
+                list(argv),
+                cwd=cwd,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            result = CommandResult("", f"required command is unavailable: {argv[0]}", 127)
+            if check:
+                raise ContractError(result.stderr) from error
+            return result
+        result = CommandResult(process.stdout, process.stderr, process.returncode)
+        if check and process.returncode:
+            detail = process.stderr.strip() or process.stdout.strip() or "no diagnostic"
+            raise ContractError(f"command failed ({argv[0]}): {detail}")
+        return result
+
+
+def read_device_tree_text(path: pathlib.Path) -> list[str]:
+    try:
+        return [item.decode("utf-8", "strict") for item in path.read_bytes().split(b"\0") if item]
+    except (OSError, UnicodeError):
+        return []
+
+
+def detect_platform(model_file: pathlib.Path, compatible_file: pathlib.Path) -> dict[str, Any]:
+    models = read_device_tree_text(model_file)
+    compatibles = read_device_tree_text(compatible_file)
+    model = models[0] if models else "unknown"
+    pi5_model = bool(
+        re.fullmatch(r"Raspberry Pi 5(?: Model B)?(?: Rev .+)?", model)
+        or re.fullmatch(r"Raspberry Pi Compute Module 5(?: Rev .+)?", model)
+    )
+    pi5_compatible = any(
+        item in {"raspberrypi,5-model-b", "raspberrypi,5-compute-module"}
+        for item in compatibles
+    )
+    bcm2712 = any(item in {"brcm,bcm2712", "brcm,bcm2712d0"} for item in compatibles)
+    positive = pi5_model and pi5_compatible and bcm2712
+    return {
+        "model": model,
+        "compatible": compatibles,
+        "classification": "raspberry-pi-5-family" if positive else "other-or-unknown",
+        "automaticEligible": positive,
+    }
+
+
+def installation_decision(requested: str, detected: Mapping[str, Any]) -> dict[str, Any]:
+    require(requested in {"auto", "true", "false"}, "INSTALL_RP1_GPCLK_DKMS must be auto, true, or false")
+    eligible = detected.get("automaticEligible") is True
+    if requested == "false":
+        return {"install": False, "reason": "explicit operator opt-out", "platformOverride": False}
+    if requested == "true":
+        return {
+            "install": True,
+            "reason": "explicit operator installation request",
+            "platformOverride": not eligible,
+        }
+    return {
+        "install": eligible,
+        "reason": "positively identified Raspberry Pi 5-family system" if eligible else "automatic selection skipped other or unknown system",
+        "platformOverride": False,
+    }
+
+
+def wsprry_channel(source: str) -> str:
+    require(bool(source) and source not in {"HEAD", "detached", "unknown"}, "WsprryPi source channel is ambiguous; set RP1_GPCLK_DKMS_SOURCE explicitly")
+    if source in {"main", "master", "release"} or SEMVER.fullmatch(source):
+        return "production"
+    require(re.fullmatch(r"[A-Za-z0-9._/-]+", source) is not None, "WsprryPi source channel contains unsupported characters")
+    return "development"
+
+
+def source_selector(requested: str, channel: str) -> tuple[str, str | None]:
+    if requested == "auto":
+        return ("release", None) if channel == "production" else ("devel", None)
+    if requested in {"release", "devel"}:
+        return requested, None
+    if requested.startswith("commit:"):
+        commit = requested.removeprefix("commit:")
+        require(SHA40.fullmatch(commit) is not None, "commit source requires a full lowercase 40-character SHA")
+        return "commit", commit
+    if requested.startswith("checkout:"):
+        path = requested.removeprefix("checkout:")
+        require(pathlib.Path(path).is_absolute(), "checkout source requires an absolute path")
+        return "checkout", path
+    raise ContractError("RP1_GPCLK_DKMS_SOURCE must be auto, release, devel, commit:FULL_SHA, or checkout:/absolute/path")
+
+
+def release_assets(release: Mapping[str, Any]) -> dict[str, str]:
+    assets: dict[str, str] = {}
+    for asset in release.get("assets", []):
+        if not isinstance(asset, dict):
+            continue
+        name, url = asset.get("name"), asset.get("browser_download_url")
+        if isinstance(name, str) and isinstance(url, str) and asset.get("state") == "uploaded":
+            require(name not in assets, f"release contains duplicate asset name: {name}")
+            assets[name] = url
+    return assets
+
+
+def release_candidate(release: Mapping[str, Any]) -> bool:
+    if release.get("draft") is not False or release.get("prerelease") is not False:
+        return False
+    if release.get("immutable") is not True:
+        return False
+    if not isinstance(release.get("published_at"), str) or not release.get("published_at"):
+        return False
+    tag = release.get("tag_name")
+    if not isinstance(tag, str) or SEMVER.fullmatch(tag) is None:
+        return False
+    assets = release_assets(release)
+    return MANIFEST_NAME in assets and CHECKSUMS_NAME in assets and any(
+        re.fullmatch(r"rp1-gpclk-dkms_[0-9A-Za-z.+:~-]+_all\.deb", name) for name in assets
+    )
+
+
+def select_release(releases: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    candidates = [release for release in releases if release_candidate(release)]
+    require(bool(candidates), "no eligible RP1-GPCLK-DKMS release is available")
+    return max(candidates, key=lambda item: parse_semver(str(item["tag_name"])))
+
+
+def authoritative_asset_url(tag: str, filename: str, url: str) -> None:
+    parsed = urllib.parse.urlsplit(url)
+    require(parsed.scheme == "https" and parsed.netloc == "github.com", f"release asset URL is not authoritative HTTPS: {url}")
+    expected = f"/{REPOSITORY}/releases/download/{urllib.parse.quote(tag, safe='')}/{urllib.parse.quote(filename, safe='._+-~') }"
+    require(parsed.path == expected and not parsed.query and not parsed.fragment, f"release asset URL does not match repository, tag, and filename: {url}")
+
+
+def parse_checksums(data: bytes) -> dict[str, str]:
+    try:
+        text = data.decode("ascii")
+    except UnicodeError as error:
+        raise ContractError("SHA256SUMS is not ASCII") from error
+    result: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line:
+            continue
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._+:~-]*)", line)
+        require(match is not None, "SHA256SUMS contains a malformed or unsafe line")
+        digest, filename = match.groups()
+        require(filename not in result, f"SHA256SUMS repeats {filename}")
+        result[filename] = digest
+    return result
+
+
+def validate_manifest(manifest: Any, *, tag: str, tag_commit: str) -> dict[str, Any]:
+    require(isinstance(manifest, dict), "installation manifest must be a JSON object")
+    required = {
+        "schema", "schemaVersion", "repository", "releaseTag", "sourceCommit",
+        "productVersion", "debianVersion", "package", "dkmsModule", "kernelModule",
+        "uapi", "administrationProtocol", "packageInventory", "packageInventorySha256",
+        "installationBehavior", "releaseChannel",
+    }
+    require_exact_keys(manifest, required, "installation manifest")
+    require(manifest["schema"] == MANIFEST_SCHEMA and manifest["schemaVersion"] == 1, "unsupported installation manifest schema")
+    require(manifest["repository"] == REPOSITORY, "installation manifest repository substitution")
+    require(manifest["releaseTag"] == tag, "manifest release tag differs from selected release")
+    require(manifest["sourceCommit"] == tag_commit and SHA40.fullmatch(tag_commit) is not None, "manifest source commit differs from immutable tag commit")
+    version = tag.removeprefix("v")
+    require(manifest["productVersion"] == version, "manifest product version differs from release tag")
+    require(isinstance(manifest["debianVersion"], str) and SAFE_VERSION.fullmatch(manifest["debianVersion"]), "manifest Debian version is invalid")
+    require(manifest["dkmsModule"] == DKMS_NAME and manifest["kernelModule"] == MODULE_NAME, "manifest module identity is incompatible")
+    require(manifest["administrationProtocol"] == ADMIN_PROTOCOL, "manifest administration protocol is incompatible")
+    require(manifest["releaseChannel"] == "release", "manifest is not classified for the release channel")
+    behavior = manifest["installationBehavior"]
+    require(isinstance(behavior, dict), "manifest installation behavior must be an object")
+    require_exact_keys(
+        behavior,
+        {"routeNeutral", "outputDisabled", "loadsModule", "appliesOverlay", "editsBootConfiguration", "operatesServices"},
+        "manifest installation behavior",
+    )
+    require(
+        behavior == {
+            "routeNeutral": True,
+            "outputDisabled": True,
+            "loadsModule": False,
+            "appliesOverlay": False,
+            "editsBootConfiguration": False,
+            "operatesServices": False,
+        },
+        "manifest does not declare the required inactive installation behavior",
+    )
+    package = manifest["package"]
+    require(isinstance(package, dict), "manifest package must be an object")
+    require_exact_keys(package, {"name", "filename", "sha256"}, "manifest package")
+    require(package["name"] == PACKAGE_NAME, "manifest package name is incompatible")
+    expected_filename = f"{PACKAGE_NAME}_{manifest['debianVersion']}_all.deb"
+    require(package["filename"] == expected_filename, "manifest package filename and Debian version differ")
+    require(isinstance(package["sha256"], str) and SHA256.fullmatch(package["sha256"]), "manifest package SHA-256 is invalid")
+    uapi = manifest["uapi"]
+    require(isinstance(uapi, dict), "manifest UAPI must be an object")
+    require_exact_keys(uapi, {"abiMin", "abiMax", "sha256", "path"}, "manifest UAPI")
+    require(isinstance(uapi["abiMin"], int) and isinstance(uapi["abiMax"], int), "manifest UAPI ABI range is invalid")
+    require(uapi["abiMin"] <= SUPPORTED_UAPI_MAX and uapi["abiMax"] >= SUPPORTED_UAPI_MIN, "manifest UAPI ABI is not supported by this WsprryPi consumer")
+    require(isinstance(uapi["sha256"], str) and SHA256.fullmatch(uapi["sha256"]), "manifest UAPI SHA-256 is invalid")
+    require(isinstance(uapi["path"], str) and safe_archive_path(uapi["path"]), "manifest UAPI path is unsafe")
+    inventory = manifest["packageInventory"]
+    require(isinstance(inventory, list) and bool(inventory), "manifest package inventory is empty or invalid")
+    normalized = validate_inventory(inventory)
+    require(isinstance(manifest["packageInventorySha256"], str) and SHA256.fullmatch(manifest["packageInventorySha256"]), "manifest package inventory SHA-256 is invalid")
+    require(sha256_bytes(canonical(normalized)) == manifest["packageInventorySha256"], "manifest package inventory hash is inconsistent")
+    matches = [item for item in normalized if item["path"] == uapi["path"]]
+    require(len(matches) == 1 and matches[0]["type"] == "file" and matches[0]["sha256"] == uapi["sha256"], "manifest UAPI is not bound to the package inventory")
+    result = dict(manifest)
+    result["packageInventory"] = normalized
+    return result
+
+
+def safe_archive_path(value: str) -> bool:
+    if not value or "\0" in value or value.startswith("/"):
+        return False
+    parts = pathlib.PurePosixPath(value).parts
+    return all(part not in {"", ".", ".."} for part in parts)
+
+
+def validate_inventory(inventory: Sequence[Any]) -> list[dict[str, Any]]:
+    require(len(inventory) <= MAX_PACKAGE_MEMBERS, "package inventory exceeds the bounded member limit")
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in inventory:
+        require(isinstance(raw, dict), "package inventory member must be an object")
+        require_exact_keys(raw, {"path", "type", "mode", "sha256"}, "package inventory member")
+        path, kind, mode, digest = raw["path"], raw["type"], raw["mode"], raw["sha256"]
+        require(isinstance(path, str) and len(path.encode("utf-8")) <= MAX_ARCHIVE_PATH_BYTES, "package inventory path exceeds the bounded length")
+        require(isinstance(path, str) and safe_archive_path(path), "package inventory contains an unsafe path")
+        require(path not in seen, f"package inventory repeats path: {path}")
+        require(kind in {"file", "directory", "symlink"}, f"package inventory contains unsupported type: {kind!r}")
+        require(isinstance(mode, str) and re.fullmatch(r"0[0-7]{3}", mode) is not None, "package inventory mode is invalid")
+        require(isinstance(digest, str) and SHA256.fullmatch(digest) is not None, "package inventory SHA-256 is invalid")
+        seen.add(path)
+        result.append({"path": path, "type": kind, "mode": mode, "sha256": digest})
+    return sorted(result, key=lambda item: item["path"])
+
+
+def tar_inventory(tar_path: pathlib.Path) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    try:
+        archive = tarfile.open(tar_path, "r:*")
+    except (tarfile.TarError, OSError) as error:
+        raise ContractError("Debian data archive is unreadable or uses unsupported compression") from error
+    with archive:
+        for member_index, member in enumerate(archive, start=1):
+            require(member_index <= MAX_PACKAGE_MEMBERS, "package inventory exceeds the bounded member limit")
+            path = member.name.removeprefix("./")
+            if not path or path == ".":
+                continue
+            require(safe_archive_path(path), f"package contains unsafe archive path: {member.name!r}")
+            require(len(path.encode("utf-8")) <= MAX_ARCHIVE_PATH_BYTES, f"package path exceeds the bounded length: {path!r}")
+            require(path not in seen, f"package repeats archive path: {path}")
+            seen.add(path)
+            mode = f"0{stat.S_IMODE(member.mode):03o}"
+            if member.isfile():
+                require(0 <= member.size <= MAX_PACKAGE_MEMBER_BYTES, f"package member exceeds the bounded size limit: {path}")
+                stream = archive.extractfile(member)
+                require(stream is not None, f"package member cannot be read: {path}")
+                digest = hashlib.sha256(stream.read()).hexdigest()
+                kind = "file"
+            elif member.isdir():
+                digest = sha256_bytes(b"")
+                kind = "directory"
+            elif member.issym():
+                require(not member.linkname.startswith("/"), f"package symlink has an absolute target: {path}")
+                target_parts = pathlib.PurePosixPath(path).parent.joinpath(member.linkname).parts
+                depth = 0
+                for part in target_parts:
+                    if part == "..":
+                        depth -= 1
+                    elif part not in {"", "."}:
+                        depth += 1
+                    require(depth >= 0, f"package symlink escapes package root: {path}")
+                digest = sha256_bytes(member.linkname.encode())
+                kind = "symlink"
+            else:
+                raise ContractError(f"package contains unsupported special or hard-linked member: {path}")
+            result.append({"path": path, "type": kind, "mode": mode, "sha256": digest})
+    return sorted(result, key=lambda item: item["path"])
+
+
+def parse_debian_control(text: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if line.startswith((" ", "\t")):
+            require(current is not None, "Debian control continuation has no field")
+            fields[current] += "\n" + line[1:]
+            continue
+        if not line:
+            continue
+        require(":" in line, "Debian control contains malformed field")
+        key, value = line.split(":", 1)
+        require(re.fullmatch(r"[A-Za-z0-9-]+", key) is not None and key not in fields, "Debian control contains invalid or duplicate field")
+        fields[key] = value.strip()
+        current = key
+    return fields
+
+
+def validate_package(path: pathlib.Path, manifest: Mapping[str, Any], runner: Runner) -> None:
+    package = manifest["package"]
+    require(path.name == package["filename"], "downloaded package filename differs from manifest")
+    require(sha256_file(path) == package["sha256"], "downloaded package SHA-256 differs from manifest")
+    control = [
+        runner.run(["dpkg-deb", "-f", str(path), field]).stdout.strip()
+        for field in ("Package", "Version", "Architecture")
+    ]
+    require(control == [PACKAGE_NAME, manifest["debianVersion"], "all"], "Debian control identity differs from manifest")
+    tar_path = path.parent / "data.tar"
+    process = subprocess.Popen(
+        ["dpkg-deb", "--fsys-tarfile", str(path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    expanded = 0
+    with tar_path.open("wb") as stream:
+        assert process.stdout is not None
+        for chunk in iter(lambda: process.stdout.read(1024 * 1024), b""):
+            expanded += len(chunk)
+            if expanded > MAX_EXPANDED_TAR_BYTES:
+                process.kill()
+                process.wait()
+                tar_path.unlink(missing_ok=True)
+                raise ContractError("Debian data archive exceeds the bounded expanded size limit")
+            stream.write(chunk)
+    assert process.stderr is not None
+    stderr = process.stderr.read().decode(errors="replace").strip()
+    returncode = process.wait()
+    require(returncode == 0, f"dpkg-deb could not expose package inventory: {stderr}")
+    try:
+        actual = tar_inventory(tar_path)
+    finally:
+        tar_path.unlink(missing_ok=True)
+    require(actual == manifest["packageInventory"], "package contents differ from checksummed manifest inventory")
+
+
+class GitHubClient:
+    def __init__(self, token: str | None = None):
+        self.headers = {"Accept": "application/vnd.github+json", "User-Agent": "WsprryPi-installer"}
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
+
+    def bytes(self, url: str, *, limit: int = MAX_API_BYTES, allow_asset_redirect: bool = False) -> bytes:
+        headers = self.headers if not allow_asset_redirect else {
+            "Accept": "application/octet-stream", "User-Agent": "WsprryPi-installer"
+        }
+        request = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                final = response.geturl()
+                if final != url:
+                    parsed = urllib.parse.urlsplit(final)
+                    require(
+                        allow_asset_redirect
+                        and parsed.scheme == "https"
+                        and parsed.netloc in {"release-assets.githubusercontent.com", "objects.githubusercontent.com"},
+                        f"unexpected redirect while retrieving {url}",
+                    )
+                length = response.headers.get("Content-Length")
+                if length is not None:
+                    require(length.isdigit() and int(length) <= limit, f"remote content exceeds the bounded size limit: {url}")
+                data = response.read(limit + 1)
+                require(len(data) <= limit, f"remote content exceeds the bounded size limit: {url}")
+                return data
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise ContractError(f"failed to retrieve {url}: {error}") from error
+
+    def json(self, url: str) -> Any:
+        try:
+            return json.loads(self.bytes(url, limit=MAX_API_BYTES))
+        except json.JSONDecodeError as error:
+            raise ContractError(f"remote JSON is malformed: {url}") from error
+
+    def releases(self) -> list[Mapping[str, Any]]:
+        result: list[Mapping[str, Any]] = []
+        for page in range(1, 21):
+            payload = self.json(f"{API_BASE}/releases?per_page=100&page={page}")
+            require(isinstance(payload, list), "GitHub releases response is not an array")
+            result.extend(item for item in payload if isinstance(item, dict))
+            if len(payload) < 100:
+                return result
+        raise ContractError("GitHub release enumeration exceeded the bounded page limit")
+
+    def tag_commit(self, tag: str) -> str:
+        payload = self.json(f"{API_BASE}/git/ref/tags/{urllib.parse.quote(tag, safe='')}")
+        require(isinstance(payload, dict) and isinstance(payload.get("object"), dict), "Git tag reference response is malformed")
+        obj = payload["object"]
+        for _ in range(8):
+            kind, sha = obj.get("type"), obj.get("sha")
+            require(isinstance(sha, str) and SHA40.fullmatch(sha), "Git tag object SHA is malformed")
+            if kind == "commit":
+                return sha
+            require(kind == "tag", "Git tag does not resolve to a commit")
+            annotated = self.json(f"{API_BASE}/git/tags/{sha}")
+            require(isinstance(annotated, dict) and isinstance(annotated.get("object"), dict), "annotated Git tag response is malformed")
+            obj = annotated["object"]
+        raise ContractError("Git tag indirection exceeds the bounded resolution limit")
+
+
+def download_release(state_dir: pathlib.Path, client: GitHubClient, runner: Runner) -> dict[str, Any]:
+    release = select_release(client.releases())
+    tag = str(release["tag_name"])
+    assets = release_assets(release)
+    package_names = sorted(name for name in assets if re.fullmatch(r"rp1-gpclk-dkms_[0-9A-Za-z.+:~-]+_all\.deb", name))
+    require(len(package_names) == 1, "selected release must contain exactly one RP1-GPCLK-DKMS package")
+    package_name = package_names[0]
+    for name in (MANIFEST_NAME, CHECKSUMS_NAME, package_name):
+        authoritative_asset_url(tag, name, assets[name])
+    manifest_bytes = client.bytes(assets[MANIFEST_NAME], limit=MAX_METADATA_BYTES, allow_asset_redirect=True)
+    checksums_bytes = client.bytes(assets[CHECKSUMS_NAME], limit=MAX_METADATA_BYTES, allow_asset_redirect=True)
+    asset_objects = {
+        item["name"]: item for item in release.get("assets", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    for name, data in ((MANIFEST_NAME, manifest_bytes), (CHECKSUMS_NAME, checksums_bytes)):
+        api_digest = asset_objects[name].get("digest")
+        if api_digest is not None:
+            require(api_digest == f"sha256:{sha256_bytes(data)}", f"GitHub asset digest differs for {name}")
+    checksums = parse_checksums(checksums_bytes)
+    require(checksums.get(MANIFEST_NAME) == sha256_bytes(manifest_bytes), "SHA256SUMS does not bind the installation manifest")
+    try:
+        manifest_raw = json.loads(manifest_bytes)
+    except json.JSONDecodeError as error:
+        raise ContractError("selected release installation manifest is malformed") from error
+    tag_commit = client.tag_commit(tag)
+    manifest = validate_manifest(manifest_raw, tag=tag, tag_commit=tag_commit)
+    require(manifest["package"]["filename"] == package_name, "selected package asset differs from manifest")
+    require(checksums.get(package_name) == manifest["package"]["sha256"], "SHA256SUMS package identity differs from manifest")
+    package_path = state_dir / package_name
+    package_bytes = client.bytes(assets[package_name], limit=MAX_PACKAGE_BYTES, allow_asset_redirect=True)
+    api_package_digest = asset_objects[package_name].get("digest")
+    if api_package_digest is not None:
+        require(api_package_digest == f"sha256:{sha256_bytes(package_bytes)}", "GitHub asset digest differs for the package")
+    package_path.write_bytes(package_bytes)
+    os.chmod(package_path, 0o600)
+    validate_package(package_path, manifest, runner)
+    (state_dir / MANIFEST_NAME).write_bytes(canonical(manifest) + b"\n")
+    os.chmod(state_dir / MANIFEST_NAME, 0o600)
+    return {"channel": "release", "tag": tag, "commit": tag_commit, "manifest": manifest, "packagePath": str(package_path)}
+
+
+def git_output(runner: Runner, source: pathlib.Path, *args: str) -> str:
+    return runner.run(["git", "-C", str(source), *args]).stdout.strip()
+
+
+def validate_checkout(source_text: str, runner: Runner) -> dict[str, Any]:
+    requested = pathlib.Path(source_text)
+    require(requested.is_absolute(), "checkout source requires an absolute path")
+    require(requested.exists() and requested.is_dir(), "checkout source is not an existing directory")
+    absolute = pathlib.Path(os.path.abspath(requested))
+    resolved = requested.resolve(strict=True)
+    require(absolute == resolved, "checkout source contains a symlink or path substitution")
+    top = pathlib.Path(git_output(runner, resolved, "rev-parse", "--show-toplevel"))
+    require(top.resolve(strict=True) == resolved, "checkout path is not the repository root")
+    remote = git_output(runner, resolved, "remote", "get-url", "origin")
+    require(normalize_repository_url(remote) == REPOSITORY_URL, "checkout is not the authoritative RP1-GPCLK-DKMS repository")
+    commit = git_output(runner, resolved, "rev-parse", "HEAD")
+    require(SHA40.fullmatch(commit) is not None, "checkout HEAD is not a full commit SHA")
+    status_text = git_output(runner, resolved, "status", "--porcelain=v1", "--untracked-files=all")
+    require(not status_text, "checkout has tracked or untracked changes")
+    flags = git_output(runner, resolved, "ls-files", "-v").splitlines()
+    require(all(line.startswith("H ") for line in flags), "checkout uses assume-unchanged, skip-worktree, or unsupported tracked-file state")
+    tree = git_output(runner, resolved, "rev-parse", "HEAD^{tree}")
+    require(SHA40.fullmatch(tree) is not None, "checkout tree identity is invalid")
+    root_stat, git_stat = resolved.stat(), pathlib.Path(git_output(runner, resolved, "rev-parse", "--absolute-git-dir")).resolve(strict=True).stat()
+    return {
+        "path": str(resolved), "commit": commit, "tree": tree,
+        "rootDevice": root_stat.st_dev, "rootInode": root_stat.st_ino,
+        "gitDevice": git_stat.st_dev, "gitInode": git_stat.st_ino,
+    }
+
+
+def clone_exact(state_dir: pathlib.Path, selector: str, value: str | None, runner: Runner) -> dict[str, Any]:
+    source = state_dir / "source"
+    runner.run(["git", "clone", "--no-checkout", "--origin", "origin", REPOSITORY_URL, str(source)])
+    if selector == "devel":
+        result = runner.run(["git", "-C", str(source), "rev-parse", "--verify", "origin/devel^{commit}"], check=False)
+        require(result.returncode == 0, "authoritative RP1-GPCLK-DKMS origin/devel is unavailable")
+        commit = result.stdout.strip()
+    else:
+        require(value is not None and SHA40.fullmatch(value) is not None, "internal exact-commit resolution error")
+        result = runner.run(["git", "-C", str(source), "cat-file", "-e", f"{value}^{{commit}}"], check=False)
+        require(result.returncode == 0, "requested RP1-GPCLK-DKMS commit does not exist in the authoritative repository")
+        commit = value
+    require(SHA40.fullmatch(commit) is not None, "resolved development commit is not immutable")
+    runner.run(["git", "-C", str(source), "checkout", "--detach", commit])
+    identity = validate_checkout(str(source), runner)
+    require(identity["commit"] == commit, "development checkout changed after immutable resolution")
+    return identity
+
+
+def development_version(source: pathlib.Path) -> str:
+    model = source / "release" / "installation-model-v1.json"
+    try:
+        payload = json.loads(model.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError("development source lacks a readable upstream installation model") from error
+    version = payload.get("release")
+    require(isinstance(version, str) and SAFE_VERSION.fullmatch(version), "development source installation model has an invalid version")
+    return version
+
+
+def route_neutral_interface(source: pathlib.Path, runner: Runner) -> tuple[str, list[str]]:
+    installer = source / "scripts" / "development-install"
+    preflight = source / "scripts" / "development-preflight"
+    require(installer.is_file() and os.access(installer, os.X_OK) and preflight.is_file() and os.access(preflight, os.X_OK), "development source lacks maintained executable lifecycle tools")
+    help_result = runner.run([str(installer), "--help"], cwd=source)
+    help_text = help_result.stdout + help_result.stderr
+    if "--route-neutral" in help_text:
+        return "route-neutral-flag", ["--route-neutral"]
+    if re.search(r"--route[^\n]*route-neutral", help_text):
+        return "route-choice", ["--route", "route-neutral"]
+    raise ContractError("upstream development-install has no reviewed route-neutral installation interface; no development mutation was attempted")
+
+
+def revalidate_checkout(identity: Mapping[str, Any], runner: Runner) -> pathlib.Path:
+    source = pathlib.Path(str(identity["path"]))
+    try:
+        current = validate_checkout(str(source), runner)
+    except ContractError as error:
+        raise ContractError("development checkout was dirty or replaced after preflight") from error
+    for key in ("commit", "tree", "rootDevice", "rootInode", "gitDevice", "gitInode"):
+        require(current[key] == identity[key], "development checkout was dirty or replaced after preflight")
+    return source
+
+
+def prepare_development(state_dir: pathlib.Path, selector: str, value: str | None, runner: Runner) -> dict[str, Any]:
+    if selector == "checkout":
+        original = validate_checkout(str(value), runner)
+        snapshot = state_dir / "source"
+        runner.run(["git", "clone", "--no-local", "--no-checkout", original["path"], str(snapshot)])
+        runner.run(["git", "-C", str(snapshot), "remote", "set-url", "origin", REPOSITORY_URL])
+        runner.run(["git", "-C", str(snapshot), "checkout", "--detach", original["commit"]])
+        identity = validate_checkout(str(snapshot), runner)
+        require(
+            identity["commit"] == original["commit"] and identity["tree"] == original["tree"],
+            "local checkout snapshot differs from the selected commit",
+        )
+    else:
+        identity = clone_exact(state_dir, selector, value, runner)
+    source = pathlib.Path(identity["path"])
+    version = development_version(source)
+    uapi = source / "include" / "uapi" / "linux" / "rp1_gpclk.h"
+    require(uapi.is_file() and not uapi.is_symlink(), "development source lacks the canonical regular-file UAPI")
+    interface, route_args = route_neutral_interface(source, runner)
+    runner.run([str(source / "scripts" / "development-preflight"), "--kernel", platform.release()], cwd=source)
+    return {
+        "channel": "development", "commit": identity["commit"], "version": version,
+        "checkout": identity, "interface": interface, "routeArguments": route_args,
+        "sourceTree": identity["tree"], "uapiSha256": sha256_file(uapi),
+        "compatibilityIdentity": COMPATIBILITY_IDENTITY,
+    }
+
+
+def secure_state_dir(path: pathlib.Path) -> pathlib.Path:
+    require(path.is_absolute() and path.exists() and path.is_dir(), "state directory must be an existing absolute directory")
+    resolved = path.resolve(strict=True)
+    require(resolved == pathlib.Path(os.path.abspath(path)), "state directory cannot contain symlinks")
+    info = resolved.stat()
+    require(info.st_uid == os.geteuid(), "state directory is not owned by the invoking user")
+    require(stat.S_IMODE(info.st_mode) & 0o077 == 0, "state directory must not be accessible by group or others")
+    return resolved
+
+
+def secure_record_parent(path: pathlib.Path) -> None:
+    parent = path.parent
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    absolute = pathlib.Path(os.path.abspath(parent))
+    resolved = parent.resolve(strict=True)
+    require(absolute == resolved, "installation record parent contains a symlink or path substitution")
+    info = resolved.stat()
+    require(info.st_uid == os.geteuid(), "installation record parent is not owned by the invoking user")
+    require(stat.S_IMODE(info.st_mode) & 0o022 == 0, "installation record parent is group- or world-writable")
+
+
+def atomic_json(path: pathlib.Path, value: Any, mode: int = 0o600) -> None:
+    payload = canonical(value) + b"\n"
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def render_plan(plan: Mapping[str, Any]) -> None:
+    print("RP1-GPCLK-DKMS installation plan")
+    print(f"  WsprryPi source channel: {plan['wsprryChannel']}")
+    print(f"  Installation decision: {'install' if plan['decision']['install'] else 'skip'} ({plan['decision']['reason']})")
+    print(f"  Detected platform: {plan['platform']['model']} [{plan['platform']['classification']}]")
+    print(f"  Explicit platform override: {'yes' if plan['decision']['platformOverride'] else 'no'}")
+    print(f"  Requested source selector: {plan['requestedSource']}")
+    if plan.get("resolved"):
+        resolved = plan["resolved"]
+        print(f"  Resolved channel: {resolved['channel']}")
+        print(f"  Resolved tag or commit: {resolved.get('tag') or resolved.get('commit')}")
+        if resolved["channel"] == "release":
+            manifest = resolved["manifest"]
+            print(f"  Product/Debian version: {manifest['productVersion']} / {manifest['debianVersion']}")
+            print(f"  Package SHA-256: {manifest['package']['sha256']}")
+            print(f"  UAPI SHA-256: {manifest['uapi']['sha256']}")
+            print("  Planned lifecycle: apt-get install of the validated local Debian package")
+        else:
+            print(f"  Source version: {resolved['version']}")
+            print(f"  Source tree: {resolved['sourceTree']}")
+            print(f"  UAPI SHA-256: {resolved['uapiSha256']}")
+            print("  Module SHA-256: resolved and verified by the upstream exact-source build")
+            print("  Planned lifecycle: upstream development-preflight and exact-source development-install")
+    print("  Safety boundary: route activation and output remain disabled; no overlay, module load, service, GPIO, or RF action is authorized.")
+
+
+def prepare(args: argparse.Namespace, runner: Runner) -> dict[str, Any]:
+    state_dir = secure_state_dir(args.state_dir)
+    detected = detect_platform(args.model_file, args.compatible_file)
+    decision = installation_decision(args.install, detected)
+    explicit_source = args.source != "auto"
+    try:
+        channel = wsprry_channel(args.wsprry_source)
+    except ContractError:
+        if not explicit_source:
+            raise
+        channel = "explicit-source"
+    plan: dict[str, Any] = {
+        "schema": STATE_SCHEMA, "wsprrySource": args.wsprry_source, "wsprryChannel": channel,
+        "platform": detected, "decision": decision, "requestedSource": args.source,
+        "resolved": None, "dryRun": args.dry_run,
+    }
+    if decision["install"]:
+        selector, value = source_selector(args.source, channel)
+        if selector == "release":
+            plan["resolved"] = download_release(state_dir, GitHubClient(os.environ.get("GITHUB_TOKEN")), runner)
+        else:
+            plan["resolved"] = prepare_development(state_dir, selector, value, runner)
+    atomic_json(state_dir / "plan.json", plan)
+    render_plan(plan)
+    return plan
+
+
+def root_path(root: pathlib.Path, absolute: str) -> pathlib.Path:
+    require(absolute.startswith("/"), "internal installed path must be absolute")
+    return root / absolute.removeprefix("/")
+
+
+def existing_inventory(root: pathlib.Path, runner: Runner) -> dict[str, Any]:
+    package = runner.run(["dpkg-query", "-W", "-f=${Status}\n${Version}\n", PACKAGE_NAME], check=False)
+    package_version = None
+    if package.returncode == 0:
+        lines = package.stdout.splitlines()
+        require(len(lines) >= 2 and lines[0] == "install ok installed", "existing package state is ambiguous")
+        package_version = lines[1]
+    dkms = runner.run(["dkms", "status", "-m", DKMS_NAME], check=False)
+    modules_file = root_path(root, "/proc/modules")
+    active = False
+    if modules_file.exists():
+        active = any(line.split(maxsplit=1)[0] == MODULE_NAME for line in modules_file.read_text(errors="replace").splitlines() if line)
+    source_base = root_path(root, "/usr/src")
+    sources = sorted(str(path) for path in source_base.glob(f"{PACKAGE_NAME}-*") if source_base.exists())
+    module_candidates: list[str] = []
+    modules_base = root_path(root, "/lib/modules")
+    if modules_base.exists():
+        module_candidates = sorted(str(path) for path in modules_base.glob("*/updates/dkms/rp1_gpclk_dkms.ko*"))
+    enrollment = root_path(root, "/etc/rp1-gpclk-dkms/enrollment.json").exists()
+    manager = root_path(root, "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/90-source-development.conf").exists()
+    overlay_paths = [
+        root_path(root, "/boot/firmware/overlays/rp1-gpclk-gpio4.dtbo"),
+        root_path(root, "/boot/firmware/overlays/rp1-gpclk-gpio20.dtbo"),
+        root_path(root, "/usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio4.dtbo"),
+        root_path(root, "/usr/lib/rp1-gpclk-dkms/overlays/rp1-gpclk-gpio20.dtbo"),
+    ]
+    overlays = sorted(str(path) for path in overlay_paths if path.exists() or path.is_symlink())
+    configured = False
+    for config in (root_path(root, "/boot/firmware/config.txt"), root_path(root, "/boot/config.txt")):
+        if config.is_file() and not config.is_symlink():
+            configured = configured or "dtoverlay=rp1-gpclk-" in config.read_text(errors="replace")
+    return {
+        "packageVersion": package_version, "dkms": dkms.stdout.strip(),
+        "activeModule": active, "sourceTrees": sources, "moduleCandidates": module_candidates,
+        "installedOverlays": overlays, "configuredRoute": configured,
+        "enrollment": enrollment, "developmentManager": manager,
+    }
+
+
+def installed_member(root: pathlib.Path, relative: str, expected_type: str) -> pathlib.Path:
+    current = root
+    parts = pathlib.PurePosixPath(relative).parts
+    for index, part in enumerate(parts):
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError as error:
+            raise ContractError(f"installed package member is missing: /{relative}") from error
+        final = index == len(parts) - 1
+        if not final:
+            require(stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode), f"installed package path has a substituted ancestor: /{relative}")
+        elif expected_type == "file":
+            require(stat.S_ISREG(info.st_mode), f"installed package file is substituted: /{relative}")
+        elif expected_type == "directory":
+            require(stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode), f"installed package directory is substituted: /{relative}")
+        else:
+            require(stat.S_ISLNK(info.st_mode), f"installed package symlink is substituted: /{relative}")
+    return current
+
+
+def verify_installed_release(root: pathlib.Path, manifest: Mapping[str, Any], runner: Runner) -> None:
+    inventory = existing_inventory(root, runner)
+    require(inventory["packageVersion"] == manifest["debianVersion"], "installed Debian package version differs from plan")
+    require(not inventory["activeModule"], "RP1 GPCLK module became active during route-neutral installation")
+    require(not inventory["configuredRoute"], "RP1 GPCLK route became configured during route-neutral installation")
+    require(not inventory["enrollment"] and not inventory["developmentManager"], "installed provider has unexpected development enrollment or manager binding")
+    dkms_lines = [line for line in inventory["dkms"].splitlines() if line.strip()]
+    expected_dkms = re.compile(rf"^{re.escape(DKMS_NAME)}/{re.escape(manifest['productVersion'])}[^\n]*installed$")
+    require(bool(dkms_lines) and all(expected_dkms.fullmatch(line) for line in dkms_lines), "DKMS registration contains a missing, foreign, or non-installed version")
+
+    expected_sources: set[str] = set()
+    for member in manifest["packageInventory"]:
+        parts = pathlib.PurePosixPath(member["path"]).parts
+        if len(parts) >= 3 and parts[:2] == ("usr", "src") and parts[2].startswith(f"{PACKAGE_NAME}-"):
+            expected_sources.add(str(root_path(root, "/" + "/".join(parts[:3]))))
+    require(bool(expected_sources), "manifest package inventory does not contain the DKMS source destination")
+    require(set(inventory["sourceTrees"]) == expected_sources, "installed DKMS source destinations contain missing or foreign state")
+
+    expected_overlays = {
+        str(root_path(root, "/" + member["path"]))
+        for member in manifest["packageInventory"]
+        if member["path"].endswith(("/rp1-gpclk-gpio4.dtbo", "/rp1-gpclk-gpio20.dtbo"))
+    }
+    require(set(inventory["installedOverlays"]) == expected_overlays, "installed overlay inventory contains missing or foreign state")
+    for member in manifest["packageInventory"]:
+        installed = installed_member(root, member["path"], member["type"])
+        kind = member["type"]
+        if kind == "file":
+            require(sha256_file(installed) == member["sha256"], f"installed package file hash differs: /{member['path']}")
+        elif kind == "directory":
+            pass
+        else:
+            require(sha256_bytes(os.readlink(installed).encode()) == member["sha256"], f"installed package symlink differs: /{member['path']}")
+        if kind != "symlink":
+            actual_mode = f"0{stat.S_IMODE(installed.stat().st_mode):03o}"
+            require(actual_mode == member["mode"], f"installed package member mode differs: /{member['path']}")
+    version = runner.run(["modinfo", "-k", platform.release(), "-F", "version", MODULE_NAME]).stdout.strip()
+    require(version == manifest["productVersion"], "installed module metadata version differs from manifest")
+
+
+def apply_release(state_dir: pathlib.Path, resolved: Mapping[str, Any], record: pathlib.Path, root: pathlib.Path, runner: Runner) -> None:
+    manifest = resolved["manifest"]
+    package_path = pathlib.Path(str(resolved["packagePath"]))
+    require(package_path.parent == state_dir and package_path.is_file() and not package_path.is_symlink(), "prepared package was replaced before installation")
+    validate_package(package_path, manifest, runner)
+    inventory = existing_inventory(root, runner)
+    require(not inventory["activeModule"], "an active RP1 GPCLK module blocks ordinary installation")
+    require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks ordinary installation")
+    require(not inventory["enrollment"] and not inventory["developmentManager"], "development enrollment or manager binding blocks release installation")
+    expected = manifest["debianVersion"]
+    if inventory["packageVersion"] is None:
+        require(
+            not inventory["dkms"] and not inventory["sourceTrees"]
+            and not inventory["moduleCandidates"] and not inventory["installedOverlays"],
+            "foreign or mixed RP1 GPCLK installation blocks package installation",
+        )
+        runner.run(["apt-get", "install", "--no-install-recommends", "-y", str(package_path)])
+    elif inventory["packageVersion"] == expected:
+        pass
+    else:
+        raise ContractError(f"existing RP1-GPCLK-DKMS {inventory['packageVersion']} requires its owning package migration workflow; automatic replacement refused")
+    verify_installed_release(root, manifest, runner)
+    record_value = {
+        "schema": RECORD_SCHEMA, "repository": REPOSITORY, "channel": "release",
+        "tag": resolved["tag"], "sourceCommit": resolved["commit"],
+        "productVersion": manifest["productVersion"], "debianVersion": manifest["debianVersion"],
+        "packageSha256": manifest["package"]["sha256"], "uapiSha256": manifest["uapi"]["sha256"],
+        "administrationProtocol": manifest["administrationProtocol"], "routeActivation": "disabled",
+        "output": "disabled", "qualificationClaim": False,
+    }
+    record.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    atomic_json(record, record_value)
+
+
+def verify_development_result(
+    manifest_path: pathlib.Path,
+    resolved: Mapping[str, Any],
+) -> dict[str, Any]:
+    require(manifest_path.is_file() and not manifest_path.is_symlink(), "upstream development result manifest is missing or substituted")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError("upstream development result manifest is unreadable") from error
+    require(isinstance(manifest, dict), "upstream development result manifest is not an object")
+    expected = {
+        "schema": "rp1-gpclk-source-development-manifest-v1",
+        "classification": "source-development",
+        "qualification": False,
+        "releaseQualified": False,
+        "sourceCommit": resolved["commit"],
+        "sourceState": "clean",
+        "renderedVersion": resolved["version"],
+        "dkmsName": DKMS_NAME,
+        "moduleName": MODULE_NAME,
+        "targetKernel": platform.release(),
+    }
+    for key, value in expected.items():
+        require(manifest.get(key) == value, f"upstream development result has incompatible {key}")
+    require(manifest.get("route") is None, "upstream development result selected a GPIO route")
+    uapi = manifest.get("uapiIdentity")
+    require(isinstance(uapi, dict) and uapi.get("sha256") == resolved["uapiSha256"], "upstream development result UAPI differs from the selected source")
+    parameters = manifest.get("parameters")
+    require(isinstance(parameters, dict) and parameters.get("live_output") == 0, "upstream development result did not retain output disabled")
+    installed = manifest.get("installedModule")
+    require(isinstance(installed, dict), "upstream development result lacks installed module identity")
+    require(installed.get("moduleName") == MODULE_NAME and installed.get("moduleVersion") == resolved["version"], "upstream installed module identity differs from the selected source")
+    require(installed.get("kernel") == platform.release(), "upstream installed module targets a different kernel")
+    for field in ("installedFileSha256", "decompressedElfSha256"):
+        require(isinstance(installed.get(field), str) and SHA256.fullmatch(installed[field]), f"upstream installed module lacks valid {field}")
+    return manifest
+
+
+def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner: Runner) -> None:
+    source = revalidate_checkout(resolved["checkout"], runner)
+    interface, route_args = route_neutral_interface(source, runner)
+    require(interface == resolved["interface"] and route_args == resolved["routeArguments"], "upstream development interface changed after preflight")
+    before = existing_inventory(pathlib.Path("/"), runner)
+    require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
+    require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
+    require(
+        before["packageVersion"] is None
+        and not before["dkms"]
+        and not before["sourceTrees"]
+        and not before["moduleCandidates"]
+        and not before["installedOverlays"]
+        and not before["enrollment"]
+        and not before["developmentManager"],
+        "an existing packaged, development, foreign, or mixed RP1 GPCLK installation requires its owning migration workflow",
+    )
+    evidence = record.parent / "rp1-gpclk-dkms-development-evidence"
+    evidence.mkdir(parents=True, exist_ok=False, mode=0o700)
+    command = [
+        str(source / "scripts" / "development-install"), "--source", str(source),
+        "--kernel", platform.release(), "--module-version", resolved["version"],
+        *route_args, "--live-output", "0", "--install", "--evidence-directory", str(evidence),
+    ]
+    runner.run(command, cwd=source)
+    result = verify_development_result(evidence / "rendered-source" / "DEVELOPMENT_MANIFEST.json", resolved)
+    after = existing_inventory(pathlib.Path("/"), runner)
+    require(not after["activeModule"], "RP1 GPCLK module became active during development installation")
+    require(not after["configuredRoute"], "RP1 GPCLK route became configured during development installation")
+    installed = result["installedModule"]
+    atomic_json(record, {
+        "schema": RECORD_SCHEMA, "repository": REPOSITORY, "channel": "development",
+        "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
+        "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
+        "installedModuleSha256": installed["installedFileSha256"],
+        "decompressedModuleSha256": installed["decompressedElfSha256"],
+        "targetKernel": platform.release(),
+        "compatibilityIdentity": COMPATIBILITY_IDENTITY, "routeActivation": "disabled",
+        "output": "disabled", "qualificationClaim": False, "upstreamEvidence": str(evidence),
+    })
+
+
+def load_plan(state_dir: pathlib.Path) -> dict[str, Any]:
+    plan_path = state_dir / "plan.json"
+    require(plan_path.is_file() and not plan_path.is_symlink(), "prepared plan is missing or substituted")
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError("prepared plan is unreadable") from error
+    require(isinstance(plan, dict) and plan.get("schema") == STATE_SCHEMA, "prepared plan schema is invalid")
+    return plan
+
+
+def apply(args: argparse.Namespace, runner: Runner) -> None:
+    state_dir = secure_state_dir(args.state_dir)
+    plan = load_plan(state_dir)
+    require(not plan.get("dryRun"), "dry-run plan cannot be applied")
+    if not plan["decision"]["install"]:
+        print("RP1-GPCLK-DKMS installation skipped by resolved plan.")
+        return
+    resolved = plan.get("resolved")
+    require(isinstance(resolved, dict), "prepared installation identity is missing")
+    record = args.record
+    require(record.is_absolute(), "installation record path must be absolute")
+    secure_record_parent(record)
+    root = args.root.resolve(strict=True)
+    if resolved["channel"] == "release":
+        apply_release(state_dir, resolved, record, root, runner)
+    elif resolved["channel"] == "development":
+        apply_development(resolved, record, runner)
+    else:
+        raise ContractError("prepared source channel is invalid")
+    print("RP1-GPCLK-DKMS package/source and DKMS installation verified; route activation and output remain disabled.")
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    sub = result.add_subparsers(dest="command", required=True)
+    prepare_parser = sub.add_parser("prepare")
+    prepare_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
+    prepare_parser.add_argument("--install", choices=("auto", "true", "false"), default="auto")
+    prepare_parser.add_argument("--source", default="auto")
+    prepare_parser.add_argument("--wsprry-source", required=True)
+    prepare_parser.add_argument("--model-file", type=pathlib.Path, default=pathlib.Path("/proc/device-tree/model"))
+    prepare_parser.add_argument("--compatible-file", type=pathlib.Path, default=pathlib.Path("/proc/device-tree/compatible"))
+    prepare_parser.add_argument("--dry-run", action="store_true")
+    apply_parser = sub.add_parser("apply")
+    apply_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
+    apply_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
+    apply_parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/"))
+    return result
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        if args.command == "prepare":
+            prepare(args, Runner())
+        else:
+            apply(args, Runner())
+    except ContractError as error:
+        print(f"RP1-GPCLK-DKMS installation refused: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

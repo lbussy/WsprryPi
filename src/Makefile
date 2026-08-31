@@ -1111,7 +1111,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: semantics-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
 .PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
-.PHONY: installer-dependency-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
+.PHONY: installer-dependency-test rp1-gpclk-dkms-installer-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
 .PHONY: support-bundle-download-preparation-test support-bundle-job-directory-remover-test support-bundle-startup-cleanup-test
 .PHONY: support-bundle-private-artifact-test support-bundle-age-roundtrip-test support-bundle-key-provisioning-test
@@ -1329,6 +1329,9 @@ support-bundle-runtime-installer-test:
 
 installer-dependency-test:
 	$(Q)bash ../scripts/tests/installer_dependency_test.sh
+
+rp1-gpclk-dkms-installer-test:
+	$(Q)python3 ../scripts/tests/rp1_gpclk_dkms_install_test.py
 
 ui-publication-test:
 	$(Q)python3 ../scripts/tests/ui_publication_test.py
