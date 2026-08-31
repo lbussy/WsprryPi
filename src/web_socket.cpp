@@ -27,6 +27,7 @@
  */
 
 #include "web_socket.hpp"
+#include "backend_capabilities.hpp"
 #if WSPRRYPI_BACKEND_RP1_GPCLK
 #include "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.hpp"
 #endif
