@@ -34,7 +34,7 @@ if [[ -n "$omitted" ]]; then
         echo "invalid backend unexpectedly succeeded" >&2
         exit 1
     fi
-    grep -F "Invalid backend. Expected 'gpio', 'si5351', or 'simulated'." "$output_file" >/dev/null || {
+    grep -F "Invalid backend. Expected 'gpio', 'rp1-gpclk', 'si5351', or 'simulated'." "$output_file" >/dev/null || {
         cat "$output_file" >&2
         exit 1
     }
