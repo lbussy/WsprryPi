@@ -413,5 +413,39 @@ int main() {
   assert(service.query().at("result") == "contract_mismatch");
   assert(inhibited);
 
+  // Runtime reconciliation uses real current-route evidence, not a boot overlay.
+  nlohmann::json ctl = {{"id",1},{"route",2},{"flags",6},{"error",0},
+                        {"session",1234},{"generation",7}};
+  nlohmann::json lifecycle = {{"ready",true},{"executionAuthorized",false},
+      {"route","gpio20"},{"controller",ctl},{"bootId","current-boot"},
+      {"bindingSha256",std::string(64,'a')}};
+  auto runtime = nlohmann::json{{"schemaVersion",3},
+      {"contract","rp1-gpclk-route-manager-runtime-v1"},{"status","ok"},
+      {"state",{{"profile","runtime"},{"outputEnabled",false},{"qualification",false},
+          {"controller",ctl},{"bootId","current-boot"},{"bindingSha256",std::string(64,'a')},
+          {"outputLifecycle",lifecycle}}}};
+  bool runtime_inhibited = true;
+  std::vector<nlohmann::json> runtime_requests;
+  wsprrypi::Rp1GpclkRouteService runtime_service({
+      [&](const nlohmann::json &value) { runtime_requests.push_back(value); return runtime; },
+      idle, [] {return 20;}, [](int,std::string*) {return false;},
+      [&](bool value,const std::string&) {runtime_inhibited=value;}});
+  auto idle_runtime = runtime_service.reconcileIdleStartup("GPIO20");
+  assert(idle_runtime.at("ok") == true && runtime_inhibited);
+  assert(idle_runtime.at("executionAuthorized") == false);
+  assert(runtime_requests.back().at("operation") == "idle");
+  auto development_runtime = runtime_service.reconcileDevelopmentStartup("GPIO20");
+  assert(development_runtime.at("ok") == true && !runtime_inhibited);
+  assert(development_runtime.at("executionAuthorized") == false);
+  assert(runtime_requests.back().at("operation") == "reconcile-output");
+  assert(development_runtime.at("generation") != idle_runtime.at("generation"));
+  runtime["state"]["outputLifecycle"]["controller"]["route"] = 1;
+  assert(runtime_service.reconcileDevelopmentStartup("GPIO20").at("ok") == false);
+  assert(runtime_inhibited);
+  runtime["state"]["outputLifecycle"] = lifecycle;
+  runtime["state"]["outputLifecycle"]["executionAuthorized"] = true;
+  assert(runtime_service.reconcileDevelopmentStartup("GPIO20").at("ok") == false);
+  assert(runtime_inhibited);
+
   std::cout << "rp1_gpclk_route_service_test: PASS\n";
 }

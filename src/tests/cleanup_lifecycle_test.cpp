@@ -150,6 +150,24 @@ void test_cancellation_cleanup_failure_prevents_false_cancel_success()
            "cancellation cleanup failure must remain a failed lifecycle");
 }
 
+void test_async_execution_exception_is_reported_without_process_abort()
+{
+    WsprTransmitter transmitter;
+    WsprTransmitter::SimulatedRuntimeConfig config;
+    config.fail_event = 0;
+    transmitter.selectBackend(wsprrypi::BackendKind::SIMULATED, {}, config);
+    transmitter.configureExecution(qrss_request(), legacy_request());
+    transmitter.startAsync();
+    for (int i = 0; i < 1000 &&
+         transmitter.getState() != WsprTransmitter::State::FAILED; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    expect(transmitter.getState() == WsprTransmitter::State::FAILED,
+           "worker exception must become FAILED without terminating the process");
+    transmitter.stopAndJoin();
+    expect(transmitter.lastCleanupResult().ok,
+           "worker exception must complete backend cleanup");
+}
+
 void test_startup_quiesce_failure_propagates_without_arming_cleanup()
 {
     WsprTransmitter transmitter;
@@ -175,6 +193,7 @@ void test_startup_quiesce_failure_propagates_without_arming_cleanup()
 int main()
 try
 {
+    test_async_execution_exception_is_reported_without_process_abort();
     test_explicit_cleanup_and_stop_failure();
     test_backend_replacement_failure();
     test_configuration_and_cleanup_failure_preserve_both_errors();

@@ -422,6 +422,47 @@ nlohmann::json Rp1GpclkRouteService::reconcileStartup() {
       !reconciled, reconciled ? "" : "RP1 GPCLK reconciliation is incomplete");
   return rendered;
 }
+nlohmann::json Rp1GpclkRouteService::reconcileRuntime(
+    const std::string &route, bool development) {
+  const int gpio = gpioForRoute(route);
+  if (!gpio || gpio != operations_.persisted_gpio())
+    return failure("runtime_route_mismatch", "Requested and saved runtime route differ.");
+  const auto raw = request({{"schemaVersion",3},
+      {"operation",development ? "reconcile-output" : "idle"},
+      {"route",gpio == 4 ? "gpio4" : "gpio20"}});
+  const auto state = raw.value("state", nlohmann::json::object());
+  const auto output = state.value("outputLifecycle", nlohmann::json::object());
+  const auto controller = output.value("controller", nlohmann::json::object());
+  const bool valid = raw.value("status", std::string{}) == "ok" &&
+      output.value("ready", false) && !output.value("executionAuthorized", true) &&
+      output.value("route", std::string{}) == (gpio == 4 ? "gpio4" : "gpio20") &&
+      output.value("bootId", std::string{}) == state.value("bootId", std::string{}) &&
+      !output.value("bootId", std::string{}).empty() &&
+      output.value("bindingSha256", std::string{}) == state.value("bindingSha256", std::string{}) &&
+      output.value("bindingSha256", std::string{}).size() == 64 &&
+      controller == state.value("controller", nlohmann::json::object()) &&
+      controller.value("route", 0) == (gpio == 4 ? 1 : 2) &&
+      controller.value("flags", 0) == 6 && controller.value("error", -1) == 0 &&
+      controller.value("session", 0ULL) != 0 && controller.value("generation", 0ULL) != 0;
+  if (!valid) {
+    const auto error = raw.value("error", nlohmann::json::object());
+    return failure("runtime_reconciliation_failed", error.value("message",
+        std::string("Runtime route reconciliation failed; output remains inhibited.")));
+  }
+  auto result = failure("runtime_reconciled", "Runtime route reconciled; existing operation authorization is still required.");
+  result.update({{"ok",true},{"reconciled",true},{"compatible",true},
+      {"requested",route},{"persisted",route},{"configured",route},{"active",route},
+      {"journal","none"},{"bootOwnership","runtime"},{"endpointOwned",true},
+      {"endpointOpen",false},{"liveOutput","disabled"},
+      {"generation",++generation_},
+      {"controllerGeneration",controller["generation"]},
+      {"policyDomain",development ? "external-provider" : "startup-idle"},
+      {"executionAuthorized",false},{"qualification",false}});
+  operations_.set_transmission_inhibited(!development,
+      development ? "" : "Runtime idle startup awaits an operation authorization");
+  return result;
+}
+
 nlohmann::json Rp1GpclkRouteService::reconcileIdleStartup(
     const std::string &route) {
   std::lock_guard<std::mutex> guard(mutex_);
@@ -438,8 +479,13 @@ nlohmann::json Rp1GpclkRouteService::reconcileIdleStartup(
                    "RP1 GPCLK idle startup requires GPIO4 or GPIO20.");
   }
 
-  auto rendered = render(request({{"schemaVersion", 1},
-                                  {"operation", "query"}}), expected);
+  auto discovered = request({{"schemaVersion", 1}, {"operation", "query"}});
+  if (runtime_profile_) {
+    auto result = reconcileRuntime(expected, false);
+    startup_failure_latched_ = !result.value("ok", false);
+    return result;
+  }
+  auto rendered = render(discovered, expected);
   const auto exact_route_state = [&expected](const nlohmann::json &value) {
     return value.value("ok", false) &&
            value.value("reconciled", false) &&
@@ -499,8 +545,9 @@ nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
   }
 
   ++generation_;
-  auto rendered = render(request({{"schemaVersion", 1},
-                                  {"operation", "query"}}), expected);
+  auto discovered = request({{"schemaVersion", 1}, {"operation", "query"}});
+  if (runtime_profile_) return reconcileRuntime(expected, true);
+  auto rendered = render(discovered, expected);
   const bool reconciled = rendered.value("ok", false) &&
                           rendered.value("reconciled", false) &&
                           rendered.value("requested", std::string{}) == expected &&

@@ -2085,7 +2085,7 @@ inline double WsprTransmitter::convert_mw_dbm(double mw)
     return 10.0 * std::log10(mw);
 }
 
-void WsprTransmitter::thread_entry()
+void WsprTransmitter::thread_entry() try
 {
     const int ncpu = cpu_count();
 
@@ -2136,6 +2136,28 @@ void WsprTransmitter::thread_entry()
             std::string("WsprTransmitter::thread_entry(): Unexpected error: ") + e.what());
     }
     transmit();
+}
+catch (const std::exception &error)
+{
+    state_.store(State::FAILED, std::memory_order_release);
+    const auto cleanup = cleanupTransmissionBackend();
+    try {
+        std::string message = error.what();
+        if (!cleanup.ok) message += "; cleanup failed: " + cleanup.error;
+        fire_transmit_cb(TransmissionCallbackEvent::FAILED, LogLevel::ERROR,
+                         message, 0.0);
+    } catch (...) {
+        // A throwing notification must not escape a std::thread boundary.
+    }
+}
+catch (...)
+{
+    state_.store(State::FAILED, std::memory_order_release);
+    (void)cleanupTransmissionBackend();
+    try {
+        fire_transmit_cb(TransmissionCallbackEvent::FAILED, LogLevel::ERROR,
+                         "Unknown transmission worker failure.", 0.0);
+    } catch (...) {}
 }
 
 void WsprTransmitter::set_thread_priority()

@@ -70,7 +70,8 @@ public:
     }
     bool requestFiniteStop(std::uint64_t, std::string&) override { stopped=true; return true; }
     wsprrypi::Rp1GpclkCompletionState state(std::uint64_t) const noexcept override { return state_value; }
-    wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override { return {state_value,current_event,0}; }
+    wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override { return {state_value,current_event,terminal_reason}; }
+    std::uint32_t terminal_reason{};
     bool release(std::string&) noexcept override { released=true; return true; }
     std::uint64_t leaseId() const noexcept override { return 41; }
     std::uint32_t acquired_route{}; std::uint64_t required_capabilities{};
@@ -366,10 +367,13 @@ int main()
             expected_tone.tones[0].upper_divider_word,
         "TONE must plan divider words from the 200 MHz compatibility parent");
     auto finite_provider=std::make_unique<Provider>(); Provider* finite_observed=finite_provider.get();
+    finite_observed->terminal_reason = RP1_GPCLK_REASON_COMPLETE;
     WsprRp1GpclkBackend finite_backend(owner,std::move(finite_provider));
     auto explicit_tone=tonePlan(true);
     expect(finite_backend.configure(explicit_tone,developmentInputs()).ok && finite_backend.execute(explicit_tone).ok,
         "explicit-duration TONE must use finite ABI v2 operation");
+    expect(wsprrypi::rp1GpclkOperationRecordSnapshot().terminal_reason == RP1_GPCLK_REASON_COMPLETE,
+        "TONE must preserve the provider terminal reason in its operation record");
     expect(finite_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&
         finite_observed->tone_program.duration_ns==1000000000ULL &&
         (finite_observed->required_capabilities & RP1_GPCLK_CAP_TONE_FINITE)!=0,
