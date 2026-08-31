@@ -34,3 +34,16 @@ The manager can explicitly release its application mask with `resume gpio20
 after that request returns. The existing ABI-v4 lease supports authorized output
 with the module loaded at `live_output=0`; no globally enabled load is needed.
 Route changes still stop and mask the application.
+
+Bounded-tone start acknowledgements are asynchronous. A response includes an
+RP1 operation record only when it belongs to that request; the terminal record
+retains provider failure reasons and cleanup failures. A worker exception is
+reported without terminating the application process.
+
+The 2026-08-31 wspr5 integration test exercised GPIO20 at a requested
+14.097100 MHz for ten seconds, including repeated execution and cleanup without
+a reboot. Exact source/build identities, failed attempts and successful outcomes
+are retained in RP1-GPCLK-DKMS under `docs/evidence/runtime-tone-20260831/`.
+This is not analyzer frequency or product qualification. The test used a
+temporary configuration and transient loopback-only service; the normal INI,
+served UI and masked service were not replaced as part of that test.
