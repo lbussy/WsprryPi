@@ -837,6 +837,14 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
 #if WSPRRYPI_BACKEND_RP1_GPCLK
                                         terminal["rp1_operation_record"] =
                                             rp1_operation_record_json();
+                                        const auto &record = terminal["rp1_operation_record"];
+                                        if (record["state"] == "failed" ||
+                                            record["state"] == "cleanup-fault")
+                                        {
+                                            terminal["status"] = "error";
+                                            terminal["message"] =
+                                                "RP1 operation failed; inspect rp1_operation_record.";
+                                        }
 #endif
                                         if (running_)
                                             sendAllClients(terminal.dump());

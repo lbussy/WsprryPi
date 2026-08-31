@@ -455,10 +455,7 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
 
         {
             std::lock_guard<std::mutex> lock(backend_mutex_);
-            const auto event_state = configured_->finite_events
-                ? provider_->eventState(backend_->generation())
-                : wsprrypi::Rp1GpclkProviderEventState{
-                      provider_->state(backend_->generation()), 0, 0};
+            const auto event_state = provider_->eventState(backend_->generation());
             const auto state = event_state.completion;
             if (configured_->finite_events &&
                 event_state.current_event < plan.events.size())
@@ -466,24 +463,26 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             if (state == wsprrypi::Rp1GpclkCompletionState::complete ||
                 state == wsprrypi::Rp1GpclkCompletionState::failed)
             {
-                if (!backend_->cleanup(error))
+                auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+                const bool cleaned = backend_->cleanup(error);
+                record.terminal_reason = event_state.terminal_reason;
+                record.state = !cleaned ? "cleanup-fault" :
+                    state == wsprrypi::Rp1GpclkCompletionState::complete
+                        ? "complete" : "failed";
+                record.cleanup_attempted = true;
+                record.cleanup_complete = cleaned;
+                record.endpoint_closed = cleaned;
+                if (cleaned) record.lease = 0;
+                record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                update_record(record);
+                if (!cleaned)
                 {
                     result.error = error;
                     result.faulted = true;
                     return result;
                 }
-                auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
-                record.terminal_reason = event_state.terminal_reason;
-                record.state = state == wsprrypi::Rp1GpclkCompletionState::complete
-                    ? "complete" : "failed";
-                record.cleanup_attempted = true;
-                record.cleanup_complete = true;
-                record.endpoint_closed = true;
-                record.lease = 0;
-                record.finished_monotonic_ns = static_cast<std::uint64_t>(
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch()).count());
-                update_record(record);
                 if (state == wsprrypi::Rp1GpclkCompletionState::failed)
                 {
                     result.error = "RP1 GPCLK provider reported frame failure.";
