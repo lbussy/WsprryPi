@@ -39,6 +39,14 @@ class Tests(unittest.TestCase):
                      self.data.replace(b'Enable on Boot = Never', b'Enable on Boot = unknown')):
             with self.assertRaises(Exception): app.edit(data, 'gpio20')
 
+    def test_appended_sections_preserve_bytes_and_new_keys(self):
+        data = self.data + b'\n[Band GPIO]\n8m = \n[GPIO]\nRP1 Drive mA = 2\n'
+        self.assertEqual(app.configuration(data).getint('GPIO', 'RP1 Drive mA'), 2)
+        self.assertEqual(app.edit(data, 'gpio20'),
+                         data.replace(b'Transmit Pin = 4', b'Transmit Pin = 20'))
+        with self.assertRaises(Exception):
+            app.configuration(data + b'\n[GPIO]\nRP1 Drive mA = 4\n')
+
     def test_atomic_configuration_and_mode_preservation(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'application.ini'

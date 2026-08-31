@@ -1,0 +1,1104 @@
+{
+  "running-gpio4": {
+    "administratorMasked": false,
+    "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+    "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+    "controller": {
+      "error": 0,
+      "flags": 6,
+      "generation": 3,
+      "id": 1,
+      "route": 1,
+      "session": 14421307271028578308
+    },
+    "fingerprint": "df85352fd9dedf95de0be33d096f3875e972a0dd7e131bfcf3830bc8ba76935f",
+    "phase": "restored",
+    "previousIdle": "8745d36b-467c-414f-9155-865f65a776eb",
+    "ready": {
+      "pid": 35362,
+      "route": "gpio4"
+    },
+    "requestId": "89abb3b2-5037-465a-bd64-9d0465849911",
+    "route": "gpio4",
+    "token": "d7996c30-58d4-4a3d-8e67-3a6e11d824eb",
+    "version": 1,
+    "wasActive": true
+  },
+  "running-gpio20": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio20",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 5,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "45d38dee396b271393d14ce52f33ec183d6aa608b1b580fe307f8c50f54f8fca",
+        "phase": "restored",
+        "previousIdle": "d7996c30-58d4-4a3d-8e67-3a6e11d824eb",
+        "ready": {
+          "pid": 35859,
+          "route": "gpio20"
+        },
+        "requestId": "0d70a7b2-0a91-4fd7-8285-676f5c305259",
+        "route": "gpio20",
+        "token": "85575973-3b36-471e-982d-55a7b347803c",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 5,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 5,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio20"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 5,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "dbd89c30-a409-403a-a6a6-315a458c9297",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 2,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "restart-failure": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "error": {
+      "code": "application-restoration-failed",
+      "kernelError": 0,
+      "message": "fixed command failed: /usr/bin/systemctl exit=1: Job for wsprrypi.service failed because the control process exited with error code.\nSee \"systemctl status wsprrypi.service\" and \"journalctl -xeu wsprrypi.service\" for details.",
+      "overlayId": 1
+    },
+    "operation": "switch",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio4",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 7,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "error": "fixed command failed: /usr/bin/systemctl exit=1: Job for wsprrypi.service failed because the control process exited with error code.\nSee \"systemctl status wsprrypi.service\" and \"journalctl -xeu wsprrypi.service\" for details.",
+        "fingerprint": "09596b021cf1bbbc925691bde300a3a238d46ae79def1dd3de173cbef1332736",
+        "phase": "restoration-failed",
+        "previousIdle": "85575973-3b36-471e-982d-55a7b347803c",
+        "ready": null,
+        "requestId": "7b7a9680-f3ba-4395-8a7f-99e566b0e11e",
+        "route": "gpio4",
+        "token": "a80cc1c2-decd-4a9e-86fa-5f26954e5bb1",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": true,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 7,
+        "id": 1,
+        "route": 1,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 7,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "551885fc-810b-411e-beca-c6c811fd0032",
+        "session": 14421307271028578308,
+        "target": 1,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "error"
+  },
+  "restart-recovered": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio4",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 7,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "error": "fixed command failed: /usr/bin/systemctl exit=1: Job for wsprrypi.service failed because the control process exited with error code.\nSee \"systemctl status wsprrypi.service\" and \"journalctl -xeu wsprrypi.service\" for details.",
+        "fingerprint": "09596b021cf1bbbc925691bde300a3a238d46ae79def1dd3de173cbef1332736",
+        "phase": "restored",
+        "previousIdle": "85575973-3b36-471e-982d-55a7b347803c",
+        "ready": {
+          "pid": 37046,
+          "route": "gpio4"
+        },
+        "requestId": "7b7a9680-f3ba-4395-8a7f-99e566b0e11e",
+        "route": "gpio4",
+        "token": "a80cc1c2-decd-4a9e-86fa-5f26954e5bb1",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 7,
+        "id": 1,
+        "route": 1,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 7,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio4"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 7,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "551885fc-810b-411e-beca-c6c811fd0032",
+        "session": 14421307271028578308,
+        "target": 1,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 1,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "stopped-gpio4": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio4",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 11,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "d51957a585399e57a063d48c653e53b4a065d49ae8e58de6b33c17bba1027d10",
+        "phase": "stopped",
+        "previousIdle": "fb93ac0e-8f87-4fff-bf8e-151a0df78d6a",
+        "ready": null,
+        "requestId": "ea4ab681-b0e5-44a0-ae7f-a9827063dcb5",
+        "route": "gpio4",
+        "token": "4d4a4bdf-4a4c-4329-81e9-3c8b9c34ef90",
+        "version": 1,
+        "wasActive": false
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 11,
+        "id": 1,
+        "route": 1,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 11,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio4"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 11,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "be608838-9523-464f-a012-a19a1cacfea3",
+        "session": 14421307271028578308,
+        "target": 1,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 1,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "stopped-gpio20": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio20",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "1c7e2a5253bd6d4974809b07edbcf7eae586219de2898fa06b7baf147fa5d7fe",
+        "phase": "stopped",
+        "previousIdle": "4d4a4bdf-4a4c-4329-81e9-3c8b9c34ef90",
+        "ready": null,
+        "requestId": "43646cf1-3c33-456a-aef2-272afb6e2a1f",
+        "route": "gpio20",
+        "token": "ee67bcee-7a16-420e-ad69-a108a16a3350",
+        "version": 1,
+        "wasActive": false
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 13,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio20"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "10ff4608-88f4-47e6-a4aa-8af76a50cd60",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 2,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "later-start-gpio20": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio20",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "1c7e2a5253bd6d4974809b07edbcf7eae586219de2898fa06b7baf147fa5d7fe",
+        "phase": "restored",
+        "previousIdle": "4d4a4bdf-4a4c-4329-81e9-3c8b9c34ef90",
+        "ready": {
+          "pid": 38232,
+          "route": "gpio20"
+        },
+        "requestId": "43646cf1-3c33-456a-aef2-272afb6e2a1f",
+        "route": "gpio20",
+        "token": "ee67bcee-7a16-420e-ad69-a108a16a3350",
+        "version": 1,
+        "wasActive": false
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 13,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio20"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 13,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "10ff4608-88f4-47e6-a4aa-8af76a50cd60",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 2,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "http-restored-GPIO4": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio4",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 15,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "b357a8f38a8c0404e1c10b3be884803ae234ad74d47ea6c7d3f4c60bf4c61be7",
+        "phase": "restored",
+        "previousIdle": "ee67bcee-7a16-420e-ad69-a108a16a3350",
+        "ready": {
+          "pid": 38787,
+          "route": "gpio4"
+        },
+        "requestId": "wsprrypi-0f3c360709a658ccc4986e5761e3ec68ef6e98b8940eae22",
+        "route": "gpio4",
+        "token": "3b518c0d-9380-4498-a0de-373a2c82e961",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 15,
+        "id": 1,
+        "route": 1,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 15,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio4"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 15,
+          "id": 1,
+          "route": 1,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "5a4f8fef-c4b5-463a-bc25-a56eb80a56bf",
+        "session": 14421307271028578308,
+        "target": 1,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 1,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "http-restored-GPIO20": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio20",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 17,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "08ced4c0b432fa8740eab82a0550055434d8fa2b0a52686c3ab79ce2c219c25f",
+        "phase": "restored",
+        "previousIdle": "3b518c0d-9380-4498-a0de-373a2c82e961",
+        "ready": {
+          "pid": 39286,
+          "route": "gpio20"
+        },
+        "requestId": "wsprrypi-c38bdc06317d6bec68883eec7356ccfc09843576b35ca421",
+        "route": "gpio20",
+        "token": "b555f277-2faa-438d-8394-5a7ad9f617a8",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 17,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 17,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio20"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 17,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "7233dc3c-1c6e-4298-9414-e97c197dc5bb",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 2,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    }
+  },
+  "http-final-GPIO4": {
+    "active": "GPIO4",
+    "application": {
+      "administratorMasked": false,
+      "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 15,
+        "id": 1,
+        "route": 1,
+        "session": 14421307271028578308
+      },
+      "fingerprint": "b357a8f38a8c0404e1c10b3be884803ae234ad74d47ea6c7d3f4c60bf4c61be7",
+      "phase": "restored",
+      "previousIdle": "ee67bcee-7a16-420e-ad69-a108a16a3350",
+      "ready": {
+        "pid": 38787,
+        "route": "gpio4"
+      },
+      "requestId": "wsprrypi-0f3c360709a658ccc4986e5761e3ec68ef6e98b8940eae22",
+      "route": "gpio4",
+      "token": "3b518c0d-9380-4498-a0de-373a2c82e961",
+      "version": 1,
+      "wasActive": true
+    },
+    "bootOwnership": "runtime controller",
+    "compatible": true,
+    "configured": "GPIO4",
+    "contractIdentity": "rp1-gpclk-route-manager-runtime-v1",
+    "controller": {
+      "error": 0,
+      "flags": 6,
+      "generation": 15,
+      "id": 1,
+      "route": 1,
+      "session": 14421307271028578308
+    },
+    "eligible": false,
+    "endpointOpen": true,
+    "endpointOwned": false,
+    "generation": 1,
+    "journal": "none",
+    "liveOutput": "Disabled",
+    "liveQualification": "Unavailable",
+    "message": "Last route switch restored Wsprry Pi in idle mode. Transmission was not resumed.",
+    "ok": true,
+    "persisted": "GPIO4",
+    "preflightValidated": false,
+    "profile": "runtime",
+    "reconciled": true,
+    "requested": "GPIO4",
+    "result": "runtime_inhibited",
+    "services": {
+      "wsprrypi.service": "restored"
+    },
+    "state": "runtime_ready"
+  },
+  "http-final-GPIO20": {
+    "active": "GPIO20",
+    "application": {
+      "administratorMasked": false,
+      "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 17,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "fingerprint": "08ced4c0b432fa8740eab82a0550055434d8fa2b0a52686c3ab79ce2c219c25f",
+      "phase": "restored",
+      "previousIdle": "3b518c0d-9380-4498-a0de-373a2c82e961",
+      "ready": {
+        "pid": 39286,
+        "route": "gpio20"
+      },
+      "requestId": "wsprrypi-c38bdc06317d6bec68883eec7356ccfc09843576b35ca421",
+      "route": "gpio20",
+      "token": "b555f277-2faa-438d-8394-5a7ad9f617a8",
+      "version": 1,
+      "wasActive": true
+    },
+    "bootOwnership": "runtime controller",
+    "compatible": true,
+    "configured": "GPIO20",
+    "contractIdentity": "rp1-gpclk-route-manager-runtime-v1",
+    "controller": {
+      "error": 0,
+      "flags": 6,
+      "generation": 17,
+      "id": 1,
+      "route": 2,
+      "session": 14421307271028578308
+    },
+    "eligible": false,
+    "endpointOpen": true,
+    "endpointOwned": false,
+    "generation": 1,
+    "journal": "none",
+    "liveOutput": "Disabled",
+    "liveQualification": "Unavailable",
+    "message": "Last route switch restored Wsprry Pi in idle mode. Transmission was not resumed.",
+    "ok": true,
+    "persisted": "GPIO20",
+    "preflightValidated": false,
+    "profile": "runtime",
+    "reconciled": true,
+    "requested": "GPIO20",
+    "result": "runtime_inhibited",
+    "services": {
+      "wsprrypi.service": "restored"
+    },
+    "state": "runtime_ready"
+  },
+  "no-route": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "query",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": null,
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 17,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "08ced4c0b432fa8740eab82a0550055434d8fa2b0a52686c3ab79ce2c219c25f",
+        "phase": "route-recovered",
+        "previousIdle": "3b518c0d-9380-4498-a0de-373a2c82e961",
+        "ready": {
+          "pid": 39286,
+          "route": "gpio20"
+        },
+        "requestId": "wsprrypi-c38bdc06317d6bec68883eec7356ccfc09843576b35ca421",
+        "route": "gpio20",
+        "token": "b555f277-2faa-438d-8394-5a7ad9f617a8",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": true,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 0,
+        "generation": 18,
+        "id": 0,
+        "route": 0,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 0,
+          "generation": 18,
+          "id": 0,
+          "route": 0,
+          "session": 14421307271028578308
+        },
+        "phase": "recovered-inhibited",
+        "request": "7233dc3c-1c6e-4298-9414-e97c197dc5bb",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "consumerAbsent": true,
+    "endpointAbsent": true,
+    "clockEnableCount": "0"
+  },
+  "final-gpio20": {
+    "contract": "rp1-gpclk-route-manager-runtime-v1",
+    "operation": "idle",
+    "schemaVersion": 3,
+    "state": {
+      "activeRoute": "gpio20",
+      "application": {
+        "administratorMasked": false,
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 19,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "fingerprint": "391b859eeb389a5abcb5908efb16b70638d5a833ad180a1aed85c507923761a2",
+        "phase": "restored",
+        "previousIdle": null,
+        "ready": {
+          "pid": 39982,
+          "route": "gpio20"
+        },
+        "requestId": "3aa5c0ae-1118-463f-a153-34be8aa941f2",
+        "route": "gpio20",
+        "token": "e2be2c36-543d-428a-8ee6-159488447f92",
+        "version": 1,
+        "wasActive": true
+      },
+      "applicationInhibited": false,
+      "applicationRestorationVersion": 1,
+      "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+      "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+      "configuredRoute": null,
+      "controller": {
+        "error": 0,
+        "flags": 6,
+        "generation": 19,
+        "id": 1,
+        "route": 2,
+        "session": 14421307271028578308
+      },
+      "outputEnabled": false,
+      "outputLifecycle": {
+        "bindingSha256": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "bootId": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "controller": {
+          "error": 0,
+          "flags": 6,
+          "generation": 19,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "executionAuthorized": false,
+        "ready": true,
+        "route": "gpio20"
+      },
+      "pendingTransaction": {
+        "binding": "0f2f3ebe42cdc1e9454382d9fa75430a57e5d905241fe697ad07a18e4cf4d0cd",
+        "boot": "f69985c3-bbd9-46cd-8bb1-04aac1e5af7e",
+        "observation": {
+          "error": 0,
+          "flags": 6,
+          "generation": 19,
+          "id": 1,
+          "route": 2,
+          "session": 14421307271028578308
+        },
+        "phase": "complete-inhibited",
+        "request": "f9d33e24-922e-4df2-81f9-1f015a635ce7",
+        "session": 14421307271028578308,
+        "target": 2,
+        "version": 1
+      },
+      "profile": "runtime",
+      "qualification": false
+    },
+    "status": "ok",
+    "snapshot": {
+      "route": 2,
+      "compatibility": 2,
+      "reason": 0,
+      "operation": 0,
+      "terminal": 0,
+      "event": 0,
+      "flags": 0,
+      "fault": 1,
+      "owner": 1,
+      "lease": 1,
+      "live": 1,
+      "eligible": 2,
+      "drain": 0,
+      "gpio": 2,
+      "clock": 2,
+      "dma": 2,
+      "stable": 2,
+      "reserved": 0
+    },
+    "hashes": {
+      "/usr/local/bin/wsprrypi": "d62c26e0248fef31daf7aa4a0aed97602a786c6e16bc22a40f2695e8eb4c794a",
+      "/usr/local/lib/wsprrypi/route_application.py": "6a8e6df9e1a0f768d86f139a3de53a9a4f56b2180031bbb03a74c5d59cc25180",
+      "/etc/systemd/system/wsprrypi.service": "0f9d3dc2f3fcaa0eaf255e781b55b1f7999fafea73e69dba8366d4780fc6262b"
+    },
+    "devNullMode": "0o666",
+    "clockEnableCount": "0"
+  }
+}

@@ -42,7 +42,24 @@ def trusted(path):
 def configuration(data):
     parser = configparser.ConfigParser(interpolation=None, strict=True)
     parser.optionxform = str
-    parser.read_string(data.decode('utf-8'))
+    # IniFile appends another section header when persisting newly added keys.
+    # Coalesce sections only in the parsing view; edit() retains the original
+    # bytes. Strict parsing still rejects duplicate keys across repeated blocks.
+    sections = {None: []}
+    section = None
+    for line in data.decode('utf-8').splitlines():
+        header = re.fullmatch(r'\s*\[([^\]]+)\]\s*', line)
+        if header:
+            section = header[1]
+            sections.setdefault(section, [])
+        else:
+            sections[section].append(line)
+    normalized = []
+    for name, lines in sections.items():
+        if name is not None:
+            normalized.append('[' + name + ']')
+        normalized.extend(lines)
+    parser.read_string('\n'.join(normalized))
     if parser.defaults():
         raise ValueError('inherited configuration is not supported')
     if parser.get('Operation', 'Transmit Backend').lower() != 'rp1-gpclk':
