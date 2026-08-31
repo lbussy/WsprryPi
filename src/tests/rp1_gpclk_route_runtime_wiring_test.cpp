@@ -51,6 +51,10 @@ int main() {
     assert(request_commit != std::string::npos);
     assert(listener_start != std::string::npos);
     assert(idle_startup < listener_start);
+    const auto restoration_ack = scheduling.find(".acknowledgeRestoration(");
+    const auto listener_ready = scheduling.find("!webServer.isListening()");
+    assert(restoration_ack != std::string::npos && listener_ready > listener_start && listener_ready < restoration_ack);
+    assert(http.find("return svr && svr->is_running();") != std::string::npos);
     assert(bounded_request < development_reconciliation);
     assert(development_reconciliation < request_commit);
     const auto direct_confirmation = scheduling.find(

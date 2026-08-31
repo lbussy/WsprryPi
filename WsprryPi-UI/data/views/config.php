@@ -765,7 +765,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             <dl class="rp1-route-identities" aria-label="RP1 clock route state">
                                                 <div><dt>Requested</dt><dd id="rp1-route-requested">—</dd></div>
                                                 <div><dt>Persisted</dt><dd id="rp1-route-persisted">—</dd></div>
-                                                <div><dt>Boot configured</dt><dd id="rp1-route-configured">—</dd></div>
+                                                <div><dt>Configured</dt><dd id="rp1-route-configured">—</dd></div>
                                                 <div><dt>Active</dt><dd id="rp1-route-active">—</dd></div>
                                                 <div><dt>Module reported</dt><dd id="rp1-route-module">—</dd></div>
                                                 <div><dt>Reconciled</dt><dd id="rp1-route-reconciled">No</dd></div>

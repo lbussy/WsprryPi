@@ -5057,6 +5057,24 @@ bool wspr_loop()
         }
     }
 
+    if (const char *restoration = std::getenv("WSPRRYPI_ROUTE_RESTORE_IDLE"))
+    {
+        const auto listener_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (start_web && network_safety_ready && !webServer.isListening() &&
+               std::chrono::steady_clock::now() < listener_deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        if (startup_quiesce_inhibited.load(std::memory_order_acquire) ||
+            !network_safety_ready || (start_web && !webServer.isListening()) ||
+            config.transmit_backend != TransmitBackendKind::RP1_GPCLK ||
+            !wsprrypi::productionRp1GpclkRouteService().acknowledgeRestoration(
+                restoration, config.transmit))
+        {
+            llog.logS(ERROR, "Route restoration could not acknowledge idle application readiness.");
+            stop_runtime_components_for_process_exit();
+            return false;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Loop (block wspr_loop only) until shutdown is triggered
     // -------------------------------------------------------------------------

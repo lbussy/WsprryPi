@@ -15,25 +15,51 @@ and persists the requested route separately from controller-reported active stat
 Recovery explicitly asks the controller to reach no route; it is not a rollback
 to a previous GPIO. Removal errors retain their kernel errno and overlay ID.
 
-The manager stops and persistently masks WsprryPi before route changes. The UI
-therefore warns that its HTTP connection may disappear. A disconnect means
-completion unknown, disables further switch attempts until fresh state is read,
-and directs the operator to `runtime_route_client.py query`. Subsequent operations
-while WsprryPi is stopped use that client. Nothing automatically unmasks, restarts,
-or authorizes output. A permanently available browser administration service is
-not provided by this change.
+The manager temporarily inhibits systemd starts using its own service drop-in,
+stops WsprryPi, and switches the owned runtime overlay with output disabled.
+It does not overwrite the installed service unit or an administrator's mask.
+After the route is verified idle, the installed WsprryPi companion updates the
+saved pin and disables transmission. A previously running application restarts
+in idle mode; a previously stopped or administrator-masked application stays
+stopped. Saved `Enable on Boot` preferences and unrelated configuration remain
+unchanged. A stopped application's first subsequent startup is also idle.
 
-Install/update/recovery belong to the module repository's separately reviewed
-runtime bundle workflow. This application commit does not install it, replace a
-running binary, change services, migrate a firmware route, reboot, or test GPIO.
-Coherent target deployment and clock-disabled GPIO4/GPIO20 switching still need
-separate authorization and proof. No product or RF qualification is claimed.
+The browser may disconnect when its application stops. Refresh after the
+application restarts. Do not repeat a switch merely because the connection was
+lost: `runtime_route_client.py query` reports the durable transaction. Application
+readiness is acknowledged only after startup reconciliation, loop setup and
+binding the HTTP listener when enabled; a
+systemd start request alone is not success. The UI distinguishes restoration in
+progress, successful completion, route recovery, and application restoration
+failure. Completed records describe the last transaction, not future uptime.
 
-The manager can explicitly release its application mask with `resume gpio20
---execute` after validating the idle runtime route. Start the application only
-after that request returns. The existing ABI-v4 lease supports authorized output
-with the module loaded at `live_output=0`; no globally enabled load is needed.
-Route changes still stop and mask the application.
+`runtime_route_client.py restore --execute` retries incomplete application
+restoration on the installed route without repeating overlay removal/application.
+An interrupted route change requires `recover --execute`, followed by a new
+explicit switch. Prior-boot state is never used to restart automatically.
+Transmission is not resumed by either switching or restoration; the normal
+operator controls and existing RP1 operation authorization remain available.
+
+The application installer and `scripts/copy_exe.py` install
+`/usr/local/lib/wsprrypi/route_application.py` with the executable. Use a matching,
+newly bound DKMS runtime bundle supporting `applicationRestorationVersion=1`.
+The companion supports the canonical `/usr/local/bin/wsprrypi -J -i
+/usr/local/etc/wsprrypi.ini` service command, optionally with `--no-web`.
+It refuses missing services, unsupported command overrides, alternate config
+paths or old binaries before stopping the application. Administrator-owned
+units using that command are preserved. An old service mask from a previous
+manual deployment must be reviewed during installation; it is not automatically
+removed or assumed to belong to this workflow.
+
+The startup-only `WSPRRYPI_ROUTE_RESTORE_IDLE` environment value is supplied by
+the manager's owned drop-in. It is not a transmission permit or operator setting.
+Startup forces `Transmit=false` while preserving the stored boot preference;
+the token binds the application's readiness acknowledgement to this transaction.
+
+These changes have offline software validation only. Coherent target deployment,
+clock-disabled route switching and actual service restart still require separate
+authorization and target evidence. No module installation, GPIO changes, reboot
+or RF operation is performed by the offline test suite.
 
 Bounded-tone start acknowledgements are asynchronous. A response includes an
 RP1 operation record only when it belongs to that request; the terminal record

@@ -2354,9 +2354,12 @@ function clickTransmitPin() {
 }
 
 const RP1_ROUTE_STATES = Object.freeze({
-    runtime_inhibited: ["Output disabled", "Runtime route administration is available. Switching stops Wsprry Pi; verify completion with the operator client."],
+    runtime_inhibited: ["Output disabled", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
+    runtime_ready: ["Route ready", "Route switching is complete. Transmission was not resumed."],
+    runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
+    runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
     runtime_recovery: ["Recovery required", "Inspect the controller error and ownership before explicit cleanup recovery."],
-    runtime_unknown: ["Completion unknown", "The application disconnected. Do not retry the switch. Run runtime_route_client.py query to inspect the result; transmission must remain inhibited."],
+    runtime_unknown: ["Reconnecting", "Wsprry Pi disconnected during route administration. Refresh this page after it restarts; if it remains unavailable, run runtime_route_client.py query. Do not repeat the switch."],
     checking: ["Checking", "Checking the external provider and active route…"],
     active: ["Active", "Requested and active routes match. No reboot is required."],
     reboot_required: ["Reboot required", "Review the requested route, then apply it and reboot or cancel the draft."],
@@ -2390,7 +2393,7 @@ class Rp1RouteUiController {
         const draft=this.routeValue(`GPIO${getTxPin()}`);
         const changed=draft!=="Unavailable" && draft!==this.active;
         const recovery=["staged","mismatch","rollback_required","runtime_recovery"].includes(state);
-        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || recovery || state==="runtime_unknown" || !changed);
+        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
         $("#rp1-route-cancel").prop("disabled",this.inFlight || draft===this.persisted);
         $("#rp1-route-rollback").prop("hidden",!recovery).prop("disabled",this.inFlight);
     }
@@ -2443,7 +2446,7 @@ class Rp1RouteUiController {
     }
     async operate(operation) {
         if(this.runtimeProfile && operation==="rollback") {
-            if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain masked. Verify the result with the operator client before further administration.")) return;
+            if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain inhibited. Verify the result with the operator client before further administration.")) return;
             operation="recover";
         }
         const requested=this.routeValue(`GPIO${getTxPin()}`);
@@ -2466,7 +2469,7 @@ class Rp1RouteUiController {
             if(!preflightResponse.ok || preflight.ok!==true){this.inFlight=false;this.render(preflight);return;}
             this.generation=preflight.generation;
             const confirmed=window.confirm(this.runtimeProfile
-                ? `Switch to ${requested} with output disabled? Wsprry Pi will stop and remain masked. This browser may disconnect. Verify completion using runtime_route_client.py query. No reboot is requested.`
+                ? `Switch to ${requested} with output disabled? A running Wsprry Pi will restart in idle mode. This browser may disconnect; refresh after it reconnects. Transmission will not resume. No reboot is requested.`
                 :
                 `Apply ${requested} and reboot? The package executor will stop only wsprrypi.service and soapyremote-server.service before changing its owned boot block.`
             );
