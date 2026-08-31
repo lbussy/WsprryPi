@@ -53,6 +53,16 @@ static void require_no_semantic_details(
 
 int main()
 {
+    nlohmann::json reply = {{"request_id", "current"}, {"status", "ok"}};
+    attach_rp1_operation_record(reply, {{"operationId", "previous"}, {"state", "complete"}}, false);
+    require(!reply.contains("rp1_operation_record"), "must not attach a stale operation record");
+    attach_rp1_operation_record(reply, {{"operationId", "current"}, {"state", "complete"}}, true);
+    require(reply["status"] == "ok", "completed current operation remains successful");
+    for (const char *state : {"failed", "cleanup-fault", "submit-failed", "acquire-failed", "draining"}) {
+        reply["status"] = "ok";
+        attach_rp1_operation_record(reply, {{"operationId", "current"}, {"state", state}}, true);
+        require(reply["status"] == "error", "non-complete terminal operation must report error");
+    }
     TestToneStartResult result;
     result.started = true;
     result.message = "started";

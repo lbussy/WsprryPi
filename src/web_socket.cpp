@@ -784,7 +784,7 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                         reply["request_id"] = parsed.request->request_id;
                         reply["duration_ms"] = parsed.request->duration_ms;
 #if WSPRRYPI_BACKEND_RP1_GPCLK
-                        reply["rp1_operation_record"] = rp1_operation_record_json();
+                        attach_rp1_operation_record(reply, rp1_operation_record_json(), false);
 #endif
                         if (start_result.started)
                         {
@@ -835,16 +835,8 @@ void WebSocketServer::handleMessage(const std::string &raw_message)
                                                 ? "ok" : "error"},
                                             {"message", stopped.message}};
 #if WSPRRYPI_BACKEND_RP1_GPCLK
-                                        terminal["rp1_operation_record"] =
-                                            rp1_operation_record_json();
-                                        const auto &record = terminal["rp1_operation_record"];
-                                        if (record["state"] == "failed" ||
-                                            record["state"] == "cleanup-fault")
-                                        {
-                                            terminal["status"] = "error";
-                                            terminal["message"] =
-                                                "RP1 operation failed; inspect rp1_operation_record.";
-                                        }
+                                        attach_rp1_operation_record(
+                                            terminal, rp1_operation_record_json(), true);
 #endif
                                         if (running_)
                                             sendAllClients(terminal.dump());
