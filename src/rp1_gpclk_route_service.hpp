@@ -28,6 +28,7 @@ private:
   nlohmann::json render(const nlohmann::json &,
                         const std::string &requested = {});
   nlohmann::json failure(const std::string &, const std::string &) const;
+  nlohmann::json reconcileRuntime(const std::string &, bool);
   bool idle() const;
   static std::string routeForGpio(int);
   static int gpioForRoute(const std::string &);

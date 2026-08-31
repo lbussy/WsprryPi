@@ -3,8 +3,10 @@
 This companion implementation consumes the explicit schema-3
 `rp1-gpclk-route-manager-runtime-v1` profile from RP1-GPCLK-DKMS PR #7. The legacy
 packaged/source-development protocol remains separate. Unknown contracts fail
-closed; discovery of the runtime profile asserts the transmission inhibit and
-never satisfies startup or development output reconciliation.
+closed; discovery of the runtime profile asserts the transmission inhibit. Explicit
+`idle` and `reconcile-output` requests now establish runtime route readiness for
+startup and the existing operation-scoped development authorization path. Neither
+query authorizes output.
 
 The existing route panel uses runtime preflight and an explicit **Switch route
 (output disabled)** confirmation. The application requires its full idle
@@ -26,3 +28,9 @@ runtime bundle workflow. This application commit does not install it, replace a
 running binary, change services, migrate a firmware route, reboot, or test GPIO.
 Coherent target deployment and clock-disabled GPIO4/GPIO20 switching still need
 separate authorization and proof. No product or RF qualification is claimed.
+
+The manager can explicitly release its application mask with `resume gpio20
+--execute` after validating the idle runtime route. Start the application only
+after that request returns. The existing ABI-v4 lease supports authorized output
+with the module loaded at `live_output=0`; no globally enabled load is needed.
+Route changes still stop and mask the application.
