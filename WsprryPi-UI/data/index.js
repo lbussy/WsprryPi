@@ -2354,6 +2354,9 @@ function clickTransmitPin() {
 }
 
 const RP1_ROUTE_STATES = Object.freeze({
+    runtime_inhibited: ["Output disabled", "Runtime route administration is available. Switching stops Wsprry Pi; verify completion with the operator client."],
+    runtime_recovery: ["Recovery required", "Inspect the controller error and ownership before explicit cleanup recovery."],
+    runtime_unknown: ["Completion unknown", "The application disconnected. Do not retry the switch. Run runtime_route_client.py query to inspect the result; transmission must remain inhibited."],
     checking: ["Checking", "Checking the external provider and active route…"],
     active: ["Active", "Requested and active routes match. No reboot is required."],
     reboot_required: ["Reboot required", "Review the requested route, then apply it and reboot or cancel the draft."],
@@ -2368,11 +2371,12 @@ const RP1_ROUTE_STATES = Object.freeze({
 class Rp1RouteUiController {
     constructor(endpoint, request = window.fetch.bind(window)) {
         this.endpoint=endpoint; this.request=request; this.persisted=""; this.active=""; this.outputValidated=false;
-        this.developmentCompatible=false; this.generation=0; this.inFlight=false;
+        this.completionUnknown=false; this.runtimeProfile=false; this.developmentCompatible=false; this.generation=0; this.inFlight=false;
     }
     visible() { return !document.getElementById("rp1-route-panel")?.hidden; }
     routeValue(value) { return value === "GPIO4" || value === "GPIO20" ? value : "Unavailable"; }
     setState(state, message="") {
+        if(state==="runtime_unknown") this.completionUnknown=true;
         const panel=document.querySelector(".rp1-route-panel");
         const badge=document.getElementById("rp1-route-state");
         const feedback=document.getElementById("rp1-route-feedback");
@@ -2385,13 +2389,15 @@ class Rp1RouteUiController {
     syncActions(state) {
         const draft=this.routeValue(`GPIO${getTxPin()}`);
         const changed=draft!=="Unavailable" && draft!==this.active;
-        const recovery=["staged","mismatch","rollback_required"].includes(state);
-        $("#rp1-route-apply").prop("disabled",this.inFlight || recovery || !changed);
+        const recovery=["staged","mismatch","rollback_required","runtime_recovery"].includes(state);
+        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || recovery || state==="runtime_unknown" || !changed);
         $("#rp1-route-cancel").prop("disabled",this.inFlight || draft===this.persisted);
         $("#rp1-route-rollback").prop("hidden",!recovery).prop("disabled",this.inFlight);
     }
     render(data) {
+        this.completionUnknown=false;
         this.persisted=this.routeValue(data.persisted); this.active=this.routeValue(data.active);
+        this.runtimeProfile=data.profile==="runtime";
         this.developmentCompatible=data.compatible===true;
         this.generation=Number.isSafeInteger(data.generation) ? data.generation : 0;
         const requested=this.routeValue(data.requested || this.persisted);
@@ -2419,22 +2425,27 @@ class Rp1RouteUiController {
             : "No active lease or generation";
         $("#rp1-operation-lifecycle").text(lifecycle);
         $("#rp1-route-eligible").text("Unqualified");
-        $("#rp1-route-apply").text(this.developmentCompatible ? "Apply route and reboot" : "Check route");
+        $("#rp1-route-apply").text(this.runtimeProfile ? "Switch route (output disabled)" : (this.developmentCompatible ? "Apply route and reboot" : "Check route"));
+        $("#rp1-route-rollback").text(this.runtimeProfile ? "Recover to no route" : "Roll back");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
         this.setState(reported,
             typeof data.message==="string" ? data.message : "");
     }
     select(route) {
         const requested=this.routeValue(route); $("#rp1-route-requested").text(requested);
-        this.setState(requested === this.active ? "active" : "reboot_required");
+        this.setState(this.runtimeProfile ? "runtime_inhibited" : (requested === this.active ? "active" : "reboot_required"));
     }
     async query() {
         this.inFlight=true; this.setState("checking");
         try { const response=await this.request(this.endpoint,{headers:{Accept:"application/json"}});
             if(!response.ok) throw new Error(); this.inFlight=false; this.render(await response.json());
-        } catch(_){this.inFlight=false;this.setState("unavailable");}
+        } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
     }
     async operate(operation) {
+        if(this.runtimeProfile && operation==="rollback") {
+            if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain masked. Verify the result with the operator client before further administration.")) return;
+            operation="recover";
+        }
         const requested=this.routeValue(`GPIO${getTxPin()}`);
         this.inFlight=true; this.setState(operation==="rollback" ? "rollback" : "applying");
         try { const response=await this.request(this.endpoint,{method:"POST",
@@ -2442,7 +2453,7 @@ class Rp1RouteUiController {
                 body:JSON.stringify({operation, route:requested, generation:this.generation})});
             const data=await response.json(); this.inFlight=false;
             if(!response.ok && !data.state) throw new Error(); this.render(data);
-        } catch(_){this.inFlight=false;this.setState("unavailable");}
+        } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
     }
     async applyAndReboot() {
         const requested=this.routeValue(`GPIO${getTxPin()}`);
@@ -2452,18 +2463,21 @@ class Rp1RouteUiController {
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation:"preflight",route:requested,generation:this.generation})});
             const preflight=await preflightResponse.json();
-            if(!preflightResponse.ok){this.inFlight=false;this.render(preflight);return;}
+            if(!preflightResponse.ok || preflight.ok!==true){this.inFlight=false;this.render(preflight);return;}
             this.generation=preflight.generation;
-            const confirmed=window.confirm(
+            const confirmed=window.confirm(this.runtimeProfile
+                ? `Switch to ${requested} with output disabled? Wsprry Pi will stop and remain masked. This browser may disconnect. Verify completion using runtime_route_client.py query. No reboot is requested.`
+                :
                 `Apply ${requested} and reboot? The package executor will stop only wsprrypi.service and soapyremote-server.service before changing its owned boot block.`
             );
             if(!confirmed){this.inFlight=false;this.render(preflight);return;}
+            if(this.runtimeProfile) { await this.operate("switch"); return; }
             this.setState("applying");
             const applyResponse=await this.request(this.endpoint,{method:"POST",
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation:"apply-and-reboot",route:requested,generation:this.generation})});
             const applied=await applyResponse.json(); this.inFlight=false; this.render(applied);
-        } catch(_){this.inFlight=false;this.setState("unavailable");}
+        } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
     }
     cancel() {
         if(this.persisted!=="Unavailable") setTxPin(Number(this.persisted.slice(4)));

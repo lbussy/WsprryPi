@@ -24,3 +24,42 @@ assert.match(script,/wsprrypi\.service and soapyremote-server\.service/);
 assert.match(header,/'rp1RoutePath' => \$basePath \. '\/api\/rp1-gpclk-route'/);
 assert.match(styles,/@media \(max-width: 575\.98px\)[\s\S]*\.rp1-route-actions > \.btn/);
 console.log("rp1_route_ui_test passed");
+
+// Execute the real controller without a browser or external dependencies.
+const vm=require("node:vm");
+const nodes=new Map();
+function element(id){
+ if(!nodes.has(id)) nodes.set(id,{dataset:{},setAttribute(){},disabled:false,hidden:false,textContent:""});
+ return nodes.get(id);
+}
+let pin=20;
+const context={window:{fetch:async()=>{throw Error("no fixture")},confirm:()=>true},
+ document:{getElementById:element,querySelector:element},
+ getTxPin:()=>pin,setTxPin:value=>{pin=value},
+ $:selector=>({prop(name,value){element(selector.slice(1))[name]=value;return this},
+ text(value){element(selector.slice(1)).textContent=value;return this}})};
+vm.createContext(context);
+vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.indexOf("function initializeRp1RouteUi"))+
+ ';globalThis.controller=new Rp1RouteUiController("/offline");',context);
+(async()=>{
+ const controller=context.controller;
+ controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO4",compatible:true});
+ assert.equal(element("rp1-route-apply").textContent,"Switch route (output disabled)");
+ let confirmations=0,requests=[];
+ context.window.confirm=()=>{confirmations++;return true};
+ controller.request=async()=>({ok:true,json:async()=>({ok:false,profile:"runtime",state:"runtime_recovery"})});
+ await controller.applyAndReboot();
+ assert.equal(confirmations,0,"failed preflight cannot request confirmation");
+ controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));throw Error("disconnected")};
+ await controller.operate("switch");
+ assert.equal(requests.length,1,"no automatic effect retries");
+ assert.equal(element("rp1-route-state").dataset.state,"runtime_unknown");
+ controller.select("GPIO20");
+ assert.equal(element("rp1-route-apply").disabled,true,"selection cannot clear unknown completion");
+ controller.render({profile:"runtime",ok:true,state:"runtime_recovery",persisted:"GPIO20",active:"GPIO4"});
+ assert.equal(element("rp1-route-rollback").hidden,false);
+ context.window.confirm=()=>false;
+ await controller.operate("rollback");
+ assert.equal(requests.length,1,"cancelled recovery has no effect");
+ console.log("runtime route UI behavior: PASS");
+})().catch(error=>{console.error(error);process.exitCode=1});

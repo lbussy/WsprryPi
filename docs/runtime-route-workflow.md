@@ -1,0 +1,28 @@
+# Runtime route-manager application integration
+
+This companion implementation consumes the explicit schema-3
+`rp1-gpclk-route-manager-runtime-v1` profile from RP1-GPCLK-DKMS PR #7. The legacy
+packaged/source-development protocol remains separate. Unknown contracts fail
+closed; discovery of the runtime profile asserts the transmission inhibit and
+never satisfies startup or development output reconciliation.
+
+The existing route panel uses runtime preflight and an explicit **Switch route
+(output disabled)** confirmation. The application requires its full idle
+predicate, binds the request to the selected route and preflight generation/token,
+and persists the requested route separately from controller-reported active state.
+Recovery explicitly asks the controller to reach no route; it is not a rollback
+to a previous GPIO. Removal errors retain their kernel errno and overlay ID.
+
+The manager stops and persistently masks WsprryPi before route changes. The UI
+therefore warns that its HTTP connection may disappear. A disconnect means
+completion unknown, disables further switch attempts until fresh state is read,
+and directs the operator to `runtime_route_client.py query`. Subsequent operations
+while WsprryPi is stopped use that client. Nothing automatically unmasks, restarts,
+or authorizes output. A permanently available browser administration service is
+not provided by this change.
+
+Install/update/recovery belong to the module repository's separately reviewed
+runtime bundle workflow. This application commit does not install it, replace a
+running binary, change services, migrate a firmware route, reboot, or test GPIO.
+Coherent target deployment and clock-disabled GPIO4/GPIO20 switching still need
+separate authorization and proof. No product or RF qualification is claimed.
