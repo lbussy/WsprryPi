@@ -100,6 +100,12 @@ null route, and output-disabled state before recording success. Development
 identity remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment,
 and qualification remain separate facts.
 
+Runtime-capable source selection additionally requires commit
+`e34214bfd14aee85d75c26287ddc0f76a5eaade0`, which corrected the controller
+reserved-field encoding, or a selected commit/tag whose Git history contains
+that correction. A development checkout or immutable release that cannot prove
+that ancestry is rejected before provider mutation or runtime bundle creation.
+
 A repeated development installation is a no-op only when WsprryPi's existing
 v2 ownership record and the complete inactive provider inventory still match
 the newly resolved commit, source tree, version source, UAPI, compatibility
@@ -121,10 +127,17 @@ WsprryPi v2 ownership record, a repeated installation may enter the same bound
 deployment and recovery workflow; it does not treat that partial state as a
 foreign installation or publish v3 readiness before final neutral proof.
 If a later exact development source is selected, the installer first reviews
-and executes the old binding's fixed deployment-removal digest, verifies that
-all runtime residue is gone, runs the recorded owned-provider rollback, and
-only then installs the new exact source. It never migrates an unowned provider,
-an active route/module/endpoint/socket, a pending transaction, or drifted bytes.
+the installed binding and every bound artifact against WsprryPi ownership. A
+retained neutral-activation journal, including `activation-failed`, is handled
+through the binding's digest-reviewed `activation-recover-plan` and
+`activation-recover` transaction. Only after the controller, endpoints, and
+manager socket are absent does the installer review and execute the old
+binding's fixed deployment-removal digest, verify that all runtime residue is
+gone, run the recorded owned-provider rollback, and install the new exact
+source. The journal is never deleted to bypass recovery. The same migration
+applies to v2 partial-runtime and v3 neutral-ready ownership. It never migrates
+an unowned provider, an active route/consumer, a pending unrelated transaction,
+or drifted binding or artifact bytes.
 
 ## Plan, record, and safety boundary
 

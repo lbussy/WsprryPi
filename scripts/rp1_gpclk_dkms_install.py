@@ -42,6 +42,7 @@ PACKAGE_NAME = "rp1-gpclk-dkms"
 DKMS_NAME = "rp1-gpclk-dkms"
 MODULE_NAME = "rp1_gpclk_dkms"
 COMPATIBILITY_IDENTITY = "v0.9.0-pi5"
+CORRECTED_RUNTIME_COMMIT = "e34214bfd14aee85d75c26287ddc0f76a5eaade0"
 LEGACY_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
 RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v2"
 RUNTIME_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v3"
@@ -600,6 +601,7 @@ def download_release(state_dir: pathlib.Path, client: GitHubClient, runner: Runn
     os.chmod(state_dir / MANIFEST_NAME, 0o600)
     checkout = clone_exact(state_dir, "commit", tag_commit, runner)
     source = pathlib.Path(checkout["path"])
+    require_compatible_runtime_source(source, tag_commit, runner)
     runtime_source_interface(source)
     upstream_identity = development_identity(source, runner)
     require(
@@ -616,6 +618,28 @@ def download_release(state_dir: pathlib.Path, client: GitHubClient, runner: Runn
 
 def git_output(runner: Runner, source: pathlib.Path, *args: str) -> str:
     return runner.run(["git", "-C", str(source), *args]).stdout.strip()
+
+
+def require_compatible_runtime_source(
+    source: pathlib.Path, commit: str, runner: Runner
+) -> None:
+    require(SHA40.fullmatch(commit) is not None, "selected runtime source commit is invalid")
+    available = runner.run(
+        ["git", "-C", str(source), "cat-file", "-e", f"{CORRECTED_RUNTIME_COMMIT}^{{commit}}"],
+        check=False,
+    )
+    require(
+        available.returncode == 0,
+        "selected source cannot prove the corrected RP1 runtime ancestry",
+    )
+    compatible = runner.run(
+        ["git", "-C", str(source), "merge-base", "--is-ancestor", CORRECTED_RUNTIME_COMMIT, commit],
+        check=False,
+    )
+    require(
+        compatible.returncode == 0,
+        "selected RP1-GPCLK-DKMS source predates the corrected runtime controller UAPI",
+    )
 
 
 def validate_checkout(source_text: str, runner: Runner) -> dict[str, Any]:
@@ -775,6 +799,7 @@ def prepare_development(state_dir: pathlib.Path, selector: str, value: str | Non
     else:
         identity = clone_exact(state_dir, selector, value, runner)
     source = pathlib.Path(identity["path"])
+    require_compatible_runtime_source(source, identity["commit"], runner)
     uapi = source / "include" / "uapi" / "linux" / "rp1_gpclk.h"
     require(uapi.is_file() and not uapi.is_symlink(), "development source lacks the canonical regular-file UAPI")
     interface, route_args = route_neutral_interface(source, runner)
@@ -1390,8 +1415,87 @@ def validate_runtime_development_provider(
     require(installed_version == version, "runtime consumer module version differs from ownership")
 
 
-def remove_owned_partial_runtime(source: pathlib.Path, runner: Runner) -> None:
+def recover_and_remove_owned_runtime(
+    source: pathlib.Path,
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    runner: Runner,
+) -> None:
     provider = source / "scripts/runtime_provider.py"
+    inspected = validate_readiness(runtime_call(
+        runner, provider, "inspect", (),
+        {"activation_required", "recovery_required", "neutral_ready"},
+    ))
+    binding = inspected.get("identities", {}).get("installedBinding", {})
+    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
+    require(
+        binding.get("status") == "valid"
+        and binding_value.get("sourceCommit") == record.get("sourceCommit"),
+        "installed runtime binding differs from WsprryPi provider ownership",
+    )
+    if record.get("schema") == RUNTIME_RECORD_SCHEMA:
+        runtime = validate_runtime_ownership(record.get("runtime"), record)
+        require(
+            binding.get("sha256") == runtime["bindingSha256"]
+            and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"],
+            "installed runtime binding differs from recorded runtime ownership",
+        )
+    artifacts = inspected.get("artifacts")
+    require(
+        isinstance(artifacts, dict) and artifacts
+        and all(value.get("status") == "exact" for value in artifacts.values()),
+        "installed runtime artifacts differ from the owned binding",
+    )
+    if inspected.get("result") in {"recovery_required", "neutral_ready"}:
+        recovery = runtime_call(runner, provider, "activation-recover-plan")
+        require(
+            recovery.get("contract") == RUNTIME_READINESS_CONTRACT
+            and recovery.get("operation") == "activation-recover-plan",
+            "runtime activation recovery plan identity differs",
+        )
+        recovery_digest = recovery.get("planSha256")
+        recovery_plan = recovery.get("plan", {})
+        require(
+            isinstance(recovery_digest, str) and SHA256.fullmatch(recovery_digest)
+            and recovery_digest == sha256_bytes(canonical(recovery_plan))
+            and recovery_plan.get("bindingSha256") == binding.get("sha256"),
+            "runtime activation recovery plan lacks the owned binding digest",
+        )
+        require_unchanged_ownership(
+            record_path, record, record_identity, "runtime activation recovery"
+        )
+        recovered = runtime_call(
+            runner, provider, "activation-recover",
+            ["--plan-sha256", recovery_digest],
+        )
+        require(
+            recovered.get("contract") == RUNTIME_READINESS_CONTRACT
+            and recovered.get("operation") == "activation-recover"
+            and recovered.get("planSha256") == recovery_digest
+            and recovered.get("response", {}).get("status")
+                in {"recovered-inhibited", "idempotent-no-change"},
+            "runtime activation recovery response differs from the reviewed plan",
+        )
+        inspected = validate_readiness(runtime_call(
+            runner, provider, "inspect", (), {"activation_required"},
+        ), "activation_required")
+    modules = inspected.get("modules")
+    endpoints = inspected.get("endpoints")
+    require(
+        inspected.get("result") == "activation_required"
+        and not inspected.get("routeSelected")
+        and isinstance(modules, dict)
+        and set(modules) == {"rp1_route_controller", "rp1_gpclk_dkms"}
+        and all(isinstance(value, dict) and value.get("status") == "absent"
+                for value in modules.values())
+        and isinstance(endpoints, dict)
+        and set(endpoints) == {"controller", "consumer"}
+        and all(isinstance(value, dict) and value.get("status") == "absent"
+                for value in endpoints.values())
+        and inspected.get("managerSocket", {}).get("status") == "absent",
+        "recovered runtime is not eligible for reviewed deployment removal",
+    )
     planned = runtime_call(runner, provider, "remove-plan")
     require(
         planned.get("contract") == RUNTIME_READINESS_CONTRACT
@@ -1405,6 +1509,9 @@ def remove_owned_partial_runtime(source: pathlib.Path, runner: Runner) -> None:
     require(isinstance(destinations, list)
             and set(destinations) == runtime_deployment_destinations(),
             "runtime deployment removal inventory differs")
+    require_unchanged_ownership(
+        record_path, record, record_identity, "runtime deployment removal"
+    )
     removed = runtime_call(
         runner, provider, "remove", ["--plan-sha256", digest]
     )
@@ -1463,11 +1570,14 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             for name, value in expected_identity.items()
         )
         if (not identity_matches
-                and existing_record.get("schema") == RECORD_SCHEMA
+                and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}
                 and before["runtimeResidue"]):
-            remove_owned_partial_runtime(source, runner)
             entrypoint, rollback = validate_development_removal(
-                existing_record, pathlib.Path("/"), runner
+                existing_record, pathlib.Path("/"), runner,
+                allow_runtime_residue=True,
+            )
+            recover_and_remove_owned_runtime(
+                source, record, existing_record, record_identity, runner
             )
             current_record, current_identity, current_reason = load_ownership_record(record)
             require(
@@ -1936,6 +2046,21 @@ def replace_owned_record(
         f"installation ownership changed before runtime evidence publication: {reason or 'identity mismatch'}",
     )
     atomic_json(path, replacement)
+
+
+def require_unchanged_ownership(
+    path: pathlib.Path,
+    expected_value: Mapping[str, Any],
+    expected_identity: os.stat_result,
+    operation: str,
+) -> None:
+    current, identity, reason = load_ownership_record(path)
+    require(
+        current == expected_value and identity is not None
+        and (identity.st_dev, identity.st_ino)
+            == (expected_identity.st_dev, expected_identity.st_ino),
+        f"installation ownership changed before {operation}: {reason or 'identity mismatch'}",
+    )
 
 
 def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:

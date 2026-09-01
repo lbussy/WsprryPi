@@ -159,6 +159,26 @@ class PlatformAndSelectionTests(unittest.TestCase):
         with self.assertRaises(MOD.ContractError):
             MOD.source_selector("commit:" + "a" * 40 + ";modprobe", "development")
 
+    def test_runtime_source_requires_corrected_commit_ancestry(self):
+        source = pathlib.Path("/fixture/source")
+        selected = "a" * 40
+        ancestor = (
+            "git", "-C", str(source), "merge-base", "--is-ancestor",
+            MOD.CORRECTED_RUNTIME_COMMIT, selected,
+        )
+        missing = FakeRunner({
+            ("git", "-C", str(source), "cat-file", "-e",
+             f"{MOD.CORRECTED_RUNTIME_COMMIT}^{{commit}}"): MOD.CommandResult("", "missing", 1),
+        })
+        with self.assertRaisesRegex(MOD.ContractError, "cannot prove the corrected"):
+            MOD.require_compatible_runtime_source(source, selected, missing)
+        predates = FakeRunner({ancestor: MOD.CommandResult("", "", 1)})
+        with self.assertRaisesRegex(MOD.ContractError, "predates the corrected"):
+            MOD.require_compatible_runtime_source(source, selected, predates)
+        compatible = FakeRunner()
+        MOD.require_compatible_runtime_source(source, selected, compatible)
+        self.assertIn(ancestor, compatible.calls)
+
     def test_debug_runner_reports_argv_and_captured_output(self):
         completed = subprocess.CompletedProcess(["git", "status"], 0, "clean\n", "notice\n")
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -861,46 +881,137 @@ class ApplyPolicyTests(unittest.TestCase):
         ):
             self.assertIn(path, source)
 
-    def test_owned_partial_runtime_removal_reviews_digest_and_complete_inventory(self):
+    def test_owned_runtime_recovery_and_removal_reviews_both_digests(self):
         source = self.root / "source"
         provider = source / "scripts/runtime_provider.py"
         provider.parent.mkdir(parents=True)
-        digest = "d" * 64
+        binding_digest = "b" * 64
+        recovery_plan = {"bindingSha256": binding_digest}
+        activation_digest = digest(MOD.canonical(recovery_plan))
+        removal_digest = "d" * 64
+        inspected = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "recovery_required", "state": "recovery_required",
+            "routeSelected": False,
+            "identities": {"installedBinding": {
+                "status": "valid", "sha256": binding_digest,
+                "value": {"sourceCommit": "c" * 40,
+                          "artifactSetSha256": "f" * 64},
+            }},
+            "artifacts": {"/bound": {"status": "exact"}},
+        }
+        recovery = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover-plan", "planSha256": activation_digest,
+            "plan": recovery_plan,
+        }
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover", "planSha256": activation_digest,
+            "response": {"status": "recovered-inhibited"},
+        }
+        removable = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "activation_required", "state": "activation_required",
+            "routeSelected": False,
+            "modules": {"rp1_route_controller": {"status": "absent"},
+                        "rp1_gpclk_dkms": {"status": "absent"}},
+            "endpoints": {"controller": {"status": "absent"},
+                          "consumer": {"status": "absent"}},
+            "managerSocket": {"status": "absent"},
+        }
         planned = {
             "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": digest,
+            "operation": "remove-plan", "planSha256": removal_digest,
             "destinations": sorted(MOD.runtime_deployment_destinations()),
         }
         removed = {
             "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": digest,
+            "operation": "remove", "planSha256": removal_digest,
             "response": {"status": "removed-exact-deployment"},
         }
         runner = FakeRunner({
+            ("python3", str(provider), "inspect"):
+                MOD.CommandResult(json.dumps(inspected), "", 12),
+            ("python3", str(provider), "activation-recover-plan"):
+                MOD.CommandResult(json.dumps(recovery), "", 0),
+            ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest):
+                MOD.CommandResult(json.dumps(recovered), "", 0),
             ("python3", str(provider), "remove-plan"):
                 MOD.CommandResult(json.dumps(planned), "", 0),
-            ("python3", str(provider), "remove", "--plan-sha256", digest):
+            ("python3", str(provider), "remove", "--plan-sha256", removal_digest):
                 MOD.CommandResult(json.dumps(removed), "", 0),
         })
-        with mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.remove_owned_partial_runtime(source, runner)
-        self.assertEqual(len(runner.calls), 2)
+        inspect_calls = 0
+        def runtime_call(runner_arg, provider_arg, operation, arguments=(), allowed_results=()):
+            nonlocal inspect_calls
+            if operation == "inspect":
+                inspect_calls += 1
+                return inspected if inspect_calls == 1 else removable
+            result = runner_arg.run(["python3", str(provider_arg), operation, *arguments], check=False)
+            return json.loads(result.stdout)
+        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        with mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+             mock.patch.object(MOD, "load_ownership_record",
+                               return_value=(record, identity, None)) as ownership, \
+             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.recover_and_remove_owned_runtime(
+                source, self.record, record, identity, runner
+            )
+        self.assertEqual(inspect_calls, 2)
+        self.assertEqual(ownership.call_count, 2)
+        self.assertIn(
+            ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest),
+            runner.calls,
+        )
 
-    def test_owned_partial_runtime_removal_rejects_inventory_drift_before_mutation(self):
+    def test_owned_runtime_removal_rejects_binding_mismatch_before_mutation(self):
         source = self.root / "source"
         provider = source / "scripts/runtime_provider.py"
         provider.parent.mkdir(parents=True)
-        planned = {
+        inspected = {
             "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": "d" * 64,
-            "destinations": ["/foreign"],
+            "result": "activation_required", "state": "activation_required",
+            "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
+                "value": {"sourceCommit": "e" * 40}}},
+            "artifacts": {"/bound": {"status": "exact"}},
         }
         runner = FakeRunner({
-            ("python3", str(provider), "remove-plan"):
-                MOD.CommandResult(json.dumps(planned), "", 0),
+            ("python3", str(provider), "inspect"):
+                MOD.CommandResult(json.dumps(inspected), "", 14),
         })
-        with self.assertRaisesRegex(MOD.ContractError, "inventory differs"):
-            MOD.remove_owned_partial_runtime(source, runner)
+        with self.assertRaisesRegex(MOD.ContractError, "binding differs"):
+            MOD.recover_and_remove_owned_runtime(
+                source, self.record,
+                {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
+                mock.Mock(st_dev=1, st_ino=2), runner,
+            )
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_owned_runtime_removal_rejects_incomplete_absence_evidence(self):
+        source = self.root / "source"
+        provider = source / "scripts/runtime_provider.py"
+        provider.parent.mkdir(parents=True)
+        inspected = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "activation_required", "state": "activation_required",
+            "routeSelected": False,
+            "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
+                "value": {"sourceCommit": "c" * 40}}},
+            "artifacts": {"/bound": {"status": "exact"}},
+            "modules": {}, "endpoints": {}, "managerSocket": {"status": "absent"},
+        }
+        runner = FakeRunner({
+            ("python3", str(provider), "inspect"):
+                MOD.CommandResult(json.dumps(inspected), "", 14),
+        })
+        with self.assertRaisesRegex(MOD.ContractError, "not eligible"):
+            MOD.recover_and_remove_owned_runtime(
+                source, self.record,
+                {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
+                mock.Mock(st_dev=1, st_ino=2), runner,
+            )
         self.assertEqual(len(runner.calls), 1)
 
     def test_runtime_bundle_requires_self_contained_bootstrap_and_bound_units(self):
