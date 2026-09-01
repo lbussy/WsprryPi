@@ -18,8 +18,8 @@ namespace {
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST
 constexpr const char *kSocket = "/run/rp1-gpclk-dkms/route-manager.sock";
 #endif
-constexpr const char *kRuntimeContract = "rp1-gpclk-route-manager-runtime-v1";
-constexpr const char *kContract = "rp1-gpclk-route-manager-v1";
+constexpr const char *kRuntimeContract = "rp1-gpclk-route-manager-runtime";
+constexpr const char *kContract = "rp1-gpclk-route-manager";
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST
 nlohmann::json socketRequest(const nlohmann::json &request) {
   const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
@@ -156,7 +156,7 @@ nlohmann::json Rp1GpclkRouteService::request(const nlohmann::json &value) {
       operations_.set_transmission_inhibited(true, "Runtime route administration is output-disabled");
       return response;
     }
-    if (runtime_profile_ || !response.is_object() || response.value("schemaVersion", 0) != 1 ||
+    if (runtime_profile_ || !response.is_object() ||
         response.value("contract", std::string{}) != kContract ||
         !response.contains("status") ||
         (response.contains("state") == response.contains("error")))
@@ -197,8 +197,8 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
     result["journal"] = state.contains("pendingTransaction") && state["pendingTransaction"].is_object()
         ? field(state["pendingTransaction"], "phase") : "none";
     result["preflightValidated"] = valid && status == "ok" &&
-        state.value("applicationRestorationVersion", 0) == 1 && field(state, "preflightToken").size() == 64;
-    if (!field(state, "preflightToken").empty() && state.value("applicationRestorationVersion", 0) != 1) {
+        state.value("applicationRestoration", false) && field(state, "preflightToken").size() == 64;
+    if (!field(state, "preflightToken").empty() && !state.value("applicationRestoration", false)) {
       result["message"] = "Upgrade the route manager before switching: this version cannot restore application availability.";
     }
     result["controller"] = state.value("controller", nlohmann::json::object());
@@ -325,7 +325,7 @@ bool Rp1GpclkRouteService::acknowledgeRestoration(const std::string &token,
 
 nlohmann::json Rp1GpclkRouteService::query() {
   std::lock_guard<std::mutex> guard(mutex_);
-  return render(request({{"schemaVersion", 1}, {"operation", "query"}}));
+  return render(request({{"operation", "query"}}));
 }
 nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                                              const std::string &route,
@@ -382,8 +382,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                      "provider, drain, and cleanup lifecycle to be idle.");
     if (executor_route.empty())
       return failure("invalid_route", "Route must be exactly GPIO4 or GPIO20.");
-    auto raw = request({{"schemaVersion", 1},
-                        {"operation", "preflight"},
+    auto raw = request({{"operation", "preflight"},
                         {"route", executor_route}});
     if (!raw.contains("state"))
       return render(raw, route);
@@ -423,8 +422,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                      persistence_error.empty()
                          ? "Could not persist the requested route."
                          : persistence_error);
-    const auto raw = request({{"schemaVersion", 1},
-                              {"operation", "apply-and-reboot"},
+    const auto raw = request({{"operation", "apply-and-reboot"},
                               {"route", executor_route},
                               {"execute", true},
                               {"requestId", requestId("apply", generation)},
@@ -432,8 +430,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     return render(raw, route);
   }
   if (operation == "rollback") {
-    const auto raw = request({{"schemaVersion", 1},
-                              {"operation", "rollback"},
+    const auto raw = request({{"operation", "rollback"},
                               {"execute", true},
                               {"requestId", requestId("rollback", generation)},
                               {"actor", "wsprrypi.service"}});
@@ -452,8 +449,7 @@ nlohmann::json Rp1GpclkRouteService::reconcileStartup() {
                    "A prior RP1 GPCLK startup reconciliation failure keeps "
                    "transmission inhibited for this process lifetime.");
   const auto raw =
-      request({{"schemaVersion", 1},
-               {"operation", "reconcile"},
+      request({{"operation", "reconcile"},
                {"execute", true},
                {"requestId", requestId("reconcile", ++generation_)},
                {"actor", "wsprrypi.service"}});
@@ -530,7 +526,7 @@ nlohmann::json Rp1GpclkRouteService::reconcileIdleStartup(
                    "RP1 GPCLK idle startup requires GPIO4 or GPIO20.");
   }
 
-  auto discovered = request({{"schemaVersion", 1}, {"operation", "query"}});
+  auto discovered = request({{"operation", "query"}});
   if (runtime_profile_) {
     auto result = reconcileRuntime(expected, false);
     startup_failure_latched_ = !result.value("ok", false);
@@ -596,7 +592,7 @@ nlohmann::json Rp1GpclkRouteService::reconcileDevelopmentStartup(
   }
 
   ++generation_;
-  auto discovered = request({{"schemaVersion", 1}, {"operation", "query"}});
+  auto discovered = request({{"operation", "query"}});
   if (runtime_profile_) return reconcileRuntime(expected, true);
   auto rendered = render(discovered, expected);
   const bool reconciled = rendered.value("ok", false) &&

@@ -1,7 +1,7 @@
 # Runtime route-manager application integration
 
-This companion implementation consumes the explicit schema-3
-`rp1-gpclk-route-manager-runtime-v1` profile from RP1-GPCLK-DKMS PR #7. The legacy
+This companion implementation consumes the explicit
+`rp1-gpclk-route-manager-runtime` profile from RP1-GPCLK-DKMS. The
 packaged/source-development protocol remains separate. Unknown contracts fail
 closed; discovery of the runtime profile asserts the transmission inhibit. Explicit
 `idle` and `reconcile-output` requests now establish runtime route readiness for
@@ -42,7 +42,7 @@ operator controls and existing RP1 operation authorization remain available.
 
 The application installer and `scripts/copy_exe.py` install
 `/usr/local/lib/wsprrypi/route_application.py` with the executable. Use a matching,
-newly bound DKMS runtime bundle supporting `applicationRestorationVersion=1`.
+newly bound DKMS runtime bundle reporting `applicationRestoration: true`.
 The companion supports the canonical `/usr/local/bin/wsprrypi -J -i
 /usr/local/etc/wsprrypi.ini` service command, optionally with `--no-web`.
 It refuses missing services, unsupported command overrides, alternate config
@@ -65,11 +65,3 @@ Bounded-tone start acknowledgements are asynchronous. A response includes an
 RP1 operation record only when it belongs to that request; the terminal record
 retains provider failure reasons and cleanup failures. A worker exception is
 reported without terminating the application process.
-
-The 2026-08-31 wspr5 integration test exercised GPIO20 at a requested
-14.097100 MHz for ten seconds, including repeated execution and cleanup without
-a reboot. Exact source/build identities, failed attempts and successful outcomes
-are retained in RP1-GPCLK-DKMS under `docs/evidence/runtime-tone-20260831/`.
-This is not analyzer frequency or product qualification. The test used a
-temporary configuration and transient loopback-only service; the normal INI,
-served UI and masked service were not replaced as part of that test.

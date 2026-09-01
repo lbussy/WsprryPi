@@ -34,7 +34,7 @@ API_BASE = f"https://api.github.com/repos/{REPOSITORY}"
 MANIFEST_NAME = "rp1-gpclk-dkms-installation-manifest-v1.json"
 CHECKSUMS_NAME = "SHA256SUMS"
 MANIFEST_SCHEMA = "rp1-gpclk-dkms-installation-manifest-v1"
-ADMIN_PROTOCOL = "rp1-gpclk-route-manager-v1"
+ADMIN_PROTOCOL = "rp1-gpclk-route-manager"
 PACKAGE_NAME = "rp1-gpclk-dkms"
 DKMS_NAME = "rp1-gpclk-dkms"
 MODULE_NAME = "rp1_gpclk_dkms"
@@ -1090,7 +1090,7 @@ def verify_development_result(
         raise ContractError("upstream development result manifest is unreadable") from error
     require(isinstance(manifest, dict), "upstream development result manifest is not an object")
     expected = {
-        "schema": "rp1-gpclk-source-development-manifest-v1",
+        "schema": "rp1-gpclk-source-development-manifest",
         "classification": "source-development",
         "qualification": False,
         "releaseQualified": False,

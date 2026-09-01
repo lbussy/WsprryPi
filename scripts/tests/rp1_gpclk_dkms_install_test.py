@@ -438,7 +438,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         resolved = {"commit": "a" * 40, "version": "0.9.0", "uapiSha256": "b" * 64,
                     "versionSource": "include/rp1_gpclk/version.h", "versionSourceSha256": "e" * 64}
         manifest = {
-            "schema": "rp1-gpclk-source-development-manifest-v1",
+            "schema": "rp1-gpclk-source-development-manifest",
             "classification": "source-development", "qualification": False,
             "releaseQualified": False, "sourceCommit": "a" * 40,
             "sourceState": "clean", "renderedVersion": "0.9.0",

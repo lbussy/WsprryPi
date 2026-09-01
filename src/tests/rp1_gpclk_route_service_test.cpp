@@ -31,8 +31,7 @@ nlohmann::json state(const std::string &configured = "gpio4",
 
 nlohmann::json response(const std::string &operation, const std::string &status,
                         const nlohmann::json &value) {
-  return {{"schemaVersion", 1},
-          {"contract", "rp1-gpclk-route-manager-v1"},
+  return {{"contract", "rp1-gpclk-route-manager"},
           {"operation", operation},
           {"status", status},
           {"state", value}};
@@ -154,7 +153,7 @@ int main() {
   assert(query.at("journal") == "none");
   assert(requests.size() == 1);
   assert(requests.back() ==
-         nlohmann::json({{"schemaVersion", 1}, {"operation", "query"}}));
+         nlohmann::json({{"operation", "query"}}));
 
   next = response("preflight", "ok", state());
   auto preflight = service.operate("preflight", "GPIO20", 0);
@@ -384,10 +383,10 @@ int main() {
           {"state", state()}};
   assert(service.query().at("result") == "contract_mismatch");
 
-  next = {{"schemaVersion", 3}, {"contract", "rp1-gpclk-route-manager-runtime-v1"},
+  next = {{"schemaVersion", 3}, {"contract", "rp1-gpclk-route-manager-runtime"},
           {"status", "ok"}, {"state", {{"profile", "runtime"}, {"activeRoute", "gpio4"},
           {"outputEnabled", false}, {"qualification", false}, {"controller", {{"id", 9}}},
-          {"applicationRestorationVersion", 1}, {"preflightToken", std::string(64, 'a')}}}};
+          {"applicationRestoration", true}, {"preflightToken", std::string(64, 'a')}}}};
   assert(service.query().at("profile") == "runtime");
   assert(inhibited);
   auto runtime_preflight = service.operate("preflight", "GPIO20", 0);
@@ -422,7 +421,7 @@ int main() {
       {"route","gpio20"},{"controller",ctl},{"bootId","current-boot"},
       {"bindingSha256",std::string(64,'a')}};
   auto runtime = nlohmann::json{{"schemaVersion",3},
-      {"contract","rp1-gpclk-route-manager-runtime-v1"},{"status","ok"},
+      {"contract","rp1-gpclk-route-manager-runtime"},{"status","ok"},
       {"state",{{"profile","runtime"},{"outputEnabled",false},{"qualification",false},
           {"controller",ctl},{"bootId","current-boot"},{"bindingSha256",std::string(64,'a')},
           {"outputLifecycle",lifecycle}}}};

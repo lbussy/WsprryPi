@@ -25,7 +25,7 @@ int main() {
         root / "WSPR-Transmitter/src/rp1_gpclk_development_policy.hpp");
     const auto installer = read_file(root / "../scripts/install.sh");
     assert(service.find("/run/rp1-gpclk-dkms/route-manager.sock") != std::string::npos);
-    assert(service.find("rp1-gpclk-route-manager-v1") != std::string::npos);
+    assert(service.find("rp1-gpclk-route-manager") != std::string::npos);
     assert(service.find("SOCK_STREAM") != std::string::npos && service.find("FD_CLOEXEC") != std::string::npos);
     assert(service.find("{\"eligible\", false}") != std::string::npos);
     assert(service.find("apply-and-reboot") != std::string::npos);
