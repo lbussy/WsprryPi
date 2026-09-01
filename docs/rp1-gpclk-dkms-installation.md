@@ -139,6 +139,11 @@ and rollback record captured during installation. WsprryPi never invents a
 direct DKMS, module unload, overlay, route, boot, service, GPIO, or RF removal
 sequence.
 
+If any preceding WsprryPi uninstall step fails, safe teardown continues where
+possible, but provider removal is skipped. The provider and ownership record
+are preserved, the overall uninstall fails, and no uninstall-success message is
+reported.
+
 The ownership record is deleted only after the canonical removal succeeds and
 the helper verifies that package, DKMS, source, module, overlay, route,
 enrollment, and manager state are absent. A lifecycle failure retains the

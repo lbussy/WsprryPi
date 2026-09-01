@@ -8442,6 +8442,18 @@ manage_wsprry_pi() {
     for func in "${group_to_execute[@]}"; do
         local function_name="${func%% *}" # Extract only function name
 
+        # Provider removal is ownership-sensitive and may run only after every
+        # preceding uninstall step has completed successfully. Continue safe
+        # teardown after failures, but preserve the provider and its ownership
+        # record when the WsprryPi teardown is incomplete.
+        if [[ "$ACTION" == "uninstall" && \
+            "$function_name" == "remove_owned_rp1_gpclk_dkms_provider" && \
+            "$overall_status" -ne 0 ]]; then
+            warn "Skipping RP1-GPCLK-DKMS provider removal because earlier WsprryPi uninstall steps failed; the provider and ownership record were preserved."
+            debug_print "$func skipped after incomplete WsprryPi teardown." "$debug"
+            continue
+        fi
+
         # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
         # Disable -e (crash out on error) temporarily
@@ -8458,9 +8470,9 @@ manage_wsprry_pi() {
                 restore_daemon_state "${func}" "${debug}"
                 overall_status=1
                 break
-            elif [[ "$function_name" == "remove_owned_rp1_gpclk_dkms_provider" ]]; then
-                # Do not report uninstall success after a partially completed
-                # provider lifecycle. Its ownership record remains for recovery.
+            elif [[ "$ACTION" == "uninstall" ]]; then
+                # Continue safe teardown, but retain every failure so provider
+                # removal is gated and uninstall success cannot be reported.
                 overall_status=1
             fi
         else
