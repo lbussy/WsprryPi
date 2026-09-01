@@ -2087,6 +2087,12 @@ replace_string_in_script() {
     local search_string="$2"
     local replace_string="$3"
 
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: sed -i 's|%${search_string}%|${replace_string}|g' '$file_path'"
+        debug_end "$debug"
+        return 0
+    fi
+
     if [[ ! -f "$file_path" ]]; then
         debug_print "Error: File '$file_path' not found." "$debug"
         debug_end "$debug"
@@ -3849,6 +3855,17 @@ init_log() {
     local scriptname="${THIS_SCRIPT%%.*}" # Extract script name without extension
     local homepath log_dir fallback_log
 
+    # A dry run must not create, truncate, chown, or append to a log file.
+    # Console output remains available, including debug output.
+    if [[ "$DRY_RUN" == "true" ]]; then
+        LOG_FILE="/dev/null"
+        readonly LOG_FILE
+        export LOG_FILE
+        debug_print "Dry run: file logging disabled." "$debug"
+        debug_end "$debug"
+        return 0
+    fi
+
     # Get the home directory of the current user
     homepath=$(
         getent passwd "${SUDO_USER:-$(whoami)}" | {
@@ -4951,6 +4968,12 @@ set_time() {
     # Inform the user about the current date and time
     logI "Timezone detected as $tz, which may need to be updated."
 
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: would confirm or reconfigure the system timezone."
+        debug_end "$debug"
+        return 0
+    fi
+
     # Prompt for confirmation or reconfiguration
     while true; do
         read -rp "Is this correct? [y/N]: " yn </dev/tty
@@ -5997,8 +6020,13 @@ compile_binary() {
     daemon_name="${WSPR_SERVICE}" # Remove path
     daemon_systemd_name="${daemon_name}.service"
 
-    runuser -u "$SUDO_USER" -- mkdir -p "${staging_path}"
-    if [[ ! -d "${staging_path:-}" ]]; then
+    exec_command "Create executable staging directory" \
+        runuser -u "$SUDO_USER" -- mkdir -p "${staging_path}" "$debug" || {
+        logE "Error: Unable to create executable staging directory."
+        debug_end "$debug"
+        return 1
+    }
+    if [[ "$DRY_RUN" != "true" && ! -d "${staging_path:-}" ]]; then
         debug_end "$debug"
         die 1 "Executables source directory does not exist."
     fi
@@ -6292,8 +6320,12 @@ manage_config() {
 
             if [[ -n "$old_path" ]]; then
                 merged_ini="${LOCAL_CONFIG_DIR}/wsprrypi_merged.ini"
-                upgrade_ini "$old_path" "$source_path" "$merged_ini" "$debug"
-                source_path="$merged_ini"
+                if upgrade_ini "$old_path" "$source_path" "$merged_ini" "$debug"; then
+                    source_path="$merged_ini"
+                else
+                    debug_end "$debug"
+                    return 1
+                fi
             fi
         fi
 
@@ -6315,7 +6347,7 @@ manage_config() {
             "$config_path" \
             "SEMANTIC_VERSION" \
             "$(get_sem_ver "$debug")" \
-            "$debug"
+            "$debug" || retval=1
 
         # Install the stock configuration copy for the primary INI
         if [[ -n "$stock_source_path" && -n "$stock_config_path" ]]; then
@@ -6335,7 +6367,7 @@ manage_config() {
                 "$stock_config_path" \
                 "SEMANTIC_VERSION" \
                 "$(get_sem_ver "$debug")" \
-                "$debug"
+                "$debug" || retval=1
 
             debug_print \
                 "Changing ownership on stock configuration." \
@@ -6456,6 +6488,15 @@ upgrade_ini() {
         logE "New INI file is empty: $new_ini"
         debug_end "$debug"
         return 1
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        if [[ -f "$old_ini" ]]; then
+            logD "Exec: cp -f '$old_ini' '$backup_ini'"
+        fi
+        logD "Exec: merge '$old_ini' with '$new_ini' into '$merged_ini'"
+        debug_end "$debug"
+        return 0
     fi
 
     if [[ -f "$old_ini" ]]; then
@@ -6872,6 +6913,31 @@ manage_sound() {
 
     blacklist="blacklist snd_bcm2835"
     file="/etc/modprobe.d/alsa-blacklist.conf"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        if [[ "$ACTION" == "install" ]]; then
+            if [[ ! -f "$file" ]]; then
+                logD "Exec: create $file with '$blacklist'"
+                REBOOT="true"
+            elif ! grep -Fxq "$blacklist" "$file"; then
+                logD "Exec: append '$blacklist' to $file"
+                REBOOT="true"
+            else
+                debug_print "Sound is already disabled." "$debug"
+            fi
+        elif [[ "$ACTION" == "uninstall" ]]; then
+            if [[ -f "$file" ]] && grep -Fxq "$blacklist" "$file"; then
+                logD "Exec: remove '$blacklist' from $file"
+                REBOOT="true"
+            else
+                debug_print "Sound is already enabled or no blacklist file exists." "$debug"
+            fi
+        else
+            die 1 "Invalid action. Use 'install' or 'uninstall'."
+        fi
+        debug_end "$debug"
+        return 0
+    fi
 
     if [[ "$ACTION" == "install" ]]; then
         if [[ ! -f "$file" ]]; then
@@ -7949,6 +8015,10 @@ flag_need_reboot() {
             printf "The sound system has been re-enabled. To use audio, reboot\n"
             printf "with 'sudo reboot' for changes to take effect.\n\n"
         fi
+        if [[ "$DRY_RUN" == "true" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
         read -rp "Press any key to continue." </dev/tty
         echo
     fi
@@ -8017,6 +8087,11 @@ flag_need_reboot() {
             printf "to take effect:\n\n"
         fi
         printf "'sudo reboot'\n\n"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
 
         read -rp "Press any key to continue." </dev/tty
         echo

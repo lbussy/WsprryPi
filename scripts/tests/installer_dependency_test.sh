@@ -29,6 +29,7 @@ if ! grep -Fq 'upgrade_ini "$old_path" "$source_path" "$merged_ini"' "$INSTALLER
 fi
 
 python3 "${SCRIPT_DIR}/ini_upgrade_schema_test.py"
+python3 "${SCRIPT_DIR}/installer_dry_run_purity_test.py"
 
 if ! awk '
     /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }

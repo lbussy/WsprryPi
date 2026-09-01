@@ -2,6 +2,14 @@
 
 These scripts are used for install and development orchestration.
 
+## Installer dry runs
+
+Set `DRY_RUN=true` to inspect the selected install or uninstall workflow
+without changing the checkout or system. Dry runs write no installer log,
+temporary merge output, staged executable, installed configuration, package,
+service, boot, web, GPIO, or provider state. Passing `debug` prints the planned
+commands to the console.
+
 ## RP1-GPCLK-DKMS provider
 
 `install.sh` uses `rp1_gpclk_dkms_install.py` to resolve and validate the
@@ -17,6 +25,7 @@ Run its offline hardware-free contract coverage with:
 
 ```sh
 python3 scripts/tests/rp1_gpclk_dkms_install_test.py
+python3 scripts/tests/installer_dry_run_purity_test.py
 ```
 
 ## Support-bundle collector
