@@ -1924,6 +1924,7 @@ exec_command() {
     local status=0 exec_name running_pre complete_pre failed_pre
     local args cmd cmd_str
     local show_output="${EXEC_COMMAND_SHOW_OUTPUT:-false}"
+    local status_mode="${EXEC_COMMAND_STATUS_MODE:-execution}"
 
     # Assign the human readable name and shift it off
     exec_name="$1"; shift
@@ -1945,6 +1946,42 @@ exec_command() {
     if [[ "$debug" == "debug" ]]; then
         debug_print "Name:    $exec_name" "$debug"
         debug_print "Command: $cmd_str" "$debug"
+    fi
+
+    case "$status_mode" in
+        execution|info) ;;
+        *)
+            warn "Unsupported exec_command status mode: $status_mode"
+            debug_end "$debug"
+            return 2
+            ;;
+    esac
+
+    # Read-only planning is useful operator context, not a completed mutation.
+    # Keep it inside this wrapper so dry runs still suppress command execution
+    # and debug mode still renders the exact argv.
+    if [[ "$status_mode" == "info" ]]; then
+        logI "$exec_name."
+        if [[ "$DRY_RUN" == "true" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
+
+        if [[ "$debug" == "debug" || "$show_output" == "true" ]]; then
+            "${cmd[@]}" || status=$?
+        else
+            "${cmd[@]}" &>/dev/null || status=$?
+        fi
+        if [[ $status -ne 0 ]]; then
+            logE "Failed: $exec_name."
+            if [[ $status -eq 127 ]]; then
+                warn "Command not found: ${cmd_str}"
+            else
+                warn "Command failed with status $status: ${cmd_str}"
+            fi
+        fi
+        debug_end "$debug"
+        return "$status"
     fi
 
     # Prepare status prefixes
@@ -2332,7 +2369,8 @@ prepare_rp1_gpclk_dkms_installation() {
         prepare_args+=(--debug)
     fi
 
-    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Resolve RP1-GPCLK-DKMS installation plan" \
+    if ! EXEC_COMMAND_SHOW_OUTPUT=true EXEC_COMMAND_STATUS_MODE=info \
+        exec_command "Resolve RP1-GPCLK-DKMS installation plan" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${prepare_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS installation planning failed before package mutation."
         cleanup_rp1_gpclk_dkms_state
@@ -5245,26 +5283,30 @@ handle_apt_packages() {
 }
 
 # shellcheck disable=SC2317
+run_support_bundle_age_dependency_validation() {
+    # shellcheck source=scripts/support_bundle_age_dependency.sh
+    source "${LOCAL_REPO_DIR}/scripts/support_bundle_age_dependency.sh" &&
+        support_bundle_validate_age_dependency
+}
+
+# shellcheck disable=SC2317
 validate_support_bundle_age_dependency() {
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    if [[ "$DRY_RUN" == "true" ]]; then
-        logI "Dry run: would validate the support-bundle encryption tools."
-        debug_end "$debug"
-        return 0
-    fi
-
-    # shellcheck source=scripts/support_bundle_age_dependency.sh
-    if ! source "${LOCAL_REPO_DIR}/scripts/support_bundle_age_dependency.sh" ||
-        ! support_bundle_validate_age_dependency; then
+    if ! exec_command "Validate support-bundle encryption tools" \
+        run_support_bundle_age_dependency_validation "$debug"; then
         logE "Required support-bundle encryption tools are unavailable or unsafe."
         debug_print "Support-bundle encryption validation status: ${SUPPORT_BUNDLE_AGE_DEPENDENCY_ERROR:-helper_unavailable}." "$debug"
         debug_end "$debug"
         return 1
     fi
-    debug_print "Validated fixed support-bundle encryption tools." "$debug"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        debug_print "Support-bundle encryption validation planned but not executed." "$debug"
+    else
+        debug_print "Validated fixed support-bundle encryption tools." "$debug"
+    fi
     debug_end "$debug"
     return 0
 }

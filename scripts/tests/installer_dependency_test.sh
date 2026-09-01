@@ -66,8 +66,13 @@ if ! awk '
     exit 1
 fi
 
-if ! grep -Fq 'Dry run: would validate the support-bundle encryption tools.' "$INSTALLER"; then
-    echo "installer dry-run must report age validation without executing it" >&2
+if ! grep -Fq 'exec_command "Validate support-bundle encryption tools"' "$INSTALLER"; then
+    echo "installer must route age validation through exec_command" >&2
+    exit 1
+fi
+
+if grep -Fq 'Dry run: would validate the support-bundle encryption tools.' "$INSTALLER"; then
+    echo "installer must not bypass the standard dry-run execution pathway for age validation" >&2
     exit 1
 fi
 
