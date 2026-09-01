@@ -749,11 +749,8 @@ cleanup_rp1_gpclk_dkms_state
         self.assertFalse(sentinel.exists())
         self.assertEqual(result.stdout.count("(dry)"), 1)
         self.assertNotIn("Running: (dry)", result.stdout)
-        self.assertIn(
-            "Complete: (dry) Remove WsprryPi-owned RP1-GPCLK-DKMS provider "
-            "when ownership and identity match.",
-            result.stdout,
-        )
+        self.assertIn("Complete: (dry) Remove owned RP1 provider.", result.stdout)
+        self.assertLessEqual(max(map(len, result.stdout.splitlines())), 80)
         helper = install_script.parent / "rp1_gpclk_dkms_install.py"
         self.assertIn(
             f"Command: python3 {helper} remove --remove auto --debug",

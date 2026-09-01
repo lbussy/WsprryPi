@@ -516,10 +516,8 @@ finish_script 0 debug
 ''',
                 REQUESTED_ACTION=action,
             )
-            self.assertIn(
-                f"Dry run successful: Wsprry Pi {action}ation plan completed; no changes were applied.",
-                result.stdout,
-            )
+            self.assertIn("Dry run complete. No changes were applied.", result.stdout)
+            self.assertLessEqual(max(map(len, result.stdout.splitlines())), 80)
             self.assertNotIn("Installation successful", result.stdout)
             self.assertNotIn("Uninstallation successful", result.stdout)
             self.assertNotIn("has been uninstalled", result.stdout)

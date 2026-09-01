@@ -2481,7 +2481,7 @@ remove_owned_rp1_gpclk_dkms_provider() {
     if [[ "$debug" == "debug" ]]; then
         remove_args+=(--debug)
     fi
-    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Remove WsprryPi-owned RP1-GPCLK-DKMS provider when ownership and identity match" \
+    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Remove owned RP1 provider" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${remove_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS owned-provider removal failed; the ownership record was retained for recovery."
         cleanup_rp1_gpclk_dkms_state
@@ -8283,8 +8283,7 @@ finish_script() {
     if [[ "$DRY_RUN" == "true" ]]; then
         if [[ "$overall_status" -eq 0 ]]; then
             debug_print "$action_message dry run completed successfully; no changes were applied." "$debug"
-            printf "\nDry run successful: %s %s plan completed; no changes were applied.\n" \
-                "$REPO_TITLE" "${action_message,,}"
+            printf "\nDry run complete. No changes were applied.\n"
             debug_end "$debug"
             return 0
         fi
