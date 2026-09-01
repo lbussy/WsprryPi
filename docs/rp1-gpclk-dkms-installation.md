@@ -44,6 +44,10 @@ sudo INSTALL_RP1_GPCLK_DKMS=true \
 
 ## Published releases
 
+No eligible RP1-GPCLK-DKMS release is currently published. Production/main
+selection therefore fails closed until the canonical release is prepared with
+the contract below; it does not fall back to development source.
+
 Release selection enumerates published, immutable, non-draft, non-prerelease
 semantic versions rather than following a `latest` redirect. A candidate must provide
 exactly one Debian package plus `SHA256SUMS` and
@@ -75,16 +79,17 @@ WsprryPi uninstall preserves the provider.
 Development selection clones or validates the authoritative repository,
 records a full commit, checks out that commit detached when applicable, rejects
 tracked or untracked changes, and revalidates checkout identity immediately
-before mutation. It runs the upstream preflight and exact-source installer only
-when that maintained interface supports route-neutral installation with output
-disabled and without loading the module.
+before mutation. The upstream preflight derives the development module version
+from the exact checkout's canonical source header and binds that header by hash.
+WsprryPi does not infer a development version from release metadata
+or supply a version to the upstream installer.
 
-The present upstream exact-source lifecycle requires a concrete GPIO route.
-That is not a route-neutral installation contract, so development installation
-currently fails before mutation and identifies the missing upstream interface.
-WsprryPi does not guess a route or bypass that refusal. Development identity
-remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment, and
-qualification remain separate facts.
+The maintained exact-source installer must provide route-neutral installation
+with output disabled and without loading the module. WsprryPi verifies the
+returned exact commit, canonical version, kernel, UAPI, installed module hashes,
+null route, and output-disabled state before recording success. Development
+identity remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment,
+and qualification remain separate facts.
 
 ## Plan, record, and safety boundary
 

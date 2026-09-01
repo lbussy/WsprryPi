@@ -188,9 +188,9 @@ class ReleaseTests(unittest.TestCase):
         ])
         self.assertEqual(selected["tag_name"], "v1.10.0")
 
-    def test_historical_release_without_new_manifest_is_not_eligible(self):
+    def test_release_without_required_manifest_is_not_eligible(self):
         with self.assertRaisesRegex(MOD.ContractError, "no eligible"):
-            MOD.select_release([release("v1.0.0", complete=False)])
+            MOD.select_release([release("v2.0.0", complete=False)])
 
     def test_selected_highest_corruption_does_not_fallback(self):
         selected = MOD.select_release([release("v2.0.0"), release("v1.9.0")])
@@ -395,10 +395,18 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         root = pathlib.Path(self.temp.name)
         scripts = root / "scripts"
         scripts.mkdir(exist_ok=True)
+        version_source = root / "include/rp1_gpclk/version.h"
+        version_source.parent.mkdir(parents=True, exist_ok=True)
+        version_source.write_text('#define RP1_GPCLK_MODULE_VERSION "0.9.0"\n')
         installer = scripts / "development-install"
         installer.write_text(f"#!/bin/sh\nprintf '%s\\n' '{help_text}'\n")
         preflight = scripts / "development-preflight"
-        preflight.write_text("#!/bin/sh\nexit 0\n")
+        identity = {
+            "classification": "source-development", "moduleName": MOD.MODULE_NAME,
+            "moduleVersion": "0.9.0", "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": digest(version_source.read_bytes()),
+        }
+        preflight.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(identity) + "'\n")
         installer.chmod(0o755)
         preflight.chmod(0o755)
         return root
@@ -418,16 +426,33 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         source = self.lifecycle_source("usage: development-install --route {gpio4,gpio20,route-neutral}")
         self.assertEqual(MOD.route_neutral_interface(source, MOD.Runner())[1], ["--route", "route-neutral"])
 
+    def test_development_identity_comes_from_upstream_preflight(self):
+        source = self.lifecycle_source("usage: development-install --route-neutral")
+        identity = MOD.development_identity(source, MOD.Runner())
+        self.assertEqual(identity["version"], "0.9.0")
+        self.assertEqual(identity["versionSource"], "include/rp1_gpclk/version.h")
+        (source / "include/rp1_gpclk/version.h").write_text('#define RP1_GPCLK_MODULE_VERSION "changed"\n')
+        with self.assertRaisesRegex(MOD.ContractError, "differs from the selected source"):
+            MOD.development_identity(source, MOD.Runner())
+
     def test_development_result_is_bound_before_recording(self):
         manifest_path = pathlib.Path(self.temp.name) / "DEVELOPMENT_MANIFEST.json"
-        resolved = {"commit": "a" * 40, "version": "0.9.0", "uapiSha256": "b" * 64}
+        resolved = {"commit": "a" * 40, "version": "0.9.0", "uapiSha256": "b" * 64,
+                    "versionSource": "include/rp1_gpclk/version.h", "versionSourceSha256": "e" * 64}
         manifest = {
             "schema": "rp1-gpclk-source-development-manifest-v1",
             "classification": "source-development", "qualification": False,
             "releaseQualified": False, "sourceCommit": "a" * 40,
             "sourceState": "clean", "renderedVersion": "0.9.0",
+            "versionIdentity": {"path": "include/rp1_gpclk/version.h", "sha256": "e" * 64,
+                                "moduleVersion": "0.9.0"},
             "dkmsName": MOD.DKMS_NAME, "moduleName": MOD.MODULE_NAME,
             "targetKernel": MOD.platform.release(),
+            "installationMode": "route-neutral", "route": None,
+            "routeNeutralSafety": {
+                "before": {"loadedModule": False, "configuredRoutes": []},
+                "after": {"loadedModule": False, "configuredRoutes": []},
+            },
             "uapiIdentity": {"sha256": "b" * 64},
             "parameters": {"live_output": 0},
             "installedModule": {
@@ -499,7 +524,7 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertFalse(any(call and call[0] == "apt-get" for call in runner.calls))
 
     def test_different_installed_version_requires_owner_migration(self):
-        runner = FakeRunner(self.responses("1.0.1-1"))
+        runner = FakeRunner(self.responses("9.9.9-1"))
         with mock.patch.object(MOD, "validate_package"):
             with self.assertRaisesRegex(MOD.ContractError, "owning package migration"):
                 MOD.apply_release(self.state, self.resolved, self.record, self.root, runner)

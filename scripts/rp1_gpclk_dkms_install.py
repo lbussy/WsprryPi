@@ -635,15 +635,29 @@ def clone_exact(state_dir: pathlib.Path, selector: str, value: str | None, runne
     return identity
 
 
-def development_version(source: pathlib.Path) -> str:
-    model = source / "release" / "installation-model-v1.json"
+def development_identity(source: pathlib.Path, runner: Runner) -> dict[str, str]:
+    preflight = source / "scripts" / "development-preflight"
+    require(preflight.is_file() and os.access(preflight, os.X_OK), "development source lacks the maintained preflight")
+    result = runner.run(
+        [str(preflight), "--source", str(source), "--kernel", platform.release()],
+        cwd=source,
+    )
     try:
-        payload = json.loads(model.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ContractError("development source lacks a readable upstream installation model") from error
-    version = payload.get("release")
-    require(isinstance(version, str) and SAFE_VERSION.fullmatch(version), "development source installation model has an invalid version")
-    return version
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise ContractError("upstream development preflight returned malformed identity") from error
+    require(isinstance(payload, dict), "upstream development preflight identity is not an object")
+    version = payload.get("moduleVersion")
+    version_source = payload.get("versionSource")
+    version_sha256 = payload.get("versionSourceSha256")
+    require(payload.get("classification") == "source-development", "upstream development preflight classification differs")
+    require(payload.get("moduleName") == MODULE_NAME, "upstream development preflight module identity differs")
+    require(isinstance(version, str) and SAFE_VERSION.fullmatch(version), "upstream development preflight has an invalid version")
+    require(version_source == "include/rp1_gpclk/version.h", "upstream development preflight version source differs")
+    path = source / version_source
+    require(path.is_file() and not path.is_symlink(), "upstream canonical development version source is missing or substituted")
+    require(version_sha256 == sha256_file(path), "upstream development version identity differs from the selected source")
+    return {"version": version, "versionSource": version_source, "versionSourceSha256": version_sha256}
 
 
 def route_neutral_interface(source: pathlib.Path, runner: Runner) -> tuple[str, list[str]]:
@@ -685,15 +699,16 @@ def prepare_development(state_dir: pathlib.Path, selector: str, value: str | Non
     else:
         identity = clone_exact(state_dir, selector, value, runner)
     source = pathlib.Path(identity["path"])
-    version = development_version(source)
     uapi = source / "include" / "uapi" / "linux" / "rp1_gpclk.h"
     require(uapi.is_file() and not uapi.is_symlink(), "development source lacks the canonical regular-file UAPI")
     interface, route_args = route_neutral_interface(source, runner)
-    runner.run([str(source / "scripts" / "development-preflight"), "--kernel", platform.release()], cwd=source)
+    upstream_identity = development_identity(source, runner)
     return {
-        "channel": "development", "commit": identity["commit"], "version": version,
+        "channel": "development", "commit": identity["commit"], "version": upstream_identity["version"],
         "checkout": identity, "interface": interface, "routeArguments": route_args,
         "sourceTree": identity["tree"], "uapiSha256": sha256_file(uapi),
+        "versionSource": upstream_identity["versionSource"],
+        "versionSourceSha256": upstream_identity["versionSourceSha256"],
         "compatibilityIdentity": COMPATIBILITY_IDENTITY,
     }
 
@@ -955,7 +970,22 @@ def verify_development_result(
     }
     for key, value in expected.items():
         require(manifest.get(key) == value, f"upstream development result has incompatible {key}")
+    require(manifest.get("installationMode") == "route-neutral", "upstream development result is not route-neutral")
+    version_identity = manifest.get("versionIdentity")
+    require(
+        isinstance(version_identity, dict)
+        and version_identity.get("path") == resolved["versionSource"]
+        and version_identity.get("sha256") == resolved["versionSourceSha256"]
+        and version_identity.get("moduleVersion") == resolved["version"],
+        "upstream development result canonical version identity differs from the selected source",
+    )
     require(manifest.get("route") is None, "upstream development result selected a GPIO route")
+    safety = manifest.get("routeNeutralSafety")
+    require(isinstance(safety, dict) and set(safety) == {"before", "after"}, "upstream development result lacks route-neutral safety observations")
+    for stage in ("before", "after"):
+        observation = safety.get(stage)
+        require(isinstance(observation, dict) and observation, f"upstream development result has invalid {stage} route-neutral observation")
+        require(not any(bool(value) for value in observation.values()), f"upstream development result reports a {stage} route-neutral blocker")
     uapi = manifest.get("uapiIdentity")
     require(isinstance(uapi, dict) and uapi.get("sha256") == resolved["uapiSha256"], "upstream development result UAPI differs from the selected source")
     parameters = manifest.get("parameters")
@@ -990,7 +1020,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     evidence.mkdir(parents=True, exist_ok=False, mode=0o700)
     command = [
         str(source / "scripts" / "development-install"), "--source", str(source),
-        "--kernel", platform.release(), "--module-version", resolved["version"],
+        "--kernel", platform.release(),
         *route_args, "--live-output", "0", "--install", "--evidence-directory", str(evidence),
     ]
     runner.run(command, cwd=source, passthrough=True)
@@ -1003,6 +1033,8 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         "schema": RECORD_SCHEMA, "repository": REPOSITORY, "channel": "development",
         "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
         "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
+        "versionSource": resolved["versionSource"],
+        "versionSourceSha256": resolved["versionSourceSha256"],
         "installedModuleSha256": installed["installedFileSha256"],
         "decompressedModuleSha256": installed["decompressedElfSha256"],
         "targetKernel": platform.release(),
