@@ -37,7 +37,7 @@ bool reconcileRp1GpclkRoute(
     }
     if (!state.identity_matches)
     {
-        error = "RP1 GPCLK provider UAPI or module identity does not match pinned release v1.1.1.";
+        error = "RP1 GPCLK provider UAPI or module identity does not match the selected provider identity.";
         return false;
     }
     if (!state.eligible)
