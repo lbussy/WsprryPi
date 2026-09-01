@@ -612,8 +612,8 @@ INSTALL_RP1_GPCLK_DKMS=true
 RP1_GPCLK_DKMS_SOURCE="$SOURCE_SELECTOR"
 REPO_BRANCH="$WSPRRYPi_BRANCH"
 FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
-prepare_rp1_gpclk_dkms_installation
-apply_rp1_gpclk_dkms_installation
+prepare_rp1_gpclk_dkms_installation debug
+apply_rp1_gpclk_dkms_installation debug
 [[ ! -e "$SENTINEL" ]]
 cleanup_rp1_gpclk_dkms_state
 [[ -z "$RP1_GPCLK_DKMS_STATE_DIR" && -z "$RP1_GPCLK_DKMS_HELPER" ]]
@@ -634,6 +634,18 @@ cleanup_rp1_gpclk_dkms_state
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
             self.assertEqual(result.stdout.count("(dry)"), 4)
+            self.assertIn("Name:    Resolve RP1-GPCLK-DKMS installation plan", result.stderr)
+            self.assertIn("Name:    Apply RP1-GPCLK-DKMS installation plan", result.stderr)
+            helper = install_script.parent / "rp1_gpclk_dkms_install.py"
+            prepare_command = (
+                f"Command: python3 {helper} prepare --state-dir dry-run:no-state-created "
+                f"--install true --source {selector} --wsprry-source {branch} --dry-run --debug"
+            )
+            apply_command = (
+                f"Command: python3 {helper} apply --state-dir dry-run:no-state-created --debug"
+            )
+            self.assertIn(prepare_command, result.stderr)
+            self.assertIn(apply_command, result.stderr)
 
     def test_exec_command_preserves_internal_debug_argv(self):
         install_script = ROOT / "scripts" / "install.sh"
