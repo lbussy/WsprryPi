@@ -561,9 +561,11 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                 f"/lib/modules/{MOD.platform.release()}/updates/dkms/{MOD.MODULE_NAME}.ko"
             ],
             "installedOverlays": [], "enrollment": False,
-            "developmentManager": False, "runtimeResidue": [],
+            "developmentManager": False,
+            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
         }
         owned = {
+            "schema": MOD.RECORD_SCHEMA,
             "channel": "development", "sourceCommit": resolved["commit"],
             "productVersion": resolved["version"], "sourceTree": resolved["sourceTree"],
             "uapiSha256": resolved["uapiSha256"],
@@ -588,8 +590,10 @@ class DevelopmentInterfaceTests(unittest.TestCase):
              mock.patch.object(MOD.sys, "stdout", stdout):
             MOD.apply_development(resolved, record, runner)
         self.assertEqual(validate.call_args_list, [
-            mock.call(owned, pathlib.Path("/"), runner),
-            mock.call(owned, pathlib.Path("/"), runner),
+            mock.call(owned, pathlib.Path("/"), runner,
+                      allow_runtime_residue=True),
+            mock.call(owned, pathlib.Path("/"), runner,
+                      allow_runtime_residue=True),
         ])
         self.assertEqual(runner.passthrough_calls, [])
         self.assertIn("no provider mutation", stdout.getvalue())
@@ -856,6 +860,48 @@ class ApplyPolicyTests(unittest.TestCase):
             "/var/lib/rp1-gpclk-dkms/runtime-admin",
         ):
             self.assertIn(path, source)
+
+    def test_owned_partial_runtime_removal_reviews_digest_and_complete_inventory(self):
+        source = self.root / "source"
+        provider = source / "scripts/runtime_provider.py"
+        provider.parent.mkdir(parents=True)
+        digest = "d" * 64
+        planned = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": digest,
+            "destinations": sorted(MOD.runtime_deployment_destinations()),
+        }
+        removed = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove", "planSha256": digest,
+            "response": {"status": "removed-exact-deployment"},
+        }
+        runner = FakeRunner({
+            ("python3", str(provider), "remove-plan"):
+                MOD.CommandResult(json.dumps(planned), "", 0),
+            ("python3", str(provider), "remove", "--plan-sha256", digest):
+                MOD.CommandResult(json.dumps(removed), "", 0),
+        })
+        with mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.remove_owned_partial_runtime(source, runner)
+        self.assertEqual(len(runner.calls), 2)
+
+    def test_owned_partial_runtime_removal_rejects_inventory_drift_before_mutation(self):
+        source = self.root / "source"
+        provider = source / "scripts/runtime_provider.py"
+        provider.parent.mkdir(parents=True)
+        planned = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": "d" * 64,
+            "destinations": ["/foreign"],
+        }
+        runner = FakeRunner({
+            ("python3", str(provider), "remove-plan"):
+                MOD.CommandResult(json.dumps(planned), "", 0),
+        })
+        with self.assertRaisesRegex(MOD.ContractError, "inventory differs"):
+            MOD.remove_owned_partial_runtime(source, runner)
+        self.assertEqual(len(runner.calls), 1)
 
     def test_runtime_bundle_requires_self_contained_bootstrap_and_bound_units(self):
         bundle = self.root / "bundle"

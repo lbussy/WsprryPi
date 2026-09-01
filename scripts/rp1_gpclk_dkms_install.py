@@ -976,6 +976,33 @@ def validate_runtime_ownership(runtime: Any, record: Mapping[str, Any]) -> dict[
     return runtime
 
 
+def runtime_deployment_destinations() -> set[str]:
+    library = "/usr/lib/rp1-gpclk-dkms"
+    state = "/var/lib/rp1-gpclk-dkms/runtime-admin"
+    return {
+        f"/lib/modules/{platform.release()}/updates/dkms/rp1_route_controller.ko",
+        f"/lib/modules/{platform.release()}/updates/dkms/rp1_gpclk_dkms.ko",
+        "/etc/rp1-gpclk-dkms/runtime-controller.json",
+        "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service",
+        *(f"{library}/{name}" for name in (
+            "runtime_controller_admin.py", "runtime_manager.py",
+            "runtime_route_client.py", "runtime_layout.py",
+            "runtime_deployment.py", "runtime_output.py",
+            "runtime_application.py", "runtime_activation.py",
+            "runtime_provider.py", "runtime_binding.py")),
+        *(f"{library}/runtime-uapi/{name}" for name in
+          ("rp1_gpclk.h", "rp1_route_admin.h")),
+        *(f"{library}/runtime-overlays/{route}.dtbo" for route in
+          ("gpio4", "gpio20")),
+        f"{library}/schema/rp1-gpclk-runtime-readiness-v1.schema.json",
+        *(f"{state}/{name}" for name in
+          ("transaction.json", "manager.json", "application.json",
+           "activation.json")),
+    }
+
+
 def remove_ownership_record(path: pathlib.Path, expected: os.stat_result) -> None:
     current = record_file_identity(path)
     require(
@@ -1363,6 +1390,35 @@ def validate_runtime_development_provider(
     require(installed_version == version, "runtime consumer module version differs from ownership")
 
 
+def remove_owned_partial_runtime(source: pathlib.Path, runner: Runner) -> None:
+    provider = source / "scripts/runtime_provider.py"
+    planned = runtime_call(runner, provider, "remove-plan")
+    require(
+        planned.get("contract") == RUNTIME_READINESS_CONTRACT
+        and planned.get("operation") == "remove-plan",
+        "runtime deployment removal plan identity differs",
+    )
+    digest = planned.get("planSha256")
+    require(isinstance(digest, str) and SHA256.fullmatch(digest),
+            "runtime deployment removal plan lacks a reviewed digest")
+    destinations = planned.get("destinations")
+    require(isinstance(destinations, list)
+            and set(destinations) == runtime_deployment_destinations(),
+            "runtime deployment removal inventory differs")
+    removed = runtime_call(
+        runner, provider, "remove", ["--plan-sha256", digest]
+    )
+    require(
+        removed.get("contract") == RUNTIME_READINESS_CONTRACT
+        and removed.get("operation") == "remove"
+        and removed.get("planSha256") == digest
+        and removed.get("response", {}).get("status") == "removed-exact-deployment",
+        "runtime deployment removal response differs from the reviewed plan",
+    )
+    require(not runtime_residue_inventory(pathlib.Path("/")),
+            "reviewed runtime deployment removal left residue")
+
+
 def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner: Runner) -> None:
     source = revalidate_checkout(resolved["checkout"], runner)
     interface, route_args = route_neutral_interface(source, runner)
@@ -1375,7 +1431,11 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         existing_record is not None and record_identity is not None
         and existing_record.get("schema") == RUNTIME_RECORD_SCHEMA
     )
-    if not owned_runtime:
+    owned_provider = bool(
+        existing_record is not None and record_identity is not None
+        and existing_record.get("schema") == RECORD_SCHEMA
+    )
+    if not (owned_runtime or owned_provider):
         require_no_runtime_residue(before, "source-development installation")
     provider_present = bool(
         before["packageVersion"] is not None
@@ -1398,12 +1458,39 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             "targetKernel": platform.release(),
             "compatibilityIdentity": COMPATIBILITY_IDENTITY,
         }
-        require(
-            all(existing_record.get(name) == value for name, value in expected_identity.items()),
-            "existing WsprryPi-owned development provider identity differs from the selected source",
+        identity_matches = all(
+            existing_record.get(name) == value
+            for name, value in expected_identity.items()
         )
+        if (not identity_matches
+                and existing_record.get("schema") == RECORD_SCHEMA
+                and before["runtimeResidue"]):
+            remove_owned_partial_runtime(source, runner)
+            entrypoint, rollback = validate_development_removal(
+                existing_record, pathlib.Path("/"), runner
+            )
+            current_record, current_identity, current_reason = load_ownership_record(record)
+            require(
+                current_record == existing_record
+                and current_identity is not None
+                and (current_identity.st_dev, current_identity.st_ino)
+                == (record_identity.st_dev, record_identity.st_ino),
+                f"installation ownership changed before partial-provider migration: {current_reason or 'identity mismatch'}",
+            )
+            runner.run([str(entrypoint), "--record", str(rollback)],
+                       cwd=entrypoint.parents[1], passthrough=True)
+            verify_provider_absent(pathlib.Path("/"), runner)
+            remove_ownership_record(record, record_identity)
+            return apply_development(resolved, record, runner)
+        require(identity_matches,
+                "existing WsprryPi-owned development provider identity differs from the selected source")
         if owned_runtime:
             validate_runtime_development_provider(existing_record, before, runner)
+        elif before["runtimeResidue"]:
+            validate_development_removal(
+                existing_record, pathlib.Path("/"), runner,
+                allow_runtime_residue=True,
+            )
         else:
             validate_development_removal(existing_record, pathlib.Path("/"), runner)
         current_record, current_identity, current_reason = load_ownership_record(record)
@@ -1418,6 +1505,11 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         # the first verification cannot be reported as an exact no-op.
         if owned_runtime:
             validate_runtime_development_provider(current_record, existing_inventory(pathlib.Path("/"), runner), runner)
+        elif before["runtimeResidue"]:
+            validate_development_removal(
+                current_record, pathlib.Path("/"), runner,
+                allow_runtime_residue=True,
+            )
         else:
             validate_development_removal(current_record, pathlib.Path("/"), runner)
         print("Exact WsprryPi-owned development provider already installed; no provider mutation performed.")
@@ -1533,7 +1625,10 @@ def secure_owned_path(path: pathlib.Path, parent: pathlib.Path, description: str
     return resolved
 
 
-def validate_development_removal(record: Mapping[str, Any], root: pathlib.Path, runner: Runner) -> tuple[pathlib.Path, pathlib.Path]:
+def validate_development_removal(
+    record: Mapping[str, Any], root: pathlib.Path, runner: Runner,
+    *, allow_runtime_residue: bool = False,
+) -> tuple[pathlib.Path, pathlib.Path]:
     require(record["installationMethod"] == "upstream-development-rollback", "development ownership installation method differs")
     require(isinstance(record["sourceCommit"], str) and SHA40.fullmatch(record["sourceCommit"]) is not None, "development ownership commit is invalid")
     require(isinstance(record["productVersion"], str) and SAFE_VERSION.fullmatch(record["productVersion"]) is not None, "development ownership version is invalid")
@@ -1562,7 +1657,8 @@ def validate_development_removal(record: Mapping[str, Any], root: pathlib.Path, 
     require(sha256_file(rollback) == record["rollbackRecordSha256"], "development rollback record identity differs")
     require(sha256_file(entrypoint) == record["rollbackEntrypointSha256"], "development rollback entrypoint identity differs")
     inventory = existing_inventory(root, runner)
-    require_no_runtime_residue(inventory, "source-development removal")
+    if not allow_runtime_residue:
+        require_no_runtime_residue(inventory, "source-development removal")
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks development rollback")
     require(not inventory["activeModule"], "an active RP1 GPCLK module blocks owned provider removal")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks owned provider removal")

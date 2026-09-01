@@ -120,6 +120,11 @@ neutral runtime deployment is interrupted after the exact provider has a valid
 WsprryPi v2 ownership record, a repeated installation may enter the same bound
 deployment and recovery workflow; it does not treat that partial state as a
 foreign installation or publish v3 readiness before final neutral proof.
+If a later exact development source is selected, the installer first reviews
+and executes the old binding's fixed deployment-removal digest, verifies that
+all runtime residue is gone, runs the recorded owned-provider rollback, and
+only then installs the new exact source. It never migrates an unowned provider,
+an active route/module/endpoint/socket, a pending transaction, or drifted bytes.
 
 ## Plan, record, and safety boundary
 
