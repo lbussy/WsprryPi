@@ -552,9 +552,7 @@ class ApplyPolicyTests(unittest.TestCase):
         with mock.patch.object(MOD, "validate_package"):
             MOD.apply_release(self.state, self.resolved, self.record, self.root, runner)
         self.assertFalse(any(call and call[0] == "apt-get" for call in runner.calls))
-        recorded = json.loads(self.record.read_text())
-        self.assertEqual(recorded["sourceCommit"], "a" * 40)
-        self.assertFalse(recorded["qualificationClaim"])
+        self.assertFalse(self.record.exists(), "pre-existing exact providers must not become WsprryPi-owned")
 
     def test_exact_installation_rejects_foreign_same_version_state(self):
         member = self.manifest["packageInventory"][0]
@@ -572,11 +570,21 @@ class ApplyPolicyTests(unittest.TestCase):
 
     def test_fresh_release_uses_normal_debian_path(self):
         runner = FakeRunner(self.responses())
-        with mock.patch.object(MOD, "validate_package"), mock.patch.object(MOD, "verify_installed_release"):
+        artifacts = [{
+            "path": "/lib/modules/fixture/updates/dkms/rp1_gpclk_dkms.ko",
+            "sha256": digest(b"module"),
+        }]
+        with mock.patch.object(MOD, "validate_package"), \
+             mock.patch.object(MOD, "verify_installed_release"), \
+             mock.patch.object(MOD, "module_artifacts", return_value=artifacts):
             MOD.apply_release(self.state, self.resolved, self.record, self.root, runner)
         apt_calls = [call for call in runner.calls if call and call[0] == "apt-get"]
         self.assertEqual(apt_calls, [("apt-get", "install", "--no-install-recommends", "-y", str(self.package))])
         self.assertEqual(runner.passthrough_calls, apt_calls)
+        recorded = json.loads(self.record.read_text())
+        self.assertEqual(recorded["schema"], MOD.RECORD_SCHEMA)
+        self.assertEqual(recorded["owner"], "WsprryPi")
+        self.assertEqual(recorded["moduleArtifacts"][0]["sha256"], digest(b"module"))
 
     def test_dry_run_plan_cannot_be_applied(self):
         model = self.root / "model"
@@ -700,12 +708,69 @@ cleanup_rp1_gpclk_dkms_state
         self.assertEqual(arguments.count("CALL"), 2)
         self.assertEqual(arguments.count("ARG=--debug"), 2)
 
-    def test_uninstall_and_forbidden_operations_absent_from_installer_paths(self):
+    def test_selected_uninstall_dry_run_displays_helper_without_invoking_python(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        sentinel = self.root / "uninstall-python-invoked"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+python3() { printf python3 >"$SENTINEL"; return 99; }
+curl() { printf curl >"$SENTINEL"; return 99; }
+mktemp() { printf mktemp >"$SENTINEL"; return 99; }
+DRY_RUN=true
+ACTION=uninstall
+REPO_ORG=WsprryPi
+REPO_NAME=WsprryPi
+REPO_BRANCH=devel
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+remove_owned_rp1_gpclk_dkms_provider debug
+[[ ! -e "$SENTINEL" ]]
+cleanup_rp1_gpclk_dkms_state
+'''
+        environment = os.environ.copy()
+        environment.update({"INSTALL_SCRIPT": str(install_script), "SENTINEL": str(sentinel)})
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(sentinel.exists())
+        self.assertEqual(result.stdout.count("(dry)"), 2)
+        helper = install_script.parent / "rp1_gpclk_dkms_install.py"
+        self.assertIn(
+            f"Command: python3 {helper} remove --remove auto --debug",
+            result.stderr,
+        )
+
+    def test_uninstall_opt_out_never_prepares_or_invokes_helper(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        sentinel = self.root / "opt-out-helper-activity"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+python3() { printf python3 >"$SENTINEL"; return 99; }
+curl() { printf curl >"$SENTINEL"; return 99; }
+mktemp() { printf mktemp >"$SENTINEL"; return 99; }
+logI() { :; }
+DRY_RUN=false
+ACTION=uninstall
+REMOVE_RP1_GPCLK_DKMS=false
+remove_owned_rp1_gpclk_dkms_provider debug
+[[ ! -e "$SENTINEL" ]]
+[[ -z "$RP1_GPCLK_DKMS_STATE_DIR" && -z "$RP1_GPCLK_DKMS_HELPER" ]]
+'''
+        environment = os.environ.copy()
+        environment.update({"INSTALL_SCRIPT": str(install_script), "SENTINEL": str(sentinel)})
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(sentinel.exists())
+
+    def test_forbidden_runtime_operations_absent_from_installer_paths(self):
         install_source = (ROOT / "scripts/install.sh").read_text()
         helper_source = SCRIPT.read_text()
         self.assertIn('[[ "$ACTION" == "install" ]] || return 0', install_source)
         self.assertNotRegex(helper_source, r'\["(?:dtoverlay|modprobe|insmod|rmmod|systemctl|service|reboot|shutdown)"')
-        self.assertNotIn("apt-get remove", helper_source)
         self.assertNotRegex(helper_source, r"config\.txt[^\n]*(?:write|replace|unlink)")
 
     def test_prepare_precedes_package_mutation_and_apply_follows_dependencies(self):
@@ -736,13 +801,193 @@ cleanup_rp1_gpclk_dkms_state
             self.assertIn("explicitly requested", body)
         self.assertIn('"$file" == "/proc/device-tree/compatible"', function_body("validate_sys_accs"))
 
-    def test_temporary_cleanup_is_scoped_and_uninstall_preserves_provider(self):
+    def test_temporary_cleanup_is_scoped_and_uninstall_uses_owned_provider_step(self):
         source = (ROOT / "scripts/install.sh").read_text()
         cleanup_start = source.index("cleanup_rp1_gpclk_dkms_state() {")
         cleanup = source[cleanup_start:source.index("\n}\n", cleanup_start) + 3]
         self.assertIn("/tmp/wsprrypi-rp1-gpclk-dkms.*", cleanup)
         self.assertIn("Refusing to remove unexpected", cleanup)
-        self.assertIn('[[ "$ACTION" == "install" ]] || return 0', source)
+        self.assertIn('group_to_execute+=("remove_owned_rp1_gpclk_dkms_provider")', source)
+
+
+class RemovalPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = pathlib.Path(self.temp.name).resolve()
+        self.record = self.root / "ownership.json"
+
+    def release_record(self) -> dict[str, object]:
+        return {
+            "schema": MOD.RECORD_SCHEMA, "repository": MOD.REPOSITORY,
+            "owner": "WsprryPi", "channel": "release",
+            "installationMethod": "debian-package", "tag": "v2.1.0",
+            "sourceCommit": "a" * 40, "manifest": valid_manifest(),
+            "moduleArtifacts": [{
+                "path": "/lib/modules/fixture/updates/dkms/rp1_gpclk_dkms.ko",
+                "sha256": "c" * 64,
+            }],
+            "routeActivation": "disabled", "output": "disabled",
+            "qualificationClaim": False,
+        }
+
+    def development_record(self) -> dict[str, object]:
+        return {
+            "schema": MOD.RECORD_SCHEMA, "repository": MOD.REPOSITORY,
+            "owner": "WsprryPi", "channel": "development",
+            "installationMethod": "upstream-development-rollback",
+            "sourceCommit": "a" * 40, "productVersion": "0.9.0",
+            "sourceTree": "b" * 40, "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+            "upstreamEvidence": "/var/lib/wsprrypi/rp1-gpclk-dkms-development-evidence",
+            "rollbackRecord": "/var/lib/wsprrypi/rp1-gpclk-dkms-development-evidence/ROLLBACK.json",
+            "rollbackRecordSha256": "e" * 64,
+            "rollbackEntrypoint": "/var/lib/wsprrypi/rp1-gpclk-dkms-development-evidence/rendered-source/scripts/development-rollback",
+            "rollbackEntrypointSha256": "f" * 64,
+            "installedModulePath": f"/lib/modules/{MOD.platform.release()}/updates/dkms/rp1_gpclk_dkms.ko",
+            "installedModuleSha256": "1" * 64,
+            "decompressedModuleSha256": "2" * 64,
+            "routeActivation": "disabled", "output": "disabled",
+            "qualificationClaim": False,
+        }
+
+    def write_record(self, value: dict[str, object]) -> None:
+        self.record.write_text(json.dumps(value))
+        self.record.chmod(0o600)
+
+    def args(self):
+        return MOD.parser().parse_args(["remove", "--record", str(self.record), "--root", str(self.root)])
+
+    def test_missing_legacy_malformed_and_symlink_records_preserve_provider(self):
+        runner = FakeRunner()
+        stdout = io.StringIO()
+        with mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.remove_owned_provider(self.args(), runner)
+        self.assertIn("preserved", stdout.getvalue())
+        self.assertEqual(runner.calls, [])
+
+        for value in (
+            {"schema": MOD.LEGACY_RECORD_SCHEMA},
+            {"schema": MOD.RECORD_SCHEMA, "owner": "attacker"},
+            {**self.release_record(), "tag": 210},
+        ):
+            self.write_record(value)
+            stdout = io.StringIO()
+            with mock.patch.object(MOD.sys, "stdout", stdout):
+                MOD.remove_owned_provider(self.args(), runner)
+            self.assertIn("preserved", stdout.getvalue())
+            self.assertTrue(self.record.exists())
+            self.record.unlink()
+
+        target = self.root / "target.json"
+        target.write_text(json.dumps(self.release_record()))
+        self.record.symlink_to(target)
+        stdout = io.StringIO()
+        with mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.remove_owned_provider(self.args(), runner)
+        self.assertIn("preserved", stdout.getvalue())
+        self.assertTrue(target.exists())
+
+    def test_explicit_opt_out_preserves_even_a_valid_owned_provider(self):
+        self.write_record(self.release_record())
+        args = MOD.parser().parse_args([
+            "remove", "--remove", "false", "--record", str(self.record),
+            "--root", str(self.root),
+        ])
+        runner = FakeRunner()
+        stdout = io.StringIO()
+        with mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.remove_owned_provider(args, runner)
+        self.assertIn("explicit operator opt-out", stdout.getvalue())
+        self.assertTrue(self.record.exists())
+        self.assertEqual(runner.calls, [])
+
+    def test_owned_release_uses_package_removal_then_deletes_record(self):
+        self.write_record(self.release_record())
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "validate_release_removal"), \
+             mock.patch.object(MOD, "verify_provider_absent"):
+            MOD.remove_owned_provider(self.args(), runner)
+        self.assertEqual(runner.passthrough_calls, [("apt-get", "remove", "-y", MOD.PACKAGE_NAME)])
+        self.assertFalse(self.record.exists())
+
+    def test_identity_drift_preserves_record_without_package_mutation(self):
+        self.write_record(self.release_record())
+        runner = FakeRunner()
+        stdout = io.StringIO()
+        with mock.patch.object(MOD, "validate_release_removal", side_effect=MOD.ContractError("artifact drift")), \
+             mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.remove_owned_provider(self.args(), runner)
+        self.assertIn("artifact drift", stdout.getvalue())
+        self.assertEqual(runner.calls, [])
+        self.assertTrue(self.record.exists())
+
+    def test_release_allows_only_same_version_additional_kernel_artifacts(self):
+        record = self.release_record()
+        artifacts = [
+            *record["moduleArtifacts"],
+            {
+                "path": "/lib/modules/new-kernel/updates/dkms/rp1_gpclk_dkms.ko.xz",
+                "sha256": "d" * 64,
+            },
+        ]
+        responses = {
+            ("modinfo", "-k", "fixture", "-F", "version", MOD.MODULE_NAME): MOD.CommandResult("2.1.0\n", "", 0),
+            ("modinfo", "-k", "new-kernel", "-F", "version", MOD.MODULE_NAME): MOD.CommandResult("2.1.0\n", "", 0),
+        }
+        runner = FakeRunner(responses)
+        with mock.patch.object(MOD, "verify_installed_release"), \
+             mock.patch.object(MOD, "module_artifacts", return_value=artifacts):
+            MOD.validate_release_removal(record, self.root, runner)
+        runner.responses[("modinfo", "-k", "new-kernel", "-F", "version", MOD.MODULE_NAME)] = MOD.CommandResult("9.9.9\n", "", 0)
+        with mock.patch.object(MOD, "verify_installed_release"), \
+             mock.patch.object(MOD, "module_artifacts", return_value=artifacts):
+            with self.assertRaisesRegex(MOD.ContractError, "additional-kernel"):
+                MOD.validate_release_removal(record, self.root, runner)
+
+    def test_package_removal_failure_retains_record_and_fails(self):
+        self.write_record(self.release_record())
+        failed = MOD.CommandResult("", "package busy", 1)
+        runner = FakeRunner({("apt-get", "remove", "-y", MOD.PACKAGE_NAME): failed})
+        with mock.patch.object(MOD, "validate_release_removal"):
+            with self.assertRaises(MOD.ContractError):
+                MOD.remove_owned_provider(self.args(), runner)
+        self.assertTrue(self.record.exists())
+
+    def test_record_change_after_preflight_blocks_package_mutation(self):
+        self.write_record(self.release_record())
+        runner = FakeRunner()
+
+        def change_record(*_):
+            changed = self.release_record()
+            changed["sourceCommit"] = "b" * 40
+            self.write_record(changed)
+
+        with mock.patch.object(MOD, "validate_release_removal", side_effect=change_record):
+            with self.assertRaisesRegex(MOD.ContractError, "ownership changed"):
+                MOD.remove_owned_provider(self.args(), runner)
+        self.assertEqual(runner.calls, [])
+        self.assertTrue(self.record.exists())
+
+    def test_owned_development_uses_captured_upstream_rollback(self):
+        self.write_record(self.development_record())
+        evidence = self.root / "evidence/rendered-source/scripts"
+        evidence.mkdir(parents=True)
+        entrypoint = evidence / "development-rollback"
+        entrypoint.write_text("#!/bin/sh\n")
+        entrypoint.chmod(0o700)
+        rollback = self.root / "evidence/ROLLBACK.json"
+        rollback.write_text("{}")
+        rollback.chmod(0o600)
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "validate_development_removal", return_value=(entrypoint, rollback)), \
+             mock.patch.object(MOD, "verify_provider_absent"):
+            MOD.remove_owned_provider(self.args(), runner)
+        self.assertEqual(runner.passthrough_calls, [(str(entrypoint), "--record", str(rollback))])
+        self.assertFalse(self.record.exists())
 
 
 if __name__ == "__main__":

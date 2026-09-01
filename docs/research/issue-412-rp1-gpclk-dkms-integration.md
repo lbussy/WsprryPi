@@ -49,9 +49,14 @@ The package installs both overlays and leaves both inactive. The installer does
 not edit config.txt, load the module, apply an overlay, or silently substitute a
 route. A route change therefore does not reinstall the package.
 
-WsprryPi uninstallation preserves the independently owned package by default.
-An explicit REMOVE_RP1_GPCLK_DKMS=true with ACTION=uninstall removes only the
-recognized 1.0.0-1 Debian package through APT.
+WsprryPi uninstallation removes a provider only when its secure v2 ownership
+record proves that WsprryPi installed the unchanged, inactive identity. It
+preserves pre-existing providers, legacy or missing records, and ambiguous or
+drifted state. Release removal uses the ordinary Debian package lifecycle;
+exact-source development removal uses its captured upstream rollback record and
+entrypoint. `REMOVE_RP1_GPCLK_DKMS=false` preserves even a proven owned provider;
+`true` expresses removal intent but does not force removal through a failed
+ownership or safety check.
 
 ## Runtime fail-closed boundary
 

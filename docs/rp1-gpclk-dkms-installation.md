@@ -72,7 +72,8 @@ manifest are not eligible.
 An exact installed release is verified idempotently. Foreign, mixed,
 development, active, enrolled, manager-bound, or different-version state is
 refused and must be handled by its owning migration or recovery procedure.
-WsprryPi uninstall preserves the provider.
+An exact release that was already present is accepted but never claimed as
+WsprryPi-owned.
 
 ## Development sources
 
@@ -105,8 +106,62 @@ external command argv and captured validation output. The resolved plan and
 ordinary package/DKMS or upstream lifecycle output remain visible during a real
 installation even when debug mode is off.
 
-After successful verification, current provider identity is recorded at
-`/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json`. This record describes
-source/package state only. It is not a signature, route selection, hardware or
-kernel qualification, GPIO permission, transmission authority, or RF evidence.
-No failure selects a fallback backend.
+Only when WsprryPi actually mutates an empty provider state and then verifies
+the result does it atomically create the root-owned, mode-0600 v2 ownership
+record at
+`/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json`. A release record embeds
+the validated release manifest and hashes every DKMS module artifact present at
+ownership creation. Later DKMS artifacts for additional kernels are accepted
+only at canonical module paths with the same recorded module version; every
+originally recorded artifact must remain byte-identical.
+A development record binds the exact source, kernel, installed module,
+upstream evidence, rollback record, and captured upstream rollback entrypoint.
+Failed installs and dry runs create no ownership record. A stale record blocks
+a new provider installation rather than being overwritten.
+
+The record proves only that this WsprryPi workflow installed the recorded
+provider identity. It is not a signature, route selection, hardware or kernel
+qualification, GPIO permission, transmission authority, or RF evidence. The
+older v1 installation record did not distinguish a newly installed provider
+from an idempotently accepted pre-existing provider, so it is deliberately
+insufficient for automatic removal.
+
+## Ownership-aware uninstall
+
+After WsprryPi application and service teardown, uninstall checks the v2
+ownership record. Missing, legacy, malformed, symlinked, insecure, foreign,
+mixed, active, configured, enrolled, manager-bound, or identity-drifted state
+is preserved with an operator-facing reason. A matching release is revalidated
+against its complete recorded manifest and module-artifact hashes, then removed
+with the normal Debian package lifecycle. A matching development installation
+is removed only through the exact upstream `development-rollback` entrypoint
+and rollback record captured during installation. WsprryPi never invents a
+direct DKMS, module unload, overlay, route, boot, service, GPIO, or RF removal
+sequence.
+
+The ownership record is deleted only after the canonical removal succeeds and
+the helper verifies that package, DKMS, source, module, overlay, route,
+enrollment, and manager state are absent. A lifecycle failure retains the
+record, fails the overall uninstall, and leaves recovery to the recorded owning
+procedure. Successfully rolled-back development evidence remains under
+`/var/lib/wsprrypi` as uniquely named audit/recovery evidence and does not block
+a later installation.
+
+`REMOVE_RP1_GPCLK_DKMS` accepts exactly:
+
+- `auto` (default): remove only a matching, inactive provider proven by the v2
+  ownership record;
+- `true`: explicitly request the same ownership-aware removal; it does not
+  bypass any provenance, identity, inactivity, or upstream lifecycle check; or
+- `false`: preserve the provider even when WsprryPi ownership is proven.
+
+For example, to remove WsprryPi while deliberately retaining an owned provider:
+
+```sh
+sudo ACTION=uninstall REMOVE_RP1_GPCLK_DKMS=false ./scripts/install.sh
+```
+
+`DRY_RUN=true ACTION=uninstall` passes the planned helper argv through the
+standard command wrapper, does not start Python, and does not inspect or mutate
+provider or ownership state. Debug mode displays the exact `remove --debug`
+argv. No failure selects a fallback backend.
