@@ -75,6 +75,13 @@ refused and must be handled by its owning migration or recovery procedure.
 An exact release that was already present is accepted but never claimed as
 WsprryPi-owned.
 
+The pre-mutation inventory also rejects opt-in runtime-controller residue,
+including its binding, manager fragment, tools, journals, controller module,
+endpoints, runtime overlays, and the owned WsprryPi application-inhibition
+drop-in. WsprryPi reports the paths but does not remove independently owned
+runtime state. Use the RP1-GPCLK-DKMS runtime cleanup workflow; foreign or
+ambiguous service overrides remain untouched.
+
 ## Development sources
 
 Development selection clones or validates the authoritative repository,
@@ -119,6 +126,13 @@ A development record binds the exact source, kernel, installed module,
 upstream evidence, rollback record, and captured upstream rollback entrypoint.
 Failed installs and dry runs create no ownership record. A stale record blocks
 a new provider installation rather than being overwritten.
+
+After installing the application and Apache configuration, the installer
+requires `wsprrypi.service` to become active. With web mode enabled it also
+requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
+A systemd start request that returns success but is skipped by a false unit
+condition is an installation failure, so no success banner or configuration
+URLs are printed. `--no-web` installations require only active service state.
 
 The record proves only that this WsprryPi workflow installed the recorded
 provider identity. It is not a signature, route selection, hardware or kernel

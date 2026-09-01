@@ -518,6 +518,97 @@ compile_binary wsprrypi debug
         self.assertEqual(snapshot(self.root), before)
         self.assertFalse((checkout / "executables").exists())
 
+    def test_runtime_readiness_rejects_condition_skipped_service(self) -> None:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                r'''
+source "$INSTALLER"
+systemctl() {
+    if [[ "$1" == is-active ]]; then return 3; fi
+    return 0
+}
+curl() { return 0; }
+sleep() { :; }
+warn() { printf '%s\n' "$1" >&2; }
+ACTION=install
+DRY_RUN=false
+NO_WEB=false
+validate_wsprrypi_runtime
+''',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "INSTALLER": str(INSTALLER)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("did not become active", result.stderr)
+
+    def test_runtime_readiness_requires_proxy_api_when_web_enabled(self) -> None:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                r'''
+source "$INSTALLER"
+systemctl() { [[ "$1" == is-active ]]; }
+curl() { return 22; }
+sleep() { :; }
+warn() { printf '%s\n' "$1" >&2; }
+ACTION=install
+DRY_RUN=false
+NO_WEB=false
+validate_wsprrypi_runtime
+''',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "INSTALLER": str(INSTALLER)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("local /wsprrypi/version endpoint", result.stderr)
+
+    def test_runtime_readiness_no_web_requires_only_active_service(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+systemctl() { [[ "$1" == is-active ]]; }
+curl() { printf invoked >"$SENTINEL"; return 99; }
+sleep() { :; }
+logI() { :; }
+ACTION=install
+DRY_RUN=false
+NO_WEB=true
+validate_wsprrypi_runtime
+[[ ! -e "$SENTINEL" ]]
+''',
+            SENTINEL=self.root / "curl-invoked",
+        )
+
+    def test_runtime_readiness_dry_run_executes_nothing(self) -> None:
+        sentinel = self.root / "readiness-invoked"
+        before = snapshot(self.root)
+        self.run_shell(
+            r'''
+source "$INSTALLER"
+systemctl() { printf systemctl >"$SENTINEL"; return 99; }
+curl() { printf curl >"$SENTINEL"; return 99; }
+sleep() { printf sleep >"$SENTINEL"; return 99; }
+logD() { :; }
+ACTION=install
+DRY_RUN=true
+validate_wsprrypi_runtime debug
+[[ ! -e "$SENTINEL" ]]
+''',
+            SENTINEL=sentinel,
+        )
+        self.assertEqual(snapshot(self.root), before)
+
     def test_utc_timezone_dry_run_neither_prompts_nor_reconfigures(self) -> None:
         sentinel = self.root / "timezone-command-invoked"
         before = snapshot(self.root)

@@ -923,6 +923,10 @@ def prepare(args: argparse.Namespace, runner: Runner) -> dict[str, Any]:
         "resolved": None, "dryRun": args.dry_run,
     }
     if decision["install"]:
+        require_no_runtime_residue(
+            {"runtimeResidue": runtime_residue_inventory(pathlib.Path("/"))},
+            "installation planning",
+        )
         selector, value = source_selector(args.source, channel)
         if selector == "release":
             plan["resolved"] = download_release(state_dir, GitHubClient(os.environ.get("GITHUB_TOKEN")), runner)
@@ -936,6 +940,38 @@ def prepare(args: argparse.Namespace, runner: Runner) -> dict[str, Any]:
 def root_path(root: pathlib.Path, absolute: str) -> pathlib.Path:
     require(absolute.startswith("/"), "internal installed path must be absolute")
     return root / absolute.removeprefix("/")
+
+
+def runtime_residue_inventory(root: pathlib.Path) -> list[str]:
+    runtime_paths = (
+        "/etc/rp1-gpclk-dkms/runtime-controller.json",
+        "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
+        "/etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf",
+        "/var/lib/rp1-gpclk-dkms/runtime-admin",
+        "/usr/lib/rp1-gpclk-dkms/runtime-uapi",
+        "/usr/lib/rp1-gpclk-dkms/runtime-overlays",
+        "/usr/lib/rp1-gpclk-dkms/runtime_application.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_controller_admin.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_deployment.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_layout.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_manager.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_output.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_route_client.py",
+        "/dev/rp1-route-admin",
+        "/sys/module/rp1_route_controller",
+    )
+    residue = []
+    for path_text in runtime_paths:
+        path = root_path(root, path_text)
+        if path.exists() or path.is_symlink():
+            residue.append(str(path))
+    modules_base = root_path(root, "/lib/modules")
+    if modules_base.exists():
+        residue.extend(
+            str(path)
+            for path in modules_base.glob("*/updates/dkms/rp1_route_controller.ko*")
+        )
+    return sorted(set(residue))
 
 
 def existing_inventory(root: pathlib.Path, runner: Runner) -> dict[str, Any]:
@@ -974,7 +1010,18 @@ def existing_inventory(root: pathlib.Path, runner: Runner) -> dict[str, Any]:
         "activeModule": active, "sourceTrees": sources, "moduleCandidates": module_candidates,
         "installedOverlays": overlays, "configuredRoute": configured,
         "enrollment": enrollment, "developmentManager": manager,
+        "runtimeResidue": runtime_residue_inventory(root),
     }
+
+
+def require_no_runtime_residue(inventory: Mapping[str, Any], operation: str) -> None:
+    residue = inventory.get("runtimeResidue")
+    require(isinstance(residue, list), "RP1 runtime-controller inventory is unavailable")
+    require(
+        not residue,
+        f"RP1 runtime-controller residue blocks {operation}; use the owning runtime cleanup workflow: "
+        + ", ".join(str(path) for path in residue),
+    )
 
 
 def installed_member(root: pathlib.Path, relative: str, expected_type: str) -> pathlib.Path:
@@ -1000,6 +1047,7 @@ def installed_member(root: pathlib.Path, relative: str, expected_type: str) -> p
 
 def verify_installed_release(root: pathlib.Path, manifest: Mapping[str, Any], runner: Runner) -> None:
     inventory = existing_inventory(root, runner)
+    require_no_runtime_residue(inventory, "release verification")
     require(inventory["packageVersion"] == manifest["debianVersion"], "installed Debian package version differs from plan")
     require(not inventory["activeModule"], "RP1 GPCLK module became active during route-neutral installation")
     require(not inventory["configuredRoute"], "RP1 GPCLK route became configured during route-neutral installation")
@@ -1044,6 +1092,7 @@ def apply_release(state_dir: pathlib.Path, resolved: Mapping[str, Any], record: 
     require(package_path.parent == state_dir and package_path.is_file() and not package_path.is_symlink(), "prepared package was replaced before installation")
     validate_package(package_path, manifest, runner)
     inventory = existing_inventory(root, runner)
+    require_no_runtime_residue(inventory, "release installation")
     require(not inventory["activeModule"], "an active RP1 GPCLK module blocks ordinary installation")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks ordinary installation")
     require(not inventory["enrollment"] and not inventory["developmentManager"], "development enrollment or manager binding blocks release installation")
@@ -1137,6 +1186,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     interface, route_args = route_neutral_interface(source, runner)
     require(interface == resolved["interface"] and route_args == resolved["routeArguments"], "upstream development interface changed after preflight")
     before = existing_inventory(pathlib.Path("/"), runner)
+    require_no_runtime_residue(before, "source-development installation")
     require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
     require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
     require(
@@ -1277,6 +1327,7 @@ def validate_development_removal(record: Mapping[str, Any], root: pathlib.Path, 
     require(sha256_file(rollback) == record["rollbackRecordSha256"], "development rollback record identity differs")
     require(sha256_file(entrypoint) == record["rollbackEntrypointSha256"], "development rollback entrypoint identity differs")
     inventory = existing_inventory(root, runner)
+    require_no_runtime_residue(inventory, "source-development removal")
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks development rollback")
     require(not inventory["activeModule"], "an active RP1 GPCLK module blocks owned provider removal")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks owned provider removal")
@@ -1300,6 +1351,7 @@ def validate_development_removal(record: Mapping[str, Any], root: pathlib.Path, 
 
 def verify_provider_absent(root: pathlib.Path, runner: Runner) -> None:
     inventory = existing_inventory(root, runner)
+    require_no_runtime_residue(inventory, "provider absence verification")
     require(
         inventory["packageVersion"] is None
         and not inventory["dkms"]

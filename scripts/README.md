@@ -25,6 +25,10 @@ Python helper. Passing `debug` displays the safely quoted helper command. The
 wrapper suppresses child stdout and stderr in every execution mode and owns all
 status and failure diagnostics.
 
+Real installation success requires the resulting WsprryPi service to be active.
+When web mode is enabled, the installed loopback `/wsprrypi/version` proxy must
+also respond. A condition-skipped systemd start is not application readiness.
+
 Run its offline hardware-free contract coverage with:
 
 ```sh

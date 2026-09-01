@@ -6901,6 +6901,64 @@ manage_service() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Prove the installed application is actually available before success.
+# @details A successful systemctl start job can still mean that systemd skipped
+#          the service because a unit condition was false. Poll the resulting
+#          active state and, when web mode is enabled, the installed Apache
+#          proxy endpoint. This is application readiness only; it does not
+#          exercise GPIO, clocks, transmission, or RF.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+validate_wsprrypi_runtime() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Validate WsprryPi service and local API readiness (dry-run)."
+        debug_end "$debug"
+        return 0
+    fi
+
+    local attempts_remaining=50 service_ready=false api_ready=false
+    while ((attempts_remaining-- > 0)); do
+        if systemctl is-active --quiet "${WSPR_SERVICE}.service" 2>/dev/null; then
+            service_ready=true
+            if [[ "${NO_WEB:-false}" == "true" ]]; then
+                api_ready=true
+                break
+            fi
+            if curl --fail --silent --show-error --max-time 2 \
+                "http://127.0.0.1/${REPO_NAME,,}/version" \
+                >/dev/null 2>&1; then
+                api_ready=true
+                break
+            fi
+        else
+            service_ready=false
+        fi
+        sleep 0.1
+    done
+
+    if [[ "$service_ready" != "true" ]]; then
+        warn "WsprryPi service did not become active; inspect systemd conditions and the service journal."
+        debug_end "$debug"
+        return 1
+    fi
+    if [[ "$api_ready" != "true" ]]; then
+        warn "WsprryPi service is active, but the installed local /${REPO_NAME,,}/version endpoint did not become ready."
+        debug_end "$debug"
+        return 1
+    fi
+
+    logI "WsprryPi runtime readiness verified."
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Manages the installation or removal of web files.
 # @details This function installs or removes web-related files from the
 #          `$LOCAL_WWW_DIR` source directory to `/var/www/html/$REPO_NAME`.
@@ -8376,6 +8434,7 @@ manage_wsprry_pi() {
         "manage_service \"/usr/bin/$WSPR_EXE\" \"$service_command\" \"false\""
         "manage_web"
         "manage_apache"
+        "validate_wsprrypi_runtime"
         "manage_sound"
         "cleanup_files_in_directories"
         "restore_daemon_state"

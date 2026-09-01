@@ -479,6 +479,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
             "activeModule": False, "configuredRoute": False, "sourceTrees": [],
             "moduleCandidates": [], "installedOverlays": [], "enrollment": False,
             "developmentManager": False,
+            "runtimeResidue": [],
         }
         record = pathlib.Path(self.temp.name) / "record.json"
         with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
@@ -486,6 +487,52 @@ class DevelopmentInterfaceTests(unittest.TestCase):
             with self.assertRaisesRegex(MOD.ContractError, "foreign.*mixed"):
                 MOD.apply_development(resolved, record, MOD.Runner())
         self.assertFalse(record.exists())
+
+    def test_runtime_controller_residue_blocks_development_before_mutation(self):
+        source = self.lifecycle_source("usage: development-install --route-neutral")
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "version": "0.9.0",
+        }
+        existing = {
+            "packageVersion": None, "dkms": "", "activeModule": False,
+            "configuredRoute": False, "sourceTrees": [], "moduleCandidates": [],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False,
+            "runtimeResidue": [
+                "/etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf"
+            ],
+        }
+        record = pathlib.Path(self.temp.name) / "record.json"
+        runner = MOD.Runner()
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=existing):
+            with self.assertRaisesRegex(MOD.ContractError, "runtime-controller residue.*owning runtime cleanup"):
+                MOD.apply_development(resolved, record, runner)
+        self.assertFalse(record.exists())
+
+    def test_inventory_reports_runtime_files_directories_symlinks_and_controller_modules(self):
+        root = pathlib.Path(self.temp.name) / "inventory-root"
+        (root / "proc").mkdir(parents=True)
+        (root / "proc/modules").write_text("")
+        inhibitor = root / "etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf"
+        inhibitor.parent.mkdir(parents=True)
+        inhibitor.write_text("owned")
+        runtime_library = root / "usr/lib/rp1-gpclk-dkms/runtime_route_client.py"
+        runtime_library.parent.mkdir(parents=True)
+        runtime_library.symlink_to("missing-client")
+        controller = root / "lib/modules/fixture/updates/dkms/rp1_route_controller.ko"
+        controller.parent.mkdir(parents=True)
+        controller.write_bytes(b"module")
+        runner = FakeRunner({
+            ("dpkg-query", "-W", "-f=${Status}\n${Version}\n", MOD.PACKAGE_NAME):
+                MOD.CommandResult("", "not installed", 1),
+        })
+        inventory = MOD.existing_inventory(root, runner)
+        self.assertEqual(
+            inventory["runtimeResidue"],
+            sorted((str(inhibitor), str(runtime_library), str(controller))),
+        )
 
 
 class ApplyPolicyTests(unittest.TestCase):
@@ -601,6 +648,30 @@ class ApplyPolicyTests(unittest.TestCase):
         ])
         with self.assertRaisesRegex(MOD.ContractError, "dry-run"):
             MOD.apply(apply_args, FakeRunner())
+
+    def test_prepare_rejects_runtime_residue_before_source_resolution(self):
+        model = self.root / "model"
+        compatible = self.root / "compatible"
+        model.write_bytes(b"Raspberry Pi 5 Model B Rev 1.0\0")
+        compatible.write_bytes(b"raspberrypi,5-model-b\0brcm,bcm2712\0")
+        args = MOD.parser().parse_args([
+            "prepare", "--state-dir", str(self.state), "--install", "auto",
+            "--source", "devel", "--wsprry-source", "devel",
+            "--model-file", str(model), "--compatible-file", str(compatible),
+        ])
+        inventory = {
+            "runtimeResidue": [
+                "/etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf"
+            ]
+        }
+        with mock.patch.object(MOD, "runtime_residue_inventory", return_value=inventory["runtimeResidue"]), \
+             mock.patch.object(MOD, "existing_inventory") as full_inventory, \
+             mock.patch.object(MOD, "prepare_development") as resolve:
+            with self.assertRaisesRegex(MOD.ContractError, "residue blocks installation planning"):
+                MOD.prepare(args, FakeRunner())
+        full_inventory.assert_not_called()
+        resolve.assert_not_called()
+        self.assertFalse((self.state / "plan.json").exists())
 
     def test_selected_shell_dry_run_never_invokes_python_or_resolution_tools(self):
         install_script = ROOT / "scripts" / "install.sh"
