@@ -115,7 +115,11 @@ application drop-ins, the complete runtime-admin directory (including
 activation archives and `last-deployment.json`), the binding, private UAPIs and
 overlays, readiness schema, scripts, units, and controller module artifacts.
 Foreign or unowned residue is preserved and blocks installation. Exact state
-already recorded by WsprryPi is revalidated rather than silently adopted.
+already recorded by WsprryPi is revalidated rather than silently adopted. If
+neutral runtime deployment is interrupted after the exact provider has a valid
+WsprryPi v2 ownership record, a repeated installation may enter the same bound
+deployment and recovery workflow; it does not treat that partial state as a
+foreign installation or publish v3 readiness before final neutral proof.
 
 ## Plan, record, and safety boundary
 

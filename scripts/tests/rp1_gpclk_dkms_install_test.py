@@ -819,6 +819,31 @@ class ApplyPolicyTests(unittest.TestCase):
         resolve.assert_not_called()
         self.assertFalse((self.state / "plan.json").exists())
 
+    def test_prepare_allows_runtime_retry_for_owned_provider(self):
+        model = self.root / "model"
+        compatible = self.root / "compatible"
+        model.write_bytes(b"Raspberry Pi 5 Model B Rev 1.0\0")
+        compatible.write_bytes(b"raspberrypi,5-model-b\0brcm,bcm2712\0")
+        args = MOD.parser().parse_args([
+            "prepare", "--state-dir", str(self.state), "--install", "auto",
+            "--source", "devel", "--wsprry-source", "devel",
+            "--model-file", str(model), "--compatible-file", str(compatible),
+        ])
+        owned = {"schema": MOD.RECORD_SCHEMA}
+        resolved = {"channel": "development", "commit": "a" * 40,
+                    "version": "1.2.3", "sourceTree": "b" * 40,
+                    "uapiSha256": "c" * 64}
+        with mock.patch.object(
+                MOD, "runtime_residue_inventory",
+                return_value=["/var/lib/rp1-gpclk-dkms/runtime-admin"]), \
+             mock.patch.object(MOD, "load_ownership_record",
+                               return_value=(owned, mock.sentinel.identity, None)), \
+             mock.patch.object(MOD, "prepare_development",
+                               return_value=resolved) as resolve:
+            plan = MOD.prepare(args, FakeRunner())
+        resolve.assert_called_once()
+        self.assertEqual(plan["resolved"], resolved)
+
     def test_runtime_residue_inventory_covers_complete_activation_surface(self):
         source = SCRIPT.read_text()
         for path in (

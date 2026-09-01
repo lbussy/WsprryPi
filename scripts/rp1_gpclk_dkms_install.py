@@ -1055,7 +1055,8 @@ def prepare(args: argparse.Namespace, runner: Runner) -> dict[str, Any]:
         if residue:
             owned, _, reason = load_ownership_record(args.record)
             require(
-                owned is not None and owned.get("schema") == RUNTIME_RECORD_SCHEMA,
+                owned is not None
+                and owned.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA},
                 "RP1 runtime-controller residue blocks installation planning; use the owning runtime cleanup workflow: "
                 + ", ".join(residue) + (f" ({reason})" if reason else ""),
             )
