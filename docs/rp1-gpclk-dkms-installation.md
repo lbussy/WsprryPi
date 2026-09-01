@@ -127,17 +127,20 @@ WsprryPi v2 ownership record, a repeated installation may enter the same bound
 deployment and recovery workflow; it does not treat that partial state as a
 foreign installation or publish v3 readiness before final neutral proof.
 If a later exact development source is selected, the installer first reviews
-the installed binding and every bound artifact against WsprryPi ownership. A
-retained neutral-activation journal, including `activation-failed`, is handled
-through the binding's digest-reviewed `activation-recover-plan` and
-`activation-recover` transaction. Only after the controller, endpoints, and
-manager socket are absent does the installer review and execute the old
-binding's fixed deployment-removal digest, verify that all runtime residue is
-gone, run the recorded owned-provider rollback, and install the new exact
-source. The journal is never deleted to bypass recovery. The same migration
-applies to v2 partial-runtime and v3 neutral-ready ownership. It never migrates
-an unowned provider, an active route/consumer, a pending unrelated transaction,
-or drifted binding or artifact bytes.
+the ownership record and retained rollback paths, permissions, and hashes, but
+does not require ordinary DKMS inventory while the bound runtime deployment is
+still present. It then reviews the installed binding and every bound artifact
+against WsprryPi ownership. A retained neutral-activation journal, including
+`activation-failed`, is handled through the binding's digest-reviewed
+`activation-recover-plan` and `activation-recover` transaction. Only after the
+controller, endpoints, and manager socket are absent does the installer review
+and execute the old binding's fixed deployment-removal digest. With runtime
+residue gone, it performs the complete ordinary provider/DKMS inventory check,
+revalidates the rollback authority, runs the recorded provider rollback, and
+installs the new exact source. The journal is never deleted to bypass recovery.
+The same migration applies to v2 partial-runtime and v3 neutral-ready ownership.
+It never migrates an unowned provider, an active route/consumer, a pending
+unrelated transaction, or drifted binding or artifact bytes.
 
 ## Plan, record, and safety boundary
 

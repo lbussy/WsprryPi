@@ -606,14 +606,12 @@ class DevelopmentInterfaceTests(unittest.TestCase):
              mock.patch.object(MOD, "load_ownership_record", side_effect=[
                  (owned, identity, None), (owned, identity, None),
              ]), \
-             mock.patch.object(MOD, "validate_development_removal") as validate, \
+             mock.patch.object(MOD, "validate_development_rollback_authority") as validate, \
              mock.patch.object(MOD.sys, "stdout", stdout):
             MOD.apply_development(resolved, record, runner)
         self.assertEqual(validate.call_args_list, [
-            mock.call(owned, pathlib.Path("/"), runner,
-                      allow_runtime_residue=True),
-            mock.call(owned, pathlib.Path("/"), runner,
-                      allow_runtime_residue=True),
+            mock.call(owned, pathlib.Path("/")),
+            mock.call(owned, pathlib.Path("/")),
         ])
         self.assertEqual(runner.passthrough_calls, [])
         self.assertIn("no provider mutation", stdout.getvalue())
@@ -654,6 +652,127 @@ class DevelopmentInterfaceTests(unittest.TestCase):
             with self.assertRaisesRegex(MOD.ContractError, "identity differs"):
                 MOD.apply_development(resolved, pathlib.Path(self.temp.name) / "record.json", runner)
         validate.assert_not_called()
+
+    def test_runtime_migration_defers_provider_inventory_until_after_runtime_removal(self):
+        source = self.lifecycle_source("usage: development-install --route-neutral")
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        before = {
+            "packageVersion": None,
+            "dkms": f"{MOD.DKMS_NAME}/0.9.0, kernel, arm64: installed (Differences between built and installed modules)",
+            "activeModule": False, "configuredRoute": False,
+            "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
+            "moduleCandidates": ["/lib/modules/kernel/updates/dkms/rp1_gpclk_dkms.ko",
+                                 "/lib/modules/kernel/updates/dkms/rp1_gpclk_dkms.ko.xz"],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False,
+            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
+        }
+        absent = {key: value for key, value in before.items()}
+        absent.update({"dkms": "", "sourceTrees": [], "moduleCandidates": [],
+                       "runtimeResidue": []})
+        owned = {
+            "schema": MOD.RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": "e" * 40, "productVersion": "0.9.0",
+            "sourceTree": "f" * 40, "uapiSha256": "1" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "2" * 64,
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        record = pathlib.Path(self.temp.name) / "record.json"
+        rollback = pathlib.Path("/var/lib/wsprrypi/evidence/ROLLBACK.json")
+        entrypoint = pathlib.Path("/var/lib/wsprrypi/evidence/rendered-source/scripts/development-rollback")
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+        })
+        events = []
+        def authority(*unused):
+            events.append("authority")
+            return entrypoint, rollback
+        def recover(*unused):
+            events.append("runtime-remove")
+        def provider(*unused):
+            events.append("provider-validate")
+            return entrypoint, rollback
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", side_effect=[before, absent]), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (owned, identity, None), (None, None, "absent")]), \
+             mock.patch.object(MOD, "validate_development_rollback_authority", side_effect=authority), \
+             mock.patch.object(MOD, "recover_and_remove_owned_runtime", side_effect=recover), \
+             mock.patch.object(MOD, "validate_development_removal", side_effect=provider), \
+             mock.patch.object(MOD, "verify_provider_absent"), \
+             mock.patch.object(MOD, "remove_ownership_record", side_effect=lambda *unused: events.append("record-remove")), \
+             mock.patch.object(MOD, "ensure_new_ownership_record",
+                               side_effect=MOD.ContractError("stop after migration")):
+            with self.assertRaisesRegex(MOD.ContractError, "stop after migration"):
+                MOD.apply_development(resolved, record, runner)
+        self.assertEqual(events, ["authority", "runtime-remove", "provider-validate", "record-remove"])
+        self.assertEqual(runner.passthrough_calls, [
+            (str(entrypoint), "--record", str(rollback)),
+        ])
+
+    def test_runtime_migration_resumes_after_runtime_removal_checkpoint(self):
+        source = pathlib.Path(self.temp.name) / "source"
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        provider = {
+            "packageVersion": None, "dkms": "owned", "activeModule": False,
+            "configuredRoute": False, "sourceTrees": ["owned"],
+            "moduleCandidates": ["owned"], "installedOverlays": [],
+            "enrollment": False, "developmentManager": False,
+            "runtimeResidue": [],
+        }
+        absent = dict(provider, dkms="", sourceTrees=[], moduleCandidates=[])
+        owned = {
+            "schema": MOD.RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": "e" * 40, "productVersion": "0.9.0",
+            "sourceTree": "f" * 40, "uapiSha256": "1" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "2" * 64,
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        record = pathlib.Path(self.temp.name) / "record.json"
+        rollback = pathlib.Path("/var/lib/wsprrypi/evidence/ROLLBACK.json")
+        entrypoint = pathlib.Path("/var/lib/wsprrypi/evidence/rendered-source/scripts/development-rollback")
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "route_neutral_interface",
+                               return_value=("route-neutral-flag", ["--route-neutral"])), \
+             mock.patch.object(MOD, "existing_inventory", side_effect=[provider, absent]), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (owned, identity, None), (None, None, "absent")]), \
+             mock.patch.object(MOD, "validate_development_removal",
+                               return_value=(entrypoint, rollback)) as validate, \
+             mock.patch.object(MOD, "recover_and_remove_owned_runtime") as recover, \
+             mock.patch.object(MOD, "verify_provider_absent"), \
+             mock.patch.object(MOD, "remove_ownership_record"), \
+             mock.patch.object(MOD, "ensure_new_ownership_record",
+                               side_effect=MOD.ContractError("stop after migration")):
+            with self.assertRaisesRegex(MOD.ContractError, "stop after migration"):
+                MOD.apply_development(resolved, record, runner)
+        validate.assert_called_once_with(owned, pathlib.Path("/"), runner)
+        recover.assert_not_called()
+        self.assertEqual(runner.passthrough_calls, [
+            (str(entrypoint), "--record", str(rollback)),
+        ])
 
     def test_runtime_controller_residue_blocks_development_before_mutation(self):
         source = self.lifecycle_source("usage: development-install --route-neutral")

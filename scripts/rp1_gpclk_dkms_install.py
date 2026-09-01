@@ -1570,15 +1570,25 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             for name, value in expected_identity.items()
         )
         if (not identity_matches
-                and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}
-                and before["runtimeResidue"]):
-            entrypoint, rollback = validate_development_removal(
-                existing_record, pathlib.Path("/"), runner,
-                allow_runtime_residue=True,
-            )
-            recover_and_remove_owned_runtime(
-                source, record, existing_record, record_identity, runner
-            )
+                and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}):
+            if before["runtimeResidue"]:
+                entrypoint, rollback = validate_development_rollback_authority(
+                    existing_record, pathlib.Path("/")
+                )
+                recover_and_remove_owned_runtime(
+                    source, record, existing_record, record_identity, runner
+                )
+                verified_entrypoint, verified_rollback = validate_development_removal(
+                    existing_record, pathlib.Path("/"), runner
+                )
+                require(
+                    (verified_entrypoint, verified_rollback) == (entrypoint, rollback),
+                    "development rollback authority changed after runtime removal",
+                )
+            else:
+                entrypoint, rollback = validate_development_removal(
+                    existing_record, pathlib.Path("/"), runner
+                )
             current_record, current_identity, current_reason = load_ownership_record(record)
             require(
                 current_record == existing_record
@@ -1597,9 +1607,8 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         if owned_runtime:
             validate_runtime_development_provider(existing_record, before, runner)
         elif before["runtimeResidue"]:
-            validate_development_removal(
-                existing_record, pathlib.Path("/"), runner,
-                allow_runtime_residue=True,
+            validate_development_rollback_authority(
+                existing_record, pathlib.Path("/")
             )
         else:
             validate_development_removal(existing_record, pathlib.Path("/"), runner)
@@ -1616,9 +1625,8 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         if owned_runtime:
             validate_runtime_development_provider(current_record, existing_inventory(pathlib.Path("/"), runner), runner)
         elif before["runtimeResidue"]:
-            validate_development_removal(
-                current_record, pathlib.Path("/"), runner,
-                allow_runtime_residue=True,
+            validate_development_rollback_authority(
+                current_record, pathlib.Path("/")
             )
         else:
             validate_development_removal(current_record, pathlib.Path("/"), runner)
@@ -1735,9 +1743,8 @@ def secure_owned_path(path: pathlib.Path, parent: pathlib.Path, description: str
     return resolved
 
 
-def validate_development_removal(
-    record: Mapping[str, Any], root: pathlib.Path, runner: Runner,
-    *, allow_runtime_residue: bool = False,
+def validate_development_rollback_authority(
+    record: Mapping[str, Any], root: pathlib.Path
 ) -> tuple[pathlib.Path, pathlib.Path]:
     require(record["installationMethod"] == "upstream-development-rollback", "development ownership installation method differs")
     require(isinstance(record["sourceCommit"], str) and SHA40.fullmatch(record["sourceCommit"]) is not None, "development ownership commit is invalid")
@@ -1766,9 +1773,15 @@ def validate_development_removal(
     require(entrypoint == evidence / "rendered-source/scripts/development-rollback", "development rollback entrypoint path differs")
     require(sha256_file(rollback) == record["rollbackRecordSha256"], "development rollback record identity differs")
     require(sha256_file(entrypoint) == record["rollbackEntrypointSha256"], "development rollback entrypoint identity differs")
+    return entrypoint, rollback
+
+
+def validate_development_removal(
+    record: Mapping[str, Any], root: pathlib.Path, runner: Runner
+) -> tuple[pathlib.Path, pathlib.Path]:
+    entrypoint, rollback = validate_development_rollback_authority(record, root)
     inventory = existing_inventory(root, runner)
-    if not allow_runtime_residue:
-        require_no_runtime_residue(inventory, "source-development removal")
+    require_no_runtime_residue(inventory, "source-development removal")
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks development rollback")
     require(not inventory["activeModule"], "an active RP1 GPCLK module blocks owned provider removal")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks owned provider removal")
