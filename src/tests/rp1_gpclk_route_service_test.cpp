@@ -126,6 +126,9 @@ int main() {
   bool persistence_ok = true;
   int persisted_write = 0;
   bool inhibited = false;
+  bool corrupt_runtime_ensure_digest = false;
+  std::vector<std::string> runtime_plans;
+  std::vector<std::pair<std::string, std::string>> runtime_ensures;
 
   wsprrypi::Rp1GpclkRouteService service(
       {[&](const nlohmann::json &request) {
@@ -139,7 +142,33 @@ int main() {
            persisted = gpio;
          return persistence_ok;
        },
-       [&](bool value, const std::string &) { inhibited = value; }});
+       [&](bool value, const std::string &) { inhibited = value; },
+       [&](const std::string &route) {
+         runtime_plans.push_back(route);
+         return nlohmann::json{
+             {"contract", "rp1-gpclk-runtime-readiness-v1"},
+             {"result", "neutral_ready"}, {"state", "neutral_ready"},
+             {"administrationEligible", true},
+             {"transmissionEligible", false},
+             {"routeSelected", false},
+             {"safety", {{"liveOutput", false}, {"authorization", false},
+                         {"owner", false}, {"lease", false}}},
+             {"routePlan", {{"operation", "select"}, {"route", route},
+                            {"alreadyReady", false},
+                            {"bindingSha256", std::string(64, 'a')},
+                            {"planSha256", std::string(64, 'b')}}}};
+       },
+       [&](const std::string &route, const std::string &digest,
+           const std::string &binding) {
+         runtime_ensures.emplace_back(route, digest);
+         assert(binding == std::string(64, 'a'));
+         return nlohmann::json{{"contract", "rp1-gpclk-runtime-readiness-v1"},
+                               {"operation", "route-ensure"},
+                               {"planSha256", corrupt_runtime_ensure_digest
+                                                  ? std::string(64, 'c')
+                                                  : digest},
+                               {"response", {{"status", "stopped"}}}};
+       }});
 
   const auto query = service.query();
   assert(query.at("ok") == true);
@@ -392,17 +421,26 @@ int main() {
   auto runtime_preflight = service.operate("preflight", "GPIO20", 0);
   assert(runtime_preflight.at("ok") == true);
   const auto runtime_generation = runtime_preflight.at("generation").get<std::uint64_t>();
-  assert(requests.back().at("schemaVersion") == 3);
+  assert(runtime_plans == std::vector<std::string>{"gpio20"});
+  assert(runtime_preflight.at("planSha256") == std::string(64, 'b'));
   assert(service.operate("switch", "GPIO20", runtime_generation + 1).at("ok") == false);
   assert(service.operate("apply-and-reboot", "GPIO20", runtime_generation).at("ok") == false);
   const int saved_before_runtime_switch = persisted;
   next["status"] = "complete-inhibited";
   assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == true);
-  assert(requests.back().at("operation") == "switch");
   assert(persisted == saved_before_runtime_switch);
-  assert(requests.back().at("preflightToken") == std::string(64, 'a'));
+  assert(runtime_ensures.size() == 1);
+  assert(runtime_ensures.front().first == "gpio20");
+  assert(runtime_ensures.front().second == std::string(64, 'b'));
   assert(inhibited);
   assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == false);
+  corrupt_runtime_ensure_digest = true;
+  const auto corrupt_preflight = service.operate("preflight", "GPIO20", 0);
+  assert(corrupt_preflight.at("ok") == true);
+  assert(service.operate("switch", "GPIO20",
+                         corrupt_preflight.at("generation").get<std::uint64_t>())
+             .at("ok") == false);
+  corrupt_runtime_ensure_digest = false;
   next["status"] = "error";
   next["error"] = {{"message", "overlay removal failed"}, {"kernelError", -16}, {"overlayId", 9}};
   const auto runtime_failure = service.operate("recover", "GPIO20", 0);

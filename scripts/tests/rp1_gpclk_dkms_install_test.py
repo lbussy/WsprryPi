@@ -179,6 +179,44 @@ class PlatformAndSelectionTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_release_resolution_binds_exact_runtime_source_checkout(self):
+        package = b"fixture package"
+        manifest = valid_manifest()
+        manifest["package"]["sha256"] = digest(package)
+        manifest_bytes = MOD.canonical(manifest) + b"\n"
+        package_name = manifest["package"]["filename"]
+        checksums = (
+            f"{digest(manifest_bytes)}  {MOD.MANIFEST_NAME}\n"
+            f"{digest(package)}  {package_name}\n"
+        ).encode()
+        selected = release("v2.1.0")
+        assets = {item["name"]: item["browser_download_url"] for item in selected["assets"]}
+
+        class Client:
+            def releases(self): return [selected]
+            def tag_commit(self, _tag): return "a" * 40
+            def bytes(self, url, **_kwargs):
+                return {
+                    assets[MOD.MANIFEST_NAME]: manifest_bytes,
+                    assets[MOD.CHECKSUMS_NAME]: checksums,
+                    assets[package_name]: package,
+                }[url]
+
+        with tempfile.TemporaryDirectory() as raw:
+            state = pathlib.Path(raw).resolve()
+            checkout = {"path": str(state / "source"), "commit": "a" * 40}
+            with mock.patch.object(MOD, "validate_package"), \
+                 mock.patch.object(MOD, "clone_exact", return_value=checkout) as clone, \
+                 mock.patch.object(MOD, "runtime_source_interface") as interface, \
+                 mock.patch.object(MOD, "development_identity", return_value={"version": "2.1.0"}), \
+                 mock.patch.object(MOD, "runtime_source_identity") as identity:
+                resolved = MOD.download_release(state, Client(), FakeRunner())
+            clone.assert_called_once_with(state, "commit", "a" * 40, mock.ANY)
+            interface.assert_called_once_with(state / "source")
+            identity.assert_called_once_with(state / "source", "2.1.0")
+            self.assertEqual(resolved["checkout"], checkout)
+            self.assertEqual(resolved["runtimeVersion"], "2.1.0")
+
     def test_semantic_ordering_and_exclusions(self):
         selected = MOD.select_release([
             release("v1.9.9"), release("v1.10.0"), release("v9.0.0", draft=True),
@@ -432,6 +470,22 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         (source / "include/rp1_gpclk/version.h").write_text('#define RP1_GPCLK_MODULE_VERSION "changed"\n')
         with self.assertRaisesRegex(MOD.ContractError, "differs from the selected source"):
             MOD.development_identity(source, MOD.Runner())
+
+    def test_runtime_source_identity_binds_kernel_product_and_both_routes(self):
+        source = pathlib.Path(self.temp.name) / "runtime-source"
+        scripts = source / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "runtime_layout.py").write_text("KERNEL = 'fixture-kernel'\n")
+        (scripts / "runtime_binding.py").write_text(
+            "CONTRACT = 'rp1-gpclk-runtime-binding-v2'\n"
+            "PRODUCT_VERSION = '0.9.0'\n"
+            "COMPATIBILITY = {'gpio4': 'v0.9.0-pi5-gpio4', 'gpio20': 'v0.9.0-pi5-gpio20'}\n"
+        )
+        with mock.patch.object(MOD.platform, "release", return_value="fixture-kernel"):
+            MOD.runtime_source_identity(source, "0.9.0")
+            (scripts / "runtime_layout.py").write_text("KERNEL = 'other-kernel'\n")
+            with self.assertRaisesRegex(MOD.ContractError, "different running kernel"):
+                MOD.runtime_source_identity(source, "0.9.0")
 
     def test_development_result_is_bound_before_recording(self):
         manifest_path = pathlib.Path(self.temp.name) / "DEVELOPMENT_MANIFEST.json"
@@ -765,6 +819,99 @@ class ApplyPolicyTests(unittest.TestCase):
         resolve.assert_not_called()
         self.assertFalse((self.state / "plan.json").exists())
 
+    def test_runtime_residue_inventory_covers_complete_activation_surface(self):
+        source = SCRIPT.read_text()
+        for path in (
+            "/usr/lib/rp1-gpclk-dkms/runtime_activation.py",
+            "/dev/rp1-route-admin", "/dev/rp1-gpclk",
+            "/sys/module/rp1_route_controller", "/sys/module/rp1_gpclk_dkms",
+            "/run/rp1-gpclk-dkms/route-manager.sock",
+            "/etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf",
+            "/etc/systemd/system/wsprrypi.service.d/91-rp1-route-idle.conf",
+            "/var/lib/rp1-gpclk-dkms/runtime-admin",
+        ):
+            self.assertIn(path, source)
+
+    def test_neutral_runtime_activation_records_reviewed_identity(self):
+        resolved = {"channel": "development", "commit": "a" * 40, "version": "0.9.0"}
+        MOD.atomic_json(self.state / "plan.json", {
+            "schema": MOD.STATE_SCHEMA, "dryRun": False,
+            "decision": {"install": True}, "resolved": resolved,
+        })
+        owned = {
+            "schema": MOD.RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": "a" * 40, "productVersion": "0.9.0",
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        binding = {
+            "artifactSetSha256": "b" * 64,
+            "compatibilityIdentities": {
+                "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20",
+            },
+            "files": {"/bound/runtime": "c" * 64},
+        }
+        readiness = lambda state: {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT, "result": state, "state": state,
+        }
+        deployment = readiness("deployment_required")
+        deployment["deployment"] = {"plan": {
+            "planSha256": "d" * 64,
+            "destinations": {path: {"before": None, "after": "c" * 64} for path in (
+                "/bound/runtime", "/etc/rp1-gpclk-dkms/runtime-controller.json",
+                "/var/lib/rp1-gpclk-dkms/runtime-admin/transaction.json",
+                "/var/lib/rp1-gpclk-dkms/runtime-admin/manager.json",
+                "/var/lib/rp1-gpclk-dkms/runtime-admin/application.json",
+                "/var/lib/rp1-gpclk-dkms/runtime-admin/activation.json",
+            )},
+        }}
+        activation = readiness("activation_required")
+        activation["activationPlan"] = {
+            "planSha256": "e" * 64, "bindingSha256": "f" * 64,
+            "artifactSetSha256": "b" * 64,
+        }
+        final = readiness("neutral_ready")
+        final.update({
+            "administrationEligible": True, "transmissionEligible": False,
+            "routeSelected": False,
+            "routes": {name: None for name in ("requested", "configured", "persisted", "active")},
+            "safety": {"liveOutput": False, "owner": False, "lease": False,
+                       "authorization": False},
+            "identities": {"installedBinding": {"sha256": "f" * 64,
+                "value": {"artifactSetSha256": "b" * 64}}},
+            "activation": {"value": {"controllerState": {"session": 42, "generation": 0}}},
+        })
+        replies = [
+            readiness("absent"), deployment, {"operation": "ensure"},
+            readiness("activation_required"), activation,
+            {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+             "operation": "activation-ensure", "planSha256": "e" * 64,
+             "response": {"journal": {"requestId": "00000000-0000-0000-0000-000000000001"}}},
+            final,
+        ]
+        args = MOD.parser().parse_args([
+            "activate-runtime", "--state-dir", str(self.state), "--record", str(self.record),
+        ])
+        captured = {}
+        def replace(path, expected, expected_identity, replacement):
+            captured.update(replacement)
+        with mock.patch.object(MOD, "load_ownership_record", return_value=(owned, identity, None)), \
+             mock.patch.object(MOD, "build_runtime_bundle", return_value=(self.state / "bundle", {
+                 "binding": binding, "bindingSha256": "f" * 64,
+                 "artifactSetSha256": "b" * 64,
+             })), \
+             mock.patch.object(MOD, "runtime_call", side_effect=replies) as calls, \
+             mock.patch.object(MOD, "replace_owned_record", side_effect=replace):
+            MOD.activate_runtime(args, FakeRunner())
+        self.assertEqual(calls.call_count, 7)
+        self.assertEqual(captured["schema"], MOD.RUNTIME_RECORD_SCHEMA)
+        runtime = captured["runtime"]
+        self.assertEqual(runtime["deploymentPlanSha256"], "d" * 64)
+        self.assertEqual(runtime["activationPlanSha256"], "e" * 64)
+        self.assertEqual(runtime["controllerSession"], 42)
+        self.assertEqual(runtime["controllerGeneration"], 0)
+        self.assertIsNone(runtime["route"])
+        self.assertEqual(runtime["output"], "disabled")
+
     def test_selected_shell_dry_run_never_invokes_python_or_resolution_tools(self):
         install_script = ROOT / "scripts" / "install.sh"
         shell = r'''
@@ -957,14 +1104,25 @@ remove_owned_rp1_gpclk_dkms_provider debug
         apply = source.index('apply_rp1_gpclk_dkms_installation "$debug" || return 1')
         self.assertLess(prepare, packages)
         self.assertLess(packages, apply)
+        group = source[source.index("local install_group=("):]
+        companion = group.index('"manage_route_application"')
+        service = group.index('"manage_service')
+        activation = group.index('"activate_rp1_gpclk_runtime_administration"')
+        website = group.index('"manage_web"')
+        readiness = group.index('"validate_wsprrypi_runtime"')
+        self.assertLess(companion, activation)
+        self.assertLess(service, activation)
+        self.assertLess(activation, website)
+        self.assertLess(website, readiness)
 
     def test_helper_invocations_use_exec_command_and_propagate_debug(self):
         source = (ROOT / "scripts/install.sh").read_text()
         self.assertNotRegex(source, r'if ! python3 "\$RP1_GPCLK_DKMS_HELPER"')
         self.assertEqual(source.count('exec_command "Resolve RP1-GPCLK-DKMS installation plan"'), 1)
         self.assertEqual(source.count('exec_command "Apply RP1-GPCLK-DKMS installation plan"'), 1)
+        self.assertEqual(source.count('exec_command "Activate neutral RP1-GPCLK-DKMS administration"'), 1)
         self.assertIn('EXEC_COMMAND_STATUS_MODE=info', source)
-        self.assertGreaterEqual(source.count('args+=(--debug)'), 2)
+        self.assertGreaterEqual(source.count('args+=(--debug)'), 3)
 
     def test_explicit_true_reaches_planner_without_raspberry_pi_identity(self):
         source = (ROOT / "scripts/install.sh").read_text()

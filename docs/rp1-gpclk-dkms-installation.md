@@ -3,8 +3,9 @@
 WsprryPi can orchestrate installation of the independently maintained
 [`WsprryPi/RP1-GPCLK-DKMS`](https://github.com/WsprryPi/RP1-GPCLK-DKMS)
 provider. WsprryPi does not vendor its module source, reproduce its DKMS
-lifecycle, select a GPIO route, edit boot configuration, load the module, or
-enable output.
+lifecycle, select a GPIO route during installation, edit boot configuration, or
+enable output. A source or release that implements the reviewed runtime contract
+is activated only to route-neutral controller and manager administration.
 
 ## Selection
 
@@ -108,12 +109,13 @@ record after those checks before reporting success. It never adopts an exact
 foreign installation. Missing, changed, mixed, active, routed, enrolled, or
 runtime-profile state still requires its owning migration or recovery workflow.
 
-Runtime-profile residue accounting includes the provider and binding tools,
-readiness schema, controller module, private UAPIs and overlays, journals,
-manager fragments, endpoints, and WsprryPi inhibition drop-in introduced by the
-upstream runtime-provider contract. This installer detects and preserves that
-state; it does not infer ownership or silently translate route-neutral
-development ownership into runtime-profile ownership.
+Runtime-profile residue accounting includes `runtime_activation.py`, both
+device endpoints and loaded-module paths, the manager socket, both WsprryPi
+application drop-ins, the complete runtime-admin directory (including
+activation archives and `last-deployment.json`), the binding, private UAPIs and
+overlays, readiness schema, scripts, units, and controller module artifacts.
+Foreign or unowned residue is preserved and blocks installation. Exact state
+already recorded by WsprryPi is revalidated rather than silently adopted.
 
 ## Plan, record, and safety boundary
 
@@ -140,11 +142,31 @@ only at canonical module paths with the same recorded module version; every
 originally recorded artifact must remain byte-identical.
 A development record binds the exact source, kernel, installed module,
 upstream evidence, rollback record, and captured upstream rollback entrypoint.
-Failed installs and dry runs create no ownership record. A stale record blocks
-a new provider installation rather than being overwritten.
+Failed provider installs and dry runs create no ownership record. A stale record
+blocks a new provider installation rather than being overwritten.
 
-After installing the application and Apache configuration, the installer
-requires `wsprrypi.service` to become active. With web mode enabled it also
+After the application binary, configuration, service, and exact route companion
+exist, the installer builds the opt-in bundle from the same immutable source
+commit, independently validates its binding and complete artifact inventory,
+and calls the upstream runtime provider in this order: `inspect`, `plan`,
+`ensure`, `inspect`, `activation-plan`, `activation-ensure`, and final `inspect`.
+Both mutation calls receive only the digest returned by the immediately reviewed
+plan. The final result must be `neutral_ready`, with
+`administrationEligible=true`, `transmissionEligible=false`, no
+requested/configured/persisted/active route, no owner or lease, and output
+disabled.
+
+Only after that proof is the provider record upgraded to v3 with the readiness
+contract, binding and artifact-set digests, source commit,
+product/kernel/compatibility identities, reviewed deployment and activation
+plan digests, activation request ID, controller session and zero generation,
+neutral state, null route, and disabled-output state. This records WsprryPi
+orchestration; it does not transfer ownership of upstream files, journals,
+modules, units, or systemd state.
+
+After neutral administration succeeds, the installer finishes website and
+Apache publication and requires `wsprrypi.service` to become active. With web
+mode enabled it also
 requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
 A systemd start request that returns success but is skipped by a false unit
 condition is an installation failure, so no success banner or configuration
@@ -157,10 +179,18 @@ older v1 installation record did not distinguish a newly installed provider
 from an idempotently accepted pre-existing provider, so it is deliberately
 insufficient for automatic removal.
 
+Installation stops at route zero. A later explicit operator selection of GPIO4
+or GPIO20 invokes upstream `route-plan`; WsprryPi retains the reviewed digest
+and calls `route-ensure` only for the same route and current preflight
+generation. The runtime manager persists the selected pin while keeping output
+disabled. A saved or default GPIO value is not installation-time route consent.
+
 ## Ownership-aware uninstall
 
-After WsprryPi application and service teardown, uninstall checks the v2
-ownership record. Missing, legacy, malformed, symlinked, insecure, foreign,
+After WsprryPi application and service teardown, uninstall checks the v2 or v3
+ownership record. Runtime-enabled v3 state is preserved until its exact route,
+activation, and deployment recovery sequence has removed runtime residue.
+Missing, legacy, malformed, symlinked, insecure, foreign,
 mixed, active, configured, enrolled, manager-bound, or identity-drifted state
 is preserved with an operator-facing reason. A matching release is revalidated
 against its complete recorded manifest and module-artifact hashes, then removed

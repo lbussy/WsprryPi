@@ -10,7 +10,10 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <signal.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 namespace wsprrypi {
@@ -21,6 +24,137 @@ constexpr const char *kSocket = "/run/rp1-gpclk-dkms/route-manager.sock";
 constexpr const char *kRuntimeContract = "rp1-gpclk-route-manager-runtime";
 constexpr const char *kContract = "rp1-gpclk-route-manager";
 #ifndef WSPRRYPI_ROUTE_SERVICE_TEST
+std::string ownedRuntimeBinding() {
+  const char *path = "/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json";
+  const int fd = ::open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+  if (fd < 0)
+    throw std::runtime_error("WsprryPi runtime ownership is unavailable.");
+  struct stat info {};
+  if (::fstat(fd, &info) != 0 || !S_ISREG(info.st_mode) || info.st_uid != 0 ||
+      (info.st_mode & 0077) != 0 || info.st_size <= 0 ||
+      info.st_size > 4 * 1024 * 1024) {
+    ::close(fd);
+    throw std::runtime_error("WsprryPi runtime ownership is unsafe.");
+  }
+  std::string payload;
+  payload.reserve(static_cast<std::size_t>(info.st_size));
+  char buffer[4096];
+  for (;;) {
+    const auto count = ::read(fd, buffer, sizeof(buffer));
+    if (count < 0 && errno == EINTR)
+      continue;
+    if (count < 0) {
+      ::close(fd);
+      throw std::runtime_error("Could not read WsprryPi runtime ownership.");
+    }
+    if (count == 0)
+      break;
+    payload.append(buffer, static_cast<std::size_t>(count));
+    if (payload.size() > 4U * 1024U * 1024U) {
+      ::close(fd);
+      throw std::runtime_error("WsprryPi runtime ownership exceeded its bound.");
+    }
+  }
+  ::close(fd);
+  const auto record = nlohmann::json::parse(payload);
+  if (!record.is_object() ||
+      record.value("schema", std::string{}) !=
+          "wsprrypi-rp1-gpclk-dkms-ownership-v3" ||
+      record.value("repository", std::string{}) !=
+          "WsprryPi/RP1-GPCLK-DKMS" ||
+      record.value("owner", std::string{}) != "WsprryPi" ||
+      !record.contains("runtime") || !record["runtime"].is_object())
+    throw std::runtime_error("WsprryPi runtime ownership contract differs.");
+  const auto &runtime = record["runtime"];
+  const auto digest = runtime.contains("bindingSha256") &&
+                              runtime["bindingSha256"].is_string()
+                          ? runtime["bindingSha256"].get<std::string>()
+                          : std::string{};
+  if (runtime.value("readinessContract", std::string{}) !=
+          "rp1-gpclk-runtime-readiness-v1" ||
+      runtime.value("state", std::string{}) != "neutral_ready" ||
+      !runtime.contains("route") || !runtime["route"].is_null() ||
+      runtime.value("output", std::string{}) != "disabled" ||
+      digest.size() != 64 ||
+      digest.find_first_not_of("0123456789abcdef") != std::string::npos)
+    throw std::runtime_error("WsprryPi neutral runtime ownership differs.");
+  return digest;
+}
+
+nlohmann::json providerCommand(const std::string &operation,
+                               const std::string &route,
+                               const std::string &digest = {}) {
+  if ((route != "gpio4" && route != "gpio20") ||
+      (operation != "route-plan" && operation != "route-ensure"))
+    throw std::runtime_error("Invalid fixed RP1 runtime-provider request.");
+  if (operation == "route-ensure" &&
+      (digest.size() != 64 ||
+       digest.find_first_not_of("0123456789abcdef") != std::string::npos))
+    throw std::runtime_error("Invalid reviewed RP1 route-plan digest.");
+  int output[2];
+  if (::pipe(output) != 0)
+    throw std::runtime_error("Could not create the RP1 runtime-provider pipe.");
+  const pid_t child = ::fork();
+  if (child < 0) {
+    ::close(output[0]);
+    ::close(output[1]);
+    throw std::runtime_error("Could not start the RP1 runtime provider.");
+  }
+  if (child == 0) {
+    ::close(output[0]);
+    if (::dup2(output[1], STDOUT_FILENO) < 0)
+      _exit(126);
+    ::close(output[1]);
+    const char *provider = "/usr/lib/rp1-gpclk-dkms/runtime_provider.py";
+    if (operation == "route-plan")
+      ::execl("/usr/bin/python3", "python3", provider, "route-plan",
+              "--route", route.c_str(), static_cast<char *>(nullptr));
+    else
+      ::execl("/usr/bin/python3", "python3", provider, "route-ensure",
+              "--route", route.c_str(), "--plan-sha256", digest.c_str(),
+              static_cast<char *>(nullptr));
+    _exit(127);
+  }
+  ::close(output[1]);
+  const auto terminate_child = [child] {
+    (void)::kill(child, SIGKILL);
+    int discarded = 0;
+    while (::waitpid(child, &discarded, 0) < 0 && errno == EINTR) {
+    }
+  };
+  std::string response;
+  char buffer[4096];
+  for (;;) {
+    const auto count = ::read(output[0], buffer, sizeof(buffer));
+    if (count < 0 && errno == EINTR)
+      continue;
+    if (count < 0) {
+      ::close(output[0]);
+      terminate_child();
+      throw std::runtime_error("Could not read the RP1 runtime-provider response.");
+    }
+    if (count == 0)
+      break;
+    response.append(buffer, static_cast<std::size_t>(count));
+    if (response.size() > 1024U * 1024U) {
+      ::close(output[0]);
+      terminate_child();
+      throw std::runtime_error("The RP1 runtime-provider response exceeded its bound.");
+    }
+  }
+  ::close(output[0]);
+  int status = 0;
+  while (::waitpid(child, &status, 0) < 0) {
+    if (errno != EINTR)
+      throw std::runtime_error("Could not collect the RP1 runtime provider.");
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    throw std::runtime_error("The RP1 runtime provider refused the reviewed route operation.");
+  if (response.empty())
+    throw std::runtime_error("The RP1 runtime provider returned no response.");
+  return nlohmann::json::parse(response);
+}
+
 nlohmann::json socketRequest(const nlohmann::json &request) {
   const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0)
@@ -340,38 +474,114 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     if (!idle())
       return failure("not_idle", "Runtime administration requires the complete application lifecycle to be idle.");
     if (operation == "preflight") {
-      runtime_token_.clear();
+      runtime_plan_digest_.clear();
+      runtime_binding_digest_.clear();
       preflight_route_.clear();
       if (executor_route.empty())
         return failure("invalid_route", "Route must be GPIO4 or GPIO20.");
-      auto raw = request({{"schemaVersion", 3}, {"operation", "preflight"}, {"route", executor_route}});
-      auto result = render(raw, route);
-      if (result.value("ok", false) && result.value("preflightValidated", false)) {
-        runtime_token_ = field(raw["state"], "preflightToken");
+      if (!operations_.runtime_route_plan)
+        return failure("provider_unavailable", "The digest-bound runtime route planner is unavailable.");
+      nlohmann::json raw;
+      try {
+        raw = operations_.runtime_route_plan(executor_route);
+      } catch (const std::exception &error) {
+        return failure("route_plan_failed", error.what());
+      }
+      const auto plan = raw.value("routePlan", nlohmann::json::object());
+      const auto digest = field(plan, "planSha256");
+      const auto binding = field(plan, "bindingSha256");
+      const auto safety = raw.value("safety", nlohmann::json::object());
+      const auto classification = raw.value("result", std::string{});
+      const bool eligibility =
+          (classification == "neutral_ready" &&
+           !raw.value("routeSelected", true) &&
+           !raw.value("transmissionEligible", true)) ||
+          (classification == "exact_ready" &&
+           raw.value("routeSelected", false) &&
+           raw.value("transmissionEligible", false));
+      const bool valid = raw.value("contract", std::string{}) ==
+                             "rp1-gpclk-runtime-readiness-v1" &&
+                         raw.value("state", std::string{}) == classification &&
+                         eligibility &&
+                         raw.value("administrationEligible", false) &&
+                         safety.value("liveOutput", true) == false &&
+                         safety.value("authorization", true) == false &&
+                         safety.value("owner", true) == false &&
+                         safety.value("lease", true) == false &&
+                         field(plan, "operation") == "select" &&
+                         field(plan, "route") == executor_route &&
+                         plan.contains("alreadyReady") &&
+                         plan["alreadyReady"].is_boolean() &&
+                         binding.size() == 64 &&
+                         binding
+                                 .find_first_not_of("0123456789abcdef") ==
+                             std::string::npos &&
+                         digest.size() == 64 &&
+                         digest.find_first_not_of("0123456789abcdef") ==
+                             std::string::npos;
+      auto result = failure(
+          valid ? "route_plan_reviewed" : "route_plan_failed",
+          valid ? "Digest-bound route plan reviewed. Transmission remains disabled until explicit apply."
+                : "The runtime provider did not return an exact administration-only route plan.");
+      result["ok"] = valid;
+      result["preflightValidated"] = valid;
+      result["requested"] = route;
+      if (valid) {
+        runtime_plan_digest_ = digest;
+        runtime_binding_digest_ = binding;
         preflight_route_ = executor_route;
         result["generation"] = ++generation_;
-      } else {
-        result["ok"] = false;
+        result["planSha256"] = digest;
       }
       return result;
     }
     if (operation != "switch" && operation != "recover")
       return failure("invalid_operation", "Runtime profile requires explicit switch or recover; reboot operations are not translated.");
     if (operation == "switch" && (generation == 0 || generation != generation_ ||
-        runtime_token_.empty() || executor_route != preflight_route_))
+        runtime_plan_digest_.empty() || runtime_binding_digest_.empty() ||
+        executor_route != preflight_route_))
       return failure("generation_mismatch", "Repeat runtime preflight before switching.");
     operations_.set_transmission_inhibited(true, "Runtime route administration in progress");
+    if (operation == "switch") {
+      if (!operations_.runtime_route_ensure)
+        return failure("provider_unavailable", "The digest-bound runtime route executor is unavailable.");
+      const auto reviewed_digest = runtime_plan_digest_;
+      nlohmann::json raw;
+      try {
+        raw = operations_.runtime_route_ensure(executor_route,
+                                               runtime_plan_digest_,
+                                               runtime_binding_digest_);
+      } catch (const std::exception &error) {
+        runtime_plan_digest_.clear();
+        runtime_binding_digest_.clear();
+        preflight_route_.clear();
+        return failure("route_ensure_failed", error.what());
+      }
+      runtime_plan_digest_.clear();
+      runtime_binding_digest_.clear();
+      preflight_route_.clear();
+      auto result = failure("runtime_route_requested",
+                            "The reviewed route transaction was accepted; refresh after application restoration.");
+      const auto response = raw.value("response", nlohmann::json::object());
+      const auto status = field(response, "status");
+      result["ok"] = raw.value("contract", std::string{}) ==
+                         "rp1-gpclk-runtime-readiness-v1" &&
+                     raw.value("operation", std::string{}) == "route-ensure" &&
+                     raw.value("planSha256", std::string{}) ==
+                         reviewed_digest &&
+                     (status == "restored" || status == "stopped" ||
+                      status == "administrator-masked" ||
+                      status == "idempotent-ready");
+      result["requested"] = route;
+      result["state"] = result["ok"] ? "runtime_restoring" : "runtime_recovery";
+      if (!result["ok"])
+        result["message"] = "The runtime provider did not confirm the reviewed route transaction.";
+      return result;
+    }
     nlohmann::json value = {{"schemaVersion", 3}, {"operation", operation}, {"execute", true},
         {"actor", "wsprrypi.service"}, {"requestId", requestId(operation.c_str(), ++generation_)}};
-    if (operation == "switch") {
-      value["route"] = executor_route;
-      value["preflightToken"] = runtime_token_;
-      // The token binds the ID across application restarts as well as preflights.
-      value["requestId"] = "wsprrypi-" + runtime_token_.substr(0, 48);
-      // The privileged completion workflow persists the pin only after the
-      // overlay succeeds, independently of this application's lifetime.
-    }
-    runtime_token_.clear();
+    runtime_plan_digest_.clear();
+    runtime_binding_digest_.clear();
     preflight_route_.clear();
     return render(request(value), route);
   }
@@ -628,6 +838,25 @@ Rp1GpclkRouteService &productionRp1GpclkRouteService() {
        },
        [](bool inhibited, const std::string &) {
          set_rp1_route_transaction_inhibited(inhibited);
+       },
+       [](const std::string &route) {
+         auto result = providerCommand("route-plan", route);
+         const auto plan = result.value("routePlan", nlohmann::json::object());
+         const auto binding = plan.contains("bindingSha256") &&
+                                      plan["bindingSha256"].is_string()
+                                  ? plan["bindingSha256"].get<std::string>()
+                                  : std::string{};
+         if (binding != ownedRuntimeBinding())
+           throw std::runtime_error(
+               "The runtime route plan differs from WsprryPi ownership.");
+         return result;
+       },
+       [](const std::string &route, const std::string &digest,
+          const std::string &binding) {
+         if (binding != ownedRuntimeBinding())
+           throw std::runtime_error(
+               "WsprryPi runtime ownership changed after route planning.");
+         return providerCommand("route-ensure", route, digest);
        }});
   return service;
 }

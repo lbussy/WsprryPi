@@ -8,10 +8,12 @@ closed; discovery of the runtime profile asserts the transmission inhibit. Expli
 startup and the existing operation-scoped development authorization path. Neither
 query authorizes output.
 
-The existing route panel uses runtime preflight and an explicit **Switch route
-(output disabled)** confirmation. The application requires its full idle
-predicate, binds the request to the selected route and preflight generation/token,
-and persists the requested route separately from controller-reported active state.
+The installer stops in `neutral_ready` with no route. The existing route panel
+is the later explicit operator choice: preflight calls upstream `route-plan`,
+reviews and retains its SHA-256 digest, and **Switch route (output disabled)**
+calls `route-ensure` only for that same route and preflight generation. The
+application requires its full idle predicate and keeps requested state separate
+from controller-reported active state.
 Recovery explicitly asks the controller to reach no route; it is not a rollback
 to a previous GPIO. Removal errors retain their kernel errno and overlay ID.
 

@@ -2406,6 +2406,39 @@ apply_rp1_gpclk_dkms_installation() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Establish digest-bound, route-neutral RP1 runtime administration.
+# @details Runs only after the exact WsprryPi route companion is installed.
+#          The helper builds and reviews the exact runtime bundle, executes the
+#          reviewed deployment and neutral-activation plans, and requires
+#          neutral_ready with administration eligible and transmission
+#          ineligible. It never selects GPIO4/GPIO20 or authorizes output.
+# -----------------------------------------------------------------------------
+activate_rp1_gpclk_runtime_administration() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+    if [[ "$DRY_RUN" != "true" && \
+        ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
+        warn "RP1-GPCLK-DKMS runtime plan state is unavailable."
+        return 1
+    fi
+
+    local runtime_args=(activate-runtime --state-dir "$RP1_GPCLK_DKMS_STATE_DIR")
+    if [[ "$debug" == "debug" ]]; then
+        runtime_args+=(--debug)
+    fi
+    if ! exec_command "Activate neutral RP1-GPCLK-DKMS administration" \
+        python3 "$RP1_GPCLK_DKMS_HELPER" "${runtime_args[@]}" "$debug"; then
+        warn "RP1-GPCLK-DKMS neutral runtime activation failed closed; no GPIO route or output was requested."
+        return 1
+    fi
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Remove an unchanged RP1 provider only when a v2 record proves that
 #        WsprryPi installed it.
 # @details The helper preserves missing, legacy, malformed, drifted, active, or
@@ -8376,7 +8409,7 @@ finish_script() {
     elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
         printf "\n%s has been uninstalled. Shared apt packages were retained.\n" "$REPO_TITLE"
         printf "An unchanged RP1-GPCLK-DKMS provider is removed only when\n"
-        printf "WsprryPi's v2 ownership record proves it installed that provider.\n\n"
+        printf "WsprryPi's secure ownership record proves it installed that provider.\n\n"
         if [[ "${REBOOT:-false}" == "true" ]]; then
             printf "Remember to reboot to re-enable your soundcard.\n\n"
         fi
@@ -8432,6 +8465,7 @@ manage_wsprry_pi() {
         "manage_config \"$WSPR_INI\" \"/usr/local/etc/\""
         "manage_i2c"
         "manage_service \"/usr/bin/$WSPR_EXE\" \"$service_command\" \"false\""
+        "activate_rp1_gpclk_runtime_administration"
         "manage_web"
         "manage_apache"
         "validate_wsprrypi_runtime"
