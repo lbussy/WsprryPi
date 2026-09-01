@@ -221,6 +221,22 @@ fi
         self.assertIn("[ERROR] Failed: Resolve read-only plan.", result.stdout)
         self.assertIn("Command failed with status 17: probe", result.stderr)
 
+    def test_output_visible_dry_run_emits_only_final_status(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { return 99; }
+DRY_RUN=true
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP='<UP>' CLEAR_LINE='<CLEAR>'
+EXEC_COMMAND_SHOW_OUTPUT=true exec_command \
+    "A deliberately long output-visible operation whose status would wrap" probe
+'''
+        )
+        self.assertNotIn("Running: (dry)", result.stdout)
+        self.assertNotIn("<UP>", result.stdout)
+        self.assertNotIn("<CLEAR>", result.stdout)
+        self.assertEqual(result.stdout.count("Complete: (dry)"), 1)
+
     def test_support_bundle_validation_uses_standard_dry_run_execution_item(self) -> None:
         sentinel = self.root / "age-validation-invoked"
         result = self.run_shell(
@@ -359,6 +375,66 @@ manage_config wsprrypi.ini "$DESTINATION_DIR"
         )
 
         self.assertEqual(snapshot(self.root), before)
+
+    def test_pi5_never_disables_legacy_sound_and_uninstall_needs_no_reboot(self) -> None:
+        sound_file = self.root / "alsa-blacklist.conf"
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+definition=$(declare -f manage_sound)
+definition=${definition/manage_sound /manage_sound_under_test }
+definition=${definition/'file="/etc/modprobe.d/alsa-blacklist.conf"'/'file="$SOUND_FILE"'}
+eval "$definition"
+is_raspberry_pi_5() { return 0; }
+logD() { :; }
+
+ACTION=install
+DRY_RUN=false
+REBOOT=false
+manage_sound_under_test debug
+[[ ! -e "$SOUND_FILE" ]]
+[[ "$REBOOT" == "false" ]]
+
+printf 'blacklist snd_bcm2835\n' >"$SOUND_FILE"
+ACTION=uninstall
+REBOOT=false
+manage_sound_under_test debug
+[[ ! -e "$SOUND_FILE" ]]
+[[ "$REBOOT" == "false" ]]
+flag_need_reboot debug
+''',
+            SOUND_FILE=sound_file,
+        )
+        self.assertNotIn("re-enabled sound", result.stderr)
+        self.assertNotIn("Important Note", result.stdout)
+        self.assertNotIn("sound system", result.stdout)
+
+    def test_legacy_pi_sound_cleanup_still_requires_reboot(self) -> None:
+        sound_file = self.root / "alsa-blacklist.conf"
+        sound_file.write_text("blacklist snd_bcm2835\n", encoding="utf-8")
+        self.run_shell(
+            r'''
+source "$INSTALLER"
+definition=$(declare -f manage_sound)
+definition=${definition/manage_sound /manage_sound_under_test }
+definition=${definition/'file="/etc/modprobe.d/alsa-blacklist.conf"'/'file="$SOUND_FILE"'}
+eval "$definition"
+is_raspberry_pi_5() { return 1; }
+logD() { :; }
+
+ACTION=uninstall
+DRY_RUN=false
+REBOOT=false
+manage_sound_under_test debug
+[[ ! -e "$SOUND_FILE" ]]
+[[ "$REBOOT" == "true" ]]
+''',
+            SOUND_FILE=sound_file,
+        )
+
+    def test_installer_has_one_reboot_prompt_implementation(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        self.assertEqual(source.count("\nflag_need_reboot() {"), 1)
 
     def test_compile_dry_run_does_not_create_staging_directory(self) -> None:
         checkout = self.root / "checkout"

@@ -640,7 +640,8 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("(dry)"), 2)
+            self.assertEqual(result.stdout.count("(dry)"), 1)
+            self.assertNotIn("Running: (dry)", result.stdout)
             self.assertIn(
                 "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
                 result.stdout,
@@ -746,7 +747,13 @@ cleanup_rp1_gpclk_dkms_state
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(sentinel.exists())
-        self.assertEqual(result.stdout.count("(dry)"), 2)
+        self.assertEqual(result.stdout.count("(dry)"), 1)
+        self.assertNotIn("Running: (dry)", result.stdout)
+        self.assertIn(
+            "Complete: (dry) Remove WsprryPi-owned RP1-GPCLK-DKMS provider "
+            "when ownership and identity match.",
+            result.stdout,
+        )
         helper = install_script.parent / "rp1_gpclk_dkms_install.py"
         self.assertIn(
             f"Command: python3 {helper} remove --remove auto --debug",

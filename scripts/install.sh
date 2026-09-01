@@ -1992,15 +1992,25 @@ exec_command() {
         failed_pre+=" (dry)"
     fi
 
-    # Show running status line
-    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
-    sleep 0.02
     if [[ "$DRY_RUN" == "true" ]]; then
-        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        # Commands that deliberately expose their output use a persistent
+        # status line during real execution. In a dry run there is no command
+        # output and no execution delay, so emit only the final plan item. This
+        # avoids trying to erase a long, terminal-wrapped "Running" line one
+        # physical row at a time.
+        if [[ "$show_output" != "true" ]]; then
+            printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+            sleep 0.02
+            printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        fi
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
         debug_end "$debug"
         return 0
     fi
+
+    # Show running status line
+    printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    sleep 0.02
 
     # Execute the command, swallowing output unless debug or an explicitly
     # reviewed caller requires ordinary command output in the installer log.
@@ -7014,12 +7024,12 @@ manage_web() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Manages the sound module for WsprryPi.
-# @details This function enables or disables the Raspberry Pi sound module
-#          (`snd_bcm2835`) by modifying the ALSA blacklist file. During
-#          installation, the module is blacklisted to allow WsprryPi to
-#          generate radio frequencies. During uninstallation, the blacklist
-#          entry is removed to restore sound functionality.
+# @brief Manages the legacy-Pi sound module for WsprryPi.
+# @details On pre-Pi-5 models, installation blacklists `snd_bcm2835` to avoid
+#          conflicts with WsprryPi's legacy clock use, and uninstallation
+#          removes that entry. Pi 5 and Compute Module 5 never create the
+#          blacklist; uninstall only cleans up an obsolete entry left by an
+#          older WsprryPi installation.
 #
 # @global ACTION Specifies whether the function runs in 'install' or 'uninstall' mode.
 # @global REBOOT Indicates whether a system reboot is required.
@@ -7048,6 +7058,20 @@ manage_sound() {
     blacklist="blacklist snd_bcm2835"
     file="/etc/modprobe.d/alsa-blacklist.conf"
 
+    # Pi 5 has no bcm2835 analogue-audio device sharing the legacy clock
+    # peripheral. Never create this blacklist there. During uninstall, still
+    # remove an entry left by an older WsprryPi installation, but that cleanup
+    # does not require a reboot or mean that Pi 5 sound was re-enabled.
+    local sound_reboot_required="true"
+    if is_raspberry_pi_5; then
+        if [[ "$ACTION" == "install" ]]; then
+            debug_print "Legacy snd_bcm2835 sound management is not applicable on Raspberry Pi 5." "$debug"
+            debug_end "$debug"
+            return 0
+        fi
+        sound_reboot_required="false"
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
         if [[ "$ACTION" == "install" ]]; then
             if [[ ! -f "$file" ]]; then
@@ -7062,7 +7086,9 @@ manage_sound() {
         elif [[ "$ACTION" == "uninstall" ]]; then
             if [[ -f "$file" ]] && grep -Fxq "$blacklist" "$file"; then
                 logD "Exec: remove '$blacklist' from $file"
-                REBOOT="true"
+                if [[ "$sound_reboot_required" == "true" ]]; then
+                    REBOOT="true"
+                fi
             else
                 debug_print "Sound is already enabled or no blacklist file exists." "$debug"
             fi
@@ -7095,13 +7121,19 @@ manage_sound() {
             if [[ "$line_count" -eq 1 ]]; then
                 # If it's the only line, delete the file
                 rm -f "$file"
-                debug_print "Removed $file and re-enabled sound." "$debug"
+                if [[ "$sound_reboot_required" == "true" ]]; then
+                    debug_print "Removed $file and re-enabled sound." "$debug"
+                else
+                    debug_print "Removed obsolete Pi 5 sound blacklist file $file." "$debug"
+                fi
             else
                 # Otherwise, remove just the blacklist line
                 sed -i "\|$blacklist|d" "$file"
                 debug_print "Removed blacklist entry from $file." "$debug"
             fi
-            REBOOT="true"
+            if [[ "$sound_reboot_required" == "true" ]]; then
+                REBOOT="true"
+            fi
         else
             debug_print "Sound is already enabled or no blacklist file exists." "$debug"
         fi
@@ -8114,54 +8146,6 @@ cleanup_files_in_directories() {
     return 0
 }
 
-# -----------------------------------------------------------------------------
-# @brief Display a reboot prompt when required.
-# @details
-#   Checks the global REBOOT flag. If "true", prints a message
-#   explaining why a reboot is needed (install or uninstall path),
-#   shows the reboot command, and waits for a key press.
-#
-# @global ACTION  Install or uninstall mode indicator.
-# @global REBOOT  Semaphore flag for reboot requirement.
-#
-# @param $1  Optional debug flag to enable debug output.
-#
-# @return Always returns 0.
-#
-# @example
-#   flag_need_reboot "debug"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-# shellcheck disable=SC2329
-flag_need_reboot() {
-    local debug
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
-
-    if [[ "$REBOOT" == "true" ]]; then
-        printf "\n*Important Note:*\n\n"
-        if [[ "$ACTION" == "install" ]]; then
-            printf "Wsprry Pi uses the same hardware as the sound system to\n"
-            printf "generate radio frequencies. This soundcard has been disabled.\n"
-            printf "Reboot with 'sudo reboot' after install for changes to take\n"
-            printf "effect.\n\n"
-        else
-            printf "The sound system has been re-enabled. To use audio, reboot\n"
-            printf "with 'sudo reboot' for changes to take effect.\n\n"
-        fi
-        if [[ "$DRY_RUN" == "true" ]]; then
-            debug_end "$debug"
-            return 0
-        fi
-        read -rp "Press any key to continue." </dev/tty
-        echo
-    fi
-
-    debug_end "$debug"
-    return 0
-}
-
-# shellcheck disable=SC2317
 restore_daemon_state() {
     local debug
     debug=$(debug_start "$@")
