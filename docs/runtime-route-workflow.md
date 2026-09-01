@@ -21,7 +21,9 @@ The manager temporarily inhibits systemd starts using its own service drop-in,
 stops WsprryPi, and switches the owned runtime overlay with output disabled.
 It does not overwrite the installed service unit or an administrator's mask.
 After the route is verified idle, the installed WsprryPi companion updates the
-saved pin and disables transmission. A previously running application restarts
+backend to `rp1-gpclk`, updates the saved pin, and disables transmission. Before
+this explicit selection, a stock `gpio` backend is accepted for neutral
+inspection but is left byte-for-byte unchanged. A previously running application restarts
 in idle mode; a previously stopped or administrator-masked application stays
 stopped. Saved `Enable on Boot` preferences and unrelated configuration remain
 unchanged. A stopped application's first subsequent startup is also idle.

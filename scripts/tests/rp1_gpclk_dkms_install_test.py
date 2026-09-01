@@ -832,6 +832,72 @@ class ApplyPolicyTests(unittest.TestCase):
         ):
             self.assertIn(path, source)
 
+    def test_runtime_bundle_requires_self_contained_bootstrap_and_bound_units(self):
+        bundle = self.root / "bundle"
+        bundle.mkdir(mode=0o700)
+        companion = self.root / "route_application.py"
+        companion.write_bytes(b"companion\n")
+        kernel = "fixture-kernel"
+        bootstrap = {
+            "runtime_deployment.py", "runtime_controller_admin.py", "runtime_layout.py",
+            "runtime_application.py", "runtime_output.py", "runtime_provider.py",
+            "runtime_binding.py", "runtime_activation.py", "runtime_route_client.py",
+        }
+        files = {
+            f"/lib/modules/{kernel}/updates/dkms/rp1_route_controller.ko",
+            f"/lib/modules/{kernel}/updates/dkms/rp1_gpclk_dkms.ko",
+            "/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_gpclk.h",
+            "/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_route_admin.h",
+            "/usr/lib/rp1-gpclk-dkms/runtime-overlays/gpio4.dtbo",
+            "/usr/lib/rp1-gpclk-dkms/runtime-overlays/gpio20.dtbo",
+            "/usr/lib/rp1-gpclk-dkms/schema/rp1-gpclk-runtime-readiness-v1.schema.json",
+            "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
+            "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service",
+            "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
+            *{"/usr/lib/rp1-gpclk-dkms/" + name for name in bootstrap},
+        }
+        file_digests = {}
+        for destination in files:
+            name = pathlib.Path(destination).name
+            payload = (("# fixture: " if name in bootstrap else "payload:") +
+                       destination + "\n").encode()
+            file_digests[destination] = digest(payload)
+            (bundle / (digest(destination.encode()) + ".bin")).write_bytes(payload)
+        for name in bootstrap:
+            destination = "/usr/lib/rp1-gpclk-dkms/" + name
+            (bundle / name).write_bytes(("# fixture: " + destination + "\n").encode())
+        binding = {
+            "schemaVersion": 2, "contract": MOD.RUNTIME_BINDING_CONTRACT,
+            "productVersion": "0.9.0",
+            "compatibilityIdentities": {
+                "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20"},
+            "sourceCommit": "a" * 40, "kernel": kernel, "files": file_digests,
+            "externalFiles": {str(companion): digest(companion.read_bytes())},
+            "uapiSha256": {
+                "consumer": file_digests["/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_gpclk.h"],
+                "controller": file_digests["/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_route_admin.h"]},
+            "controllerNoteSha256": "b" * 64, "consumerNoteSha256": "c" * 64,
+        }
+        binding["artifactSetSha256"] = digest(MOD.canonical(binding))
+        (bundle / "binding.json").write_text(json.dumps(binding))
+        resolved = {"channel": "development", "commit": "a" * 40, "version": "0.9.0"}
+        with mock.patch.object(MOD.platform, "release", return_value=kernel):
+            result = MOD.validate_runtime_bundle(bundle, resolved, companion)
+        self.assertEqual(result["artifactSetSha256"], binding["artifactSetSha256"])
+
+        (bundle / "runtime_route_client.py").unlink()
+        with mock.patch.object(MOD.platform, "release", return_value=kernel):
+            with self.assertRaisesRegex(MOD.ContractError, "unsupported or missing member"):
+                MOD.validate_runtime_bundle(bundle, resolved, companion)
+
+    def test_runtime_bundle_import_closure_rejects_missing_local_module(self):
+        bundle = self.root / "bootstrap"
+        bundle.mkdir()
+        (bundle / "runtime_provider.py").write_text("import runtime_missing\n")
+        with self.assertRaisesRegex(MOD.ContractError, "import closure is incomplete"):
+            MOD.validate_bootstrap_import_closure(
+                bundle, {"runtime_provider.py"})
+
     def test_neutral_runtime_activation_records_reviewed_identity(self):
         resolved = {"channel": "development", "commit": "a" * 40, "version": "0.9.0"}
         MOD.atomic_json(self.state / "plan.json", {

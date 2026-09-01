@@ -3,7 +3,8 @@
 """Fixed-path companion for DKMS route restoration; no hardware operations.
 
 Only the canonical installed service/configuration is managed. INI edits retain
-all bytes except the two selected values. No service or module is started here.
+all bytes except the explicit backend, route, and transmit values. No service or
+module is started here.
 """
 import configparser
 import json
@@ -39,7 +40,7 @@ def trusted(path):
         os.close(fd)
 
 
-def configuration(data):
+def configuration(data, require_runtime_backend=False):
     parser = configparser.ConfigParser(interpolation=None, strict=True)
     parser.optionxform = str
     # IniFile appends another section header when persisting newly added keys.
@@ -62,8 +63,11 @@ def configuration(data):
     parser.read_string('\n'.join(normalized))
     if parser.defaults():
         raise ValueError('inherited configuration is not supported')
-    if parser.get('Operation', 'Transmit Backend').lower() != 'rp1-gpclk':
-        raise ValueError('installed configuration must select rp1-gpclk')
+    backend = parser.get('Operation', 'Transmit Backend').lower()
+    if backend not in ('gpio', 'rp1-gpclk'):
+        raise ValueError('installed configuration must select a GPIO clock backend')
+    if require_runtime_backend and backend != 'rp1-gpclk':
+        raise ValueError('route configuration did not select rp1-gpclk')
     if parser.get('Operation', 'Mode').upper() not in ('WSPR', 'QRSS', 'FSKCW', 'DFCW'):
         raise ValueError('managed idle restoration requires a scheduled application mode')
     parser.getboolean('Operation', 'Transmit')
@@ -78,7 +82,11 @@ def edit(data, route):
     configuration(data)
     if route not in ('gpio4', 'gpio20'):
         raise ValueError('invalid route')
-    replacements = {('GPIO', 'Transmit Pin'): route[4:], ('Operation', 'Transmit'): 'False'}
+    replacements = {
+        ('Operation', 'Transmit Backend'): 'rp1-gpclk',
+        ('GPIO', 'Transmit Pin'): route[4:],
+        ('Operation', 'Transmit'): 'False',
+    }
     section = None
     seen = set()
     lines = []
@@ -98,7 +106,7 @@ def edit(data, route):
     if seen != set(replacements):
         raise ValueError('explicit route and transmit assignments required')
     result = ''.join(lines).encode('utf-8')
-    configuration(result)
+    configuration(result, require_runtime_backend=True)
     return result
 
 

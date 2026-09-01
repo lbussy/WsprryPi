@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import ast
 import copy
 import hashlib
 import json
@@ -1702,16 +1703,14 @@ def validate_runtime_bundle(
         "/usr/lib/rp1-gpclk-dkms/runtime-overlays/gpio4.dtbo",
         "/usr/lib/rp1-gpclk-dkms/runtime-overlays/gpio20.dtbo",
         "/usr/lib/rp1-gpclk-dkms/schema/rp1-gpclk-runtime-readiness-v1.schema.json",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service",
         "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
     }
     require(critical <= set(files), "runtime bundle omits a required bound artifact")
     require(all(isinstance(path, str) and isinstance(value, str) and SHA256.fullmatch(value) for path, value in files.items()), "runtime bundle file digests are invalid")
     external = binding["externalFiles"]
-    expected_external = {
-        str(companion),
-        "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
-        "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service",
-    }
+    expected_external = {str(companion)}
     require(isinstance(external, dict) and set(external) == expected_external, "runtime bundle external prerequisite inventory differs")
     require(companion.is_file() and not companion.is_symlink(), "installed WsprryPi route companion is missing or substituted")
     require(external[str(companion)] == sha256_file(companion), "runtime bundle WsprryPi companion identity differs")
@@ -1734,7 +1733,7 @@ def validate_runtime_bundle(
     bootstrap = {
         "runtime_deployment.py", "runtime_controller_admin.py", "runtime_layout.py",
         "runtime_application.py", "runtime_output.py", "runtime_provider.py",
-        "runtime_binding.py", "runtime_activation.py",
+        "runtime_binding.py", "runtime_activation.py", "runtime_route_client.py",
     }
     expected_members = {"binding.json", *bootstrap}
     for destination, expected in files.items():
@@ -1749,11 +1748,34 @@ def validate_runtime_bundle(
         require(member.is_file() and not member.is_symlink(), f"runtime bundle bootstrap is missing: {name}")
         destination = "/usr/lib/rp1-gpclk-dkms/" + name
         require(destination in files and sha256_file(member) == files[destination], f"runtime bundle bootstrap digest differs: {name}")
+    validate_bootstrap_import_closure(bundle, bootstrap)
     return {
         "binding": binding,
         "bindingSha256": sha256_file(binding_path),
         "artifactSetSha256": binding["artifactSetSha256"],
     }
+
+
+def validate_bootstrap_import_closure(bundle: pathlib.Path, bootstrap: set[str]) -> None:
+    """Compile bootstrap sources and require every local runtime import."""
+    available = {pathlib.Path(name).stem for name in bootstrap}
+    for name in sorted(bootstrap):
+        member = bundle / name
+        try:
+            source = member.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(member))
+        except (OSError, UnicodeDecodeError, SyntaxError) as error:
+            raise ContractError(f"runtime bundle bootstrap is not valid Python: {name}") from error
+        imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.update(alias.name.split(".", 1)[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                imports.add(node.module.split(".", 1)[0])
+        missing = sorted(module for module in imports
+                         if module.startswith("runtime_") and module not in available)
+        require(not missing,
+                f"runtime bundle bootstrap import closure is incomplete: {name} imports {', '.join(missing)}")
 
 
 def build_runtime_bundle(

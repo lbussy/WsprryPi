@@ -19,22 +19,31 @@ class Tests(unittest.TestCase):
         self.data = (SOURCE/'config/wsprrypi.ini').read_bytes().replace(
             b'Transmit Backend = gpio', b'Transmit Backend = rp1-gpclk')
 
-    def test_only_pin_and_transmit_change_for_all_boot_policies(self):
+    def test_explicit_route_selects_runtime_backend_pin_and_inhibits_transmit(self):
         for policy in (b'Never', b'Follow', b'Always'):
-            original = self.data.replace(b'Enable on Boot = Never', b'Enable on Boot = '+policy).replace(
+            original = self.data.replace(b'Transmit Backend = rp1-gpclk', b'Transmit Backend = gpio').replace(
+                b'Enable on Boot = Never', b'Enable on Boot = '+policy).replace(
                 b'Transmit = False', b'Transmit = True')
-            expected = original.replace(b'Transmit Pin = 4', b'Transmit Pin = 20').replace(
+            expected = original.replace(b'\nTransmit Backend = gpio\n', b'\nTransmit Backend = rp1-gpclk\n').replace(
+                b'Transmit Pin = 4', b'Transmit Pin = 20').replace(
                 b'Transmit = True', b'Transmit = False')
             self.assertEqual(app.edit(original, 'gpio20'), expected)
             self.assertEqual(app.edit(expected, 'gpio20'), expected)
+
+    def test_neutral_inspection_accepts_stock_gpio_without_mutating_it(self):
+        stock = self.data.replace(b'Transmit Backend = rp1-gpclk', b'Transmit Backend = gpio')
+        parsed = app.configuration(stock)
+        self.assertEqual(parsed.get('Operation', 'Transmit Backend'), 'gpio')
+        self.assertEqual(stock, self.data.replace(
+            b'Transmit Backend = rp1-gpclk', b'Transmit Backend = gpio'))
 
     def test_crlf_and_unknown_settings_are_preserved(self):
         data = self.data.replace(b'\n', b'\r\n')+b'\r\n[Custom]\r\nValue = literal%value\r\n'
         self.assertEqual(app.edit(data, 'gpio20'), data.replace(b'Transmit Pin = 4', b'Transmit Pin = 20'))
 
-    def test_invalid_duplicate_and_wrong_backend_do_not_edit(self):
+    def test_invalid_duplicate_and_non_gpio_backend_do_not_edit(self):
         for data in (self.data+b'\n[GPIO]\nTransmit Pin = 20\n',
-                     self.data.replace(b'Transmit Backend = rp1-gpclk', b'Transmit Backend = gpio'),
+                     self.data.replace(b'Transmit Backend = rp1-gpclk', b'Transmit Backend = si5351'),
                      self.data.replace(b'Transmit Pin = 4', b'Transmit Pin = 19'),
                      self.data.replace(b'Enable on Boot = Never', b'Enable on Boot = unknown')):
             with self.assertRaises(Exception): app.edit(data, 'gpio20')

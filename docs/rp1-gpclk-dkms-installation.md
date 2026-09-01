@@ -156,6 +156,13 @@ plan. The final result must be `neutral_ready`, with
 requested/configured/persisted/active route, no owner or lease, and output
 disabled.
 
+The bundle must be self-contained for these pre-deployment calls: its bootstrap
+set includes the route client imported by the provider and activation tools.
+The route-manager socket and service units are digest-bound deployment payloads,
+not assumed host prerequisites; the installed WsprryPi route companion is the
+only external bound file. A stock `Transmit Backend = gpio` configuration is
+valid for neutral inspection and is not rewritten during installation.
+
 Only after that proof is the provider record upgraded to v3 with the readiness
 contract, binding and artifact-set digests, source commit,
 product/kernel/compatibility identities, reviewed deployment and activation
@@ -182,8 +189,9 @@ insufficient for automatic removal.
 Installation stops at route zero. A later explicit operator selection of GPIO4
 or GPIO20 invokes upstream `route-plan`; WsprryPi retains the reviewed digest
 and calls `route-ensure` only for the same route and current preflight
-generation. The runtime manager persists the selected pin while keeping output
-disabled. A saved or default GPIO value is not installation-time route consent.
+generation. Only this route transaction changes the application backend to
+`rp1-gpclk`, persists the selected pin, and keeps output disabled. A saved or
+default GPIO value is not installation-time route consent.
 
 ## Ownership-aware uninstall
 
