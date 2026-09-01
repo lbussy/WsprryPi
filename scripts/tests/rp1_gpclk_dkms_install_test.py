@@ -607,6 +607,7 @@ class ApplyPolicyTests(unittest.TestCase):
         shell = r'''
 source "$INSTALL_SCRIPT"
 python3() { printf python3 >"$SENTINEL"; return 99; }
+logI() { printf '[INFO ] %s\n' "$1"; }
 curl() { printf curl >"$SENTINEL"; return 99; }
 mktemp() { printf mktemp >"$SENTINEL"; return 99; }
 git() { printf git >"$SENTINEL"; return 99; }
@@ -639,7 +640,19 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("(dry)"), 4)
+            self.assertEqual(result.stdout.count("(dry)"), 2)
+            self.assertIn(
+                "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
+                result.stdout,
+            )
+            self.assertNotIn(
+                "Complete: (dry) Resolve RP1-GPCLK-DKMS installation plan",
+                result.stdout,
+            )
+            self.assertIn(
+                "Complete: (dry) Apply RP1-GPCLK-DKMS installation plan",
+                result.stdout,
+            )
             self.assertIn("Name:    Resolve RP1-GPCLK-DKMS installation plan", result.stderr)
             self.assertIn("Name:    Apply RP1-GPCLK-DKMS installation plan", result.stderr)
             helper = install_script.parent / "rp1_gpclk_dkms_install.py"
@@ -684,6 +697,7 @@ python3() {
         printf 'ARG=%s\n' "$@"
     } >>"$CAPTURE"
 }
+logI() { printf '[INFO ] %s\n' "$1"; }
 logD() { :; }
 DRY_RUN=false
 ACTION=install
@@ -784,6 +798,7 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertNotRegex(source, r'if ! python3 "\$RP1_GPCLK_DKMS_HELPER"')
         self.assertEqual(source.count('exec_command "Resolve RP1-GPCLK-DKMS installation plan"'), 1)
         self.assertEqual(source.count('exec_command "Apply RP1-GPCLK-DKMS installation plan"'), 1)
+        self.assertIn('EXEC_COMMAND_STATUS_MODE=info', source)
         self.assertGreaterEqual(source.count('args+=(--debug)'), 2)
 
     def test_explicit_true_reaches_planner_without_raspberry_pi_identity(self):

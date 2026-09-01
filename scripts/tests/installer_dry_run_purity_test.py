@@ -184,6 +184,95 @@ exec_command "argv display" probe plain "two words" '$(not-executed)' 'semi;colo
         self.assertIn(expected, result.stderr)
         self.assertFalse(sentinel.exists())
 
+    def test_exec_command_info_mode_is_informational_and_suppresses_dry_run(self) -> None:
+        sentinel = self.root / "planning-command-invoked"
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { printf invoked >"$SENTINEL"; return 99; }
+logI() { printf '[INFO ] %s\n' "$1"; }
+DRY_RUN=true
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+EXEC_COMMAND_STATUS_MODE=info exec_command "Resolve read-only plan" probe --exact argv debug
+[[ ! -e "$SENTINEL" ]]
+''',
+            SENTINEL=sentinel,
+        )
+        self.assertIn("[INFO ] Resolve read-only plan.", result.stdout)
+        self.assertNotIn("Running:", result.stdout)
+        self.assertNotIn("Complete:", result.stdout)
+        self.assertIn("Command: probe --exact argv", result.stderr)
+        self.assertFalse(sentinel.exists())
+
+    def test_exec_command_info_mode_propagates_live_failure(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { return 17; }
+logI() { printf '[INFO ] %s\n' "$1"; }
+logE() { printf '[ERROR] %s\n' "$1"; }
+DRY_RUN=false
+if EXEC_COMMAND_STATUS_MODE=info exec_command "Resolve read-only plan" probe; then
+    exit 1
+fi
+'''
+        )
+        self.assertIn("[INFO ] Resolve read-only plan.", result.stdout)
+        self.assertIn("[ERROR] Failed: Resolve read-only plan.", result.stdout)
+        self.assertIn("Command failed with status 17: probe", result.stderr)
+
+    def test_support_bundle_validation_uses_standard_dry_run_execution_item(self) -> None:
+        sentinel = self.root / "age-validation-invoked"
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+run_support_bundle_age_dependency_validation() {
+    printf invoked >"$SENTINEL"
+    return 99
+}
+DRY_RUN=true
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+validate_support_bundle_age_dependency debug
+[[ ! -e "$SENTINEL" ]]
+''',
+            SENTINEL=sentinel,
+        )
+        self.assertIn(
+            "Complete: (dry) Validate support-bundle encryption tools.",
+            result.stdout,
+        )
+        self.assertNotIn(
+            "Dry run: would validate the support-bundle encryption tools.",
+            result.stdout,
+        )
+        self.assertIn(
+            "Command: run_support_bundle_age_dependency_validation",
+            result.stderr,
+        )
+        self.assertFalse(sentinel.exists())
+
+    def test_support_bundle_validation_propagates_live_execution_failure(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+run_support_bundle_age_dependency_validation() { return 23; }
+logE() { printf '[ERROR] %s\n' "$1" >&2; }
+DRY_RUN=false
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+if validate_support_bundle_age_dependency debug; then
+    exit 1
+fi
+'''
+        )
+        self.assertIn(
+            "Failed: Validate support-bundle encryption tools.",
+            result.stdout,
+        )
+        self.assertIn(
+            "Required support-bundle encryption tools are unavailable or unsafe.",
+            result.stderr,
+        )
+
     def test_placeholder_replacement_allows_planned_new_target(self) -> None:
         target = self.root / "not-installed-yet.ini"
         before = snapshot(self.root)

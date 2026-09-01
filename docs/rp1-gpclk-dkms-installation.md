@@ -98,13 +98,14 @@ Before package mutation a real installation displays the WsprryPi channel,
 detected platform, selection reason and override state, requested and resolved
 source, immutable tag or commit, version and expected hashes, lifecycle command
 class, and the output-disabled boundary. With `DRY_RUN=true`, the standard
-installer command wrapper reports both RP1 planning and application commands
-as skipped and does not invoke Python, download or clone provider inputs, run
-upstream preflight, inspect a package, or mutate provider state. Debug mode
-shows the exact helper command; during a real run it also reports the helper's
-external command argv and captured validation output. The resolved plan and
-ordinary package/DKMS or upstream lifecycle output remain visible during a real
-installation even when debug mode is off.
+installer command wrapper reports RP1 plan resolution as informational context
+and the application command as a skipped execution item. It does not invoke
+Python, download or clone provider inputs, run upstream preflight, inspect a
+package, or mutate provider state. Debug mode shows the exact helper command;
+during a real run it also reports the helper's external command argv and
+captured validation output. The resolved plan and ordinary package/DKMS or
+upstream lifecycle output remain visible during a real installation even when
+debug mode is off.
 
 Only when WsprryPi actually mutates an empty provider state and then verifies
 the result does it atomically create the root-owned, mode-0600 v2 ownership
