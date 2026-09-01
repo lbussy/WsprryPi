@@ -9,6 +9,9 @@ independently owned provider before package mutation. Automatic Pi 5/CM5,
 explicit override/opt-out, published release, immutable development source,
 dry-run, existing-state refusal, and provider-preserving uninstall behavior are
 documented in [RP1-GPCLK-DKMS installation](../docs/rp1-gpclk-dkms-installation.md).
+Dry-run uses the installer's standard command wrapper and never starts the
+Python helper. Passing `debug` displays the helper command and, for a real run,
+its external command activity and captured output.
 
 Run its offline hardware-free contract coverage with:
 

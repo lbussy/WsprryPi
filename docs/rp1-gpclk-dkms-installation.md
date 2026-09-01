@@ -88,11 +88,17 @@ qualification remain separate facts.
 
 ## Plan, record, and safety boundary
 
-Before package mutation the installer displays the WsprryPi channel, detected
-platform, selection reason and override state, requested and resolved source,
-immutable tag or commit, version and expected hashes, lifecycle command class,
-and the output-disabled boundary. Dry-run mode resolves and validates the plan
-but does not apply it.
+Before package mutation a real installation displays the WsprryPi channel,
+detected platform, selection reason and override state, requested and resolved
+source, immutable tag or commit, version and expected hashes, lifecycle command
+class, and the output-disabled boundary. With `DRY_RUN=true`, the standard
+installer command wrapper reports both RP1 planning and application commands
+as skipped and does not invoke Python, download or clone provider inputs, run
+upstream preflight, inspect a package, or mutate provider state. Debug mode
+shows the exact helper command; during a real run it also reports the helper's
+external command argv and captured validation output. The resolved plan and
+ordinary package/DKMS or upstream lifecycle output remain visible during a real
+installation even when debug mode is off.
 
 After successful verification, current provider identity is recorded at
 `/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json`. This record describes

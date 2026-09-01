@@ -90,12 +90,16 @@ def release(tag: str, *, draft: bool = False, prerelease: bool = False, complete
 
 class FakeRunner(MOD.Runner):
     def __init__(self, responses: dict[tuple[str, ...], MOD.CommandResult] | None = None):
+        super().__init__()
         self.responses = responses or {}
         self.calls: list[tuple[str, ...]] = []
+        self.passthrough_calls: list[tuple[str, ...]] = []
 
-    def run(self, argv, *, check=True, cwd=None):
+    def run(self, argv, *, check=True, cwd=None, passthrough=False):
         key = tuple(str(item) for item in argv)
         self.calls.append(key)
+        if passthrough:
+            self.passthrough_calls.append(key)
         result = self.responses.get(key, MOD.CommandResult("", "", 0))
         if check and result.returncode:
             raise MOD.ContractError(result.stderr or "fake command failure")
@@ -156,6 +160,24 @@ class PlatformAndSelectionTests(unittest.TestCase):
             MOD.source_selector("checkout:relative", "development")
         with self.assertRaises(MOD.ContractError):
             MOD.source_selector("commit:" + "a" * 40 + ";modprobe", "development")
+
+    def test_debug_runner_reports_argv_and_captured_output(self):
+        completed = subprocess.CompletedProcess(["git", "status"], 0, "clean\n", "notice\n")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(MOD.subprocess, "run", return_value=completed), \
+             mock.patch.object(MOD.sys, "stdout", stdout), \
+             mock.patch.object(MOD.sys, "stderr", stderr):
+            result = MOD.Runner(debug=True).run(["git", "status"])
+        self.assertEqual(result.stdout, "clean\n")
+        self.assertEqual(stdout.getvalue(), "clean\n")
+        self.assertIn("[RP1 DEBUG] command: git status", stderr.getvalue())
+        self.assertIn("notice", stderr.getvalue())
+
+    def test_passthrough_failure_remains_a_contract_error(self):
+        completed = subprocess.CompletedProcess(["apt-get", "install"], 1, None, None)
+        with mock.patch.object(MOD.subprocess, "run", return_value=completed):
+            with self.assertRaisesRegex(MOD.ContractError, "see command output above"):
+                MOD.Runner().run(["apt-get", "install"], passthrough=True)
 
 
 class ReleaseTests(unittest.TestCase):
@@ -529,6 +551,7 @@ class ApplyPolicyTests(unittest.TestCase):
             MOD.apply_release(self.state, self.resolved, self.record, self.root, runner)
         apt_calls = [call for call in runner.calls if call and call[0] == "apt-get"]
         self.assertEqual(apt_calls, [("apt-get", "install", "--no-install-recommends", "-y", str(self.package))])
+        self.assertEqual(runner.passthrough_calls, apt_calls)
 
     def test_dry_run_plan_cannot_be_applied(self):
         model = self.root / "model"
@@ -548,6 +571,98 @@ class ApplyPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(MOD.ContractError, "dry-run"):
             MOD.apply(apply_args, FakeRunner())
 
+    def test_selected_shell_dry_run_never_invokes_python_or_resolution_tools(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+python3() { printf python3 >"$SENTINEL"; return 99; }
+curl() { printf curl >"$SENTINEL"; return 99; }
+mktemp() { printf mktemp >"$SENTINEL"; return 99; }
+git() { printf git >"$SENTINEL"; return 99; }
+apt-get() { printf apt-get >"$SENTINEL"; return 99; }
+dpkg-deb() { printf dpkg-deb >"$SENTINEL"; return 99; }
+DRY_RUN=true
+ACTION=install
+INSTALL_RP1_GPCLK_DKMS=true
+RP1_GPCLK_DKMS_SOURCE="$SOURCE_SELECTOR"
+REPO_BRANCH="$WSPRRYPi_BRANCH"
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+prepare_rp1_gpclk_dkms_installation
+apply_rp1_gpclk_dkms_installation
+[[ ! -e "$SENTINEL" ]]
+cleanup_rp1_gpclk_dkms_state
+[[ -z "$RP1_GPCLK_DKMS_STATE_DIR" && -z "$RP1_GPCLK_DKMS_HELPER" ]]
+'''
+        for selector, branch in (("release", "main"), ("devel", "codex/issue-412-test")):
+            sentinel = self.root / f"{selector}.invoked"
+            environment = os.environ.copy()
+            environment.update({
+                "INSTALL_SCRIPT": str(install_script),
+                "SENTINEL": str(sentinel),
+                "SOURCE_SELECTOR": selector,
+                "WSPRRYPi_BRANCH": branch,
+            })
+            result = subprocess.run(
+                ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=environment, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(sentinel.exists())
+            self.assertEqual(result.stdout.count("(dry)"), 4)
+
+    def test_exec_command_preserves_internal_debug_argv(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        capture = self.root / "argv.txt"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+probe() { printf '%s\n' "$@" >"$CAPTURE"; }
+logD() { :; }
+DRY_RUN=false
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+exec_command "argv fidelity" probe before debug after debug
+'''
+        environment = os.environ.copy()
+        environment.update({"INSTALL_SCRIPT": str(install_script), "CAPTURE": str(capture)})
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(capture.read_text().splitlines(), ["before", "debug", "after"])
+
+    def test_shell_propagates_debug_to_both_helper_invocations(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        capture = self.root / "helper-argv.txt"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+python3() {
+    {
+        printf 'CALL\n'
+        printf 'ARG=%s\n' "$@"
+    } >>"$CAPTURE"
+}
+logD() { :; }
+DRY_RUN=false
+ACTION=install
+INSTALL_RP1_GPCLK_DKMS=true
+RP1_GPCLK_DKMS_SOURCE=release
+REPO_BRANCH=main
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+prepare_rp1_gpclk_dkms_installation debug
+apply_rp1_gpclk_dkms_installation debug
+cleanup_rp1_gpclk_dkms_state
+'''
+        environment = os.environ.copy()
+        environment.update({"INSTALL_SCRIPT": str(install_script), "CAPTURE": str(capture)})
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = capture.read_text().splitlines()
+        self.assertEqual(arguments.count("CALL"), 2)
+        self.assertEqual(arguments.count("ARG=--debug"), 2)
+
     def test_uninstall_and_forbidden_operations_absent_from_installer_paths(self):
         install_source = (ROOT / "scripts/install.sh").read_text()
         helper_source = SCRIPT.read_text()
@@ -563,6 +678,13 @@ class ApplyPolicyTests(unittest.TestCase):
         apply = source.index('apply_rp1_gpclk_dkms_installation "$debug" || return 1')
         self.assertLess(prepare, packages)
         self.assertLess(packages, apply)
+
+    def test_helper_invocations_use_exec_command_and_propagate_debug(self):
+        source = (ROOT / "scripts/install.sh").read_text()
+        self.assertNotRegex(source, r'if ! python3 "\$RP1_GPCLK_DKMS_HELPER"')
+        self.assertEqual(source.count('exec_command "Resolve RP1-GPCLK-DKMS installation plan"'), 1)
+        self.assertEqual(source.count('exec_command "Apply RP1-GPCLK-DKMS installation plan"'), 1)
+        self.assertGreaterEqual(source.count('args+=(--debug)'), 2)
 
     def test_explicit_true_reaches_planner_without_raspberry_pi_identity(self):
         source = (ROOT / "scripts/install.sh").read_text()

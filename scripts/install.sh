@@ -1895,14 +1895,20 @@ remove_slash() {
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
 exec_command() {
-    # Start debug and filter parameters
-    local debug status
-    debug=$(debug_start "$@")
-    eval set -- "$(debug_filter "$@")"
+    # The documented debug control is a trailing wrapper argument. Preserve
+    # command arguments named "debug" anywhere else with exact argv fidelity.
+    local debug="" status
+    if (( $# > 0 )) && [[ "${!#}" == "debug" ]]; then
+        debug=$(debug_start "debug")
+        set -- "${@:1:$(($# - 1))}"
+    else
+        debug=$(debug_start)
+    fi
 
     # Declare local variables after debug initialization
     local status=0 exec_name running_pre complete_pre failed_pre
     local args cmd cmd_str
+    local show_output="${EXEC_COMMAND_SHOW_OUTPUT:-false}"
 
     # Assign the human readable name and shift it off
     exec_name="$1"; shift
@@ -1944,15 +1950,16 @@ exec_command() {
         return 0
     fi
 
-    # Execute the command, swallowing output unless debug is enabled
-    if [[ "$debug" == "debug" ]]; then
+    # Execute the command, swallowing output unless debug or an explicitly
+    # reviewed caller requires ordinary command output in the installer log.
+    if [[ "$debug" == "debug" || "$show_output" == "true" ]]; then
         "${cmd[@]}" || status=$?
     else
         "${cmd[@]}" &>/dev/null || status=$?
     fi
 
-    # Clear running status line only when not in debug mode
-    if [[ "$debug" != "debug" ]]; then
+    # Preserve visible command output instead of erasing its final line.
+    if [[ "$debug" != "debug" && "$show_output" != "true" ]]; then
         printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
     fi
 
@@ -2219,6 +2226,11 @@ is_pi5() {
 # -----------------------------------------------------------------------------
 cleanup_rp1_gpclk_dkms_state() {
     local state_dir="${RP1_GPCLK_DKMS_STATE_DIR:-}"
+    if [[ "$state_dir" == "dry-run:no-state-created" ]]; then
+        RP1_GPCLK_DKMS_STATE_DIR=""
+        RP1_GPCLK_DKMS_HELPER=""
+        return 0
+    fi
     if [[ -z "$state_dir" || ! -d "$state_dir" || -L "$state_dir" ]]; then
         return 0
     fi
@@ -2251,28 +2263,35 @@ prepare_rp1_gpclk_dkms_installation() {
 
     [[ "$ACTION" == "install" ]] || return 0
 
-    RP1_GPCLK_DKMS_STATE_DIR=$(mktemp -d /tmp/wsprrypi-rp1-gpclk-dkms.XXXXXX)
-    chmod 0700 "$RP1_GPCLK_DKMS_STATE_DIR"
-
     local script_source="${BASH_SOURCE[0]:-}"
     local local_helper=""
     if [[ -n "$script_source" && "$script_source" != "bash" ]]; then
         local_helper="$(cd "$(dirname "$script_source")" && pwd -P)/rp1_gpclk_dkms_install.py"
     fi
 
-    RP1_GPCLK_DKMS_HELPER="$RP1_GPCLK_DKMS_STATE_DIR/rp1_gpclk_dkms_install.py"
-    if [[ -n "$local_helper" && -f "$local_helper" && ! -L "$local_helper" ]]; then
-        cp -- "$local_helper" "$RP1_GPCLK_DKMS_HELPER"
-        chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        # Use stable display-only paths. exec_command() deliberately does not
+        # execute Python in dry-run mode, so no helper download, temporary
+        # directory, network resolution, package inspection, or preflight runs.
+        RP1_GPCLK_DKMS_STATE_DIR="dry-run:no-state-created"
+        RP1_GPCLK_DKMS_HELPER="${local_helper:-dry-run:no-helper-downloaded}"
     else
-        local helper_url="${GIT_RAW_BASE}/${REPO_ORG}/${REPO_NAME}/${REPO_BRANCH}/scripts/rp1_gpclk_dkms_install.py"
-        if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
-            --output "$RP1_GPCLK_DKMS_HELPER" "$helper_url"; then
-            warn "Unable to retrieve the RP1-GPCLK-DKMS installer helper from $helper_url."
-            cleanup_rp1_gpclk_dkms_state
-            return 1
+        RP1_GPCLK_DKMS_STATE_DIR=$(mktemp -d /tmp/wsprrypi-rp1-gpclk-dkms.XXXXXX)
+        chmod 0700 "$RP1_GPCLK_DKMS_STATE_DIR"
+        RP1_GPCLK_DKMS_HELPER="$RP1_GPCLK_DKMS_STATE_DIR/rp1_gpclk_dkms_install.py"
+        if [[ -n "$local_helper" && -f "$local_helper" && ! -L "$local_helper" ]]; then
+            cp -- "$local_helper" "$RP1_GPCLK_DKMS_HELPER"
+            chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+        else
+            local helper_url="${GIT_RAW_BASE}/${REPO_ORG}/${REPO_NAME}/${REPO_BRANCH}/scripts/rp1_gpclk_dkms_install.py"
+            if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+                --output "$RP1_GPCLK_DKMS_HELPER" "$helper_url"; then
+                warn "Unable to retrieve the RP1-GPCLK-DKMS installer helper from $helper_url."
+                cleanup_rp1_gpclk_dkms_state
+                return 1
+            fi
+            chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
         fi
-        chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
     fi
 
     local prepare_args=(
@@ -2285,8 +2304,12 @@ prepare_rp1_gpclk_dkms_installation() {
     if [[ "$DRY_RUN" == "true" ]]; then
         prepare_args+=(--dry-run)
     fi
+    if [[ "$debug" == "debug" ]]; then
+        prepare_args+=(--debug)
+    fi
 
-    if ! python3 "$RP1_GPCLK_DKMS_HELPER" "${prepare_args[@]}"; then
+    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Resolve RP1-GPCLK-DKMS installation plan" \
+        python3 "$RP1_GPCLK_DKMS_HELPER" "${prepare_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS installation planning failed before package mutation."
         cleanup_rp1_gpclk_dkms_state
         return 1
@@ -2308,17 +2331,18 @@ apply_rp1_gpclk_dkms_installation() {
     eval set -- "$(debug_filter "$@")"
 
     [[ "$ACTION" == "install" ]] || return 0
-    if [[ "$DRY_RUN" == "true" ]]; then
-        logI "Dry run: RP1-GPCLK-DKMS plan validated; no provider mutation performed."
-        debug_end "$debug"
-        return 0
-    fi
-    if [[ -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ]]; then
+    if [[ "$DRY_RUN" != "true" && \
+        ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
         warn "RP1-GPCLK-DKMS plan state is unavailable."
         return 1
     fi
-    if ! python3 "$RP1_GPCLK_DKMS_HELPER" apply \
-        --state-dir "$RP1_GPCLK_DKMS_STATE_DIR"; then
+
+    local apply_args=(apply --state-dir "$RP1_GPCLK_DKMS_STATE_DIR")
+    if [[ "$debug" == "debug" ]]; then
+        apply_args+=(--debug)
+    fi
+    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Apply RP1-GPCLK-DKMS installation plan" \
+        python3 "$RP1_GPCLK_DKMS_HELPER" "${apply_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS installation failed closed; inspect the retained installer log and provider state."
         return 1
     fi
@@ -8410,11 +8434,13 @@ main() {
 #          exits. This enables proper session cleanup and displays session
 #          statistics to the user.
 # -----------------------------------------------------------------------------
-trap egress EXIT
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+    trap egress EXIT
 
-debug=$(debug_start "$@")
-eval set -- "$(debug_filter "$@")"
-main "$@" "$debug"
-retval="$?"
-debug_end "$debug"
-exit "$retval"
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+    main "$@" "$debug"
+    retval="$?"
+    debug_end "$debug"
+    exit "$retval"
+fi

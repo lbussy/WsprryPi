@@ -14,6 +14,7 @@ import os
 import pathlib
 import platform
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -113,30 +114,47 @@ class CommandResult:
 
 
 class Runner:
+    def __init__(self, debug: bool = False):
+        self.debug = debug
+
+    def trace(self, argv: Sequence[str], cwd: pathlib.Path | None = None) -> None:
+        if self.debug:
+            location = f" (cwd={cwd})" if cwd is not None else ""
+            print(f"[RP1 DEBUG] command{location}: {shlex.join(str(item) for item in argv)}", file=sys.stderr)
+
     def run(
         self,
         argv: Sequence[str],
         *,
         check: bool = True,
         cwd: pathlib.Path | None = None,
+        passthrough: bool = False,
     ) -> CommandResult:
+        self.trace(argv, cwd)
         try:
-            process = subprocess.run(
-                list(argv),
-                cwd=cwd,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
+            if passthrough:
+                process = subprocess.run(list(argv), cwd=cwd, text=True, check=False)
+            else:
+                process = subprocess.run(
+                    list(argv), cwd=cwd, text=True, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, check=False,
+                )
         except FileNotFoundError as error:
             result = CommandResult("", f"required command is unavailable: {argv[0]}", 127)
             if check:
                 raise ContractError(result.stderr) from error
             return result
-        result = CommandResult(process.stdout, process.stderr, process.returncode)
+        result = CommandResult(process.stdout or "", process.stderr or "", process.returncode)
+        if self.debug and not passthrough:
+            if result.stdout:
+                print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+            if result.stderr:
+                print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
         if check and process.returncode:
-            detail = process.stderr.strip() or process.stdout.strip() or "no diagnostic"
+            if passthrough:
+                detail = "see command output above"
+            else:
+                detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic"
             raise ContractError(f"command failed ({argv[0]}): {detail}")
         return result
 
@@ -432,8 +450,10 @@ def validate_package(path: pathlib.Path, manifest: Mapping[str, Any], runner: Ru
     ]
     require(control == [PACKAGE_NAME, manifest["debianVersion"], "all"], "Debian control identity differs from manifest")
     tar_path = path.parent / "data.tar"
+    fsys_command = ["dpkg-deb", "--fsys-tarfile", str(path)]
+    runner.trace(fsys_command)
     process = subprocess.Popen(
-        ["dpkg-deb", "--fsys-tarfile", str(path)],
+        fsys_command,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     expanded = 0
@@ -450,6 +470,8 @@ def validate_package(path: pathlib.Path, manifest: Mapping[str, Any], runner: Ru
     assert process.stderr is not None
     stderr = process.stderr.read().decode(errors="replace").strip()
     returncode = process.wait()
+    if runner.debug and stderr:
+        print(stderr, file=sys.stderr)
     require(returncode == 0, f"dpkg-deb could not expose package inventory: {stderr}")
     try:
         actual = tar_inventory(tar_path)
@@ -888,7 +910,10 @@ def apply_release(state_dir: pathlib.Path, resolved: Mapping[str, Any], record: 
             and not inventory["moduleCandidates"] and not inventory["installedOverlays"],
             "foreign or mixed RP1 GPCLK installation blocks package installation",
         )
-        runner.run(["apt-get", "install", "--no-install-recommends", "-y", str(package_path)])
+        runner.run(
+            ["apt-get", "install", "--no-install-recommends", "-y", str(package_path)],
+            passthrough=True,
+        )
     elif inventory["packageVersion"] == expected:
         pass
     else:
@@ -968,7 +993,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         "--kernel", platform.release(), "--module-version", resolved["version"],
         *route_args, "--live-output", "0", "--install", "--evidence-directory", str(evidence),
     ]
-    runner.run(command, cwd=source)
+    runner.run(command, cwd=source, passthrough=True)
     result = verify_development_result(evidence / "rendered-source" / "DEVELOPMENT_MANIFEST.json", resolved)
     after = existing_inventory(pathlib.Path("/"), runner)
     require(not after["activeModule"], "RP1 GPCLK module became active during development installation")
@@ -1030,10 +1055,12 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--model-file", type=pathlib.Path, default=pathlib.Path("/proc/device-tree/model"))
     prepare_parser.add_argument("--compatible-file", type=pathlib.Path, default=pathlib.Path("/proc/device-tree/compatible"))
     prepare_parser.add_argument("--dry-run", action="store_true")
+    prepare_parser.add_argument("--debug", action="store_true")
     apply_parser = sub.add_parser("apply")
     apply_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
     apply_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
     apply_parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/"))
+    apply_parser.add_argument("--debug", action="store_true")
     return result
 
 
@@ -1041,9 +1068,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         if args.command == "prepare":
-            prepare(args, Runner())
+            prepare(args, Runner(args.debug))
         else:
-            apply(args, Runner())
+            apply(args, Runner(args.debug))
     except ContractError as error:
         print(f"RP1-GPCLK-DKMS installation refused: {error}", file=sys.stderr)
         return 1
