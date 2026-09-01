@@ -99,6 +99,22 @@ null route, and output-disabled state before recording success. Development
 identity remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment,
 and qualification remain separate facts.
 
+A repeated development installation is a no-op only when WsprryPi's existing
+v2 ownership record and the complete inactive provider inventory still match
+the newly resolved commit, source tree, version source, UAPI, compatibility
+identity, running kernel, DKMS registration, source destination, module bytes,
+and retained upstream rollback tools. The installer revalidates the ownership
+record after those checks before reporting success. It never adopts an exact
+foreign installation. Missing, changed, mixed, active, routed, enrolled, or
+runtime-profile state still requires its owning migration or recovery workflow.
+
+Runtime-profile residue accounting includes the provider and binding tools,
+readiness schema, controller module, private UAPIs and overlays, journals,
+manager fragments, endpoints, and WsprryPi inhibition drop-in introduced by the
+upstream runtime-provider contract. This installer detects and preserves that
+state; it does not infer ownership or silently translate route-neutral
+development ownership into runtime-profile ownership.
+
 ## Plan, record, and safety boundary
 
 Before package mutation a real installation displays the WsprryPi channel,

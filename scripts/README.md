@@ -18,7 +18,8 @@ uninstallation as completed.
 `install.sh` uses `rp1_gpclk_dkms_install.py` to resolve and validate the
 independently owned provider before package mutation. Automatic Pi 5/CM5,
 explicit override/opt-out, published release, immutable development source,
-dry-run, existing-state refusal, and ownership-aware uninstall behavior are
+dry-run, exact-owned development no-op, foreign-state refusal, and
+ownership-aware uninstall behavior are
 documented in [RP1-GPCLK-DKMS installation](../docs/rp1-gpclk-dkms-installation.md).
 Dry-run uses the installer's standard command wrapper and never starts the
 Python helper. Passing `debug` displays the safely quoted helper command. The

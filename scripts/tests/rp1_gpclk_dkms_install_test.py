@@ -484,9 +484,98 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         record = pathlib.Path(self.temp.name) / "record.json"
         with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
              mock.patch.object(MOD, "existing_inventory", return_value=existing):
-            with self.assertRaisesRegex(MOD.ContractError, "foreign.*mixed"):
+            with self.assertRaisesRegex(MOD.ContractError, "not adoptable"):
                 MOD.apply_development(resolved, record, MOD.Runner())
         self.assertFalse(record.exists())
+
+    def test_exact_owned_development_state_is_an_idempotent_noop(self):
+        source = self.lifecycle_source("usage: development-install --route-neutral")
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        existing = {
+            "packageVersion": None,
+            "dkms": f"{MOD.DKMS_NAME}/0.9.0, {MOD.platform.release()}, arm64: installed",
+            "activeModule": False, "configuredRoute": False,
+            "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
+            "moduleCandidates": [
+                f"/lib/modules/{MOD.platform.release()}/updates/dkms/{MOD.MODULE_NAME}.ko"
+            ],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False, "runtimeResidue": [],
+        }
+        owned = {
+            "channel": "development", "sourceCommit": resolved["commit"],
+            "productVersion": resolved["version"], "sourceTree": resolved["sourceTree"],
+            "uapiSha256": resolved["uapiSha256"],
+            "versionSource": resolved["versionSource"],
+            "versionSourceSha256": resolved["versionSourceSha256"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        record = pathlib.Path(self.temp.name) / "record.json"
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+        })
+        stdout = io.StringIO()
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=existing), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (owned, identity, None),
+             ]), \
+             mock.patch.object(MOD, "validate_development_removal") as validate, \
+             mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.apply_development(resolved, record, runner)
+        self.assertEqual(validate.call_args_list, [
+            mock.call(owned, pathlib.Path("/"), runner),
+            mock.call(owned, pathlib.Path("/"), runner),
+        ])
+        self.assertEqual(runner.passthrough_calls, [])
+        self.assertIn("no provider mutation", stdout.getvalue())
+
+    def test_owned_development_identity_drift_is_not_reused(self):
+        source = self.lifecycle_source("usage: development-install --route-neutral")
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        existing = {
+            "packageVersion": None, "dkms": "present", "activeModule": False,
+            "configuredRoute": False, "sourceTrees": [], "moduleCandidates": [],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False, "runtimeResidue": [],
+        }
+        owned = {
+            "channel": "development", "sourceCommit": "e" * 40,
+            "productVersion": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+        })
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=existing), \
+             mock.patch.object(MOD, "load_ownership_record", return_value=(owned, mock.Mock(st_dev=1, st_ino=2), None)), \
+             mock.patch.object(MOD, "validate_development_removal") as validate:
+            with self.assertRaisesRegex(MOD.ContractError, "identity differs"):
+                MOD.apply_development(resolved, pathlib.Path(self.temp.name) / "record.json", runner)
+        validate.assert_not_called()
 
     def test_runtime_controller_residue_blocks_development_before_mutation(self):
         source = self.lifecycle_source("usage: development-install --route-neutral")
@@ -518,9 +607,12 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         inhibitor = root / "etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf"
         inhibitor.parent.mkdir(parents=True)
         inhibitor.write_text("owned")
-        runtime_library = root / "usr/lib/rp1-gpclk-dkms/runtime_route_client.py"
+        runtime_library = root / "usr/lib/rp1-gpclk-dkms/runtime_provider.py"
         runtime_library.parent.mkdir(parents=True)
         runtime_library.symlink_to("missing-client")
+        runtime_socket = root / "usr/lib/systemd/system/rp1-gpclk-route-manager.socket"
+        runtime_socket.parent.mkdir(parents=True)
+        runtime_socket.write_text("[Socket]\n")
         controller = root / "lib/modules/fixture/updates/dkms/rp1_route_controller.ko"
         controller.parent.mkdir(parents=True)
         controller.write_bytes(b"module")
@@ -531,7 +623,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         inventory = MOD.existing_inventory(root, runner)
         self.assertEqual(
             inventory["runtimeResidue"],
-            sorted((str(inhibitor), str(runtime_library), str(controller))),
+            sorted((str(inhibitor), str(runtime_library), str(runtime_socket), str(controller))),
         )
 
 

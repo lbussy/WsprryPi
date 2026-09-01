@@ -947,16 +947,21 @@ def runtime_residue_inventory(root: pathlib.Path) -> list[str]:
         "/etc/rp1-gpclk-dkms/runtime-controller.json",
         "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
         "/etc/systemd/system/wsprrypi.service.d/90-rp1-route-inhibit.conf",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
+        "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service",
         "/var/lib/rp1-gpclk-dkms/runtime-admin",
         "/usr/lib/rp1-gpclk-dkms/runtime-uapi",
         "/usr/lib/rp1-gpclk-dkms/runtime-overlays",
         "/usr/lib/rp1-gpclk-dkms/runtime_application.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_binding.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_controller_admin.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_deployment.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_layout.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_manager.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_output.py",
+        "/usr/lib/rp1-gpclk-dkms/runtime_provider.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_route_client.py",
+        "/usr/lib/rp1-gpclk-dkms/schema/rp1-gpclk-runtime-readiness-v1.schema.json",
         "/dev/rp1-route-admin",
         "/sys/module/rp1_route_controller",
     )
@@ -1189,6 +1194,48 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     require_no_runtime_residue(before, "source-development installation")
     require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
     require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
+    existing_record, record_identity, record_reason = load_ownership_record(record)
+    provider_present = bool(
+        before["packageVersion"] is not None
+        or before["dkms"]
+        or before["sourceTrees"]
+        or before["moduleCandidates"]
+        or before["installedOverlays"]
+        or before["enrollment"]
+        or before["developmentManager"]
+    )
+    if provider_present and existing_record is not None and record_identity is not None:
+        require(existing_record["channel"] == "development", "an existing WsprryPi-owned release provider requires its owning migration workflow")
+        expected_identity = {
+            "sourceCommit": resolved["commit"],
+            "productVersion": resolved["version"],
+            "sourceTree": resolved["sourceTree"],
+            "uapiSha256": resolved["uapiSha256"],
+            "versionSource": resolved["versionSource"],
+            "versionSourceSha256": resolved["versionSourceSha256"],
+            "targetKernel": platform.release(),
+            "compatibilityIdentity": COMPATIBILITY_IDENTITY,
+        }
+        require(
+            all(existing_record.get(name) == value for name, value in expected_identity.items()),
+            "existing WsprryPi-owned development provider identity differs from the selected source",
+        )
+        validate_development_removal(existing_record, pathlib.Path("/"), runner)
+        current_record, current_identity, current_reason = load_ownership_record(record)
+        require(
+            current_record == existing_record
+            and current_identity is not None
+            and (current_identity.st_dev, current_identity.st_ino)
+            == (record_identity.st_dev, record_identity.st_ino),
+            f"installation ownership changed during exact-provider verification: {current_reason or 'identity mismatch'}",
+        )
+        # Recheck the provider after the record observation so a change during
+        # the first verification cannot be reported as an exact no-op.
+        validate_development_removal(current_record, pathlib.Path("/"), runner)
+        print("Exact WsprryPi-owned development provider already installed; no provider mutation performed.")
+        return
+    if provider_present and (existing_record is None or record_identity is None):
+        require(False, f"an existing provider is not adoptable: {record_reason or 'WsprryPi ownership is unproven'}")
     require(
         before["packageVersion"] is None
         and not before["dkms"]
