@@ -225,6 +225,7 @@ declare UI_PUBLICATION_ATTEMPTED="false"
 declare UI_PUBLICATION_RESULT_FILE=""
 declare INSTALL_RP1_GPCLK_DKMS="${INSTALL_RP1_GPCLK_DKMS:-auto}"
 declare RP1_GPCLK_DKMS_SOURCE="${RP1_GPCLK_DKMS_SOURCE:-auto}"
+declare REMOVE_RP1_GPCLK_DKMS="${REMOVE_RP1_GPCLK_DKMS:-auto}"
 declare RP1_GPCLK_DKMS_STATE_DIR=""
 declare RP1_GPCLK_DKMS_HELPER=""
 
@@ -2369,6 +2370,76 @@ apply_rp1_gpclk_dkms_installation() {
         warn "RP1-GPCLK-DKMS installation failed closed; inspect the retained installer log and provider state."
         return 1
     fi
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Remove an unchanged RP1 provider only when a v2 record proves that
+#        WsprryPi installed it.
+# @details The helper preserves missing, legacy, malformed, drifted, active, or
+#          otherwise ambiguous provider state. Release removal uses the normal
+#          Debian package lifecycle; development removal uses the exact
+#          upstream rollback entrypoint captured at installation time.
+# -----------------------------------------------------------------------------
+remove_owned_rp1_gpclk_dkms_provider() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "uninstall" ]] || return 0
+    case "$REMOVE_RP1_GPCLK_DKMS" in
+        auto|true|false) ;;
+        *)
+            warn "REMOVE_RP1_GPCLK_DKMS must be auto, true, or false."
+            return 1
+            ;;
+    esac
+    if [[ "$REMOVE_RP1_GPCLK_DKMS" == "false" ]]; then
+        logI "RP1-GPCLK-DKMS preserved by explicit operator opt-out."
+        debug_end "$debug"
+        return 0
+    fi
+
+    local script_source="${BASH_SOURCE[0]:-}"
+    local local_helper=""
+    if [[ -n "$script_source" && "$script_source" != "bash" ]]; then
+        local_helper="$(cd "$(dirname "$script_source")" && pwd -P)/rp1_gpclk_dkms_install.py"
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        RP1_GPCLK_DKMS_STATE_DIR="dry-run:no-state-created"
+        RP1_GPCLK_DKMS_HELPER="${local_helper:-dry-run:no-helper-downloaded}"
+    else
+        RP1_GPCLK_DKMS_STATE_DIR=$(mktemp -d /tmp/wsprrypi-rp1-gpclk-dkms.XXXXXX)
+        chmod 0700 "$RP1_GPCLK_DKMS_STATE_DIR"
+        RP1_GPCLK_DKMS_HELPER="$RP1_GPCLK_DKMS_STATE_DIR/rp1_gpclk_dkms_install.py"
+        if [[ -n "$local_helper" && -f "$local_helper" && ! -L "$local_helper" ]]; then
+            cp -- "$local_helper" "$RP1_GPCLK_DKMS_HELPER"
+            chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+        else
+            local helper_url="${GIT_RAW_BASE}/${REPO_ORG}/${REPO_NAME}/${REPO_BRANCH}/scripts/rp1_gpclk_dkms_install.py"
+            if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+                --output "$RP1_GPCLK_DKMS_HELPER" "$helper_url"; then
+                warn "Unable to retrieve the RP1-GPCLK-DKMS installer helper from $helper_url."
+                cleanup_rp1_gpclk_dkms_state
+                return 1
+            fi
+            chmod 0700 "$RP1_GPCLK_DKMS_HELPER"
+        fi
+    fi
+
+    local remove_args=(remove --remove "$REMOVE_RP1_GPCLK_DKMS")
+    if [[ "$debug" == "debug" ]]; then
+        remove_args+=(--debug)
+    fi
+    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Remove WsprryPi-owned RP1-GPCLK-DKMS provider when ownership and identity match" \
+        python3 "$RP1_GPCLK_DKMS_HELPER" "${remove_args[@]}" "$debug"; then
+        warn "RP1-GPCLK-DKMS owned-provider removal failed; the ownership record was retained for recovery."
+        cleanup_rp1_gpclk_dkms_state
+        return 1
+    fi
+    cleanup_rp1_gpclk_dkms_state
     debug_end "$debug"
     return 0
 }
@@ -8237,8 +8308,9 @@ finish_script() {
             printf "Remember to reboot to disable your soundcard before transmission.\n\n"
         fi
     elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
-        printf "\n%s has been uninstalled. No apt packages have\n" "$REPO_TITLE"
-        printf "been removed to prevent impact to other functionality.\n\n"
+        printf "\n%s has been uninstalled. Shared apt packages were retained.\n" "$REPO_TITLE"
+        printf "An unchanged RP1-GPCLK-DKMS provider is removed only when\n"
+        printf "WsprryPi's v2 ownership record proves it installed that provider.\n\n"
         if [[ "${REBOOT:-false}" == "true" ]]; then
             printf "Remember to reboot to re-enable your soundcard.\n\n"
         fi
@@ -8351,6 +8423,9 @@ manage_wsprry_pi() {
         )
         # Re-add manage_sound at the very end
         group_to_execute+=("manage_sound")
+        # Perform ownership-aware provider cleanup only after application and
+        # service teardown has completed.
+        group_to_execute+=("remove_owned_rp1_gpclk_dkms_provider")
         ;;
     *)
         die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
@@ -8383,6 +8458,10 @@ manage_wsprry_pi() {
                 restore_daemon_state "${func}" "${debug}"
                 overall_status=1
                 break
+            elif [[ "$function_name" == "remove_owned_rp1_gpclk_dkms_provider" ]]; then
+                # Do not report uninstall success after a partially completed
+                # provider lifecycle. Its ownership record remains for recovery.
+                overall_status=1
             fi
         else
             debug_print "$func succeeded." "$debug"

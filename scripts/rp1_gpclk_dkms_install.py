@@ -14,6 +14,7 @@ import os
 import pathlib
 import platform
 import re
+import secrets
 import shlex
 import stat
 import subprocess
@@ -38,7 +39,8 @@ PACKAGE_NAME = "rp1-gpclk-dkms"
 DKMS_NAME = "rp1-gpclk-dkms"
 MODULE_NAME = "rp1_gpclk_dkms"
 COMPATIBILITY_IDENTITY = "v0.9.0-pi5"
-RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
+LEGACY_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
+RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v2"
 STATE_SCHEMA = "wsprrypi-rp1-gpclk-dkms-plan-v1"
 SUPPORTED_UAPI_MIN = 4
 SUPPORTED_UAPI_MAX = 4
@@ -53,6 +55,7 @@ MAX_PACKAGE_MEMBERS = 20000
 MAX_PACKAGE_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_EXPANDED_TAR_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_PATH_BYTES = 1024
+MAX_RECORD_BYTES = 4 * 1024 * 1024
 
 
 class ContractError(RuntimeError):
@@ -751,6 +754,136 @@ def atomic_json(path: pathlib.Path, value: Any, mode: int = 0o600) -> None:
             pass
 
 
+def atomic_json_new(path: pathlib.Path, value: Any, mode: int = 0o600) -> None:
+    """Publish a new ownership record without replacing any concurrent state."""
+    payload = canonical(value) + b"\n"
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+        parent_descriptor = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
+    except FileExistsError as error:
+        raise ContractError("installation ownership record appeared during provider installation") from error
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def record_file_identity(path: pathlib.Path) -> os.stat_result:
+    require(path.is_absolute(), "installation ownership record path must be absolute")
+    secure_record_parent(path)
+    try:
+        info = path.lstat()
+    except FileNotFoundError as error:
+        raise ContractError("installation ownership record is absent") from error
+    require(stat.S_ISREG(info.st_mode), "installation ownership record is not a regular file")
+    require(info.st_uid == os.geteuid(), "installation ownership record is not owned by the invoking user")
+    require(stat.S_IMODE(info.st_mode) & 0o077 == 0, "installation ownership record is accessible by group or others")
+    require(info.st_size <= MAX_RECORD_BYTES, "installation ownership record exceeds the bounded size")
+    return info
+
+
+def load_ownership_record(path: pathlib.Path) -> tuple[dict[str, Any] | None, os.stat_result | None, str | None]:
+    """Return a validated v2 record, or a preservation reason without following unsafe state."""
+    if not path.is_absolute():
+        return None, None, "ownership record path is not absolute"
+    if not path.exists() and not path.is_symlink():
+        return None, None, "no WsprryPi ownership record exists"
+    try:
+        info = record_file_identity(path)
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            opened = os.fstat(descriptor)
+            require(
+                (opened.st_dev, opened.st_ino) == (info.st_dev, info.st_ino),
+                "installation ownership record changed while opening",
+            )
+            with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                payload = stream.read(MAX_RECORD_BYTES + 1)
+        finally:
+            os.close(descriptor)
+        require(len(payload) <= MAX_RECORD_BYTES, "installation ownership record exceeds the bounded size")
+        value = json.loads(payload.decode("utf-8"))
+        require(isinstance(value, dict), "installation ownership record is not an object")
+        if value.get("schema") == LEGACY_RECORD_SCHEMA:
+            return None, info, "legacy v1 installation record cannot prove WsprryPi ownership"
+        require(value.get("schema") == RECORD_SCHEMA, "installation ownership record schema is unsupported")
+        common = {
+            "schema", "repository", "owner", "channel", "installationMethod",
+            "routeActivation", "output", "qualificationClaim",
+        }
+        channel = value.get("channel")
+        if channel == "release":
+            required = common | {"tag", "sourceCommit", "manifest", "moduleArtifacts"}
+        elif channel == "development":
+            required = common | {
+                "sourceCommit", "productVersion", "sourceTree", "uapiSha256",
+                "versionSource", "versionSourceSha256", "targetKernel",
+                "compatibilityIdentity", "upstreamEvidence", "rollbackRecord",
+                "rollbackRecordSha256", "rollbackEntrypoint",
+                "rollbackEntrypointSha256", "installedModulePath",
+                "installedModuleSha256", "decompressedModuleSha256",
+            }
+        else:
+            raise ContractError("installation ownership record channel is unsupported")
+        require_exact_keys(value, required, "installation ownership record")
+        require(value["repository"] == REPOSITORY, "installation ownership repository differs")
+        require(value["owner"] == "WsprryPi", "installation ownership owner differs")
+        require(value["routeActivation"] == "disabled" and value["output"] == "disabled", "installation ownership record is not route-neutral")
+        require(value["qualificationClaim"] is False, "installation ownership record contains an unsupported qualification claim")
+        if channel == "release":
+            require(isinstance(value["tag"], str) and isinstance(value["sourceCommit"], str), "release ownership identity fields are invalid")
+            require(isinstance(value["manifest"], dict) and isinstance(value["moduleArtifacts"], list), "release ownership evidence fields are invalid")
+        else:
+            string_fields = required - common
+            require(all(isinstance(value[field], str) for field in string_fields), "development ownership evidence fields are invalid")
+        return value, info, None
+    except (ContractError, OSError, UnicodeError, json.JSONDecodeError) as error:
+        return None, None, str(error)
+
+
+def remove_ownership_record(path: pathlib.Path, expected: os.stat_result) -> None:
+    current = record_file_identity(path)
+    require(
+        (current.st_dev, current.st_ino) == (expected.st_dev, expected.st_ino),
+        "installation ownership record changed during provider removal",
+    )
+    path.unlink()
+    parent_descriptor = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(parent_descriptor)
+    finally:
+        os.close(parent_descriptor)
+
+
+def module_artifacts(root: pathlib.Path) -> list[dict[str, str]]:
+    base = root_path(root, "/lib/modules")
+    artifacts: list[dict[str, str]] = []
+    if not base.exists():
+        return artifacts
+    for path in sorted(base.glob("*/updates/dkms/rp1_gpclk_dkms.ko*")):
+        relative = pathlib.PurePosixPath("/" + str(path.relative_to(root)))
+        installed = installed_member(root, str(relative).removeprefix("/"), "file")
+        artifacts.append({"path": str(relative), "sha256": sha256_file(installed)})
+    return artifacts
+
+
+def ensure_new_ownership_record(path: pathlib.Path) -> None:
+    require(path.is_absolute(), "installation ownership record path must be absolute")
+    secure_record_parent(path)
+    require(not path.exists() and not path.is_symlink(), "stale installation ownership state blocks a new provider installation")
+
+
 def render_plan(plan: Mapping[str, Any]) -> None:
     print("RP1-GPCLK-DKMS installation plan")
     print(f"  WsprryPi source channel: {plan['wsprryChannel']}")
@@ -919,31 +1052,35 @@ def apply_release(state_dir: pathlib.Path, resolved: Mapping[str, Any], record: 
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks ordinary installation")
     require(not inventory["enrollment"] and not inventory["developmentManager"], "development enrollment or manager binding blocks release installation")
     expected = manifest["debianVersion"]
+    installed_by_wsprrypi = False
     if inventory["packageVersion"] is None:
         require(
             not inventory["dkms"] and not inventory["sourceTrees"]
             and not inventory["moduleCandidates"] and not inventory["installedOverlays"],
             "foreign or mixed RP1 GPCLK installation blocks package installation",
         )
+        ensure_new_ownership_record(record)
         runner.run(
             ["apt-get", "install", "--no-install-recommends", "-y", str(package_path)],
             passthrough=True,
         )
+        installed_by_wsprrypi = True
     elif inventory["packageVersion"] == expected:
         pass
     else:
         raise ContractError(f"existing RP1-GPCLK-DKMS {inventory['packageVersion']} requires its owning package migration workflow; automatic replacement refused")
     verify_installed_release(root, manifest, runner)
-    record_value = {
-        "schema": RECORD_SCHEMA, "repository": REPOSITORY, "channel": "release",
-        "tag": resolved["tag"], "sourceCommit": resolved["commit"],
-        "productVersion": manifest["productVersion"], "debianVersion": manifest["debianVersion"],
-        "packageSha256": manifest["package"]["sha256"], "uapiSha256": manifest["uapi"]["sha256"],
-        "administrationProtocol": manifest["administrationProtocol"], "routeActivation": "disabled",
-        "output": "disabled", "qualificationClaim": False,
-    }
-    record.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    atomic_json(record, record_value)
+    if installed_by_wsprrypi:
+        artifacts = module_artifacts(root)
+        require(bool(artifacts), "installed release lacks attributable DKMS module artifacts")
+        atomic_json_new(record, {
+            "schema": RECORD_SCHEMA, "repository": REPOSITORY, "owner": "WsprryPi",
+            "channel": "release", "installationMethod": "debian-package",
+            "tag": resolved["tag"], "sourceCommit": resolved["commit"],
+            "manifest": manifest, "moduleArtifacts": artifacts,
+            "routeActivation": "disabled", "output": "disabled",
+            "qualificationClaim": False,
+        })
 
 
 def verify_development_result(
@@ -1016,8 +1153,9 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         and not before["developmentManager"],
         "an existing packaged, development, foreign, or mixed RP1 GPCLK installation requires its owning migration workflow",
     )
-    evidence = record.parent / "rp1-gpclk-dkms-development-evidence"
-    evidence.mkdir(parents=True, exist_ok=False, mode=0o700)
+    ensure_new_ownership_record(record)
+    evidence = record.parent / f"rp1-gpclk-dkms-development-evidence.{secrets.token_hex(12)}"
+    require(not evidence.exists() and not evidence.is_symlink(), "development evidence destination already exists")
     command = [
         str(source / "scripts" / "development-install"), "--source", str(source),
         "--kernel", platform.release(),
@@ -1029,18 +1167,192 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     require(not after["activeModule"], "RP1 GPCLK module became active during development installation")
     require(not after["configuredRoute"], "RP1 GPCLK route became configured during development installation")
     installed = result["installedModule"]
-    atomic_json(record, {
-        "schema": RECORD_SCHEMA, "repository": REPOSITORY, "channel": "development",
+    rollback_record = pathlib.Path(str(result.get("rollbackRecord", "")))
+    expected_rollback = evidence / "ROLLBACK.json"
+    require(rollback_record == expected_rollback and rollback_record.is_file() and not rollback_record.is_symlink(), "upstream development rollback record is missing or out of scope")
+    rollback_entrypoint = evidence / "rendered-source" / "scripts" / "development-rollback"
+    require(rollback_entrypoint.is_file() and not rollback_entrypoint.is_symlink(), "upstream development rollback entrypoint is missing or substituted")
+    installed_path = pathlib.Path(str(installed.get("installedPath", "")))
+    expected_prefix = pathlib.Path(f"/lib/modules/{platform.release()}/updates/dkms")
+    require(installed_path.is_absolute() and installed_path.parent == expected_prefix, "upstream installed module path is outside the exact-kernel DKMS destination")
+    atomic_json_new(record, {
+        "schema": RECORD_SCHEMA, "repository": REPOSITORY, "owner": "WsprryPi",
+        "channel": "development", "installationMethod": "upstream-development-rollback",
         "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
         "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
         "versionSource": resolved["versionSource"],
         "versionSourceSha256": resolved["versionSourceSha256"],
         "installedModuleSha256": installed["installedFileSha256"],
         "decompressedModuleSha256": installed["decompressedElfSha256"],
+        "installedModulePath": str(installed_path),
         "targetKernel": platform.release(),
         "compatibilityIdentity": COMPATIBILITY_IDENTITY, "routeActivation": "disabled",
         "output": "disabled", "qualificationClaim": False, "upstreamEvidence": str(evidence),
+        "rollbackRecord": str(rollback_record), "rollbackRecordSha256": sha256_file(rollback_record),
+        "rollbackEntrypoint": str(rollback_entrypoint),
+        "rollbackEntrypointSha256": sha256_file(rollback_entrypoint),
     })
+
+
+def require_hash(value: Any, field: str) -> str:
+    require(isinstance(value, str) and SHA256.fullmatch(value) is not None, f"installation ownership record has invalid {field}")
+    return value
+
+
+def validate_recorded_module_artifacts(value: Any) -> list[dict[str, str]]:
+    require(isinstance(value, list) and value, "installation ownership record lacks module artifacts")
+    result: list[dict[str, str]] = []
+    for item in value:
+        require(isinstance(item, dict), "installation ownership module artifact is not an object")
+        require_exact_keys(item, {"path", "sha256"}, "installation ownership module artifact")
+        path = item["path"]
+        require(
+            isinstance(path, str)
+            and re.fullmatch(r"/lib/modules/[^/]+/updates/dkms/rp1_gpclk_dkms\.ko(?:\.(?:xz|gz|zst|bz2))?", path) is not None,
+            "installation ownership module artifact path is out of scope",
+        )
+        result.append({"path": path, "sha256": require_hash(item["sha256"], "module artifact SHA-256")})
+    require(len({item["path"] for item in result}) == len(result), "installation ownership module artifacts contain duplicate paths")
+    return sorted(result, key=lambda item: item["path"])
+
+
+def validate_release_removal(record: Mapping[str, Any], root: pathlib.Path, runner: Runner) -> None:
+    require(record["installationMethod"] == "debian-package", "release ownership installation method differs")
+    tag = record["tag"]
+    commit = record["sourceCommit"]
+    require(isinstance(tag, str) and SEMVER.fullmatch(tag) is not None, "release ownership tag is invalid")
+    require(isinstance(commit, str) and SHA40.fullmatch(commit) is not None, "release ownership commit is invalid")
+    manifest = record["manifest"]
+    require(isinstance(manifest, dict), "release ownership manifest is invalid")
+    validated = validate_manifest(manifest, tag=tag, tag_commit=commit)
+    verify_installed_release(root, validated, runner)
+    expected = {item["path"]: item["sha256"] for item in validate_recorded_module_artifacts(record["moduleArtifacts"])}
+    current = {item["path"]: item["sha256"] for item in module_artifacts(root)}
+    require(all(current.get(path) == digest for path, digest in expected.items()), "recorded DKMS module artifacts differ from WsprryPi ownership")
+    for path in current:
+        match = re.fullmatch(r"/lib/modules/([^/]+)/updates/dkms/rp1_gpclk_dkms\.ko(?:\.(?:xz|gz|zst|bz2))?", path)
+        require(match is not None, "installed DKMS module artifact path is out of scope")
+        version = runner.run(["modinfo", "-k", match.group(1), "-F", "version", MODULE_NAME]).stdout.strip()
+        require(version == validated["productVersion"], "additional-kernel DKMS module identity differs from WsprryPi ownership")
+
+
+def secure_owned_path(path: pathlib.Path, parent: pathlib.Path, description: str) -> pathlib.Path:
+    require(path.is_absolute(), f"{description} path is not absolute")
+    absolute = pathlib.Path(os.path.abspath(path))
+    parent_absolute = pathlib.Path(os.path.abspath(parent))
+    require(absolute.is_relative_to(parent_absolute), f"{description} path is outside WsprryPi-owned evidence")
+    try:
+        resolved = absolute.resolve(strict=True)
+    except OSError as error:
+        raise ContractError(f"{description} is unavailable") from error
+    require(resolved == absolute and resolved.is_file() and not resolved.is_symlink(), f"{description} is missing or substituted")
+    info = resolved.stat()
+    require(info.st_uid == os.geteuid(), f"{description} is not owned by the invoking user")
+    require(stat.S_IMODE(info.st_mode) & 0o022 == 0, f"{description} is group- or world-writable")
+    return resolved
+
+
+def validate_development_removal(record: Mapping[str, Any], root: pathlib.Path, runner: Runner) -> tuple[pathlib.Path, pathlib.Path]:
+    require(record["installationMethod"] == "upstream-development-rollback", "development ownership installation method differs")
+    require(isinstance(record["sourceCommit"], str) and SHA40.fullmatch(record["sourceCommit"]) is not None, "development ownership commit is invalid")
+    require(isinstance(record["productVersion"], str) and SAFE_VERSION.fullmatch(record["productVersion"]) is not None, "development ownership version is invalid")
+    require(SHA40.fullmatch(record["sourceTree"]) is not None, "development ownership source tree is invalid")
+    require(record["versionSource"] == "include/rp1_gpclk/version.h", "development ownership version source differs")
+    require(record["compatibilityIdentity"] == COMPATIBILITY_IDENTITY, "development ownership compatibility identity differs")
+    require(record["targetKernel"] == platform.release(), "development ownership targets a different running kernel")
+    for field in (
+        "uapiSha256", "versionSourceSha256", "rollbackRecordSha256",
+        "rollbackEntrypointSha256", "installedModuleSha256", "decompressedModuleSha256",
+    ):
+        require_hash(record[field], field)
+    evidence = pathlib.Path(record["upstreamEvidence"])
+    expected_parent = pathlib.Path("/var/lib/wsprrypi")
+    if root != pathlib.Path("/"):
+        expected_parent = root_path(root, str(expected_parent))
+    require(
+        evidence.parent == expected_parent
+        and re.fullmatch(r"rp1-gpclk-dkms-development-evidence\.[0-9a-f]{24}", evidence.name) is not None,
+        "development ownership evidence path differs",
+    )
+    rollback = secure_owned_path(pathlib.Path(record["rollbackRecord"]), evidence, "development rollback record")
+    entrypoint = secure_owned_path(pathlib.Path(record["rollbackEntrypoint"]), evidence, "development rollback entrypoint")
+    require(rollback == evidence / "ROLLBACK.json", "development rollback record path differs")
+    require(entrypoint == evidence / "rendered-source/scripts/development-rollback", "development rollback entrypoint path differs")
+    require(sha256_file(rollback) == record["rollbackRecordSha256"], "development rollback record identity differs")
+    require(sha256_file(entrypoint) == record["rollbackEntrypointSha256"], "development rollback entrypoint identity differs")
+    inventory = existing_inventory(root, runner)
+    require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks development rollback")
+    require(not inventory["activeModule"], "an active RP1 GPCLK module blocks owned provider removal")
+    require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks owned provider removal")
+    require(not inventory["enrollment"] and not inventory["developmentManager"], "development enrollment or manager binding blocks owned provider removal")
+    version = record["productVersion"]
+    dkms_lines = [line for line in inventory["dkms"].splitlines() if line.strip()]
+    expected_dkms = re.compile(rf"^{re.escape(DKMS_NAME)}/{re.escape(version)}[^\n]*installed$")
+    require(bool(dkms_lines) and all(expected_dkms.fullmatch(line) for line in dkms_lines), "development DKMS registration differs from WsprryPi ownership")
+    expected_source = str(root_path(root, f"/usr/src/{PACKAGE_NAME}-{version}"))
+    require(inventory["sourceTrees"] == [expected_source], "development source destination differs from WsprryPi ownership")
+    require(not inventory["installedOverlays"], "installed RP1 route overlays block development rollback")
+    installed_path = pathlib.Path(record["installedModulePath"])
+    expected_prefix = pathlib.Path(f"/lib/modules/{record['targetKernel']}/updates/dkms")
+    require(installed_path.is_absolute() and installed_path.parent == expected_prefix, "development installed module path is out of scope")
+    actual_installed = root_path(root, str(installed_path))
+    require(inventory["moduleCandidates"] == [str(actual_installed)], "development module destination differs from WsprryPi ownership")
+    require(actual_installed.is_file() and not actual_installed.is_symlink(), "development installed module is missing or substituted")
+    require(sha256_file(actual_installed) == record["installedModuleSha256"], "development installed module identity differs")
+    return entrypoint, rollback
+
+
+def verify_provider_absent(root: pathlib.Path, runner: Runner) -> None:
+    inventory = existing_inventory(root, runner)
+    require(
+        inventory["packageVersion"] is None
+        and not inventory["dkms"]
+        and not inventory["activeModule"]
+        and not inventory["sourceTrees"]
+        and not inventory["moduleCandidates"]
+        and not inventory["installedOverlays"]
+        and not inventory["configuredRoute"]
+        and not inventory["enrollment"]
+        and not inventory["developmentManager"],
+        "provider removal completed with residual or active RP1 state",
+    )
+
+
+def remove_owned_provider(args: argparse.Namespace, runner: Runner) -> None:
+    if args.remove == "false":
+        print("RP1-GPCLK-DKMS preserved: explicit operator opt-out.")
+        return
+    record, identity, reason = load_ownership_record(args.record)
+    if record is None or identity is None:
+        print(f"RP1-GPCLK-DKMS preserved: {reason or 'WsprryPi ownership is unproven'}.")
+        return
+    try:
+        root = args.root.resolve(strict=True)
+    except OSError as error:
+        raise ContractError("provider inventory root is unavailable") from error
+    try:
+        if record["channel"] == "release":
+            validate_release_removal(record, root, runner)
+            command = ["apt-get", "remove", "-y", PACKAGE_NAME]
+            working_directory = None
+        else:
+            entrypoint, rollback = validate_development_removal(record, root, runner)
+            command = [str(entrypoint), "--record", str(rollback)]
+            working_directory = entrypoint.parents[1]
+    except ContractError as error:
+        print(f"RP1-GPCLK-DKMS preserved: installed state does not match WsprryPi ownership ({error}).")
+        return
+    current_record, current_identity, current_reason = load_ownership_record(args.record)
+    require(
+        current_record == record
+        and current_identity is not None
+        and (current_identity.st_dev, current_identity.st_ino) == (identity.st_dev, identity.st_ino),
+        f"installation ownership changed before provider removal: {current_reason or 'identity mismatch'}",
+    )
+    runner.run(command, cwd=working_directory, passthrough=True)
+    verify_provider_absent(root, runner)
+    remove_ownership_record(args.record, identity)
+    print("WsprryPi-owned RP1-GPCLK-DKMS provider removed and absence verified.")
 
 
 def load_plan(state_dir: pathlib.Path) -> dict[str, Any]:
@@ -1093,6 +1405,11 @@ def parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
     apply_parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/"))
     apply_parser.add_argument("--debug", action="store_true")
+    remove_parser = sub.add_parser("remove")
+    remove_parser.add_argument("--remove", choices=("auto", "true", "false"), default="auto")
+    remove_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
+    remove_parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/"))
+    remove_parser.add_argument("--debug", action="store_true")
     return result
 
 
@@ -1101,10 +1418,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "prepare":
             prepare(args, Runner(args.debug))
-        else:
+        elif args.command == "apply":
             apply(args, Runner(args.debug))
+        else:
+            remove_owned_provider(args, Runner(args.debug))
     except ContractError as error:
-        print(f"RP1-GPCLK-DKMS installation refused: {error}", file=sys.stderr)
+        print(f"RP1-GPCLK-DKMS operation refused: {error}", file=sys.stderr)
         return 1
     return 0
 

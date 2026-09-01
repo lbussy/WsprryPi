@@ -44,10 +44,14 @@ independently maintained `/dev/rp1-gpclk` provider. On Pi 5-family systems the
 installer can resolve and validate an eligible published provider release; it
 also supports fail-closed exact-source development selection. See the
 [RP1-GPCLK-DKMS installation contract](docs/rp1-gpclk-dkms-installation.md).
-WsprryPi preserves the provider on uninstall and never selects a route, loads
-the module, or enables output as part of provider installation. Runtime checks
-establish application compatibility only; they do not qualify installation,
-GPIO behavior, timing, frequency accuracy, spectral performance, or RF output.
+On uninstall, WsprryPi removes only an unchanged provider that its secure v2
+ownership record proves WsprryPi installed; all pre-existing, legacy-recorded,
+ambiguous, or drifted providers are preserved. Operators can set
+`REMOVE_RP1_GPCLK_DKMS=false` to retain even a proven owned provider. WsprryPi
+never selects a route, loads the module, or enables output as part of provider
+installation. Runtime checks establish application compatibility only; they do
+not qualify installation, GPIO behavior, timing, frequency accuracy, spectral
+performance, or RF output.
 
 ## Installation
 
