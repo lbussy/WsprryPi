@@ -2152,7 +2152,7 @@ function backendInlineHintMessage() {
     }
 
     if (backend === "gpio" && platform.gpioClockTransmissionSupported === false) {
-        return "GPIO transmission is supported only on Raspberry Pi 1 through 4.";
+        return gpioPlatformRestrictionMessage();
     }
 
     return "";
@@ -2160,7 +2160,7 @@ function backendInlineHintMessage() {
 
 function formatBackendBannerMessage(reason) {
     if (isGpioUnsupportedReason(reason)) {
-        return "Transmission is unavailable with the GPIO backend on this Raspberry Pi. Use the Si5351 backend to enable transmission.";
+        return `Transmission is unavailable with the GPIO backend. ${reason}`;
     }
 
     if (isSi5351MissingReason(reason)) {
@@ -2229,19 +2229,19 @@ function updateBackendPlatformSupportUi() {
             ? formatBackendRecoveryMessage(currentBackend, resolvedBackend)
             : "";
     const backendWarning = hiddenRp1Selection
-        ? "Select Si5351 to enable transmission."
+        ? gpioPlatformRestrictionMessage()
         : (anyBackendSupported
             ? selectedBackendUnavailableMessage()
             : noBackendAvailableMessage());
     const inlineHint = hiddenRp1Selection
-        ? "The saved RF output path is unavailable on this system."
+        ? gpioPlatformRestrictionMessage()
         : (anyBackendSupported
             ? backendInlineHintMessage()
             : noBackendAvailableMessage());
 
     $gpioOption.text(
         hiddenRp1Selection
-            ? "Select Si5351 output"
+            ? "GPIO (RP1 unavailable)"
             : (gpioSupported ? "GPIO" : "GPIO (Unsupported on this Pi)")
     );
     $gpioOption.prop("disabled", !gpioSupported);

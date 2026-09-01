@@ -702,7 +702,9 @@ namespace
             !gpio_clock_transmission_supported)
         {
             gpio_support_error =
-                "GPIO transmission is supported only on Raspberry Pi 1 through 4.";
+                "GPIO controls on Raspberry Pi 5 require a compatible RP1 route "
+                "controller and an active canonical provider. Transmission remains "
+                "disabled until both are available.";
         }
         bool si5351_detected = true;
         std::string si5351_detection_error;

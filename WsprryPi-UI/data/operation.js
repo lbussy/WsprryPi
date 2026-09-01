@@ -130,7 +130,13 @@ function selectedBackendUnavailableMessage() {
     const backend = selectedRuntimeTransmitBackend();
 
     if (backend === "gpio" && platform.gpioClockTransmissionSupported === false) {
-        return "GPIO transmission is supported only on Raspberry Pi 1 through 4.";
+        if (
+            typeof platform.gpioClockTransmissionError === "string" &&
+            platform.gpioClockTransmissionError.trim()
+        ) {
+            return platform.gpioClockTransmissionError.trim();
+        }
+        return "GPIO transmission is unavailable on this Raspberry Pi.";
     }
 
     if (backend === "si5351" && platform.si5351Detected === false) {

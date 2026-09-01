@@ -40,7 +40,11 @@ def eligible_networks(addresses: list[dict]) -> list[str]:
         if str(interface.get("link_type", "")).lower() not in {"ether", ""}:
             continue
         for info in interface.get("addr_info", []):
-            if info.get("scope") != "global" or info.get("family") not in {"inet", "inet6"}:
+            family = info.get("family")
+            scope = info.get("scope")
+            if family not in {"inet", "inet6"}:
+                continue
+            if scope != "global" and not (family == "inet6" and scope == "link"):
                 continue
             try:
                 address = ipaddress.ip_address(info["local"])
@@ -75,6 +79,8 @@ def render(mode: str, networks: list[str]) -> str:
         '<LocationMatch "^/wsprrypi/api/support-bundles(?:/|$)">\n'
         + requirement() + '\n</LocationMatch>',
         '<LocationMatch "^/wsprrypi/api/network-safety$">\n    <LimitExcept GET>\n'
+        + requirement() + '\n    </LimitExcept>\n</LocationMatch>',
+        '<LocationMatch "^/wsprrypi/api/rp1-gpclk-route$">\n    <LimitExcept GET>\n'
         + requirement() + '\n    </LimitExcept>\n</LocationMatch>',
         '<LocationMatch "^/wsprrypi/socket(?:/|$)">\n' + requirement() + '\n</LocationMatch>',
     ]
@@ -118,7 +124,7 @@ def main() -> int:
             addresses = json.loads(args.ip_json.read_text(encoding="utf-8"))
         else:
             completed = subprocess.run(
-                ["ip", "-j", "address", "show", "up", "scope", "global"],
+                ["ip", "-j", "address", "show", "up"],
                 check=True, capture_output=True, text=True)
             addresses = json.loads(completed.stdout)
         networks = eligible_networks(addresses)

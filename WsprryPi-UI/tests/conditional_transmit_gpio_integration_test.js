@@ -199,7 +199,7 @@ async function captureHiddenRp1Screenshot(client, outputPath, theme) {
                 ...(window.WSPRRYPI_PLATFORM || {}),
                 raspberryPiGeneration: 5,
                 gpioClockTransmissionSupported: false,
-                gpioClockTransmissionError: "GPIO transmission is supported only on Raspberry Pi 1 through 4.",
+                gpioClockTransmissionError: "GPIO controls on Raspberry Pi 5 require a compatible RP1 route controller and an active canonical provider.",
                 rp1GpioOperatorVisible: false,
                 si5351Detected: true,
             };
@@ -687,22 +687,24 @@ async function browserTest() {
 
     window.WSPRRYPI_PLATFORM.raspberryPiGeneration = 5;
     window.WSPRRYPI_PLATFORM.gpioClockTransmissionSupported = false;
+    window.WSPRRYPI_PLATFORM.gpioClockTransmissionError =
+        "GPIO controls on Raspberry Pi 5 require a compatible RP1 route controller and an active canonical provider.";
     window.WSPRRYPI_PLATFORM.rp1GpioOperatorVisible = false;
     field("transmit_backend").value = "gpio";
     updateBackendPlatformSupportUi();
     equal(field("transmit_backend").value, "gpio",
         "default-hidden Pi 5 RP1 must preserve a retained engineering backend");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "Select Si5351 output",
-        "default-hidden Pi 5 RP1 must present a neutral migration choice");
+        "GPIO (RP1 unavailable)",
+        "default-hidden Pi 5 RP1 must name the unavailable RP1 path without offering GPIO");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, true,
         "default-hidden Pi 5 RP1 must not offer GPIO as an operator selection");
     equal(field("rp1-gpio-drive-group").hidden, true,
         "default-hidden Pi 5 RP1 must hide its drive selector");
     ok(!field("backend-selector-hint").textContent.includes("GPIO uses"),
         "default-hidden Pi 5 RP1 must not advertise the hidden GPIO path in operator guidance");
-    ok(!field("backendPlatformHint").textContent.includes("GPIO"),
-        "default-hidden Pi 5 RP1 must describe the retained backend generically");
+    ok(field("backendPlatformHint").textContent.includes("RP1 route controller"),
+        "default-hidden Pi 5 RP1 must explain the controller readiness requirement");
     equal(field("legacy-gpio-power-group").hidden, true,
         "Pi 5 must not substitute the legacy GPIO power control");
     equal(field("gpio-backend-panel").hidden, true,

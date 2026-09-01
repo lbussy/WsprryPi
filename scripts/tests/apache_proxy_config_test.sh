@@ -12,6 +12,8 @@ intake_mapping='ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:3
 intake_reverse_mapping='ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake'
 network_safety_mapping='ProxyPass        /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety'
 network_safety_reverse_mapping='ProxyPassReverse /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety'
+rp1_route_mapping='ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route'
+rp1_route_reverse_mapping='ProxyPassReverse /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route'
 
 grep -Fqx '    ProxyPreserveHost On' "$CONFIG"
 grep -Fqx '    Include /usr/local/etc/wsprrypi-apache-network-policy.conf' "$CONFIG"
@@ -23,12 +25,16 @@ grep -Fqx "    ${intake_mapping}" "$CONFIG"
 grep -Fqx "    ${intake_reverse_mapping}" "$CONFIG"
 grep -Fqx "    ${network_safety_mapping}" "$CONFIG"
 grep -Fqx "    ${network_safety_reverse_mapping}" "$CONFIG"
+grep -Fqx "    ${rp1_route_mapping}" "$CONFIG"
+grep -Fqx "    ${rp1_route_reverse_mapping}" "$CONFIG"
 grep -Fqx "    ${mapping}" "$INSTALLER"
 grep -Fqx "    ${reverse_mapping}" "$INSTALLER"
 grep -Fqx "    ${intake_mapping}" "$INSTALLER"
 grep -Fqx "    ${intake_reverse_mapping}" "$INSTALLER"
 grep -Fqx "    ${network_safety_mapping}" "$INSTALLER"
 grep -Fqx "    ${network_safety_reverse_mapping}" "$INSTALLER"
+grep -Fqx "    ${rp1_route_mapping}" "$INSTALLER"
+grep -Fqx "    ${rp1_route_reverse_mapping}" "$INSTALLER"
 grep -Fq 'Support bundle API family and signed private-intake availability.' "$CONFIG"
 grep -Fq 'Support bundle API family and signed private-intake availability.' "$INSTALLER"
 

@@ -135,6 +135,8 @@ int main() {
     assert(scheduling.find("rp1_live_qualification_inhibited") == std::string::npos);
     assert(transmit.find("decideRp1GpclkDevelopmentUse(current_policy)") != std::string::npos);
     assert(scheduling.find("productionRp1GpclkRouteService().query()") != std::string::npos);
+    const std::string stock_vhost = read_file("../config/wsprrypi.conf");
+    assert(stock_vhost.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route") != std::string::npos);
     assert(service.find("std::system(") == std::string::npos && service.find("popen(") == std::string::npos);
     std::cout << "rp1_gpclk_route_runtime_wiring_test: PASS\n";

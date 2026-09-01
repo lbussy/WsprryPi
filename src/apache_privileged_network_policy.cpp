@@ -110,6 +110,11 @@ ApachePrivilegedNetworkPolicyResult render_apache_privileged_network_policy(
     append_peer_requirement(output, cidrs);
     output << "    </LimitExcept>\n"
            << "</LocationMatch>\n\n"
+           << "<LocationMatch \"^/wsprrypi/api/rp1-gpclk-route$\">\n"
+           << "    <LimitExcept GET>\n";
+    append_peer_requirement(output, cidrs);
+    output << "    </LimitExcept>\n"
+           << "</LocationMatch>\n\n"
            << "<LocationMatch \"^/wsprrypi/socket(?:/|$)\">\n";
     append_peer_requirement(output, cidrs);
     output << "</LocationMatch>\n";

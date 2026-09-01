@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
     const auto rendered = render_apache_privileged_network_policy({
         {"192.168.50.42", "255.255.255.0"},
         {"192.168.50.10", "255.255.255.0"},
+        {"fe80::92de:80ff:fe47:b9da", "ffff:ffff:ffff:ffff::"},
         {"fd00:1234::42", "ffff:ffff:ffff:ffff::"}});
     assert(rendered.valid() && rendered.error.empty());
     const std::string &policy = *rendered.configuration;
@@ -34,9 +35,10 @@ int main(int argc, char **argv) {
         std::cout << policy;
         return 0;
     }
-    assert(count(policy, "Require ip 192.168.50.0/24") == 6);
-    assert(count(policy, "Require ip fd00:1234::/64") == 6);
-    assert(count(policy, "Require local") == 6);
+    assert(count(policy, "Require ip 192.168.50.0/24") == 7);
+    assert(count(policy, "Require ip fd00:1234::/64") == 7);
+    assert(count(policy, "Require ip fe80::/64") == 7);
+    assert(count(policy, "Require local") == 7);
     assert(policy.find("<LocationMatch \"^/wsprrypi/config$\">") != std::string::npos);
     assert(policy.find("<LimitExcept GET>") != std::string::npos);
     assert(policy.find("<LocationMatch \"^/wsprrypi/config/\">") != std::string::npos);
@@ -44,6 +46,9 @@ int main(int argc, char **argv) {
     assert(policy.find("^/wsprrypi/api/support-bundles(?:/|$)") != std::string::npos);
     assert(policy.find("^/wsprrypi/socket(?:/|$)") != std::string::npos);
     assert(policy.find("^/wsprrypi/api/network-safety$") != std::string::npos);
+    assert(policy.find(
+        "<LocationMatch \"^/wsprrypi/api/rp1-gpclk-route$\">\n"
+        "    <LimitExcept GET>") != std::string::npos);
     assert(policy.find("support-intake") == std::string::npos);
     assert(policy.find("/wsprrypi/version") == std::string::npos);
     assert(policy.find("Forwarded") == std::string::npos);
@@ -64,10 +69,12 @@ int main(int argc, char **argv) {
     assert(stock_vhost.find("ProxyPass        /wsprrypi/config") != std::string::npos);
     assert(stock_vhost.find("ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version") != std::string::npos);
     assert(stock_vhost.find("ProxyPass        /wsprrypi/socket") != std::string::npos);
+    assert(stock_vhost.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route") != std::string::npos);
     assert(installer.find("# BEGIN WsprryPi proxy configuration") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/config") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/socket") != std::string::npos);
+    assert(installer.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route") != std::string::npos);
     for (const std::string *source : {&stock_vhost, &installer}) {
         assert(source->find("ProxyPass        /wsprrypi/ui-version.php") == std::string::npos);
         assert(source->find("ProxyPass        /wsprrypi/ui-manifest.php") == std::string::npos);

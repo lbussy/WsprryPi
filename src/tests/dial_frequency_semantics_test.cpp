@@ -5084,6 +5084,11 @@ int main(int argc, char *argv[])
                   ["RP1 GPIO Operator Visible"].get<bool>(),
             "public capability JSON must keep Pi 5 RP1 GPIO hidden by default");
         require(
+            hidden_rp1_public_config["Platform"]
+                ["GPIO Clock Transmission Error"].get<std::string>()
+                .find("compatible RP1 route controller") != std::string::npos,
+            "hidden Pi 5 RP1 GPIO must report the actual controller readiness requirement");
+        require(
             hidden_rp1_public_config["GPIO"]["RP1 Drive mA"].get<int>() == 12,
             "operator visibility must preserve retained RP1 configuration");
         set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
