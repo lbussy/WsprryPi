@@ -1872,6 +1872,20 @@ remove_slash() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Render command arguments with unambiguous Bash-safe quoting.
+# @param ... Command argv to render.
+# @return A single display-only string; no argument is evaluated.
+# -----------------------------------------------------------------------------
+render_command_argv() {
+    local arg quoted rendered=""
+    for arg in "$@"; do
+        printf -v quoted '%q' "$arg"
+        rendered+="${rendered:+ }${quoted}"
+    done
+    printf '%s' "$rendered"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Executes a command in a separate Bash process.
 # @details This function manages the execution of a shell command, handling the
 #          display of status messages. It supports dry-run mode, where the
@@ -1924,12 +1938,12 @@ exec_command() {
     # Build the actual command array
     cmd=( "${args[@]}" )
 
-    # Join cmd[@] on spaces into one line
-    cmd_str=$(printf '%s ' "${cmd[@]}")
-    cmd_str=${cmd_str% }   # strip trailing space
+    # Render argv for display without losing argument boundaries or allowing
+    # shell metacharacters to look executable.
+    cmd_str=$(render_command_argv "${cmd[@]}")
     if [[ "$debug" == "debug" ]]; then
-        logD "Name:    $exec_name"
-        logD "Command: $cmd_str"
+        debug_print "Name:    $exec_name" "$debug"
+        debug_print "Command: $cmd_str" "$debug"
     fi
 
     # Prepare status prefixes
@@ -2088,7 +2102,10 @@ replace_string_in_script() {
     local replace_string="$3"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        logD "Exec: sed -i 's|%${search_string}%|${replace_string}|g' '$file_path'"
+        local planned_command
+        planned_command=$(render_command_argv \
+            sed -i "s|%${search_string}%|${replace_string}|g" "$file_path")
+        debug_print "Dry run command: $planned_command" "$debug"
         debug_end "$debug"
         return 0
     fi
@@ -6491,10 +6508,14 @@ upgrade_ini() {
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
+        local planned_command
         if [[ -f "$old_ini" ]]; then
-            logD "Exec: cp -f '$old_ini' '$backup_ini'"
+            planned_command=$(render_command_argv cp -f "$old_ini" "$backup_ini")
+            debug_print "Dry run command: $planned_command" "$debug"
         fi
-        logD "Exec: merge '$old_ini' with '$new_ini' into '$merged_ini'"
+        debug_print \
+            "Dry run INI merge: old=$(printf '%q' "$old_ini") new=$(printf '%q' "$new_ini") output=$(printf '%q' "$merged_ini")" \
+            "$debug"
         debug_end "$debug"
         return 0
     fi
@@ -8158,6 +8179,22 @@ finish_script() {
         action_message="Installation"
     else
         action_message="Uninstallation"
+    fi
+
+    # Dry runs describe plan evaluation and return before any normal install or
+    # uninstall success message, URL, reboot reminder, or completion claim.
+    if [[ "$DRY_RUN" == "true" ]]; then
+        if [[ "$overall_status" -eq 0 ]]; then
+            debug_print "$action_message dry run completed successfully; no changes were applied." "$debug"
+            printf "\nDry run successful: %s %s plan completed; no changes were applied.\n" \
+                "$REPO_TITLE" "${action_message,,}"
+            debug_end "$debug"
+            return 0
+        fi
+        logE "$action_message dry run failed while evaluating the $REPO_TITLE plan."
+        debug_print "$action_message dry run encountered errors; no completion was claimed." "$debug"
+        debug_end "$debug"
+        return 1
     fi
 
     # Handle success or failure messages

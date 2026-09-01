@@ -16,6 +16,15 @@ ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install.sh"
 
 
+def bash_quote(value: str | Path) -> str:
+    return subprocess.run(
+        ["bash", "-c", 'printf "%q" "$1"', "bash-quote", str(value)],
+        text=True,
+        stdout=subprocess.PIPE,
+        check=True,
+    ).stdout
+
+
 def snapshot(root: Path) -> dict[str, tuple[str, int, int, str]]:
     result: dict[str, tuple[str, int, int, str]] = {}
     for path in sorted((root, *root.rglob("*"))):
@@ -61,9 +70,11 @@ class InstallerDryRunPurityTest(unittest.TestCase):
         return result
 
     def test_upgrade_ini_dry_run_creates_nothing(self) -> None:
-        old_ini = self.root / "old.ini"
-        new_ini = self.root / "new.ini"
-        merged_ini = self.root / "merged.ini"
+        paths = self.root / "INI paths; $(not-executed)"
+        paths.mkdir()
+        old_ini = paths / "old config.ini"
+        new_ini = paths / "new config.ini"
+        merged_ini = paths / "merged config.ini"
         old_ini.write_text("[WSPR]\nCall Sign = OLD\n", encoding="utf-8")
         new_ini.write_text("[WSPR]\nCall Sign = NEW\n", encoding="utf-8")
         before = snapshot(self.root)
@@ -71,7 +82,6 @@ class InstallerDryRunPurityTest(unittest.TestCase):
         result = self.run_shell(
             r'''
 source "$INSTALLER"
-logD() { printf '%s\n' "$*"; }
 DRY_RUN=true
 upgrade_ini "$OLD_INI" "$NEW_INI" "$MERGED_INI" debug
 ''',
@@ -81,7 +91,13 @@ upgrade_ini "$OLD_INI" "$NEW_INI" "$MERGED_INI" debug
         )
 
         self.assertEqual(snapshot(self.root), before)
-        self.assertIn("Exec: merge", result.stdout)
+        expected_backup = f"Dry run command: cp -f {bash_quote(old_ini)} {bash_quote(f'{old_ini}.pre_migration.bak')}"
+        expected_merge = (
+            f"Dry run INI merge: old={bash_quote(old_ini)} "
+            f"new={bash_quote(new_ini)} output={bash_quote(merged_ini)}"
+        )
+        self.assertIn(expected_backup, result.stderr)
+        self.assertIn(expected_merge, result.stderr)
         self.assertFalse(merged_ini.exists())
         self.assertFalse(Path(f"{old_ini}.pre_migration.bak").exists())
 
@@ -110,7 +126,7 @@ upgrade_ini "$OLD_INI" "$NEW_INI" "$MERGED_INI" debug
         self.assertEqual(snapshot(self.root), before)
 
     def test_placeholder_replacement_is_display_only(self) -> None:
-        target = self.root / "installed.ini"
+        target = self.root / "installed $(not-executed); config.ini"
         target.write_text("version=%SEMANTIC_VERSION%\n", encoding="utf-8")
         target.chmod(0o640)
         before = snapshot(self.root)
@@ -118,15 +134,55 @@ upgrade_ini "$OLD_INI" "$NEW_INI" "$MERGED_INI" debug
         result = self.run_shell(
             r'''
 source "$INSTALLER"
-logD() { printf '%s\n' "$*"; }
 DRY_RUN=true
-replace_string_in_script "$TARGET" SEMANTIC_VERSION v9.9.9 debug
+replace_string_in_script "$TARGET" SEMANTIC_VERSION 'v9.9.9; $(not-executed)' debug
 ''',
             TARGET=target,
         )
 
         self.assertEqual(snapshot(self.root), before)
-        self.assertIn("Exec: sed -i", result.stdout)
+        replacement = "v9.9.9; $(not-executed)"
+        expected = "Dry run command: " + " ".join(
+            bash_quote(value)
+            for value in (
+                "sed",
+                "-i",
+                f"s|%SEMANTIC_VERSION%|{replacement}|g",
+                target,
+            )
+        )
+        self.assertIn(expected, result.stderr)
+
+    def test_exec_command_debug_renders_exact_safe_argv_without_execution(self) -> None:
+        sentinel = self.root / "command-invoked"
+        before = snapshot(self.root)
+        arguments = (
+            "plain",
+            "two words",
+            "$(not-executed)",
+            "semi;colon",
+            "single'quote",
+            "line\nbreak",
+            "debug",
+        )
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { printf invoked >"$SENTINEL"; return 99; }
+DRY_RUN=true
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+exec_command "argv display" probe plain "two words" '$(not-executed)' 'semi;colon' \
+    "single'quote" $'line\nbreak' debug debug
+''',
+            SENTINEL=sentinel,
+        )
+        self.assertEqual(snapshot(self.root), before)
+        expected = "Command: " + " ".join(
+            bash_quote(value) for value in ("probe", *arguments)
+        )
+        self.assertIn("Name:    argv display", result.stderr)
+        self.assertIn(expected, result.stderr)
+        self.assertFalse(sentinel.exists())
 
     def test_placeholder_replacement_allows_planned_new_target(self) -> None:
         target = self.root / "not-installed-yet.ini"
@@ -264,6 +320,67 @@ set_time debug
             SENTINEL=sentinel,
         )
         self.assertEqual(snapshot(self.root), before)
+
+    def test_finish_script_reports_install_and_uninstall_as_dry_runs(self) -> None:
+        for action in ("install", "uninstall"):
+            result = self.run_shell(
+                r'''
+source "$INSTALLER"
+DRY_RUN=true
+ACTION="$REQUESTED_ACTION"
+REPO_TITLE='Wsprry Pi'
+finish_script 0 debug
+''',
+                REQUESTED_ACTION=action,
+            )
+            self.assertIn(
+                f"Dry run successful: Wsprry Pi {action}ation plan completed; no changes were applied.",
+                result.stdout,
+            )
+            self.assertNotIn("Installation successful", result.stdout)
+            self.assertNotIn("Uninstallation successful", result.stdout)
+            self.assertNotIn("has been uninstalled", result.stdout)
+            self.assertNotIn("To configure", result.stdout)
+
+    def test_normal_finish_message_is_unchanged(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+hostname() { if [[ "${1:-}" == -I ]]; then printf '127.0.0.1\n'; else command hostname "$@"; fi; }
+DRY_RUN=false
+ACTION=install
+NO_WEB=true
+REPO_TITLE='Wsprry Pi'
+finish_script 0
+'''
+        )
+        self.assertIn("Installation successful: Wsprry Pi.", result.stdout)
+        self.assertNotIn("Dry run successful", result.stdout)
+
+    def test_failed_dry_run_never_claims_completion(self) -> None:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                r'''
+source "$INSTALLER"
+logE() { printf '%s\n' "$1" >&2; }
+DRY_RUN=true
+ACTION=install
+REPO_TITLE='Wsprry Pi'
+finish_script 1 debug
+''',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "INSTALLER": str(INSTALLER)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Installation dry run failed", result.stderr)
+        self.assertNotIn("successful", result.stdout.lower())
+        self.assertNotIn("completed", result.stdout.lower())
 
     def test_direct_mutation_paths_have_dry_run_guards(self) -> None:
         source = INSTALLER.read_text(encoding="utf-8")

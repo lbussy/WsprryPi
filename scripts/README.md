@@ -8,7 +8,10 @@ Set `DRY_RUN=true` to inspect the selected install or uninstall workflow
 without changing the checkout or system. Dry runs write no installer log,
 temporary merge output, staged executable, installed configuration, package,
 service, boot, web, GPIO, or provider state. Passing `debug` prints the planned
-commands to the console.
+commands to the console with shell-safe quoting that preserves exact argument
+boundaries. Successful dry runs end with an explicit notice that the selected
+plan completed without applying changes; they do not report an installation or
+uninstallation as completed.
 
 ## RP1-GPCLK-DKMS provider
 
