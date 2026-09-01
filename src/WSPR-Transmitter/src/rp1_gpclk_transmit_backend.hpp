@@ -25,7 +25,6 @@ struct Rp1GpclkOperationRecord
     std::string module_id;
     std::string module_version;
     std::string compatibility_id;
-    std::uint16_t uapi_abi{0};
     std::uint32_t route{0};
     std::string endpoint{"/dev/rp1-gpclk"};
     std::uint64_t lease{0};

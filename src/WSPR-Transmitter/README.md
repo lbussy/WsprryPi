@@ -6,7 +6,7 @@ Propagation Reporter) RF transmissions with precise symbol timing.
 On Raspberry Pi 5, RP1 output exclusively uses the externally provisioned
 endpoint `/dev/rp1-gpclk`; it never falls back to the legacy DMA backend.
 WsprryPi does not install or attest the provider. Runtime protocol and
-capability checks, ABI v4 operation-scoped ownership, bounded execution,
+capability checks, operation-scoped ownership, bounded execution,
 `LIVE_ELIGIBLE`, and cleanup remain required. GPIO4 and GPIO20 are independent
 routes. The provider's package version or build label is not an application
 allowlist. Earlier version-specific consumer-contract documents remain

@@ -57,8 +57,6 @@ def valid_manifest(version: str = "2.1.0", commit: str = "a" * 40) -> dict[str, 
         "dkmsModule": MOD.DKMS_NAME,
         "kernelModule": MOD.MODULE_NAME,
         "uapi": {
-            "abiMin": 4,
-            "abiMax": 4,
             "sha256": inventory[0]["sha256"],
             "path": inventory[0]["path"],
         },
@@ -203,7 +201,7 @@ class ReleaseTests(unittest.TestCase):
     def test_manifest_contract(self):
         manifest = valid_manifest()
         validated = MOD.validate_manifest(manifest, tag="v2.1.0", tag_commit="a" * 40)
-        self.assertEqual(validated["uapi"]["abiMin"], 4)
+        self.assertEqual(validated["uapi"]["sha256"], inventory_for_uapi()[0]["sha256"])
         mutations = [
             ("schema", "bad"), ("repository", "other/repo"), ("sourceCommit", "c" * 40),
             ("releaseChannel", "development"), ("administrationProtocol", "shell-v0"),

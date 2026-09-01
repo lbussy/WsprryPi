@@ -42,8 +42,6 @@ COMPATIBILITY_IDENTITY = "v0.9.0-pi5"
 LEGACY_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
 RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v2"
 STATE_SCHEMA = "wsprrypi-rp1-gpclk-dkms-plan-v1"
-SUPPORTED_UAPI_MIN = 4
-SUPPORTED_UAPI_MAX = 4
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SEMVER = re.compile(r"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -337,9 +335,7 @@ def validate_manifest(manifest: Any, *, tag: str, tag_commit: str) -> dict[str, 
     require(isinstance(package["sha256"], str) and SHA256.fullmatch(package["sha256"]), "manifest package SHA-256 is invalid")
     uapi = manifest["uapi"]
     require(isinstance(uapi, dict), "manifest UAPI must be an object")
-    require_exact_keys(uapi, {"abiMin", "abiMax", "sha256", "path"}, "manifest UAPI")
-    require(isinstance(uapi["abiMin"], int) and isinstance(uapi["abiMax"], int), "manifest UAPI ABI range is invalid")
-    require(uapi["abiMin"] <= SUPPORTED_UAPI_MAX and uapi["abiMax"] >= SUPPORTED_UAPI_MIN, "manifest UAPI ABI is not supported by this WsprryPi consumer")
+    require_exact_keys(uapi, {"sha256", "path"}, "manifest UAPI")
     require(isinstance(uapi["sha256"], str) and SHA256.fullmatch(uapi["sha256"]), "manifest UAPI SHA-256 is invalid")
     require(isinstance(uapi["path"], str) and safe_archive_path(uapi["path"]), "manifest UAPI path is unsafe")
     inventory = manifest["packageInventory"]

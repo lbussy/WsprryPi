@@ -19,7 +19,7 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
         i.confirmation_current = true;
     i.route_transaction_generation = i.confirmation_route_transaction_generation = 17;
     i.operation_id = i.confirmation_operation_id = "bounded-operation-7"; i.confirmation_route = route;
-    i.identity.abi_min = 1; i.identity.abi_max = 4; i.identity.route = route;
+    i.identity.route = route;
     i.identity.compatibility_state = 2;
     i.identity.capabilities = kRp1GpclkDevelopmentCapabilityLiveEligible |
         kRp1GpclkDevelopmentCapabilityOperationLiveGate;

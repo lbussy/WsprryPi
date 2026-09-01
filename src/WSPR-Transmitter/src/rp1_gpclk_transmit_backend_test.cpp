@@ -39,7 +39,7 @@ class Provider final : public wsprrypi::Rp1GpclkProvider
 public:
     bool query(std::uint32_t route, std::uint64_t capabilities, bool,
         wsprrypi::Rp1GpclkProviderIdentity& identity, std::string&) override {
-        identity.abi_min=1; identity.abi_max=4; identity.route=route;
+        identity.route=route;
         identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
         identity.capabilities=capabilities; identity.module_id="rp1-gpclk-dkms";
         identity.build_id="1.1.2";
@@ -119,7 +119,6 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
     d.confirmation_current=true; d.operation_id=d.confirmation_operation_id="test-operation";
     d.route_transaction_generation=d.confirmation_route_transaction_generation=3;
     wsprrypi::Rp1GpclkProviderIdentity identity;
-    identity.abi_min=1; identity.abi_max=4;
     identity.route=gpio==20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_GPIO4;
     identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
     identity.capabilities=RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
@@ -353,7 +352,7 @@ int main()
     WsprRp1GpclkBackend tone_backend(owner,std::move(tone_provider));
     auto implicit_tone=tonePlan(false);
     expect(tone_backend.configure(implicit_tone,developmentInputs()).ok && tone_backend.execute(implicit_tone).ok,
-        "implicit-duration TONE must use continuous ABI v2 operation");
+        "implicit-duration TONE must use the continuous operation");
     expect(tone_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_CONTINUOUS &&
         tone_observed->tone_program.duration_ns==0 &&
         (tone_observed->required_capabilities & RP1_GPCLK_CAP_TONE_CONTINUOUS)!=0,
@@ -371,7 +370,7 @@ int main()
     WsprRp1GpclkBackend finite_backend(owner,std::move(finite_provider));
     auto explicit_tone=tonePlan(true);
     expect(finite_backend.configure(explicit_tone,developmentInputs()).ok && finite_backend.execute(explicit_tone).ok,
-        "explicit-duration TONE must use finite ABI v2 operation");
+        "explicit-duration TONE must use the finite operation");
     expect(wsprrypi::rp1GpclkOperationRecordSnapshot().terminal_reason == RP1_GPCLK_REASON_COMPLETE,
         "TONE must preserve the provider terminal reason in its operation record");
     expect(finite_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&

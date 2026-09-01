@@ -62,7 +62,6 @@ int main(int argc, char** argv)
               << "\nmodule_id=" << snapshot.module_id
               << "\nbuild_id=" << snapshot.build_id
               << "\ncompatibility_id=" << snapshot.compatibility_id
-              << "\nsnapshot_version=" << snapshot.snapshot_version
               << "\noperation_state=" << snapshot.operation_state
               << "\nterminal_reason=" << snapshot.terminal_reason
               << "\ndrain_state=" << snapshot.drain_state

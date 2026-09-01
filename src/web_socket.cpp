@@ -74,7 +74,6 @@ nlohmann::json rp1_operation_record_json()
             {"moduleId", record.module_id},
             {"moduleVersion", record.module_version},
             {"compatibilityId", record.compatibility_id},
-            {"uapiAbi", record.uapi_abi},
             {"route", record.route == 1 ? "GPIO4" : record.route == 2 ? "GPIO20" : "unknown"},
             {"endpoint", record.endpoint},
             {"lease", record.lease},

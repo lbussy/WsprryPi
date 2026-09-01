@@ -33,16 +33,9 @@ std::uint32_t driveMask(std::uint32_t drive_ma)
     }
 }
 
-template <typename Request> void initializeHeaderV1(Request& request)
+template <typename Request> void initializeHeader(Request& request)
 {
     request.header.size = sizeof(Request);
-    request.header.version = RP1_GPCLK_UAPI_ABI_V1;
-}
-
-template <typename Request> void initializeHeaderV2(Request& request)
-{
-    request.header.size = sizeof(Request);
-    request.header.version = RP1_GPCLK_UAPI_ABI_V2;
 }
 
 bool boundedIdentity(const char* value, std::size_t size, std::string& output)
@@ -104,22 +97,17 @@ bool Rp1GpclkLinuxProvider::queryOpen(
     bool require_live_eligible, Rp1GpclkProviderIdentity& identity,
     std::string& error)
 {
-    rp1_gpclk_query_v2 request{};
-    initializeHeaderV2(request);
-    if (io_.control(fd_, RP1_GPCLK_IOC_QUERY_V2, &request) < 0)
+    rp1_gpclk_query request{};
+    initializeHeader(request);
+    if (io_.control(fd_, RP1_GPCLK_IOC_QUERY, &request) < 0)
     {
-        if (io_.lastError() == EOPNOTSUPP)
-            error = "RP1 GPCLK provider is an old module without ABI v2 support.";
-        else
-            failed("Could not query RP1 GPCLK ABI v2 provider", error);
+        failed("Could not query RP1 GPCLK provider", error);
         return false;
     }
     if (request.header.size != sizeof(request) ||
-        request.header.version != RP1_GPCLK_UAPI_ABI_V2 ||
-        request.header.flags != 0 || request.abi_min > RP1_GPCLK_UAPI_ABI_V2 ||
-        request.abi_max < RP1_GPCLK_UAPI_ABI_V2)
+        request.header.reserved != 0 || request.header.flags != 0)
     {
-        error = "RP1 GPCLK provider ABI v2 identity mismatch."; return false;
+        error = "RP1 GPCLK provider UAPI identity mismatch."; return false;
     }
     if (!knownRoute(request.route) ||
         (expected_route != RP1_GPCLK_ROUTE_INVALID && request.route != expected_route))
@@ -157,14 +145,12 @@ bool Rp1GpclkLinuxProvider::queryOpen(
         request.max_tone_duration_ns != RP1_GPCLK_TONE_DURATION_NS_MAX ||
         request.reserved0 != 0 || request.reserved1 != 0)
     {
-        error = "RP1 GPCLK provider reported an incompatible ABI v2 limit or reserved value."; return false;
+        error = "RP1 GPCLK provider reported an incompatible limit or reserved value."; return false;
     }
     for (const auto value : request.reserved)
         if (value != 0) { error = "RP1 GPCLK provider reported nonzero reserved QUERY data."; return false; }
 
     identity = {};
-    identity.abi_min = request.abi_min;
-    identity.abi_max = request.abi_max;
     identity.route = request.route;
     identity.compatibility_state = request.compatibility_state;
     identity.compatibility_reason = request.compatibility_reason;
@@ -189,11 +175,7 @@ bool Rp1GpclkLinuxProvider::query(
     if (fd_ >= 0) { error = "RP1 GPCLK provider query requires no active lease."; return false; }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
-    const auto v2_required = required_capabilities &
-        ~(RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
-          RP1_GPCLK_CAP_OPERATION_LIVE_GATE |
-          RP1_GPCLK_CAP_LIVE_ELIGIBLE);
-    const bool ok = queryOpen(expected_route, v2_required,
+    const bool ok = queryOpen(expected_route, required_capabilities,
         require_live_eligible, identity, error);
     const int close_result = io_.closeDevice(fd_);
     fd_ = -1;
@@ -227,8 +209,6 @@ bool Rp1GpclkLinuxProvider::query(
             "/" + snapshot.build_id + "/" + snapshot.compatibility_id;
         return false;
     }
-    identity.abi_min = snapshot.abi_min;
-    identity.abi_max = snapshot.abi_max;
     identity.compatibility_state = snapshot.compatibility_state;
     identity.capabilities |= snapshot.capabilities;
     if ((identity.capabilities & required_capabilities) != required_capabilities)
@@ -249,18 +229,17 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
     }
     const int descriptor = io_.openDevice(device_.c_str(), O_RDONLY | O_NONBLOCK);
     if (descriptor < 0) return failed("Could not open canonical RP1 GPCLK provider read-only", error);
-    rp1_gpclk_snapshot_v3 request{};
-    request.header.size = sizeof(request);
-    request.header.version = RP1_GPCLK_UAPI_ABI_V3;
+    rp1_gpclk_snapshot request{};
+    initializeHeader(request);
     const int control_result = io_.control(
-        descriptor, RP1_GPCLK_IOC_GET_SNAPSHOT_V3, &request);
+        descriptor, RP1_GPCLK_IOC_GET_SNAPSHOT, &request);
     const int saved_error = io_.lastError();
     const int close_result = io_.closeDevice(descriptor);
     if (control_result < 0)
     {
         error = saved_error == EOPNOTSUPP || saved_error == ENOTTY
-            ? "RP1 GPCLK provider does not support the passive ABI v3 snapshot."
-            : "Could not read passive RP1 GPCLK ABI v3 snapshot: " +
+            ? "RP1 GPCLK provider does not support the passive snapshot."
+            : "Could not read passive RP1 GPCLK snapshot: " +
                 std::string(std::strerror(saved_error));
         return false;
     }
@@ -270,9 +249,7 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
         return false;
     }
     if (request.header.size != sizeof(request) ||
-        request.header.version != RP1_GPCLK_UAPI_ABI_V3 ||
-        request.header.flags != 0 || request.abi_min > RP1_GPCLK_UAPI_ABI_V3 ||
-        request.abi_max < RP1_GPCLK_UAPI_ABI_V3 ||
+        request.header.reserved != 0 || request.header.flags != 0 ||
         !knownRoute(request.route) ||
         !knownCompatibility(request.compatibility_state) ||
         !knownReason(request.compatibility_reason) ||
@@ -310,8 +287,6 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
         return false;
     }
     result = {};
-    result.snapshot_version = request.header.version;
-    result.abi_min = request.abi_min; result.abi_max = request.abi_max;
     result.route = request.route;
     result.compatibility_state = request.compatibility_state;
     result.compatibility_reason = request.compatibility_reason;
@@ -361,44 +336,38 @@ bool Rp1GpclkLinuxProvider::acquire(
     }
     Rp1GpclkPassiveSnapshot snapshot;
     if (!passiveSnapshot(snapshot, error)) return false;
-    if (snapshot.abi_max < RP1_GPCLK_UAPI_ABI_V4 ||
-        snapshot.route != expected_route ||
+    if (snapshot.route != expected_route ||
         snapshot.compatibility_state == RP1_GPCLK_COMPAT_UNAVAILABLE ||
         snapshot.compatibility_state == RP1_GPCLK_COMPAT_REJECTED ||
         snapshot.live_eligible != RP1_GPCLK_OBSERVATION_TRUE ||
         (snapshot.capabilities & required_capabilities) != required_capabilities)
     {
-        error = "RP1 GPCLK provider is not eligible for ABI v4 operation-scoped acquisition.";
+        error = "RP1 GPCLK provider is not eligible for operation-scoped acquisition.";
         return false;
     }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
     Rp1GpclkProviderIdentity identity;
-    const auto query_required = required_capabilities &
-        ~(RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
-          RP1_GPCLK_CAP_OPERATION_LIVE_GATE |
-          RP1_GPCLK_CAP_LIVE_ELIGIBLE);
-    if (!queryOpen(expected_route, query_required, false, identity, error))
+    if (!queryOpen(expected_route, required_capabilities, false, identity, error))
     {
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
-    rp1_gpclk_acquire_v4 request{};
-    request.header.size = sizeof(request);
-    request.header.version = RP1_GPCLK_UAPI_ABI_V4;
+    rp1_gpclk_acquire request{};
+    initializeHeader(request);
     request.expected_route = expected_route;
-    request.authorization_flags = RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE;
+    request.authorization_flags = RP1_GPCLK_ACQUIRE_F_AUTHORIZE_LIVE;
     request.required_capabilities = required_capabilities;
     std::copy(
         authorization_digest.begin(), authorization_digest.end(),
         request.authorization_digest);
-    if (io_.control(fd_, RP1_GPCLK_IOC_ACQUIRE_V4, &request) < 0)
+    if (io_.control(fd_, RP1_GPCLK_IOC_ACQUIRE, &request) < 0)
     {
-        failed("Could not acquire RP1 GPCLK ABI v4 operation lease", error);
+        failed("Could not acquire RP1 GPCLK operation lease", error);
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
     if (request.header.size != sizeof(request) ||
-        request.header.version != RP1_GPCLK_UAPI_ABI_V4 ||
-        request.header.flags != 0 || request.lease_id == 0)
+        request.header.reserved != 0 || request.header.flags != 0 ||
+        request.lease_id == 0)
     {
         error = "RP1 GPCLK provider returned an invalid lease identity.";
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
@@ -415,8 +384,8 @@ bool Rp1GpclkLinuxProvider::submit(
     const auto required_drive = driveMask(source.drive_ma);
     if (required_drive == 0 || (supported_drive_ma_mask_ & required_drive) == 0)
     { error = "RP1 GPCLK provider does not support the requested drive strength."; return false; }
-    rp1_gpclk_submit_wspr_v1 request{};
-    initializeHeaderV1(request);
+    rp1_gpclk_submit_wspr request{};
+    initializeHeader(request);
     request.lease_id = lease_id_; request.generation = 0;
     request.tones_ptr = reinterpret_cast<std::uintptr_t>(source.tones.data());
     request.symbols_ptr = reinterpret_cast<std::uintptr_t>(source.symbols.data());
@@ -444,20 +413,20 @@ bool Rp1GpclkLinuxProvider::submitEvents(
     if (required_drive == 0 || (supported_drive_ma_mask_ & required_drive) == 0)
     { error = "RP1 GPCLK provider does not support the requested drive strength."; return false; }
     if (source.tones.size() > RP1_GPCLK_MAX_TONES || source.events.size() > RP1_GPCLK_MAX_EVENTS)
-    { error = "RP1 GPCLK event program exceeds the ABI v1 bounds."; return false; }
-    std::vector<rp1_gpclk_tone_v1> tones(source.tones.size());
+    { error = "RP1 GPCLK event program exceeds the UAPI bounds."; return false; }
+    std::vector<rp1_gpclk_tone> tones(source.tones.size());
     for (std::size_t i = 0; i < source.tones.size(); ++i)
         tones[i] = {source.tones[i].lower_divider_word, source.tones[i].upper_divider_word,
             source.tones[i].lower_count, source.tones[i].upper_count};
-    std::vector<rp1_gpclk_event_v1> events(source.events.size());
+    std::vector<rp1_gpclk_event> events(source.events.size());
     for (std::size_t i = 0; i < source.events.size(); ++i)
     {
         events[i].duration_ns = source.events[i].duration_ns;
         events[i].tone_index = source.events[i].tone_index;
         events[i].flags = source.events[i].rf_on ? RP1_GPCLK_EVENT_F_OUTPUT_ENABLED : 0;
     }
-    rp1_gpclk_submit_events_v1 request{};
-    initializeHeaderV1(request);
+    rp1_gpclk_submit_events request{};
+    initializeHeader(request);
     request.lease_id = lease_id_; request.generation = 0;
     request.tones_ptr = reinterpret_cast<std::uintptr_t>(tones.data());
     request.events_ptr = reinterpret_cast<std::uintptr_t>(events.data());
@@ -489,8 +458,8 @@ bool Rp1GpclkLinuxProvider::submitTone(
         (finite && (source.duration_ns < RP1_GPCLK_TONE_DURATION_NS_MIN ||
                     source.duration_ns > RP1_GPCLK_TONE_DURATION_NS_MAX)))
     { error = "RP1 GPCLK TONE operation or duration is invalid."; return false; }
-    rp1_gpclk_submit_tone_v2 request{};
-    initializeHeaderV2(request);
+    rp1_gpclk_submit_tone request{};
+    initializeHeader(request);
     request.lease_id = lease_id_;
     request.generation = 0;
     request.tone = {source.tone.lower_divider_word, source.tone.upper_divider_word,
@@ -501,8 +470,8 @@ bool Rp1GpclkLinuxProvider::submitTone(
     request.fractional_bits = source.fractional_bits;
     request.tick_divider = source.tick_divider;
     request.drive_ma = source.drive_ma;
-    if (io_.control(fd_, RP1_GPCLK_IOC_SUBMIT_TONE_V2, &request) < 0)
-        return failed("Could not submit RP1 GPCLK ABI v2 TONE", error);
+    if (io_.control(fd_, RP1_GPCLK_IOC_SUBMIT_TONE, &request) < 0)
+        return failed("Could not submit RP1 GPCLK TONE", error);
     if (request.generation == 0)
     { error = "RP1 GPCLK provider returned an invalid TONE generation identity."; return false; }
     source.generation = request.generation;
@@ -513,7 +482,7 @@ bool Rp1GpclkLinuxProvider::submitTone(
 
 bool Rp1GpclkLinuxProvider::requestFiniteStop(std::uint64_t generation, std::string& error)
 {
-    rp1_gpclk_stop_v1 request{}; initializeHeaderV1(request);
+    rp1_gpclk_stop request{}; initializeHeader(request);
     request.lease_id = lease_id_; request.generation = generation;
     if (fd_ < 0 || lease_id_ == 0)
         return failed("Could not request RP1 GPCLK finite stop", error);
@@ -538,7 +507,7 @@ bool Rp1GpclkLinuxProvider::getState(
     Rp1GpclkProviderEventState& state_result,
     std::string& error) const
 {
-    rp1_gpclk_state_v1 request{}; initializeHeaderV1(request);
+    rp1_gpclk_state_request request{}; initializeHeader(request);
     request.lease_id = lease_id_; request.generation = generation;
     if (fd_ < 0 || lease_id_ == 0)
     {
@@ -592,22 +561,13 @@ bool Rp1GpclkLinuxProvider::release(std::string& error) noexcept
     bool ok = true;
     if (lease_id_ != 0)
     {
-        int release_result = 0;
-        if (active_generation_ != 0 && !active_generation_terminal_)
-        {
-            rp1_gpclk_release_v2 request{};
-            initializeHeaderV2(request);
-            request.lease_id = lease_id_;
-            request.generation = active_generation_;
-            release_result = io_.control(fd_, RP1_GPCLK_IOC_RELEASE_V2, &request);
-        }
-        else
-        {
-            rp1_gpclk_release_v1 request{};
-            initializeHeaderV1(request);
-            request.lease_id = lease_id_;
-            release_result = io_.control(fd_, RP1_GPCLK_IOC_RELEASE, &request);
-        }
+        rp1_gpclk_release request{};
+        initializeHeader(request);
+        request.lease_id = lease_id_;
+        request.generation = active_generation_ != 0 && !active_generation_terminal_
+            ? active_generation_ : 0;
+        const int release_result =
+            io_.control(fd_, RP1_GPCLK_IOC_RELEASE, &request);
         if (release_result < 0)
         {
             error = "Could not release the owned RP1 GPCLK lease.";

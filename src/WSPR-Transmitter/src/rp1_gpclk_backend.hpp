@@ -23,8 +23,6 @@ enum class Rp1GpclkCompletionState
 
 struct Rp1GpclkProviderIdentity
 {
-    std::uint16_t abi_min{0};
-    std::uint16_t abi_max{0};
     std::uint32_t route{0};
     std::uint32_t compatibility_state{0};
     std::uint32_t compatibility_reason{0};
@@ -96,9 +94,6 @@ struct Rp1GpclkProviderEventState
 
 struct Rp1GpclkPassiveSnapshot
 {
-    std::uint16_t snapshot_version{0};
-    std::uint16_t abi_min{0};
-    std::uint16_t abi_max{0};
     std::uint32_t route{0};
     std::uint32_t compatibility_state{0};
     std::uint32_t compatibility_reason{0};

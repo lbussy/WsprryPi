@@ -91,7 +91,7 @@ void test_tone_submission() {
  Provider p; wsprrypi::Rp1GpclkBackend b(p); std::string e;
  wsprrypi::Rp1GpclkProviderToneProgram tone; tone.tone={1,2,1,1};
  tone.operation=RP1_GPCLK_TONE_OPERATION_FINITE; tone.duration_ns=1000000000ULL;
- expect(prepare(b,2,e) && b.emitTone(tone,e), "ABI v2 TONE must submit");
+ expect(prepare(b,2,e) && b.emitTone(tone,e), "TONE must submit");
  expect(p.tone_programs.size()==1 && p.tone_programs[0].generation==1 &&
   p.tone_programs[0].drive_ma==2, "TONE submission must bind generation and drive");
  p.current=wsprrypi::Rp1GpclkCompletionState::complete;

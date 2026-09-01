@@ -2,13 +2,18 @@
 #ifndef _UAPI_LINUX_RP1_GPCLK_H
 #define _UAPI_LINUX_RP1_GPCLK_H
 
+#ifdef __linux__
 #include <linux/ioctl.h>
 #include <linux/types.h>
+#else
+#include <stdint.h>
+#include <sys/ioctl.h>
+typedef uint8_t __u8;
+typedef uint16_t __u16;
+typedef uint32_t __u32;
+typedef uint64_t __aligned_u64;
+#endif
 
-#define RP1_GPCLK_UAPI_ABI_V1 1U
-#define RP1_GPCLK_UAPI_ABI_V2 2U
-#define RP1_GPCLK_UAPI_ABI_V3 3U
-#define RP1_GPCLK_UAPI_ABI_V4 4U
 #define RP1_GPCLK_IOC_MAGIC 0xb8
 
 #define RP1_GPCLK_MODULE_ID_MAX 64U
@@ -31,7 +36,7 @@
 
 struct rp1_gpclk_uapi_header {
     __u16 size;
-    __u16 version;
+    __u16 reserved;
     __u32 flags;
 };
 
@@ -121,9 +126,9 @@ enum rp1_gpclk_terminal_reason {
 #define RP1_GPCLK_CAP_OPERATION_LIVE_GATE (1ULL << 11)
 
 #define RP1_GPCLK_OPERATION_AUTHORIZATION_DIGEST_SIZE 32U
-#define RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE (1U << 0)
-#define RP1_GPCLK_ACQUIRE_V4_F_ALLOWED_MASK \
-    RP1_GPCLK_ACQUIRE_V4_F_AUTHORIZE_LIVE
+#define RP1_GPCLK_ACQUIRE_F_AUTHORIZE_LIVE (1U << 0)
+#define RP1_GPCLK_ACQUIRE_F_ALLOWED_MASK \
+    RP1_GPCLK_ACQUIRE_F_AUTHORIZE_LIVE
 
 enum rp1_gpclk_observation {
     RP1_GPCLK_OBSERVATION_UNKNOWN = 0,
@@ -157,33 +162,8 @@ enum rp1_gpclk_drain_state {
     (RP1_GPCLK_DRIVE_SUPPORT_2_MA | RP1_GPCLK_DRIVE_SUPPORT_4_MA | \
      RP1_GPCLK_DRIVE_SUPPORT_8_MA | RP1_GPCLK_DRIVE_SUPPORT_12_MA)
 
-struct rp1_gpclk_query_v1 {
+struct rp1_gpclk_query {
     struct rp1_gpclk_uapi_header header;
-    __u16 abi_min;
-    __u16 abi_max;
-    __u32 route;
-    __u32 compatibility_state;
-    __u32 compatibility_reason;
-    __u32 reserved0;
-    __aligned_u64 capabilities;
-    __u32 max_tones;
-    __u32 wspr_symbols;
-    __u32 max_events;
-    __u32 max_dither_period;
-    __u32 supported_drive_ma_mask;
-    __u32 reserved1;
-    __aligned_u64 max_event_duration_ns;
-    __aligned_u64 max_request_duration_ns;
-    char module_id[RP1_GPCLK_MODULE_ID_MAX];
-    char build_id[RP1_GPCLK_BUILD_ID_MAX];
-    char compatibility_id[RP1_GPCLK_COMPAT_ID_MAX];
-    __aligned_u64 reserved[4];
-};
-
-struct rp1_gpclk_query_v2 {
-    struct rp1_gpclk_uapi_header header;
-    __u16 abi_min;
-    __u16 abi_max;
     __u32 route;
     __u32 compatibility_state;
     __u32 compatibility_reason;
@@ -205,17 +185,7 @@ struct rp1_gpclk_query_v2 {
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_acquire_v1 {
-    struct rp1_gpclk_uapi_header header;
-    __u32 expected_route;
-    __u32 reserved0;
-    __aligned_u64 required_capabilities;
-    __aligned_u64 lease_id;
-    __aligned_u64 reserved[4];
-};
-
-/* ABI v4: acquire one lease with an application-bound live authorization. */
-struct rp1_gpclk_acquire_v4 {
+struct rp1_gpclk_acquire {
     struct rp1_gpclk_uapi_header header;
     __u32 expected_route;
     __u32 authorization_flags;
@@ -225,14 +195,14 @@ struct rp1_gpclk_acquire_v4 {
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_tone_v1 {
+struct rp1_gpclk_tone {
     __aligned_u64 lower_divider_q16;
     __aligned_u64 upper_divider_q16;
     __u32 lower_count;
     __u32 upper_count;
 };
 
-struct rp1_gpclk_submit_wspr_v1 {
+struct rp1_gpclk_submit_wspr {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
@@ -252,14 +222,14 @@ struct rp1_gpclk_submit_wspr_v1 {
 
 #define RP1_GPCLK_EVENT_F_OUTPUT_ENABLED (1U << 0)
 
-struct rp1_gpclk_event_v1 {
+struct rp1_gpclk_event {
     __aligned_u64 duration_ns;
     __u16 tone_index;
     __u16 flags;
     __u32 reserved0;
 };
 
-struct rp1_gpclk_submit_events_v1 {
+struct rp1_gpclk_submit_events {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
@@ -277,11 +247,11 @@ struct rp1_gpclk_submit_events_v1 {
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_submit_tone_v2 {
+struct rp1_gpclk_submit_tone {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
-    struct rp1_gpclk_tone_v1 tone;
+    struct rp1_gpclk_tone tone;
     __aligned_u64 duration_ns;
     __u32 operation;
     __u32 expected_route;
@@ -292,14 +262,14 @@ struct rp1_gpclk_submit_tone_v2 {
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_stop_v1 {
+struct rp1_gpclk_stop {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_state_v1 {
+struct rp1_gpclk_state_request {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
@@ -312,24 +282,15 @@ struct rp1_gpclk_state_v1 {
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_release_v2 {
+struct rp1_gpclk_release {
     struct rp1_gpclk_uapi_header header;
     __aligned_u64 lease_id;
     __aligned_u64 generation;
     __aligned_u64 reserved[4];
 };
 
-struct rp1_gpclk_release_v1 {
+struct rp1_gpclk_snapshot {
     struct rp1_gpclk_uapi_header header;
-    __aligned_u64 lease_id;
-    __aligned_u64 reserved[4];
-};
-
-/* ABI v3: passive, non-owning, single-observation module state. */
-struct rp1_gpclk_snapshot_v3 {
-    struct rp1_gpclk_uapi_header header;
-    __u16 abi_min;
-    __u16 abi_max;
     __u32 route;
     __u32 compatibility_state;
     __u32 compatibility_reason;
@@ -361,28 +322,22 @@ struct rp1_gpclk_snapshot_v3 {
 };
 
 #define RP1_GPCLK_IOC_QUERY \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x20, struct rp1_gpclk_query_v1)
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x20, struct rp1_gpclk_query)
 #define RP1_GPCLK_IOC_ACQUIRE \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x21, struct rp1_gpclk_acquire_v1)
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x21, struct rp1_gpclk_acquire)
 #define RP1_GPCLK_IOC_SUBMIT_WSPR \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x22, struct rp1_gpclk_submit_wspr_v1)
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x22, struct rp1_gpclk_submit_wspr)
 #define RP1_GPCLK_IOC_SUBMIT_EVENTS \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x23, struct rp1_gpclk_submit_events_v1)
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x23, struct rp1_gpclk_submit_events)
 #define RP1_GPCLK_IOC_STOP \
-    _IOW(RP1_GPCLK_IOC_MAGIC, 0x24, struct rp1_gpclk_stop_v1)
+    _IOW(RP1_GPCLK_IOC_MAGIC, 0x24, struct rp1_gpclk_stop)
 #define RP1_GPCLK_IOC_GET_STATE \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x25, struct rp1_gpclk_state_v1)
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x25, struct rp1_gpclk_state_request)
 #define RP1_GPCLK_IOC_RELEASE \
-    _IOW(RP1_GPCLK_IOC_MAGIC, 0x26, struct rp1_gpclk_release_v1)
-#define RP1_GPCLK_IOC_QUERY_V2 \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x27, struct rp1_gpclk_query_v2)
-#define RP1_GPCLK_IOC_SUBMIT_TONE_V2 \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x28, struct rp1_gpclk_submit_tone_v2)
-#define RP1_GPCLK_IOC_RELEASE_V2 \
-    _IOW(RP1_GPCLK_IOC_MAGIC, 0x29, struct rp1_gpclk_release_v2)
-#define RP1_GPCLK_IOC_GET_SNAPSHOT_V3 \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x2a, struct rp1_gpclk_snapshot_v3)
-#define RP1_GPCLK_IOC_ACQUIRE_V4 \
-    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x2b, struct rp1_gpclk_acquire_v4)
+    _IOW(RP1_GPCLK_IOC_MAGIC, 0x26, struct rp1_gpclk_release)
+#define RP1_GPCLK_IOC_SUBMIT_TONE \
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x27, struct rp1_gpclk_submit_tone)
+#define RP1_GPCLK_IOC_GET_SNAPSHOT \
+    _IOWR(RP1_GPCLK_IOC_MAGIC, 0x28, struct rp1_gpclk_snapshot)
 
 #endif /* _UAPI_LINUX_RP1_GPCLK_H */

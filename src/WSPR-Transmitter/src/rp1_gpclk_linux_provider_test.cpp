@@ -34,19 +34,19 @@ public:
     {
         requests.push_back(request);
         if (fail_request == request) { error = fail_error; return -1; }
-        if (request == RP1_GPCLK_IOC_QUERY_V2)
+        if (request == RP1_GPCLK_IOC_QUERY)
         {
-            auto* value = static_cast<rp1_gpclk_query_v2*>(argument);
+            auto* value = static_cast<rp1_gpclk_query*>(argument);
             const auto input = value->header;
             *value = query;
             value->header = input;
             if (malformed_query_size) --value->header.size;
-            if (wrong_query_version) value->header.version = RP1_GPCLK_UAPI_ABI_V1;
+            if (nonzero_query_reserved) value->header.reserved = 1;
             if (unknown_query_flags) value->header.flags = 1;
         }
-        else if (request == RP1_GPCLK_IOC_GET_SNAPSHOT_V3)
+        else if (request == RP1_GPCLK_IOC_GET_SNAPSHOT)
         {
-            auto* value = static_cast<rp1_gpclk_snapshot_v3*>(argument);
+            auto* value = static_cast<rp1_gpclk_snapshot*>(argument);
             const auto input = value->header;
             *value = snapshot;
             value->header = input;
@@ -68,22 +68,22 @@ public:
             std::strcpy(value->build_id, query.build_id);
             std::strcpy(value->compatibility_id, query.compatibility_id);
         }
-        else if (request == RP1_GPCLK_IOC_ACQUIRE_V4)
+        else if (request == RP1_GPCLK_IOC_ACQUIRE)
         {
-            acquire_v4 = *static_cast<rp1_gpclk_acquire_v4*>(argument);
-            static_cast<rp1_gpclk_acquire_v4*>(argument)->lease_id = lease_id;
+            acquire = *static_cast<rp1_gpclk_acquire*>(argument);
+            static_cast<rp1_gpclk_acquire*>(argument)->lease_id = lease_id;
         }
         else if (request == RP1_GPCLK_IOC_SUBMIT_WSPR) {
-            auto* value=static_cast<rp1_gpclk_submit_wspr_v1*>(argument); wspr=*value; value->generation=returned_generation; }
+            auto* value=static_cast<rp1_gpclk_submit_wspr*>(argument); wspr=*value; value->generation=returned_generation; }
         else if (request == RP1_GPCLK_IOC_SUBMIT_EVENTS) {
-            auto* value=static_cast<rp1_gpclk_submit_events_v1*>(argument); events=*value; value->generation=returned_generation; }
-        else if (request == RP1_GPCLK_IOC_SUBMIT_TONE_V2) {
-            auto* value=static_cast<rp1_gpclk_submit_tone_v2*>(argument); tone=*value; value->generation=returned_generation; }
+            auto* value=static_cast<rp1_gpclk_submit_events*>(argument); events=*value; value->generation=returned_generation; }
+        else if (request == RP1_GPCLK_IOC_SUBMIT_TONE) {
+            auto* value=static_cast<rp1_gpclk_submit_tone*>(argument); tone=*value; value->generation=returned_generation; }
         else if (request == RP1_GPCLK_IOC_STOP)
-            stop = *static_cast<rp1_gpclk_stop_v1*>(argument);
+            stop = *static_cast<rp1_gpclk_stop*>(argument);
         else if (request == RP1_GPCLK_IOC_GET_STATE)
         {
-            auto* value = static_cast<rp1_gpclk_state_v1*>(argument);
+            auto* value = static_cast<rp1_gpclk_state_request*>(argument);
             value->state = state;
             value->terminal_reason = terminal_reason;
             value->current_event = current_event;
@@ -92,9 +92,7 @@ public:
             if (foreign_lease) ++value->lease_id;
         }
         else if (request == RP1_GPCLK_IOC_RELEASE)
-            release = *static_cast<rp1_gpclk_release_v1*>(argument);
-        else if (request == RP1_GPCLK_IOC_RELEASE_V2)
-            release_v2 = *static_cast<rp1_gpclk_release_v2*>(argument);
+            release = *static_cast<rp1_gpclk_release*>(argument);
         return 0;
     }
     int closeDevice(int) noexcept override { ++closes; return close_result; }
@@ -103,16 +101,14 @@ public:
     Io()
     {
         query.header.size = sizeof(query);
-        query.header.version = RP1_GPCLK_UAPI_ABI_V2;
-        query.abi_min = RP1_GPCLK_UAPI_ABI_V1;
-        query.abi_max = RP1_GPCLK_UAPI_ABI_V2;
         query.route = RP1_GPCLK_ROUTE_GPIO4;
         query.compatibility_state = RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED;
         query.compatibility_reason = RP1_GPCLK_COMPAT_REASON_ADMIN_ENROLLMENT_REQUIRED;
         query.capabilities = kAdministrativeCapabilities |
             RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
             RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_TONE_CONTINUOUS |
-            RP1_GPCLK_CAP_TONE_FINITE;
+            RP1_GPCLK_CAP_TONE_FINITE | RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
+            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
         query.max_tones = RP1_GPCLK_MAX_TONES;
         query.wspr_symbols = RP1_GPCLK_WSPR_SYMBOLS;
         query.max_events = RP1_GPCLK_MAX_EVENTS;
@@ -127,9 +123,6 @@ public:
         std::strcpy(query.compatibility_id,
             "external-provider-gpio4");
         snapshot.header.size = sizeof(snapshot);
-        snapshot.header.version = RP1_GPCLK_UAPI_ABI_V3;
-        snapshot.abi_min = RP1_GPCLK_UAPI_ABI_V1;
-        snapshot.abi_max = RP1_GPCLK_UAPI_ABI_V4;
         snapshot.operation_state = RP1_GPCLK_STATE_IDLE;
         snapshot.terminal_reason = RP1_GPCLK_REASON_NONE;
         snapshot.cleanup_fault = RP1_GPCLK_OBSERVATION_FALSE;
@@ -147,16 +140,14 @@ public:
         snapshot.max_tone_duration_ns = RP1_GPCLK_TONE_DURATION_NS_MAX;
     }
 
-    rp1_gpclk_query_v2 query{};
-    rp1_gpclk_snapshot_v3 snapshot{};
-    rp1_gpclk_acquire_v1 acquire{};
-    rp1_gpclk_acquire_v4 acquire_v4{};
-    rp1_gpclk_submit_wspr_v1 wspr{};
-    rp1_gpclk_submit_events_v1 events{};
-    rp1_gpclk_submit_tone_v2 tone{};
-    rp1_gpclk_stop_v1 stop{};
-    rp1_gpclk_release_v1 release{};
-    rp1_gpclk_release_v2 release_v2{};
+    rp1_gpclk_query query{};
+    rp1_gpclk_snapshot snapshot{};
+    rp1_gpclk_acquire acquire{};
+    rp1_gpclk_submit_wspr wspr{};
+    rp1_gpclk_submit_events events{};
+    rp1_gpclk_submit_tone tone{};
+    rp1_gpclk_stop stop{};
+    rp1_gpclk_release release{};
     std::string path;
     std::vector<int> flags;
     std::vector<unsigned long> requests;
@@ -172,7 +163,7 @@ public:
     bool stale_generation{};
     bool foreign_lease{};
     bool malformed_query_size{};
-    bool wrong_query_version{};
+    bool nonzero_query_reserved{};
     bool unknown_query_flags{};
     bool unknown_snapshot_flags{};
     bool independent_safe_idle_snapshot{};
@@ -185,7 +176,7 @@ void test_query_and_fail_closed_validation()
     wsprrypi::Rp1GpclkProviderIdentity identity;
     std::string error;
     expect(provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "valid ABI v2 QUERY must parse");
+        false, identity, error), "valid QUERY must parse");
     expect(io.path == "/dev/rp1-gpclk", "only the canonical endpoint may be opened");
     expect(identity.route == RP1_GPCLK_ROUTE_GPIO4 &&
         identity.compatibility_state == RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED,
@@ -195,24 +186,24 @@ void test_query_and_fail_closed_validation()
 
     io.query.capabilities |= (1ULL << 63);
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "unknown ABI v2 capability must fail closed");
+        false, identity, error), "unknown capability must fail closed");
     io.query.capabilities &= ~(1ULL << 63);
 
     io.malformed_query_size = true;
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "malformed ABI v2 QUERY size must fail closed");
+        false, identity, error), "malformed QUERY size must fail closed");
     io.malformed_query_size = false;
-    io.wrong_query_version = true;
+    io.nonzero_query_reserved = true;
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "wrong ABI v2 QUERY version must fail closed");
-    io.wrong_query_version = false;
+        false, identity, error), "nonzero QUERY header reservation must fail closed");
+    io.nonzero_query_reserved = false;
     io.unknown_query_flags = true;
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "unknown ABI v2 QUERY flag must fail closed");
+        false, identity, error), "unknown QUERY flag must fail closed");
     io.unknown_query_flags = false;
     io.query.reserved[0] = 1;
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "nonzero ABI v2 reserved data must fail closed");
+        false, identity, error), "nonzero QUERY reserved data must fail closed");
     io.query.reserved[0] = 0;
 
     io.query.capabilities &= ~RP1_GPCLK_CAP_TONE_CONTINUOUS;
@@ -226,10 +217,6 @@ void test_query_and_fail_closed_validation()
         false, identity, error), "missing finite TONE capability must fail closed");
     io.query.capabilities |= RP1_GPCLK_CAP_TONE_FINITE;
 
-    io.query.abi_max = RP1_GPCLK_UAPI_ABI_V1;
-    expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
-        false, identity, error), "ABI mismatch must fail closed");
-    io.query.abi_max = RP1_GPCLK_UAPI_ABI_V2;
     io.query.capabilities &= ~RP1_GPCLK_CAP_STABLE_STATE;
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
         false, identity, error), "missing capability must fail closed");
@@ -262,28 +249,18 @@ void test_safe_idle_query_projection_uses_authenticated_passive_identity()
     std::string error;
     expect(provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
         false, identity, error),
-        "safe-idle ABI v2 projection must reconcile with passive ABI v3 eligibility");
+        "safe-idle projection must reconcile with passive eligibility");
     expect(identity.compatibility_state == RP1_GPCLK_COMPAT_EXPERIMENTAL &&
         (identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) != 0,
-        "passive ABI v3 identity must become authoritative after reconciliation");
+        "passive identity must become authoritative after reconciliation");
     expect(!provider.query(RP1_GPCLK_ROUTE_GPIO4, kAdministrativeCapabilities,
         true, identity, error),
         "safe-idle projection must not satisfy an already-live query");
 }
 
-void test_old_module_and_tone_v2()
+void test_tone()
 {
-    Io old;
-    old.fail_request = RP1_GPCLK_IOC_QUERY_V2;
-    old.fail_error = EOPNOTSUPP;
-    wsprrypi::Rp1GpclkLinuxProvider old_provider(old);
-    wsprrypi::Rp1GpclkProviderIdentity identity;
     std::string error;
-    expect(!old_provider.query(RP1_GPCLK_ROUTE_GPIO4,
-        kAdministrativeCapabilities, false, identity, error) &&
-        error.find("old module") != std::string::npos,
-        "old modules must receive deterministic ABI v2 rejection");
-
     Io io;
     io.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     io.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
@@ -293,7 +270,7 @@ void test_old_module_and_tone_v2()
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
         RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
     expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
-        "ABI v2 TONE fixture must acquire exact capabilities");
+        "TONE fixture must acquire exact capabilities");
     wsprrypi::Rp1GpclkProviderToneProgram tone;
     tone.tone = {1, 2, 1, 1};
     tone.generation = 12;
@@ -313,7 +290,7 @@ void test_old_module_and_tone_v2()
         io.stop.generation == io.returned_generation,
         "operator STOP must bind the active continuous generation");
     expect(provider.release(error) &&
-        io.release_v2.generation == io.returned_generation,
+        io.release.generation == io.returned_generation,
         "continuous TONE release must bind its generation");
 
     Io finite_io;
@@ -368,7 +345,7 @@ void test_passive_snapshot_is_read_only_and_fail_closed()
     wsprrypi::Rp1GpclkPassiveSnapshot snapshot;
     std::string error;
     expect(provider.passiveSnapshot(snapshot, error),
-        "valid ABI v3 passive snapshot must parse");
+        "valid passive snapshot must parse");
     expect(io.opens == 1 && io.closes == 1 && !io.flags.empty() &&
         (io.flags.back() & O_ACCMODE) == O_RDONLY,
         "passive inspection must use one read-only descriptor and close it");
@@ -400,7 +377,7 @@ void test_passive_snapshot_is_read_only_and_fail_closed()
     expect(!provider.passiveSnapshot(snapshot, error),
         "nonzero passive reserved data must fail closed");
     io.snapshot.reserved[0] = 0;
-    io.fail_request = RP1_GPCLK_IOC_GET_SNAPSHOT_V3;
+    io.fail_request = RP1_GPCLK_IOC_GET_SNAPSHOT;
     io.fail_error = ENOTTY;
     const auto closes_before = io.closes;
     expect(!provider.passiveSnapshot(snapshot, error) &&
@@ -422,9 +399,9 @@ void test_acquire_state_release_and_generation()
         RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
     expect(provider.acquire(RP1_GPCLK_ROUTE_GPIO4, required, authorizationDigest(), error),
         "live-eligible exact-route provider must acquire");
-    expect(io.acquire_v4.expected_route == RP1_GPCLK_ROUTE_GPIO4 &&
-        io.acquire_v4.required_capabilities == required &&
-        io.acquire_v4.authorization_digest[0] == 1,
+    expect(io.acquire.expected_route == RP1_GPCLK_ROUTE_GPIO4 &&
+        io.acquire.required_capabilities == required &&
+        io.acquire.authorization_digest[0] == 1,
         "ACQUIRE must bind route and capabilities");
 
     wsprrypi::Rp1GpclkProviderProgram program{};
@@ -493,7 +470,7 @@ void test_failure_cleanup_and_historical_endpoint_rejection()
     Io acquire_failure;
     acquire_failure.query.capabilities |= RP1_GPCLK_CAP_LIVE_ELIGIBLE;
     acquire_failure.query.compatibility_state = RP1_GPCLK_COMPAT_EXPERIMENTAL;
-    acquire_failure.fail_request = RP1_GPCLK_IOC_ACQUIRE_V4;
+    acquire_failure.fail_request = RP1_GPCLK_IOC_ACQUIRE;
     wsprrypi::Rp1GpclkLinuxProvider failed(acquire_failure);
     expect(!failed.acquire(RP1_GPCLK_ROUTE_GPIO4,
         kAdministrativeCapabilities | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
@@ -522,9 +499,9 @@ int main()
     test_query_and_fail_closed_validation();
     test_safe_idle_query_projection_uses_authenticated_passive_identity();
     test_acquire_state_release_and_generation();
-    test_old_module_and_tone_v2();
+    test_tone();
     test_passive_snapshot_is_read_only_and_fail_closed();
     test_failure_cleanup_and_historical_endpoint_rejection();
     if (failures) return 1;
-    std::cout << "RP1 GPCLK ABI v2 execution and ABI v3 passive provider tests passed\n";
+    std::cout << "RP1 GPCLK canonical UAPI provider tests passed\n";
 }

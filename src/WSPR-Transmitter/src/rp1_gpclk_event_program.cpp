@@ -87,7 +87,7 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     if (plan.mode != TransmissionMode::QRSS &&
         plan.mode != TransmissionMode::FSKCW &&
         plan.mode != TransmissionMode::DFCW)
-        return reject("RP1 GPCLK ABI v1 finite events support QRSS, FSKCW, and DFCW only.");
+        return reject("RP1 GPCLK finite events support QRSS, FSKCW, and DFCW only.");
     if (plan.events.empty() || plan.events.size() > RP1_GPCLK_MAX_EVENTS)
         return reject("RP1 GPCLK finite event count is outside the supported bound.");
     for (const auto& event : plan.events)

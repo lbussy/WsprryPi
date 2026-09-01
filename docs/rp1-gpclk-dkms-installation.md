@@ -56,7 +56,7 @@ exactly one Debian package plus `SHA256SUMS` and
 - repository, release tag, immutable tag commit, product and Debian versions,
   and release-channel classification;
 - package filename, package/DKMS/kernel-module identities, and package SHA-256;
-- supported UAPI ABI range, installed UAPI path and SHA-256;
+- installed UAPI path and SHA-256;
 - `rp1-gpclk-route-manager-v1`;
 - route-neutral, output-disabled package behavior with no module load, overlay
   application, boot-configuration edit, or service operation; and

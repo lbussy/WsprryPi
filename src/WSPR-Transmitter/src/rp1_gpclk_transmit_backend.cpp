@@ -344,7 +344,6 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         record.module_id = current_policy.identity.module_id;
         record.module_version = current_policy.identity.build_id;
         record.compatibility_id = current_policy.identity.compatibility_id;
-        record.uapi_abi = RP1_GPCLK_UAPI_ABI_V4;
         record.route = configured_->route;
         record.endpoint = provider_->endpoint();
         record.state = "authorized";
