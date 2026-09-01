@@ -31,6 +31,31 @@ std::string encode_symbols(const std::string& callsign,
 
     return out;
 }
+
+std::string encode_symbols_after_longer_callsign(
+    const std::string& callsign,
+    const std::string& locator,
+    int power_dbm)
+{
+    wspr::WsprRefEncoder encoder;
+    uint8_t discarded[wspr::WSPR_SYMBOL_COUNT] = {};
+    uint8_t symbols[wspr::WSPR_SYMBOL_COUNT] = {};
+
+    encoder.wspr_encode("AA0NTX/1", "EM18", 20, discarded);
+    encoder.wspr_encode(
+        callsign.c_str(),
+        locator.c_str(),
+        static_cast<int8_t>(power_dbm),
+        symbols);
+
+    std::string out;
+    out.reserve(wspr::WSPR_SYMBOL_COUNT);
+
+    for (std::size_t i = 0; i < wspr::WSPR_SYMBOL_COUNT; ++i)
+        out.push_back(static_cast<char>('0' + symbols[i]));
+
+    return out;
+}
 } // namespace
 
 int main()
@@ -82,6 +107,25 @@ int main()
                 << "\n";
             std::cout << "Expected: " << expected << "\n";
             std::cout << "Actual:   " << actual << "\n";
+        }
+
+        if (type == "TYPE1" && callsign == "AA0NT" && power_dbm == 37)
+        {
+            const std::string after_longer =
+                encode_symbols_after_longer_callsign(callsign, locator, power_dbm);
+
+            if (after_longer == expected)
+            {
+                ++pass_count;
+                std::cout << "PASS: TYPE1 short callsign after longer callsign\n";
+            }
+            else
+            {
+                ++fail_count;
+                std::cout << "FAIL: TYPE1 short callsign after longer callsign\n";
+                std::cout << "Expected: " << expected << "\n";
+                std::cout << "Actual:   " << after_longer << "\n";
+            }
         }
     }
 

@@ -273,8 +273,8 @@ namespace wspr
 {
     void WsprRefEncoder::wspr_encode(const char *call, const char *loc, int8_t dbm, uint8_t *symbols)
     {
-        char call_[13];
-        char loc_[7];
+        char call_[13] = {};
+        char loc_[7] = {};
         uint8_t dbm_ = static_cast<uint8_t>(dbm);
         std::strcpy(call_, call);
         std::strcpy(loc_, loc);
@@ -304,7 +304,7 @@ namespace wspr
     void WsprRefEncoder::wspr_message_prep(char *call, char *loc, int8_t dbm)
     {
         uint8_t i;
-        for (i = 0; i < 12; i++)
+        for (i = 0; i < 12 && call[i] != '\0'; i++)
         {
             if (call[i] != '/' && call[i] != '<' && call[i] != '>')
             {
