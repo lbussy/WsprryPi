@@ -208,7 +208,7 @@ EXEC_COMMAND_STATUS_MODE=info exec_command "Resolve read-only plan" probe --exac
         result = self.run_shell(
             r'''
 source "$INSTALLER"
-probe() { return 17; }
+probe() { printf 'child stdout\n'; printf 'child stderr\n' >&2; return 17; }
 logI() { printf '[INFO ] %s\n' "$1"; }
 logE() { printf '[ERROR] %s\n' "$1"; }
 DRY_RUN=false
@@ -220,22 +220,57 @@ fi
         self.assertIn("[INFO ] Resolve read-only plan.", result.stdout)
         self.assertIn("[ERROR] Failed: Resolve read-only plan.", result.stdout)
         self.assertIn("Command failed with status 17: probe", result.stderr)
+        self.assertNotIn("child stdout", result.stdout)
+        self.assertNotIn("child stderr", result.stderr)
 
-    def test_output_visible_dry_run_emits_only_final_status(self) -> None:
+    def test_exec_command_info_mode_suppresses_live_success_output(self) -> None:
         result = self.run_shell(
             r'''
 source "$INSTALLER"
-probe() { return 99; }
-DRY_RUN=true
-FGGLD= RESET= FGGRN= FGRED= MOVE_UP='<UP>' CLEAR_LINE='<CLEAR>'
-EXEC_COMMAND_SHOW_OUTPUT=true exec_command \
-    "A deliberately long output-visible operation whose status would wrap" probe
+probe() { printf 'child stdout\n'; printf 'child stderr\n' >&2; }
+logI() { printf '[INFO ] %s\n' "$1"; }
+DRY_RUN=false
+EXEC_COMMAND_STATUS_MODE=info exec_command "Resolve read-only plan" probe
 '''
         )
-        self.assertNotIn("Running: (dry)", result.stdout)
-        self.assertNotIn("<UP>", result.stdout)
-        self.assertNotIn("<CLEAR>", result.stdout)
-        self.assertEqual(result.stdout.count("Complete: (dry)"), 1)
+        self.assertEqual(result.stdout.strip(), "[INFO ] Resolve read-only plan.")
+        self.assertNotIn("child stderr", result.stderr)
+
+    def test_exec_command_suppresses_child_output_in_debug_mode(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { printf 'child stdout\n'; printf 'child stderr\n' >&2; }
+DRY_RUN=false
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP='<UP>' CLEAR_LINE='<CLEAR>'
+exec_command "Wrapped command" probe debug
+'''
+        )
+        self.assertNotIn("child stdout", result.stdout)
+        self.assertNotIn("child stderr", result.stderr)
+        self.assertIn("Complete: Wrapped command.", result.stdout)
+        self.assertIn("Command: probe", result.stderr)
+
+    def test_exec_command_suppresses_child_output_on_failure(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+probe() { printf 'child stdout\n'; printf 'child stderr\n' >&2; return 19; }
+DRY_RUN=false
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+if exec_command "Wrapped command" probe; then
+    exit 1
+fi
+'''
+        )
+        self.assertNotIn("child stdout", result.stdout)
+        self.assertNotIn("child stderr", result.stderr)
+        self.assertIn("Failed: Wrapped command.", result.stdout)
+        self.assertIn("Command failed with status 19: probe", result.stderr)
+
+    def test_exec_command_has_no_child_output_override(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        self.assertNotIn("EXEC_COMMAND_SHOW_OUTPUT", source)
 
     def test_support_bundle_validation_uses_standard_dry_run_execution_item(self) -> None:
         sentinel = self.root / "age-validation-invoked"

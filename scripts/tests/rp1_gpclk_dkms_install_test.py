@@ -640,8 +640,7 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("(dry)"), 1)
-            self.assertNotIn("Running: (dry)", result.stdout)
+            self.assertEqual(result.stdout.count("Complete: (dry)"), 1)
             self.assertIn(
                 "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
                 result.stdout,
@@ -721,7 +720,7 @@ cleanup_rp1_gpclk_dkms_state
         self.assertEqual(arguments.count("CALL"), 2)
         self.assertEqual(arguments.count("ARG=--debug"), 2)
 
-    def test_selected_uninstall_dry_run_displays_helper_without_invoking_python(self):
+    def test_selected_uninstall_dry_run_reports_check_without_invoking_python(self):
         install_script = ROOT / "scripts" / "install.sh"
         sentinel = self.root / "uninstall-python-invoked"
         shell = r'''
@@ -747,9 +746,8 @@ cleanup_rp1_gpclk_dkms_state
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(sentinel.exists())
-        self.assertEqual(result.stdout.count("(dry)"), 1)
-        self.assertNotIn("Running: (dry)", result.stdout)
-        self.assertIn("Complete: (dry) Remove owned RP1 provider.", result.stdout)
+        self.assertEqual(result.stdout.count("Complete: (dry)"), 1)
+        self.assertIn("Complete: (dry) Check owned RP1 provider.", result.stdout)
         self.assertLessEqual(max(map(len, result.stdout.splitlines())), 80)
         helper = install_script.parent / "rp1_gpclk_dkms_install.py"
         self.assertIn(

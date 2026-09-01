@@ -21,8 +21,9 @@ explicit override/opt-out, published release, immutable development source,
 dry-run, existing-state refusal, and ownership-aware uninstall behavior are
 documented in [RP1-GPCLK-DKMS installation](../docs/rp1-gpclk-dkms-installation.md).
 Dry-run uses the installer's standard command wrapper and never starts the
-Python helper. Passing `debug` displays the helper command and, for a real run,
-its external command activity and captured output.
+Python helper. Passing `debug` displays the safely quoted helper command. The
+wrapper suppresses child stdout and stderr in every execution mode and owns all
+status and failure diagnostics.
 
 Run its offline hardware-free contract coverage with:
 

@@ -1889,10 +1889,12 @@ render_command_argv() {
 # -----------------------------------------------------------------------------
 # @brief Executes a command in a separate Bash process.
 # @details This function manages the execution of a shell command, handling the
-#          display of status messages. It supports dry-run mode, where the
+#          display of status messages. Child stdout and stderr are always
+#          suppressed; debug mode renders the safely quoted command through the
+#          wrapper's own diagnostics. It supports dry-run mode, where the
 #          command is simulated without execution. The function prints success
-#          or failure messages and handles the removal of the "Running" line
-#          once the command finishes.
+#          or failure messages and removes the "Running" line once the command
+#          finishes.
 #
 # @param exec_name The name of the command or task being executed.
 # @param ...       The command and its arguments, followed optionally by the
@@ -1923,7 +1925,6 @@ exec_command() {
     # Declare local variables after debug initialization
     local status=0 exec_name running_pre complete_pre failed_pre
     local args cmd cmd_str
-    local show_output="${EXEC_COMMAND_SHOW_OUTPUT:-false}"
     local status_mode="${EXEC_COMMAND_STATUS_MODE:-execution}"
 
     # Assign the human readable name and shift it off
@@ -1967,11 +1968,7 @@ exec_command() {
             return 0
         fi
 
-        if [[ "$debug" == "debug" || "$show_output" == "true" ]]; then
-            "${cmd[@]}" || status=$?
-        else
-            "${cmd[@]}" &>/dev/null || status=$?
-        fi
+        "${cmd[@]}" &>/dev/null || status=$?
         if [[ $status -ne 0 ]]; then
             logE "Failed: $exec_name."
             if [[ $status -eq 127 ]]; then
@@ -1993,16 +1990,9 @@ exec_command() {
     fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        # Commands that deliberately expose their output use a persistent
-        # status line during real execution. In a dry run there is no command
-        # output and no execution delay, so emit only the final plan item. This
-        # avoids trying to erase a long, terminal-wrapped "Running" line one
-        # physical row at a time.
-        if [[ "$show_output" != "true" ]]; then
-            printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
-            sleep 0.02
-            printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
-        fi
+        printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+        sleep 0.02
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
         debug_end "$debug"
         return 0
@@ -2012,18 +2002,11 @@ exec_command() {
     printf "%b[  -  ]%b %s %s.\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
     sleep 0.02
 
-    # Execute the command, swallowing output unless debug or an explicitly
-    # reviewed caller requires ordinary command output in the installer log.
-    if [[ "$debug" == "debug" || "$show_output" == "true" ]]; then
-        "${cmd[@]}" || status=$?
-    else
-        "${cmd[@]}" &>/dev/null || status=$?
-    fi
+    # Child output never bypasses the wrapper. Debug mode has already rendered
+    # the exact command through debug_print().
+    "${cmd[@]}" &>/dev/null || status=$?
 
-    # Preserve visible command output instead of erasing its final line.
-    if [[ "$debug" != "debug" && "$show_output" != "true" ]]; then
-        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
-    fi
+    printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
 
     # Report result
     if [[ $status -eq 0 ]]; then
@@ -2379,7 +2362,7 @@ prepare_rp1_gpclk_dkms_installation() {
         prepare_args+=(--debug)
     fi
 
-    if ! EXEC_COMMAND_SHOW_OUTPUT=true EXEC_COMMAND_STATUS_MODE=info \
+    if ! EXEC_COMMAND_STATUS_MODE=info \
         exec_command "Resolve RP1-GPCLK-DKMS installation plan" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${prepare_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS installation planning failed before package mutation."
@@ -2413,7 +2396,7 @@ apply_rp1_gpclk_dkms_installation() {
     if [[ "$debug" == "debug" ]]; then
         apply_args+=(--debug)
     fi
-    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Apply RP1-GPCLK-DKMS installation plan" \
+    if ! exec_command "Apply RP1-GPCLK-DKMS installation plan" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${apply_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS installation failed closed; inspect the retained installer log and provider state."
         return 1
@@ -2481,7 +2464,7 @@ remove_owned_rp1_gpclk_dkms_provider() {
     if [[ "$debug" == "debug" ]]; then
         remove_args+=(--debug)
     fi
-    if ! EXEC_COMMAND_SHOW_OUTPUT=true exec_command "Remove owned RP1 provider" \
+    if ! exec_command "Check owned RP1 provider" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${remove_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS owned-provider removal failed; the ownership record was retained for recovery."
         cleanup_rp1_gpclk_dkms_state
