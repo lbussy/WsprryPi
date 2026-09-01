@@ -376,6 +376,14 @@ manage_config wsprrypi.ini "$DESTINATION_DIR"
 
         self.assertEqual(snapshot(self.root), before)
 
+    def test_sound_management_uses_the_canonical_pi5_detector(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        function_body = source.split("\nmanage_sound() {", 1)[1].split(
+            "\n# -----------------------------------------------------------------------------", 1
+        )[0]
+        self.assertIn("if is_pi5; then", function_body)
+        self.assertNotIn("is_raspberry_pi_5", function_body)
+
     def test_pi5_never_disables_legacy_sound_and_uninstall_needs_no_reboot(self) -> None:
         sound_file = self.root / "alsa-blacklist.conf"
         result = self.run_shell(
@@ -385,7 +393,7 @@ definition=$(declare -f manage_sound)
 definition=${definition/manage_sound /manage_sound_under_test }
 definition=${definition/'file="/etc/modprobe.d/alsa-blacklist.conf"'/'file="$SOUND_FILE"'}
 eval "$definition"
-is_raspberry_pi_5() { return 0; }
+is_pi5() { return 0; }
 logD() { :; }
 
 ACTION=install
@@ -397,6 +405,15 @@ manage_sound_under_test debug
 
 printf 'blacklist snd_bcm2835\n' >"$SOUND_FILE"
 ACTION=uninstall
+DRY_RUN=true
+REBOOT=false
+manage_sound_under_test debug
+[[ -e "$SOUND_FILE" ]]
+[[ "$REBOOT" == "false" ]]
+flag_need_reboot debug
+
+ACTION=uninstall
+DRY_RUN=false
 REBOOT=false
 manage_sound_under_test debug
 [[ ! -e "$SOUND_FILE" ]]
@@ -406,6 +423,7 @@ flag_need_reboot debug
             SOUND_FILE=sound_file,
         )
         self.assertNotIn("re-enabled sound", result.stderr)
+        self.assertNotIn("command not found", result.stderr)
         self.assertNotIn("Important Note", result.stdout)
         self.assertNotIn("sound system", result.stdout)
 
@@ -419,7 +437,7 @@ definition=$(declare -f manage_sound)
 definition=${definition/manage_sound /manage_sound_under_test }
 definition=${definition/'file="/etc/modprobe.d/alsa-blacklist.conf"'/'file="$SOUND_FILE"'}
 eval "$definition"
-is_raspberry_pi_5() { return 1; }
+is_pi5() { return 1; }
 logD() { :; }
 
 ACTION=uninstall

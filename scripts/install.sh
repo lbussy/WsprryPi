@@ -7063,7 +7063,7 @@ manage_sound() {
     # remove an entry left by an older WsprryPi installation, but that cleanup
     # does not require a reboot or mean that Pi 5 sound was re-enabled.
     local sound_reboot_required="true"
-    if is_raspberry_pi_5; then
+    if is_pi5; then
         if [[ "$ACTION" == "install" ]]; then
             debug_print "Legacy snd_bcm2835 sound management is not applicable on Raspberry Pi 5." "$debug"
             debug_end "$debug"
