@@ -809,6 +809,89 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertIn("Refusing to remove unexpected", cleanup)
         self.assertIn('group_to_execute+=("remove_owned_rp1_gpclk_dkms_provider")', source)
 
+    def run_uninstall_orchestration(self, failing_step=""):
+        install_script = ROOT / "scripts" / "install.sh"
+        capture = self.root / f"uninstall-{failing_step or 'success'}.txt"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+ACTION=uninstall
+DRY_RUN=false
+NO_WEB=false
+
+record_step() {
+    printf '%s\n' "$1" >>"$CAPTURE"
+    [[ "$1" != "$FAILING_STEP" ]]
+}
+manage_apache() { record_step manage_apache; }
+manage_web() { record_step manage_web; }
+manage_service() { record_step manage_service; }
+manage_i2c() { record_step manage_i2c; }
+manage_config() { record_step manage_config; }
+manage_route_application() { record_step manage_route_application; }
+manage_support_bundle_runtime() { record_step manage_support_bundle_runtime; }
+manage_exe() { record_step manage_exe; }
+manage_sound() { record_step manage_sound; }
+remove_owned_rp1_gpclk_dkms_provider() { record_step remove_owned_rp1_gpclk_dkms_provider; }
+flag_need_reboot() { record_step flag_need_reboot; }
+eval "$(declare -f finish_script | sed '1s/finish_script/original_finish_script/')"
+finish_script() {
+    printf 'finish_status=%s\n' "$1" >>"$CAPTURE"
+    original_finish_script "$@"
+}
+logE() { :; }
+warn() { printf 'warning=%s\n' "$*" >>"$CAPTURE"; }
+
+status=0
+manage_wsprry_pi || status=$?
+printf 'return_status=%s\n' "$status" >>"$CAPTURE"
+'''
+        environment = os.environ.copy()
+        environment.update({
+            "INSTALL_SCRIPT": str(install_script),
+            "CAPTURE": str(capture),
+            "FAILING_STEP": failing_step,
+        })
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return capture.read_text().splitlines(), result.stdout
+
+    def test_teardown_failures_skip_owned_provider_removal_and_fail_uninstall(self):
+        expected_teardown = {
+            "manage_apache", "manage_web", "manage_service", "manage_i2c",
+            "manage_config", "manage_route_application",
+            "manage_support_bundle_runtime", "manage_exe", "manage_sound",
+            "flag_need_reboot",
+        }
+        for failing_step in ("manage_service", "manage_route_application", "manage_exe"):
+            with self.subTest(failing_step=failing_step):
+                lines, stdout = self.run_uninstall_orchestration(failing_step)
+                self.assertTrue(expected_teardown.issubset(lines))
+                self.assertNotIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+                self.assertIn("finish_status=1", lines)
+                self.assertIn("return_status=1", lines)
+                self.assertTrue(any("provider and ownership record were preserved" in line for line in lines))
+                self.assertNotIn("Uninstallation successful", stdout)
+                self.assertNotIn("has been uninstalled", stdout)
+
+    def test_successful_teardown_runs_owned_provider_removal_last(self):
+        lines, stdout = self.run_uninstall_orchestration()
+        provider = lines.index("remove_owned_rp1_gpclk_dkms_provider")
+        self.assertGreater(provider, lines.index("manage_sound"))
+        self.assertIn("finish_status=0", lines)
+        self.assertIn("return_status=0", lines)
+        self.assertIn("Uninstallation successful", stdout)
+
+    def test_owned_provider_removal_failure_fails_uninstall(self):
+        lines, stdout = self.run_uninstall_orchestration("remove_owned_rp1_gpclk_dkms_provider")
+        self.assertIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+        self.assertIn("finish_status=1", lines)
+        self.assertIn("return_status=1", lines)
+        self.assertNotIn("Uninstallation successful", stdout)
+        self.assertNotIn("has been uninstalled", stdout)
+
 
 class RemovalPolicyTests(unittest.TestCase):
     def setUp(self):
