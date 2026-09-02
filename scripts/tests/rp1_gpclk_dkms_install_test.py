@@ -2191,6 +2191,20 @@ exec_command "argv fidelity" probe before debug after debug
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(capture.read_text().splitlines(), ["before", "debug", "after"])
 
+    def test_empty_log_message_fails_without_unbound_argument_abort(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        result = subprocess.run(
+            ["bash", "-c", 'source "$INSTALL_SCRIPT"; logI ""'],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "INSTALL_SCRIPT": str(install_script)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Message is required.", result.stderr)
+        self.assertNotIn("unbound variable", result.stderr)
+
     def test_exec_command_retains_bounded_failure_details(self):
         install_script = ROOT / "scripts/install.sh"
         failure_output = self.root / "apply-output.log"

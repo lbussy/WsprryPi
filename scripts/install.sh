@@ -4036,13 +4036,13 @@ log_message_with_severity() {
     local extended_message=""
 
     # Get level if it exists (must be one of the predefined values)
-    if [[ -n "$1" && "$1" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
-        severity="$1"
+    if [[ -n "${1:-}" && "${1:-}" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
+        severity="${1:-}"
     fi
 
     # Process arguments
-    if [[ -n "$2" ]]; then
-        message="$2"
+    if [[ -n "${2:-}" ]]; then
+        message="${2:-}"
     else
         warn "Message is required."
         debug_end "$debug"
