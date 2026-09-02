@@ -85,11 +85,6 @@ Rp1GpclkDevelopmentDecision decideRp1GpclkDevelopmentUse(
         return deny(D::configured_active_mismatch, "configured-active-mismatch", "Requested, saved, boot-configured, active, and module-reported routes must agree exactly.");
     if (i.identity.route != i.requested_route)
         return deny(D::configured_active_mismatch, "configured-active-mismatch", "The provider-reported route must match the selected route.");
-    if ((i.identity.capabilities & kRp1GpclkDevelopmentCapabilityLiveEligible) == 0 ||
-        (i.identity.capabilities &
-            kRp1GpclkDevelopmentCapabilityOperationLiveGate) == 0 ||
-        !i.live_output_verified)
-        return deny(D::live_output_unverified, "live-output-unverified", "The provider must affirmatively report live eligibility with live_output=1.");
     if (!i.route_transaction_resolved)
         return deny(D::unresolved_route_transaction, "unresolved-route-transaction", "Route state is unresolved.");
     if (!i.scheduler_idle)

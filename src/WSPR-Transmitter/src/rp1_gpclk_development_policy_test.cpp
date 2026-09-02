@@ -13,16 +13,14 @@ static Rp1GpclkDevelopmentPolicyInputs allowed(std::uint32_t route)
     i.active_route_count = 1; i.route_transaction_resolved = true;
     i.scheduler_idle = i.application_owns_operation = true;
     i.endpoint_available = i.endpoint_closed = i.endpoint_exclusively_acquirable = true;
-    i.live_output_verified = i.physical_connection_confirmed =
-        i.attenuation_and_load_confirmed = i.bounded_operation_confirmed =
+    i.physical_connection_confirmed = i.attenuation_and_load_confirmed =
+        i.bounded_operation_confirmed =
         i.non_radiating_topology_confirmed = i.experimental_status_acknowledged =
         i.confirmation_current = true;
     i.route_transaction_generation = i.confirmation_route_transaction_generation = 17;
     i.operation_id = i.confirmation_operation_id = "bounded-operation-7"; i.confirmation_route = route;
     i.identity.route = route;
     i.identity.compatibility_state = 2;
-    i.identity.capabilities = kRp1GpclkDevelopmentCapabilityLiveEligible |
-        kRp1GpclkDevelopmentCapabilityOperationLiveGate;
     i.identity.module_id = "external-provider"; i.identity.build_id = "development";
     i.identity.compatibility_id = "external-compatible-provider";
     return i;
@@ -41,8 +39,6 @@ int main()
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::stale_operator_confirmation);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.identity.build_id = "arbitrary-build";
     assert(decideRp1GpclkDevelopmentUse(i).allowed);
-    i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.live_output_verified = false;
-    assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::live_output_unverified);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.active_route_count = 2;
     assert(decideRp1GpclkDevelopmentUse(i).reason == Rp1GpclkDevelopmentDenial::ambiguous_topology);
     i = allowed(kRp1GpclkDevelopmentRouteGpio4); i.configured_route = kRp1GpclkDevelopmentRouteGpio20;

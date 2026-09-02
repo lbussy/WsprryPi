@@ -48,40 +48,43 @@ public:
         return true;
     }
     bool acquire(std::uint32_t route, std::uint64_t capabilities,
-        const std::array<std::uint8_t,32>&,
         std::string& error) override {
-        if (fail_acquire) { error=acquire_error; return false; }
-        acquired_route=route; required_capabilities=capabilities; acquired=true; return true;
-    }
-    bool submit(wsprrypi::Rp1GpclkProviderProgram& value, std::string& error) override {
-        if (fail_submit) { error=submit_error; return false; }
-        value.generation=1;
-        program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
+        if (fail_acquire) { error=acquire_error; endpoint_closed=true; lease_id=0; return false; }
+        acquired_route=route; required_capabilities=capabilities; acquired=true;
+        endpoint_closed=false; lease_id=41; return true;
     }
     bool submitEvents(wsprrypi::Rp1GpclkProviderEventProgram& value, std::string& error) override {
         if (fail_submit) { error=submit_error; return false; }
         value.generation=1;
-        event_program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
-    }
-    bool submitTone(wsprrypi::Rp1GpclkProviderToneProgram& value, std::string& error) override {
-        if (fail_submit) { error=submit_error; return false; }
-        value.generation=1;
-        tone_program=value; submitted=true; state_value=wsprrypi::Rp1GpclkCompletionState::complete; return true;
+        event_program=value; submitted=true; state_value=completion_after_submit; return true;
     }
     bool requestFiniteStop(std::uint64_t, std::string&) override { stopped=true; return true; }
     wsprrypi::Rp1GpclkCompletionState state(std::uint64_t) const noexcept override { return state_value; }
-    wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override { return {state_value,current_event,terminal_reason}; }
-    std::uint32_t terminal_reason{};
-    bool release(std::string&) noexcept override { released=true; return true; }
-    std::uint64_t leaseId() const noexcept override { return 41; }
+    wsprrypi::Rp1GpclkProviderEventState eventState(std::uint64_t) const noexcept override {
+        return {state_value,current_event,terminal_reason,cleanup_fault,elapsed_ns,remaining_ns};
+    }
+    std::uint32_t terminal_reason{RP1_GPCLK_REASON_COMPLETE};
+    std::uint32_t cleanup_fault{};
+    std::uint64_t elapsed_ns{};
+    std::uint64_t remaining_ns{};
+    wsprrypi::Rp1GpclkCompletionState completion_after_submit{
+        wsprrypi::Rp1GpclkCompletionState::complete};
+    bool release(std::string& error) noexcept override {
+        released=true; endpoint_closed=true; lease_id=0;
+        if (!release_ok) error=release_error;
+        return release_ok;
+    }
+    std::uint64_t leaseId() const noexcept override { return lease_id; }
+    bool endpointClosed() const noexcept override { return endpoint_closed; }
     std::uint32_t acquired_route{}; std::uint64_t required_capabilities{};
     bool acquired{},submitted{},stopped{},released{};
+    bool release_ok{true},endpoint_closed{true};
+    std::uint64_t lease_id{};
+    std::string release_error{"injected release failure"};
     bool fail_acquire{},fail_submit{};
     std::string acquire_error{"injected acquire failure"};
     std::string submit_error{"injected submit ENOTTY"};
-    wsprrypi::Rp1GpclkProviderProgram program{};
     wsprrypi::Rp1GpclkProviderEventProgram event_program{};
-    wsprrypi::Rp1GpclkProviderToneProgram tone_program{};
     std::uint32_t current_event{};
     wsprrypi::Rp1GpclkCompletionState state_value{wsprrypi::Rp1GpclkCompletionState::idle};
 };
@@ -113,7 +116,7 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
     d.active_route_count=1; d.route_transaction_resolved=true;
     d.scheduler_idle=d.application_owns_operation=true;
     d.endpoint_available=d.endpoint_closed=d.endpoint_exclusively_acquirable=true;
-    d.live_output_verified=d.physical_connection_confirmed=true;
+    d.physical_connection_confirmed=true;
     d.attenuation_and_load_confirmed=d.bounded_operation_confirmed=true;
     d.non_radiating_topology_confirmed=d.experimental_status_acknowledged=true;
     d.confirmation_current=true; d.operation_id=d.confirmation_operation_id="test-operation";
@@ -121,11 +124,11 @@ wsprrypi::BackendExecutionInputs developmentInputs(int drive=2, int gpio=4)
     wsprrypi::Rp1GpclkProviderIdentity identity;
     identity.route=gpio==20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_GPIO4;
     identity.compatibility_state=RP1_GPCLK_COMPAT_EXPERIMENTAL;
-    identity.capabilities=RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
+    identity.capabilities=RP1_GPCLK_CAP_SUBMIT_EVENTS |
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
         RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-        RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
+        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_OUTPUT_INHIBIT |
+        RP1_GPCLK_CAP_PASSIVE_SNAPSHOT | RP1_GPCLK_CAP_BOUNDED_DMA_CHUNKS;
     identity.module_id="rp1-gpclk-dkms"; identity.build_id="1.1.2";
     identity.compatibility_id=gpio==20
         ? "external-provider-gpio20" : "external-provider-gpio4";
@@ -233,14 +236,10 @@ void test_direct_band_range()
             "direct-band execution must retain acquire/submit/release lifecycle");
         expect(observed->acquired_route==(gpio==20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_GPIO4),
             "direct-band execution must retain the selected route");
-        if (mode!=Mode::TONE && mode!=Mode::WSPR)
-        {
-            expect(!observed->event_program.tones.empty(),
-                "direct-band event execution must submit at least one tone");
-            if (observed->event_program.tones.empty()) continue;
-        }
-        const auto tone=mode==Mode::TONE ? observed->tone_program.tone :
-            mode==Mode::WSPR ? observed->program.tones[0] : observed->event_program.tones[0];
+        expect(!observed->event_program.tones.empty(),
+            "every product mode must submit at least one generic tone");
+        if (observed->event_program.tones.empty()) continue;
+        const auto tone=observed->event_program.tones[0];
         const double requested=plan.events[0].frequency_hz;
         // Independent literal/formula: catches missing, doubled, wrong-sign,
         // or multiplicatively applied intrinsic offsets in every adapter path.
@@ -252,9 +251,9 @@ void test_direct_band_range()
         expect(std::fabs(average-requested)<=0.01,
             "submitted divider counts must synthesize direct RF within the unchanged tolerance");
         if (mode==Mode::TONE)
-            expect(observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&
-                observed->tone_program.duration_ns==1000000000ULL,
-                "6 m and 12 m finite tones must preserve their kernel-owned duration");
+            expect(observed->event_program.events.size()==1 &&
+                observed->event_program.events[0].duration_ns==1000000000ULL,
+                "finite tones must preserve their duration as generic events");
     }
 }
 }
@@ -282,28 +281,30 @@ int main()
     const auto result=backend.execute(plan);
     expect(result.ok && !result.stopped,"valid frame must execute");
     expect(observed->acquired && observed->submitted && observed->released,"provider lifecycle must complete");
-    expect(observed->program.drive_ma==2,"minimum drive must be carried in submission");
+    expect(observed->event_program.drive_ma==2,"minimum drive must be carried in submission");
     expect(observed->acquired_route==RP1_GPCLK_ROUTE_GPIO4,
         "GPIO4 route must be carried independently into acquisition");
-    expect(observed->program.symbols[0]==0 && observed->program.symbols[1]==1,"symbol order must preserve tone indexes");
-    expect(observed->program.tones[0].lower_divider_word !=
-            observed->program.tones[1].lower_divider_word ||
-        observed->program.tones[0].upper_divider_word !=
-            observed->program.tones[1].upper_divider_word ||
-        observed->program.tones[0].lower_count !=
-            observed->program.tones[1].lower_count ||
-        observed->program.tones[0].upper_count !=
-            observed->program.tones[1].upper_count,
+    expect(observed->event_program.events[0].tone_index==0 &&
+        observed->event_program.events[1].tone_index==1,
+        "symbol order must preserve tone indexes");
+    expect(observed->event_program.tones[0].lower_divider_word !=
+            observed->event_program.tones[1].lower_divider_word ||
+        observed->event_program.tones[0].upper_divider_word !=
+            observed->event_program.tones[1].upper_divider_word ||
+        observed->event_program.tones[0].lower_count !=
+            observed->event_program.tones[1].lower_count ||
+        observed->event_program.tones[0].upper_count !=
+            observed->event_program.tones[1].upper_count,
         "frame must carry distinct complete tone plans");
     const auto expected_wspr=expectedPlan(
         plan.reference_frequency_hz,12000.0/8192.0,plan.calibration.ppm);
-    expect(observed->program.tones[0].lower_divider_word==
+    expect(observed->event_program.tones[0].lower_divider_word==
             expected_wspr.tones[0].lower_divider_word &&
-        observed->program.tones[0].upper_divider_word==
+        observed->event_program.tones[0].upper_divider_word==
             expected_wspr.tones[0].upper_divider_word,
         "WSPR must plan divider words from the 200 MHz compatibility parent");
     const auto operation_record=wsprrypi::rp1GpclkOperationRecordSnapshot();
-    expect(operation_record.schema_version==1, "operation record schema must be stable");
+    expect(operation_record.schema_version==2, "operation record schema must expose failure detail");
     expect(operation_record.operation_id=="test-operation", "operation record must preserve operation identity");
     expect(operation_record.module_version=="1.1.2", "operation record must preserve module version");
     expect(operation_record.route==RP1_GPCLK_ROUTE_GPIO4, "operation record must preserve route");
@@ -353,16 +354,18 @@ int main()
     auto implicit_tone=tonePlan(false);
     expect(tone_backend.configure(implicit_tone,developmentInputs()).ok && tone_backend.execute(implicit_tone).ok,
         "implicit-duration TONE must use the continuous operation");
-    expect(tone_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_CONTINUOUS &&
-        tone_observed->tone_program.duration_ns==0 &&
-        (tone_observed->required_capabilities & RP1_GPCLK_CAP_TONE_CONTINUOUS)!=0,
-        "continuous TONE must have zero duration and require its exact capability");
+    expect(tone_observed->event_program.events.size()==1 &&
+        tone_observed->event_program.events[0].duration_ns==
+            RP1_GPCLK_EVENT_DURATION_NS_MAX &&
+        (tone_observed->required_capabilities &
+            RP1_GPCLK_CAP_BOUNDED_DMA_CHUNKS)!=0,
+        "continuous TONE must use the maximum finite generic event and bounded chunks");
     const auto expected_tone=expectedPlan(
         implicit_tone.reference_frequency_hz+1.5*(12000.0/8192.0),
         12000.0/8192.0,implicit_tone.calibration.ppm);
-    expect(tone_observed->tone_program.tone.lower_divider_word==
+    expect(tone_observed->event_program.tones[0].lower_divider_word==
             expected_tone.tones[0].lower_divider_word &&
-        tone_observed->tone_program.tone.upper_divider_word==
+        tone_observed->event_program.tones[0].upper_divider_word==
             expected_tone.tones[0].upper_divider_word,
         "TONE must plan divider words from the 200 MHz compatibility parent");
     auto finite_provider=std::make_unique<Provider>(); Provider* finite_observed=finite_provider.get();
@@ -373,10 +376,9 @@ int main()
         "explicit-duration TONE must use the finite operation");
     expect(wsprrypi::rp1GpclkOperationRecordSnapshot().terminal_reason == RP1_GPCLK_REASON_COMPLETE,
         "TONE must preserve the provider terminal reason in its operation record");
-    expect(finite_observed->tone_program.operation==RP1_GPCLK_TONE_OPERATION_FINITE &&
-        finite_observed->tone_program.duration_ns==1000000000ULL &&
-        (finite_observed->required_capabilities & RP1_GPCLK_CAP_TONE_FINITE)!=0,
-        "finite TONE must preserve the kernel-owned one-second duration");
+    expect(finite_observed->event_program.events.size()==1 &&
+        finite_observed->event_program.events[0].duration_ns==1000000000ULL,
+        "finite TONE must preserve the kernel-owned one-second generic event");
 
     auto faded=qrssPlan(); faded.events[0].envelope.fade_shape=wsprrypi::FadeShape::LINEAR;
     auto fade_provider=std::make_unique<Provider>(); WsprRp1GpclkBackend fade_backend(owner,std::move(fade_provider));
@@ -421,6 +423,58 @@ int main()
         submit_failure_record.cleanup_attempted && submit_failure_record.cleanup_complete &&
         submit_failure_record.endpoint_closed && submit_failure_record.lease==0,
         "submission failure must leave a terminal closed-endpoint record");
+
+    auto provider_failure_provider=std::make_unique<Provider>();
+    Provider* provider_failure_observed=provider_failure_provider.get();
+    provider_failure_observed->completion_after_submit=
+        wsprrypi::Rp1GpclkCompletionState::failed;
+    provider_failure_observed->terminal_reason=RP1_GPCLK_REASON_PINCTRL_FAILED;
+    provider_failure_observed->cleanup_fault=1;
+    provider_failure_observed->elapsed_ns=250000000ULL;
+    provider_failure_observed->remaining_ns=750000000ULL;
+    WsprRp1GpclkBackend provider_failure_backend(
+        owner,std::move(provider_failure_provider));
+    expect(provider_failure_backend.configure(plan,developmentInputs()).ok,
+        "provider-failure frame must configure");
+    const auto provider_failure=provider_failure_backend.execute(plan);
+    expect(!provider_failure.ok && provider_failure.faulted &&
+        provider_failure.cleanup_attempted && provider_failure.cleanup.ok &&
+        provider_failure.error.find("pinctrl-failed (11)")!=std::string::npos &&
+        provider_failure.error.find("cleanup fault")!=std::string::npos,
+        "provider failure must preserve terminal reason and cleanup state");
+    const auto provider_failure_record=
+        wsprrypi::rp1GpclkOperationRecordSnapshot();
+    expect(provider_failure_record.schema_version==2 &&
+        provider_failure_record.terminal_reason_name=="pinctrl-failed" &&
+        provider_failure_record.cleanup_fault &&
+        provider_failure_record.elapsed_ns==250000000ULL &&
+        provider_failure_record.remaining_ns==750000000ULL,
+        "operation record must expose structured provider failure detail");
+
+    auto cleanup_failure_provider=std::make_unique<Provider>();
+    Provider* cleanup_failure_observed=cleanup_failure_provider.get();
+    cleanup_failure_observed->completion_after_submit=
+        wsprrypi::Rp1GpclkCompletionState::failed;
+    cleanup_failure_observed->terminal_reason=RP1_GPCLK_REASON_CLEANUP_FAILED;
+    cleanup_failure_observed->cleanup_fault=1;
+    cleanup_failure_observed->release_ok=false;
+    WsprRp1GpclkBackend cleanup_failure_backend(
+        owner,std::move(cleanup_failure_provider));
+    expect(cleanup_failure_backend.configure(plan,developmentInputs()).ok,
+        "cleanup-failure frame must configure");
+    const auto cleanup_failure=cleanup_failure_backend.execute(plan);
+    expect(!cleanup_failure.ok && cleanup_failure.faulted &&
+        cleanup_failure.error.find("cleanup-failed (13)")!=std::string::npos &&
+        cleanup_failure.error.find("injected release failure")!=std::string::npos,
+        "cleanup failure must preserve both terminal reason and release diagnostic");
+    const auto cleanup_failure_record=
+        wsprrypi::rp1GpclkOperationRecordSnapshot();
+    expect(cleanup_failure_record.state=="cleanup-fault" &&
+        cleanup_failure_record.cleanup_fault &&
+        !cleanup_failure_record.cleanup_complete &&
+        cleanup_failure_record.endpoint_closed &&
+        cleanup_failure_record.lease==0,
+        "cleanup failure must distinguish a latched provider fault from local endpoint ownership");
     if (failures) return 1;
     std::cout << "RP1 GPCLK scheduler backend tests passed\n";
 }

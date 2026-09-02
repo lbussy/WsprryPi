@@ -771,7 +771,8 @@ int main(int argc, char *argv[])
                     {"endpointOpen", false},
                     {"endpointOwned", true},
                     {"state", "idle"},
-                    {"liveOutput", "disabled"}};
+                    {"outputInhibited", "Disabled"},
+                    {"operationalReady", "Ready"}};
             });
         const ArgParserConfig copied_confirmation_config = config;
         require(
@@ -1432,7 +1433,8 @@ int main(int argc, char *argv[])
                     {"reconciled", true}, {"journal", "none"},
                     {"contractIdentity", "rp1-gpclk-route-manager"},
                     {"endpointOpen", false}, {"endpointOwned", true},
-                    {"state", "idle"}, {"liveOutput", "disabled"}};
+                    {"state", "idle"}, {"outputInhibited", "Disabled"},
+                    {"operationalReady", "Ready"}};
             });
         config.gpio_use_system_clock_frequency_estimate = false;
         config.use_system_clock_frequency_estimate = false;
@@ -7569,7 +7571,8 @@ int main(int argc, char *argv[])
                     {"endpointOpen", false},
                     {"endpointOwned", true},
                     {"state", "idle"},
-                    {"liveOutput", "disabled"}};
+                    {"outputInhibited", "Disabled"},
+                    {"operationalReady", "Ready"}};
             });
 
         const bool configured = set_config(true);
@@ -7631,7 +7634,8 @@ int main(int argc, char *argv[])
                     {"endpointOpen", false},
                     {"endpointOwned", true},
                     {"state", "idle"},
-                    {"liveOutput", "disabled"}};
+                    {"outputInhibited", "Disabled"},
+                    {"operationalReady", "Ready"}};
             });
         reset_current_transmission_request_for_test();
         reset_committed_execution_route_for_test();

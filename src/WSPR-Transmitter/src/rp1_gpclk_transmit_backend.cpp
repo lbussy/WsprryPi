@@ -6,16 +6,12 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <thread>
 #include <mutex>
-#include <openssl/sha.h>
 #include <unistd.h>
 
 namespace
 {
-constexpr double kWsprSymbolSeconds = 8192.0 / 12000.0;
-constexpr double kWsprToneSpacingHz = 1.0 / kWsprSymbolSeconds;
 std::mutex operation_record_mutex;
 wsprrypi::Rp1GpclkOperationRecord operation_record;
 
@@ -25,17 +21,28 @@ void update_record(const wsprrypi::Rp1GpclkOperationRecord& value)
     operation_record = value;
 }
 
-std::array<std::uint8_t, 32> operation_authorization_digest(
-    const wsprrypi::Rp1GpclkDevelopmentPolicyInputs& policy)
+const char* terminal_reason_name(std::uint32_t reason) noexcept
 {
-    const std::string material = policy.operation_id + "\n" +
-        std::to_string(policy.requested_route) + "\n" +
-        std::to_string(policy.route_transaction_generation);
-    std::array<std::uint8_t, 32> digest{};
-    SHA256(
-        reinterpret_cast<const unsigned char*>(material.data()),
-        material.size(), digest.data());
-    return digest;
+    switch (reason)
+    {
+    case RP1_GPCLK_REASON_NONE: return "none";
+    case RP1_GPCLK_REASON_COMPLETE: return "complete";
+    case RP1_GPCLK_REASON_STOPPED: return "stopped";
+    case RP1_GPCLK_REASON_OWNER_CLOSED: return "owner-closed";
+    case RP1_GPCLK_REASON_PROVIDER_REMOVED: return "provider-removed";
+    case RP1_GPCLK_REASON_DEADLINE_MISSED: return "deadline-missed";
+    case RP1_GPCLK_REASON_INVALID_REQUEST: return "invalid-request";
+    case RP1_GPCLK_REASON_RESOURCE_UNAVAILABLE: return "resource-unavailable";
+    case RP1_GPCLK_REASON_STARTUP_CONFLICT: return "startup-conflict";
+    case RP1_GPCLK_REASON_DMA_FAILED: return "dma-failed";
+    case RP1_GPCLK_REASON_CLOCK_FAILED: return "clock-failed";
+    case RP1_GPCLK_REASON_PINCTRL_FAILED: return "pinctrl-failed";
+    case RP1_GPCLK_REASON_READBACK_FAILED: return "readback-failed";
+    case RP1_GPCLK_REASON_CLEANUP_FAILED: return "cleanup-failed";
+    case RP1_GPCLK_REASON_COMPATIBILITY_REJECTED: return "compatibility-rejected";
+    case RP1_GPCLK_REASON_INTERNAL_ERROR: return "internal-error";
+    default: return "unknown";
+    }
 }
 }
 
@@ -117,185 +124,65 @@ wsprrypi::BackendCompileResult WsprRp1GpclkBackend::configure(
         result.error = "RP1 GPCLK requires the independently selected GPIO4 or GPIO20 route.";
         return result;
     }
+
+    const auto compiled = wsprrypi::compileRp1GpclkEventProgram(plan);
+    if (!compiled.ok)
+    {
+        result.error = compiled.error;
+        return result;
+    }
+
     const auto map_route = [](int gpio) {
         return gpio == 4 ? RP1_GPCLK_ROUTE_GPIO4 :
             gpio == 20 ? RP1_GPCLK_ROUTE_GPIO20 : RP1_GPCLK_ROUTE_INVALID;
     };
-    auto make_policy = [&]() {
-        wsprrypi::Rp1GpclkDevelopmentPolicyInputs policy;
-        const auto& source = inputs.rp1_development;
-        policy.development_testing_enabled = source.enabled;
-        policy.rp1_backend_selected = true;
-        policy.requested_route = route;
-        policy.persisted_route = map_route(source.persisted_gpio);
-        policy.configured_route = map_route(inputs.configured_tx_gpio);
-        policy.active_route = map_route(source.active_gpio);
-        policy.module_route = map_route(source.module_gpio);
-        policy.active_route_count = source.active_route_count;
-        policy.route_transaction_resolved = source.route_transaction_resolved;
-        policy.scheduler_idle = source.scheduler_idle;
-        policy.application_owns_operation = source.application_owns_operation;
-        policy.endpoint_available = source.endpoint_available;
-        policy.endpoint_closed = source.endpoint_closed;
-        policy.endpoint_exclusively_acquirable = source.endpoint_exclusively_acquirable;
-        policy.cleanup_fault = source.cleanup_fault;
-        policy.live_output_verified = source.live_output_verified;
-        policy.physical_connection_confirmed = source.physical_connection_confirmed;
-        policy.attenuation_and_load_confirmed = source.attenuation_and_load_confirmed;
-        policy.bounded_operation_confirmed = source.bounded_operation_confirmed;
-        policy.non_radiating_topology_confirmed = source.non_radiating_topology_confirmed;
-        policy.experimental_status_acknowledged = source.experimental_status_acknowledged;
-        policy.confirmation_current = source.confirmation_current;
-        policy.route_transaction_generation = source.route_transaction_generation;
-        policy.confirmation_route_transaction_generation = source.confirmation_route_transaction_generation;
-        policy.operation_id = source.operation_id;
-        policy.confirmation_operation_id = source.confirmation_operation_id;
-        policy.confirmation_route = map_route(source.confirmation_gpio);
-        return policy;
-    };
-    if (plan.mode == wsprrypi::TransmissionMode::TONE)
-    {
-        if (plan.events.empty() || !plan.events.front().rf_on ||
-            plan.events.front().frequency_hz != plan.reference_frequency_hz)
-        { result.error = "RP1 GPCLK TONE requires one valid RF-on frequency."; return result; }
-        wsprrypi::Rp1GpclkPlannerInput planner_input;
-        planner_input.center_frequency_hz =
-            plan.reference_frequency_hz + 1.5 * kWsprToneSpacingHz;
-        planner_input.tone_spacing_hz = kWsprToneSpacingHz;
-        planner_input.parent_frequency_hz =
-            wsprrypi::kRp1GpclkNominalParentFrequencyHz;
-        planner_input.source_rate_ppm = plan.calibration.ppm;
-        planner_input.intrinsic_source_rate_ppm =
-            wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1);
-        planner_input.maximum_output_hz = wsprrypi::kRp1GpclkMaximumDirectOutputHz;
-        planner_input.dither_sequence_length = wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
-        const auto planned = wsprrypi::planRp1GpclkWspr(planner_input);
-        if (!planned.ok)
-        { result.error = planned.error; return result; }
-        ConfiguredFrame frame;
-        frame.plan_id = plan.id;
-        frame.tone = true;
-        frame.continuous_tone = !plan.duration_was_explicit;
-        frame.drive_ma = static_cast<std::uint32_t>(inputs.power_level);
-        frame.route = route;
-        frame.required_capabilities =
-            (frame.continuous_tone ? RP1_GPCLK_CAP_TONE_CONTINUOUS
-                                   : RP1_GPCLK_CAP_TONE_FINITE) |
-            RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
-            RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
-        frame.development_policy = make_policy();
-        if (frame.development_policy.development_testing_enabled)
-            wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
-        const auto& tone = planned.plan.tones[0];
-        frame.tone_program.tone = {tone.lower_divider_word, tone.upper_divider_word,
-            tone.lower_word_count, tone.upper_word_count};
-        frame.tone_program.duration_ns = frame.continuous_tone ? 0 :
-            static_cast<std::uint64_t>(plan.events.front().duration.count());
-        frame.tone_program.operation = frame.continuous_tone ?
-            RP1_GPCLK_TONE_OPERATION_CONTINUOUS : RP1_GPCLK_TONE_OPERATION_FINITE;
-        frame.tone_program.expected_route = route;
-        frame.tone_program.fractional_bits = RP1_GPCLK_FRACTIONAL_BITS;
-        frame.tone_program.tick_divider = RP1_GPCLK_TICK_DIVIDER;
-        configured_ = std::move(frame);
-        stop_requested_.store(false, std::memory_order_release);
-        result.ok = true;
-        return result;
-    }
-    if (plan.mode != wsprrypi::TransmissionMode::WSPR)
-    {
-        const auto compiled = wsprrypi::compileRp1GpclkEventProgram(plan);
-        if (!compiled.ok)
-        {
-            result.error = compiled.error;
-            return result;
-        }
-        ConfiguredFrame frame;
-        frame.plan_id = plan.id;
-        frame.event_program = compiled.program;
-        frame.finite_events = true;
-        frame.drive_ma = static_cast<std::uint32_t>(inputs.power_level);
-        frame.route = route;
-        frame.required_capabilities = RP1_GPCLK_CAP_SUBMIT_EVENTS |
-            RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
-            RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-            RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
-        frame.development_policy = make_policy();
-        if (frame.development_policy.development_testing_enabled)
-            wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
-        configured_ = std::move(frame);
-        stop_requested_.store(false, std::memory_order_release);
-        result.ok = true;
-        return result;
-    }
-    if (plan.events.size() != 162)
-    {
-        result.error = "RP1 GPCLK requires exactly one 162-symbol WSPR frame.";
-        return result;
-    }
-
-    wsprrypi::Rp1GpclkPlannerInput planner_input;
-    planner_input.center_frequency_hz = plan.reference_frequency_hz;
-    planner_input.tone_spacing_hz = kWsprToneSpacingHz;
-    planner_input.parent_frequency_hz =
-        wsprrypi::kRp1GpclkNominalParentFrequencyHz;
-    planner_input.source_rate_ppm = plan.calibration.ppm;
-    planner_input.intrinsic_source_rate_ppm =
-        wsprrypi::chipsetIntrinsicOffsetPpm(wsprrypi::ClockChipset::Rp1);
-    planner_input.maximum_output_hz = wsprrypi::kRp1GpclkMaximumDirectOutputHz;
-    planner_input.dither_sequence_length =
-        wsprrypi::Rp1GpclkBackend::kWritesPerSymbol;
-    const auto planned = wsprrypi::planRp1GpclkWspr(planner_input);
-    if (!planned.ok)
-    {
-        result.error = planned.error;
-        return result;
-    }
+    wsprrypi::Rp1GpclkDevelopmentPolicyInputs policy;
+    const auto& source = inputs.rp1_development;
+    policy.development_testing_enabled = source.enabled;
+    policy.rp1_backend_selected = true;
+    policy.requested_route = route;
+    policy.persisted_route = map_route(source.persisted_gpio);
+    policy.configured_route = map_route(inputs.configured_tx_gpio);
+    policy.active_route = map_route(source.active_gpio);
+    policy.module_route = map_route(source.module_gpio);
+    policy.active_route_count = source.active_route_count;
+    policy.route_transaction_resolved = source.route_transaction_resolved;
+    policy.scheduler_idle = source.scheduler_idle;
+    policy.application_owns_operation = source.application_owns_operation;
+    policy.endpoint_available = source.endpoint_available;
+    policy.endpoint_closed = source.endpoint_closed;
+    policy.endpoint_exclusively_acquirable = source.endpoint_exclusively_acquirable;
+    policy.cleanup_fault = source.cleanup_fault;
+    policy.physical_connection_confirmed = source.physical_connection_confirmed;
+    policy.attenuation_and_load_confirmed = source.attenuation_and_load_confirmed;
+    policy.bounded_operation_confirmed = source.bounded_operation_confirmed;
+    policy.non_radiating_topology_confirmed = source.non_radiating_topology_confirmed;
+    policy.experimental_status_acknowledged = source.experimental_status_acknowledged;
+    policy.confirmation_current = source.confirmation_current;
+    policy.route_transaction_generation = source.route_transaction_generation;
+    policy.confirmation_route_transaction_generation =
+        source.confirmation_route_transaction_generation;
+    policy.operation_id = source.operation_id;
+    policy.confirmation_operation_id = source.confirmation_operation_id;
+    policy.confirmation_route = map_route(source.confirmation_gpio);
 
     ConfiguredFrame frame;
     frame.plan_id = plan.id;
-    frame.clock_plan = planned.plan;
+    frame.event_program = compiled.program;
+    frame.continuous_tone =
+        plan.mode == wsprrypi::TransmissionMode::TONE &&
+        !plan.duration_was_explicit;
     frame.drive_ma = static_cast<std::uint32_t>(inputs.power_level);
     frame.route = route;
-    frame.required_capabilities = RP1_GPCLK_CAP_SUBMIT_WSPR |
+    frame.required_capabilities = RP1_GPCLK_CAP_SUBMIT_EVENTS |
         RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
         RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-            RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
-    frame.development_policy = make_policy();
+        RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_OUTPUT_INHIBIT |
+        RP1_GPCLK_CAP_PASSIVE_SNAPSHOT | RP1_GPCLK_CAP_BOUNDED_DMA_CHUNKS;
+    frame.development_policy = std::move(policy);
     if (frame.development_policy.development_testing_enabled)
         wsprrypi::armRp1GpclkDevelopmentOperation(frame.development_policy);
-    for (std::size_t i = 0; i < plan.events.size(); ++i)
-    {
-        const auto& event = plan.events[i];
-        if (!event.rf_on ||
-            std::llabs(event.duration.count() - 682666667LL) > 1)
-        {
-            result.error = "RP1 GPCLK requires contiguous standard-duration WSPR symbols.";
-            return result;
-        }
-        const long tone = std::lround(
-            (event.frequency_hz - planned.plan.tones[0].requested_frequency_hz) /
-            kWsprToneSpacingHz);
-        if (tone < 0 || tone > 3 ||
-            std::fabs(event.frequency_hz -
-                planned.plan.tones[static_cast<std::size_t>(tone)].requested_frequency_hz) >
-                0.001)
-        {
-            result.error = "RP1 GPCLK execution plan contains a non-WSPR tone.";
-            return result;
-        }
-        frame.symbols[i] = static_cast<std::uint8_t>(tone);
-        if (i > 0 && event.offset_from_start !=
-                plan.events[i - 1].offset_from_start + plan.events[i - 1].duration)
-        {
-            result.error = "RP1 GPCLK WSPR symbols must be contiguous.";
-            return result;
-        }
-    }
-    configured_ = frame;
+    configured_ = std::move(frame);
     stop_requested_.store(false, std::memory_order_release);
     result.ok = true;
     return result;
@@ -316,7 +203,7 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         std::lock_guard<std::mutex> lock(backend_mutex_);
         wsprrypi::Rp1GpclkProviderIdentity identity;
         if (!provider_->query(configured_->route, configured_->required_capabilities,
-                false, identity, error))
+                true, identity, error))
         {
             wsprrypi::invalidateRp1GpclkDevelopmentOperation();
             result.error = error;
@@ -360,8 +247,8 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             record.state = state;
             record.cleanup_attempted = cleanup_attempted;
             record.cleanup_complete = cleanup_complete;
-            record.endpoint_closed = cleanup_complete;
-            record.lease = cleanup_complete ? 0 : provider_->leaseId();
+            record.endpoint_closed = provider_->endpointClosed();
+            record.lease = provider_->leaseId();
             record.finished_monotonic_ns = static_cast<std::uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -371,7 +258,6 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 configured_->drive_ma,
                 configured_->route,
                 configured_->required_capabilities,
-                operation_authorization_digest(current_policy),
                 error))
         {
             record_failure("acquire-failed", true, true);
@@ -382,11 +268,8 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         record.endpoint_closed = false;
         record.state = "acquired";
         update_record(record);
-        const bool submitted = configured_->tone
-            ? backend_->emitTone(configured_->tone_program, error)
-            : configured_->finite_events
-                ? backend_->emitEvents(configured_->event_program, error)
-                : backend_->emitFrame(configured_->clock_plan, configured_->symbols, error);
+        const bool submitted = backend_->emitEvents(
+            configured_->event_program, error);
         if (!submitted)
         {
             const std::string submit_error = error;
@@ -398,6 +281,8 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 result.error = submit_error + " Cleanup failed: " + cleanup_error;
             else
                 result.error = submit_error;
+            result.cleanup_attempted = true;
+            result.cleanup = {cleanup_ok, cleanup_error};
             return result;
         }
         record.generation = backend_->generation();
@@ -406,11 +291,16 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
     }
 
     bool stop_sent = false;
-    const auto execution_deadline = configured_->continuous_tone
-        ? std::optional<std::chrono::steady_clock::time_point>{}
-        : std::optional<std::chrono::steady_clock::time_point>{
-            std::chrono::steady_clock::now() + plan.summary.total_duration +
-            std::chrono::seconds{5}};
+    std::optional<std::chrono::steady_clock::time_point> execution_deadline;
+    if (!configured_->continuous_tone)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const auto margin = std::chrono::seconds{5};
+        const auto available = std::chrono::steady_clock::time_point::max() - now;
+        execution_deadline = plan.summary.total_duration <= available - margin
+            ? now + plan.summary.total_duration + margin
+            : std::chrono::steady_clock::time_point::max();
+    }
     std::optional<std::chrono::steady_clock::time_point> drain_deadline;
     for (;;)
     {
@@ -420,6 +310,13 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             std::lock_guard<std::mutex> lock(backend_mutex_);
             if (!backend_->cancel(error))
             {
+                auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+                record.cancellation_requested = true;
+                record.state = "stop-failed";
+                record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                update_record(record);
                 result.error = error;
                 result.faulted = true;
                 return result;
@@ -439,6 +336,13 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             std::lock_guard<std::mutex> lock(backend_mutex_);
             if (!backend_->timedOut(error))
             {
+                auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+                record.cancellation_requested = true;
+                record.state = "deadline-stop-failed";
+                record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                update_record(record);
                 result.error = error;
                 result.faulted = true;
                 return result;
@@ -456,8 +360,7 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
             std::lock_guard<std::mutex> lock(backend_mutex_);
             const auto event_state = provider_->eventState(backend_->generation());
             const auto state = event_state.completion;
-            if (configured_->finite_events &&
-                event_state.current_event < plan.events.size())
+            if (event_state.current_event < plan.events.size())
                 owner_.backendReportExecutionProgress(event_state.current_event);
             if (state == wsprrypi::Rp1GpclkCompletionState::complete ||
                 state == wsprrypi::Rp1GpclkCompletionState::failed)
@@ -465,26 +368,40 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
                 auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
                 const bool cleaned = backend_->cleanup(error);
                 record.terminal_reason = event_state.terminal_reason;
+                record.terminal_reason_name =
+                    terminal_reason_name(event_state.terminal_reason);
+                record.cleanup_fault = event_state.cleanup_fault != 0 || !cleaned;
+                record.elapsed_ns = event_state.elapsed_ns;
+                record.remaining_ns = event_state.remaining_ns;
                 record.state = !cleaned ? "cleanup-fault" :
                     state == wsprrypi::Rp1GpclkCompletionState::complete
                         ? "complete" : "failed";
                 record.cleanup_attempted = true;
                 record.cleanup_complete = cleaned;
-                record.endpoint_closed = cleaned;
-                if (cleaned) record.lease = 0;
+                record.endpoint_closed = provider_->endpointClosed();
+                record.lease = provider_->leaseId();
                 record.finished_monotonic_ns = static_cast<std::uint64_t>(
                     std::chrono::duration_cast<std::chrono::nanoseconds>(
                         std::chrono::steady_clock::now().time_since_epoch()).count());
                 update_record(record);
+                result.cleanup_attempted = true;
+                result.cleanup = {cleaned, cleaned ? std::string{} : error};
                 if (!cleaned)
                 {
-                    result.error = error;
+                    result.error = "RP1 GPCLK provider failed: " +
+                        record.terminal_reason_name + " (" +
+                        std::to_string(record.terminal_reason) +
+                        "). Cleanup failed: " + error;
                     result.faulted = true;
                     return result;
                 }
                 if (state == wsprrypi::Rp1GpclkCompletionState::failed)
                 {
-                    result.error = "RP1 GPCLK provider reported frame failure.";
+                    result.error = "RP1 GPCLK provider failed: " +
+                        record.terminal_reason_name + " (" +
+                        std::to_string(record.terminal_reason) + ").";
+                    if (record.cleanup_fault)
+                        result.error += " The provider also reported a cleanup fault.";
                     result.faulted = true;
                     return result;
                 }
@@ -495,6 +412,12 @@ wsprrypi::ExecutionResult WsprRp1GpclkBackend::execute(
         }
         if (drain_deadline && std::chrono::steady_clock::now() >= *drain_deadline)
         {
+            auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
+            record.state = "drain-timeout";
+            record.finished_monotonic_ns = static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            update_record(record);
             result.error = "RP1 GPCLK provider did not reach a terminal state within the bounded drain interval.";
             result.faulted = true;
             return result;
@@ -531,8 +454,8 @@ wsprrypi::CleanupResult WsprRp1GpclkBackend::cleanup() noexcept
     auto record = wsprrypi::rp1GpclkOperationRecordSnapshot();
     record.cleanup_attempted = true;
     record.cleanup_complete = ok;
-    record.endpoint_closed = ok;
-    record.lease = ok ? 0 : record.lease;
+    record.endpoint_closed = provider_->endpointClosed();
+    record.lease = provider_->leaseId();
     if (!ok) record.state = "cleanup-fault";
     update_record(record);
     configured_.reset();

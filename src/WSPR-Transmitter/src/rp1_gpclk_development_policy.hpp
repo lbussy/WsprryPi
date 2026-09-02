@@ -11,9 +11,6 @@ namespace wsprrypi
 {
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio4 = 1;
 inline constexpr std::uint32_t kRp1GpclkDevelopmentRouteGpio20 = 2;
-inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityLiveEligible = 1ULL << 7;
-inline constexpr std::uint64_t kRp1GpclkDevelopmentCapabilityOperationLiveGate = 1ULL << 11;
-
 enum class Rp1GpclkDevelopmentDenial
 {
     allowed,
@@ -23,7 +20,6 @@ enum class Rp1GpclkDevelopmentDenial
     zero_route_topology,
     ambiguous_topology,
     configured_active_mismatch,
-    live_output_unverified,
     unresolved_route_transaction,
     scheduler_conflict,
     transmission_owner_conflict,
@@ -52,7 +48,6 @@ struct Rp1GpclkDevelopmentPolicyInputs
     bool endpoint_closed{false};
     bool endpoint_exclusively_acquirable{false};
     bool cleanup_fault{false};
-    bool live_output_verified{false};
     bool physical_connection_confirmed{false};
     bool attenuation_and_load_confirmed{false};
     bool bounded_operation_confirmed{false};

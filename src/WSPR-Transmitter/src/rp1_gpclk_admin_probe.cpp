@@ -43,7 +43,8 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
     for (const auto observation : {snapshot.cleanup_fault, snapshot.owner_present,
-            snapshot.lease_present, snapshot.live_output, snapshot.live_eligible,
+            snapshot.lease_present, snapshot.output_inhibited,
+            snapshot.operational_ready,
             snapshot.gpio_safe, snapshot.clock_quiescent,
             snapshot.dma_quiescent, snapshot.stable})
     {
@@ -58,7 +59,7 @@ int main(int argc, char** argv)
               << "\ncompatibility_state=" << snapshot.compatibility_state
               << "\ncompatibility_reason=" << snapshot.compatibility_reason
               << "\ncapabilities=" << snapshot.capabilities
-              << "\nlive_eligible=" << observationName(snapshot.live_eligible)
+              << "\noperational_ready=" << observationName(snapshot.operational_ready)
               << "\nmodule_id=" << snapshot.module_id
               << "\nbuild_id=" << snapshot.build_id
               << "\ncompatibility_id=" << snapshot.compatibility_id
@@ -68,7 +69,9 @@ int main(int argc, char** argv)
               << "\ngeneration=" << snapshot.generation
               << "\nowner_present=" << observationName(snapshot.owner_present)
               << "\nlease_present=" << observationName(snapshot.lease_present)
-              << "\nlive_output=" << observationName(snapshot.live_output)
+              << "\noutput_inhibited=" << observationName(snapshot.output_inhibited)
+              << "\ndma_chunk_duration_ns=" << snapshot.dma_chunk_duration_ns
+              << "\nmax_request_duration_ns=" << snapshot.max_request_duration_ns
               << "\nstable=" << observationName(snapshot.stable)
               << "\ncleanup_fault=" << observationName(snapshot.cleanup_fault)
               << "\ngpio_safe=" << observationName(snapshot.gpio_safe)

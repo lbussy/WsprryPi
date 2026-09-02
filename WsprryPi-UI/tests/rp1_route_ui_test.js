@@ -5,7 +5,7 @@ const view=fs.readFileSync(path.join(root,"data/views/config.php"),"utf8");
 const script=fs.readFileSync(path.join(root,"data/index.js"),"utf8");
 const styles=fs.readFileSync(path.join(root,"data/index.css"),"utf8");
 const header=fs.readFileSync(path.join(root,"data/header.php"),"utf8");
-assert.match(view,/Requested[\s\S]*Persisted[\s\S]*Configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*live_output[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Product qualification/);
+assert.match(view,/Requested[\s\S]*Persisted[\s\S]*Configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*Output inhibited[\s\S]*Operational readiness[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Product qualification/);
 assert.match(view,/>Check route</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
@@ -46,7 +46,7 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
 (async()=>{
  const controller=context.controller;
  controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO4",compatible:true});
- assert.equal(element("rp1-route-apply").textContent,"Switch route (output disabled)");
+ assert.equal(element("rp1-route-apply").textContent,"Switch route (stay idle)");
  let confirmations=0,requests=[];
  context.window.confirm=()=>{confirmations++;return true};
  controller.request=async()=>({ok:true,json:async()=>({ok:false,profile:"runtime",state:"runtime_recovery"})});

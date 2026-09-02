@@ -758,7 +758,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             <div class="rp1-route-panel__heading">
                                                 <div>
                                                     <h3 id="rp1-route-heading" class="cw-control-section__title mb-1">RP1 clock route</h3>
-                                                    <p class="form-text mb-0">Installation leaves RP1 route-neutral. Choose GPIO4 or GPIO20 here; selecting a route keeps output disabled and never authorizes transmission.</p>
+                                                    <p class="form-text mb-0">Installation leaves RP1 route-neutral. Choose GPIO4 or GPIO20 here; selecting a route keeps WsprryPi idle and does not authorize transmission.</p>
                                                 </div>
                                                 <span id="rp1-route-state" class="rp1-route-state" data-state="checking">Checking</span>
                                             </div>
@@ -779,7 +779,8 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                                 <div><dt>Pending transaction</dt><dd id="rp1-route-pending">Unknown</dd></div>
                                                 <div><dt>Fixed services</dt><dd id="rp1-route-services">Not reported</dd></div>
                                                 <div><dt>Endpoint</dt><dd id="rp1-route-endpoint">Not inspected</dd></div>
-                                                <div><dt>live_output</dt><dd id="rp1-route-live-output">Unknown</dd></div>
+                                                <div><dt>Output inhibited</dt><dd id="rp1-route-output-inhibited">Unknown</dd></div>
+                                                <div><dt>Operational readiness</dt><dd id="rp1-route-operational-ready">Unknown</dd></div>
                                                 <div><dt>Development policy</dt><dd id="rp1-development-policy">Disabled</dd></div>
                                                 <div><dt>Operation lifecycle</dt><dd id="rp1-operation-lifecycle">No active lease or generation</dd></div>
                                                 <div><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>

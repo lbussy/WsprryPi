@@ -6,7 +6,6 @@
 #include "rp1_gpclk_development_policy.hpp"
 #include "transmission_backend.hpp"
 
-#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -20,7 +19,7 @@ namespace wsprrypi
 {
 struct Rp1GpclkOperationRecord
 {
-    std::uint32_t schema_version{1};
+    std::uint32_t schema_version{2};
     std::string operation_id;
     std::string module_id;
     std::string module_version;
@@ -31,6 +30,10 @@ struct Rp1GpclkOperationRecord
     std::uint64_t generation{0};
     std::string state{"idle"};
     std::uint32_t terminal_reason{0};
+    std::string terminal_reason_name{"none"};
+    bool cleanup_fault{false};
+    std::uint64_t elapsed_ns{0};
+    std::uint64_t remaining_ns{0};
     bool cancellation_requested{false};
     bool cleanup_attempted{false};
     bool cleanup_complete{false};
@@ -70,12 +73,7 @@ private:
     struct ConfiguredFrame
     {
         wsprrypi::PlanId plan_id{};
-        wsprrypi::Rp1GpclkPlan clock_plan{};
-        std::array<std::uint8_t, 162> symbols{};
         wsprrypi::Rp1GpclkProviderEventProgram event_program{};
-        wsprrypi::Rp1GpclkProviderToneProgram tone_program{};
-        bool finite_events{false};
-        bool tone{false};
         bool continuous_tone{false};
         std::uint32_t drive_ma{2};
         std::uint32_t route{0};

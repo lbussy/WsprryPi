@@ -26,7 +26,6 @@ bool Rp1GpclkBackend::prepare(
     std::uint32_t drive_ma,
     std::uint32_t expected_route,
     std::uint64_t required_capabilities,
-    const std::array<std::uint8_t, 32>& authorization_digest,
     std::string& error)
 {
     if (acquired_)
@@ -39,62 +38,10 @@ bool Rp1GpclkBackend::prepare(
         error = "RP1 GPIO drive must be 2, 4, 8, or 12 mA.";
         return false;
     }
-    if (!provider_.acquire(
-            expected_route, required_capabilities, authorization_digest, error))
+    if (!provider_.acquire(expected_route, required_capabilities, error))
         return false;
     drive_ma_ = drive_ma;
     acquired_ = true;
-    return true;
-}
-
-bool Rp1GpclkBackend::emitFrame(
-    const Rp1GpclkPlan& plan,
-    const std::array<std::uint8_t, 162>& symbols,
-    std::string& error)
-{
-    if (!acquired_ || in_flight_ ||
-        plan.fractional_bits != 16 ||
-        generation_ == std::numeric_limits<std::uint64_t>::max())
-    {
-        error = "RP1 GPCLK emit state or plan is invalid.";
-        return false;
-    }
-    Rp1GpclkProviderProgram program;
-    program.fractional_bits = plan.fractional_bits;
-    program.writes_per_symbol = kWritesPerSymbol;
-    program.tick_divider = kTickDivider;
-    program.drive_ma = drive_ma_;
-    program.generation = 0;
-    for (std::size_t tone = 0; tone < plan.tones.size(); ++tone)
-    {
-        const auto& selected = plan.tones[tone];
-        if (selected.lower_word_count + selected.upper_word_count !=
-            kWritesPerSymbol)
-        {
-            error = "Every RP1 GPCLK symbol must contain exactly 66792 divider writes.";
-            return false;
-        }
-        program.tones[tone] = Rp1GpclkProviderSymbol{
-            selected.lower_divider_word,
-            selected.upper_divider_word,
-            selected.lower_word_count,
-            selected.upper_word_count};
-    }
-    for (std::size_t i = 0; i < symbols.size(); ++i)
-    {
-        if (symbols[i] >= plan.tones.size())
-        {
-            error = "RP1 GPCLK frame contains an invalid tone index.";
-            return false;
-        }
-        program.symbols[i] = symbols[i];
-    }
-    if (!provider_.submit(program, error))
-        return false;
-    generation_ = program.generation;
-    in_flight_ = true;
-    in_flight_events_ = false;
-    in_flight_tone_ = false;
     return true;
 }
 
@@ -118,30 +65,6 @@ bool Rp1GpclkBackend::emitEvents(
         return false;
     generation_ = program.generation;
     in_flight_ = true;
-    in_flight_events_ = true;
-    in_flight_tone_ = false;
-    return true;
-}
-
-bool Rp1GpclkBackend::emitTone(
-    Rp1GpclkProviderToneProgram program, std::string& error)
-{
-    if (!acquired_ || in_flight_)
-    {
-        error = acquired_ ? "RP1 GPCLK provider is already running."
-                          : "RP1 GPCLK provider is not prepared.";
-        return false;
-    }
-    if (generation_ == std::numeric_limits<std::uint64_t>::max())
-    { error = "RP1 GPCLK generation is exhausted."; return false; }
-    program.generation = 0;
-    program.drive_ma = drive_ma_;
-    if (!provider_.submitTone(program, error))
-        return false;
-    generation_ = program.generation;
-    in_flight_ = true;
-    in_flight_events_ = false;
-    in_flight_tone_ = true;
     return true;
 }
 
@@ -161,9 +84,7 @@ bool Rp1GpclkBackend::cleanup(std::string& error)
         return true;
     if (in_flight_)
     {
-        const auto state = in_flight_events_
-            ? provider_.eventState(generation_).completion
-            : provider_.state(generation_);
+        const auto state = provider_.eventState(generation_).completion;
         if (state != Rp1GpclkCompletionState::complete &&
             state != Rp1GpclkCompletionState::failed)
         {
@@ -171,8 +92,6 @@ bool Rp1GpclkBackend::cleanup(std::string& error)
             return false;
         }
         in_flight_ = false;
-        in_flight_events_ = false;
-        in_flight_tone_ = false;
     }
     if (!provider_.release(error))
         return false;

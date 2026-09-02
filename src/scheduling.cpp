@@ -2880,8 +2880,6 @@ static bool apply_direct_rp1_development_confirmation(
             observed.value("endpointOwned", false) && development.endpoint_closed;
         development.cleanup_fault =
             observed.value("state", std::string{}) == "rollback_required";
-        development.live_output_verified =
-            observed.value("liveOutput", std::string{}) == "disabled";
         development.physical_connection_confirmed = true;
         development.attenuation_and_load_confirmed = true;
         development.bounded_operation_confirmed = true;
@@ -4474,8 +4472,6 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
             route.value("endpointOwned", false) && development.endpoint_closed;
         development.cleanup_fault =
             route.value("state", std::string{}) == "rollback_required";
-        development.live_output_verified =
-            route.value("liveOutput", std::string{}) == "disabled";
         development.physical_connection_confirmed = confirmation.physical_connection;
         development.attenuation_and_load_confirmed = confirmation.attenuation_and_load;
         development.bounded_operation_confirmed = confirmation.bounded_operation;

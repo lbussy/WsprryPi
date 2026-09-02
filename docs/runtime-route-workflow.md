@@ -10,7 +10,7 @@ query authorizes output.
 
 The installer stops in `neutral_ready` with no route. The existing route panel
 is the later explicit operator choice: preflight calls upstream `route-plan`,
-reviews and retains its SHA-256 digest, and **Switch route (output disabled)**
+reviews and retains its SHA-256 digest, and **Switch route (stay idle)**
 calls `route-ensure` only for that same route and preflight generation. The
 application requires its full idle predicate and keeps requested state separate
 from controller-reported active state.
@@ -18,7 +18,8 @@ Recovery explicitly asks the controller to reach no route; it is not a rollback
 to a previous GPIO. Removal errors retain their kernel errno and overlay ID.
 
 The manager temporarily inhibits systemd starts using its own service drop-in,
-stops WsprryPi, and switches the owned runtime overlay with output disabled.
+stops WsprryPi, and switches the owned runtime overlay while the application is
+idle and transmission is not authorized.
 It does not overwrite the installed service unit or an administrator's mask.
 After the route is verified idle, the installed WsprryPi companion updates the
 backend to `rp1-gpclk`, updates the saved pin, and disables transmission. Before
@@ -41,8 +42,9 @@ failure. Completed records describe the last transaction, not future uptime.
 restoration on the installed route without repeating overlay removal/application.
 An interrupted route change requires `recover --execute`, followed by a new
 explicit switch. Prior-boot state is never used to restart automatically.
-Transmission is not resumed by either switching or restoration; the normal
-operator controls and existing RP1 operation authorization remain available.
+Transmission is not resumed by either switching or restoration. The normal
+operator controls and application-owned RP1 operation authorization remain
+available; the kernel endpoint does not receive an authorization credential.
 
 The application installer and `scripts/copy_exe.py` install
 `/usr/local/lib/wsprrypi/route_application.py` with the executable. Use a matching,

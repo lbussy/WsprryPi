@@ -277,7 +277,8 @@ nlohmann::json Rp1GpclkRouteService::failure(const std::string &result,
           {"services", nlohmann::json::object()},
           {"endpointOwned", false},
           {"endpointOpen", true},
-          {"liveOutput", "unknown"}};
+          {"outputInhibited", "Unknown"},
+          {"operationalReady", "Unknown"}};
 }
 nlohmann::json Rp1GpclkRouteService::request(const nlohmann::json &value) {
   try {
@@ -326,7 +327,19 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
     result["state"] = status == "error" ? "runtime_recovery" : "runtime_inhibited";
     result["active"] = routeForGpio(gpioForRoute(field(state, "activeRoute")));
     result["requested"] = requested.empty() ? routeForGpio(operations_.persisted_gpio()) : requested;
-    result["liveOutput"] = "Disabled";
+    const auto runtime_safety = state.value("safety", nlohmann::json::object());
+    result["outputInhibited"] =
+        runtime_safety.contains("outputInhibited") &&
+                runtime_safety["outputInhibited"].is_boolean()
+            ? nlohmann::json(runtime_safety["outputInhibited"].get<bool>()
+                                 ? "Enabled" : "Disabled")
+            : nlohmann::json("Unknown");
+    result["operationalReady"] =
+        runtime_safety.contains("operationalReady") &&
+                runtime_safety["operationalReady"].is_boolean()
+            ? nlohmann::json(runtime_safety["operationalReady"].get<bool>()
+                                 ? "Ready" : "Not ready")
+            : nlohmann::json("Unknown");
     result["bootOwnership"] = "runtime controller";
     result["journal"] = state.contains("pendingTransaction") && state["pendingTransaction"].is_object()
         ? field(state["pendingTransaction"], "phase") : "none";
@@ -405,12 +418,15 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
       state.contains("safety") && state["safety"].is_object()
           ? state["safety"]
           : nlohmann::json::object();
-  const bool live_output_disabled = safety.contains("liveOutput") &&
-                                    safety["liveOutput"].is_boolean() &&
-                                    !safety["liveOutput"].get<bool>();
+  const bool output_enabled = safety.contains("outputInhibited") &&
+                              safety["outputInhibited"].is_boolean() &&
+                              !safety["outputInhibited"].get<bool>();
+  const bool operational_ready = safety.contains("operationalReady") &&
+                                 safety["operationalReady"].is_boolean() &&
+                                 safety["operationalReady"].get<bool>();
   const bool preflight_safe = safety.value("endpointOwned", false) &&
                               !safety.value("endpointOpen", true) &&
-                              live_output_disabled;
+                              output_enabled && operational_ready;
   const bool accepted = status == "ok" || status == "complete" ||
                         status == "rolled-back" || status == "reboot-requested";
   return {{"ok", accepted},
@@ -437,11 +453,16 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
           {"services", safety.value("services", nlohmann::json::object())},
           {"endpointOwned", safety.value("endpointOwned", false)},
           {"endpointOpen", safety.value("endpointOpen", true)},
-          {"liveOutput",
-           safety.contains("liveOutput") && safety["liveOutput"].is_boolean()
-               ? nlohmann::json(safety["liveOutput"].get<bool>() ? "enabled"
-                                                                 : "disabled")
-               : nlohmann::json("unknown")}};
+          {"outputInhibited",
+           safety.contains("outputInhibited") && safety["outputInhibited"].is_boolean()
+               ? nlohmann::json(safety["outputInhibited"].get<bool>() ? "Enabled"
+                                                                       : "Disabled")
+               : nlohmann::json("Unknown")},
+          {"operationalReady",
+           safety.contains("operationalReady") && safety["operationalReady"].is_boolean()
+               ? nlohmann::json(safety["operationalReady"].get<bool>() ? "Ready"
+                                                                        : "Not ready")
+               : nlohmann::json("Unknown")}};
 }
 bool Rp1GpclkRouteService::acknowledgeRestoration(const std::string &token,
                                                  bool transmit) {
@@ -504,8 +525,8 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                          raw.value("state", std::string{}) == classification &&
                          eligibility &&
                          raw.value("administrationEligible", false) &&
-                         safety.value("liveOutput", true) == false &&
-                         safety.value("authorization", true) == false &&
+                         safety.value("outputInhibited", true) == false &&
+                         safety.value("operationalReady", false) == true &&
                          safety.value("owner", true) == false &&
                          safety.value("lease", true) == false &&
                          field(plan, "operation") == "select" &&
@@ -605,7 +626,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       rendered["result"] = "preflight_failed";
       rendered["message"] =
           "Preflight did not confirm the exact packaged identity, endpoint "
-          "closure, ownership, and live_output=0.";
+          "closure, ownership, output_inhibit=0, and operational readiness.";
       return rendered;
     }
     ++generation_;
@@ -710,7 +731,8 @@ nlohmann::json Rp1GpclkRouteService::reconcileRuntime(
   result.update({{"ok",true},{"reconciled",true},{"compatible",true},
       {"requested",route},{"persisted",route},{"configured",route},{"active",route},
       {"journal","none"},{"bootOwnership","runtime"},{"endpointOwned",true},
-      {"endpointOpen",false},{"liveOutput","disabled"},
+      {"endpointOpen",false},{"outputInhibited","Disabled"},
+      {"operationalReady","Ready"},
       {"generation",++generation_},
       {"controllerGeneration",controller["generation"]},
       {"policyDomain",development ? "external-provider" : "startup-idle"},

@@ -23,7 +23,8 @@ nlohmann::json state(const std::string &configured = "gpio4",
       {"safety",
        {{"endpointOwned", true},
         {"endpointOpen", false},
-        {"liveOutput", false},
+        {"outputInhibited", false},
+        {"operationalReady", true},
         {"services",
          {{"wsprrypi.service", "active"},
           {"soapyremote-server.service", "inactive"}}}}}};
@@ -61,7 +62,6 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
   inputs.endpoint_available = true;
   inputs.endpoint_closed = true;
   inputs.endpoint_exclusively_acquirable = true;
-  inputs.live_output_verified = true;
   inputs.physical_connection_confirmed = true;
   inputs.attenuation_and_load_confirmed = true;
   inputs.bounded_operation_confirmed = true;
@@ -74,9 +74,6 @@ wsprrypi::Rp1GpclkDevelopmentPolicyInputs authorized_for(
   inputs.confirmation_operation_id = inputs.operation_id;
   inputs.confirmation_route = route;
   inputs.identity.route = route;
-  inputs.identity.capabilities =
-      wsprrypi::kRp1GpclkDevelopmentCapabilityLiveEligible |
-      wsprrypi::kRp1GpclkDevelopmentCapabilityOperationLiveGate;
   return inputs;
 }
 
@@ -151,7 +148,8 @@ int main() {
              {"administrationEligible", true},
              {"transmissionEligible", false},
              {"routeSelected", false},
-             {"safety", {{"liveOutput", false}, {"authorization", false},
+             {"safety", {{"outputInhibited", false},
+                         {"operationalReady", true},
                          {"owner", false}, {"lease", false}}},
              {"routePlan", {{"operation", "select"}, {"route", route},
                             {"alreadyReady", false},
@@ -202,7 +200,11 @@ int main() {
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   unsafe = state();
-  unsafe["safety"]["liveOutput"] = true;
+  unsafe["safety"]["outputInhibited"] = true;
+  next = response("preflight", "ok", unsafe);
+  assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
+  unsafe = state();
+  unsafe["safety"]["operationalReady"] = false;
   next = response("preflight", "ok", unsafe);
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   next = response("preflight", "ok", state("gpio4", "gpio4"));

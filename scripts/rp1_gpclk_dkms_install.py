@@ -1212,7 +1212,7 @@ def render_plan(plan: Mapping[str, Any]) -> None:
             print(f"  UAPI SHA-256: {resolved['uapiSha256']}")
             print("  Module SHA-256: resolved and verified by the upstream exact-source build")
             print("  Planned lifecycle: upstream development-preflight and exact-source development-install")
-    print("  Safety boundary: route activation and output remain disabled; no overlay, module load, service, GPIO, or RF action is authorized.")
+    print("  Safety boundary: no route, overlay, module load, service, GPIO, transmission, or RF action is authorized.")
 
 
 def prepare(args: argparse.Namespace, runner: Runner) -> dict[str, Any]:
@@ -1517,7 +1517,8 @@ def verify_development_result(
     uapi = manifest.get("uapiIdentity")
     require(isinstance(uapi, dict) and uapi.get("sha256") == resolved["uapiSha256"], "upstream development result UAPI differs from the selected source")
     parameters = manifest.get("parameters")
-    require(isinstance(parameters, dict) and parameters.get("live_output") == 0, "upstream development result did not retain output disabled")
+    require(isinstance(parameters, dict) and parameters.get("output_inhibit") == 0,
+            "upstream development result did not select the production output model")
     installed = manifest.get("installedModule")
     require(isinstance(installed, dict), "upstream development result lacks installed module identity")
     require(installed.get("moduleName") == MODULE_NAME and installed.get("moduleVersion") == resolved["version"], "upstream installed module identity differs from the selected source")
@@ -2756,7 +2757,10 @@ def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
         "neutral runtime route evidence is missing or selected",
     )
     safety = final.get("safety", {})
-    require(safety.get("liveOutput") is False and safety.get("owner") is False and safety.get("lease") is False and safety.get("authorization") is False, "neutral runtime output state is not disabled and unowned")
+    require(safety.get("outputInhibited") is False and
+            safety.get("operationalReady") is False and
+            safety.get("owner") is False and safety.get("lease") is False,
+            "neutral runtime output state is not unowned and administratively quiescent")
     installed_binding = final.get("identities", {}).get("installedBinding", {})
     require(installed_binding.get("sha256") == reviewed["bindingSha256"], "installed runtime binding differs from reviewed bundle")
     require(installed_binding.get("value", {}).get("artifactSetSha256") == reviewed["artifactSetSha256"], "installed runtime artifact set differs from reviewed bundle")
@@ -2805,7 +2809,7 @@ def apply(args: argparse.Namespace, runner: Runner) -> None:
         apply_development(resolved, record, runner)
     else:
         raise ContractError("prepared source channel is invalid")
-    print("RP1-GPCLK-DKMS package/source and DKMS installation verified; route activation and output remain disabled.")
+    print("RP1-GPCLK-DKMS package/source and DKMS installation verified; no route or transmission was activated.")
 
 
 def parser() -> argparse.ArgumentParser:

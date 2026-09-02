@@ -2257,7 +2257,7 @@ function updateBackendPlatformSupportUi() {
     $backend.prop("disabled", !anyBackendSupported);
     $selectorHint.text(
         rp1RouteSelectable && !gpioSupported
-            ? "Choose an RP1 GPIO route below. Route selection keeps output disabled."
+            ? "Choose an RP1 GPIO route below. Route selection keeps WsprryPi idle."
             : isRp1GpioPlatform() && !rp1GpioOperatorVisible()
             ? "Si5351 uses an attached synthesizer on the configured I2C bus."
             : "GPIO uses Raspberry Pi clock output pins directly. Si5351 uses an attached synthesizer on the configured I2C bus."
@@ -2363,7 +2363,7 @@ function clickTransmitPin() {
 }
 
 const RP1_ROUTE_STATES = Object.freeze({
-    runtime_inhibited: ["Output disabled", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
+    runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
     runtime_ready: ["Route ready", "Route switching is complete. Transmission was not resumed."],
     runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
     runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
@@ -2430,14 +2430,15 @@ class Rp1RouteUiController {
             ? (data.endpointOpen===true ? "Owned; open owner detected" : "Owned; closed")
             : "Ownership unconfirmed";
         $("#rp1-route-endpoint").text(endpoint);
-        $("#rp1-route-live-output").text(data.liveOutput || "Unknown");
+        $("#rp1-route-output-inhibited").text(data.outputInhibited || "Unknown");
+        $("#rp1-route-operational-ready").text(data.operationalReady || "Unknown");
         $("#rp1-development-policy").text(data.developmentPolicy || "Disabled");
         const lifecycle=data.operationLifecycle && typeof data.operationLifecycle==="object"
-            ? `Lease ${data.operationLifecycle.lease || "none"}; generation ${data.operationLifecycle.generation || "none"}; ${data.operationLifecycle.terminalReason || "no terminal result"}`
+            ? `Lease ${data.operationLifecycle.lease || "none"}; generation ${data.operationLifecycle.generation || "none"}; ${data.operationLifecycle.terminalReasonName || data.operationLifecycle.terminalReason || "no terminal result"}`
             : "No active lease or generation";
         $("#rp1-operation-lifecycle").text(lifecycle);
         $("#rp1-route-eligible").text("Unqualified");
-        $("#rp1-route-apply").text(this.runtimeProfile ? "Switch route (output disabled)" : (this.developmentCompatible ? "Apply route and reboot" : "Check route"));
+        $("#rp1-route-apply").text(this.runtimeProfile ? "Switch route (stay idle)" : (this.developmentCompatible ? "Apply route and reboot" : "Check route"));
         $("#rp1-route-rollback").text(this.runtimeProfile ? "Recover to no route" : "Roll back");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
         this.setState(reported,
@@ -2478,7 +2479,7 @@ class Rp1RouteUiController {
             if(!preflightResponse.ok || preflight.ok!==true){this.inFlight=false;this.render(preflight);return;}
             this.generation=preflight.generation;
             const confirmed=window.confirm(this.runtimeProfile
-                ? `Switch to ${requested} with output disabled? A running Wsprry Pi will restart in idle mode. This browser may disconnect; refresh after it reconnects. Transmission will not resume. No reboot is requested.`
+                ? `Switch to ${requested} and keep WsprryPi idle? A running Wsprry Pi will restart in idle mode. This browser may disconnect; refresh after it reconnects. Transmission will not resume. No reboot is requested.`
                 :
                 `Apply ${requested} and reboot? The package executor will stop only wsprrypi.service and soapyremote-server.service before changing its owned boot block.`
             );

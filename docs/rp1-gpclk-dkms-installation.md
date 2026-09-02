@@ -94,11 +94,11 @@ WsprryPi does not infer a development version from release metadata
 or supply a version to the upstream installer.
 
 The maintained exact-source installer must provide the explicit
-`runtime-controller` DKMS profile through a route-neutral installation with
-output disabled and without loading either module. A single DKMS instance owns
+`runtime-controller` DKMS profile through a route-neutral installation without
+loading either module. A single DKMS instance owns
 the consumer and controller; WsprryPi verifies the returned exact commit,
 canonical version, kernel, UAPI, both installed-file and decompressed-ELF hashes,
-null route, and output-disabled state before recording success. Development
+null route, and quiescent unowned state before recording success. Development
 identity remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment,
 and qualification remain separate facts.
 
@@ -263,7 +263,9 @@ Installation stops at route zero. A later explicit operator selection of GPIO4
 or GPIO20 invokes upstream `route-plan`; WsprryPi retains the reviewed digest
 and calls `route-ensure` only for the same route and current preflight
 generation. Only this route transaction changes the application backend to
-`rp1-gpclk`, persists the selected pin, and keeps output disabled. A saved or
+`rp1-gpclk`, persists the selected pin, and keeps WsprryPi idle. The production
+module uses the root-owned mode-0600 endpoint with `output_inhibit=0`; application
+policy and operator confirmation still gate every transmission. A saved or
 default GPIO value is not installation-time route consent. Because the provider
 endpoint is route-owned, `/dev/rp1-gpclk` is normally absent at this neutral
 stage. **Setup > Transmitter** keeps GPIO selectable as **GPIO (route required)**

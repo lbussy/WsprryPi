@@ -20,7 +20,6 @@ struct Rp1GpclkDevelopmentInputs
     bool endpoint_closed{false};
     bool endpoint_exclusively_acquirable{false};
     bool cleanup_fault{false};
-    bool live_output_verified{false};
     bool physical_connection_confirmed{false};
     bool attenuation_and_load_confirmed{false};
     bool bounded_operation_confirmed{false};

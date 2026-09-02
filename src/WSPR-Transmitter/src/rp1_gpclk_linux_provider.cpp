@@ -1,7 +1,6 @@
 #include "rp1_gpclk_linux_provider.hpp"
 #include "rp1_gpclk_uapi.h"
 
-#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -13,13 +12,11 @@ namespace wsprrypi
 namespace
 {
 constexpr std::uint64_t kKnownCapabilities =
-    RP1_GPCLK_CAP_SUBMIT_WSPR | RP1_GPCLK_CAP_SUBMIT_EVENTS |
+    RP1_GPCLK_CAP_SUBMIT_EVENTS |
     RP1_GPCLK_CAP_STOP_DRAIN | RP1_GPCLK_CAP_STABLE_STATE |
     RP1_GPCLK_CAP_ROUTE_IDENTITY | RP1_GPCLK_CAP_COMPAT_IDENTITY |
-    RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_LIVE_ELIGIBLE |
-    RP1_GPCLK_CAP_TONE_CONTINUOUS | RP1_GPCLK_CAP_TONE_FINITE |
-    RP1_GPCLK_CAP_PASSIVE_SNAPSHOT |
-    RP1_GPCLK_CAP_OPERATION_LIVE_GATE;
+    RP1_GPCLK_CAP_CLEANUP_FAULT_LATCH | RP1_GPCLK_CAP_OUTPUT_INHIBIT |
+    RP1_GPCLK_CAP_PASSIVE_SNAPSHOT | RP1_GPCLK_CAP_BOUNDED_DMA_CHUNKS;
 
 std::uint32_t driveMask(std::uint32_t drive_ma)
 {
@@ -49,7 +46,7 @@ bool boundedIdentity(const char* value, std::size_t size, std::string& output)
 bool knownCompatibility(std::uint32_t value)
 { return value >= RP1_GPCLK_COMPAT_QUALIFIED && value <= RP1_GPCLK_COMPAT_REJECTED; }
 bool knownReason(std::uint32_t value)
-{ return value <= RP1_GPCLK_COMPAT_REASON_ADMIN_ENROLLMENT_REQUIRED; }
+{ return value <= RP1_GPCLK_COMPAT_REASON_CLEANUP_LATCHED; }
 bool knownRoute(std::uint32_t value)
 { return value == RP1_GPCLK_ROUTE_GPIO4 || value == RP1_GPCLK_ROUTE_GPIO20; }
 bool knownState(std::uint32_t value) { return value <= RP1_GPCLK_STATE_DEAD; }
@@ -94,7 +91,7 @@ bool Rp1GpclkLinuxProvider::failed(const char* operation, std::string& error) co
 
 bool Rp1GpclkLinuxProvider::queryOpen(
     std::uint32_t expected_route, std::uint64_t required_capabilities,
-    bool require_live_eligible, Rp1GpclkProviderIdentity& identity,
+    Rp1GpclkProviderIdentity& identity,
     std::string& error)
 {
     rp1_gpclk_query request{};
@@ -124,26 +121,19 @@ bool Rp1GpclkLinuxProvider::queryOpen(
     {
         error = "RP1 GPCLK provider is missing required capabilities or reported unknown capabilities."; return false;
     }
-    if (require_live_eligible &&
-        (request.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0)
-    {
-        error = "RP1 GPCLK provider lacks LIVE_ELIGIBLE capability."; return false;
-    }
     if (request.compatibility_state == RP1_GPCLK_COMPAT_UNAVAILABLE ||
         request.compatibility_state == RP1_GPCLK_COMPAT_REJECTED)
     {
         error = "RP1 GPCLK provider compatibility is unavailable or rejected."; return false;
     }
     if (request.max_tones != RP1_GPCLK_MAX_TONES ||
-        request.wspr_symbols != RP1_GPCLK_WSPR_SYMBOLS ||
         request.max_events != RP1_GPCLK_MAX_EVENTS ||
         request.max_dither_period != RP1_GPCLK_DITHER_PERIOD_MAX ||
         (request.supported_drive_ma_mask & ~RP1_GPCLK_DRIVE_SUPPORT_ALLOWED_MASK) != 0 ||
         request.max_event_duration_ns != RP1_GPCLK_EVENT_DURATION_NS_MAX ||
         request.max_request_duration_ns != RP1_GPCLK_REQUEST_DURATION_NS_MAX ||
-        request.min_tone_duration_ns != RP1_GPCLK_TONE_DURATION_NS_MIN ||
-        request.max_tone_duration_ns != RP1_GPCLK_TONE_DURATION_NS_MAX ||
-        request.reserved0 != 0 || request.reserved1 != 0)
+        request.dma_chunk_duration_ns != RP1_GPCLK_DMA_CHUNK_DURATION_NS ||
+        request.reserved0 != 0)
     {
         error = "RP1 GPCLK provider reported an incompatible limit or reserved value."; return false;
     }
@@ -156,8 +146,9 @@ bool Rp1GpclkLinuxProvider::queryOpen(
     identity.compatibility_reason = request.compatibility_reason;
     identity.capabilities = request.capabilities;
     identity.supported_drive_ma_mask = request.supported_drive_ma_mask;
-    identity.min_tone_duration_ns = request.min_tone_duration_ns;
-    identity.max_tone_duration_ns = request.max_tone_duration_ns;
+    identity.max_event_duration_ns = request.max_event_duration_ns;
+    identity.max_request_duration_ns = request.max_request_duration_ns;
+    identity.dma_chunk_duration_ns = request.dma_chunk_duration_ns;
     if (!boundedIdentity(request.module_id, sizeof(request.module_id), identity.module_id) ||
         !boundedIdentity(request.build_id, sizeof(request.build_id), identity.build_id) ||
         !boundedIdentity(request.compatibility_id, sizeof(request.compatibility_id), identity.compatibility_id))
@@ -169,32 +160,23 @@ bool Rp1GpclkLinuxProvider::queryOpen(
 
 bool Rp1GpclkLinuxProvider::query(
     std::uint32_t expected_route, std::uint64_t required_capabilities,
-    bool require_live_eligible, Rp1GpclkProviderIdentity& identity,
+    bool require_operational_ready, Rp1GpclkProviderIdentity& identity,
     std::string& error)
 {
     if (fd_ >= 0) { error = "RP1 GPCLK provider query requires no active lease."; return false; }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
-    const bool ok = queryOpen(expected_route, required_capabilities,
-        require_live_eligible, identity, error);
+    const bool ok = queryOpen(expected_route, required_capabilities, identity, error);
     const int close_result = io_.closeDevice(fd_);
     fd_ = -1;
     if (close_result < 0) { error = "Could not close RP1 GPCLK provider after QUERY."; return false; }
     if (!ok) return false;
     Rp1GpclkPassiveSnapshot snapshot;
     if (!passiveSnapshot(snapshot, error)) return false;
-    const bool safe_idle_eligibility_projection =
-        !require_live_eligible &&
-        identity.compatibility_state == RP1_GPCLK_COMPAT_COMPATIBLE_UNQUALIFIED &&
-        (identity.capabilities & RP1_GPCLK_CAP_LIVE_ELIGIBLE) == 0 &&
-        snapshot.compatibility_state != RP1_GPCLK_COMPAT_UNAVAILABLE &&
-        snapshot.compatibility_state != RP1_GPCLK_COMPAT_REJECTED &&
-        snapshot.live_output == RP1_GPCLK_OBSERVATION_FALSE &&
-        snapshot.live_eligible == RP1_GPCLK_OBSERVATION_TRUE;
     if (snapshot.route != identity.route ||
-        (snapshot.compatibility_state != identity.compatibility_state &&
-            !safe_idle_eligibility_projection) ||
+        snapshot.compatibility_state != identity.compatibility_state ||
         snapshot.compatibility_reason != identity.compatibility_reason ||
+        snapshot.capabilities != identity.capabilities ||
         snapshot.module_id != identity.module_id || snapshot.build_id != identity.build_id ||
         snapshot.compatibility_id != identity.compatibility_id)
     {
@@ -209,11 +191,23 @@ bool Rp1GpclkLinuxProvider::query(
             "/" + snapshot.build_id + "/" + snapshot.compatibility_id;
         return false;
     }
-    identity.compatibility_state = snapshot.compatibility_state;
-    identity.capabilities |= snapshot.capabilities;
     if ((identity.capabilities & required_capabilities) != required_capabilities)
     {
         error = "RP1 GPCLK provider is missing a required passive capability.";
+        return false;
+    }
+    if (require_operational_ready &&
+        (snapshot.output_inhibited != RP1_GPCLK_OBSERVATION_FALSE ||
+         snapshot.operational_ready != RP1_GPCLK_OBSERVATION_TRUE ||
+         snapshot.cleanup_fault != RP1_GPCLK_OBSERVATION_FALSE ||
+         snapshot.owner_present != RP1_GPCLK_OBSERVATION_FALSE ||
+         snapshot.lease_present != RP1_GPCLK_OBSERVATION_FALSE ||
+         snapshot.gpio_safe != RP1_GPCLK_OBSERVATION_TRUE ||
+         snapshot.clock_quiescent != RP1_GPCLK_OBSERVATION_TRUE ||
+         snapshot.dma_quiescent != RP1_GPCLK_OBSERVATION_TRUE ||
+         snapshot.stable != RP1_GPCLK_OBSERVATION_TRUE))
+    {
+        error = "RP1 GPCLK provider is not operationally ready for production output.";
         return false;
     }
     return true;
@@ -260,6 +254,8 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
         request.snapshot_flags & ~RP1_GPCLK_SNAPSHOT_F_ALLOWED_MASK ||
         request.capabilities & ~kKnownCapabilities ||
         (request.capabilities & RP1_GPCLK_CAP_PASSIVE_SNAPSHOT) == 0 ||
+        request.dma_chunk_duration_ns != RP1_GPCLK_DMA_CHUNK_DURATION_NS ||
+        request.max_request_duration_ns != RP1_GPCLK_REQUEST_DURATION_NS_MAX ||
         request.reserved0 != 0)
     {
         error = "RP1 GPCLK provider returned malformed or unknown passive snapshot data.";
@@ -272,7 +268,8 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
             return false;
         }
     for (const auto value : {request.cleanup_fault, request.owner_present,
-            request.lease_present, request.live_output, request.live_eligible,
+            request.lease_present, request.output_inhibited,
+            request.operational_ready,
             request.gpio_safe, request.clock_quiescent, request.dma_quiescent,
             request.stable})
         if (!knownObservation(value))
@@ -297,8 +294,8 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
     result.cleanup_fault = request.cleanup_fault;
     result.owner_present = request.owner_present;
     result.lease_present = request.lease_present;
-    result.live_output = request.live_output;
-    result.live_eligible = request.live_eligible;
+    result.output_inhibited = request.output_inhibited;
+    result.operational_ready = request.operational_ready;
     result.drain_state = request.drain_state;
     result.gpio_safe = request.gpio_safe;
     result.clock_quiescent = request.clock_quiescent;
@@ -308,8 +305,8 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
     result.generation = request.generation;
     result.elapsed_ns = request.elapsed_ns;
     result.remaining_ns = request.remaining_ns;
-    result.min_tone_duration_ns = request.min_tone_duration_ns;
-    result.max_tone_duration_ns = request.max_tone_duration_ns;
+    result.dma_chunk_duration_ns = request.dma_chunk_duration_ns;
+    result.max_request_duration_ns = request.max_request_duration_ns;
     if (!boundedIdentity(request.module_id, sizeof(request.module_id), result.module_id) ||
         !boundedIdentity(request.build_id, sizeof(request.build_id), result.build_id) ||
         !boundedIdentity(request.compatibility_id, sizeof(request.compatibility_id),
@@ -323,43 +320,39 @@ bool Rp1GpclkLinuxProvider::passiveSnapshot(
 
 bool Rp1GpclkLinuxProvider::acquire(
     std::uint32_t expected_route, std::uint64_t required_capabilities,
-    const std::array<std::uint8_t, 32>& authorization_digest,
     std::string& error)
 {
     if (fd_ >= 0) { error = "RP1 GPCLK provider is already acquired."; return false; }
-    if (std::all_of(
-            authorization_digest.begin(), authorization_digest.end(),
-            [](std::uint8_t value) { return value == 0; }))
-    {
-        error = "RP1 GPCLK operation authorization digest is empty.";
-        return false;
-    }
     Rp1GpclkPassiveSnapshot snapshot;
     if (!passiveSnapshot(snapshot, error)) return false;
     if (snapshot.route != expected_route ||
         snapshot.compatibility_state == RP1_GPCLK_COMPAT_UNAVAILABLE ||
         snapshot.compatibility_state == RP1_GPCLK_COMPAT_REJECTED ||
-        snapshot.live_eligible != RP1_GPCLK_OBSERVATION_TRUE ||
+        snapshot.output_inhibited != RP1_GPCLK_OBSERVATION_FALSE ||
+        snapshot.operational_ready != RP1_GPCLK_OBSERVATION_TRUE ||
+        snapshot.cleanup_fault != RP1_GPCLK_OBSERVATION_FALSE ||
+        snapshot.owner_present != RP1_GPCLK_OBSERVATION_FALSE ||
+        snapshot.lease_present != RP1_GPCLK_OBSERVATION_FALSE ||
+        snapshot.gpio_safe != RP1_GPCLK_OBSERVATION_TRUE ||
+        snapshot.clock_quiescent != RP1_GPCLK_OBSERVATION_TRUE ||
+        snapshot.dma_quiescent != RP1_GPCLK_OBSERVATION_TRUE ||
+        snapshot.stable != RP1_GPCLK_OBSERVATION_TRUE ||
         (snapshot.capabilities & required_capabilities) != required_capabilities)
     {
-        error = "RP1 GPCLK provider is not eligible for operation-scoped acquisition.";
+        error = "RP1 GPCLK provider is not operationally ready for acquisition.";
         return false;
     }
     fd_ = io_.openDevice(device_.c_str(), O_RDWR);
     if (fd_ < 0) return failed("Could not open canonical RP1 GPCLK provider", error);
     Rp1GpclkProviderIdentity identity;
-    if (!queryOpen(expected_route, required_capabilities, false, identity, error))
+    if (!queryOpen(expected_route, required_capabilities, identity, error))
     {
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
     rp1_gpclk_acquire request{};
     initializeHeader(request);
     request.expected_route = expected_route;
-    request.authorization_flags = RP1_GPCLK_ACQUIRE_F_AUTHORIZE_LIVE;
     request.required_capabilities = required_capabilities;
-    std::copy(
-        authorization_digest.begin(), authorization_digest.end(),
-        request.authorization_digest);
     if (io_.control(fd_, RP1_GPCLK_IOC_ACQUIRE, &request) < 0)
     {
         failed("Could not acquire RP1 GPCLK operation lease", error);
@@ -367,41 +360,19 @@ bool Rp1GpclkLinuxProvider::acquire(
     }
     if (request.header.size != sizeof(request) ||
         request.header.reserved != 0 || request.header.flags != 0 ||
-        request.lease_id == 0)
+        request.reserved0 != 0 || request.lease_id == 0)
     {
         error = "RP1 GPCLK provider returned an invalid lease identity.";
         (void)io_.closeDevice(fd_); fd_ = -1; return false;
     }
+    for (const auto value : request.reserved)
+        if (value != 0)
+        {
+            error = "RP1 GPCLK provider returned nonzero reserved ACQUIRE data.";
+            (void)io_.closeDevice(fd_); fd_ = -1; return false;
+        }
     lease_id_ = request.lease_id;
     supported_drive_ma_mask_ = identity.supported_drive_ma_mask;
-    return true;
-}
-
-bool Rp1GpclkLinuxProvider::submit(
-    Rp1GpclkProviderProgram& source, std::string& error)
-{
-    if (fd_ < 0 || lease_id_ == 0) { error = "RP1 GPCLK provider is not acquired."; return false; }
-    const auto required_drive = driveMask(source.drive_ma);
-    if (required_drive == 0 || (supported_drive_ma_mask_ & required_drive) == 0)
-    { error = "RP1 GPCLK provider does not support the requested drive strength."; return false; }
-    rp1_gpclk_submit_wspr request{};
-    initializeHeader(request);
-    request.lease_id = lease_id_; request.generation = 0;
-    request.tones_ptr = reinterpret_cast<std::uintptr_t>(source.tones.data());
-    request.symbols_ptr = reinterpret_cast<std::uintptr_t>(source.symbols.data());
-    request.fractional_bits = source.fractional_bits;
-    request.tick_divider = source.tick_divider;
-    request.writes_per_symbol = source.writes_per_symbol;
-    request.tone_count = source.tones.size(); request.symbol_count = source.symbols.size();
-    request.drive_ma = source.drive_ma;
-    request.expected_frame_duration_ns = 110591999892ULL;
-    if (io_.control(fd_, RP1_GPCLK_IOC_SUBMIT_WSPR, &request) < 0)
-        return failed("Could not submit RP1 GPCLK WSPR program", error);
-    if (request.generation == 0)
-    { error = "RP1 GPCLK provider returned an invalid WSPR generation identity."; return false; }
-    source.generation = request.generation;
-    active_generation_ = request.generation;
-    active_generation_terminal_ = false;
     return true;
 }
 
@@ -412,8 +383,28 @@ bool Rp1GpclkLinuxProvider::submitEvents(
     const auto required_drive = driveMask(source.drive_ma);
     if (required_drive == 0 || (supported_drive_ma_mask_ & required_drive) == 0)
     { error = "RP1 GPCLK provider does not support the requested drive strength."; return false; }
-    if (source.tones.size() > RP1_GPCLK_MAX_TONES || source.events.size() > RP1_GPCLK_MAX_EVENTS)
+    if (source.tones.empty() || source.tones.size() > RP1_GPCLK_MAX_TONES ||
+        source.events.empty() || source.events.size() > RP1_GPCLK_MAX_EVENTS)
     { error = "RP1 GPCLK event program exceeds the UAPI bounds."; return false; }
+    std::uint64_t total_duration_ns = 0;
+    for (const auto& event : source.events)
+    {
+        if (event.duration_ns < RP1_GPCLK_EVENT_DURATION_NS_MIN ||
+            event.duration_ns > RP1_GPCLK_EVENT_DURATION_NS_MAX ||
+            (event.rf_on && event.tone_index >= source.tones.size()) ||
+            event.duration_ns > RP1_GPCLK_REQUEST_DURATION_NS_MAX -
+                total_duration_ns)
+        {
+            error = "RP1 GPCLK event program contains an invalid event or duration.";
+            return false;
+        }
+        total_duration_ns += event.duration_ns;
+    }
+    if (total_duration_ns != source.total_duration_ns)
+    {
+        error = "RP1 GPCLK event program total duration is inconsistent.";
+        return false;
+    }
     std::vector<rp1_gpclk_tone> tones(source.tones.size());
     for (std::size_t i = 0; i < source.tones.size(); ++i)
         tones[i] = {source.tones[i].lower_divider_word, source.tones[i].upper_divider_word,
@@ -430,7 +421,7 @@ bool Rp1GpclkLinuxProvider::submitEvents(
     request.lease_id = lease_id_; request.generation = 0;
     request.tones_ptr = reinterpret_cast<std::uintptr_t>(tones.data());
     request.events_ptr = reinterpret_cast<std::uintptr_t>(events.data());
-    request.mode = source.mode; request.fractional_bits = source.fractional_bits;
+    request.fractional_bits = source.fractional_bits;
     request.tick_divider = source.tick_divider; request.tone_count = tones.size();
     request.event_count = events.size(); request.drive_ma = source.drive_ma;
     request.total_duration_ns = source.total_duration_ns;
@@ -440,43 +431,6 @@ bool Rp1GpclkLinuxProvider::submitEvents(
     { error = "RP1 GPCLK provider returned an invalid event generation identity."; return false; }
     source.generation = request.generation;
     active_generation_ = request.generation;
-    active_generation_terminal_ = false;
-    return true;
-}
-
-bool Rp1GpclkLinuxProvider::submitTone(
-    Rp1GpclkProviderToneProgram& source, std::string& error)
-{
-    if (fd_ < 0 || lease_id_ == 0)
-    { error = "RP1 GPCLK provider is not acquired."; return false; }
-    const auto required_drive = driveMask(source.drive_ma);
-    if (required_drive == 0 || (supported_drive_ma_mask_ & required_drive) == 0)
-    { error = "RP1 GPCLK provider does not support the requested drive strength."; return false; }
-    const bool continuous = source.operation == RP1_GPCLK_TONE_OPERATION_CONTINUOUS;
-    const bool finite = source.operation == RP1_GPCLK_TONE_OPERATION_FINITE;
-    if ((!continuous && !finite) || (continuous && source.duration_ns != 0) ||
-        (finite && (source.duration_ns < RP1_GPCLK_TONE_DURATION_NS_MIN ||
-                    source.duration_ns > RP1_GPCLK_TONE_DURATION_NS_MAX)))
-    { error = "RP1 GPCLK TONE operation or duration is invalid."; return false; }
-    rp1_gpclk_submit_tone request{};
-    initializeHeader(request);
-    request.lease_id = lease_id_;
-    request.generation = 0;
-    request.tone = {source.tone.lower_divider_word, source.tone.upper_divider_word,
-        source.tone.lower_count, source.tone.upper_count};
-    request.duration_ns = source.duration_ns;
-    request.operation = source.operation;
-    request.expected_route = source.expected_route;
-    request.fractional_bits = source.fractional_bits;
-    request.tick_divider = source.tick_divider;
-    request.drive_ma = source.drive_ma;
-    if (io_.control(fd_, RP1_GPCLK_IOC_SUBMIT_TONE, &request) < 0)
-        return failed("Could not submit RP1 GPCLK TONE", error);
-    if (request.generation == 0)
-    { error = "RP1 GPCLK provider returned an invalid TONE generation identity."; return false; }
-    source.generation = request.generation;
-    active_generation_ = request.generation;
-    active_generation_terminal_ = false;
     return true;
 }
 
@@ -492,7 +446,9 @@ bool Rp1GpclkLinuxProvider::requestFiniteStop(std::uint64_t generation, std::str
             return failed("Could not request RP1 GPCLK finite stop", error);
         Rp1GpclkProviderEventState state_result;
         if (!getState(generation, state_result, error) ||
-            state_result.completion != Rp1GpclkCompletionState::complete)
+            (state_result.completion != Rp1GpclkCompletionState::complete &&
+             state_result.completion != Rp1GpclkCompletionState::failed &&
+             state_result.completion != Rp1GpclkCompletionState::dead))
         {
             if (error.empty())
                 error = "RP1 GPCLK finite stop reported an already-finished operation without authenticated terminal state.";
@@ -531,22 +487,20 @@ bool Rp1GpclkLinuxProvider::getState(
     case RP1_GPCLK_STATE_RUNNING: completion = Rp1GpclkCompletionState::running; break;
     case RP1_GPCLK_STATE_DRAINING: completion = Rp1GpclkCompletionState::draining; break;
     case RP1_GPCLK_STATE_COMPLETE: completion = Rp1GpclkCompletionState::complete; break;
-    case RP1_GPCLK_STATE_DEAD: completion = Rp1GpclkCompletionState::dead; break;
+    case RP1_GPCLK_STATE_DEAD: completion = Rp1GpclkCompletionState::failed; break;
     default: break;
     }
     if (request.cleanup_fault != 0) completion = Rp1GpclkCompletionState::failed;
-    state_result = {completion, request.current_event, request.terminal_reason};
-    active_generation_terminal_ =
-        completion == Rp1GpclkCompletionState::complete ||
-        completion == Rp1GpclkCompletionState::failed ||
-        completion == Rp1GpclkCompletionState::dead;
+    state_result = {completion, request.current_event, request.terminal_reason,
+        request.cleanup_fault, request.elapsed_ns, request.remaining_ns};
     return true;
 }
 
 Rp1GpclkProviderEventState Rp1GpclkLinuxProvider::eventState(std::uint64_t generation) const noexcept
 {
     Rp1GpclkProviderEventState result{
-        Rp1GpclkCompletionState::failed, 0, RP1_GPCLK_REASON_INTERNAL_ERROR};
+        Rp1GpclkCompletionState::failed, 0, RP1_GPCLK_REASON_INTERNAL_ERROR,
+        1, 0, 0};
     std::string ignored;
     (void)getState(generation, result, ignored);
     return result;
@@ -564,8 +518,7 @@ bool Rp1GpclkLinuxProvider::release(std::string& error) noexcept
         rp1_gpclk_release request{};
         initializeHeader(request);
         request.lease_id = lease_id_;
-        request.generation = active_generation_ != 0 && !active_generation_terminal_
-            ? active_generation_ : 0;
+        request.generation = active_generation_;
         const int release_result =
             io_.control(fd_, RP1_GPCLK_IOC_RELEASE, &request);
         if (release_result < 0)
@@ -580,7 +533,7 @@ bool Rp1GpclkLinuxProvider::release(std::string& error) noexcept
         error += "Could not close the RP1 GPCLK endpoint.";
         ok = false;
     }
-    lease_id_ = 0; active_generation_ = 0; active_generation_terminal_ = false;
+    lease_id_ = 0; active_generation_ = 0;
     supported_drive_ma_mask_ = 0; fd_ = -1;
     return ok;
 }

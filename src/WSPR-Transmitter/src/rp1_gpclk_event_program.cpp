@@ -62,7 +62,8 @@ bool validateRp1GpclkEventProgram(
     std::uint64_t total = 0;
     for (const auto& event : program.events)
     {
-        if (!event.duration_ns ||
+        if (event.duration_ns < RP1_GPCLK_EVENT_DURATION_NS_MIN ||
+            event.duration_ns > RP1_GPCLK_EVENT_DURATION_NS_MAX ||
             (event.rf_on && event.tone_index >= program.tones.size()) ||
             event.duration_ns > std::numeric_limits<std::uint64_t>::max() - total)
         {
@@ -71,7 +72,8 @@ bool validateRp1GpclkEventProgram(
         }
         total += event.duration_ns;
     }
-    if (total != program.total_duration_ns)
+    if (total != program.total_duration_ns ||
+        total > RP1_GPCLK_REQUEST_DURATION_NS_MAX)
     {
         error = "RP1 GPCLK event program total duration is inconsistent.";
         return false;
@@ -84,15 +86,28 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
 {
     if (plan.backend != BackendKind::RP1_GPCLK)
         return reject("Execution plan is not targeted for RP1 GPCLK.");
-    if (plan.mode != TransmissionMode::QRSS &&
+    if (plan.mode != TransmissionMode::WSPR &&
+        plan.mode != TransmissionMode::TONE &&
+        plan.mode != TransmissionMode::QRSS &&
         plan.mode != TransmissionMode::FSKCW &&
         plan.mode != TransmissionMode::DFCW)
-        return reject("RP1 GPCLK finite events support QRSS, FSKCW, and DFCW only.");
-    if (plan.events.empty() || plan.events.size() > RP1_GPCLK_MAX_EVENTS)
-        return reject("RP1 GPCLK finite event count is outside the supported bound.");
-    for (const auto& event : plan.events)
+        return reject("RP1 GPCLK generic events do not support this product mode.");
+    const std::size_t event_count = plan.mode == TransmissionMode::TONE
+        ? std::size_t{1} : plan.events.size();
+    if (plan.events.empty() || event_count > RP1_GPCLK_MAX_EVENTS)
+        return reject("RP1 GPCLK event count is outside the supported bound.");
+    if (plan.mode == TransmissionMode::WSPR && event_count != 162)
+        return reject("RP1 GPCLK requires exactly one 162-symbol WSPR frame.");
+    if (plan.mode == TransmissionMode::TONE &&
+        (!plan.events.front().rf_on ||
+         plan.events.front().frequency_hz != plan.reference_frequency_hz))
+        return reject("RP1 GPCLK TONE requires one valid RF-on frequency.");
+    for (std::size_t i = 0; i < event_count; ++i)
+    {
+        const auto& event = plan.events[i];
         if (!noFade(event.envelope))
-            return reject("RP1 GPCLK finite events do not support envelope fades.");
+            return reject("RP1 GPCLK events do not support envelope fades.");
+    }
 
     double spacing = kWsprSpacingHz;
     if (plan.mode == TransmissionMode::FSKCW || plan.mode == TransmissionMode::DFCW)
@@ -101,7 +116,9 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
         return reject("RP1 GPCLK finite event plan has invalid tone spacing.");
 
     Rp1GpclkPlannerInput input;
-    input.center_frequency_hz = plan.reference_frequency_hz;
+    input.center_frequency_hz = plan.mode == TransmissionMode::TONE
+        ? plan.reference_frequency_hz + 1.5 * spacing
+        : plan.reference_frequency_hz;
     input.tone_spacing_hz = spacing;
     input.parent_frequency_hz =
         kRp1GpclkNominalParentFrequencyHz;
@@ -116,9 +133,6 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     Rp1GpclkProviderEventProgram program;
     program.fractional_bits = planned.plan.fractional_bits;
     program.tick_divider = Rp1GpclkBackend::kTickDivider;
-    program.mode = plan.mode == TransmissionMode::QRSS ? RP1_GPCLK_MODE_QRSS :
-        plan.mode == TransmissionMode::FSKCW ? RP1_GPCLK_MODE_FSKCW :
-        RP1_GPCLK_MODE_DFCW;
 
     auto toneForFrequency = [&](double frequency) -> std::size_t {
         std::size_t best = 0;
@@ -133,8 +147,9 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     };
 
     std::vector<std::size_t> planned_indexes;
-    for (const auto& event : plan.events)
+    for (std::size_t i = 0; i < event_count; ++i)
     {
+        const auto& event = plan.events[i];
         if (!event.rf_on)
             continue;
         const std::size_t planned_index = toneForFrequency(event.frequency_hz);
@@ -155,12 +170,18 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
     }
 
     std::uint64_t total = 0;
-    for (const auto& event : plan.events)
+    for (std::size_t i = 0; i < event_count; ++i)
     {
-        if (event.duration.count() <= 0 ||
-            static_cast<std::uint64_t>(event.duration.count()) >
+        const auto& event = plan.events[i];
+        const std::uint64_t duration = plan.mode == TransmissionMode::TONE &&
+                !plan.duration_was_explicit
+            ? RP1_GPCLK_EVENT_DURATION_NS_MAX
+            : event.duration.count() > 0
+                ? static_cast<std::uint64_t>(event.duration.count()) : 0;
+        if (duration < RP1_GPCLK_EVENT_DURATION_NS_MIN ||
+            duration > RP1_GPCLK_EVENT_DURATION_NS_MAX || duration >
                 std::numeric_limits<std::uint64_t>::max() - total)
-            return reject("RP1 GPCLK finite event has an invalid duration.");
+            return reject("RP1 GPCLK event has an invalid duration.");
         std::uint16_t tone_index = 0;
         if (event.rf_on)
         {
@@ -168,7 +189,6 @@ Rp1GpclkEventCompileResult compileRp1GpclkEventProgram(
                 toneForFrequency(event.frequency_hz));
             tone_index = static_cast<std::uint16_t>(found - planned_indexes.begin());
         }
-        const auto duration = static_cast<std::uint64_t>(event.duration.count());
         program.events.push_back({duration, tone_index, event.rf_on});
         total += duration;
     }

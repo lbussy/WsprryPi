@@ -6,9 +6,12 @@ Propagation Reporter) RF transmissions with precise symbol timing.
 On Raspberry Pi 5, RP1 output exclusively uses the externally provisioned
 endpoint `/dev/rp1-gpclk`; it never falls back to the legacy DMA backend.
 WsprryPi does not install or attest the provider. Runtime protocol and
-capability checks, operation-scoped ownership, bounded execution,
-`LIVE_ELIGIBLE`, and cleanup remain required. GPIO4 and GPIO20 are independent
-routes. The provider's package version or build label is not an application
+capability checks, operation-scoped ownership, bounded one-second DMA chunks,
+operational readiness, and cleanup remain required. WsprryPi translates every
+supported product mode into the provider's generic finite-event UAPI; product
+mode and operator authorization remain application policy and are not sent to
+the kernel. GPIO4 and GPIO20 are independent routes. The root-owned, mode-0600
+endpoint is the production authority. The provider's package version or build label is not an application
 allowlist. Earlier version-specific consumer-contract documents remain
 historical audit evidence, not the current provisioning policy.
 
@@ -45,6 +48,12 @@ it twice (for example, a previous total of -46.245 becomes manual 0).
 The same accounting applies to Pi1's -2.5 ppm baseline: a manually entered
 total correction of -2.5 becomes an additional correction of 0. No persisted
 value is rewritten automatically.
+
+Implicit continuous tone is submitted as one maximum-duration finite event.
+WsprryPi retains stop ownership and requests bounded drain when the operator or
+application stops it. Long QRSS events are submitted directly; the provider's
+fixed one-second DMA chunks bound coherent allocation and cancellation latency
+without imposing a 120-second logical-event limit.
 
 The baseline is the operator-approved, rounded equal-band mean of the Issue 429
 fourteen-point wspr5 GPIO20 sweep, applied as a shared RP1 default. It is not

@@ -529,7 +529,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                 "after": {"loadedModule": False, "configuredRoutes": []},
             },
             "uapiIdentity": {"sha256": "b" * 64},
-            "parameters": {"live_output": 0},
+            "parameters": {"output_inhibit": 0},
             "installedModule": {
                 "moduleName": MOD.MODULE_NAME, "moduleVersion": "0.9.0",
                 "kernel": MOD.platform.release(), "installedFileSha256": "c" * 64,
@@ -1382,6 +1382,7 @@ class ApplyPolicyTests(unittest.TestCase):
         installed = self.root / member["path"]
         installed.parent.mkdir(parents=True)
         installed.write_bytes(b"uapi\n")
+        installed.chmod(int(member["mode"], 8))
         responses = self.responses(
             "2.1.0-1",
             "rp1-gpclk-dkms/2.1.0, fixture-kernel, arm64: installed\n",
@@ -1579,6 +1580,7 @@ class ApplyPolicyTests(unittest.TestCase):
         identity = mock.Mock(st_dev=1, st_ino=2)
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
              mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve_journal, \
              mock.patch.object(MOD, "load_ownership_record",
                                return_value=(record, identity, None)) as ownership, \
              mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
@@ -1587,6 +1589,10 @@ class ApplyPolicyTests(unittest.TestCase):
             )
         self.assertEqual(inspect_calls, 2)
         self.assertEqual(ownership.call_count, 2)
+        self.assertEqual(preserve_journal.call_args_list, [
+            mock.call(record, "before-recovery"),
+            mock.call(record, "after-recovery", clear=True),
+        ])
         self.assertIn(
             ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest),
             runner.calls,
@@ -1925,8 +1931,8 @@ class ApplyPolicyTests(unittest.TestCase):
             "administrationEligible": True, "transmissionEligible": False,
             "routeSelected": False,
             "routes": {name: None for name in ("requested", "configured", "persisted", "active")},
-            "safety": {"liveOutput": False, "owner": False, "lease": False,
-                       "authorization": False},
+            "safety": {"outputInhibited": False, "operationalReady": False,
+                       "owner": False, "lease": False},
             "identities": {"installedBinding": {"sha256": "f" * 64,
                 "value": {"artifactSetSha256": "b" * 64}}},
             "activation": {"value": {"controllerState": {"session": 42, "generation": 0}}},

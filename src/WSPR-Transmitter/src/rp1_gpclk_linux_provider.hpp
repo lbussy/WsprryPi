@@ -36,17 +36,14 @@ public:
     bool query(
         std::uint32_t expected_route,
         std::uint64_t required_capabilities,
-        bool require_live_eligible,
+        bool require_operational_ready,
         Rp1GpclkProviderIdentity& identity,
         std::string& error) override;
     bool acquire(
         std::uint32_t expected_route,
         std::uint64_t required_capabilities,
-        const std::array<std::uint8_t, 32>& authorization_digest,
         std::string& error) override;
-    bool submit(Rp1GpclkProviderProgram&, std::string& error) override;
     bool submitEvents(Rp1GpclkProviderEventProgram&, std::string& error) override;
-    bool submitTone(Rp1GpclkProviderToneProgram&, std::string& error) override;
     bool requestFiniteStop(std::uint64_t generation, std::string& error) override;
     Rp1GpclkCompletionState state(std::uint64_t generation) const noexcept override;
     Rp1GpclkProviderEventState eventState(std::uint64_t generation) const noexcept override;
@@ -58,12 +55,12 @@ public:
     bool release(std::string& error) noexcept override;
     std::uint64_t leaseId() const noexcept override { return lease_id_; }
     std::string endpoint() const override { return device_; }
+    bool endpointClosed() const noexcept override { return fd_ < 0; }
 
 private:
     bool queryOpen(
         std::uint32_t expected_route,
         std::uint64_t required_capabilities,
-        bool require_live_eligible,
         Rp1GpclkProviderIdentity& identity,
         std::string& error);
     bool failed(const char* operation, std::string& error) const;
@@ -72,7 +69,6 @@ private:
     int fd_{-1};
     std::uint64_t lease_id_{0};
     std::uint64_t active_generation_{0};
-    mutable bool active_generation_terminal_{false};
     std::uint32_t supported_drive_ma_mask_{0};
 };
 } // namespace wsprrypi
