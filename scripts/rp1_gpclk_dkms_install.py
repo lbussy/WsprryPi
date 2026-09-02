@@ -1552,7 +1552,10 @@ def validate_runtime_development_provider(
     version = record["productVersion"]
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks runtime development reuse")
     require(not inventory["activeModule"], "the transmission consumer is active during neutral runtime reuse")
-    require(not inventory.get("activeController", False), "the route controller is active during neutral runtime reuse")
+    # A WsprryPi-owned neutral runtime deliberately keeps the administration
+    # controller loaded while the transmission consumer remains absent.  The
+    # caller admits that state only for a v3 runtime ownership record; runtime
+    # activation subsequently revalidates the bound controller and artifacts.
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks neutral runtime reuse")
     require(not inventory["enrollment"] and not inventory["developmentManager"], "legacy development administration blocks neutral runtime reuse")
     lines = [line for line in inventory["dkms"].splitlines() if line.strip()]

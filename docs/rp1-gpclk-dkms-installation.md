@@ -163,11 +163,12 @@ class, and the output-disabled boundary. With `DRY_RUN=true`, the standard
 installer command wrapper reports RP1 plan resolution as informational context
 and the application command as a skipped execution item. It does not invoke
 Python, download or clone provider inputs, run upstream preflight, inspect a
-package, or mutate provider state. Debug mode shows the exact helper command;
-during a real run it also reports the helper's external command argv and
-captured validation output. The resolved plan and ordinary package/DKMS or
-upstream lifecycle output remain visible during a real installation even when
-debug mode is off.
+package, or mutate provider state. Debug mode shows the exact helper command.
+During a real run, the command wrapper owns the status display and suppresses
+ordinary helper output. If provider apply fails, its last 20 output lines,
+bounded to 16 KiB and stripped of terminal-control bytes, are copied into the
+console report and retained installer log before temporary planning state is
+removed.
 
 Only when WsprryPi actually mutates an empty provider state and then verifies
 the result does it atomically create the root-owned, mode-0600 v2 ownership
@@ -211,6 +212,14 @@ plan digests, activation request ID, controller session and zero generation,
 neutral state, null route, and disabled-output state. This records WsprryPi
 orchestration; it does not transfer ownership of upstream files, journals,
 modules, units, or systemd state.
+
+A repeat installation accepts an exact WsprryPi-owned v3 development runtime
+idempotently. In `neutral_ready`, the administrative route controller is
+expected to remain loaded while the transmission consumer, configured route,
+output, owner, and lease remain absent. Reuse still requires the exact source,
+kernel, DKMS registration, source tree, unique module pair, version, ownership
+record, and subsequent bound-runtime validation. An active transmission
+consumer, selected route, foreign state, or identity drift remains a refusal.
 
 After neutral administration succeeds, the installer finishes website and
 Apache publication and requires `wsprrypi.service` to become active. With web

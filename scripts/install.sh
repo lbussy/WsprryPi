@@ -1924,8 +1924,10 @@ exec_command() {
 
     # Declare local variables after debug initialization
     local status=0 exec_name running_pre complete_pre failed_pre
-    local args cmd cmd_str
+    local args cmd cmd_str failure_output_file output_line
+    local -a pipeline_status=()
     local status_mode="${EXEC_COMMAND_STATUS_MODE:-execution}"
+    failure_output_file="${EXEC_COMMAND_FAILURE_OUTPUT_FILE:-}"
 
     # Assign the human readable name and shift it off
     exec_name="$1"; shift
@@ -1958,6 +1960,25 @@ exec_command() {
             ;;
     esac
 
+    if [[ -n "$failure_output_file" ]]; then
+        if [[ -e "$failure_output_file" || -L "$failure_output_file" ||
+              ! -d "${failure_output_file%/*}" || -L "${failure_output_file%/*}" ]]; then
+            warn "Refusing unsafe command failure-output path: $failure_output_file"
+            debug_end "$debug"
+            return 2
+        fi
+        if ! (umask 077; set -o noclobber; : >"$failure_output_file") 2>/dev/null; then
+            warn "Unable to create command failure-output file: $failure_output_file"
+            debug_end "$debug"
+            return 2
+        fi
+        if [[ ! -f "$failure_output_file" || -L "$failure_output_file" ]]; then
+            warn "Command failure-output file is not a regular file: $failure_output_file"
+            debug_end "$debug"
+            return 2
+        fi
+    fi
+
     # Read-only planning is useful operator context, not a completed mutation.
     # Keep it inside this wrapper so dry runs still suppress command execution
     # and debug mode still renders the exact argv.
@@ -1968,13 +1989,32 @@ exec_command() {
             return 0
         fi
 
-        "${cmd[@]}" &>/dev/null || status=$?
+        if [[ -n "$failure_output_file" ]]; then
+            if "${cmd[@]}" 2>&1 | tail -c 16384 >"$failure_output_file"; then
+                pipeline_status=("${PIPESTATUS[@]}")
+            else
+                pipeline_status=("${PIPESTATUS[@]}")
+            fi
+            status="${pipeline_status[0]}"
+            if [[ "$status" -eq 0 && "${pipeline_status[1]}" -ne 0 ]]; then
+                status="${pipeline_status[1]}"
+            fi
+        else
+            "${cmd[@]}" &>/dev/null || status=$?
+        fi
         if [[ $status -ne 0 ]]; then
             logE "Failed: $exec_name."
             if [[ $status -eq 127 ]]; then
                 warn "Command not found: ${cmd_str}"
             else
                 warn "Command failed with status $status: ${cmd_str}"
+            fi
+            if [[ -n "$failure_output_file" && -s "$failure_output_file" ]]; then
+                logW "Failure details from $exec_name (last 20 lines, 16 KiB maximum):"
+                while IFS= read -r output_line || [[ -n "$output_line" ]]; do
+                    logW "${output_line:0:500}"
+                done < <(tail -c 16384 -- "$failure_output_file" |
+                    tail -n 20 | LC_ALL=C tr -cd '\11\12\40-\176')
             fi
         fi
         debug_end "$debug"
@@ -2004,7 +2044,19 @@ exec_command() {
 
     # Child output never bypasses the wrapper. Debug mode has already rendered
     # the exact command through debug_print().
-    "${cmd[@]}" &>/dev/null || status=$?
+    if [[ -n "$failure_output_file" ]]; then
+        if "${cmd[@]}" 2>&1 | tail -c 16384 >"$failure_output_file"; then
+            pipeline_status=("${PIPESTATUS[@]}")
+        else
+            pipeline_status=("${PIPESTATUS[@]}")
+        fi
+        status="${pipeline_status[0]}"
+        if [[ "$status" -eq 0 && "${pipeline_status[1]}" -ne 0 ]]; then
+            status="${pipeline_status[1]}"
+        fi
+    else
+        "${cmd[@]}" &>/dev/null || status=$?
+    fi
 
     printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
 
@@ -2017,6 +2069,13 @@ exec_command() {
             warn "Command not found: ${cmd_str}"
         else
             warn "Command failed with status $status: ${cmd_str}"
+        fi
+        if [[ -n "$failure_output_file" && -s "$failure_output_file" ]]; then
+            logW "Failure details from $exec_name (last 20 lines, 16 KiB maximum):"
+            while IFS= read -r output_line || [[ -n "$output_line" ]]; do
+                logW "${output_line:0:500}"
+            done < <(tail -c 16384 -- "$failure_output_file" |
+                tail -n 20 | LC_ALL=C tr -cd '\11\12\40-\176')
         fi
     fi
 
@@ -2393,12 +2452,17 @@ apply_rp1_gpclk_dkms_installation() {
     fi
 
     local apply_args=(apply --state-dir "$RP1_GPCLK_DKMS_STATE_DIR")
+    local failure_output_file=""
+    if [[ "$DRY_RUN" != "true" ]]; then
+        failure_output_file="$RP1_GPCLK_DKMS_STATE_DIR/apply-output.log"
+    fi
     if [[ "$debug" == "debug" ]]; then
         apply_args+=(--debug)
     fi
-    if ! exec_command "Apply RP1-GPCLK-DKMS installation plan" \
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$failure_output_file" \
+        exec_command "Apply RP1-GPCLK-DKMS installation plan" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${apply_args[@]}" "$debug"; then
-        warn "RP1-GPCLK-DKMS installation failed closed; inspect the retained installer log and provider state."
+        warn "RP1-GPCLK-DKMS installation failed closed; inspect the failure details above, retained installer log, and provider state."
         return 1
     fi
     debug_end "$debug"

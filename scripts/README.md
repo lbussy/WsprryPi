@@ -25,8 +25,9 @@ ownership-aware uninstall behavior are
 documented in [RP1-GPCLK-DKMS installation](../docs/rp1-gpclk-dkms-installation.md).
 Dry-run uses the installer's standard command wrapper and never starts the
 Python helper. Passing `debug` displays the safely quoted helper command. The
-wrapper suppresses child stdout and stderr in every execution mode and owns all
-status and failure diagnostics.
+wrapper suppresses ordinary child stdout and stderr and owns all status and
+failure diagnostics. RP1 provider apply additionally retains a sanitized,
+bounded tail of child output in the installer log when that command fails.
 
 Real installation success requires the resulting WsprryPi service to be active.
 When web mode is enabled, the installed loopback `/wsprrypi/version` proxy must

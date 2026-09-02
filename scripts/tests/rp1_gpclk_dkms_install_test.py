@@ -629,6 +629,105 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.assertEqual(runner.passthrough_calls, [])
         self.assertIn("no provider mutation", stdout.getvalue())
 
+    def test_exact_owned_neutral_runtime_with_loaded_controller_is_idempotent(self):
+        source = self.lifecycle_source(
+            "usage: development-install --route-neutral --runtime-controller"
+        )
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        existing = {
+            "packageVersion": None,
+            "dkms": (
+                f"{MOD.DKMS_NAME}/0.9.0, {MOD.platform.release()}, "
+                "arm64: installed"
+            ),
+            "activeModule": False, "activeController": True,
+            "configuredRoute": False,
+            "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
+            "moduleCandidates": [
+                f"/lib/modules/{MOD.platform.release()}/updates/dkms/"
+                f"{MOD.MODULE_NAME}.ko"
+            ],
+            "controllerCandidates": [
+                f"/lib/modules/{MOD.platform.release()}/updates/dkms/"
+                f"{MOD.CONTROLLER_MODULE_NAME}.ko"
+            ],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False,
+            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
+        }
+        owned = {
+            "schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": resolved["commit"],
+            "productVersion": resolved["version"],
+            "sourceTree": resolved["sourceTree"],
+            "uapiSha256": resolved["uapiSha256"],
+            "versionSource": resolved["versionSource"],
+            "versionSourceSha256": resolved["versionSourceSha256"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult(
+                    "usage: development-install --route-neutral "
+                    "--runtime-controller\n", "", 0,
+                ),
+            ("modinfo", "-k", MOD.platform.release(), "-F", "version",
+             MOD.MODULE_NAME): MOD.CommandResult("0.9.0\n", "", 0),
+        })
+        stdout = io.StringIO()
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=existing), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (owned, identity, None),
+             ]), \
+             mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.apply_development(
+                resolved, pathlib.Path(self.temp.name) / "record.json", runner
+            )
+        self.assertEqual(runner.passthrough_calls, [])
+        self.assertIn("no provider mutation", stdout.getvalue())
+
+    def test_neutral_runtime_reuse_still_rejects_transmission_state(self):
+        inventory = {
+            "packageVersion": None,
+            "dkms": (
+                f"{MOD.DKMS_NAME}/0.9.0, {MOD.platform.release()}, "
+                "arm64: installed"
+            ),
+            "activeModule": False, "activeController": True,
+            "configuredRoute": False,
+            "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
+            "moduleCandidates": ["consumer.ko"],
+            "controllerCandidates": ["controller.ko"],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False,
+        }
+        runner = FakeRunner({
+            ("modinfo", "-k", MOD.platform.release(), "-F", "version",
+             MOD.MODULE_NAME): MOD.CommandResult("0.9.0\n", "", 0),
+        })
+        for field, message in (
+            ("activeModule", "transmission consumer"),
+            ("configuredRoute", "configured RP1 GPCLK route"),
+            ("enrollment", "legacy development administration"),
+        ):
+            unsafe = dict(inventory)
+            unsafe[field] = True
+            with self.subTest(field=field), self.assertRaisesRegex(
+                    MOD.ContractError, message):
+                MOD.validate_runtime_development_provider(
+                    {"productVersion": "0.9.0"}, unsafe, runner
+                )
+
     def test_owned_development_identity_drift_is_not_reused(self):
         source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
@@ -1636,6 +1735,50 @@ exec_command "argv fidelity" probe before debug after debug
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(capture.read_text().splitlines(), ["before", "debug", "after"])
+
+    def test_exec_command_retains_bounded_failure_details(self):
+        install_script = ROOT / "scripts/install.sh"
+        failure_output = self.root / "apply-output.log"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+failing_helper() {
+    local number
+    printf '%20000s\n' x
+    for number in {1..25}; do
+        printf '\033[31mdetail-%02d\033[0m\n' "$number"
+    done
+    return 7
+}
+warn() { printf '[WARN] %s\n' "$1"; }
+logW() { printf '[LOG] %s\n' "$1"; }
+logD() { :; }
+DRY_RUN=false
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+EXEC_COMMAND_FAILURE_OUTPUT_FILE="$FAILURE_OUTPUT" \
+    exec_command "fixture apply" failing_helper || status=$?
+[[ "$status" -eq 7 ]]
+'''
+        environment = os.environ.copy()
+        environment.update({
+            "INSTALL_SCRIPT": str(install_script),
+            "FAILURE_OUTPUT": str(failure_output),
+        })
+        result = subprocess.run(
+            ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=environment, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "Failure details from fixture apply (last 20 lines, 16 KiB maximum)",
+            result.stdout,
+        )
+        self.assertNotIn("detail-05", result.stdout)
+        self.assertIn("detail-06", result.stdout)
+        self.assertIn("detail-25", result.stdout)
+        self.assertNotIn("\x1b", result.stdout)
+        self.assertLessEqual(failure_output.stat().st_size, 16384)
+        self.assertTrue(failure_output.read_text().endswith("detail-25\x1b[0m\n"))
+        self.assertEqual(stat.S_IMODE(failure_output.stat().st_mode), 0o600)
 
     def test_shell_propagates_debug_to_both_helper_invocations(self):
         install_script = ROOT / "scripts" / "install.sh"
