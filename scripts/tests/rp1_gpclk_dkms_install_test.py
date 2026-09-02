@@ -1598,7 +1598,7 @@ class ApplyPolicyTests(unittest.TestCase):
                                return_value=(record, identity, None)) as ownership, \
              mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
             MOD.recover_and_remove_owned_runtime(
-                source, self.record, record, identity, runner
+                self.record, record, identity, runner
             )
         self.assertEqual(inspect_calls, 2)
         self.assertEqual(ownership.call_count, 2)
@@ -1611,11 +1611,13 @@ class ApplyPolicyTests(unittest.TestCase):
             runner.calls,
         )
 
-    def test_owned_post_reboot_runtime_uses_candidate_to_retire_then_remove(self):
+    def test_owned_post_reboot_runtime_uses_installed_provider_to_retire_then_remove(self):
         source = self.root / "source"
-        provider = source / "scripts/runtime_provider.py"
+        source.mkdir()
+        (source / "runtime_provider.py").write_text("# incompatible candidate fixture\n")
+        provider = self.root / "installed/runtime_provider.py"
         provider.parent.mkdir(parents=True)
-        provider.write_text("# authenticated candidate fixture\n")
+        provider.write_text("# authenticated installed provider fixture\n")
         binding_digest = "b" * 64
         artifact_digest = "f" * 64
         journal_digest = "a" * 64
@@ -1679,14 +1681,15 @@ class ApplyPolicyTests(unittest.TestCase):
             self.assertEqual(provider_arg, provider)
             operations.append(operation)
             return next(replies)
-        with mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
              mock.patch.object(MOD, "preserve_owned_activation_journal",
                                side_effect=lambda *unused: operations.append("preserve")) as preserve, \
              mock.patch.object(MOD, "load_ownership_record",
                                return_value=(record, identity, None)), \
              mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
             MOD.recover_and_remove_owned_runtime(
-                source, self.record, record, identity, FakeRunner()
+                self.record, record, identity, FakeRunner()
             )
         self.assertEqual(operations, ["inspect", "activation-retire-plan",
             "preserve", "activation-retire", "inspect", "remove-plan", "remove"])
@@ -1743,7 +1746,7 @@ class ApplyPolicyTests(unittest.TestCase):
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
             with self.assertRaisesRegex(MOD.ContractError, "binding differs"):
                 MOD.recover_and_remove_owned_runtime(
-                    source, self.record,
+                    self.record,
                     {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
                     mock.Mock(st_dev=1, st_ino=2), runner,
                 )
@@ -1788,7 +1791,7 @@ class ApplyPolicyTests(unittest.TestCase):
                                return_value=(record, identity, None)), \
              mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
             MOD.recover_and_remove_owned_runtime(
-                pathlib.Path("/"), self.record, record, identity, FakeRunner())
+                self.record, record, identity, FakeRunner())
         self.assertEqual(called, [(provider, "inspect"),
                                   (provider, "remove-plan"),
                                   (provider, "remove")])
@@ -1814,7 +1817,7 @@ class ApplyPolicyTests(unittest.TestCase):
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
             with self.assertRaisesRegex(MOD.ContractError, "not eligible"):
                 MOD.recover_and_remove_owned_runtime(
-                    source, self.record,
+                    self.record,
                     {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
                     mock.Mock(st_dev=1, st_ino=2), runner,
                 )

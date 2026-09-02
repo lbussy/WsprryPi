@@ -1575,14 +1575,15 @@ def validate_runtime_development_provider(
 
 
 def recover_and_remove_owned_runtime(
-    source: pathlib.Path,
     record_path: pathlib.Path,
     record: Mapping[str, Any],
     record_identity: os.stat_result,
     runner: Runner,
 ) -> None:
-    provider = (RUNTIME_PROVIDER if source == pathlib.Path("/")
-                else source / "scripts/runtime_provider.py")
+    # An existing runtime must interpret and remove its own binding.  Candidate
+    # source may have a newer binding schema and is not cleanup authority for
+    # the installed, ownership-bound deployment.
+    provider = RUNTIME_PROVIDER
     require(provider.is_file() and not provider.is_symlink(),
             "runtime provider is missing or substituted")
     inspected = validate_readiness(runtime_call(
@@ -1802,7 +1803,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
                     existing_record, pathlib.Path("/")
                 )
                 recover_and_remove_owned_runtime(
-                    source, record, existing_record, record_identity, runner
+                    record, existing_record, record_identity, runner
                 )
                 verified_entrypoint, verified_rollback = validate_development_removal(
                     existing_record, pathlib.Path("/"), runner
@@ -2115,7 +2116,7 @@ def remove_owned_provider(args: argparse.Namespace, runner: Runner) -> None:
             if record["channel"] == "development":
                 validate_development_rollback_authority(record, root)
             recover_and_remove_owned_runtime(
-                pathlib.Path("/"), args.record, record, identity, runner)
+                args.record, record, identity, runner)
         if record["channel"] == "release":
             validate_release_removal(record, root, runner)
             command = ["apt-get", "remove", "-y", PACKAGE_NAME]
