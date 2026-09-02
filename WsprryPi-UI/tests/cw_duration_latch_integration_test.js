@@ -203,6 +203,7 @@ async function browserTest() {
         patches.push({ endpoint, options, deferred });
         if (patchMode === "success") deferred.resolve();
         else if (patchMode === "pending") pendingPatch = deferred;
+        else if (patchMode === "transient") deferred.reject({ status: 0 }, "error");
         return deferred;
     };
 
@@ -263,6 +264,7 @@ async function browserTest() {
         configAutosaveInFlight = false;
         configAutosavePendingAfterFlight = false;
         configAutosaveDirty = false;
+        configAutosaveNetworkPaused = false;
         lastSavedConfigPayload = "";
         persistedStationIdentity = null;
         lastFailedConfigPayload = "";
@@ -583,8 +585,60 @@ async function browserTest() {
     ok(hasUnsavedLocalConfigChanges(), "invalid identity draft must remain visibly unsaved");
     validatePage = focusedValidatePage;
 
+    // 15: a transient controller failure pauses autosave without an 800 ms
+    // request/status loop. Further edits stay local until an existing
+    // connectivity signal resumes exactly one save of the newest payload.
+    reset();
+    syncConfigAutosaveBaseline();
+    patchMode = "transient";
+    setValue("qrss_message", "T");
+    clock.tick(800);
+    equal(patches.length, 1, "transient failure must attempt one PATCH");
+    equal(field("configSaveStatus").textContent, "Save paused", "transient status must remain paused");
+    includes(
+        field("configSaveStatusDetail").textContent,
+        "controller could not be reached",
+        "transient detail must explain the controller failure"
+    );
+    ok(configAutosaveNetworkPaused, "transient failure must latch network pause");
+    ok(hasUnsavedLocalConfigChanges(), "transient failure must retain unsaved state");
+    const pausedTransitionCount = statusTransitions.length;
+    setConfigLoadFailureState();
+    equal(field("configSaveStatus").textContent, "Save paused", "config polling must preserve paused-save feedback");
+    equal(statusTransitions.length, pausedTransitionCount, "config polling must not repeat paused live feedback");
+    clock.tick(8000);
+    equal(patches.length, 1, "paused autosave must not poll with PATCH requests");
+    equal(statusTransitions.length, pausedTransitionCount, "paused autosave must not repeat live status announcements");
+
+    setValue("qrss_message", "EE");
+    clock.tick(8000);
+    equal(patches.length, 1, "edits while paused must remain local");
+    equal(field("configSaveStatus").textContent, "Save paused", "paused edit must not replace failure feedback");
+
+    patchMode = "success";
+    ok(resumeConfigAutosaveAfterControllerRecovery(), "controller recovery must resume a paused save");
+    equal(field("configSaveStatus").textContent, "Connection restored", "recovery must be announced once");
+    ok(!resumeConfigAutosaveAfterControllerRecovery(), "duplicate recovery signals must not queue another save");
+    clock.tick(800);
+    equal(patches.length, 2, "recovery must retry exactly once");
+    equal(JSON.parse(patches[1].options.data).CW.Message, "EE", "recovery must save the newest draft");
+    equal(field("configSaveStatus").textContent, "Saved", "successful recovery must settle as Saved");
+    equal(hasUnsavedLocalConfigChanges(), false, "successful recovery must clear unsaved state");
+
+    // 16: a successful config reload may prove that an uncertain PATCH was
+    // already applied. Recovery must still clear the pause latch so the next
+    // ordinary edit can save.
+    reset();
+    configAutosaveNetworkPaused = true;
+    configAutosaveDirty = false;
+    ok(!resumeConfigAutosaveAfterControllerRecovery(), "already-applied recovery needs no duplicate PATCH");
+    ok(!configAutosaveNetworkPaused, "already-applied recovery must clear the pause latch");
+    setValue("qrss_message", "T");
+    clock.tick(800);
+    equal(patches.length, 1, "the next edit after already-applied recovery must save normally");
+
     return {
-        scenarios: 14,
+        scenarios: 16,
         assertions: "passed",
         finalPatchCount: patches.length,
         finalDialogCount: dialogs.length,
@@ -655,11 +709,57 @@ async function main() {
             throw new Error(detail || result.exceptionDetails.text || "Browser test failed");
         }
         assert.deepEqual(result.result.value, {
-            scenarios: 14,
+            scenarios: 16,
             assertions: "passed",
             finalPatchCount: 1,
             finalDialogCount: 0,
         });
+
+        for (const viewport of [
+            { name: "desktop", width: 1280, height: 900 },
+            { name: "mobile", width: 375, height: 812 },
+        ]) {
+            await client.send("Emulation.setDeviceMetricsOverride", {
+                width: viewport.width,
+                height: viewport.height,
+                deviceScaleFactor: 1,
+                mobile: viewport.name === "mobile",
+            });
+            const layout = await client.send("Runtime.evaluate", {
+                expression: `(() => {
+                    const states = [
+                        ["saved", "Saved", ""],
+                        ["saving", "Saving...", ""],
+                        ["error", "Save paused", "The controller could not be reached for this save. Changes stay local until retry."],
+                    ];
+                    return states.map(([state, message, detail]) => {
+                        setConfigSaveStatus(state, message, detail);
+                        const detailNode = document.getElementById("configSaveStatusDetail");
+                        return {
+                            state,
+                            tabsTop: document.getElementById("configTabs").getBoundingClientRect().top,
+                            detailHeight: detailNode.getBoundingClientRect().height,
+                            detailScrollHeight: detailNode.scrollHeight,
+                            detailHidden: detailNode.hidden,
+                        };
+                    });
+                })()`,
+                returnByValue: true,
+            });
+            const metrics = layout.result.value;
+            const tabsTop = metrics.map(({ tabsTop: value }) => value);
+            assert.ok(
+                Math.max(...tabsTop) - Math.min(...tabsTop) <= 0.5,
+                `${viewport.name} Setup tabs must not move across save states: ${JSON.stringify(metrics)}`
+            );
+            metrics.forEach((metric) => {
+                assert.equal(metric.detailHidden, false, `${viewport.name} detail slot must remain in layout`);
+                assert.ok(
+                    metric.detailHeight + 0.5 >= metric.detailScrollHeight,
+                    `${viewport.name} detail slot must contain ${metric.state} feedback without growth: ${JSON.stringify(metric)}`
+                );
+            });
+        }
         console.log("cw_duration_latch_integration_test passed");
     } finally {
         if (client) client.close();

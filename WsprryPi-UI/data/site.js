@@ -1486,7 +1486,14 @@ function setConfigLoadFailureState() {
     if (typeof showBackendStatus === "function") {
         showBackendStatus(message, "warning", "backend");
     }
-    if (isConfigView() && typeof setConfigSaveStatus === "function") {
+    const autosaveIsNetworkPaused =
+        typeof isConfigAutosaveNetworkPaused === "function" &&
+        isConfigAutosaveNetworkPaused();
+    if (
+        isConfigView() &&
+        !autosaveIsNetworkPaused &&
+        typeof setConfigSaveStatus === "function"
+    ) {
         setConfigSaveStatus("load-error", "Controller unavailable", message);
     }
 }
@@ -2002,6 +2009,9 @@ function populateConfig(callback = null) {
                     }
                     if (typeof suspendConfigAutosave === "function") {
                         suspendConfigAutosave(false);
+                    }
+                    if (typeof resumeConfigAutosaveAfterControllerRecovery === "function") {
+                        resumeConfigAutosaveAfterControllerRecovery();
                     }
                 } else if (isOperationView()) {
                     if (typeof setTransmitFromBackend === "function") {

@@ -10,6 +10,7 @@ let configAutosaveSuspended = false;
 let configAutosaveInFlight = false;
 let configAutosavePendingAfterFlight = false;
 let configAutosaveDirty = false;
+let configAutosaveNetworkPaused = false;
 let lastSavedConfigPayload = "";
 let persistedStationIdentity = null;
 let currentWsprBandPreferences = {};
@@ -282,17 +283,14 @@ function bindConfigNetworkHandlers() {
 
     window.addEventListener("offline", () => {
         if (configAutosaveInFlight || configAutosaveDirty) {
-            setConfigSaveStatus("error", "Save paused", browserOfflineConfigMessage());
+            pauseConfigAutosaveForNetworkFailure(browserOfflineConfigMessage());
         }
         showBackendStatus(browserOfflineConfigMessage(), "warning", "runtime");
     });
 
     window.addEventListener("online", () => {
         clearBackendStatus("runtime");
-        if (configAutosaveDirty) {
-            setConfigSaveStatus("saving", "Connection restored", "Retrying pending changes.");
-            scheduleAutosave();
-        }
+        resumeConfigAutosaveAfterControllerRecovery();
     });
 }
 
@@ -4162,7 +4160,7 @@ function setConfigSaveStatus(state, message = "", detail = "", options = {}) {
                 : "";
 
         detailNode.innerHTML = "";
-        detailNode.hidden = !detail && !detailActionLabel;
+        detailNode.hidden = false;
         detailNode.tabIndex = -1;
         detailNode.removeAttribute("role");
         detailNode.removeAttribute("aria-label");
@@ -4203,7 +4201,7 @@ function setConfigSaveStatus(state, message = "", detail = "", options = {}) {
             node.dataset.state = "";
             node.classList.remove("is-visible");
             if (detailNode) {
-                detailNode.hidden = true;
+                detailNode.hidden = false;
                 detailNode.textContent = "";
                 detailNode.tabIndex = -1;
                 detailNode.removeAttribute("role");
@@ -4298,6 +4296,36 @@ function showConfigAutosavePendingStatus() {
     setConfigSaveStatus("pending", "Changes pending", "");
 }
 
+function pauseConfigAutosaveForNetworkFailure(message) {
+    configAutosaveNetworkPaused = true;
+    configAutosaveDirty = true;
+    persistLocalConfigDraftIfPossible();
+    setConfigSaveStatus("error", "Save paused", message);
+}
+
+function isConfigAutosaveNetworkPaused() {
+    return configAutosaveNetworkPaused;
+}
+
+function resumeConfigAutosaveAfterControllerRecovery() {
+    if (!configAutosaveNetworkPaused) {
+        return false;
+    }
+
+    configAutosaveNetworkPaused = false;
+    if (!configAutosaveDirty) {
+        return false;
+    }
+
+    scheduleAutosave();
+    setConfigSaveStatus(
+        "pending",
+        "Connection restored",
+        "Pending changes will retry automatically."
+    );
+    return true;
+}
+
 function scheduleAutosave() {
     if (configAutosaveSuspended) {
         return;
@@ -4311,6 +4339,9 @@ function scheduleAutosave() {
     configAutosaveDirty = true;
     persistLocalConfigDraftIfPossible();
     showConfigAutosavePendingStatus();
+    if (configAutosaveNetworkPaused) {
+        return;
+    }
     if (configAutosaveTimer) {
         clearTimeout(configAutosaveTimer);
     }
@@ -4326,15 +4357,17 @@ function flushAutosave() {
         return;
     }
 
+    if (configAutosaveNetworkPaused) {
+        return;
+    }
+
     const durationConstraint = updateCwDurationPolicyLatch({ markDirty: true });
     if (durationConstraint.applicable && durationConstraint.overLimit) {
         return;
     }
 
     if (navigator.onLine === false) {
-        configAutosaveDirty = true;
-        persistLocalConfigDraftIfPossible();
-        setConfigSaveStatus("error", "Save paused", browserOfflineConfigMessage());
+        pauseConfigAutosaveForNetworkFailure(browserOfflineConfigMessage());
         showBackendStatus(browserOfflineConfigMessage(), "warning", "runtime");
         return;
     }
@@ -4406,6 +4439,7 @@ function flushAutosave() {
         data: payloadJson,
     })
         .done(function () {
+            configAutosaveNetworkPaused = false;
             lastSaveTimestamp = Date.now();
             lastSavedConfigPayload = payloadJson;
             lastFailedConfigPayload = "";
@@ -4447,9 +4481,7 @@ function flushAutosave() {
                 debugConsole("warn", "Autosave paused by transient network failure.");
                 lastFailedConfigPayload = "";
                 lastFailedConfigMessage = "";
-                configAutosaveDirty = true;
-                persistLocalConfigDraftIfPossible();
-                setConfigSaveStatus("error", "Save paused", networkMessage);
+                pauseConfigAutosaveForNetworkFailure(networkMessage);
                 showBackendStatus(networkMessage, "warning", "runtime");
                 return;
             }
@@ -4480,6 +4512,7 @@ function flushAutosave() {
             }
 
             debugConsole("error", "Autosave failed:", message);
+            configAutosaveNetworkPaused = false;
             lastFailedConfigPayload = payloadJson;
             lastFailedConfigMessage = message;
             configAutosaveDirty = false;
@@ -4501,7 +4534,10 @@ function flushAutosave() {
         .always(function () {
             configAutosaveInFlight = false;
 
-            if (configAutosavePendingAfterFlight || configAutosaveDirty) {
+            if (
+                !configAutosaveNetworkPaused &&
+                (configAutosavePendingAfterFlight || configAutosaveDirty)
+            ) {
                 configAutosavePendingAfterFlight = false;
                 scheduleAutosave();
             }
