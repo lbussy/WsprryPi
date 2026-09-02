@@ -1576,13 +1576,14 @@ def validate_runtime_development_provider(
 
 def validate_resumable_neutral_activation(
     record: Mapping[str, Any], inventory: Mapping[str, Any], runner: Runner
-) -> None:
+) -> dict[str, Any]:
     """Admit only the exact fail-closed checkpoint before v3 record promotion."""
     validate_development_rollback_authority(record, pathlib.Path("/"))
     require(inventory.get("activeController") is True,
             "interrupted runtime activation lacks an active controller")
     inspected = validate_readiness(
-        runtime_call(runner, RUNTIME_PROVIDER, "inspect"), "neutral_ready"
+        runtime_call(runner, RUNTIME_PROVIDER, "inspect", (),
+                     {"neutral_ready", "conflict"})
     )
     binding = inspected.get("identities", {}).get("installedBinding", {})
     value = binding.get("value", {}) if isinstance(binding, dict) else {}
@@ -1604,17 +1605,19 @@ def validate_resumable_neutral_activation(
     routes = inspected.get("routes")
     modules = inspected.get("modules", {})
     endpoints = inspected.get("endpoints", {})
-    controller = inspected.get("activation", {}).get("value", {}).get(
-        "controllerState", {}
-    )
+    activation = inspected.get("activation", {}).get("value", {})
+    controller = activation.get("controllerState", {})
     manager = inspected.get("manager", {}).get("query", {}).get("state", {})
     journal = inspected.get("journals", {}).get("activation.json", {})
     safety = inspected.get("safety", {})
+    result = inspected.get("result")
     require(
-        inspected.get("administrationEligible") is True
+        ((result == "neutral_ready"
+          and inspected.get("administrationEligible") is True)
+         or (result == "conflict"
+             and inspected.get("administrationEligible") is False))
         and inspected.get("routeSelected") is False
         and inspected.get("executionReady") is False
-        and not inspected.get("conflicts")
         and isinstance(artifacts, dict) and artifacts
         and all(isinstance(item, dict) and item.get("status") == "exact"
                 for item in artifacts.values())
@@ -1642,14 +1645,46 @@ def validate_resumable_neutral_activation(
         and len(journal["value"]["requestId"]) >= 8
         and isinstance(journal.get("value", {}).get("planSha256"), str)
         and SHA256.fullmatch(journal["value"]["planSha256"])
-        and safety.get("clock") == "quiescent"
-        and safety.get("dma") == "quiescent"
-        and safety.get("gpio") == "quiescent"
-        and safety.get("endpointOpen") is False
-        and safety.get("owner") is False
-        and safety.get("lease") is False,
+        and isinstance(activation.get("artifactSetSha256"), str)
+        and SHA256.fullmatch(activation["artifactSetSha256"])
+        and activation.get("artifactSetSha256") == value.get("artifactSetSha256")
+        and isinstance(activation.get("lastDeploymentSha256"), str)
+        and SHA256.fullmatch(activation["lastDeploymentSha256"]),
         "interrupted runtime activation is not exact neutral state",
     )
+    if result == "conflict":
+        require(
+            inspected.get("conflicts") ==
+                ["loaded-controller-without-completed-activation"],
+            "interrupted runtime activation has a non-resumable conflict",
+        )
+        validate_runtime_update_retry_conflict(inspected, journal["value"])
+    else:
+        require(
+            not inspected.get("conflicts")
+            and safety.get("clock") == "quiescent"
+            and safety.get("dma") == "quiescent"
+            and safety.get("gpio") == "quiescent"
+            and safety.get("endpointOpen") is False
+            and safety.get("owner") is False
+            and safety.get("lease") is False,
+            "interrupted runtime activation lacks quiescent safety evidence",
+        )
+    return {
+        "readinessContract": RUNTIME_READINESS_CONTRACT,
+        "bindingSha256": binding["sha256"],
+        "artifactSetSha256": activation["artifactSetSha256"],
+        "sourceCommit": record["sourceCommit"],
+        "productVersion": record["productVersion"],
+        "targetKernel": platform.release(),
+        "compatibilityIdentities": expected_compatibility,
+        "deploymentPlanSha256": activation["lastDeploymentSha256"],
+        "activationPlanSha256": journal["value"]["planSha256"],
+        "activationRequestId": journal["value"]["requestId"],
+        "controllerSession": controller["session"],
+        "controllerGeneration": controller["generation"],
+        "state": "neutral_ready", "route": None, "output": "disabled",
+    }
 
 
 def recover_and_remove_owned_runtime(
@@ -1915,10 +1950,13 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             return apply_development(resolved, record, runner)
         require(identity_matches,
                 "existing WsprryPi-owned development provider identity differs from the selected source")
+        checkpoint_runtime = None
         if owned_runtime:
             validate_runtime_development_provider(existing_record, before, runner)
         elif before.get("activeController", False):
-            validate_resumable_neutral_activation(existing_record, before, runner)
+            checkpoint_runtime = validate_resumable_neutral_activation(
+                existing_record, before, runner
+            )
         elif before["runtimeResidue"]:
             validate_development_rollback_authority(
                 existing_record, pathlib.Path("/")
@@ -1938,9 +1976,18 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         if owned_runtime:
             validate_runtime_development_provider(current_record, existing_inventory(pathlib.Path("/"), runner), runner)
         elif before.get("activeController", False):
-            validate_resumable_neutral_activation(
+            rechecked_runtime = validate_resumable_neutral_activation(
                 current_record, existing_inventory(pathlib.Path("/"), runner), runner
             )
+            require(
+                rechecked_runtime == checkpoint_runtime,
+                "interrupted runtime activation changed during verification",
+            )
+            replacement = copy.deepcopy(current_record)
+            replacement["schema"] = RUNTIME_RECORD_SCHEMA
+            replacement["runtime"] = rechecked_runtime
+            validate_runtime_ownership(rechecked_runtime, replacement)
+            replace_owned_record(record, current_record, current_identity, replacement)
         elif before["runtimeResidue"]:
             validate_development_rollback_authority(
                 current_record, pathlib.Path("/")

@@ -751,16 +751,37 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                     "--runtime-controller\n", "", 0,
                 ),
         })
+        runtime = {
+            "readinessContract": MOD.RUNTIME_READINESS_CONTRACT,
+            "bindingSha256": "1" * 64, "artifactSetSha256": "2" * 64,
+            "sourceCommit": owned["sourceCommit"],
+            "productVersion": owned["productVersion"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentities": {
+                "gpio4": "v0.9.0-rp1-gpio4",
+                "gpio20": "v0.9.0-rp1-gpio20",
+            },
+            "deploymentPlanSha256": "3" * 64,
+            "activationPlanSha256": "4" * 64,
+            "activationRequestId": "request-1234",
+            "controllerSession": 42, "controllerGeneration": 0,
+            "state": "neutral_ready", "route": None, "output": "disabled",
+        }
         with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
              mock.patch.object(MOD, "existing_inventory", return_value=existing), \
              mock.patch.object(MOD, "load_ownership_record", side_effect=[
                  (owned, identity, None), (owned, identity, None),
              ]), \
-             mock.patch.object(MOD, "validate_resumable_neutral_activation") as validate:
+             mock.patch.object(MOD, "validate_resumable_neutral_activation",
+                               return_value=runtime) as validate, \
+             mock.patch.object(MOD, "replace_owned_record") as replace:
             MOD.apply_development(
                 resolved, pathlib.Path(self.temp.name) / "record.json", runner
             )
         self.assertEqual(validate.call_count, 2)
+        self.assertEqual(replace.call_count, 1)
+        self.assertEqual(replace.call_args.args[3]["schema"], MOD.RUNTIME_RECORD_SCHEMA)
+        self.assertEqual(replace.call_args.args[3]["runtime"], runtime)
         self.assertEqual(runner.passthrough_calls, [])
 
     def test_neutral_runtime_reuse_still_rejects_transmission_state(self):
