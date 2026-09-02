@@ -1517,8 +1517,8 @@ def verify_development_result(
     uapi = manifest.get("uapiIdentity")
     require(isinstance(uapi, dict) and uapi.get("sha256") == resolved["uapiSha256"], "upstream development result UAPI differs from the selected source")
     parameters = manifest.get("parameters")
-    require(isinstance(parameters, dict) and parameters.get("output_inhibit") == 0,
-            "upstream development result did not select the production output model")
+    require(isinstance(parameters, dict) and parameters.get("output_inhibit") == 1,
+            "upstream route-neutral development result did not retain installation output inhibition")
     installed = manifest.get("installedModule")
     require(isinstance(installed, dict), "upstream development result lacks installed module identity")
     require(installed.get("moduleName") == MODULE_NAME and installed.get("moduleVersion") == resolved["version"], "upstream installed module identity differs from the selected source")
@@ -1885,7 +1885,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     command = [
         str(source / "scripts" / "development-install"), "--source", str(source),
         "--kernel", platform.release(),
-        *route_args, "--output-inhibit", "0", "--install", "--evidence-directory", str(evidence),
+        *route_args, "--output-inhibit", "1", "--install", "--evidence-directory", str(evidence),
         "--runtime-controller",
     ]
     runner.run(command, cwd=source, passthrough=True)
