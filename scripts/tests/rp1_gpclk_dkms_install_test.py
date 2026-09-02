@@ -1756,6 +1756,24 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertLess(activation, website)
         self.assertLess(website, readiness)
 
+    def test_runtime_readiness_summary_follows_execution_loop(self):
+        source = (ROOT / "scripts/install.sh").read_text()
+        validator_start = source.index("validate_wsprrypi_runtime() {")
+        validator_end = source.index("\n}\n", validator_start)
+        validator = source[validator_start:validator_end]
+        self.assertNotIn('logI "WsprryPi runtime readiness verified."', validator)
+
+        manager_start = source.index("manage_wsprry_pi() {")
+        manager_end = source.index("\n}\n", manager_start)
+        manager = source[manager_start:manager_end]
+        execution_loop = manager.index('for func in "${group_to_execute[@]}"; do')
+        loop_end = manager.index("\n    done", execution_loop)
+        summary = manager.index('logI "WsprryPi runtime readiness verified."')
+        reboot_notice = manager.index('flag_need_reboot "$debug"')
+        self.assertIn('"$DRY_RUN" != "true"', manager[loop_end:summary])
+        self.assertLess(loop_end, summary)
+        self.assertLess(summary, reboot_notice)
+
     def test_helper_invocations_use_exec_command_and_propagate_debug(self):
         source = (ROOT / "scripts/install.sh").read_text()
         self.assertNotRegex(source, r'if ! python3 "\$RP1_GPCLK_DKMS_HELPER"')

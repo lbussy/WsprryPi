@@ -6986,7 +6986,6 @@ validate_wsprrypi_runtime() {
         return 1
     fi
 
-    logI "WsprryPi runtime readiness verified."
     debug_end "$debug"
     return 0
 }
@@ -8580,6 +8579,13 @@ manage_wsprry_pi() {
             debug_print "$func succeeded." "$debug"
         fi
     done
+
+    # Keep informational summaries after the per-step execution output. The
+    # readiness check runs earlier in the group, but reaching this point with a
+    # successful install proves that it and all subsequent steps completed.
+    if [[ "$ACTION" == "install" && "$DRY_RUN" != "true" && "$overall_status" -eq 0 ]]; then
+        logI "WsprryPi runtime readiness verified."
+    fi
 
     # Indicate if a reboot will be necessary
     flag_need_reboot "$debug"
