@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import copy
+import base64
 import hashlib
 import importlib.util
 import io
 import json
+import lzma
 import os
 import pathlib
 import stat
@@ -472,18 +474,18 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
 
     def test_current_route_required_upstream_is_explicit_blocker(self):
-        source = self.lifecycle_source("usage: development-install --route {gpio4,gpio20}")
+        source = self.lifecycle_source("usage: development-install --route {gpio4,gpio20} --runtime-controller")
         with self.assertRaisesRegex(MOD.ContractError, "no reviewed route-neutral"):
             MOD.route_neutral_interface(source, MOD.Runner())
 
     def test_future_reviewed_route_neutral_shapes(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         self.assertEqual(MOD.route_neutral_interface(source, MOD.Runner())[1], ["--route-neutral"])
-        source = self.lifecycle_source("usage: development-install --route {gpio4,gpio20,route-neutral}")
+        source = self.lifecycle_source("usage: development-install --route {gpio4,gpio20,route-neutral} --runtime-controller")
         self.assertEqual(MOD.route_neutral_interface(source, MOD.Runner())[1], ["--route", "route-neutral"])
 
     def test_development_identity_comes_from_upstream_preflight(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         identity = MOD.development_identity(source, MOD.Runner())
         self.assertEqual(identity["version"], "0.9.0")
         self.assertEqual(identity["versionSource"], "include/rp1_gpclk/version.h")
@@ -497,7 +499,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         scripts.mkdir(parents=True)
         (scripts / "runtime_layout.py").write_text("KERNEL = 'fixture-kernel'\n")
         (scripts / "runtime_binding.py").write_text(
-            "CONTRACT = 'rp1-gpclk-runtime-binding-v2'\n"
+            "CONTRACT = 'rp1-gpclk-runtime-binding-v3'\n"
             "PRODUCT_VERSION = '0.9.0'\n"
             "COMPATIBILITY = {'gpio4': 'v0.9.0-pi5-gpio4', 'gpio20': 'v0.9.0-pi5-gpio20'}\n"
         )
@@ -520,6 +522,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                                 "moduleVersion": "0.9.0"},
             "dkmsName": MOD.DKMS_NAME, "moduleName": MOD.MODULE_NAME,
             "targetKernel": MOD.platform.release(),
+            "buildProfile": "runtime-controller",
             "installationMode": "route-neutral", "route": None,
             "routeNeutralSafety": {
                 "before": {"loadedModule": False, "configuredRoutes": []},
@@ -531,6 +534,16 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                 "moduleName": MOD.MODULE_NAME, "moduleVersion": "0.9.0",
                 "kernel": MOD.platform.release(), "installedFileSha256": "c" * 64,
                 "decompressedElfSha256": "d" * 64,
+                "installedPath": f"/lib/modules/{MOD.platform.release()}/updates/dkms/{MOD.MODULE_NAME}.ko",
+            },
+        }
+        manifest["installedModules"] = {
+            MOD.MODULE_NAME: manifest["installedModule"],
+            MOD.CONTROLLER_MODULE_NAME: {
+                "moduleName": MOD.CONTROLLER_MODULE_NAME, "moduleVersion": "0.9.0",
+                "kernel": MOD.platform.release(), "installedFileSha256": "f" * 64,
+                "decompressedElfSha256": "1" * 64,
+                "installedPath": f"/lib/modules/{MOD.platform.release()}/updates/dkms/{MOD.CONTROLLER_MODULE_NAME}.ko",
             },
         }
         manifest_path.write_text(json.dumps(manifest))
@@ -543,7 +556,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                 MOD.verify_development_result(manifest_path, resolved)
 
     def test_existing_foreign_state_blocks_development_before_mutation(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
             "routeArguments": ["--route-neutral"], "version": "0.9.0",
@@ -563,7 +576,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.assertFalse(record.exists())
 
     def test_exact_owned_development_state_is_an_idempotent_noop(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
             "routeArguments": ["--route-neutral"], "commit": "a" * 40,
@@ -598,7 +611,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         record = pathlib.Path(self.temp.name) / "record.json"
         runner = FakeRunner({
             (str(source / "scripts/development-install"), "--help"):
-                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+                MOD.CommandResult("usage: development-install --route-neutral --runtime-controller\n", "", 0),
         })
         stdout = io.StringIO()
         with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
@@ -617,7 +630,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.assertIn("no provider mutation", stdout.getvalue())
 
     def test_owned_development_identity_drift_is_not_reused(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
             "routeArguments": ["--route-neutral"], "commit": "a" * 40,
@@ -643,7 +656,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         }
         runner = FakeRunner({
             (str(source / "scripts/development-install"), "--help"):
-                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+                MOD.CommandResult("usage: development-install --route-neutral --runtime-controller\n", "", 0),
         })
         with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
              mock.patch.object(MOD, "existing_inventory", return_value=existing), \
@@ -654,7 +667,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         validate.assert_not_called()
 
     def test_runtime_migration_defers_provider_inventory_until_after_runtime_removal(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
             "routeArguments": ["--route-neutral"], "commit": "a" * 40,
@@ -678,11 +691,11 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         absent.update({"dkms": "", "sourceTrees": [], "moduleCandidates": [],
                        "runtimeResidue": []})
         owned = {
-            "schema": MOD.RECORD_SCHEMA, "channel": "development",
-            "sourceCommit": "e" * 40, "productVersion": "0.9.0",
-            "sourceTree": "f" * 40, "uapiSha256": "1" * 64,
+            "schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
+            "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
             "versionSource": "include/rp1_gpclk/version.h",
-            "versionSourceSha256": "2" * 64,
+            "versionSourceSha256": resolved["versionSourceSha256"],
             "targetKernel": MOD.platform.release(),
             "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
         }
@@ -692,7 +705,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         entrypoint = pathlib.Path("/var/lib/wsprrypi/evidence/rendered-source/scripts/development-rollback")
         runner = FakeRunner({
             (str(source / "scripts/development-install"), "--help"):
-                MOD.CommandResult("usage: development-install --route-neutral\n", "", 0),
+                MOD.CommandResult("usage: development-install --route-neutral --runtime-controller\n", "", 0),
         })
         events = []
         def authority(*unused):
@@ -775,7 +788,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         ])
 
     def test_runtime_controller_residue_blocks_development_before_mutation(self):
-        source = self.lifecycle_source("usage: development-install --route-neutral")
+        source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
             "routeArguments": ["--route-neutral"], "version": "0.9.0",
@@ -820,8 +833,9 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         inventory = MOD.existing_inventory(root, runner)
         self.assertEqual(
             inventory["runtimeResidue"],
-            sorted((str(inhibitor), str(runtime_library), str(runtime_socket), str(controller))),
+            sorted((str(inhibitor), str(runtime_library), str(runtime_socket))),
         )
+        self.assertEqual(inventory["controllerCandidates"], [str(controller)])
 
 
 class ApplyPolicyTests(unittest.TestCase):
@@ -838,6 +852,30 @@ class ApplyPolicyTests(unittest.TestCase):
         self.manifest = valid_manifest()
         self.resolved = {"tag": "v2.1.0", "commit": "a" * 40, "manifest": self.manifest, "packagePath": str(self.package)}
         self.record = self.root / "record.json"
+
+    def test_activation_failure_is_archived_exactly_before_owned_cleanup(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir(mode=0o700)
+        journal = self.root / "runtime-admin/activation.json"
+        journal.parent.mkdir(mode=0o700)
+        value = {"phase": "activation-failed", "requestId": "request-1234",
+                 "failure": "fixture"}
+        raw = json.dumps(value, sort_keys=True).encode() + b"\n"
+        journal.write_bytes(raw)
+        journal.chmod(0o600)
+        record = {"upstreamEvidence": str(evidence)}
+        MOD.preserve_owned_activation_journal(
+            record, "before-recovery", journal=journal)
+        self.assertTrue(journal.is_file())
+        archive = evidence / "runtime-activation-archives/before-recovery-request-1234.json"
+        archived = json.loads(archive.read_text())
+        self.assertEqual(base64.b64decode(archived["contentBase64"]), raw)
+        self.assertEqual(archived["sha256"], digest(raw))
+        MOD.preserve_owned_activation_journal(
+            record, "before-recovery", journal=journal)
+        MOD.preserve_owned_activation_journal(
+            record, "after-recovery", clear=True, journal=journal)
+        self.assertFalse(journal.exists())
 
     def responses(self, installed_version=None, dkms=""):
         dpkg = MOD.CommandResult("", "missing", 1)
@@ -1004,6 +1042,7 @@ class ApplyPolicyTests(unittest.TestCase):
         source = self.root / "source"
         provider = source / "scripts/runtime_provider.py"
         provider.parent.mkdir(parents=True)
+        provider.write_text("# fixture\n")
         binding_digest = "b" * 64
         recovery_plan = {"bindingSha256": binding_digest}
         activation_digest = digest(MOD.canonical(recovery_plan))
@@ -1015,7 +1054,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "identities": {"installedBinding": {
                 "status": "valid", "sha256": binding_digest,
                 "value": {"sourceCommit": "c" * 40,
-                          "artifactSetSha256": "f" * 64},
+                          "artifactSetSha256": "f" * 64, "files": {}},
             }},
             "artifacts": {"/bound": {"status": "exact"}},
         }
@@ -1071,7 +1110,8 @@ class ApplyPolicyTests(unittest.TestCase):
             return json.loads(result.stdout)
         record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
         identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
              mock.patch.object(MOD, "load_ownership_record",
                                return_value=(record, identity, None)) as ownership, \
              mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
@@ -1089,35 +1129,38 @@ class ApplyPolicyTests(unittest.TestCase):
         source = self.root / "source"
         provider = source / "scripts/runtime_provider.py"
         provider.parent.mkdir(parents=True)
+        provider.write_text("# fixture\n")
         inspected = {
             "contract": MOD.RUNTIME_READINESS_CONTRACT,
             "result": "activation_required", "state": "activation_required",
             "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
-                "value": {"sourceCommit": "e" * 40}}},
+                "value": {"sourceCommit": "e" * 40, "files": {}}}},
             "artifacts": {"/bound": {"status": "exact"}},
         }
         runner = FakeRunner({
             ("python3", str(provider), "inspect"):
                 MOD.CommandResult(json.dumps(inspected), "", 14),
         })
-        with self.assertRaisesRegex(MOD.ContractError, "binding differs"):
-            MOD.recover_and_remove_owned_runtime(
-                source, self.record,
-                {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
-                mock.Mock(st_dev=1, st_ino=2), runner,
-            )
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
+            with self.assertRaisesRegex(MOD.ContractError, "binding differs"):
+                MOD.recover_and_remove_owned_runtime(
+                    source, self.record,
+                    {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
+                    mock.Mock(st_dev=1, st_ino=2), runner,
+                )
         self.assertEqual(len(runner.calls), 1)
 
     def test_owned_runtime_removal_rejects_incomplete_absence_evidence(self):
         source = self.root / "source"
         provider = source / "scripts/runtime_provider.py"
         provider.parent.mkdir(parents=True)
+        provider.write_text("# fixture\n")
         inspected = {
             "contract": MOD.RUNTIME_READINESS_CONTRACT,
             "result": "activation_required", "state": "activation_required",
             "routeSelected": False,
             "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
-                "value": {"sourceCommit": "c" * 40}}},
+                "value": {"sourceCommit": "c" * 40, "files": {}}}},
             "artifacts": {"/bound": {"status": "exact"}},
             "modules": {}, "endpoints": {}, "managerSocket": {"status": "absent"},
         }
@@ -1125,12 +1168,13 @@ class ApplyPolicyTests(unittest.TestCase):
             ("python3", str(provider), "inspect"):
                 MOD.CommandResult(json.dumps(inspected), "", 14),
         })
-        with self.assertRaisesRegex(MOD.ContractError, "not eligible"):
-            MOD.recover_and_remove_owned_runtime(
-                source, self.record,
-                {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
-                mock.Mock(st_dev=1, st_ino=2), runner,
-            )
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
+            with self.assertRaisesRegex(MOD.ContractError, "not eligible"):
+                MOD.recover_and_remove_owned_runtime(
+                    source, self.record,
+                    {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
+                    mock.Mock(st_dev=1, st_ino=2), runner,
+                )
         self.assertEqual(len(runner.calls), 1)
 
     def test_runtime_bundle_requires_self_contained_bootstrap_and_bound_units(self):
@@ -1145,8 +1189,6 @@ class ApplyPolicyTests(unittest.TestCase):
             "runtime_binding.py", "runtime_activation.py", "runtime_route_client.py",
         }
         files = {
-            f"/lib/modules/{kernel}/updates/dkms/rp1_route_controller.ko",
-            f"/lib/modules/{kernel}/updates/dkms/rp1_gpclk_dkms.ko",
             "/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_gpclk.h",
             "/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_route_admin.h",
             "/usr/lib/rp1-gpclk-dkms/runtime-overlays/gpio4.dtbo",
@@ -1168,7 +1210,7 @@ class ApplyPolicyTests(unittest.TestCase):
             destination = "/usr/lib/rp1-gpclk-dkms/" + name
             (bundle / name).write_bytes(("# fixture: " + destination + "\n").encode())
         binding = {
-            "schemaVersion": 2, "contract": MOD.RUNTIME_BINDING_CONTRACT,
+            "schemaVersion": 3, "contract": MOD.RUNTIME_BINDING_CONTRACT,
             "productVersion": "0.9.0",
             "compatibilityIdentities": {
                 "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20"},
@@ -1179,17 +1221,35 @@ class ApplyPolicyTests(unittest.TestCase):
                 "controller": file_digests["/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_route_admin.h"]},
             "controllerNoteSha256": "b" * 64, "consumerNoteSha256": "c" * 64,
         }
+        modules = {}
+        for name, note in ((MOD.CONTROLLER_MODULE_NAME, "b" * 64),
+                           (MOD.MODULE_NAME, "c" * 64)):
+            compression = "xz" if name == MOD.CONTROLLER_MODULE_NAME else "none"
+            suffix = ".ko.xz" if compression == "xz" else ".ko"
+            path = f"/lib/modules/{kernel}/updates/dkms/{name}{suffix}"
+            actual = MOD.root_path(self.root, path)
+            actual.parent.mkdir(parents=True, exist_ok=True)
+            payload = b"\x7fELF" + name.encode()
+            actual.write_bytes(lzma.compress(payload) if compression == "xz" else payload)
+            modules[name] = {
+                "name": name, "path": path,
+                "installedFileSha256": digest(actual.read_bytes()),
+                "decompressedElfSha256": digest(payload),
+                "compression": compression, "buildNoteSha256": note,
+                "version": "0.9.0", "kernel": kernel,
+            }
+        binding["modules"] = modules
         binding["artifactSetSha256"] = digest(MOD.canonical(binding))
         (bundle / "binding.json").write_text(json.dumps(binding))
         resolved = {"channel": "development", "commit": "a" * 40, "version": "0.9.0"}
         with mock.patch.object(MOD.platform, "release", return_value=kernel):
-            result = MOD.validate_runtime_bundle(bundle, resolved, companion)
+            result = MOD.validate_runtime_bundle(bundle, resolved, companion, self.root)
         self.assertEqual(result["artifactSetSha256"], binding["artifactSetSha256"])
 
         (bundle / "runtime_route_client.py").unlink()
         with mock.patch.object(MOD.platform, "release", return_value=kernel):
             with self.assertRaisesRegex(MOD.ContractError, "unsupported or missing member"):
-                MOD.validate_runtime_bundle(bundle, resolved, companion)
+                MOD.validate_runtime_bundle(bundle, resolved, companion, self.root)
 
     def test_runtime_bundle_import_closure_rejects_missing_local_module(self):
         bundle = self.root / "bootstrap"
@@ -1773,6 +1833,49 @@ class RemovalPolicyTests(unittest.TestCase):
              mock.patch.object(MOD, "verify_provider_absent"):
             MOD.remove_owned_provider(self.args(), runner)
         self.assertEqual(runner.passthrough_calls, [(str(entrypoint), "--record", str(rollback))])
+        self.assertFalse(self.record.exists())
+
+    def test_owned_runtime_uninstall_recovers_before_dkms_rollback(self):
+        record = self.development_record()
+        record["schema"] = MOD.RUNTIME_RECORD_SCHEMA
+        record["runtime"] = {
+            "readinessContract": MOD.RUNTIME_READINESS_CONTRACT,
+            "bindingSha256": "3" * 64, "artifactSetSha256": "4" * 64,
+            "sourceCommit": record["sourceCommit"],
+            "productVersion": record["productVersion"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentities": {"gpio4": "gpio4-id", "gpio20": "gpio20-id"},
+            "deploymentPlanSha256": "5" * 64, "activationPlanSha256": "6" * 64,
+            "activationRequestId": "request-1234", "controllerSession": 1,
+            "controllerGeneration": 0, "state": "neutral_ready", "route": None,
+            "output": "disabled",
+        }
+        self.write_record(record)
+        args = MOD.parser().parse_args(["remove", "--record", str(self.record)])
+        entrypoint = self.root / "evidence/rendered-source/scripts/development-rollback"
+        entrypoint.parent.mkdir(parents=True)
+        entrypoint.write_text("#!/bin/sh\n")
+        entrypoint.chmod(0o700)
+        rollback = self.root / "evidence/ROLLBACK.json"
+        rollback.parent.mkdir(parents=True, exist_ok=True)
+        rollback.write_text("{}")
+        rollback.chmod(0o600)
+        events = []
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "existing_inventory",
+                               return_value={"runtimeResidue": ["owned"]}), \
+             mock.patch.object(MOD, "validate_development_rollback_authority",
+                               side_effect=lambda *_: events.append("authority")), \
+             mock.patch.object(MOD, "recover_and_remove_owned_runtime",
+                               side_effect=lambda *_: events.append("runtime-remove")), \
+             mock.patch.object(MOD, "validate_development_removal",
+                               side_effect=lambda *_: (events.append("provider-validate")
+                                                       or (entrypoint, rollback))), \
+             mock.patch.object(MOD, "verify_provider_absent"):
+            MOD.remove_owned_provider(args, runner)
+        self.assertEqual(events, ["authority", "runtime-remove", "provider-validate"])
+        self.assertEqual(runner.passthrough_calls,
+                         [(str(entrypoint), "--record", str(rollback))])
         self.assertFalse(self.record.exists())
 
 

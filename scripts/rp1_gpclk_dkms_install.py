@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import argparse
 import ast
-import ast
+import base64
+import bz2
 import copy
+import gzip
 import hashlib
 import json
+import lzma
 import os
 import pathlib
 import platform
@@ -41,14 +44,15 @@ ADMIN_PROTOCOL = "rp1-gpclk-route-manager"
 PACKAGE_NAME = "rp1-gpclk-dkms"
 DKMS_NAME = "rp1-gpclk-dkms"
 MODULE_NAME = "rp1_gpclk_dkms"
+CONTROLLER_MODULE_NAME = "rp1_route_controller"
 COMPATIBILITY_IDENTITY = "v0.9.0-pi5"
-CORRECTED_RUNTIME_COMMIT = "e34214bfd14aee85d75c26287ddc0f76a5eaade0"
+CORRECTED_RUNTIME_COMMIT = "8a8bf5d4184714949faffbf2e2538a1cac0526b2"
 LEGACY_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-installation-v1"
 RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v2"
 RUNTIME_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v3"
 STATE_SCHEMA = "wsprrypi-rp1-gpclk-dkms-plan-v1"
 RUNTIME_READINESS_CONTRACT = "rp1-gpclk-runtime-readiness-v1"
-RUNTIME_BINDING_CONTRACT = "rp1-gpclk-runtime-binding-v2"
+RUNTIME_BINDING_CONTRACT = "rp1-gpclk-runtime-binding-v3"
 RUNTIME_PROVIDER = pathlib.Path("/usr/lib/rp1-gpclk-dkms/runtime_provider.py")
 RUNTIME_COMPANION = pathlib.Path("/usr/local/lib/wsprrypi/route_application.py")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
@@ -83,6 +87,42 @@ def sha256_file(path: pathlib.Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def decompressed_module_sha256(path: pathlib.Path, compression: str) -> str:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        require(stat.S_ISREG(os.fstat(descriptor).st_mode),
+                "runtime module prerequisite is not a regular file")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            raw = stream.read(64 * 1024 * 1024 + 1)
+    finally:
+        os.close(descriptor)
+    require(len(raw) <= 64 * 1024 * 1024,
+            "runtime module prerequisite exceeds read bound")
+    try:
+        if compression == "none":
+            payload = raw
+        elif compression == "xz":
+            payload = lzma.decompress(raw)
+        elif compression == "gz":
+            payload = gzip.decompress(raw)
+        elif compression == "bz2":
+            payload = bz2.decompress(raw)
+        elif compression == "zst":
+            result = subprocess.run(
+                ["/usr/bin/zstd", "-q", "-d", "-c"], input=raw,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            )
+            require(result.returncode == 0, "runtime zstd module decompression failed")
+            payload = result.stdout
+        else:
+            raise ContractError("runtime module compression is unsupported")
+    except (OSError, EOFError, ValueError, lzma.LZMAError) as error:
+        raise ContractError("runtime module decompression failed") from error
+    require(len(payload) <= 64 * 1024 * 1024,
+            "decompressed runtime module exceeds read bound")
+    return sha256_bytes(payload)
 
 
 def require(condition: bool, message: str) -> None:
@@ -719,6 +759,8 @@ def route_neutral_interface(source: pathlib.Path, runner: Runner) -> tuple[str, 
     require(installer.is_file() and os.access(installer, os.X_OK) and preflight.is_file() and os.access(preflight, os.X_OK), "development source lacks maintained executable lifecycle tools")
     help_result = runner.run([str(installer), "--help"], cwd=source)
     help_text = help_result.stdout + help_result.stderr
+    require("--runtime-controller" in help_text,
+            "upstream development-install lacks the single-authority runtime-controller profile")
     if "--route-neutral" in help_text:
         return "route-neutral-flag", ["--route-neutral"]
     if re.search(r"--route[^\n]*route-neutral", help_text):
@@ -1001,12 +1043,11 @@ def validate_runtime_ownership(runtime: Any, record: Mapping[str, Any]) -> dict[
     return runtime
 
 
-def runtime_deployment_destinations() -> set[str]:
+def runtime_deployment_destinations(files: Iterable[str] = ()) -> set[str]:
     library = "/usr/lib/rp1-gpclk-dkms"
     state = "/var/lib/rp1-gpclk-dkms/runtime-admin"
     return {
-        f"/lib/modules/{platform.release()}/updates/dkms/rp1_route_controller.ko",
-        f"/lib/modules/{platform.release()}/updates/dkms/rp1_gpclk_dkms.ko",
+        *files,
         "/etc/rp1-gpclk-dkms/runtime-controller.json",
         "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
         "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket",
@@ -1026,6 +1067,94 @@ def runtime_deployment_destinations() -> set[str]:
           ("transaction.json", "manager.json", "application.json",
            "activation.json")),
     }
+
+
+def preserve_owned_activation_journal(record: Mapping[str, Any], label: str,
+                                      clear: bool = False,
+                                      journal: pathlib.Path = pathlib.Path(
+                                          "/var/lib/rp1-gpclk-dkms/runtime-admin/activation.json")) -> None:
+    """Archive exact activation evidence, then clear it for owned deployment inversion."""
+    if not journal.exists() and not journal.is_symlink():
+        return
+    try:
+        info = journal.lstat()
+        require(stat.S_ISREG(info.st_mode),
+                "runtime activation journal is missing or substituted")
+        descriptor = os.open(journal, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            opened = os.fstat(descriptor)
+            require((opened.st_dev, opened.st_ino) == (info.st_dev, info.st_ino)
+                    and opened.st_uid == os.geteuid()
+                    and stat.S_IMODE(opened.st_mode) & 0o077 == 0,
+                    "runtime activation journal ownership or mode differs")
+            with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                raw = stream.read(MAX_METADATA_BYTES + 1)
+        finally:
+            os.close(descriptor)
+    except OSError as error:
+        raise ContractError("runtime activation journal is unavailable") from error
+    require(len(raw) <= MAX_METADATA_BYTES,
+            "runtime activation journal exceeds read bound")
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ContractError("runtime activation journal is unreadable") from error
+    phase = value.get("phase") if isinstance(value, dict) else None
+    require(phase in {"activation-failed", "recovered-inhibited", "complete"},
+            "runtime activation journal is not terminal owned evidence")
+    request_id = value.get("requestId")
+    require(isinstance(request_id, str)
+            and re.fullmatch(r"[A-Za-z0-9._-]{8,128}", request_id) is not None,
+            "runtime activation journal request identity is invalid")
+    evidence_value = record.get("upstreamEvidence")
+    evidence = (pathlib.Path(evidence_value) if isinstance(evidence_value, str)
+                else pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-runtime-evidence"))
+    if not evidence.exists() and record.get("channel") == "release":
+        evidence.mkdir(mode=0o700)
+    require(evidence.is_absolute() and evidence.is_dir() and not evidence.is_symlink(),
+            "runtime ownership evidence is unavailable")
+    archive = evidence / "runtime-activation-archives"
+    archive.mkdir(mode=0o700, exist_ok=True)
+    require(archive.is_dir() and not archive.is_symlink()
+            and archive.stat().st_uid == os.geteuid()
+            and stat.S_IMODE(archive.stat().st_mode) & 0o077 == 0,
+            "runtime activation archive directory is unsafe")
+    destination = archive / f"{label}-{request_id}.json"
+    archived = {
+        "schema": "wsprrypi-rp1-gpclk-activation-archive-v1",
+        "phase": phase,
+        "requestId": request_id,
+        "sha256": sha256_bytes(raw),
+        "contentBase64": base64.b64encode(raw).decode("ascii"),
+    }
+    if destination.exists() or destination.is_symlink():
+        require(destination.is_file() and not destination.is_symlink(),
+                "runtime activation archive is substituted")
+        try:
+            existing = json.loads(destination.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ContractError("runtime activation archive is unreadable") from error
+        require(existing == archived, "runtime activation archive identity differs")
+    else:
+        atomic_json_new(destination, archived)
+    current = journal.lstat()
+    require(stat.S_ISREG(current.st_mode)
+            and (current.st_dev, current.st_ino) == (info.st_dev, info.st_ino),
+            "runtime activation journal changed during preservation")
+    descriptor = os.open(journal, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            current_raw = stream.read(MAX_METADATA_BYTES + 1)
+    finally:
+        os.close(descriptor)
+    require(current_raw == raw, "runtime activation journal changed during preservation")
+    if clear:
+        journal.unlink()
+        parent_descriptor = os.open(journal.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
 
 
 def remove_ownership_record(path: pathlib.Path, expected: os.stat_result) -> None:
@@ -1162,12 +1291,6 @@ def runtime_residue_inventory(root: pathlib.Path) -> list[str]:
         path = root_path(root, path_text)
         if path.exists() or path.is_symlink():
             residue.append(str(path))
-    modules_base = root_path(root, "/lib/modules")
-    if modules_base.exists():
-        residue.extend(
-            str(path)
-            for path in modules_base.glob("*/updates/dkms/rp1_route_controller.ko*")
-        )
     return sorted(set(residue))
 
 
@@ -1181,14 +1304,19 @@ def existing_inventory(root: pathlib.Path, runner: Runner) -> dict[str, Any]:
     dkms = runner.run(["dkms", "status", "-m", DKMS_NAME], check=False)
     modules_file = root_path(root, "/proc/modules")
     active = False
+    active_controller = False
     if modules_file.exists():
         active = any(line.split(maxsplit=1)[0] == MODULE_NAME for line in modules_file.read_text(errors="replace").splitlines() if line)
+        active_controller = any(line.split(maxsplit=1)[0] == CONTROLLER_MODULE_NAME
+            for line in modules_file.read_text(errors="replace").splitlines() if line)
     source_base = root_path(root, "/usr/src")
     sources = sorted(str(path) for path in source_base.glob(f"{PACKAGE_NAME}-*") if source_base.exists())
     module_candidates: list[str] = []
+    controller_candidates: list[str] = []
     modules_base = root_path(root, "/lib/modules")
     if modules_base.exists():
         module_candidates = sorted(str(path) for path in modules_base.glob("*/updates/dkms/rp1_gpclk_dkms.ko*"))
+        controller_candidates = sorted(str(path) for path in modules_base.glob("*/updates/dkms/rp1_route_controller.ko*"))
     enrollment = root_path(root, "/etc/rp1-gpclk-dkms/enrollment.json").exists()
     manager = root_path(root, "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/90-source-development.conf").exists()
     overlay_paths = [
@@ -1204,7 +1332,9 @@ def existing_inventory(root: pathlib.Path, runner: Runner) -> dict[str, Any]:
             configured = configured or "dtoverlay=rp1-gpclk-" in config.read_text(errors="replace")
     return {
         "packageVersion": package_version, "dkms": dkms.stdout.strip(),
-        "activeModule": active, "sourceTrees": sources, "moduleCandidates": module_candidates,
+        "activeModule": active, "activeController": active_controller,
+        "sourceTrees": sources, "moduleCandidates": module_candidates,
+        "controllerCandidates": controller_candidates,
         "installedOverlays": overlays, "configuredRoute": configured,
         "enrollment": enrollment, "developmentManager": manager,
         "runtimeResidue": runtime_residue_inventory(root),
@@ -1316,7 +1446,8 @@ def apply_release(state_dir: pathlib.Path, resolved: Mapping[str, Any], record: 
     if inventory["packageVersion"] is None:
         require(
             not inventory["dkms"] and not inventory["sourceTrees"]
-            and not inventory["moduleCandidates"] and not inventory["installedOverlays"],
+            and not inventory["moduleCandidates"] and not inventory.get("controllerCandidates", [])
+            and not inventory["installedOverlays"],
             "foreign or mixed RP1 GPCLK installation blocks package installation",
         )
         ensure_new_ownership_record(record)
@@ -1393,6 +1524,25 @@ def verify_development_result(
     require(installed.get("kernel") == platform.release(), "upstream installed module targets a different kernel")
     for field in ("installedFileSha256", "decompressedElfSha256"):
         require(isinstance(installed.get(field), str) and SHA256.fullmatch(installed[field]), f"upstream installed module lacks valid {field}")
+    require(manifest.get("buildProfile") == "runtime-controller",
+            "upstream development result is not the DKMS runtime-controller profile")
+    installed_modules = manifest.get("installedModules")
+    require(isinstance(installed_modules, dict)
+            and set(installed_modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME},
+            "upstream development result lacks the exact runtime module set")
+    for name, module in installed_modules.items():
+        require(isinstance(module, dict) and module.get("moduleName") == name
+                and module.get("moduleVersion") == resolved["version"]
+                and module.get("kernel") == platform.release(),
+                f"upstream installed {name} identity differs from selected source")
+        require(isinstance(module.get("installedPath"), str)
+                and isinstance(module.get("installedFileSha256"), str)
+                and SHA256.fullmatch(module["installedFileSha256"])
+                and isinstance(module.get("decompressedElfSha256"), str)
+                and SHA256.fullmatch(module["decompressedElfSha256"]),
+                f"upstream installed {name} artifact identity is invalid")
+    require(installed == installed_modules[MODULE_NAME],
+            "upstream canonical consumer identity differs from runtime module set")
     return manifest
 
 
@@ -1402,6 +1552,7 @@ def validate_runtime_development_provider(
     version = record["productVersion"]
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks runtime development reuse")
     require(not inventory["activeModule"], "the transmission consumer is active during neutral runtime reuse")
+    require(not inventory.get("activeController", False), "the route controller is active during neutral runtime reuse")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks neutral runtime reuse")
     require(not inventory["enrollment"] and not inventory["developmentManager"], "legacy development administration blocks neutral runtime reuse")
     lines = [line for line in inventory["dkms"].splitlines() if line.strip()]
@@ -1409,8 +1560,12 @@ def validate_runtime_development_provider(
     require(bool(lines) and all(expected_dkms.fullmatch(line) for line in lines), "runtime development DKMS registration differs from ownership")
     require(inventory["sourceTrees"] == [f"/usr/src/{PACKAGE_NAME}-{version}"], "runtime development source destination differs from ownership")
     require(not inventory["installedOverlays"], "packaged route overlays block neutral runtime reuse")
-    expected_module = f"/lib/modules/{platform.release()}/updates/dkms/{MODULE_NAME}.ko"
-    require(inventory["moduleCandidates"] == [expected_module], "runtime consumer module destination differs from ownership")
+    require(len(inventory["moduleCandidates"]) == 1,
+            "runtime consumer module destination differs from ownership")
+    require(len(inventory.get("controllerCandidates", [])) == 1,
+            "runtime controller module destination differs from ownership")
+    require("Differences between built and installed modules" not in inventory["dkms"],
+            "DKMS reports installed module drift")
     installed_version = runner.run(["modinfo", "-k", platform.release(), "-F", "version", MODULE_NAME]).stdout.strip()
     require(installed_version == version, "runtime consumer module version differs from ownership")
 
@@ -1422,7 +1577,9 @@ def recover_and_remove_owned_runtime(
     record_identity: os.stat_result,
     runner: Runner,
 ) -> None:
-    provider = source / "scripts/runtime_provider.py"
+    provider = RUNTIME_PROVIDER
+    require(provider.is_file() and not provider.is_symlink(),
+            "installed runtime provider is missing or substituted")
     inspected = validate_readiness(runtime_call(
         runner, provider, "inspect", (),
         {"activation_required", "recovery_required", "neutral_ready"},
@@ -1448,6 +1605,7 @@ def recover_and_remove_owned_runtime(
         "installed runtime artifacts differ from the owned binding",
     )
     if inspected.get("result") in {"recovery_required", "neutral_ready"}:
+        preserve_owned_activation_journal(record, "before-recovery")
         recovery = runtime_call(runner, provider, "activation-recover-plan")
         require(
             recovery.get("contract") == RUNTIME_READINESS_CONTRACT
@@ -1477,6 +1635,7 @@ def recover_and_remove_owned_runtime(
                 in {"recovered-inhibited", "idempotent-no-change"},
             "runtime activation recovery response differs from the reviewed plan",
         )
+        preserve_owned_activation_journal(record, "after-recovery", clear=True)
         inspected = validate_readiness(runtime_call(
             runner, provider, "inspect", (), {"activation_required"},
         ), "activation_required")
@@ -1506,8 +1665,11 @@ def recover_and_remove_owned_runtime(
     require(isinstance(digest, str) and SHA256.fullmatch(digest),
             "runtime deployment removal plan lacks a reviewed digest")
     destinations = planned.get("destinations")
+    binding_files = binding_value.get("files")
+    require(isinstance(binding_files, dict),
+            "installed runtime binding file inventory is invalid")
     require(isinstance(destinations, list)
-            and set(destinations) == runtime_deployment_destinations(),
+            and set(destinations) == runtime_deployment_destinations(binding_files),
             "runtime deployment removal inventory differs")
     require_unchanged_ownership(
         record_path, record, record_identity, "runtime deployment removal"
@@ -1532,6 +1694,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     require(interface == resolved["interface"] and route_args == resolved["routeArguments"], "upstream development interface changed after preflight")
     before = existing_inventory(pathlib.Path("/"), runner)
     require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
+    require(not before.get("activeController", False), "an active RP1 route controller blocks exact-source development installation")
     require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
     existing_record, record_identity, record_reason = load_ownership_record(record)
     owned_runtime = bool(
@@ -1549,6 +1712,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         or before["dkms"]
         or before["sourceTrees"]
         or before["moduleCandidates"]
+        or before.get("controllerCandidates", [])
         or before["installedOverlays"]
         or before["enrollment"]
         or before["developmentManager"]
@@ -1569,7 +1733,14 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             existing_record.get(name) == value
             for name, value in expected_identity.items()
         )
-        if (not identity_matches
+        profile_migration_required = bool(
+            owned_runtime and (
+                len(before["moduleCandidates"]) != 1
+                or len(before.get("controllerCandidates", [])) != 1
+                or "Differences between built and installed modules" in before["dkms"]
+            )
+        )
+        if ((not identity_matches or profile_migration_required)
                 and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}):
             if before["runtimeResidue"]:
                 entrypoint, rollback = validate_development_rollback_authority(
@@ -1639,6 +1810,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         and not before["dkms"]
         and not before["sourceTrees"]
         and not before["moduleCandidates"]
+        and not before.get("controllerCandidates", [])
         and not before["installedOverlays"]
         and not before["enrollment"]
         and not before["developmentManager"],
@@ -1651,13 +1823,16 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         str(source / "scripts" / "development-install"), "--source", str(source),
         "--kernel", platform.release(),
         *route_args, "--live-output", "0", "--install", "--evidence-directory", str(evidence),
+        "--runtime-controller",
     ]
     runner.run(command, cwd=source, passthrough=True)
     result = verify_development_result(evidence / "rendered-source" / "DEVELOPMENT_MANIFEST.json", resolved)
     after = existing_inventory(pathlib.Path("/"), runner)
     require(not after["activeModule"], "RP1 GPCLK module became active during development installation")
+    require(not after.get("activeController", False), "RP1 route controller became active during development installation")
     require(not after["configuredRoute"], "RP1 GPCLK route became configured during development installation")
     installed = result["installedModule"]
+    installed_modules = result["installedModules"]
     rollback_record = pathlib.Path(str(result.get("rollbackRecord", "")))
     expected_rollback = evidence / "ROLLBACK.json"
     require(rollback_record == expected_rollback and rollback_record.is_file() and not rollback_record.is_symlink(), "upstream development rollback record is missing or out of scope")
@@ -1666,6 +1841,11 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     installed_path = pathlib.Path(str(installed.get("installedPath", "")))
     expected_prefix = pathlib.Path(f"/lib/modules/{platform.release()}/updates/dkms")
     require(installed_path.is_absolute() and installed_path.parent == expected_prefix, "upstream installed module path is outside the exact-kernel DKMS destination")
+    controller_path = pathlib.Path(str(installed_modules[CONTROLLER_MODULE_NAME].get("installedPath", "")))
+    require(controller_path.is_absolute() and controller_path.parent == expected_prefix,
+            "upstream installed controller path is outside the exact-kernel DKMS destination")
+    require(existing_inventory(pathlib.Path("/"), runner).get("controllerCandidates", []) == [str(controller_path)],
+            "upstream runtime controller installation is not unique")
     atomic_json_new(record, {
         "schema": RECORD_SCHEMA, "repository": REPOSITORY, "owner": "WsprryPi",
         "channel": "development", "installationMethod": "upstream-development-rollback",
@@ -1784,12 +1964,15 @@ def validate_development_removal(
     require_no_runtime_residue(inventory, "source-development removal")
     require(inventory["packageVersion"] is None, "a Debian-owned RP1 provider blocks development rollback")
     require(not inventory["activeModule"], "an active RP1 GPCLK module blocks owned provider removal")
+    require(not inventory.get("activeController", False), "an active RP1 route controller blocks owned provider removal")
     require(not inventory["configuredRoute"], "a configured RP1 GPCLK route blocks owned provider removal")
     require(not inventory["enrollment"] and not inventory["developmentManager"], "development enrollment or manager binding blocks owned provider removal")
     version = record["productVersion"]
     dkms_lines = [line for line in inventory["dkms"].splitlines() if line.strip()]
     expected_dkms = re.compile(rf"^{re.escape(DKMS_NAME)}/{re.escape(version)}[^\n]*installed$")
     require(bool(dkms_lines) and all(expected_dkms.fullmatch(line) for line in dkms_lines), "development DKMS registration differs from WsprryPi ownership")
+    require("Differences between built and installed modules" not in inventory["dkms"],
+            "DKMS reports installed module drift")
     expected_source = str(root_path(root, f"/usr/src/{PACKAGE_NAME}-{version}"))
     require(inventory["sourceTrees"] == [expected_source], "development source destination differs from WsprryPi ownership")
     require(not inventory["installedOverlays"], "installed RP1 route overlays block development rollback")
@@ -1800,6 +1983,38 @@ def validate_development_removal(
     require(inventory["moduleCandidates"] == [str(actual_installed)], "development module destination differs from WsprryPi ownership")
     require(actual_installed.is_file() and not actual_installed.is_symlink(), "development installed module is missing or substituted")
     require(sha256_file(actual_installed) == record["installedModuleSha256"], "development installed module identity differs")
+    evidence = pathlib.Path(record["upstreamEvidence"])
+    manifest_path = secure_owned_path(
+        evidence / "rendered-source/DEVELOPMENT_MANIFEST.json", evidence,
+        "development source manifest")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        rollback_value = json.loads(rollback.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ContractError("development module-set ownership evidence is unreadable") from error
+    profile = rollback_value.get("buildProfile", "ordinary")
+    require(profile in {"ordinary", "runtime-controller"},
+            "development rollback build profile is invalid")
+    if profile == "runtime-controller":
+        installed_modules = rollback_value.get("installedModules")
+        require(manifest.get("buildProfile") == "runtime-controller"
+                and isinstance(installed_modules, dict)
+                and set(installed_modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME}
+                and installed_modules == manifest.get("installedModules")
+                and rollback_value.get("installedManifestSha256") == sha256_file(manifest_path),
+                "development rollback does not own the runtime module pair")
+        controller = installed_modules[CONTROLLER_MODULE_NAME]
+        controller_path = pathlib.Path(controller.get("installedPath", ""))
+        require(controller_path.is_absolute() and controller_path.parent == expected_prefix,
+                "development controller path is out of scope")
+        actual_controller = root_path(root, str(controller_path))
+        require(inventory.get("controllerCandidates", []) == [str(actual_controller)]
+                and actual_controller.is_file() and not actual_controller.is_symlink()
+                and sha256_file(actual_controller) == controller.get("installedFileSha256"),
+                "development controller identity differs from WsprryPi ownership")
+    else:
+        require(not inventory.get("controllerCandidates", []),
+                "legacy development rollback does not own a controller module")
     return entrypoint, rollback
 
 
@@ -1810,8 +2025,10 @@ def verify_provider_absent(root: pathlib.Path, runner: Runner) -> None:
         inventory["packageVersion"] is None
         and not inventory["dkms"]
         and not inventory["activeModule"]
+        and not inventory.get("activeController", False)
         and not inventory["sourceTrees"]
         and not inventory["moduleCandidates"]
+        and not inventory.get("controllerCandidates", [])
         and not inventory["installedOverlays"]
         and not inventory["configuredRoute"]
         and not inventory["enrollment"]
@@ -1833,6 +2050,17 @@ def remove_owned_provider(args: argparse.Namespace, runner: Runner) -> None:
     except OSError as error:
         raise ContractError("provider inventory root is unavailable") from error
     try:
+        if record["schema"] == RUNTIME_RECORD_SCHEMA:
+            inventory = existing_inventory(root, runner)
+        else:
+            inventory = {"runtimeResidue": []}
+        if inventory["runtimeResidue"]:
+            require(root == pathlib.Path("/"),
+                    "runtime removal requires the production filesystem root")
+            if record["channel"] == "development":
+                validate_development_rollback_authority(record, root)
+            recover_and_remove_owned_runtime(
+                pathlib.Path("/"), args.record, record, identity, runner)
         if record["channel"] == "release":
             validate_release_removal(record, root, runner)
             command = ["apt-get", "remove", "-y", PACKAGE_NAME]
@@ -1881,6 +2109,7 @@ def validate_runtime_bundle(
     bundle: pathlib.Path,
     resolved: Mapping[str, Any],
     companion: pathlib.Path = RUNTIME_COMPANION,
+    module_root: pathlib.Path = pathlib.Path("/"),
 ) -> dict[str, Any]:
     require(bundle.is_absolute() and bundle.is_dir() and not bundle.is_symlink(), "runtime bundle directory is missing or substituted")
     info = bundle.stat()
@@ -1893,7 +2122,7 @@ def validate_runtime_bundle(
         raise ContractError("runtime bundle binding is unreadable") from error
     required = {
         "schemaVersion", "contract", "productVersion", "compatibilityIdentities",
-        "sourceCommit", "kernel", "files", "externalFiles", "uapiSha256",
+        "sourceCommit", "kernel", "files", "externalFiles", "modules", "uapiSha256",
         "controllerNoteSha256", "consumerNoteSha256", "artifactSetSha256",
     }
     require(isinstance(binding, dict), "runtime bundle binding is not an object")
@@ -1903,17 +2132,14 @@ def validate_runtime_bundle(
         "gpio4": f"v{product}-pi5-gpio4",
         "gpio20": f"v{product}-pi5-gpio20",
     }
-    require(binding["schemaVersion"] == 2 and binding["contract"] == RUNTIME_BINDING_CONTRACT, "runtime bundle binding contract differs")
+    require(binding["schemaVersion"] == 3 and binding["contract"] == RUNTIME_BINDING_CONTRACT, "runtime bundle binding contract differs")
     require(binding["sourceCommit"] == resolved.get("commit"), "runtime bundle source commit differs from selected provider")
     require(binding["productVersion"] == product, "runtime bundle product version differs from selected provider")
     require(binding["kernel"] == platform.release(), "runtime bundle targets a different running kernel")
     require(binding["compatibilityIdentities"] == compatibility, "runtime bundle compatibility identities differ")
     files = binding["files"]
     require(isinstance(files, dict) and files, "runtime bundle file inventory is invalid")
-    module_base = f"/lib/modules/{platform.release()}/updates/dkms"
     critical = {
-        f"{module_base}/rp1_route_controller.ko",
-        f"{module_base}/rp1_gpclk_dkms.ko",
         "/usr/lib/rp1-gpclk-dkms/runtime_activation.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_provider.py",
         "/usr/lib/rp1-gpclk-dkms/runtime_deployment.py",
@@ -1928,7 +2154,44 @@ def validate_runtime_bundle(
         "/etc/systemd/system/rp1-gpclk-route-manager@.service.d/95-runtime-controller.conf",
     }
     require(critical <= set(files), "runtime bundle omits a required bound artifact")
+    require(not any(path.startswith("/lib/modules/") for path in files),
+            "runtime bundle attempts to deploy a DKMS-owned module")
     require(all(isinstance(path, str) and isinstance(value, str) and SHA256.fullmatch(value) for path, value in files.items()), "runtime bundle file digests are invalid")
+    modules = binding["modules"]
+    require(isinstance(modules, dict)
+            and set(modules) == {CONTROLLER_MODULE_NAME, MODULE_NAME},
+            "runtime bundle module prerequisite inventory differs")
+    for name, note_field in ((CONTROLLER_MODULE_NAME, "controllerNoteSha256"),
+                             (MODULE_NAME, "consumerNoteSha256")):
+        module = modules[name]
+        require(isinstance(module, dict)
+                and set(module) == {"name", "path", "installedFileSha256",
+                                    "decompressedElfSha256", "compression",
+                                    "buildNoteSha256", "version", "kernel"},
+                f"runtime bundle {name} identity is invalid")
+        path = pathlib.Path(module["path"])
+        require(module["name"] == name and path.is_absolute()
+                and path.parent == pathlib.Path(
+                    f"/lib/modules/{platform.release()}/updates/dkms")
+                and re.fullmatch(rf"{re.escape(name)}\.ko(?:\.(?:xz|gz|zst|bz2))?",
+                                 path.name) is not None,
+                f"runtime bundle {name} path is invalid")
+        actual_path = root_path(module_root, str(path))
+        expected_compression = ("none" if path.name.endswith(".ko")
+                                else path.suffix.removeprefix("."))
+        require(actual_path.is_file() and not actual_path.is_symlink()
+                and module["compression"] == expected_compression
+                and sha256_file(actual_path) == module["installedFileSha256"]
+                and decompressed_module_sha256(actual_path, module["compression"])
+                    == module["decompressedElfSha256"],
+                f"runtime bundle {name} installed artifact differs")
+        require(module["version"] == product
+                and module["kernel"] == platform.release()
+                and module["buildNoteSha256"] == binding[note_field]
+                and all(isinstance(module[field], str) and SHA256.fullmatch(module[field])
+                        for field in ("installedFileSha256", "decompressedElfSha256",
+                                      "buildNoteSha256")),
+                f"runtime bundle {name} identity differs")
     external = binding["externalFiles"]
     expected_external = {str(companion)}
     require(isinstance(external, dict) and set(external) == expected_external, "runtime bundle external prerequisite inventory differs")
@@ -2009,14 +2272,12 @@ def build_runtime_bundle(
     runtime_source_interface(source)
     bundle = state_dir / "runtime-bundle"
     require(not bundle.exists() and not bundle.is_symlink(), "runtime bundle destination already exists")
-    kernel_build = pathlib.Path(f"/lib/modules/{platform.release()}/build")
-    require(kernel_build.exists() and kernel_build.is_dir(), "running-kernel build tree is unavailable")
+    module_directory = pathlib.Path(f"/lib/modules/{platform.release()}/updates/dkms")
+    require(module_directory.is_dir() and not module_directory.is_symlink(),
+            "DKMS runtime-profile module directory is unavailable")
     runner.run(
-        ["make", "-C", str(source), f"KERNEL_BUILD={kernel_build}", "RP1_RUNTIME_CONTROLLER=1"],
-        passthrough=True,
-    )
-    runner.run(
-        ["python3", str(source / "scripts/build_runtime_bundle.py"), str(source), str(bundle),
+        ["python3", str(source / "scripts/build_runtime_bundle.py"),
+         str(module_directory), str(bundle),
          "--application-companion", str(RUNTIME_COMPANION)],
         cwd=source,
         passthrough=True,

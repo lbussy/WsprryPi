@@ -77,7 +77,7 @@ An exact release that was already present is accepted but never claimed as
 WsprryPi-owned.
 
 The pre-mutation inventory also rejects opt-in runtime-controller residue,
-including its binding, manager fragment, tools, journals, controller module,
+including its binding, manager fragment, tools, and journals,
 endpoints, runtime overlays, and the owned WsprryPi application-inhibition
 drop-in. WsprryPi reports the paths but does not remove independently owned
 runtime state. Use the RP1-GPCLK-DKMS runtime cleanup workflow; foreign or
@@ -93,18 +93,21 @@ from the exact checkout's canonical source header and binds that header by hash.
 WsprryPi does not infer a development version from release metadata
 or supply a version to the upstream installer.
 
-The maintained exact-source installer must provide route-neutral installation
-with output disabled and without loading the module. WsprryPi verifies the
-returned exact commit, canonical version, kernel, UAPI, installed module hashes,
+The maintained exact-source installer must provide the explicit
+`runtime-controller` DKMS profile through a route-neutral installation with
+output disabled and without loading either module. A single DKMS instance owns
+the consumer and controller; WsprryPi verifies the returned exact commit,
+canonical version, kernel, UAPI, both installed-file and decompressed-ELF hashes,
 null route, and output-disabled state before recording success. Development
 identity remains `v0.9.0-pi5`; exact commit, kernel, route, hashes, enrollment,
 and qualification remain separate facts.
 
 Runtime-capable source selection additionally requires commit
-`e34214bfd14aee85d75c26287ddc0f76a5eaade0`, which corrected the controller
-reserved-field encoding, or a selected commit/tag whose Git history contains
-that correction. A development checkout or immutable release that cannot prove
-that ancestry is rejected before provider mutation or runtime bundle creation.
+`8a8bf5d4184714949faffbf2e2538a1cac0526b2`, which provides the single-owner
+DKMS runtime-controller profile and binding version 3, or a selected commit/tag
+whose Git history contains it. A development checkout or immutable release that
+cannot prove that ancestry is rejected before provider mutation or runtime bundle
+creation.
 
 A repeated development installation is a no-op only when WsprryPi's existing
 v2 ownership record and the complete inactive provider inventory still match
@@ -119,7 +122,9 @@ Runtime-profile residue accounting includes `runtime_activation.py`, both
 device endpoints and loaded-module paths, the manager socket, both WsprryPi
 application drop-ins, the complete runtime-admin directory (including
 activation archives and `last-deployment.json`), the binding, private UAPIs and
-overlays, readiness schema, scripts, units, and controller module artifacts.
+overlays, readiness schema, scripts, and units. Installed consumer and controller
+artifacts are provider inventory owned exclusively by DKMS, not runtime-deployment
+residue.
 Foreign or unowned residue is preserved and blocks installation. Exact state
 already recorded by WsprryPi is revalidated rather than silently adopted. If
 neutral runtime deployment is interrupted after the exact provider has a valid
@@ -131,8 +136,10 @@ the ownership record and retained rollback paths, permissions, and hashes, but
 does not require ordinary DKMS inventory while the bound runtime deployment is
 still present. It then reviews the installed binding and every bound artifact
 against WsprryPi ownership. A retained neutral-activation journal, including
-`activation-failed`, is handled through the binding's digest-reviewed
-`activation-recover-plan` and `activation-recover` transaction. Only after the
+`activation-failed`, is copied byte-for-byte into the WsprryPi-owned upstream
+evidence directory before it is handled through the binding's digest-reviewed
+`activation-recover-plan` and `activation-recover` transaction. The terminal
+recovery journal is likewise archived before its exact owned removal. Only after the
 controller, endpoints, and manager socket are absent does the installer review
 and execute the old binding's fixed deployment-removal digest. With runtime
 residue gone, it performs the complete ordinary provider/DKMS inventory check,
@@ -172,7 +179,11 @@ blocks a new provider installation rather than being overwritten.
 
 After the application binary, configuration, service, and exact route companion
 exist, the installer builds the opt-in bundle from the same immutable source
-commit, independently validates its binding and complete artifact inventory,
+commit and the exact DKMS-installed module pair. Binding version 3 records each
+module's canonical path, installed-file digest, decompressed-ELF digest,
+compression, version, kernel, and build-note digest. The bundle contains no
+module payload and never writes `/lib/modules`. The installer independently
+validates its binding and complete artifact inventory,
 and calls the upstream runtime provider in this order: `inspect`, `plan`,
 `ensure`, `inspect`, `activation-plan`, `activation-ensure`, and final `inspect`.
 Both mutation calls receive only the digest returned by the immediately reviewed
@@ -184,8 +195,8 @@ disabled.
 The bundle must be self-contained for these pre-deployment calls: its bootstrap
 set includes the route client imported by the provider and activation tools.
 The route-manager socket and service units are digest-bound deployment payloads,
-not assumed host prerequisites; the installed WsprryPi route companion is the
-only external bound file. A stock `Transmit Backend = gpio` configuration is
+not assumed host prerequisites; the installed WsprryPi route companion and the
+DKMS-owned module pair are external bound prerequisites. A stock `Transmit Backend = gpio` configuration is
 valid for neutral inspection and is not rewritten during installation.
 
 Only after that proof is the provider record upgraded to v3 with the readiness
