@@ -32,10 +32,18 @@ output in the installer log when that command fails. On a repeat installation,
 an exact owned neutral runtime is digest-reviewed, recovered to an inhibited
 and inactive activation-required state before application files or services are
 changed, then freshly activated after the updated application is in place.
+On a system not positively identified as Pi 5/CM5, automatic selection skips
+the helper and all RP1/DKMS planning, apply, recovery, and activation status
+lines. An explicit `INSTALL_RP1_GPCLK_DKMS=true` still reaches the helper's
+fail-closed platform validation; `false` suppresses provider work everywhere.
 
 Real installation success requires the resulting WsprryPi service to be active.
-When web mode is enabled, the installed loopback `/wsprrypi/version` proxy must
-also respond. A condition-skipped systemd start is not application readiness.
+When web mode is enabled, Apache REST and WebSocket targets are rendered from
+the effective installed `[Operation]` `Web Port` and `Socket Port`, including
+valid values preserved from an earlier INI. The configured direct `/version`
+endpoint and installed loopback `/wsprrypi/version` proxy must both respond. A
+condition-skipped systemd start is not application readiness, and diagnostics
+distinguish a service listener failure from an Apache proxy failure.
 
 Run its offline hardware-free contract coverage with:
 

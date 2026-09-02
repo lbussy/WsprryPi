@@ -2332,6 +2332,39 @@ is_pi5() {
         "${detected_model:-}" == "5-compute-module" ]]
 }
 
+is_rp1_system() {
+    local compatible_file="${1:-/proc/device-tree/compatible}"
+    local compatible
+
+    compatible=$(tr '\0' '\n' <"$compatible_file" 2>/dev/null) || return 1
+    grep -Fqx -e 'raspberrypi,5-model-b' -e 'raspberrypi,5-compute-module' \
+        <<<"$compatible" || return 1
+    grep -Fqx 'brcm,bcm2712' <<<"$compatible"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Return success only when RP1 provider work belongs in this install.
+# @details Automatic selection is limited to positively identified Pi 5/CM5
+#          systems. Explicit true remains an operator override so the provider
+#          helper can validate and fail closed; explicit false skips all RP1
+#          planning and lifecycle output on every platform. Unknown values are
+#          passed through to the helper for its existing validation error.
+# -----------------------------------------------------------------------------
+rp1_gpclk_dkms_installation_selected() {
+    case "${INSTALL_RP1_GPCLK_DKMS:-auto}" in
+        false)
+            return 1
+            ;;
+        auto)
+            is_rp1_system
+            return "$?"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 # -----------------------------------------------------------------------------
 # @brief Remove only the fresh RP1 provider planning directory from this run.
 # @details The independently owned installed provider and its operational record
@@ -2375,6 +2408,7 @@ prepare_rp1_gpclk_dkms_installation() {
     eval set -- "$(debug_filter "$@")"
 
     [[ "$ACTION" == "install" ]] || return 0
+    rp1_gpclk_dkms_installation_selected || return 0
 
     local script_source="${BASH_SOURCE[0]:-}"
     local local_helper=""
@@ -2445,6 +2479,7 @@ apply_rp1_gpclk_dkms_installation() {
     eval set -- "$(debug_filter "$@")"
 
     [[ "$ACTION" == "install" ]] || return 0
+    rp1_gpclk_dkms_installation_selected || return 0
     if [[ "$DRY_RUN" != "true" && \
         ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
         warn "RP1-GPCLK-DKMS plan state is unavailable."
@@ -2482,6 +2517,7 @@ prepare_rp1_gpclk_runtime_update() {
     eval set -- "$(debug_filter "$@")"
 
     [[ "$ACTION" == "install" ]] || return 0
+    rp1_gpclk_dkms_installation_selected || return 0
     if [[ "$DRY_RUN" != "true" &&
         ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
         warn "RP1-GPCLK-DKMS plan state is unavailable."
@@ -2520,6 +2556,7 @@ activate_rp1_gpclk_runtime_administration() {
     eval set -- "$(debug_filter "$@")"
 
     [[ "$ACTION" == "install" ]] || return 0
+    rp1_gpclk_dkms_installation_selected || return 0
     if [[ "$DRY_RUN" != "true" && \
         ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
         warn "RP1-GPCLK-DKMS runtime plan state is unavailable."
@@ -7040,12 +7077,74 @@ manage_service() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Resolve the REST and WebSocket ports used by the installed service.
+# @details Mirrors the application's valid unprivileged port range and default
+#          fallback so Apache and readiness checks follow preserved INI values.
+#          Results are returned in WSPRRYPI_WEB_PORT and WSPRRYPI_SOCKET_PORT.
+# -----------------------------------------------------------------------------
+resolve_wsprrypi_service_ports() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local ini_path="${1:-/usr/local/etc/${WSPR_INI}}"
+    local configured_web="" configured_socket="" resolved=""
+    WSPRRYPI_WEB_PORT=31415
+    WSPRRYPI_SOCKET_PORT=31416
+
+    if [[ -r "$ini_path" ]]; then
+        resolved=$(awk '
+            function trim(value) {
+                gsub(/^[ \t]+|[ \t]+$/, "", value)
+                return value
+            }
+            /^[[:space:]]*[;#]/ || /^[[:space:]]*$/ { next }
+            /^[[:space:]]*\[/ {
+                section = tolower($0)
+                sub(/^[[:space:]]*\[/, "", section)
+                sub(/\][[:space:]]*$/, "", section)
+                section = trim(section)
+                next
+            }
+            section == "operation" && index($0, "=") {
+                line = $0
+                sub(/[;#].*$/, "", line)
+                key = line
+                sub(/=.*/, "", key)
+                key = tolower(trim(key))
+                value = line
+                sub(/^[^=]*=/, "", value)
+                value = trim(value)
+                if (key == "web port") web = value
+                if (key == "socket port") socket = value
+            }
+            END { printf "%s|%s", web, socket }
+        ' "$ini_path")
+        IFS='|' read -r configured_web configured_socket <<<"$resolved"
+    fi
+
+    if [[ "$configured_web" =~ ^[0-9]+$ ]] && \
+        ((10#$configured_web >= 1024 && 10#$configured_web <= 49151)); then
+        WSPRRYPI_WEB_PORT=$((10#$configured_web))
+    fi
+    if [[ "$configured_socket" =~ ^[0-9]+$ ]] && \
+        ((10#$configured_socket >= 1024 && 10#$configured_socket <= 49151)); then
+        WSPRRYPI_SOCKET_PORT=$((10#$configured_socket))
+    fi
+
+    debug_print "Effective service ports: REST=${WSPRRYPI_WEB_PORT}, WebSocket=${WSPRRYPI_SOCKET_PORT}." "$debug"
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Prove the installed application is actually available before success.
 # @details A successful systemctl start job can still mean that systemd skipped
 #          the service because a unit condition was false. Poll the resulting
-#          active state and, when web mode is enabled, the installed Apache
-#          proxy endpoint. This is application readiness only; it does not
-#          exercise GPIO, clocks, transmission, or RF.
+#          active state and configured direct REST endpoint, then, when web mode
+#          is enabled, the installed Apache proxy endpoint. This is application
+#          readiness only; it does not exercise GPIO, clocks, transmission, or
+#          RF.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
@@ -7061,24 +7160,34 @@ validate_wsprrypi_runtime() {
         return 0
     fi
 
-    local attempts_remaining=50 service_ready=false api_ready=false
+    local attempts_remaining=30 service_ready=false direct_api_ready=false
+    local proxy_api_ready=false
+    local installed_ini="/usr/local/etc/${WSPR_INI}"
+    resolve_wsprrypi_service_ports "$installed_ini" "$debug"
+
     while ((attempts_remaining-- > 0)); do
         if systemctl is-active --quiet "${WSPR_SERVICE}.service" 2>/dev/null; then
             service_ready=true
             if [[ "${NO_WEB:-false}" == "true" ]]; then
-                api_ready=true
+                direct_api_ready=true
+                proxy_api_ready=true
                 break
             fi
             if curl --fail --silent --show-error --max-time 2 \
-                "http://127.0.0.1/${REPO_NAME,,}/version" \
+                "http://127.0.0.1:${WSPRRYPI_WEB_PORT}/version" \
                 >/dev/null 2>&1; then
-                api_ready=true
-                break
+                direct_api_ready=true
+                if curl --fail --silent --show-error --max-time 2 \
+                    "http://127.0.0.1/${REPO_NAME,,}/version" \
+                    >/dev/null 2>&1; then
+                    proxy_api_ready=true
+                    break
+                fi
             fi
         else
             service_ready=false
         fi
-        sleep 0.1
+        sleep 1
     done
 
     if [[ "$service_ready" != "true" ]]; then
@@ -7086,8 +7195,13 @@ validate_wsprrypi_runtime() {
         debug_end "$debug"
         return 1
     fi
-    if [[ "$api_ready" != "true" ]]; then
-        warn "WsprryPi service is active, but the installed local /${REPO_NAME,,}/version endpoint did not become ready."
+    if [[ "$direct_api_ready" != "true" ]]; then
+        warn "WsprryPi service is active, but its configured local REST endpoint on port ${WSPRRYPI_WEB_PORT} did not become ready; inspect the installed INI and service journal."
+        debug_end "$debug"
+        return 1
+    fi
+    if [[ "$proxy_api_ready" != "true" ]]; then
+        warn "WsprryPi REST endpoint on port ${WSPRRYPI_WEB_PORT} is ready, but the installed local /${REPO_NAME,,}/version Apache proxy did not become ready; inspect the active Apache proxy configuration."
         debug_end "$debug"
         return 1
     fi
@@ -7403,8 +7517,8 @@ manage_i2c() {
 #     – Adds DEFAULT_SERVERNAME to $APACHE_CONF if missing
 #     – Writes the single $DEFAULT_SITES_CONF/wsprrypi.conf with:
 #         • A redirect “/ → /wsprrypi/” (if stock Apache home is detected)
-#         • REST proxies (31415) for /wsprrypi/config & /version
-#         • WS proxy (31416) for /wsprrypi/socket
+#         • REST proxies using the effective configured Web Port
+#         • WS proxy using the effective configured Socket Port
 #         • <Proxy> blocks allowing remote access
 #     – Disables 000-default.conf, enables wsprrypi.conf
 #   * On uninstall (ACTION=uninstall):
@@ -7488,7 +7602,7 @@ manage_apache() {
             fi
 
             for target_conf in "${APACHE_ACTIVE_SITE_CONFS[@]}"; do
-                if ! install_wsprrypi_proxy_block "$target_conf" "$debug"; then
+                if ! install_wsprrypi_proxy_block "$target_conf" "$installed_ini" "$debug"; then
                     logE "Failed to update Apache vhost '$target_conf'."
                     debug_end "$debug"
                     return 1
@@ -7524,6 +7638,12 @@ manage_apache() {
             debug_end "$debug"
             return 1
         }
+
+        if ! install_wsprrypi_proxy_block "$site_conf" "$installed_ini" "$debug"; then
+            logE "Failed to configure WsprryPi service ports in '$site_conf'."
+            debug_end "$debug"
+            return 1
+        fi
 
         # If stock page, comment out log lines in the vhost before enabling.
         if [[ "${APACHE_WEB_MODE:-unknown}" == "stock" ]] && is_stock_apache_page "/var/www/html/index.html" "$debug"; then
@@ -8065,7 +8185,8 @@ find_active_apache_site_conf() {
 #          tag is present, the block is appended to the file.
 #
 # @param $1 Apache vhost config path to update.
-# @param $2 Optional debug flag.
+# @param $2 Effective installed INI path.
+# @param $3 Optional debug flag.
 #
 # @return 0 on success, 1 otherwise.
 # -----------------------------------------------------------------------------
@@ -8077,9 +8198,18 @@ install_wsprrypi_proxy_block() {
     eval set -- "$(debug_filter "$@")"
 
     local config_file="${1:-}"
-    local tmp_file
+    local installed_ini="${2:-/usr/local/etc/${WSPR_INI}}"
+    local tmp_file block_file
     local backup_file
     local proxy_block
+
+    resolve_wsprrypi_service_ports "$installed_ini" "$debug"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Exec: update managed WsprryPi proxy block in $config_file for REST port ${WSPRRYPI_WEB_PORT} and WebSocket port ${WSPRRYPI_SOCKET_PORT}"
+        debug_end "$debug"
+        return 0
+    fi
 
     if [[ -z "$config_file" || ! -f "$config_file" ]]; then
         logE "Apache vhost config '$config_file' was not found."
@@ -8087,47 +8217,53 @@ install_wsprrypi_proxy_block() {
         return 1
     fi
 
-    proxy_block=$(cat <<'EOF'
+    proxy_block=$(cat <<EOF
     # BEGIN WsprryPi proxy configuration
-    # REST API (port 31415)
-    ProxyPass        /wsprrypi/config  http://127.0.0.1:31415/config
-    ProxyPassReverse /wsprrypi/config  http://127.0.0.1:31415/config
-    ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version
-    ProxyPassReverse /wsprrypi/version http://127.0.0.1:31415/version
+    # REST API (port ${WSPRRYPI_WEB_PORT})
+    ProxyPass        /wsprrypi/config  http://127.0.0.1:${WSPRRYPI_WEB_PORT}/config
+    ProxyPassReverse /wsprrypi/config  http://127.0.0.1:${WSPRRYPI_WEB_PORT}/config
+    ProxyPass        /wsprrypi/version http://127.0.0.1:${WSPRRYPI_WEB_PORT}/version
+    ProxyPassReverse /wsprrypi/version http://127.0.0.1:${WSPRRYPI_WEB_PORT}/version
     # Support bundle API family and signed private-intake availability.
-    ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
-    ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:31415/api/support-bundles
-    ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
-    ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:31415/api/support-intake
-    ProxyPass        /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
-    ProxyPassReverse /wsprrypi/api/network-safety http://127.0.0.1:31415/api/network-safety
-    ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route
-    ProxyPassReverse /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route
+    ProxyPass        /wsprrypi/api/support-bundles http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/support-bundles
+    ProxyPassReverse /wsprrypi/api/support-bundles http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/support-bundles
+    ProxyPass        /wsprrypi/api/support-intake http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/support-intake
+    ProxyPassReverse /wsprrypi/api/support-intake http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/support-intake
+    ProxyPass        /wsprrypi/api/network-safety http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/network-safety
+    ProxyPassReverse /wsprrypi/api/network-safety http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/network-safety
+    ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/rp1-gpclk-route
+    ProxyPassReverse /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/rp1-gpclk-route
 
     Include /usr/local/etc/wsprrypi-apache-network-policy.conf
 
-    # WebSocket (port 31416)
-    ProxyPass        /wsprrypi/socket  ws://127.0.0.1:31416/socket
-    ProxyPassReverse /wsprrypi/socket  ws://127.0.0.1:31416/socket
+    # WebSocket (port ${WSPRRYPI_SOCKET_PORT})
+    ProxyPass        /wsprrypi/socket  ws://127.0.0.1:${WSPRRYPI_SOCKET_PORT}/socket
+    ProxyPassReverse /wsprrypi/socket  ws://127.0.0.1:${WSPRRYPI_SOCKET_PORT}/socket
 
-    <Proxy "http://127.0.0.1:31415/*">
+    <Proxy "http://127.0.0.1:${WSPRRYPI_WEB_PORT}/*">
         Require all granted
     </Proxy>
-    <Proxy "ws://127.0.0.1:31416/*">
+    <Proxy "ws://127.0.0.1:${WSPRRYPI_SOCKET_PORT}/*">
         Require all granted
     </Proxy>
     # END WsprryPi proxy configuration
 EOF
 )
 
-    if [[ "$DRY_RUN" == "true" ]]; then
-        logD "Exec: update managed WsprryPi proxy block in $config_file"
-        debug_end "$debug"
-        return 0
-    fi
-
     tmp_file=$(mktemp) || {
         logE "Failed to create temporary file."
+        debug_end "$debug"
+        return 1
+    }
+    block_file=$(mktemp) || {
+        rm -f "$tmp_file"
+        logE "Failed to create proxy-block temporary file."
+        debug_end "$debug"
+        return 1
+    }
+    printf '%s\n' "$proxy_block" >"$block_file" || {
+        rm -f "$tmp_file" "$block_file"
+        logE "Failed to stage the managed Apache proxy block."
         debug_end "$debug"
         return 1
     }
@@ -8135,14 +8271,26 @@ EOF
     backup_file="${config_file}.wsprrypi.bak"
     if [[ ! -f "$backup_file" ]]; then
         cp "$config_file" "$backup_file" || {
-            rm -f "$tmp_file"
+            rm -f "$tmp_file" "$block_file"
             logE "Failed to back up '$config_file'."
             debug_end "$debug"
             return 1
         }
     fi
 
-    awk -v block="$proxy_block" '
+    cp -p "$config_file" "$tmp_file" || {
+        rm -f "$tmp_file" "$block_file"
+        logE "Failed to preserve Apache config metadata."
+        debug_end "$debug"
+        return 1
+    }
+
+    awk -v block_file="$block_file" '
+        function print_block(   line) {
+            while ((getline line < block_file) > 0) print line
+            close(block_file)
+        }
+
         /^[[:space:]]*# BEGIN WsprryPi proxy configuration[[:space:]]*$/ {
             in_block = 1
             next
@@ -8155,7 +8303,7 @@ EOF
 
         !in_block {
             if ($0 ~ /^[[:space:]]*<\/VirtualHost>[[:space:]]*$/) {
-                print block
+                print_block()
                 inserted = 1
             }
             print
@@ -8164,22 +8312,23 @@ EOF
         END {
             if (!inserted) {
                 print ""
-                print block
+                print_block()
             }
         }
     ' "$config_file" >"$tmp_file" || {
-        rm -f "$tmp_file"
+        rm -f "$tmp_file" "$block_file"
         logE "Failed to build updated Apache config."
         debug_end "$debug"
         return 1
     }
 
     mv "$tmp_file" "$config_file" || {
-        rm -f "$tmp_file"
+        rm -f "$tmp_file" "$block_file"
         logE "Failed to install updated Apache config."
         debug_end "$debug"
         return 1
     }
+    rm -f "$block_file"
 
     debug_print "Installed WsprryPi proxy block in $config_file." "$debug"
     debug_end "$debug"

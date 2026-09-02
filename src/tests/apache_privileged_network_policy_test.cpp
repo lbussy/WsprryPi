@@ -72,9 +72,9 @@ int main(int argc, char **argv) {
     assert(stock_vhost.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route") != std::string::npos);
     assert(installer.find("# BEGIN WsprryPi proxy configuration") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/config") != std::string::npos);
-    assert(installer.find("ProxyPass        /wsprrypi/version http://127.0.0.1:31415/version") != std::string::npos);
+    assert(installer.find("ProxyPass        /wsprrypi/version http://127.0.0.1:${WSPRRYPI_WEB_PORT}/version") != std::string::npos);
     assert(installer.find("ProxyPass        /wsprrypi/socket") != std::string::npos);
-    assert(installer.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:31415/api/rp1-gpclk-route") != std::string::npos);
+    assert(installer.find("ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/rp1-gpclk-route") != std::string::npos);
     for (const std::string *source : {&stock_vhost, &installer}) {
         assert(source->find("ProxyPass        /wsprrypi/ui-version.php") == std::string::npos);
         assert(source->find("ProxyPass        /wsprrypi/ui-manifest.php") == std::string::npos);

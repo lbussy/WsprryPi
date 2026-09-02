@@ -2047,6 +2047,108 @@ cleanup_rp1_gpclk_dkms_state
             self.assertIn(update_command, result.stderr)
             self.assertIn(activation_command, result.stderr)
 
+    def test_non_rp1_auto_and_explicit_false_render_no_provider_steps(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+is_rp1_system() { return "$RP1_STATUS"; }
+python3() { printf python3 >"$SENTINEL"; return 99; }
+logI() { printf '[INFO ] %s\n' "$1"; }
+DRY_RUN=true
+ACTION=install
+INSTALL_RP1_GPCLK_DKMS="$SELECTION"
+FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
+prepare_rp1_gpclk_dkms_installation debug
+apply_rp1_gpclk_dkms_installation debug
+prepare_rp1_gpclk_runtime_update debug
+activate_rp1_gpclk_runtime_administration debug
+[[ ! -e "$SENTINEL" ]]
+[[ -z "$RP1_GPCLK_DKMS_STATE_DIR" && -z "$RP1_GPCLK_DKMS_HELPER" ]]
+'''
+        for selection, rp1_status in (("auto", "1"), ("false", "0")):
+            sentinel = self.root / f"{selection}.invoked"
+            result = subprocess.run(
+                ["bash", "-c", shell],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={
+                    **os.environ,
+                    "INSTALL_SCRIPT": str(install_script),
+                    "SENTINEL": str(sentinel),
+                    "SELECTION": selection,
+                    "RP1_STATUS": rp1_status,
+                },
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            self.assertNotIn("RP1-GPCLK-DKMS", result.stderr)
+            self.assertFalse(sentinel.exists())
+
+    def test_auto_pi5_shell_path_still_reaches_provider_planner(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                r'''
+source "$INSTALL_SCRIPT"
+is_rp1_system() { return 0; }
+python3() { printf invoked >"$SENTINEL"; return 99; }
+logI() { printf '[INFO ] %s\n' "$1"; }
+ACTION=install
+DRY_RUN=true
+INSTALL_RP1_GPCLK_DKMS=auto
+prepare_rp1_gpclk_dkms_installation
+cleanup_rp1_gpclk_dkms_state
+[[ ! -e "$SENTINEL" ]]
+''',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={
+                **os.environ,
+                "INSTALL_SCRIPT": str(install_script),
+                "SENTINEL": str(self.root / "auto-pi5-planner"),
+            },
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Resolve RP1-GPCLK-DKMS installation plan", result.stdout)
+        self.assertFalse((self.root / "auto-pi5-planner").exists())
+
+    def test_shell_rp1_identity_requires_pi5_model_and_bcm2712(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        compatible = self.root / "compatible"
+        scenarios = (
+            (b"raspberrypi,5-model-b\0brcm,bcm2712\0", True),
+            (b"raspberrypi,5-compute-module\0brcm,bcm2712\0", True),
+            (b"raspberrypi,5-model-b\0", False),
+            (b"raspberrypi,4-model-b\0brcm,bcm2711\0", False),
+            (b"brcm,bcm2712\0", False),
+        )
+        for payload, expected in scenarios:
+            compatible.write_bytes(payload)
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$INSTALL_SCRIPT"; is_rp1_system "$COMPATIBLE"',
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={
+                    **os.environ,
+                    "INSTALL_SCRIPT": str(install_script),
+                    "COMPATIBLE": str(compatible),
+                },
+                check=False,
+            )
+            self.assertEqual(result.returncode == 0, expected, payload)
+
     def test_exec_command_preserves_internal_debug_argv(self):
         install_script = ROOT / "scripts" / "install.sh"
         capture = self.root / "argv.txt"

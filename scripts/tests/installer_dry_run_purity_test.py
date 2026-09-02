@@ -555,7 +555,14 @@ validate_wsprrypi_runtime
                 r'''
 source "$INSTALLER"
 systemctl() { [[ "$1" == is-active ]]; }
-curl() { return 22; }
+resolve_wsprrypi_service_ports() {
+    WSPRRYPI_WEB_PORT=32415
+    WSPRRYPI_SOCKET_PORT=32416
+}
+curl() {
+    [[ "${*: -1}" == "http://127.0.0.1:32415/version" ]] && return 0
+    return 22
+}
 sleep() { :; }
 warn() { printf '%s\n' "$1" >&2; }
 ACTION=install
@@ -571,7 +578,69 @@ validate_wsprrypi_runtime
             check=False,
         )
         self.assertEqual(result.returncode, 1)
-        self.assertIn("local /wsprrypi/version endpoint", result.stderr)
+        self.assertIn("REST endpoint on port 32415 is ready", result.stderr)
+        self.assertIn("/wsprrypi/version Apache proxy", result.stderr)
+
+    def test_runtime_readiness_reports_configured_direct_api_failure(self) -> None:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                r'''
+source "$INSTALLER"
+systemctl() { [[ "$1" == is-active ]]; }
+resolve_wsprrypi_service_ports() {
+    WSPRRYPI_WEB_PORT=32415
+    WSPRRYPI_SOCKET_PORT=32416
+}
+curl() { return 7; }
+sleep() { :; }
+warn() { printf '%s\n' "$1" >&2; }
+ACTION=install
+DRY_RUN=false
+NO_WEB=false
+validate_wsprrypi_runtime
+''',
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "INSTALLER": str(INSTALLER)},
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("configured local REST endpoint on port 32415", result.stderr)
+        self.assertIn("installed INI and service journal", result.stderr)
+
+    def test_runtime_readiness_waits_for_configured_direct_and_proxy_endpoints(self) -> None:
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+resolve_wsprrypi_service_ports() {
+    WSPRRYPI_WEB_PORT=32415
+    WSPRRYPI_SOCKET_PORT=32416
+}
+systemctl() { [[ "$1" == is-active ]]; }
+curl() {
+    printf '%s\n' "${*: -1}" >>"$CALLS"
+    count=$(wc -l <"$CALLS")
+    ((count >= 3))
+}
+sleep() { :; }
+ACTION=install
+DRY_RUN=false
+NO_WEB=false
+validate_wsprrypi_runtime
+''',
+            CALLS=self.root / "readiness-calls",
+        )
+        calls = (self.root / "readiness-calls").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(calls[:3], [
+            "http://127.0.0.1:32415/version",
+            "http://127.0.0.1:32415/version",
+            "http://127.0.0.1:32415/version",
+        ])
+        self.assertEqual(calls[3:], ["http://127.0.0.1/wsprrypi/version"])
 
     def test_runtime_readiness_no_web_requires_only_active_service(self) -> None:
         result = self.run_shell(
@@ -608,6 +677,58 @@ validate_wsprrypi_runtime debug
             SENTINEL=sentinel,
         )
         self.assertEqual(snapshot(self.root), before)
+
+    def test_service_ports_and_proxy_block_follow_preserved_ini(self) -> None:
+        ini = self.root / "installed.ini"
+        config = self.root / "site.conf"
+        ini.write_text(
+            "[Operation]\nWeb Port = 32415\nSocket Port = 32416\n",
+            encoding="utf-8",
+        )
+        config.write_text(
+            (ROOT / "config" / "wsprrypi.conf").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        config.chmod(0o640)
+
+        self.run_shell(
+            r'''
+source "$INSTALLER"
+DRY_RUN=false
+install_wsprrypi_proxy_block "$CONFIG" "$INI"
+''',
+            CONFIG=config,
+            INI=ini,
+        )
+
+        rendered = config.read_text(encoding="utf-8")
+        self.assertIn("http://127.0.0.1:32415/version", rendered)
+        self.assertIn("ws://127.0.0.1:32416/socket", rendered)
+        self.assertNotIn("127.0.0.1:31415", rendered)
+        self.assertNotIn("127.0.0.1:31416", rendered)
+        self.assertEqual(rendered.count("# BEGIN WsprryPi proxy configuration"), 1)
+        self.assertEqual(rendered.count("# END WsprryPi proxy configuration"), 1)
+        self.assertEqual(
+            rendered.count("Include /usr/local/etc/wsprrypi-apache-network-policy.conf"),
+            1,
+        )
+        self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o640)
+
+    def test_service_port_resolution_matches_application_fallbacks(self) -> None:
+        ini = self.root / "invalid.ini"
+        ini.write_text(
+            "[Operation]\nWeb Port = 80\nSocket Port = not-a-port\n",
+            encoding="utf-8",
+        )
+        result = self.run_shell(
+            r'''
+source "$INSTALLER"
+resolve_wsprrypi_service_ports "$INI"
+printf '%s|%s\n' "$WSPRRYPI_WEB_PORT" "$WSPRRYPI_SOCKET_PORT"
+''',
+            INI=ini,
+        )
+        self.assertEqual(result.stdout.strip(), "31415|31416")
 
     def test_utc_timezone_dry_run_neither_prompts_nor_reconfigures(self) -> None:
         sentinel = self.root / "timezone-command-invoked"
