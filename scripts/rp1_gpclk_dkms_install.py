@@ -795,11 +795,11 @@ def runtime_source_identity(source: pathlib.Path, product: str) -> None:
         binding = (source / "scripts/runtime_binding.py").read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
         raise ContractError("selected runtime source identity is unreadable") from error
-    kernel_match = re.search(r"(?m)^KERNEL\s*=\s*(['\"])([^'\"]+)\1\s*$", layout)
     product_match = re.search(r"(?m)^PRODUCT_VERSION\s*=\s*(['\"])([^'\"]+)\1\s*$", binding)
     contract_match = re.search(r"(?m)^CONTRACT\s*=\s*(['\"])([^'\"]+)\1\s*$", binding)
     compatibility_match = re.search(r"(?m)^COMPATIBILITY\s*=\s*(\{[^\n]+\})\s*$", binding)
-    require(kernel_match is not None and kernel_match.group(2) == platform.release(), "selected runtime source targets a different running kernel")
+    require(re.search(r"(?m)^KERNEL\s*=", layout) is None,
+            "selected runtime source hard-codes a kernel instead of using the build binding")
     require(product_match is not None and product_match.group(2) == product, "selected runtime source product version differs")
     require(contract_match is not None and contract_match.group(2) == RUNTIME_BINDING_CONTRACT, "selected runtime binding contract differs")
     try:

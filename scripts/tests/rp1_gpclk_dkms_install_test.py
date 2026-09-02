@@ -497,17 +497,18 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         source = pathlib.Path(self.temp.name) / "runtime-source"
         scripts = source / "scripts"
         scripts.mkdir(parents=True)
-        (scripts / "runtime_layout.py").write_text("KERNEL = 'fixture-kernel'\n")
+        (scripts / "runtime_layout.py").write_text(
+            '"""Runtime destinations; kernel identity is binding-specific."""\n'
+        )
         (scripts / "runtime_binding.py").write_text(
             "CONTRACT = 'rp1-gpclk-runtime-binding-v3'\n"
             "PRODUCT_VERSION = '0.9.0'\n"
             "COMPATIBILITY = {'gpio4': 'v0.9.0-pi5-gpio4', 'gpio20': 'v0.9.0-pi5-gpio20'}\n"
         )
-        with mock.patch.object(MOD.platform, "release", return_value="fixture-kernel"):
+        MOD.runtime_source_identity(source, "0.9.0")
+        (scripts / "runtime_layout.py").write_text("KERNEL = 'fixture-kernel'\n")
+        with self.assertRaisesRegex(MOD.ContractError, "hard-codes a kernel"):
             MOD.runtime_source_identity(source, "0.9.0")
-            (scripts / "runtime_layout.py").write_text("KERNEL = 'other-kernel'\n")
-            with self.assertRaisesRegex(MOD.ContractError, "different running kernel"):
-                MOD.runtime_source_identity(source, "0.9.0")
 
     def test_development_result_is_bound_before_recording(self):
         manifest_path = pathlib.Path(self.temp.name) / "DEVELOPMENT_MANIFEST.json"
