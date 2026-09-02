@@ -935,6 +935,9 @@ int main(int argc, char *argv[])
                 stock_ini.find("Allow Unqualified Frequency = false") != std::string::npos &&
                 stock_ini.find("Allow Non-Amateur Frequency = false") != std::string::npos,
             "stock INI must expose both experimental frequency controls as default deny");
+        require(
+            stock_ini.find("RP1 Drive mA = 2") != std::string::npos,
+            "stock INI must publish the minimum RP1 GPIO drive default");
     }
 
     if (has_ancillary_gpio())

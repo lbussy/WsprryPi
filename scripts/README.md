@@ -45,6 +45,12 @@ endpoint and installed loopback `/wsprrypi/version` proxy must both respond. A
 condition-skipped systemd start is not application readiness, and diagnostics
 distinguish a service listener failure from an Apache proxy failure.
 
+The canonical INI includes the optional `RP1 Drive mA = 2` setting. Upgrades
+build the active file from that current schema, so configurations created
+before the RP1 setting inherit the default without a startup warning. Explicit
+operator values, including values that must still be rejected or repaired,
+remain preserved for normal validation.
+
 Run its offline hardware-free contract coverage with:
 
 ```sh
