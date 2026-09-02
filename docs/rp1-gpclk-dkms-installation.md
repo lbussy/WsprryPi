@@ -168,7 +168,8 @@ During a real run, the command wrapper owns the status display and suppresses
 ordinary helper output. If provider apply fails, its last 20 output lines,
 bounded to 16 KiB and stripped of terminal-control bytes, are copied into the
 console report and retained installer log before temporary planning state is
-removed.
+removed. The same bounded diagnostic capture applies to pre-update runtime
+recovery and final neutral activation failures.
 
 Only when WsprryPi actually mutates an empty provider state and then verifies
 the result does it atomically create the root-owned, mode-0600 v2 ownership
@@ -183,8 +184,30 @@ upstream evidence, rollback record, and captured upstream rollback entrypoint.
 Failed provider installs and dry runs create no ownership record. A stale record
 blocks a new provider installation rather than being overwritten.
 
+Before a repeat installation replaces application files or restarts the
+service, an exact WsprryPi-owned v3 neutral runtime is placed into its provider's
+inactive update state. The installer accepts a current `neutral_ready` result,
+an already `recovered-inhibited` retry, a valid post-reboot activation-required
+state, or the narrow same-boot case where the only conflict is that the
+application's active PID changed after completed neutral activation. That last
+case must retain the exact binding, artifact set, activation journal, neutral
+controller, null routes, absent consumer, disabled output, matching controller
+observation, and otherwise unchanged application-service identity.
+
+For a loaded neutral controller, the installer reviews
+`activation-recover-plan`, binds its canonical digest to the installed binding,
+current boot, and complete activation journal, archives the journal, revalidates
+the ownership record, and calls `activation-recover` with only that digest. It
+then requires both modules and endpoints absent, every route null, transmission
+ineligible, the application inhibited and inactive, and the journal retained as
+`recovered-inhibited`. Any other conflict, route, consumer, binding or artifact
+drift, changed ownership, malformed recovery plan, or incomplete final state
+fails before application mutation. A retry resumes from the retained inhibited
+state. First installations with provider-only v2 ownership and dry runs do not
+perform this runtime transition.
+
 After the application binary, configuration, service, and exact route companion
-exist, the installer builds the opt-in bundle from the same immutable source
+then exist, the installer builds the opt-in bundle from the same immutable source
 commit and the exact DKMS-installed module pair. Binding version 3 records each
 module's canonical path, installed-file digest, decompressed-ELF digest,
 compression, version, kernel, and build-note digest. The bundle contains no

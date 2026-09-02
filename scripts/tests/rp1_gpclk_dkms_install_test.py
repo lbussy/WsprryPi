@@ -986,6 +986,317 @@ class ApplyPolicyTests(unittest.TestCase):
         self.resolved = {"tag": "v2.1.0", "commit": "a" * 40, "manifest": self.manifest, "packagePath": str(self.package)}
         self.record = self.root / "record.json"
 
+    def runtime_update_args(self, *, dry_run=False):
+        MOD.atomic_json(self.state / "plan.json", {
+            "schema": MOD.STATE_SCHEMA, "dryRun": dry_run,
+            "decision": {"install": True},
+            "resolved": {"channel": "development", "commit": "a" * 40,
+                         "version": "0.9.0"},
+        })
+        return MOD.parser().parse_args([
+            "prepare-runtime-update", "--state-dir", str(self.state),
+            "--record", str(self.record),
+        ])
+
+    def runtime_update_record(self):
+        return {
+            "schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": "a" * 40, "productVersion": "0.9.0",
+            "runtime": {
+                "readinessContract": MOD.RUNTIME_READINESS_CONTRACT,
+                "bindingSha256": "b" * 64, "artifactSetSha256": "c" * 64,
+                "sourceCommit": "a" * 40, "productVersion": "0.9.0",
+                "targetKernel": MOD.platform.release(),
+                "compatibilityIdentities": {
+                    "gpio4": "v0.9.0-pi5-gpio4",
+                    "gpio20": "v0.9.0-pi5-gpio20",
+                },
+                "deploymentPlanSha256": "d" * 64,
+                "activationPlanSha256": "e" * 64,
+                "activationRequestId": "request-1234",
+                "controllerSession": 42, "controllerGeneration": 0,
+                "state": "neutral_ready", "route": None,
+                "output": "disabled",
+            },
+        }
+
+    def runtime_update_inspection(self, result="neutral_ready"):
+        controller_state = {
+            "session": 42, "generation": 0, "id": 0, "error": 0,
+            "route": 0, "flags": 0,
+        }
+        journal = {
+            "phase": "complete-neutral", "controller": controller_state,
+            "requestId": "request-1234", "planSha256": "e" * 64,
+            "plan": {
+                "bootId": "00000000-0000-0000-0000-000000000001",
+                "bindingSha256": "b" * 64,
+                "artifactSetSha256": "c" * 64,
+                "application": {"wasActive": True},
+                "socketWasActive": True,
+            },
+            "application": {
+                "phase": "restored",
+                "service": {"LoadState": "loaded", "ActiveState": "active",
+                            "UnitFileState": "enabled", "MainPID": "42"},
+            },
+        }
+        value = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": result, "state": result,
+            "conflicts": ([] if result != "conflict" else
+                          ["loaded-controller-without-completed-activation"]),
+            "identities": {"installedBinding": {
+                "status": "valid", "sha256": "b" * 64,
+                "value": {"artifactSetSha256": "c" * 64,
+                          "sourceCommit": "a" * 40},
+            }},
+            "artifacts": {"/bound/runtime": {"status": "exact"}},
+            "routes": {name: None for name in
+                       ("requested", "configured", "persisted", "active")},
+            "modules": {
+                MOD.CONTROLLER_MODULE_NAME: {"status": "loaded"},
+                MOD.MODULE_NAME: {"status": "absent"},
+            },
+            "endpoints": {
+                "controller": {"status": "owned", "open": False},
+                "consumer": {"status": "absent", "open": False},
+            },
+            "routeSelected": False, "transmissionEligible": False,
+            "journals": {"activation.json": {"status": "present", "value": journal}},
+            "activation": {"status": "observed", "value": {
+                "bindingSha256": "b" * 64,
+                "artifactSetSha256": "c" * 64,
+                "bootId": "00000000-0000-0000-0000-000000000001",
+                "controllerState": controller_state,
+                "controller": {"status": "loaded", "exact": True},
+                "applicationService": {
+                    "load": "loaded", "active": "active",
+                    "enabled": "enabled",
+                    "fragment": "/etc/systemd/system/wsprrypi.service",
+                    "MainPID": "99" if result == "conflict" else "42",
+                },
+                "socket": {"active": "active", "fragment":
+                    "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket"},
+                "managerSocket": {"status": "owned"},
+                "managerService": {"load": "loaded", "fragment":
+                    "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service"},
+                "inhibited": False,
+            }},
+            "manager": {"status": "observed", "query": {
+                "operation": "query", "status": "ok", "state": {
+                    "bindingSha256": "b" * 64,
+                    "bootId": "00000000-0000-0000-0000-000000000001",
+                    "controller": controller_state, "activeRoute": None,
+                    "configuredRoute": None, "qualification": False,
+                    "outputEnabled": False, "applicationInhibited": False,
+                    "pendingTransaction": None, "application": None,
+                    "applicationRestoration": True,
+                },
+            }},
+        }
+        return value
+
+    def recovered_runtime_update_inspection(self, *, prior_boot=False):
+        value = self.runtime_update_inspection("activation_required")
+        value["modules"] = {
+            MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
+            MOD.MODULE_NAME: {"status": "absent"},
+        }
+        value["endpoints"] = {
+            "controller": {"status": "absent", "open": False},
+            "consumer": {"status": "absent", "open": False},
+        }
+        activation = value["activation"]["value"]
+        activation["controllerState"] = None
+        activation["applicationService"] = {
+            "load": "loaded", "active": "inactive", "enabled": "enabled",
+            "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
+        }
+        if prior_boot:
+            value["reboot"] = {"occurred": True}
+        else:
+            activation["inhibited"] = True
+            value["journals"]["activation.json"]["value"]["phase"] = "recovered-inhibited"
+        return value
+
+    def runtime_recovery_plan(self, inspected):
+        journal = inspected["journals"]["activation.json"]["value"]
+        plan = {
+            "version": 1, "operation": "neutral-activation-recovery",
+            "bindingSha256": "b" * 64,
+            "bootId": inspected["activation"]["value"]["bootId"],
+            "activationJournalSha256": digest(MOD.canonical(journal)),
+            "controllerLoaded": True, "socketWasActive": True,
+            "alreadyRecovered": False,
+        }
+        return {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover-plan",
+            "planSha256": digest(MOD.canonical(plan)), "plan": plan,
+        }
+
+    def test_runtime_update_recovers_exact_neutral_and_pid_drift_retry(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        for result in ("neutral_ready", "conflict"):
+            with self.subTest(result=result):
+                initial = self.runtime_update_inspection(result)
+                planned = self.runtime_recovery_plan(initial)
+                recovered = {
+                    "contract": MOD.RUNTIME_READINESS_CONTRACT,
+                    "operation": "activation-recover",
+                    "planSha256": planned["planSha256"],
+                    "response": {"status": "recovered-inhibited"},
+                }
+                final = self.recovered_runtime_update_inspection()
+                with mock.patch.object(
+                        MOD, "load_ownership_record",
+                        return_value=(record, identity, None)), \
+                     mock.patch.object(
+                        MOD, "runtime_call",
+                        side_effect=[initial, planned, recovered, final]) as calls, \
+                     mock.patch.object(
+                        MOD, "preserve_owned_activation_journal") as preserve, \
+                     mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+                    MOD.prepare_runtime_update(args, FakeRunner())
+                self.assertEqual(
+                    [call.args[2] for call in calls.call_args_list],
+                    ["inspect", "activation-recover-plan", "activation-recover", "inspect"],
+                )
+                preserve.assert_called_once_with(record, "before-application-update")
+                self.assertEqual(unchanged.call_count, 2)
+
+    def test_runtime_update_is_noop_for_first_install_and_resumable_states(self):
+        args = self.runtime_update_args()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        provider_only = {"schema": MOD.RECORD_SCHEMA,
+                         "sourceCommit": "a" * 40}
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(provider_only, identity, None)), \
+             mock.patch.object(MOD, "runtime_call") as calls:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        calls.assert_not_called()
+
+        record = self.runtime_update_record()
+        for prior_boot in (False, True):
+            with self.subTest(prior_boot=prior_boot), \
+                 mock.patch.object(
+                    MOD, "load_ownership_record",
+                    return_value=(record, identity, None)), \
+                 mock.patch.object(
+                    MOD, "runtime_call",
+                    return_value=self.recovered_runtime_update_inspection(
+                        prior_boot=prior_boot)) as calls:
+                MOD.prepare_runtime_update(args, FakeRunner())
+            calls.assert_called_once()
+
+    def test_runtime_update_refuses_unsafe_state_before_recovery(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        unsafe_cases = []
+        route = self.runtime_update_inspection()
+        route["routes"]["active"] = "gpio4"
+        unsafe_cases.append(route)
+        consumer = self.runtime_update_inspection()
+        consumer["modules"][MOD.MODULE_NAME] = {"status": "loaded"}
+        unsafe_cases.append(consumer)
+        conflict = self.runtime_update_inspection("conflict")
+        conflict["conflicts"].append("foreign-conflict")
+        unsafe_cases.append(conflict)
+        pid = self.runtime_update_inspection("conflict")
+        pid["activation"]["value"]["applicationService"]["MainPID"] = "42"
+        unsafe_cases.append(pid)
+        for inspected in unsafe_cases:
+            with self.subTest(inspected=inspected.get("conflicts")), \
+                 mock.patch.object(
+                    MOD, "load_ownership_record",
+                    return_value=(record, identity, None)), \
+                 mock.patch.object(MOD, "runtime_call", return_value=inspected) as calls:
+                with self.assertRaises(MOD.ContractError):
+                    MOD.prepare_runtime_update(args, FakeRunner())
+            calls.assert_called_once()
+
+    def test_runtime_update_revalidates_ownership_and_final_identity(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        initial = self.runtime_update_inspection()
+        planned = self.runtime_recovery_plan(initial)
+        with mock.patch.object(
+                MOD, "load_ownership_record", return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call",
+                               side_effect=[initial, planned]) as calls, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(
+                MOD, "require_unchanged_ownership",
+                side_effect=MOD.ContractError("ownership changed")):
+            with self.assertRaisesRegex(MOD.ContractError, "ownership changed"):
+                MOD.prepare_runtime_update(args, FakeRunner())
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["inspect", "activation-recover-plan"])
+        preserve.assert_not_called()
+
+        with mock.patch.object(
+                MOD, "load_ownership_record", return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call",
+                               side_effect=[initial, planned]) as calls, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(
+                MOD, "require_unchanged_ownership",
+                side_effect=[None, MOD.ContractError("ownership changed")]):
+            with self.assertRaisesRegex(MOD.ContractError, "ownership changed"):
+                MOD.prepare_runtime_update(args, FakeRunner())
+        preserve.assert_called_once()
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["inspect", "activation-recover-plan"])
+
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover",
+            "planSha256": planned["planSha256"],
+            "response": {"status": "recovered-inhibited"},
+        }
+        final = self.recovered_runtime_update_inspection()
+        final["artifacts"]["/bound/runtime"]["status"] = "changed"
+        with mock.patch.object(
+                MOD, "load_ownership_record", return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call",
+                               side_effect=[initial, planned, recovered, final]), \
+             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+             mock.patch.object(MOD, "require_unchanged_ownership"):
+            with self.assertRaisesRegex(MOD.ContractError, "artifacts differ"):
+                MOD.prepare_runtime_update(args, FakeRunner())
+
+    def test_runtime_update_rejects_unbound_recovery_plan(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        initial = self.runtime_update_inspection()
+        planned = self.runtime_recovery_plan(initial)
+        planned["plan"]["unexpected"] = True
+        planned["planSha256"] = digest(MOD.canonical(planned["plan"]))
+        with mock.patch.object(
+                MOD, "load_ownership_record", return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call",
+                               side_effect=[initial, planned]) as calls, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve:
+            with self.assertRaisesRegex(MOD.ContractError, "recovery plan"):
+                MOD.prepare_runtime_update(args, FakeRunner())
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["inspect", "activation-recover-plan"])
+        preserve.assert_not_called()
+
+    def test_runtime_update_rejects_dry_run_plan_without_provider_call(self):
+        args = self.runtime_update_args(dry_run=True)
+        with mock.patch.object(MOD, "runtime_call") as calls:
+            with self.assertRaisesRegex(MOD.ContractError, "dry-run"):
+                MOD.prepare_runtime_update(args, FakeRunner())
+        calls.assert_not_called()
+
     def test_activation_failure_is_archived_exactly_before_owned_cleanup(self):
         evidence = self.root / "evidence"
         evidence.mkdir(mode=0o700)
@@ -1671,6 +1982,8 @@ REPO_BRANCH="$WSPRRYPi_BRANCH"
 FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
 prepare_rp1_gpclk_dkms_installation debug
 apply_rp1_gpclk_dkms_installation debug
+prepare_rp1_gpclk_runtime_update debug
+activate_rp1_gpclk_runtime_administration debug
 [[ ! -e "$SENTINEL" ]]
 cleanup_rp1_gpclk_dkms_state
 [[ -z "$RP1_GPCLK_DKMS_STATE_DIR" && -z "$RP1_GPCLK_DKMS_HELPER" ]]
@@ -1690,7 +2003,7 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("Complete: (dry)"), 1)
+            self.assertEqual(result.stdout.count("Complete: (dry)"), 3)
             self.assertIn(
                 "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
                 result.stdout,
@@ -1703,6 +2016,14 @@ cleanup_rp1_gpclk_dkms_state
                 "Complete: (dry) Apply RP1-GPCLK-DKMS installation plan",
                 result.stdout,
             )
+            self.assertIn(
+                "Complete: (dry) Prepare neutral RP1 runtime for application update",
+                result.stdout,
+            )
+            self.assertIn(
+                "Complete: (dry) Activate neutral RP1-GPCLK-DKMS administration",
+                result.stdout,
+            )
             self.assertIn("Name:    Resolve RP1-GPCLK-DKMS installation plan", result.stderr)
             self.assertIn("Name:    Apply RP1-GPCLK-DKMS installation plan", result.stderr)
             helper = install_script.parent / "rp1_gpclk_dkms_install.py"
@@ -1713,8 +2034,18 @@ cleanup_rp1_gpclk_dkms_state
             apply_command = (
                 f"Command: python3 {helper} apply --state-dir dry-run:no-state-created --debug"
             )
+            update_command = (
+                f"Command: python3 {helper} prepare-runtime-update "
+                "--state-dir dry-run:no-state-created --debug"
+            )
+            activation_command = (
+                f"Command: python3 {helper} activate-runtime "
+                "--state-dir dry-run:no-state-created --debug"
+            )
             self.assertIn(prepare_command, result.stderr)
             self.assertIn(apply_command, result.stderr)
+            self.assertIn(update_command, result.stderr)
+            self.assertIn(activation_command, result.stderr)
 
     def test_exec_command_preserves_internal_debug_argv(self):
         install_script = ROOT / "scripts" / "install.sh"
@@ -1780,7 +2111,7 @@ EXEC_COMMAND_FAILURE_OUTPUT_FILE="$FAILURE_OUTPUT" \
         self.assertTrue(failure_output.read_text().endswith("detail-25\x1b[0m\n"))
         self.assertEqual(stat.S_IMODE(failure_output.stat().st_mode), 0o600)
 
-    def test_shell_propagates_debug_to_both_helper_invocations(self):
+    def test_shell_propagates_debug_to_all_helper_invocations(self):
         install_script = ROOT / "scripts" / "install.sh"
         capture = self.root / "helper-argv.txt"
         shell = r'''
@@ -1801,6 +2132,8 @@ REPO_BRANCH=main
 FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
 prepare_rp1_gpclk_dkms_installation debug
 apply_rp1_gpclk_dkms_installation debug
+prepare_rp1_gpclk_runtime_update debug
+activate_rp1_gpclk_runtime_administration debug
 cleanup_rp1_gpclk_dkms_state
 '''
         environment = os.environ.copy()
@@ -1811,8 +2144,8 @@ cleanup_rp1_gpclk_dkms_state
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         arguments = capture.read_text().splitlines()
-        self.assertEqual(arguments.count("CALL"), 2)
-        self.assertEqual(arguments.count("ARG=--debug"), 2)
+        self.assertEqual(arguments.count("CALL"), 4)
+        self.assertEqual(arguments.count("ARG=--debug"), 4)
 
     def test_selected_uninstall_dry_run_reports_check_without_invoking_python(self):
         install_script = ROOT / "scripts" / "install.sh"
@@ -1886,8 +2219,12 @@ remove_owned_rp1_gpclk_dkms_provider debug
         prepare = source.index('prepare_rp1_gpclk_dkms_installation "$debug" || return 1')
         packages = source.index('handle_apt_packages "$debug" || return 1')
         apply = source.index('apply_rp1_gpclk_dkms_installation "$debug" || return 1')
+        update = source.index('prepare_rp1_gpclk_runtime_update "$debug" || return 1')
+        application = source.index('manage_wsprry_pi "$debug"')
         self.assertLess(prepare, packages)
         self.assertLess(packages, apply)
+        self.assertLess(apply, update)
+        self.assertLess(update, application)
         group = source[source.index("local install_group=("):]
         companion = group.index('"manage_route_application"')
         service = group.index('"manage_service')
@@ -1922,9 +2259,12 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertNotRegex(source, r'if ! python3 "\$RP1_GPCLK_DKMS_HELPER"')
         self.assertEqual(source.count('exec_command "Resolve RP1-GPCLK-DKMS installation plan"'), 1)
         self.assertEqual(source.count('exec_command "Apply RP1-GPCLK-DKMS installation plan"'), 1)
+        self.assertEqual(source.count('exec_command "Prepare neutral RP1 runtime for application update"'), 1)
         self.assertEqual(source.count('exec_command "Activate neutral RP1-GPCLK-DKMS administration"'), 1)
         self.assertIn('EXEC_COMMAND_STATUS_MODE=info', source)
-        self.assertGreaterEqual(source.count('args+=(--debug)'), 3)
+        self.assertGreaterEqual(source.count('args+=(--debug)'), 4)
+        self.assertIn('runtime-update-output.log', source)
+        self.assertIn('activation-output.log', source)
 
     def test_explicit_true_reaches_planner_without_raspberry_pi_identity(self):
         source = (ROOT / "scripts/install.sh").read_text()

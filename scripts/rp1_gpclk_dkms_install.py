@@ -2391,6 +2391,300 @@ def require_unchanged_ownership(
     )
 
 
+def validate_runtime_update_identity(
+    record: Mapping[str, Any], inspected: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Bind a pre-update transition to the exact owned neutral runtime."""
+    runtime = validate_runtime_ownership(record.get("runtime"), record)
+    binding = inspected.get("identities", {}).get("installedBinding", {})
+    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
+    require(
+        binding.get("status") == "valid"
+        and binding.get("sha256") == runtime["bindingSha256"]
+        and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"]
+        and binding_value.get("sourceCommit") == record.get("sourceCommit"),
+        "installed runtime binding differs from WsprryPi ownership",
+    )
+    artifacts = inspected.get("artifacts")
+    require(
+        isinstance(artifacts, dict) and artifacts
+        and all(value.get("status") == "exact" for value in artifacts.values()),
+        "installed runtime artifacts differ from WsprryPi ownership",
+    )
+    routes = inspected.get("routes")
+    require(
+        isinstance(routes, dict)
+        and set(routes) == {"requested", "configured", "persisted", "active"}
+        and all(routes[name] is None for name in routes),
+        "runtime update preparation found a selected GPIO route",
+    )
+    consumer = inspected.get("modules", {}).get(MODULE_NAME, {})
+    consumer_endpoint = inspected.get("endpoints", {}).get("consumer", {})
+    require(
+        consumer.get("status") == "absent"
+        and consumer_endpoint.get("status") == "absent"
+        and consumer_endpoint.get("open") is False
+        and inspected.get("routeSelected") is False
+        and inspected.get("transmissionEligible") is False,
+        "runtime update preparation found transmission-capable state",
+    )
+    return runtime
+
+
+def validate_inactive_runtime_update_state(
+    inspected: Mapping[str, Any], *, recovered: bool
+) -> None:
+    require(
+        inspected.get("result") == "activation_required"
+        and inspected.get("state") == "activation_required"
+        and not inspected.get("conflicts"),
+        "runtime update preparation did not reach inactive activation-required state",
+    )
+    modules = inspected.get("modules")
+    endpoints = inspected.get("endpoints")
+    routes = inspected.get("routes")
+    require(
+        isinstance(modules, dict)
+        and set(modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME}
+        and all(value.get("status") == "absent" for value in modules.values())
+        and isinstance(endpoints, dict)
+        and set(endpoints) == {"consumer", "controller"}
+        and all(value.get("status") == "absent" for value in endpoints.values())
+        and all(value.get("open") is False for value in endpoints.values()),
+        "runtime update preparation left a module or endpoint active",
+    )
+    require(
+        isinstance(routes, dict)
+        and set(routes) == {"requested", "configured", "persisted", "active"}
+        and all(routes[name] is None for name in routes)
+        and inspected.get("routeSelected") is False
+        and inspected.get("transmissionEligible") is False,
+        "runtime update preparation left a route or transmission eligibility",
+    )
+    if recovered:
+        activation_observation = inspected.get("activation", {})
+        activation = activation_observation.get("value", {})
+        journal = inspected.get("journals", {}).get("activation.json", {})
+        service = activation.get("applicationService", {})
+        require(
+            activation_observation.get("status") == "observed"
+            and activation.get("inhibited") is True
+            and journal.get("status") == "present"
+            and journal.get("value", {}).get("phase") == "recovered-inhibited"
+            and service.get("active") in {"inactive", "failed"}
+            and service.get("MainPID") == "0",
+            "runtime update recovery did not retain application inhibition",
+        )
+
+
+def validate_runtime_update_retry_conflict(
+    inspected: Mapping[str, Any], journal_value: Mapping[str, Any]
+) -> None:
+    """Admit only same-boot application PID drift after neutral activation."""
+    activation_observation = inspected.get("activation", {})
+    activation = activation_observation.get("value", {})
+    controller_state = activation.get("controllerState")
+    plan = journal_value.get("plan", {})
+    outcome = journal_value.get("application", {})
+    prior_service = outcome.get("service", {}) if isinstance(outcome, dict) else {}
+    current_service = activation.get("applicationService", {})
+    socket = activation.get("socket", {})
+    manager_socket = activation.get("managerSocket", {})
+    manager_service = activation.get("managerService", {})
+    manager = inspected.get("manager", {})
+    query = manager.get("query", {}) if isinstance(manager, dict) else {}
+    manager_state = query.get("state", {}) if isinstance(query, dict) else {}
+    require(
+        activation_observation.get("status") == "observed"
+        and journal_value.get("controller") == controller_state
+        and plan.get("bootId") == activation.get("bootId")
+        and plan.get("bindingSha256") == activation.get("bindingSha256")
+        and plan.get("artifactSetSha256") == activation.get("artifactSetSha256"),
+        "runtime update retry conflict lacks matching activation provenance",
+    )
+    require(
+        isinstance(outcome, dict)
+        and outcome.get("phase") == "restored"
+        and plan.get("application", {}).get("wasActive") is True
+        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
+        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
+        and prior_service.get("LoadState") == "loaded"
+        and prior_service.get("ActiveState") == "active"
+        and prior_service.get("MainPID", "0") != "0"
+        and current_service.get("load") == prior_service.get("LoadState")
+        and current_service.get("active") == prior_service.get("ActiveState")
+        and current_service.get("enabled") == prior_service.get("UnitFileState")
+        and current_service.get("fragment") == "/etc/systemd/system/wsprrypi.service"
+        and current_service.get("MainPID", "0") != "0"
+        and current_service.get("MainPID") != prior_service.get("MainPID"),
+        "runtime update preparation permits only application PID drift",
+    )
+    require(
+        socket.get("active") == "active"
+        and socket.get("fragment") ==
+            "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket"
+        and manager_socket.get("status") == "owned"
+        and manager_service.get("load") == "loaded"
+        and manager_service.get("fragment") ==
+            "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service"
+        and activation.get("inhibited") is False
+        and manager.get("status") == "observed"
+        and query.get("operation") == "query"
+        and query.get("status") == "ok"
+        and manager_state.get("bindingSha256") == activation.get("bindingSha256")
+        and manager_state.get("bootId") == activation.get("bootId")
+        and manager_state.get("controller") == controller_state
+        and manager_state.get("activeRoute") is None
+        and manager_state.get("configuredRoute") is None
+        and manager_state.get("qualification") is False
+        and manager_state.get("outputEnabled") is False
+        and manager_state.get("applicationInhibited") is False
+        and manager_state.get("pendingTransaction") is None
+        and manager_state.get("application") is None
+        and manager_state.get("applicationRestoration") is True,
+        "runtime update retry conflict differs beyond application PID drift",
+    )
+
+
+def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
+    """Recover exact neutral administration before application replacement."""
+    state_dir = secure_state_dir(args.state_dir)
+    plan = load_plan(state_dir)
+    require(not plan.get("dryRun"), "dry-run plan cannot prepare a runtime update")
+    if not plan["decision"]["install"]:
+        print("RP1-GPCLK-DKMS runtime update preparation skipped by resolved plan.")
+        return
+    resolved = plan.get("resolved")
+    require(isinstance(resolved, dict), "prepared runtime source identity is missing")
+    record, record_identity, reason = load_ownership_record(args.record)
+    require(
+        record is not None and record_identity is not None,
+        f"WsprryPi provider ownership is required before runtime update preparation: {reason or 'unknown record'}",
+    )
+    require(
+        record.get("sourceCommit") == resolved.get("commit"),
+        "owned provider and runtime source commits differ",
+    )
+    if record.get("schema") != RUNTIME_RECORD_SCHEMA:
+        print("No existing neutral runtime administration requires update preparation.")
+        return
+
+    inspected = validate_readiness(runtime_call(
+        runner, RUNTIME_PROVIDER, "inspect", (),
+        {"neutral_ready", "activation_required", "conflict"},
+    ))
+    runtime = validate_runtime_update_identity(record, inspected)
+    result = inspected.get("result")
+    journal = inspected.get("journals", {}).get("activation.json", {})
+    journal_value = journal.get("value", {}) if isinstance(journal, dict) else {}
+
+    if result == "activation_required":
+        recovered = journal.get("status") == "present" and journal_value.get("phase") == "recovered-inhibited"
+        post_reboot = (
+            journal.get("status") == "present"
+            and journal_value.get("phase") == "complete-neutral"
+            and inspected.get("reboot", {}).get("occurred") is True
+        )
+        require(recovered or post_reboot,
+                "owned runtime is inactive without recoverable update or post-reboot evidence")
+        validate_inactive_runtime_update_state(inspected, recovered=recovered)
+        print(
+            "RP1-GPCLK-DKMS runtime already recovered for application update."
+            if recovered else
+            "RP1-GPCLK-DKMS post-reboot runtime remains eligible for fresh neutral activation."
+        )
+        return
+
+    if result == "conflict":
+        require(
+            inspected.get("conflicts") == ["loaded-controller-without-completed-activation"],
+            "runtime update preparation refuses non-retry conflicts",
+        )
+        validate_runtime_update_retry_conflict(inspected, journal_value)
+    else:
+        require(result == "neutral_ready", "runtime update preparation requires neutral readiness")
+
+    activation_observation = inspected.get("activation", {})
+    activation = activation_observation.get("value", {})
+    controller = inspected.get("modules", {}).get(CONTROLLER_MODULE_NAME, {})
+    activation_controller = activation.get("controller", {})
+    controller_endpoint = inspected.get("endpoints", {}).get("controller", {})
+    controller_state = activation.get("controllerState")
+    require(
+        activation_observation.get("status") == "observed"
+        and controller.get("status") == "loaded"
+        and activation_controller.get("status") == "loaded"
+        and activation_controller.get("exact") is True
+        and controller_endpoint.get("status") == "owned"
+        and controller_endpoint.get("open") is False
+        and isinstance(controller_state, dict)
+        and controller_state.get("session") == runtime["controllerSession"]
+        and controller_state.get("generation") == runtime["controllerGeneration"]
+        and not any(controller_state.get(name) for name in
+                    ("generation", "id", "error", "route", "flags"))
+        and journal.get("status") == "present"
+        and journal_value.get("phase") == "complete-neutral"
+        and journal_value.get("requestId") == runtime["activationRequestId"]
+        and journal_value.get("planSha256") == runtime["activationPlanSha256"],
+        "runtime update preparation lacks exact neutral controller evidence",
+    )
+
+    recovery = runtime_call(runner, RUNTIME_PROVIDER, "activation-recover-plan")
+    require(
+        recovery.get("contract") == RUNTIME_READINESS_CONTRACT
+        and recovery.get("operation") == "activation-recover-plan",
+        "runtime update recovery plan identity differs",
+    )
+    recovery_digest = recovery.get("planSha256")
+    recovery_plan = recovery.get("plan", {})
+    recovery_plan_fields = {
+        "version", "operation", "activationJournalSha256", "bindingSha256",
+        "bootId", "controllerLoaded", "socketWasActive", "alreadyRecovered",
+    }
+    require(
+        isinstance(recovery_digest, str) and SHA256.fullmatch(recovery_digest)
+        and isinstance(recovery_plan, dict)
+        and set(recovery_plan) == recovery_plan_fields
+        and recovery_digest == sha256_bytes(canonical(recovery_plan))
+        and recovery_plan.get("version") == 1
+        and recovery_plan.get("operation") == "neutral-activation-recovery"
+        and recovery_plan.get("bindingSha256") == runtime["bindingSha256"]
+        and recovery_plan.get("bootId") == activation.get("bootId")
+        and recovery_plan.get("activationJournalSha256")
+            == sha256_bytes(canonical(journal_value))
+        and recovery_plan.get("controllerLoaded") is True
+        and recovery_plan.get("socketWasActive")
+            is journal_value.get("plan", {}).get("socketWasActive")
+        and recovery_plan.get("alreadyRecovered") is False,
+        "runtime update recovery plan lacks exact owned activation identities",
+    )
+    require_unchanged_ownership(
+        args.record, record, record_identity, "runtime update evidence preservation"
+    )
+    preserve_owned_activation_journal(record, "before-application-update")
+    require_unchanged_ownership(
+        args.record, record, record_identity, "runtime update recovery"
+    )
+    recovered = runtime_call(
+        runner, RUNTIME_PROVIDER, "activation-recover",
+        ["--plan-sha256", recovery_digest],
+    )
+    require(
+        recovered.get("contract") == RUNTIME_READINESS_CONTRACT
+        and recovered.get("operation") == "activation-recover"
+        and recovered.get("planSha256") == recovery_digest
+        and recovered.get("response", {}).get("status")
+            in {"recovered-inhibited", "idempotent-no-change"},
+        "runtime update recovery response differs from the reviewed plan",
+    )
+    final = validate_readiness(runtime_call(
+        runner, RUNTIME_PROVIDER, "inspect", (), {"activation_required"}
+    ))
+    validate_runtime_update_identity(record, final)
+    validate_inactive_runtime_update_state(final, recovered=True)
+    print("RP1-GPCLK-DKMS neutral runtime recovered and inhibited for application update.")
+
+
 def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
     state_dir = secure_state_dir(args.state_dir)
     plan = load_plan(state_dir)
@@ -2532,6 +2826,10 @@ def parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
     apply_parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path("/"))
     apply_parser.add_argument("--debug", action="store_true")
+    update_parser = sub.add_parser("prepare-runtime-update")
+    update_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
+    update_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
+    update_parser.add_argument("--debug", action="store_true")
     runtime_parser = sub.add_parser("activate-runtime")
     runtime_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
     runtime_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
@@ -2551,6 +2849,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             prepare(args, Runner(args.debug))
         elif args.command == "apply":
             apply(args, Runner(args.debug))
+        elif args.command == "prepare-runtime-update":
+            prepare_runtime_update(args, Runner(args.debug))
         elif args.command == "activate-runtime":
             activate_runtime(args, Runner(args.debug))
         else:

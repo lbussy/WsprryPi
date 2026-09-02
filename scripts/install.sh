@@ -2470,6 +2470,43 @@ apply_rp1_gpclk_dkms_installation() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Recover exact neutral RP1 administration before application mutation.
+# @details A repeat installation must not invalidate a completed activation
+#          journal by replacing or restarting WsprryPi first. The helper
+#          performs only the provider's digest-reviewed recovery transaction;
+#          fresh/provider-only installs and dry runs remain no-ops.
+# -----------------------------------------------------------------------------
+prepare_rp1_gpclk_runtime_update() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+    if [[ "$DRY_RUN" != "true" &&
+        ( -z "${RP1_GPCLK_DKMS_STATE_DIR:-}" || -z "${RP1_GPCLK_DKMS_HELPER:-}" ) ]]; then
+        warn "RP1-GPCLK-DKMS plan state is unavailable."
+        return 1
+    fi
+
+    local update_args=(prepare-runtime-update --state-dir "$RP1_GPCLK_DKMS_STATE_DIR")
+    local failure_output_file=""
+    if [[ "$DRY_RUN" != "true" ]]; then
+        failure_output_file="$RP1_GPCLK_DKMS_STATE_DIR/runtime-update-output.log"
+    fi
+    if [[ "$debug" == "debug" ]]; then
+        update_args+=(--debug)
+    fi
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$failure_output_file" \
+        exec_command "Prepare neutral RP1 runtime for application update" \
+        python3 "$RP1_GPCLK_DKMS_HELPER" "${update_args[@]}" "$debug"; then
+        warn "RP1-GPCLK-DKMS runtime update preparation failed closed; application files and services were not changed."
+        return 1
+    fi
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Establish digest-bound, route-neutral RP1 runtime administration.
 # @details Runs only after the exact WsprryPi route companion is installed.
 #          The helper builds and reviews the exact runtime bundle, executes the
@@ -2490,10 +2527,15 @@ activate_rp1_gpclk_runtime_administration() {
     fi
 
     local runtime_args=(activate-runtime --state-dir "$RP1_GPCLK_DKMS_STATE_DIR")
+    local failure_output_file=""
+    if [[ "$DRY_RUN" != "true" ]]; then
+        failure_output_file="$RP1_GPCLK_DKMS_STATE_DIR/activation-output.log"
+    fi
     if [[ "$debug" == "debug" ]]; then
         runtime_args+=(--debug)
     fi
-    if ! exec_command "Activate neutral RP1-GPCLK-DKMS administration" \
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$failure_output_file" \
+        exec_command "Activate neutral RP1-GPCLK-DKMS administration" \
         python3 "$RP1_GPCLK_DKMS_HELPER" "${runtime_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS neutral runtime activation failed closed; no GPIO route or output was requested."
         return 1
@@ -8765,6 +8807,7 @@ _main() {
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
         apply_rp1_gpclk_dkms_installation "$debug" || return 1
+        prepare_rp1_gpclk_runtime_update "$debug" || return 1
     fi
 
     # Handle correcting timezone
