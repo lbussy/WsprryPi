@@ -728,18 +728,29 @@ async function main() {
             const layout = await client.send("Runtime.evaluate", {
                 expression: `(() => {
                     const states = [
-                        ["saved", "Saved", ""],
-                        ["saving", "Saving...", ""],
-                        ["error", "Save paused", "The controller could not be reached for this save. Changes stay local until retry."],
+                        ["saved", "Saved", "", {}],
+                        ["saving", "Saving...", "", {}],
+                        ["error", "Save paused", "The controller could not be reached for this save. Changes stay local until retry.", {}],
+                        ["warning", "Identity change not saved", "The station identity remains local and is not valid for transmission. Fix Call Sign and Grid locator before transmitting.", {
+                            detailActionLabel: "Review station identity",
+                            onDetailAction: () => {},
+                        }],
                     ];
-                    return states.map(([state, message, detail]) => {
-                        setConfigSaveStatus(state, message, detail);
+                    return states.map(([state, message, detail, options]) => {
+                        setConfigSaveStatus(state, message, detail, options);
                         const detailNode = document.getElementById("configSaveStatusDetail");
+                        const hintNode = document.getElementById("configSaveStatusHint");
+                        const detailRange = document.createRange();
+                        detailRange.selectNodeContents(detailNode);
                         return {
                             state,
                             tabsTop: document.getElementById("configTabs").getBoundingClientRect().top,
                             detailHeight: detailNode.getBoundingClientRect().height,
+                            detailWidth: detailNode.getBoundingClientRect().width,
                             detailScrollHeight: detailNode.scrollHeight,
+                            detailTextHeight: detailRange.getBoundingClientRect().height,
+                            detailLineHeight: Number.parseFloat(getComputedStyle(detailNode).lineHeight),
+                            hintWidth: hintNode.getBoundingClientRect().width,
                             detailHidden: detailNode.hidden,
                         };
                     });
@@ -758,7 +769,18 @@ async function main() {
                     metric.detailHeight + 0.5 >= metric.detailScrollHeight,
                     `${viewport.name} detail slot must contain ${metric.state} feedback without growth: ${JSON.stringify(metric)}`
                 );
+                assert.ok(
+                    Math.abs(metric.detailWidth - metric.hintWidth) <= 0.5,
+                    `${viewport.name} detail and autosave hint must share a wrapping width: ${JSON.stringify(metric)}`
+                );
             });
+            if (viewport.name === "desktop") {
+                const pausedMetric = metrics.find(({ state }) => state === "error");
+                assert.ok(
+                    pausedMetric.detailTextHeight <= pausedMetric.detailLineHeight + 0.5,
+                    `desktop paused-save detail must use the available width: ${JSON.stringify(pausedMetric)}`
+                );
+            }
         }
         console.log("cw_duration_latch_integration_test passed");
     } finally {

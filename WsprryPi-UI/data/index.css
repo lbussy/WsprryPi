@@ -162,7 +162,8 @@
     display: grid;
     gap: 0.45rem;
     min-width: 0;
-    max-width: 48rem;
+    width: 48rem;
+    max-width: 100%;
 }
 
 .config-header-title-row {
@@ -230,14 +231,15 @@
 }
 
 #configSaveStatusDetail {
-    max-width: 60ch;
-    min-height: calc(2 * 1em * var(--leading-copy));
+    width: 100%;
+    max-width: none;
+    min-height: calc(2 * 1em * var(--leading-copy) + 1px);
     overflow-wrap: anywhere;
 }
 
 @media (max-width: 767.98px) {
     #configSaveStatusDetail {
-        min-height: calc(4 * 1em * var(--leading-copy));
+        min-height: calc(4 * 1em * var(--leading-copy) + 1px);
     }
 }
 
