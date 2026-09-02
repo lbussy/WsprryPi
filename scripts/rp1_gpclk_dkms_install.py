@@ -1694,7 +1694,6 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     require(interface == resolved["interface"] and route_args == resolved["routeArguments"], "upstream development interface changed after preflight")
     before = existing_inventory(pathlib.Path("/"), runner)
     require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
-    require(not before.get("activeController", False), "an active RP1 route controller blocks exact-source development installation")
     require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
     existing_record, record_identity, record_reason = load_ownership_record(record)
     owned_runtime = bool(
@@ -1704,6 +1703,10 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     owned_provider = bool(
         existing_record is not None and record_identity is not None
         and existing_record.get("schema") == RECORD_SCHEMA
+    )
+    require(
+        not before.get("activeController", False) or owned_runtime,
+        "an active RP1 route controller blocks exact-source development installation",
     )
     if not (owned_runtime or owned_provider):
         require_no_runtime_residue(before, "source-development installation")
