@@ -232,7 +232,12 @@ or GPIO20 invokes upstream `route-plan`; WsprryPi retains the reviewed digest
 and calls `route-ensure` only for the same route and current preflight
 generation. Only this route transaction changes the application backend to
 `rp1-gpclk`, persists the selected pin, and keeps output disabled. A saved or
-default GPIO value is not installation-time route consent.
+default GPIO value is not installation-time route consent. Because the provider
+endpoint is route-owned, `/dev/rp1-gpclk` is normally absent at this neutral
+stage. **Setup > Transmitter** keeps GPIO selectable as **GPIO (route required)**
+and exposes the route panel so the operator can make the first explicit choice;
+the missing endpoint still keeps transmission unavailable until that transaction
+completes and runtime readiness is reconciled.
 
 ## Ownership-aware uninstall
 

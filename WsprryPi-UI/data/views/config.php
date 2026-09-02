@@ -758,9 +758,15 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                             <div class="rp1-route-panel__heading">
                                                 <div>
                                                     <h3 id="rp1-route-heading" class="cw-control-section__title mb-1">RP1 clock route</h3>
-                                                    <p class="form-text mb-0">The RP1 provider is provisioned outside Wsprry Pi. A saved route never authorizes output; development use still requires a current, route-bound operation confirmation and every runtime safety gate.</p>
+                                                    <p class="form-text mb-0">Installation leaves RP1 route-neutral. Choose GPIO4 or GPIO20 here; selecting a route keeps output disabled and never authorizes transmission.</p>
                                                 </div>
                                                 <span id="rp1-route-state" class="rp1-route-state" data-state="checking">Checking</span>
+                                            </div>
+                                            <div id="rp1-route-feedback" class="rp1-route-feedback" role="status" aria-live="polite" aria-atomic="true">Checking the external provider and active route…</div>
+                                            <div class="rp1-route-actions">
+                                                <button type="button" id="rp1-route-apply" class="btn btn-primary" disabled>Check route</button>
+                                                <button type="button" id="rp1-route-cancel" class="btn btn-outline-secondary" disabled>Cancel</button>
+                                                <button type="button" id="rp1-route-rollback" class="btn btn-outline-danger" hidden>Roll back</button>
                                             </div>
                                             <dl class="rp1-route-identities" aria-label="RP1 clock route state">
                                                 <div><dt>Requested</dt><dd id="rp1-route-requested">—</dd></div>
@@ -778,12 +784,6 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                                 <div><dt>Operation lifecycle</dt><dd id="rp1-operation-lifecycle">No active lease or generation</dd></div>
                                                 <div><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
                                             </dl>
-                                            <div id="rp1-route-feedback" class="rp1-route-feedback" role="status" aria-live="polite" aria-atomic="true">Checking the external provider and active route…</div>
-                                            <div class="rp1-route-actions">
-                                                <button type="button" id="rp1-route-apply" class="btn btn-primary" disabled>Apply route and reboot</button>
-                                                <button type="button" id="rp1-route-cancel" class="btn btn-outline-secondary" disabled>Cancel</button>
-                                                <button type="button" id="rp1-route-rollback" class="btn btn-outline-danger" hidden>Roll back</button>
-                                            </div>
                                         </section>
                                     </div>
 

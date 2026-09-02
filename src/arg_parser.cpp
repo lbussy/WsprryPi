@@ -1883,11 +1883,13 @@ bool validate_config_candidate(
 
     if (transmit_backend_uses_gpio_output(candidate.transmit_backend))
     {
-        const bool inactive_rp1_configuration =
-            candidate.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
+        const bool route_neutral_pi5_gpio_configuration =
+            candidate.transmit_backend == TransmitBackendKind::GPIO &&
+            get_raspberry_pi_generation() == 5 &&
+            operator_exposes_rp1_gpio() &&
             (!require_live_backend || !backend_validation_required);
         if (candidate.transmit_backend == TransmitBackendKind::GPIO &&
-            !inactive_rp1_configuration &&
+            !route_neutral_pi5_gpio_configuration &&
             !platform_supports_gpio_clock_transmission(error_message))
         {
             return false;

@@ -1248,6 +1248,6 @@ legend {
 .rp1-route-identities > div { min-width: 0; }
 .rp1-route-identities dt { font-family: var(--font-display); font-size: var(--text-kicker); letter-spacing: var(--tracking-kicker); text-transform: uppercase; }
 .rp1-route-identities dd { margin: .15rem 0 0; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.rp1-route-feedback { max-width: 68ch; margin-bottom: 1rem; overflow-wrap: anywhere; }
+.rp1-route-feedback { max-width: 68ch; margin: .75rem 0 1rem; overflow-wrap: anywhere; }
 .rp1-route-actions { justify-content: flex-start; }
 @media (max-width: 575.98px) { .rp1-route-identities { grid-template-columns: 1fr; } .rp1-route-actions > .btn { width: 100%; min-height: 44px; } }

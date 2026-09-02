@@ -191,7 +191,7 @@ async function captureRp1DriveScreenshot(client, outputPath, theme) {
     fs.writeFileSync(outputPath, screenshot.data, "base64");
 }
 
-async function captureHiddenRp1Screenshot(client, outputPath, theme) {
+async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
     await client.send("Runtime.evaluate", {
         expression: `(() => {
             document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
@@ -199,14 +199,34 @@ async function captureHiddenRp1Screenshot(client, outputPath, theme) {
                 ...(window.WSPRRYPI_PLATFORM || {}),
                 raspberryPiGeneration: 5,
                 gpioClockTransmissionSupported: false,
-                gpioClockTransmissionError: "GPIO controls on Raspberry Pi 5 require a compatible RP1 route controller and an active canonical provider.",
-                rp1GpioOperatorVisible: false,
+                gpioClockTransmissionError: "RP1 route selection is required before GPIO transmission. Choose GPIO4 or GPIO20 below; transmission remains disabled until the canonical provider is active.",
+                rp1GpioOperatorVisible: true,
                 si5351Detected: true,
             };
             document.getElementById("transmit_backend").value = "gpio";
+            document.getElementById("rp1-route-panel").hidden = false;
             updateBackendPlatformSupportUi();
             clickTransmitBackend();
-            clearBackendStatus();
+            rp1RouteUi.render({
+                profile: "runtime",
+                ok: true,
+                state: "runtime_inhibited",
+                requested: null,
+                persisted: null,
+                configured: null,
+                active: null,
+                moduleRoute: null,
+                reconciled: false,
+                bootOwnership: "runtime controller",
+                journal: "none",
+                services: { "wsprrypi.service": "restored" },
+                endpointOwned: false,
+                endpointOpen: false,
+                liveOutput: "Disabled",
+                developmentPolicy: "Disabled",
+                compatible: true,
+                generation: 0,
+            });
             const tab = document.getElementById("transmitter-hardware-tab");
             document.querySelectorAll("#configTabs .nav-link").forEach((item) => {
                 item.classList.toggle("active", item === tab);
@@ -217,7 +237,9 @@ async function captureHiddenRp1Screenshot(client, outputPath, theme) {
                 pane.classList.toggle("active", selected);
                 pane.classList.toggle("show", selected);
             });
-            document.getElementById("transmit_backend").scrollIntoView({ block: "center" });
+            document.documentElement.style.scrollBehavior = "auto";
+            const routePanel = document.getElementById("rp1-route-panel");
+            window.scrollTo(0, Math.max(0, routePanel.offsetTop - 120));
         })()`,
     });
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -688,45 +710,48 @@ async function browserTest() {
     window.WSPRRYPI_PLATFORM.raspberryPiGeneration = 5;
     window.WSPRRYPI_PLATFORM.gpioClockTransmissionSupported = false;
     window.WSPRRYPI_PLATFORM.gpioClockTransmissionError =
-        "GPIO controls on Raspberry Pi 5 require a compatible RP1 route controller and an active canonical provider.";
-    window.WSPRRYPI_PLATFORM.rp1GpioOperatorVisible = false;
+        "RP1 route selection is required before GPIO transmission. Choose GPIO4 or GPIO20 below; transmission remains disabled until the canonical provider is active.";
+    window.WSPRRYPI_PLATFORM.rp1GpioOperatorVisible = true;
     field("transmit_backend").value = "gpio";
+    initializeRp1RouteUi();
     updateBackendPlatformSupportUi();
     equal(field("transmit_backend").value, "gpio",
-        "default-hidden Pi 5 RP1 must preserve a retained engineering backend");
+        "route-neutral Pi 5 RP1 must preserve GPIO for route administration");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO (RP1 unavailable)",
-        "default-hidden Pi 5 RP1 must name the unavailable RP1 path without offering GPIO");
-    equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, true,
-        "default-hidden Pi 5 RP1 must not offer GPIO as an operator selection");
-    equal(field("rp1-gpio-drive-group").hidden, true,
-        "default-hidden Pi 5 RP1 must hide its drive selector");
-    ok(!field("backend-selector-hint").textContent.includes("GPIO uses"),
-        "default-hidden Pi 5 RP1 must not advertise the hidden GPIO path in operator guidance");
-    ok(field("backendPlatformHint").textContent.includes("RP1 route controller"),
-        "default-hidden Pi 5 RP1 must explain the controller readiness requirement");
+        "GPIO (route required)",
+        "route-neutral Pi 5 RP1 must distinguish route setup from provider failure");
+    equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, false,
+        "route-neutral Pi 5 RP1 must keep GPIO selectable for route administration");
+    equal(field("rp1-gpio-drive-group").hidden, false,
+        "route-neutral Pi 5 RP1 must show its route-bound drive selector");
+    ok(field("backend-selector-hint").textContent.includes("Choose an RP1 GPIO route below"),
+        "route-neutral Pi 5 RP1 must point to the next operator action");
+    ok(field("backendPlatformHint").textContent.includes("route selection is required"),
+        "route-neutral Pi 5 RP1 must explain why transmission remains unavailable");
     equal(field("legacy-gpio-power-group").hidden, true,
         "Pi 5 must not substitute the legacy GPIO power control");
-    equal(field("gpio-backend-panel").hidden, true,
-        "default-hidden Pi 5 RP1 must hide the GPIO configuration panel");
+    equal(field("gpio-backend-panel").hidden, false,
+        "route-neutral Pi 5 RP1 must expose the GPIO route panel");
+    equal(field("rp1-route-panel").hidden, false,
+        "route-neutral Pi 5 RP1 must expose the route administration controls");
     equal(field("si5351-backend-panel").hidden, true,
-        "retained engineering GPIO configuration must not imply Si5351 was selected");
+        "route administration must not imply Si5351 was selected");
     equal(buildConfigPayload().GPIO["RP1 Drive mA"], 8,
-        "operator hiding must preserve retained RP1 configuration");
+        "route administration must preserve retained RP1 configuration");
     equal(buildConfigPayload().Operation["Transmit Backend"], "gpio",
-        "an unrelated autosave must not rewrite a retained engineering backend");
-    populateRp1GpioDrive(6);
+        "route administration must not silently rewrite the retained backend");
+    populateRp1GpioDrive(8);
     field("tx_pin").querySelector('option[value="20"]').disabled = false;
     field("tx_pin").value = "20";
     validateTransmitterHardwareFields();
     ok(validateRp1GpioDrive(),
-        "operator-hidden invalid RP1 drive must not block client autosave");
+        "route-neutral RP1 drive must remain valid for explicit route setup");
     equal(field("tx_pin").validationMessage, "",
-        "operator-hidden GPIO pin must not remain a client validation target");
-    equal(buildConfigPayload().GPIO["RP1 Drive mA"], 6,
-        "client hiding must not silently normalize retained RP1 drive state");
+        "route-neutral GPIO pin must remain a valid route draft");
+    equal(buildConfigPayload().GPIO["RP1 Drive mA"], 8,
+        "route setup must preserve the selected RP1 drive state");
     equal(buildConfigPayload().GPIO["Transmit Pin"], 20,
-        "client hiding must not silently normalize retained GPIO pin state");
+        "route setup must preserve the selected GPIO pin draft");
     field("transmit_backend").value = "si5351";
     field("transmit_backend").dispatchEvent(new Event("change", { bubbles: true }));
     equal(buildConfigPayload().Operation["Transmit Backend"], "si5351",
@@ -836,8 +861,8 @@ async function main() {
             );
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Light.png"), "light");
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Dark.png"), "dark");
-            await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Desktop_Light.png"), "light");
-            await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Desktop_Dark.png"), "dark");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Light.png"), "light");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Dark.png"), "dark");
             await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Desktop.png"));
             await client.send("Emulation.setDeviceMetricsOverride", {
                 width: 390,
@@ -854,8 +879,8 @@ async function main() {
             await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Mobile.png"));
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Light.png"), "light");
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Dark.png"), "dark");
-            await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Mobile_Light.png"), "light");
-            await captureHiddenRp1Screenshot(client, path.join(screenshotDir, "RP1_Hidden_Mobile_Dark.png"), "dark");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Light.png"), "light");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Dark.png"), "dark");
         }
         console.log("conditional_transmit_gpio_integration_test passed");
     } finally {

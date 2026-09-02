@@ -1891,6 +1891,10 @@ function rp1GpioOperatorVisible() {
     return platform.rp1GpioOperatorVisible === true;
 }
 
+function rp1GpioRouteSelectable() {
+    return isRp1GpioPlatform() && rp1GpioOperatorVisible();
+}
+
 function gpioBackendOperatorActive() {
     return selectedTransmitBackend() === "gpio" &&
         !(isRp1GpioPlatform() && !rp1GpioOperatorVisible());
@@ -2075,19 +2079,20 @@ function resolveSupportedTransmitBackend(preferredBackend = null) {
     const platform = window.WSPRRYPI_PLATFORM || {};
     const preferred = preferredBackend === "si5351" ? "si5351" : "gpio";
     const gpioSupported = platform.gpioClockTransmissionSupported !== false;
+    const gpioSelectable = gpioSupported || rp1GpioRouteSelectable();
     const si5351Supported = si5351UiSupported();
 
     if (preferred === "si5351") {
         if (si5351Supported) {
             return "si5351";
         }
-        if (gpioSupported) {
+        if (gpioSelectable) {
             return "gpio";
         }
         return "si5351";
     }
 
-    if (gpioSupported) {
+    if (gpioSelectable) {
         return "gpio";
     }
     if (si5351Supported) {
@@ -2100,6 +2105,7 @@ function hasAnySupportedTransmitBackend() {
     const platform = window.WSPRRYPI_PLATFORM || {};
     return (
         platform.gpioClockTransmissionSupported !== false ||
+        rp1GpioRouteSelectable() ||
         si5351UiSupported()
     );
 }
@@ -2215,6 +2221,7 @@ function updateBackendPlatformSupportUi() {
     const $hint = $("#backendPlatformHint");
     const $selectorHint = $("#backend-selector-hint");
     const $backend = $("#transmit_backend");
+    const rp1RouteSelectable = rp1GpioRouteSelectable();
     const hiddenRp1Selection = currentBackend === "gpio" &&
         isRp1GpioPlatform() && !rp1GpioOperatorVisible();
 
@@ -2240,14 +2247,18 @@ function updateBackendPlatformSupportUi() {
     $gpioOption.text(
         hiddenRp1Selection
             ? "GPIO (RP1 unavailable)"
-            : (gpioSupported ? "GPIO" : "GPIO (Unsupported on this Pi)")
+            : (gpioSupported
+                ? "GPIO"
+                : (rp1RouteSelectable ? "GPIO (route required)" : "GPIO (Unsupported on this Pi)"))
     );
-    $gpioOption.prop("disabled", !gpioSupported);
+    $gpioOption.prop("disabled", !gpioSupported && !rp1RouteSelectable);
     $si5351Option.text(getSi5351OptionLabel(si5351Detected));
     $si5351Option.prop("disabled", !si5351Supported);
     $backend.prop("disabled", !anyBackendSupported);
     $selectorHint.text(
-        isRp1GpioPlatform() && !rp1GpioOperatorVisible()
+        rp1RouteSelectable && !gpioSupported
+            ? "Choose an RP1 GPIO route below. Route selection keeps output disabled."
+            : isRp1GpioPlatform() && !rp1GpioOperatorVisible()
             ? "Si5351 uses an attached synthesizer on the configured I2C bus."
             : "GPIO uses Raspberry Pi clock output pins directly. Si5351 uses an attached synthesizer on the configured I2C bus."
     );

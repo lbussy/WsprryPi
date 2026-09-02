@@ -609,7 +609,7 @@ bool platform_supports_gpio_clock_transmission(
 
 bool operator_exposes_rp1_gpio() noexcept
 {
-    return false;
+    return get_raspberry_pi_generation() == 5 && WSPRRYPI_BACKEND_RP1_GPCLK;
 }
 
 void set_raspberry_pi_generation_override_for_test(int generation) noexcept

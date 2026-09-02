@@ -5076,34 +5076,52 @@ int main(int argc, char *argv[])
         require(
             platform_supports_gpio_clock_transmission(),
             "operator visibility must not disable the explicit Pi 5 RP1 runtime path");
-        const nlohmann::json hidden_rp1_public_config = get_public_config_json();
+        const nlohmann::json ready_rp1_public_config = get_public_config_json();
         require(
-            !hidden_rp1_public_config["Platform"]
+            ready_rp1_public_config["Platform"]
                  ["GPIO Clock Transmission Supported"].get<bool>() &&
-                !hidden_rp1_public_config["Platform"]
+                ready_rp1_public_config["Platform"]
                   ["RP1 GPIO Operator Visible"].get<bool>(),
-            "public capability JSON must keep Pi 5 RP1 GPIO hidden by default");
+            "public capability JSON must expose a ready Pi 5 RP1 GPIO path");
         require(
-            hidden_rp1_public_config["Platform"]
-                ["GPIO Clock Transmission Error"].get<std::string>()
-                .find("compatible RP1 route controller") != std::string::npos,
-            "hidden Pi 5 RP1 GPIO must report the actual controller readiness requirement");
+            ready_rp1_public_config["Platform"]
+                ["GPIO Clock Transmission Error"].get<std::string>().empty(),
+            "ready Pi 5 RP1 GPIO must not report a platform error");
         require(
-            hidden_rp1_public_config["GPIO"]["RP1 Drive mA"].get<int>() == 12,
+            ready_rp1_public_config["GPIO"]["RP1 Drive mA"].get<int>() == 12,
             "operator visibility must preserve retained RP1 configuration");
+
+        set_rp1_gpclk_provider_available_override_for_test(false);
+        const nlohmann::json neutral_rp1_public_config = get_public_config_json();
+        require(
+            !neutral_rp1_public_config["Platform"]
+                 ["GPIO Clock Transmission Supported"].get<bool>() &&
+                neutral_rp1_public_config["Platform"]
+                  ["RP1 GPIO Operator Visible"].get<bool>(),
+            "route-neutral Pi 5 must expose administration without claiming transmission readiness");
+        require(
+            neutral_rp1_public_config["Platform"]
+                ["GPIO Clock Transmission Error"].get<std::string>()
+                .find("route selection is required") != std::string::npos,
+            "route-neutral Pi 5 must report the explicit next operator action");
+        std::string neutral_backend_error;
+        require(
+            !backend_ready_for_transmission(config, &neutral_backend_error) &&
+                neutral_backend_error.find("/dev/rp1-gpclk") != std::string::npos,
+            "route-neutral configuration must not weaken live GPIO transmission readiness");
         set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
         patch_all_from_web({
             {"Meta", {{"debug_logging", true}}},
             {"GPIO", {
                 {"Transmit Pin", 20},
-                {"RP1 Drive mA", 6}}}});
+                {"RP1 Drive mA", 8}}}});
         require(
             jConfig["Meta"]["debug_logging"].get<bool>(),
-            "operator-hidden RP1 state must not block unrelated web patches");
+            "route-neutral RP1 state must not block unrelated web patches");
         require(
-            jConfig["GPIO"]["Transmit Pin"].get<int>() == 4 &&
-                jConfig["GPIO"]["RP1 Drive mA"].get<int>() == 12,
-            "web patches must preserve operator-hidden RP1 GPIO configuration");
+            jConfig["GPIO"]["Transmit Pin"].get<int>() == 20 &&
+                jConfig["GPIO"]["RP1 Drive mA"].get<int>() == 8,
+            "operator-visible Pi 5 RP1 web patches must preserve valid route settings");
         clear_rp1_gpclk_provider_available_override_for_test();
         clear_raspberry_pi_generation_override_for_test();
 

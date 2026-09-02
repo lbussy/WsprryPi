@@ -698,8 +698,17 @@ namespace
         const bool gpio_clock_transmission_supported =
             runtime_gpio_clock_transmission_supported &&
             (get_raspberry_pi_generation() != 5 || rp1_gpio_operator_visible);
-        if (runtime_gpio_clock_transmission_supported &&
-            !gpio_clock_transmission_supported)
+        if (get_raspberry_pi_generation() == 5 &&
+            rp1_gpio_operator_visible &&
+            !runtime_gpio_clock_transmission_supported)
+        {
+            gpio_support_error =
+                "RP1 route selection is required before GPIO transmission. "
+                "Choose GPIO4 or GPIO20 below; transmission remains disabled "
+                "until the canonical provider is active.";
+        }
+        else if (runtime_gpio_clock_transmission_supported &&
+                 !gpio_clock_transmission_supported)
         {
             gpio_support_error =
                 "GPIO controls on Raspberry Pi 5 require a compatible RP1 route "
