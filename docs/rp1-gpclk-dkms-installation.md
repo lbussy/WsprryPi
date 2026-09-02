@@ -278,8 +278,11 @@ completes and runtime readiness is reconciled.
 Before WsprryPi application and service teardown, uninstall recovers an exact
 v3 neutral runtime while the recorded application instance still exists. If
 that pre-teardown recovery fails, uninstall stops before changing the
-application. After application teardown succeeds, the exact route, activation,
-and deployment recovery sequence removes runtime residue and the owned provider.
+application. The exact route, activation, and deployment recovery sequence then
+removes runtime residue and the owned provider while the captured application
+service and companion still exist, allowing the provider to restore the state it
+owns. Ordinary WsprryPi application and service teardown runs only after that
+removal succeeds.
 Missing, legacy, malformed, symlinked, insecure, foreign,
 mixed, active, configured, enrolled, manager-bound, or identity-drifted state
 is preserved with an operator-facing reason. A matching release is revalidated
@@ -290,10 +293,11 @@ and rollback record captured during installation. WsprryPi never invents a
 direct DKMS, module unload, overlay, route, boot, service, GPIO, or RF removal
 sequence.
 
-If any preceding WsprryPi uninstall step fails, safe teardown continues where
-possible, but provider removal is skipped. The provider and ownership record
-are preserved, the overall uninstall fails, and no uninstall-success message is
-reported.
+If runtime preparation or provider removal fails, uninstall stops before
+application teardown. The provider and ownership record are preserved, the
+overall uninstall fails, and no uninstall-success message is reported. Failures
+in later independent application teardown remain cumulative: safe teardown
+continues where possible, but the overall uninstall still fails.
 
 The ownership record is deleted only after the canonical removal succeeds and
 the helper verifies that package, DKMS, source, module, overlay, route,

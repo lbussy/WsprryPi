@@ -2606,7 +2606,7 @@ remove_owned_rp1_gpclk_dkms_provider debug
         cleanup = source[cleanup_start:source.index("\n}\n", cleanup_start) + 3]
         self.assertIn("/tmp/wsprrypi-rp1-gpclk-dkms.*", cleanup)
         self.assertIn("Refusing to remove unexpected", cleanup)
-        self.assertIn('group_to_execute+=("remove_owned_rp1_gpclk_dkms_provider")', source)
+        self.assertIn('"prepare_owned_rp1_gpclk_runtime_removal"\n            "remove_owned_rp1_gpclk_dkms_provider"', source)
 
     def run_uninstall_orchestration(self, failing_step=""):
         install_script = ROOT / "scripts" / "install.sh"
@@ -2658,7 +2658,7 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
         self.assertEqual(result.returncode, 0, result.stderr)
         return capture.read_text().splitlines(), result.stdout
 
-    def test_teardown_failures_skip_owned_provider_removal_and_fail_uninstall(self):
+    def test_provider_removal_precedes_teardown_and_later_failures_fail_uninstall(self):
         expected_teardown = {
             "manage_apache", "manage_web", "manage_service", "manage_i2c",
             "manage_config", "manage_route_application",
@@ -2669,17 +2669,22 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
             with self.subTest(failing_step=failing_step):
                 lines, stdout = self.run_uninstall_orchestration(failing_step)
                 self.assertTrue(expected_teardown.issubset(lines))
-                self.assertNotIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+                self.assertIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+                self.assertLess(
+                    lines.index("remove_owned_rp1_gpclk_dkms_provider"),
+                    lines.index(failing_step),
+                )
                 self.assertIn("finish_status=1", lines)
                 self.assertIn("return_status=1", lines)
-                self.assertTrue(any("provider and ownership record were preserved" in line for line in lines))
                 self.assertNotIn("Uninstallation successful", stdout)
                 self.assertNotIn("has been uninstalled", stdout)
 
-    def test_successful_teardown_runs_owned_provider_removal_last(self):
+    def test_successful_teardown_removes_owned_provider_before_application(self):
         lines, stdout = self.run_uninstall_orchestration()
         provider = lines.index("remove_owned_rp1_gpclk_dkms_provider")
-        self.assertGreater(provider, lines.index("manage_sound"))
+        self.assertGreater(provider, lines.index("prepare_owned_rp1_gpclk_runtime_removal"))
+        self.assertLess(provider, lines.index("manage_service"))
+        self.assertLess(provider, lines.index("manage_exe"))
         self.assertIn("finish_status=0", lines)
         self.assertIn("return_status=0", lines)
         self.assertIn("Uninstallation successful", stdout)
@@ -2687,6 +2692,8 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
     def test_owned_provider_removal_failure_fails_uninstall(self):
         lines, stdout = self.run_uninstall_orchestration("remove_owned_rp1_gpclk_dkms_provider")
         self.assertIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+        self.assertNotIn("manage_service", lines)
+        self.assertNotIn("manage_exe", lines)
         self.assertIn("finish_status=1", lines)
         self.assertIn("return_status=1", lines)
         self.assertNotIn("Uninstallation successful", stdout)

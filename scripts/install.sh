@@ -8832,12 +8832,16 @@ manage_wsprry_pi() {
                 { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}'; } |
                 grep -v -E "^($skip_regex)( |$)"
         )
-        group_to_execute=("prepare_owned_rp1_gpclk_runtime_removal" "${group_to_execute[@]}")
+        # The runtime deployment owns restoration of the application state it
+        # captured. Remove it while that service and its companion still
+        # exist, then continue with ordinary WsprryPi teardown.
+        group_to_execute=(
+            "prepare_owned_rp1_gpclk_runtime_removal"
+            "remove_owned_rp1_gpclk_dkms_provider"
+            "${group_to_execute[@]}"
+        )
         # Re-add manage_sound at the very end
         group_to_execute+=("manage_sound")
-        # Perform ownership-aware provider cleanup only after application and
-        # service teardown has completed.
-        group_to_execute+=("remove_owned_rp1_gpclk_dkms_provider")
         ;;
     *)
         die 1 "Invalid action: '$ACTION'. Use 'install' or 'uninstall'."
@@ -8853,18 +8857,6 @@ manage_wsprry_pi() {
     # Execute functions
     for func in "${group_to_execute[@]}"; do
         local function_name="${func%% *}" # Extract only function name
-
-        # Provider removal is ownership-sensitive and may run only after every
-        # preceding uninstall step has completed successfully. Continue safe
-        # teardown after failures, but preserve the provider and its ownership
-        # record when the WsprryPi teardown is incomplete.
-        if [[ "$ACTION" == "uninstall" && \
-            "$function_name" == "remove_owned_rp1_gpclk_dkms_provider" && \
-            "$overall_status" -ne 0 ]]; then
-            warn "Skipping RP1-GPCLK-DKMS provider removal because earlier WsprryPi uninstall steps failed; the provider and ownership record were preserved."
-            debug_print "$func skipped after incomplete WsprryPi teardown." "$debug"
-            continue
-        fi
 
         # Execute the function
         debug_print "Running $func() with action: '$ACTION'" "$debug"
@@ -8883,12 +8875,13 @@ manage_wsprry_pi() {
                 overall_status=1
                 break
             elif [[ "$ACTION" == "uninstall" ]]; then
-                if [[ "$function_name" == "prepare_owned_rp1_gpclk_runtime_removal" ]]; then
+                if [[ "$function_name" == "prepare_owned_rp1_gpclk_runtime_removal" ||
+                    "$function_name" == "remove_owned_rp1_gpclk_dkms_provider" ]]; then
                     overall_status=1
                     break
                 fi
-                # Continue safe teardown, but retain every failure so provider
-                # removal is gated and uninstall success cannot be reported.
+                # Continue independent application teardown, but retain every
+                # failure so uninstall success cannot be reported.
                 overall_status=1
             fi
         else
