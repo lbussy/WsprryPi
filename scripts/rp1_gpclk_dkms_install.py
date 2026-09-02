@@ -1726,50 +1726,59 @@ def recover_and_remove_owned_runtime(
     activation_journal = inspected.get("journals", {}).get("activation.json", {})
     if (inspected.get("result") == "activation_required"
             and activation_journal.get("status") == "present"):
-        retirement = runtime_call(runner, provider, "activation-retire-plan")
-        require(
-            retirement.get("contract") == RUNTIME_READINESS_CONTRACT
-            and retirement.get("operation") == "activation-retire-plan",
-            "post-reboot activation retirement plan identity differs",
-        )
-        retirement_digest = retirement.get("planSha256")
-        retirement_plan = retirement.get("plan", {})
-        require(
-            isinstance(retirement_digest, str)
-            and SHA256.fullmatch(retirement_digest)
-            and retirement_digest == sha256_bytes(canonical(retirement_plan))
-            and retirement_plan.get("bindingSha256") == binding.get("sha256")
-            and retirement_plan.get("artifactSetSha256")
-                == binding_value.get("artifactSetSha256"),
-            "post-reboot activation retirement plan lacks owned identities",
-        )
-        preserve_owned_activation_journal(record, "before-retirement")
-        require_unchanged_ownership(
-            record_path, record, record_identity,
-            "post-reboot activation retirement",
-        )
-        retired = runtime_call(
-            runner, provider, "activation-retire",
-            ["--plan-sha256", retirement_digest],
-        )
-        require(
-            retired.get("contract") == RUNTIME_READINESS_CONTRACT
-            and retired.get("operation") == "activation-retire"
-            and retired.get("planSha256") == retirement_digest
-            and retired.get("response", {}).get("status")
-                == "retired-post-reboot-activation"
-            and retired.get("response", {}).get("activationJournalSha256")
-                == retirement_plan.get("activationJournalSha256"),
-            "post-reboot activation retirement response differs from the reviewed plan",
-        )
-        inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"activation_required"},
-        ), "activation_required")
-        require(
-            inspected.get("journals", {}).get("activation.json", {}).get("status")
-                == "absent",
-            "post-reboot activation retirement left its journal present",
-        )
+        activation_value = activation_journal.get("value", {})
+        if activation_value.get("phase") == "recovered-inhibited":
+            validate_inactive_runtime_update_state(inspected, recovered=True)
+        else:
+            require(
+                activation_value.get("phase") == "complete-neutral"
+                and inspected.get("reboot", {}).get("occurred") is True,
+                "inactive runtime activation journal is neither recovered nor attributable to a prior boot",
+            )
+            retirement = runtime_call(runner, provider, "activation-retire-plan")
+            require(
+                retirement.get("contract") == RUNTIME_READINESS_CONTRACT
+                and retirement.get("operation") == "activation-retire-plan",
+                "post-reboot activation retirement plan identity differs",
+            )
+            retirement_digest = retirement.get("planSha256")
+            retirement_plan = retirement.get("plan", {})
+            require(
+                isinstance(retirement_digest, str)
+                and SHA256.fullmatch(retirement_digest)
+                and retirement_digest == sha256_bytes(canonical(retirement_plan))
+                and retirement_plan.get("bindingSha256") == binding.get("sha256")
+                and retirement_plan.get("artifactSetSha256")
+                    == binding_value.get("artifactSetSha256"),
+                "post-reboot activation retirement plan lacks owned identities",
+            )
+            preserve_owned_activation_journal(record, "before-retirement")
+            require_unchanged_ownership(
+                record_path, record, record_identity,
+                "post-reboot activation retirement",
+            )
+            retired = runtime_call(
+                runner, provider, "activation-retire",
+                ["--plan-sha256", retirement_digest],
+            )
+            require(
+                retired.get("contract") == RUNTIME_READINESS_CONTRACT
+                and retired.get("operation") == "activation-retire"
+                and retired.get("planSha256") == retirement_digest
+                and retired.get("response", {}).get("status")
+                    == "retired-post-reboot-activation"
+                and retired.get("response", {}).get("activationJournalSha256")
+                    == retirement_plan.get("activationJournalSha256"),
+                "post-reboot activation retirement response differs from the reviewed plan",
+            )
+            inspected = validate_readiness(runtime_call(
+                runner, provider, "inspect", (), {"activation_required"},
+            ), "activation_required")
+            require(
+                inspected.get("journals", {}).get("activation.json", {}).get("status")
+                    == "absent",
+                "post-reboot activation retirement left its journal present",
+            )
     if inspected.get("result") in {"recovery_required", "neutral_ready"}:
         preserve_owned_activation_journal(record, "before-recovery")
         recovery = runtime_call(runner, provider, "activation-recover-plan")

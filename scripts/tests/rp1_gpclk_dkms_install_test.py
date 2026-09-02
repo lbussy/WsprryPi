@@ -1762,6 +1762,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "endpoints": {"controller": {"status": "absent"},
                           "consumer": {"status": "absent"}},
             "managerSocket": {"status": "absent"},
+            "reboot": {"occurred": True, "required": False},
         }
         removable = dict(initial)
         removable["journals"] = {"activation.json": {"status": "absent"}}
@@ -1808,6 +1809,62 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(operations, ["inspect", "activation-retire-plan",
             "preserve", "activation-retire", "inspect", "remove-plan", "remove"])
         preserve.assert_called_once_with(record, "before-retirement")
+
+    def test_pre_uninstall_recovered_runtime_removes_without_retirement(self):
+        provider = self.root / "installed/runtime_provider.py"
+        provider.parent.mkdir(parents=True)
+        provider.write_text("# authenticated installed provider fixture\n")
+        binding_digest = "b" * 64
+        artifact_digest = "f" * 64
+        removal_digest = "d" * 64
+        inspected = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "activation_required", "state": "activation_required",
+            "routeSelected": False,
+            "identities": {"installedBinding": {
+                "status": "valid", "sha256": binding_digest,
+                "value": {"sourceCommit": "c" * 40,
+                          "artifactSetSha256": artifact_digest, "files": {}},
+            }},
+            "artifacts": {"/bound": {"status": "exact"}},
+            "journals": {"activation.json": {"status": "present",
+                "value": {"phase": "recovered-inhibited"}}},
+            "modules": {"rp1_route_controller": {"status": "absent"},
+                        "rp1_gpclk_dkms": {"status": "absent"}},
+            "endpoints": {"controller": {"status": "absent"},
+                          "consumer": {"status": "absent"}},
+            "managerSocket": {"status": "absent"},
+        }
+        planned = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": removal_digest,
+            "destinations": sorted(MOD.runtime_deployment_destinations()),
+        }
+        removed = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove", "planSha256": removal_digest,
+            "response": {"status": "removed-exact-deployment"},
+        }
+        replies = iter((inspected, planned, removed))
+        operations = []
+        def runtime_call(unused_runner, provider_arg, operation,
+                         arguments=(), allowed_results=()):
+            self.assertEqual(provider_arg, provider)
+            operations.append(operation)
+            return next(replies)
+        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+             mock.patch.object(MOD, "validate_inactive_runtime_update_state") as validate, \
+             mock.patch.object(MOD, "load_ownership_record",
+                               return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.recover_and_remove_owned_runtime(
+                self.record, record, identity, FakeRunner()
+            )
+        validate.assert_called_once_with(inspected, recovered=True)
+        self.assertEqual(operations, ["inspect", "remove-plan", "remove"])
 
     def test_unowned_runtime_never_enters_candidate_migration(self):
         source = self.root / "source"
