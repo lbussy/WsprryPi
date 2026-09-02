@@ -1060,8 +1060,8 @@ class ApplyPolicyTests(unittest.TestCase):
                 "sourceCommit": "a" * 40, "productVersion": "0.9.0",
                 "targetKernel": MOD.platform.release(),
                 "compatibilityIdentities": {
-                    "gpio4": "v0.9.0-pi5-gpio4",
-                    "gpio20": "v0.9.0-pi5-gpio20",
+                    "gpio4": "v0.9.0-rp1-gpio4",
+                    "gpio20": "v0.9.0-rp1-gpio20",
                 },
                 "deploymentPlanSha256": "d" * 64,
                 "activationPlanSha256": "e" * 64,
@@ -1898,7 +1898,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "schemaVersion": 3, "contract": MOD.RUNTIME_BINDING_CONTRACT,
             "productVersion": "0.9.0",
             "compatibilityIdentities": {
-                "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20"},
+                "gpio4": "v0.9.0-rp1-gpio4", "gpio20": "v0.9.0-rp1-gpio20"},
             "sourceCommit": "a" * 40, "kernel": kernel, "files": file_digests,
             "externalFiles": {str(companion): digest(companion.read_bytes())},
             "uapiSha256": {
@@ -1931,6 +1931,16 @@ class ApplyPolicyTests(unittest.TestCase):
             result = MOD.validate_runtime_bundle(bundle, resolved, companion, self.root)
         self.assertEqual(result["artifactSetSha256"], binding["artifactSetSha256"])
 
+        legacy_binding = dict(binding)
+        legacy_binding["compatibilityIdentities"] = {
+            "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20",
+        }
+        (bundle / "binding.json").write_text(json.dumps(legacy_binding))
+        with mock.patch.object(MOD.platform, "release", return_value=kernel):
+            with self.assertRaisesRegex(MOD.ContractError, "compatibility identities differ"):
+                MOD.validate_runtime_bundle(bundle, resolved, companion, self.root)
+
+        (bundle / "binding.json").write_text(json.dumps(binding))
         (bundle / "runtime_route_client.py").unlink()
         with mock.patch.object(MOD.platform, "release", return_value=kernel):
             with self.assertRaisesRegex(MOD.ContractError, "unsupported or missing member"):
@@ -1958,7 +1968,7 @@ class ApplyPolicyTests(unittest.TestCase):
         binding = {
             "artifactSetSha256": "b" * 64,
             "compatibilityIdentities": {
-                "gpio4": "v0.9.0-pi5-gpio4", "gpio20": "v0.9.0-pi5-gpio20",
+                "gpio4": "v0.9.0-rp1-gpio4", "gpio20": "v0.9.0-rp1-gpio20",
             },
             "files": {"/bound/runtime": "c" * 64},
         }

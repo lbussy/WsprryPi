@@ -2192,8 +2192,8 @@ def validate_runtime_bundle(
     require_exact_keys(binding, required, "runtime bundle binding")
     product = runtime_product_version(resolved)
     compatibility = {
-        "gpio4": f"v{product}-pi5-gpio4",
-        "gpio20": f"v{product}-pi5-gpio20",
+        "gpio4": f"v{product}-rp1-gpio4",
+        "gpio20": f"v{product}-rp1-gpio20",
     }
     require(binding["schemaVersion"] == 3 and binding["contract"] == RUNTIME_BINDING_CONTRACT, "runtime bundle binding contract differs")
     require(binding["sourceCommit"] == resolved.get("commit"), "runtime bundle source commit differs from selected provider")
