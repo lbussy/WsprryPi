@@ -1114,7 +1114,7 @@ class ApplyPolicyTests(unittest.TestCase):
                 "controller": {"status": "owned", "open": False},
                 "consumer": {"status": "absent", "open": False},
             },
-            "routeSelected": False, "transmissionEligible": False,
+            "routeSelected": False, "executionReady": False,
             "journals": {"activation.json": {"status": "present", "value": journal}},
             "activation": {"status": "observed", "value": {
                 "bindingSha256": "b" * 64,
@@ -1993,7 +1993,7 @@ class ApplyPolicyTests(unittest.TestCase):
         }
         final = readiness("neutral_ready")
         final.update({
-            "administrationEligible": True, "transmissionEligible": False,
+            "administrationEligible": True, "executionReady": False,
             "routeSelected": False,
             "routes": {name: None for name in ("requested", "configured", "persisted", "active")},
             "safety": {"outputInhibited": False, "operationalReady": False,

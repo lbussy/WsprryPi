@@ -217,7 +217,7 @@ and calls the upstream runtime provider in this order: `inspect`, `plan`,
 `ensure`, `inspect`, `activation-plan`, `activation-ensure`, and final `inspect`.
 Both mutation calls receive only the digest returned by the immediately reviewed
 plan. The final result must be `neutral_ready`, with
-`administrationEligible=true`, `transmissionEligible=false`, no
+`administrationEligible=true`, `executionReady=false`, no
 requested/configured/persisted/active route, no owner or lease, and output
 disabled.
 

@@ -516,10 +516,10 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       const bool eligibility =
           (classification == "neutral_ready" &&
            !raw.value("routeSelected", true) &&
-           !raw.value("transmissionEligible", true)) ||
+           !raw.value("executionReady", true)) ||
           (classification == "exact_ready" &&
            raw.value("routeSelected", false) &&
-           raw.value("transmissionEligible", false));
+           raw.value("executionReady", false));
       const bool valid = raw.value("contract", std::string{}) ==
                              "rp1-gpclk-runtime-readiness-v1" &&
                          raw.value("state", std::string{}) == classification &&

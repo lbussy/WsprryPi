@@ -146,7 +146,7 @@ int main() {
              {"contract", "rp1-gpclk-runtime-readiness-v1"},
              {"result", "neutral_ready"}, {"state", "neutral_ready"},
              {"administrationEligible", true},
-             {"transmissionEligible", false},
+             {"executionReady", false},
              {"routeSelected", false},
              {"safety", {{"outputInhibited", false},
                          {"operationalReady", true},

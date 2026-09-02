@@ -2434,7 +2434,7 @@ def validate_runtime_update_identity(
         and consumer_endpoint.get("status") == "absent"
         and consumer_endpoint.get("open") is False
         and inspected.get("routeSelected") is False
-        and inspected.get("transmissionEligible") is False,
+        and inspected.get("executionReady") is False,
         "runtime update preparation found transmission-capable state",
     )
     return runtime
@@ -2467,7 +2467,7 @@ def validate_inactive_runtime_update_state(
         and set(routes) == {"requested", "configured", "persisted", "active"}
         and all(routes[name] is None for name in routes)
         and inspected.get("routeSelected") is False
-        and inspected.get("transmissionEligible") is False,
+        and inspected.get("executionReady") is False,
         "runtime update preparation left a route or transmission eligibility",
     )
     if recovered:
@@ -2756,7 +2756,7 @@ def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
     require(isinstance(request_id, str) and len(request_id) >= 8, "neutral activation response lacks an attributable request ID")
     final = validate_readiness(runtime_call(runner, RUNTIME_PROVIDER, "inspect"), "neutral_ready")
     require(final.get("administrationEligible") is True, "neutral runtime administration is not eligible")
-    require(final.get("transmissionEligible") is False and final.get("routeSelected") is False, "neutral runtime unexpectedly selected or enabled transmission")
+    require(final.get("executionReady") is False and final.get("routeSelected") is False, "neutral runtime unexpectedly selected or enabled transmission")
     routes = final.get("routes")
     require(
         isinstance(routes, dict)
