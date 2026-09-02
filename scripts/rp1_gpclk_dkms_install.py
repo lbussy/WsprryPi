@@ -1877,7 +1877,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     command = [
         str(source / "scripts" / "development-install"), "--source", str(source),
         "--kernel", platform.release(),
-        *route_args, "--live-output", "0", "--install", "--evidence-directory", str(evidence),
+        *route_args, "--output-inhibit", "0", "--install", "--evidence-directory", str(evidence),
         "--runtime-controller",
     ]
     runner.run(command, cwd=source, passthrough=True)

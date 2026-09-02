@@ -2332,6 +2332,8 @@ remove_owned_rp1_gpclk_dkms_provider debug
         install_source = (ROOT / "scripts/install.sh").read_text()
         helper_source = SCRIPT.read_text()
         self.assertIn('[[ "$ACTION" == "install" ]] || return 0', install_source)
+        self.assertIn('*route_args, "--output-inhibit", "0", "--install"', helper_source)
+        self.assertNotIn('"--live-output"', helper_source)
         self.assertNotRegex(helper_source, r'\["(?:dtoverlay|modprobe|insmod|rmmod|systemctl|service|reboot|shutdown)"')
         self.assertNotRegex(helper_source, r"config\.txt[^\n]*(?:write|replace|unlink)")
 
