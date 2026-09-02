@@ -933,6 +933,45 @@ class DevelopmentInterfaceTests(unittest.TestCase):
             (str(entrypoint), "--record", str(rollback)),
         ])
 
+    def test_runtime_migration_resumes_after_provider_removal_checkpoint(self):
+        source = pathlib.Path(self.temp.name) / "source"
+        source.mkdir()
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        absent = {
+            "packageVersion": None, "dkms": "", "activeModule": False,
+            "activeController": False, "configuredRoute": False,
+            "sourceTrees": [], "moduleCandidates": [],
+            "controllerCandidates": [], "installedOverlays": [],
+            "enrollment": False, "developmentManager": False,
+            "runtimeResidue": [],
+        }
+        owned = {"schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development"}
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        record = pathlib.Path(self.temp.name) / "record.json"
+        events = []
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "route_neutral_interface",
+                               return_value=("route-neutral-flag", ["--route-neutral"])), \
+             mock.patch.object(MOD, "existing_inventory", return_value=absent), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (None, None, "absent")]), \
+             mock.patch.object(MOD, "verify_provider_absent",
+                               side_effect=lambda *unused: events.append("verify-absent")), \
+             mock.patch.object(MOD, "remove_ownership_record",
+                               side_effect=lambda *unused: events.append("record-remove")), \
+             mock.patch.object(MOD, "ensure_new_ownership_record",
+                               side_effect=MOD.ContractError("stop after checkpoint")):
+            with self.assertRaisesRegex(MOD.ContractError, "stop after checkpoint"):
+                MOD.apply_development(resolved, record, FakeRunner())
+        self.assertEqual(events, ["verify-absent", "record-remove"])
+
     def test_runtime_controller_residue_blocks_development_before_mutation(self):
         source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {

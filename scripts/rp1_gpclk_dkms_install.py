@@ -1861,6 +1861,13 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         return
     if provider_present and (existing_record is None or record_identity is None):
         require(False, f"an existing provider is not adoptable: {record_reason or 'WsprryPi ownership is unproven'}")
+    if (not provider_present and existing_record is not None
+            and record_identity is not None):
+        # Resume an interrupted owned migration that completed provider
+        # rollback but stopped before retiring the ownership record.
+        verify_provider_absent(pathlib.Path("/"), runner)
+        remove_ownership_record(record, record_identity)
+        return apply_development(resolved, record, runner)
     require(
         before["packageVersion"] is None
         and not before["dkms"]
