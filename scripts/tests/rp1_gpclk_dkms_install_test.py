@@ -2573,6 +2573,7 @@ manage_route_application() { record_step manage_route_application; }
 manage_support_bundle_runtime() { record_step manage_support_bundle_runtime; }
 manage_exe() { record_step manage_exe; }
 manage_sound() { record_step manage_sound; }
+prepare_owned_rp1_gpclk_runtime_removal() { record_step prepare_owned_rp1_gpclk_runtime_removal; }
 remove_owned_rp1_gpclk_dkms_provider() { record_step remove_owned_rp1_gpclk_dkms_provider; }
 flag_need_reboot() { record_step flag_need_reboot; }
 eval "$(declare -f finish_script | sed '1s/finish_script/original_finish_script/')"
@@ -2605,7 +2606,7 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
             "manage_apache", "manage_web", "manage_service", "manage_i2c",
             "manage_config", "manage_route_application",
             "manage_support_bundle_runtime", "manage_exe", "manage_sound",
-            "flag_need_reboot",
+            "flag_need_reboot", "prepare_owned_rp1_gpclk_runtime_removal",
         }
         for failing_step in ("manage_service", "manage_route_application", "manage_exe"):
             with self.subTest(failing_step=failing_step):
@@ -2633,6 +2634,18 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
         self.assertIn("return_status=1", lines)
         self.assertNotIn("Uninstallation successful", stdout)
         self.assertNotIn("has been uninstalled", stdout)
+
+    def test_runtime_recovery_failure_stops_before_application_teardown(self):
+        lines, stdout = self.run_uninstall_orchestration(
+            "prepare_owned_rp1_gpclk_runtime_removal"
+        )
+        self.assertIn("prepare_owned_rp1_gpclk_runtime_removal", lines)
+        self.assertNotIn("manage_service", lines)
+        self.assertNotIn("manage_exe", lines)
+        self.assertNotIn("remove_owned_rp1_gpclk_dkms_provider", lines)
+        self.assertIn("finish_status=1", lines)
+        self.assertIn("return_status=1", lines)
+        self.assertNotIn("Uninstallation successful", stdout)
 
 
 class RemovalPolicyTests(unittest.TestCase):

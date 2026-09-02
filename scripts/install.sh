@@ -2582,6 +2582,62 @@ activate_rp1_gpclk_runtime_administration() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Recover an exact owned neutral runtime before application teardown.
+# @details A v3 runtime activation records the running application instance.
+#          Recover it while that instance still exists so later service and
+#          file removal cannot turn terminal evidence into a PID-drift conflict.
+# -----------------------------------------------------------------------------
+prepare_owned_rp1_gpclk_runtime_removal() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "uninstall" ]] || return 0
+    [[ "$REMOVE_RP1_GPCLK_DKMS" != "false" ]] || return 0
+
+    local script_source="${BASH_SOURCE[0]:-}"
+    local local_helper=""
+    local state_dir=""
+    if [[ -n "$script_source" && "$script_source" != "bash" ]]; then
+        local_helper="$(cd "$(dirname "$script_source")" && pwd -P)/rp1_gpclk_dkms_install.py"
+    fi
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: would recover exact owned RP1 runtime before application teardown."
+        debug_end "$debug"
+        return 0
+    fi
+    state_dir=$(mktemp -d /tmp/wsprrypi-rp1-gpclk-dkms.XXXXXX)
+    chmod 0700 "$state_dir"
+    local helper="$state_dir/rp1_gpclk_dkms_install.py"
+    if [[ -n "$local_helper" && -f "$local_helper" && ! -L "$local_helper" ]]; then
+        cp -- "$local_helper" "$helper"
+        chmod 0700 "$helper"
+    else
+        local helper_url="${GIT_RAW_BASE}/${REPO_ORG}/${REPO_NAME}/${REPO_BRANCH}/scripts/rp1_gpclk_dkms_install.py"
+        if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --output "$helper" "$helper_url"; then
+            warn "Unable to retrieve the RP1-GPCLK-DKMS installer helper from $helper_url."
+            rm -rf -- "$state_dir"
+            return 1
+        fi
+        chmod 0700 "$helper"
+    fi
+    local update_args=(prepare-runtime-removal)
+    if [[ "$debug" == "debug" ]]; then
+        update_args+=(--debug)
+    fi
+    if ! exec_command "Prepare owned RP1 runtime for removal" \
+        python3 "$helper" "${update_args[@]}" "$debug"; then
+        warn "RP1-GPCLK-DKMS runtime recovery failed before application teardown."
+        rm -rf -- "$state_dir"
+        return 1
+    fi
+    rm -rf -- "$state_dir"
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Remove an unchanged RP1 provider only when a v2 record proves that
 #        WsprryPi installed it.
 # @details The helper preserves missing, legacy, malformed, drifted, active, or
@@ -8776,6 +8832,7 @@ manage_wsprry_pi() {
                 { command -v tac &>/dev/null && tac || awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--)print lines[i]}'; } |
                 grep -v -E "^($skip_regex)( |$)"
         )
+        group_to_execute=("prepare_owned_rp1_gpclk_runtime_removal" "${group_to_execute[@]}")
         # Re-add manage_sound at the very end
         group_to_execute+=("manage_sound")
         # Perform ownership-aware provider cleanup only after application and
@@ -8826,6 +8883,10 @@ manage_wsprry_pi() {
                 overall_status=1
                 break
             elif [[ "$ACTION" == "uninstall" ]]; then
+                if [[ "$function_name" == "prepare_owned_rp1_gpclk_runtime_removal" ]]; then
+                    overall_status=1
+                    break
+                fi
                 # Continue safe teardown, but retain every failure so provider
                 # removal is gated and uninstall success cannot be reported.
                 overall_status=1

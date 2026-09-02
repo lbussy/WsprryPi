@@ -275,9 +275,11 @@ completes and runtime readiness is reconciled.
 
 ## Ownership-aware uninstall
 
-After WsprryPi application and service teardown, uninstall checks the v2 or v3
-ownership record. Runtime-enabled v3 state is preserved until its exact route,
-activation, and deployment recovery sequence has removed runtime residue.
+Before WsprryPi application and service teardown, uninstall recovers an exact
+v3 neutral runtime while the recorded application instance still exists. If
+that pre-teardown recovery fails, uninstall stops before changing the
+application. After application teardown succeeds, the exact route, activation,
+and deployment recovery sequence removes runtime residue and the owned provider.
 Missing, legacy, malformed, symlinked, insecure, foreign,
 mixed, active, configured, enrolled, manager-bound, or identity-drifted state
 is preserved with an operator-facing reason. A matching release is revalidated

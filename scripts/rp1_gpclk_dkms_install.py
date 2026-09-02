@@ -2271,6 +2271,10 @@ def remove_owned_provider(args: argparse.Namespace, runner: Runner) -> None:
             working_directory = entrypoint.parents[1]
     except ContractError as error:
         print(f"RP1-GPCLK-DKMS preserved: installed state does not match WsprryPi ownership ({error}).")
+        if args.remove == "true":
+            raise ContractError(
+                "explicitly requested owned-provider removal did not complete"
+            ) from error
         return
     current_record, current_identity, current_reason = load_ownership_record(args.record)
     require(
@@ -2694,23 +2698,30 @@ def validate_runtime_update_retry_conflict(
 
 def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     """Recover exact neutral administration before application replacement."""
-    state_dir = secure_state_dir(args.state_dir)
-    plan = load_plan(state_dir)
-    require(not plan.get("dryRun"), "dry-run plan cannot prepare a runtime update")
-    if not plan["decision"]["install"]:
-        print("RP1-GPCLK-DKMS runtime update preparation skipped by resolved plan.")
-        return
-    resolved = plan.get("resolved")
-    require(isinstance(resolved, dict), "prepared runtime source identity is missing")
+    if args.command == "prepare-runtime-update":
+        state_dir = secure_state_dir(args.state_dir)
+        plan = load_plan(state_dir)
+        require(not plan.get("dryRun"), "dry-run plan cannot prepare a runtime update")
+        if not plan["decision"]["install"]:
+            print("RP1-GPCLK-DKMS runtime update preparation skipped by resolved plan.")
+            return
+        resolved = plan.get("resolved")
+        require(isinstance(resolved, dict), "prepared runtime source identity is missing")
     record, record_identity, reason = load_ownership_record(args.record)
+    if args.command == "prepare-runtime-removal" and (
+        record is None or record_identity is None
+    ):
+        print(f"No owned RP1 runtime requires pre-uninstall recovery: {reason or 'ownership is unproven'}.")
+        return
     require(
         record is not None and record_identity is not None,
         f"WsprryPi provider ownership is required before runtime update preparation: {reason or 'unknown record'}",
     )
-    require(
-        record.get("sourceCommit") == resolved.get("commit"),
-        "owned provider and runtime source commits differ",
-    )
+    if args.command == "prepare-runtime-update":
+        require(
+            record.get("sourceCommit") == resolved.get("commit"),
+            "owned provider and runtime source commits differ",
+        )
     if record.get("schema") != RUNTIME_RECORD_SCHEMA:
         print("No existing neutral runtime administration requires update preparation.")
         return
@@ -2979,6 +2990,9 @@ def parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
     update_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
     update_parser.add_argument("--debug", action="store_true")
+    removal_update_parser = sub.add_parser("prepare-runtime-removal")
+    removal_update_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
+    removal_update_parser.add_argument("--debug", action="store_true")
     runtime_parser = sub.add_parser("activate-runtime")
     runtime_parser.add_argument("--state-dir", type=pathlib.Path, required=True)
     runtime_parser.add_argument("--record", type=pathlib.Path, default=pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"))
@@ -2998,7 +3012,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             prepare(args, Runner(args.debug))
         elif args.command == "apply":
             apply(args, Runner(args.debug))
-        elif args.command == "prepare-runtime-update":
+        elif args.command in {"prepare-runtime-update", "prepare-runtime-removal"}:
             prepare_runtime_update(args, Runner(args.debug))
         elif args.command == "activate-runtime":
             activate_runtime(args, Runner(args.debug))
