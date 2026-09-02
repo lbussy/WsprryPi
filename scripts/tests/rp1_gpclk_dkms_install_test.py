@@ -493,7 +493,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         with self.assertRaisesRegex(MOD.ContractError, "differs from the selected source"):
             MOD.development_identity(source, MOD.Runner())
 
-    def test_runtime_source_identity_binds_kernel_product_and_both_routes(self):
+    def test_runtime_source_identity_binds_product_and_both_rp1_routes(self):
         source = pathlib.Path(self.temp.name) / "runtime-source"
         scripts = source / "scripts"
         scripts.mkdir(parents=True)
@@ -503,9 +503,21 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         (scripts / "runtime_binding.py").write_text(
             "CONTRACT = 'rp1-gpclk-runtime-binding-v3'\n"
             "PRODUCT_VERSION = '0.9.0'\n"
-            "COMPATIBILITY = {'gpio4': 'v0.9.0-pi5-gpio4', 'gpio20': 'v0.9.0-pi5-gpio20'}\n"
+            "COMPATIBILITY = {'gpio4': 'v0.9.0-rp1-gpio4', 'gpio20': 'v0.9.0-rp1-gpio20'}\n"
         )
         MOD.runtime_source_identity(source, "0.9.0")
+        (scripts / "runtime_binding.py").write_text(
+            "CONTRACT = 'rp1-gpclk-runtime-binding-v3'\n"
+            "PRODUCT_VERSION = '0.9.0'\n"
+            "COMPATIBILITY = {'gpio4': 'v0.9.0-pi5-gpio4', 'gpio20': 'v0.9.0-pi5-gpio20'}\n"
+        )
+        with self.assertRaisesRegex(MOD.ContractError, "route compatibility identities differ"):
+            MOD.runtime_source_identity(source, "0.9.0")
+        (scripts / "runtime_binding.py").write_text(
+            "CONTRACT = 'rp1-gpclk-runtime-binding-v3'\n"
+            "PRODUCT_VERSION = '0.9.0'\n"
+            "COMPATIBILITY = {'gpio4': 'v0.9.0-rp1-gpio4', 'gpio20': 'v0.9.0-rp1-gpio20'}\n"
+        )
         (scripts / "runtime_layout.py").write_text("KERNEL = 'fixture-kernel'\n")
         with self.assertRaisesRegex(MOD.ContractError, "hard-codes a kernel"):
             MOD.runtime_source_identity(source, "0.9.0")

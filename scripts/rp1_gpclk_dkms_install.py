@@ -808,8 +808,8 @@ def runtime_source_identity(source: pathlib.Path, product: str) -> None:
         raise ContractError("selected runtime compatibility identity is malformed") from error
     require(
         compatibility == {
-            "gpio4": f"v{product}-pi5-gpio4",
-            "gpio20": f"v{product}-pi5-gpio20",
+            "gpio4": f"v{product}-rp1-gpio4",
+            "gpio20": f"v{product}-rp1-gpio20",
         },
         "selected runtime route compatibility identities differ",
     )
