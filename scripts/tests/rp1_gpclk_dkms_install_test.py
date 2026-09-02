@@ -709,6 +709,60 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.assertEqual(runner.passthrough_calls, [])
         self.assertIn("no provider mutation", stdout.getvalue())
 
+    def test_provider_owned_neutral_checkpoint_resumes_without_reinstall(self):
+        source = self.lifecycle_source(
+            "usage: development-install --route-neutral --runtime-controller"
+        )
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        existing = {
+            "packageVersion": None,
+            "dkms": (f"{MOD.DKMS_NAME}/0.9.0, {MOD.platform.release()}, "
+                     "arm64: installed"),
+            "activeModule": False, "activeController": True,
+            "configuredRoute": False,
+            "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
+            "moduleCandidates": ["consumer.ko"],
+            "controllerCandidates": ["controller.ko"],
+            "installedOverlays": [], "enrollment": False,
+            "developmentManager": False,
+            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
+        }
+        owned = {
+            "schema": MOD.RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
+            "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
+            "versionSource": resolved["versionSource"],
+            "versionSourceSha256": resolved["versionSourceSha256"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult(
+                    "usage: development-install --route-neutral "
+                    "--runtime-controller\n", "", 0,
+                ),
+        })
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=existing), \
+             mock.patch.object(MOD, "load_ownership_record", side_effect=[
+                 (owned, identity, None), (owned, identity, None),
+             ]), \
+             mock.patch.object(MOD, "validate_resumable_neutral_activation") as validate:
+            MOD.apply_development(
+                resolved, pathlib.Path(self.temp.name) / "record.json", runner
+            )
+        self.assertEqual(validate.call_count, 2)
+        self.assertEqual(runner.passthrough_calls, [])
+
     def test_neutral_runtime_reuse_still_rejects_transmission_state(self):
         inventory = {
             "packageVersion": None,

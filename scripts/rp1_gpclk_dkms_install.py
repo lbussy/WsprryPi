@@ -1574,6 +1574,84 @@ def validate_runtime_development_provider(
     require(installed_version == version, "runtime consumer module version differs from ownership")
 
 
+def validate_resumable_neutral_activation(
+    record: Mapping[str, Any], inventory: Mapping[str, Any], runner: Runner
+) -> None:
+    """Admit only the exact fail-closed checkpoint before v3 record promotion."""
+    validate_development_rollback_authority(record, pathlib.Path("/"))
+    require(inventory.get("activeController") is True,
+            "interrupted runtime activation lacks an active controller")
+    inspected = validate_readiness(
+        runtime_call(runner, RUNTIME_PROVIDER, "inspect"), "neutral_ready"
+    )
+    binding = inspected.get("identities", {}).get("installedBinding", {})
+    value = binding.get("value", {}) if isinstance(binding, dict) else {}
+    expected_compatibility = {
+        "gpio4": f"v{record['productVersion']}-rp1-gpio4",
+        "gpio20": f"v{record['productVersion']}-rp1-gpio20",
+    }
+    require(
+        binding.get("status") == "valid"
+        and isinstance(binding.get("sha256"), str)
+        and SHA256.fullmatch(binding["sha256"])
+        and value.get("sourceCommit") == record["sourceCommit"]
+        and value.get("productVersion") == record["productVersion"]
+        and value.get("kernel") == platform.release()
+        and value.get("compatibilityIdentities") == expected_compatibility,
+        "interrupted runtime activation binding differs from provider ownership",
+    )
+    artifacts = inspected.get("artifacts")
+    routes = inspected.get("routes")
+    modules = inspected.get("modules", {})
+    endpoints = inspected.get("endpoints", {})
+    controller = inspected.get("activation", {}).get("value", {}).get(
+        "controllerState", {}
+    )
+    manager = inspected.get("manager", {}).get("query", {}).get("state", {})
+    journal = inspected.get("journals", {}).get("activation.json", {})
+    safety = inspected.get("safety", {})
+    require(
+        inspected.get("administrationEligible") is True
+        and inspected.get("routeSelected") is False
+        and inspected.get("executionReady") is False
+        and not inspected.get("conflicts")
+        and isinstance(artifacts, dict) and artifacts
+        and all(isinstance(item, dict) and item.get("status") == "exact"
+                for item in artifacts.values())
+        and isinstance(routes, dict)
+        and set(routes) == {"requested", "configured", "persisted", "active"}
+        and all(routes[name] is None for name in routes)
+        and modules.get(CONTROLLER_MODULE_NAME, {}).get("status") == "loaded"
+        and modules.get(MODULE_NAME, {}).get("status") == "absent"
+        and endpoints.get("controller", {}).get("status") == "owned"
+        and endpoints.get("controller", {}).get("open") is False
+        and endpoints.get("consumer", {}).get("status") == "absent"
+        and endpoints.get("consumer", {}).get("open") is False
+        and isinstance(controller, dict)
+        and type(controller.get("session")) is int
+        and controller["session"] > 0
+        and not any(controller.get(name) for name in
+                    ("generation", "id", "error", "route", "flags"))
+        and isinstance(manager, dict)
+        and manager.get("activeRoute") is None
+        and manager.get("configuredRoute") is None
+        and manager.get("outputEnabled") is False
+        and journal.get("status") == "present"
+        and journal.get("value", {}).get("phase") == "complete-neutral"
+        and isinstance(journal.get("value", {}).get("requestId"), str)
+        and len(journal["value"]["requestId"]) >= 8
+        and isinstance(journal.get("value", {}).get("planSha256"), str)
+        and SHA256.fullmatch(journal["value"]["planSha256"])
+        and safety.get("clock") == "quiescent"
+        and safety.get("dma") == "quiescent"
+        and safety.get("gpio") == "quiescent"
+        and safety.get("endpointOpen") is False
+        and safety.get("owner") is False
+        and safety.get("lease") is False,
+        "interrupted runtime activation is not exact neutral state",
+    )
+
+
 def recover_and_remove_owned_runtime(
     record_path: pathlib.Path,
     record: Mapping[str, Any],
@@ -1758,7 +1836,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         and existing_record.get("schema") == RECORD_SCHEMA
     )
     require(
-        not before.get("activeController", False) or owned_runtime,
+        not before.get("activeController", False) or owned_runtime or owned_provider,
         "an active RP1 route controller blocks exact-source development installation",
     )
     if not (owned_runtime or owned_provider):
@@ -1795,6 +1873,12 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
                 or len(before.get("controllerCandidates", [])) != 1
                 or "Differences between built and installed modules" in before["dkms"]
             )
+        )
+        require(
+            not before.get("activeController", False)
+            or owned_runtime
+            or identity_matches,
+            "an active RP1 route controller blocks exact-source development installation",
         )
         if ((not identity_matches or profile_migration_required)
                 and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}):
@@ -1833,6 +1917,8 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
                 "existing WsprryPi-owned development provider identity differs from the selected source")
         if owned_runtime:
             validate_runtime_development_provider(existing_record, before, runner)
+        elif before.get("activeController", False):
+            validate_resumable_neutral_activation(existing_record, before, runner)
         elif before["runtimeResidue"]:
             validate_development_rollback_authority(
                 existing_record, pathlib.Path("/")
@@ -1851,6 +1937,10 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
         # the first verification cannot be reported as an exact no-op.
         if owned_runtime:
             validate_runtime_development_provider(current_record, existing_inventory(pathlib.Path("/"), runner), runner)
+        elif before.get("activeController", False):
+            validate_resumable_neutral_activation(
+                current_record, existing_inventory(pathlib.Path("/"), runner), runner
+            )
         elif before["runtimeResidue"]:
             validate_development_rollback_authority(
                 current_record, pathlib.Path("/")
