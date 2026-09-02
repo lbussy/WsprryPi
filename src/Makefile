@@ -156,6 +156,7 @@ PRIVILEGED_NETWORK_TRANSACTION_TEST_OUT := privileged_network_transaction_test
 PRIVILEGED_NETWORK_RUNTIME_TEST_OUT := privileged_network_runtime_test
 PRIVILEGED_NETWORK_RUNTIME_WIRING_TEST_OUT := privileged_network_runtime_wiring_test
 PRIVILEGED_NETWORK_ADMIN_TEST_OUT := privileged_network_admin_test
+PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT := privileged_network_startup_recovery_test
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT := support_bundle_job_manager_test
 SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT := support_bundle_result_validator_test
 SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT := support_bundle_collector_executor_test
@@ -1109,7 +1110,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
 .PHONY: semantics-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
-.PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test support-bundle-job-manager-test support-bundle-result-validator-test
+.PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test privileged-network-startup-recovery-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test rp1-gpclk-dkms-installer-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
@@ -1186,7 +1187,7 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1311,6 +1312,13 @@ $(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT): tests/privileged_network_admin_
 
 privileged-network-admin-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT)
+
+$(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT): tests/privileged_network_startup_recovery_test.cpp privileged_network_startup_recovery.cpp privileged_network_startup_recovery.hpp
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) tests/privileged_network_startup_recovery_test.cpp privileged_network_startup_recovery.cpp -o $@ $(LDFLAGS)
+
+privileged-network-startup-recovery-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT)
 
 support-bundle-job-manager-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)

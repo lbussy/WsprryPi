@@ -58,6 +58,7 @@
 #include "logging.hpp"
 #include "ppm_manager.hpp"
 #include "privileged_network_admin.hpp"
+#include "privileged_network_startup_recovery.hpp"
 #include "signal_handler.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "execution_plan_compiler.hpp"
@@ -4879,23 +4880,177 @@ bool wspr_loop()
 
     const bool start_web = web_server_start_enabled(config);
     const bool start_websocket = websocket_server_start_enabled(config);
+    const int startup_web_port = config.web_port;
+    const uint16_t startup_socket_port = config.socket_port;
+    const bool startup_socket_loopback_only = config.socket_loopback_only;
+    const auto startup_socket_loopback_family = config.socket_loopback_family;
+    const std::string startup_ini_filename = config.ini_filename;
     bool network_safety_ready = true;
+    bool http_listener_started = false;
+    bool websocket_listener_started = false;
     const bool external_listener_requested =
         privileged_network_reconciliation_required(config);
+    PrivilegedNetworkTransactionStatus last_network_reconciliation_status =
+        PrivilegedNetworkTransactionStatus::applied;
+    bool network_startup_retry_pending = false;
+    std::unique_ptr<PrivilegedNetworkStartupRecovery> network_startup_recovery;
+
+    const auto start_external_listeners = [&]() {
+        bool started_http_this_attempt = false;
+        const auto stop_started_http = [&]() {
+            if (started_http_this_attempt)
+            {
+                webServer.stop();
+                http_listener_started = false;
+            }
+        };
+
+        if (exiting_wspr.load(std::memory_order_acquire))
+            return PrivilegedNetworkListenerStartResult::shutdown_requested;
+
+        if (start_web && !http_listener_started)
+        {
+            try
+            {
+                webServer.start(startup_web_port);
+                webServer.setThreadPriority(SCHED_RR, 10);
+            }
+            catch (const std::exception &error)
+            {
+                llog.logE(ERROR, "Unable to start HTTP listener: ", error.what());
+                webServer.stop();
+                return PrivilegedNetworkListenerStartResult::failed;
+            }
+
+            const auto deadline = std::chrono::steady_clock::now() +
+                                  std::chrono::seconds(5);
+            while (!webServer.isListening() &&
+                   !exiting_wspr.load(std::memory_order_acquire) &&
+                   std::chrono::steady_clock::now() < deadline)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+            if (exiting_wspr.load(std::memory_order_acquire))
+            {
+                webServer.stop();
+                return PrivilegedNetworkListenerStartResult::shutdown_requested;
+            }
+            if (!webServer.isListening())
+            {
+                llog.logE(ERROR, "HTTP listener failed to bind after network policy reconciliation.");
+                webServer.stop();
+                return PrivilegedNetworkListenerStartResult::failed;
+            }
+            http_listener_started = true;
+            started_http_this_attempt = true;
+        }
+
+        if (start_websocket && !startup_socket_loopback_only &&
+            !websocket_listener_started)
+        {
+            if (exiting_wspr.load(std::memory_order_acquire))
+            {
+                stop_started_http();
+                return PrivilegedNetworkListenerStartResult::shutdown_requested;
+            }
+            if (!socketServer.start(
+                    startup_socket_port,
+                    SOCKET_KEEPALIVE,
+                    false,
+                    startup_socket_loopback_family))
+            {
+                llog.logE(ERROR, "WebSocket listener failed to start.");
+                stop_started_http();
+                return PrivilegedNetworkListenerStartResult::failed;
+            }
+            socketServer.setThreadPriority(SCHED_RR, 10);
+            websocket_listener_started = true;
+        }
+
+        if (exiting_wspr.load(std::memory_order_acquire))
+        {
+            if (websocket_listener_started && !startup_socket_loopback_only)
+            {
+                socketServer.stop();
+                websocket_listener_started = false;
+            }
+            stop_started_http();
+            return PrivilegedNetworkListenerStartResult::shutdown_requested;
+        }
+        return PrivilegedNetworkListenerStartResult::started;
+    };
+
     if (external_listener_requested)
     {
-        const auto reconciliation = reconcile_privileged_network_policy(
-            PrivilegedNetworkAdminPaths{config.ini_filename});
-        network_safety_ready = reconciliation.applied();
-        if (!network_safety_ready)
+        network_startup_recovery =
+            std::make_unique<PrivilegedNetworkStartupRecovery>(
+                PrivilegedNetworkStartupRecoveryOperations{
+                    [] {
+                        return exiting_wspr.load(std::memory_order_acquire);
+                    },
+                    [&] {
+                        const auto reconciliation =
+                            reconcile_privileged_network_policy(
+                                PrivilegedNetworkAdminPaths{startup_ini_filename});
+                        last_network_reconciliation_status = reconciliation.status;
+                        if (reconciliation.applied() &&
+                            reconciliation.status_text() == "NETWORK SAFETY OFF")
+                        {
+                            llog.logS(WARN, "NETWORK SAFETY OFF");
+                        }
+                        if (reconciliation.applied())
+                            return PrivilegedNetworkReconciliationAttemptResult::ready;
+                        if (reconciliation.status ==
+                            PrivilegedNetworkTransactionStatus::discovery_failed)
+                        {
+                            return PrivilegedNetworkReconciliationAttemptResult::retryable_failure;
+                        }
+                        return PrivilegedNetworkReconciliationAttemptResult::terminal_failure;
+                    },
+                    start_external_listeners});
+
+        const auto startup_result = network_startup_recovery->attempt();
+        network_safety_ready =
+            startup_result == PrivilegedNetworkStartupRecoveryResult::ready;
+        if (startup_result ==
+            PrivilegedNetworkStartupRecoveryResult::retry_pending)
+        {
+            network_startup_retry_pending = true;
+            llog.logS(
+                ERROR,
+                "Privileged network policy reconciliation failed; external HTTP and WebSocket listeners remain disabled.");
+            llog.logS(
+                WARN,
+                "Startup reconciliation status is ",
+                privileged_network_transaction_status_name(
+                    last_network_reconciliation_status),
+                ". Startup reconciliation will retry every 5 seconds until an "
+                "eligible LAN is available or shutdown is requested.");
+        }
+        else if (startup_result ==
+                 PrivilegedNetworkStartupRecoveryResult::listener_start_failed)
+        {
+            stop_runtime_components_for_process_exit();
+            return false;
+        }
+        else if (startup_result ==
+                 PrivilegedNetworkStartupRecoveryResult::reconciliation_failed)
         {
             llog.logS(
                 ERROR,
                 "Privileged network policy reconciliation failed; external HTTP and WebSocket listeners remain disabled.");
+            llog.logS(
+                ERROR,
+                "Startup reconciliation status is ",
+                privileged_network_transaction_status_name(
+                    last_network_reconciliation_status),
+                ". This failure is not automatically retryable.");
         }
-        else if (reconciliation.status_text() == "NETWORK SAFETY OFF")
+        else if (startup_result ==
+                 PrivilegedNetworkStartupRecoveryResult::shutdown_requested)
         {
-            llog.logS(WARN, "NETWORK SAFETY OFF");
+            stop_runtime_components_for_process_exit();
+            return false;
         }
     }
 
@@ -4904,33 +5059,28 @@ bool wspr_loop()
         llog.logS(INFO, "Web UI disabled via CLI (--no-web)");
     }
     // Start web server and set priority
-    else if (start_web && network_safety_ready)
-    {
-        webServer.start(config.web_port);
-        webServer.setThreadPriority(SCHED_RR, 10);
-    }
-    else
+    else if (!start_web)
     {
         llog.logS(DEBUG, "Skipping web server.");
     }
 
-    // Start socket server and set priority
-    if (start_websocket &&
-        (config.socket_loopback_only || network_safety_ready))
+    // A loopback-only WebSocket does not depend on external-network policy.
+    if (start_websocket && startup_socket_loopback_only)
     {
         if (!socketServer.start(
-                config.socket_port,
+                startup_socket_port,
                 SOCKET_KEEPALIVE,
-                config.socket_loopback_only,
-                config.socket_loopback_family))
+                startup_socket_loopback_only,
+                startup_socket_loopback_family))
         {
             llog.logE(ERROR, "WebSocket listener failed to start.");
             stop_runtime_components_for_process_exit();
             return false;
         }
         socketServer.setThreadPriority(SCHED_RR, 10);
+        websocket_listener_started = true;
     }
-    else
+    else if (!start_websocket)
     {
         llog.logS(DEBUG, "Skipping socket server.");
     }
@@ -5072,6 +5222,73 @@ bool wspr_loop()
             llog.logS(ERROR, "Route restoration could not acknowledge idle application readiness.");
             stop_runtime_components_for_process_exit();
             return false;
+        }
+    }
+
+    if (network_startup_recovery && network_startup_retry_pending)
+    {
+        unsigned int failed_retries = 0;
+        while (!network_startup_recovery->ready())
+        {
+            std::unique_lock<std::mutex> lk(exitwspr_mtx);
+            if (exitwspr_cv.wait_for(
+                    lk,
+                    std::chrono::seconds(5),
+                    [] { return exitwspr_ready; }))
+            {
+                break;
+            }
+            lk.unlock();
+
+            const auto retry_result = network_startup_recovery->attempt();
+            network_safety_ready =
+                retry_result == PrivilegedNetworkStartupRecoveryResult::ready;
+            if (retry_result == PrivilegedNetworkStartupRecoveryResult::ready)
+            {
+                network_startup_retry_pending = false;
+                llog.logS(
+                    INFO,
+                    "Privileged network startup reconciliation recovered; "
+                    "configured external listeners are available.");
+                break;
+            }
+            if (retry_result ==
+                PrivilegedNetworkStartupRecoveryResult::listener_start_failed)
+            {
+                stop_runtime_components_for_process_exit();
+                return false;
+            }
+            if (retry_result ==
+                PrivilegedNetworkStartupRecoveryResult::reconciliation_failed)
+            {
+                network_startup_retry_pending = false;
+                llog.logS(
+                    ERROR,
+                    "Privileged network startup retry stopped after a "
+                    "non-retryable reconciliation failure (",
+                    privileged_network_transaction_status_name(
+                        last_network_reconciliation_status),
+                    "); external listeners remain disabled.");
+                break;
+            }
+            if (retry_result ==
+                PrivilegedNetworkStartupRecoveryResult::shutdown_requested)
+            {
+                network_startup_retry_pending = false;
+                break;
+            }
+
+            ++failed_retries;
+            if (failed_retries % 12 == 0)
+            {
+                llog.logS(
+                    WARN,
+                    "Privileged network startup reconciliation is still "
+                    "waiting for an eligible LAN (",
+                    privileged_network_transaction_status_name(
+                        last_network_reconciliation_status),
+                    ").");
+            }
         }
     }
 

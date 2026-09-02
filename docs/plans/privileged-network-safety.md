@@ -117,7 +117,14 @@ The managed Apache configuration SHALL:
 
 Apache requires concrete allowed CIDRs. WsprryPi's privileged-network-safety application path SHALL discover eligible subnets, generate a managed Apache include, and validate the complete Apache configuration before publishing or reloading it.
 
-Network changes do not silently rewrite Apache policy. The initial implementation SHALL require the same explicit validated apply/reload path used for an administrator setting change. Automatic interface-change regeneration is outside the initial scope.
+Network changes after successful startup do not silently rewrite Apache policy.
+If startup reconciliation cannot discover an eligible subnet, external listeners
+remain disabled and WsprryPi retries the same validated startup transaction until
+it succeeds or shutdown is requested. This completes an interrupted startup; it
+does not continuously regenerate policy after listeners become available.
+Post-start interface-change regeneration remains outside the initial scope and
+requires the explicit validated apply/reload path used for an administrator
+setting change.
 
 ## Backend Enforcement
 

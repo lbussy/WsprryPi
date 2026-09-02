@@ -30,6 +30,10 @@ int main() {
     assert(scheduling.find("reconcile_privileged_network_policy(") != std::string::npos);
     assert(scheduling.find("external HTTP and WebSocket listeners remain disabled") !=
            std::string::npos);
+    assert(scheduling.find("Startup reconciliation will retry every 5 seconds") !=
+           std::string::npos);
+    assert(scheduling.find("configured external listeners are available") !=
+           std::string::npos);
     assert(stock_ini.find("[Security]") != std::string::npos);
     assert(stock_ini.find("Privileged Network Safety = enforced") != std::string::npos);
 
