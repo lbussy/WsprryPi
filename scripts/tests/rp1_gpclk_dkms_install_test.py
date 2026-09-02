@@ -911,6 +911,29 @@ class ApplyPolicyTests(unittest.TestCase):
             record, "after-recovery", clear=True, journal=journal)
         self.assertFalse(journal.exists())
 
+    def test_complete_neutral_is_terminal_owned_activation_evidence(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir(mode=0o700)
+        journal = self.root / "runtime-admin/activation.json"
+        journal.parent.mkdir(mode=0o700)
+        value = {"phase": "complete-neutral", "requestId": "request-neutral"}
+        journal.write_text(json.dumps(value, sort_keys=True) + "\n")
+        journal.chmod(0o600)
+        record = {"upstreamEvidence": str(evidence)}
+        MOD.preserve_owned_activation_journal(
+            record, "before-recovery", journal=journal)
+        archive = evidence / (
+            "runtime-activation-archives/before-recovery-request-neutral.json")
+        self.assertEqual(json.loads(archive.read_text())["phase"],
+                         "complete-neutral")
+        journal.write_text(json.dumps({
+            "phase": "complete", "requestId": "request-invalid"}) + "\n")
+        journal.chmod(0o600)
+        with self.assertRaisesRegex(
+                MOD.ContractError, "not terminal owned evidence"):
+            MOD.preserve_owned_activation_journal(
+                record, "invalid", journal=journal)
+
     def responses(self, installed_version=None, dkms=""):
         dpkg = MOD.CommandResult("", "missing", 1)
         if installed_version:
