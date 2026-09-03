@@ -1494,6 +1494,78 @@ class ApplyPolicyTests(unittest.TestCase):
         )
         self.assertEqual(unchanged.call_count, 4)
 
+    def test_runtime_update_retires_prior_boot_route_recovery(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        prior = self.runtime_update_inspection("recovery_required")
+        prior["modules"] = {
+            MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
+            MOD.MODULE_NAME: {"status": "absent"},
+        }
+        prior["endpoints"] = {
+            "controller": {"status": "absent", "open": False},
+            "consumer": {"status": "absent", "open": False},
+        }
+        prior["managerSocket"] = {"status": "absent"}
+        prior["reboot"] = {"occurred": True, "required": False}
+        prior["activation"]["value"]["bootId"] = (
+            "00000000-0000-0000-0000-000000000002"
+        )
+        prior["activation"]["value"]["controllerState"] = None
+        prior["journals"].update({
+            "transaction.json": {"status": "present", "value": {"route": 1}},
+            "manager.json": {"status": "present", "value": {"complete": True}},
+            "application.json": {"status": "present", "value": {"phase": "restored"}},
+        })
+        journal = prior["journals"]["activation.json"]["value"]
+        plan = {
+            "version": 2, "operation": "retire-post-reboot-activation",
+            "bindingSha256": "b" * 64,
+            "artifactSetSha256": "c" * 64,
+            "bootId": "00000000-0000-0000-0000-000000000002",
+            "lastDeploymentSha256": "d" * 64,
+            "activationJournalSha256": digest(MOD.canonical(journal)),
+            "applicationIdleSha256": None,
+            "transactionJournalSha256": {
+                "transaction.json": "1" * 64,
+                "manager.json": "2" * 64,
+                "application.json": "3" * 64,
+            },
+        }
+        plan_digest = digest(MOD.canonical(plan))
+        retirement = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-retire-plan",
+            "planSha256": plan_digest, "plan": plan,
+        }
+        retired = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-retire", "planSha256": plan_digest,
+            "response": {
+                "status": "retired-post-reboot-activation",
+                "activationJournalSha256": plan["activationJournalSha256"],
+            },
+        }
+        final = self.recovered_runtime_update_inspection(prior_boot=True)
+        final["journals"]["activation.json"] = {"status": "absent"}
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(
+                MOD, "runtime_call",
+                side_effect=[prior, retirement, retired, final]) as calls, \
+             mock.patch.object(
+                MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        self.assertEqual(
+            [call.args[2] for call in calls.call_args_list],
+            ["inspect", "activation-retire-plan", "activation-retire", "inspect"],
+        )
+        preserve.assert_called_once_with(record, "before-retirement")
+        self.assertEqual(unchanged.call_count, 2)
+
     def test_selected_route_recovery_rejects_nonquiescent_state(self):
         args = self.runtime_update_args()
         record = self.runtime_update_record()

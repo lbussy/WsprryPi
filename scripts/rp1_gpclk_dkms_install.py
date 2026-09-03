@@ -2826,6 +2826,101 @@ def recover_selected_runtime_route_for_update(
     ), "recovery_required")
 
 
+def retire_prior_boot_activation_for_update(
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    inspected: Mapping[str, Any],
+    runner: Runner,
+) -> dict[str, Any]:
+    """Retire exact prior-boot activation and route journals after recovery."""
+    runtime = validate_runtime_update_identity(record, inspected)
+    journal = inspected.get("journals", {}).get("activation.json", {})
+    journal_value = journal.get("value", {}) if isinstance(journal, dict) else {}
+    activation = inspected.get("activation", {}).get("value", {})
+    require(
+        inspected.get("result") == "recovery_required"
+        and inspected.get("reboot", {}).get("occurred") is True
+        and journal.get("status") == "present"
+        and journal_value.get("phase") == "complete-neutral"
+        and journal_value.get("plan", {}).get("bootId") != activation.get("bootId")
+        and all(value.get("status") == "absent"
+                for value in inspected.get("modules", {}).values())
+        and all(value.get("status") == "absent"
+                and value.get("open") is False
+                for value in inspected.get("endpoints", {}).values())
+        and inspected.get("managerSocket", {}).get("status") == "absent",
+        "runtime update prior-boot recovery is not safely retirement-eligible",
+    )
+    retirement = runtime_call(runner, RUNTIME_PROVIDER, "activation-retire-plan")
+    require(
+        retirement.get("contract") == RUNTIME_READINESS_CONTRACT
+        and retirement.get("operation") == "activation-retire-plan",
+        "runtime update activation retirement plan identity differs",
+    )
+    retirement_digest = retirement.get("planSha256")
+    plan = retirement.get("plan", {})
+    required = {
+        "version", "operation", "bindingSha256", "artifactSetSha256",
+        "bootId", "lastDeploymentSha256", "activationJournalSha256",
+        "applicationIdleSha256", "transactionJournalSha256",
+    }
+    transaction_digests = plan.get("transactionJournalSha256")
+    require(
+        isinstance(retirement_digest, str) and SHA256.fullmatch(retirement_digest)
+        and isinstance(plan, dict) and set(plan) == required
+        and retirement_digest == sha256_bytes(canonical(plan))
+        and plan.get("version") == 2
+        and plan.get("operation") == "retire-post-reboot-activation"
+        and plan.get("bindingSha256") == runtime["bindingSha256"]
+        and plan.get("artifactSetSha256") == runtime["artifactSetSha256"]
+        and plan.get("bootId") == activation.get("bootId")
+        and isinstance(plan.get("lastDeploymentSha256"), str)
+        and SHA256.fullmatch(plan["lastDeploymentSha256"])
+        and plan.get("activationJournalSha256")
+            == sha256_bytes(canonical(journal_value))
+        and (plan.get("applicationIdleSha256") is None
+             or (isinstance(plan["applicationIdleSha256"], str)
+                 and SHA256.fullmatch(plan["applicationIdleSha256"])))
+        and isinstance(transaction_digests, dict)
+        and set(transaction_digests)
+            == {"transaction.json", "manager.json", "application.json"}
+        and all(value is None or
+                (isinstance(value, str) and SHA256.fullmatch(value))
+                for value in transaction_digests.values()),
+        "runtime update activation retirement plan lacks exact owned identities",
+    )
+    preserve_owned_activation_journal(record, "before-retirement")
+    require_unchanged_ownership(
+        record_path, record, record_identity,
+        "runtime update activation retirement",
+    )
+    retired = runtime_call(
+        runner, RUNTIME_PROVIDER, "activation-retire",
+        ["--plan-sha256", retirement_digest],
+    )
+    require(
+        retired.get("contract") == RUNTIME_READINESS_CONTRACT
+        and retired.get("operation") == "activation-retire"
+        and retired.get("planSha256") == retirement_digest
+        and retired.get("response", {}).get("status")
+            == "retired-post-reboot-activation"
+        and retired.get("response", {}).get("activationJournalSha256")
+            == plan.get("activationJournalSha256"),
+        "runtime update activation retirement response differs from its plan",
+    )
+    require_unchanged_ownership(
+        record_path, record, record_identity,
+        "post-retirement runtime inspection",
+    )
+    final = validate_readiness(runtime_call(
+        runner, RUNTIME_PROVIDER, "inspect", (), {"activation_required"}
+    ), "activation_required")
+    validate_runtime_update_identity(record, final)
+    validate_inactive_runtime_update_state(final, recovered=False)
+    return final
+
+
 def validate_inactive_runtime_update_state(
     inspected: Mapping[str, Any], *, recovered: bool
 ) -> None:
@@ -2983,6 +3078,18 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     result = inspected.get("result")
     journal = inspected.get("journals", {}).get("activation.json", {})
     journal_value = journal.get("value", {}) if isinstance(journal, dict) else {}
+
+    if (result == "recovery_required"
+            and inspected.get("reboot", {}).get("occurred") is True
+            and journal.get("status") == "present"
+            and journal_value.get("phase") == "complete-neutral"
+            and all(value.get("status") == "absent"
+                    for value in inspected.get("modules", {}).values())):
+        retire_prior_boot_activation_for_update(
+            args.record, record, record_identity, inspected, runner
+        )
+        print("RP1-GPCLK-DKMS prior-boot runtime evidence retired for application update.")
+        return
 
     if result == "activation_required":
         recovered = journal.get("status") == "present" and journal_value.get("phase") == "recovered-inhibited"
