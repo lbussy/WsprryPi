@@ -155,6 +155,59 @@ nlohmann::json providerCommand(const std::string &operation,
   return nlohmann::json::parse(response);
 }
 
+void launchRuntimeRouteOperation(const std::string &operation,
+                                 const std::string &route,
+                                 const std::string &digest,
+                                 const std::string &request_id) {
+  if ((operation != "switch" && operation != "recover") ||
+      (route != "gpio4" && route != "gpio20") ||
+      request_id.empty() || request_id.find_first_not_of(
+          "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") !=
+          std::string::npos ||
+      (operation == "switch" &&
+       (digest.size() != 64 ||
+        digest.find_first_not_of("0123456789abcdef") != std::string::npos)) ||
+      (operation == "recover" && !digest.empty()))
+    throw std::runtime_error("Invalid detached RP1 route operation.");
+
+  const std::string unit = "wsprrypi-rp1-route-" +
+                           std::to_string(static_cast<long long>(::getpid())) +
+                           "-" + request_id;
+  const pid_t child = ::fork();
+  if (child < 0)
+    throw std::runtime_error("Could not submit the detached RP1 route operation.");
+  if (child == 0) {
+    const char *systemd_run = "/usr/bin/systemd-run";
+    if (operation == "switch") {
+      const char *provider = "/usr/lib/rp1-gpclk-dkms/runtime_provider.py";
+      ::execl(systemd_run, "systemd-run", "--quiet", "--no-block",
+              "--collect", "--unit", unit.c_str(),
+              "--property=Type=exec", "--property=TimeoutStartSec=60s",
+              "--property=RuntimeMaxSec=90s",
+              "/usr/bin/python3", provider, "route-ensure", "--route",
+              route.c_str(), "--plan-sha256", digest.c_str(),
+              static_cast<char *>(nullptr));
+    } else {
+      const char *client =
+          "/usr/lib/rp1-gpclk-dkms/runtime_route_client.py";
+      ::execl(systemd_run, "systemd-run", "--quiet", "--no-block",
+              "--collect", "--unit", unit.c_str(),
+              "--property=Type=exec", "--property=TimeoutStartSec=60s",
+              "--property=RuntimeMaxSec=90s",
+              "/usr/bin/python3", client, "recover", "--execute",
+              static_cast<char *>(nullptr));
+    }
+    _exit(127);
+  }
+  int status = 0;
+  while (::waitpid(child, &status, 0) < 0) {
+    if (errno != EINTR)
+      throw std::runtime_error("Could not collect the RP1 route submission.");
+  }
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    throw std::runtime_error("The detached RP1 route operation was not accepted.");
+}
+
 nlohmann::json socketRequest(const nlohmann::json &request) {
   const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0)
@@ -600,14 +653,13 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       return failure("generation_mismatch", "Repeat runtime preflight before switching.");
     operations_.set_transmission_inhibited(true, "Runtime route administration in progress");
     if (operation == "switch") {
-      if (!operations_.runtime_route_ensure)
-        return failure("provider_unavailable", "The digest-bound runtime route executor is unavailable.");
-      const auto reviewed_digest = runtime_plan_digest_;
-      nlohmann::json raw;
+      if (!operations_.runtime_route_launch)
+        return failure("provider_unavailable", "The detached runtime route executor is unavailable.");
+      const auto request_id = requestId("switch", ++generation_);
       try {
-        raw = operations_.runtime_route_ensure(executor_route,
-                                               runtime_plan_digest_,
-                                               runtime_binding_digest_);
+        operations_.runtime_route_launch("switch", executor_route,
+                                         runtime_plan_digest_,
+                                         runtime_binding_digest_, request_id);
       } catch (const std::exception &error) {
         runtime_plan_digest_.clear();
         runtime_binding_digest_.clear();
@@ -618,29 +670,32 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       runtime_binding_digest_.clear();
       preflight_route_.clear();
       auto result = failure("runtime_route_requested",
-                            "The reviewed route transaction was accepted; refresh after application restoration.");
-      const auto response = raw.value("response", nlohmann::json::object());
-      const auto status = field(response, "status");
-      result["ok"] = raw.value("contract", std::string{}) ==
-                         "rp1-gpclk-runtime-readiness-v1" &&
-                     raw.value("operation", std::string{}) == "route-ensure" &&
-                     raw.value("planSha256", std::string{}) ==
-                         reviewed_digest &&
-                     (status == "restored" || status == "stopped" ||
-                      status == "administrator-masked" ||
-                      status == "idempotent-ready");
+                            "The reviewed route operation was queued. Wsprry Pi will disconnect briefly; refresh after it reconnects to confirm the route. Transmission remains disabled.");
+      result["ok"] = true;
       result["requested"] = route;
-      result["state"] = result["ok"] ? "runtime_restoring" : "runtime_recovery";
-      if (!result["ok"])
-        result["message"] = "The runtime provider did not confirm the reviewed route transaction.";
+      result["state"] = "runtime_switch_queued";
+      result["requestId"] = request_id;
       return result;
     }
-    nlohmann::json value = {{"schemaVersion", 3}, {"operation", operation}, {"execute", true},
-        {"actor", "wsprrypi.service"}, {"requestId", requestId(operation.c_str(), ++generation_)}};
+    if (!operations_.runtime_route_launch)
+      return failure("provider_unavailable", "The detached runtime route executor is unavailable.");
+    const auto request_id = requestId("recover", ++generation_);
     runtime_plan_digest_.clear();
     runtime_binding_digest_.clear();
     preflight_route_.clear();
-    return render(request(value), route);
+    try {
+      operations_.runtime_route_launch("recover", executor_route, {},
+                                       {}, request_id);
+    } catch (const std::exception &error) {
+      return failure("route_recovery_failed", error.what());
+    }
+    auto result = failure("runtime_recovery_requested",
+                          "Route recovery was queued. Wsprry Pi will stop and remain inhibited; use the operator client to confirm recovery. Transmission remains disabled.");
+    result["ok"] = true;
+    result["state"] = "runtime_recovery_queued";
+    result["requested"] = route;
+    result["requestId"] = request_id;
+    return result;
   }
   if (operation == "preflight") {
     if (!idle())
@@ -909,12 +964,13 @@ Rp1GpclkRouteService &productionRp1GpclkRouteService() {
                "The runtime route plan differs from WsprryPi ownership.");
          return result;
        },
-       [](const std::string &route, const std::string &digest,
-          const std::string &binding) {
-         if (binding != ownedRuntimeBinding())
-           throw std::runtime_error(
-               "WsprryPi runtime ownership changed after route planning.");
-         return providerCommand("route-ensure", route, digest);
+       [](const std::string &operation, const std::string &route,
+          const std::string &digest, const std::string &binding,
+          const std::string &request_id) {
+         const auto owned_binding = ownedRuntimeBinding();
+         if (operation == "switch" && binding != owned_binding)
+           throw std::runtime_error("WsprryPi runtime ownership is unavailable.");
+         launchRuntimeRouteOperation(operation, route, digest, request_id);
        }});
   return service;
 }

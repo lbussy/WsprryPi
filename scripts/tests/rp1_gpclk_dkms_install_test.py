@@ -1302,14 +1302,40 @@ class ApplyPolicyTests(unittest.TestCase):
             value["journals"]["activation.json"]["value"]["phase"] = "recovered-inhibited"
         return value
 
+    def route_recovered_runtime_update_inspection(self):
+        value = self.runtime_update_inspection("recovery_required")
+        controller = value["activation"]["value"]["controllerState"]
+        controller["generation"] = 2
+        journal = value["journals"]["activation.json"]["value"]
+        journal["phase"] = "rollback-failed"
+        route = {"phase": "recovered-inhibited", "observation": controller}
+        manager = {"complete": True, "controller": controller}
+        application = {"phase": "route-recovered", "controller": {
+            "session": controller["session"], "generation": 1,
+            "id": 9, "error": 0, "route": 1, "flags": 6}}
+        value["journals"].update({
+            "transaction.json": {"status": "present", "value": route},
+            "manager.json": {"status": "present", "value": manager},
+            "application.json": {"status": "present", "value": application},
+        })
+        return value
+
     def runtime_recovery_plan(self, inspected):
         journal = inspected["journals"]["activation.json"]["value"]
+        route_recovery = None
+        if inspected["result"] == "recovery_required":
+            route_recovery = {
+                name: digest(MOD.canonical(inspected["journals"][name]["value"]))
+                for name in ("transaction.json", "manager.json", "application.json")
+            }
         plan = {
-            "version": 1, "operation": "neutral-activation-recovery",
+            "version": 2, "operation": "neutral-activation-recovery",
             "bindingSha256": "b" * 64,
             "bootId": inspected["activation"]["value"]["bootId"],
             "activationJournalSha256": digest(MOD.canonical(journal)),
-            "controllerLoaded": True, "socketWasActive": True,
+            "controllerLoaded": True,
+            "controllerState": inspected["activation"]["value"]["controllerState"],
+            "routeRecoverySha256": route_recovery, "socketWasActive": True,
             "alreadyRecovered": False,
         }
         return {
@@ -1349,6 +1375,32 @@ class ApplyPolicyTests(unittest.TestCase):
                 )
                 preserve.assert_called_once_with(record, "before-application-update")
                 self.assertEqual(unchanged.call_count, 2)
+
+    def test_runtime_update_recovers_exact_same_boot_route_recovery(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        initial = self.route_recovered_runtime_update_inspection()
+        planned = self.runtime_recovery_plan(initial)
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover",
+            "planSha256": planned["planSha256"],
+            "response": {"status": "recovered-inhibited"},
+        }
+        final = self.recovered_runtime_update_inspection()
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(
+                MOD, "runtime_call",
+                side_effect=[initial, planned, recovered, final]) as calls, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+             mock.patch.object(MOD, "require_unchanged_ownership"):
+            MOD.prepare_runtime_update(args, FakeRunner())
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["inspect", "activation-recover-plan",
+                          "activation-recover", "inspect"])
 
     def test_runtime_update_is_noop_for_first_install_and_resumable_states(self):
         args = self.runtime_update_args()

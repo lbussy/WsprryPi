@@ -211,15 +211,18 @@ Before a repeat installation replaces application files or restarts the
 service, an exact WsprryPi-owned v3 neutral runtime is placed into its provider's
 inactive update state. The installer accepts a current `neutral_ready` result,
 an already `recovered-inhibited` retry, a valid post-reboot activation-required
-state, or the narrow same-boot case where the only conflict is that the
-application's active PID changed after completed neutral activation. That last
-case must retain the exact binding, artifact set, activation journal, neutral
-controller, null routes, absent consumer, disabled output, matching controller
-observation, and otherwise unchanged application-service identity.
+state, an exactly journaled same-boot route recovery that left a neutral
+nonzero-generation controller, or the narrow same-boot case where the only
+conflict is that the application's active PID changed after completed neutral
+activation. That last case must retain the exact binding, artifact set,
+activation journal, neutral controller, null routes, absent consumer, disabled
+output, matching controller observation, and otherwise unchanged
+application-service identity.
 
 For a loaded neutral controller, the installer reviews
 `activation-recover-plan`, binds its canonical digest to the installed binding,
-current boot, and complete activation journal, archives the journal, revalidates
+current boot, controller observation, activation journal, and any terminal
+route-recovery journals, archives the activation journal, revalidates
 the ownership record, and calls `activation-recover` with only that digest. It
 then requires both modules and endpoints absent, every route null, transmission
 ineligible, the application inhibited and inactive, and the journal retained as

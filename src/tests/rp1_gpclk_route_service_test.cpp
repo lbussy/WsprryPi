@@ -123,13 +123,13 @@ int main() {
   bool persistence_ok = true;
   int persisted_write = 0;
   bool inhibited = false;
-  bool corrupt_runtime_ensure_digest = false;
+  bool runtime_launch_fails = false;
   std::string runtime_plan_classification = "neutral_ready";
   bool runtime_plan_operational_ready = false;
   bool runtime_plan_operational_ready_reported = true;
   bool runtime_plan_already_ready_matches = true;
   std::vector<std::string> runtime_plans;
-  std::vector<std::pair<std::string, std::string>> runtime_ensures;
+  std::vector<nlohmann::json> runtime_launches;
 
   wsprrypi::Rp1GpclkRouteService service(
       {[&](const nlohmann::json &request) {
@@ -165,16 +165,14 @@ int main() {
                             {"bindingSha256", std::string(64, 'a')},
                             {"planSha256", std::string(64, 'b')}}}};
        },
-       [&](const std::string &route, const std::string &digest,
-           const std::string &binding) {
-         runtime_ensures.emplace_back(route, digest);
-         assert(binding == std::string(64, 'a'));
-         return nlohmann::json{{"contract", "rp1-gpclk-runtime-readiness-v1"},
-                               {"operation", "route-ensure"},
-                               {"planSha256", corrupt_runtime_ensure_digest
-                                                  ? std::string(64, 'c')
-                                                  : digest},
-                               {"response", {{"status", "stopped"}}}};
+       [&](const std::string &operation, const std::string &route,
+           const std::string &digest, const std::string &binding,
+           const std::string &request_id) {
+         if (runtime_launch_fails)
+           throw std::runtime_error("submission failed");
+         runtime_launches.push_back({{"operation", operation}, {"route", route},
+             {"digest", digest}, {"binding", binding},
+             {"requestId", request_id}});
        }});
 
   const auto query = service.query();
@@ -445,7 +443,7 @@ int main() {
   assert(contradictory_neutral.at("changeStarted") == false);
   assert(contradictory_neutral.at("recoveryRequired") == false);
   assert(service.operate("switch", "GPIO20", initial_runtime_generation).at("ok") == false);
-  assert(runtime_ensures.empty());
+  assert(runtime_launches.empty());
   runtime_plan_operational_ready_reported = false;
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   runtime_plan_operational_ready_reported = true;
@@ -478,24 +476,29 @@ int main() {
   next["status"] = "complete-inhibited";
   assert(service.operate("switch", "GPIO20", reviewed_generation).at("ok") == true);
   assert(persisted == saved_before_runtime_switch);
-  assert(runtime_ensures.size() == 1);
-  assert(runtime_ensures.front().first == "gpio20");
-  assert(runtime_ensures.front().second == std::string(64, 'b'));
+  assert(runtime_launches.size() == 1);
+  assert(runtime_launches.front().at("operation") == "switch");
+  assert(runtime_launches.front().at("route") == "gpio20");
+  assert(runtime_launches.front().at("digest") == std::string(64, 'b'));
+  assert(runtime_launches.front().at("binding") == std::string(64, 'a'));
   assert(inhibited);
   assert(service.operate("switch", "GPIO20", reviewed_generation).at("ok") == false);
-  corrupt_runtime_ensure_digest = true;
+  runtime_launch_fails = true;
   const auto corrupt_preflight = service.operate("preflight", "GPIO20", 0);
   assert(corrupt_preflight.at("ok") == true);
   assert(service.operate("switch", "GPIO20",
                          corrupt_preflight.at("generation").get<std::uint64_t>())
              .at("ok") == false);
-  corrupt_runtime_ensure_digest = false;
-  next["status"] = "error";
-  next["error"] = {{"message", "overlay removal failed"}, {"kernelError", -16}, {"overlayId", 9}};
+  runtime_launch_fails = false;
   const auto runtime_failure = service.operate("recover", "GPIO20", 0);
-  assert(runtime_failure.at("ok") == false);
-  assert(runtime_failure.at("error").at("kernelError") == -16);
-  assert(runtime_failure.at("error").at("overlayId") == 9);
+  assert(runtime_failure.at("ok") == true);
+  assert(runtime_failure.at("state") == "runtime_recovery_queued");
+  assert(runtime_launches.back().at("operation") == "recover");
+  assert(runtime_launches.back().at("digest") == "");
+  assert(runtime_launches.back().at("binding") == "");
+  runtime_launch_fails = true;
+  assert(service.operate("recover", "GPIO20", 0).at("ok") == false);
+  runtime_launch_fails = false;
   assert(inhibited);
   next = response("query", "ok", state());
   assert(service.query().at("result") == "contract_mismatch");

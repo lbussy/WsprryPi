@@ -4,14 +4,17 @@ This companion implementation consumes the explicit
 `rp1-gpclk-route-manager-runtime` profile from RP1-GPCLK-DKMS. The
 packaged/source-development protocol remains separate. Unknown contracts fail
 closed; discovery of the runtime profile asserts the transmission inhibit. Explicit
-`idle` and `reconcile-output` requests now establish runtime route readiness for
+`idle` and `reconcile-output` requests establish runtime route readiness for
 startup and the existing operation-scoped development authorization path. Neither
 query authorizes output.
 
 The installer stops in `neutral_ready` with no route. The existing route panel
 is the later explicit operator choice: preflight calls upstream `route-plan`,
 reviews and retains its SHA-256 digest, and **Switch route (stay idle)**
-calls `route-ensure` only for that same route and preflight generation. The
+queues `route-ensure` in a bounded transient system service only for that same
+route and preflight generation. This keeps the HTTP request out of the service
+stop/restart transaction and prevents the application from waiting on its own
+shutdown. A queued response confirms submission, not route completion. The
 application requires its full idle predicate and keeps requested state separate
 from controller-reported active state.
 Recovery explicitly asks the controller to reach no route; it is not a rollback

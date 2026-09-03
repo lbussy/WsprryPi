@@ -2425,6 +2425,8 @@ function clickTransmitPin() {
 const RP1_ROUTE_STATES = Object.freeze({
     runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
     runtime_ready: ["Route ready", "Route switching is complete. Transmission was not resumed."],
+    runtime_switch_queued: ["Route switch queued", "Wsprry Pi will disconnect briefly. Refresh after it reconnects to confirm the route. Transmission remains disabled."],
+    runtime_recovery_queued: ["Route recovery queued", "Wsprry Pi will stop and remain inhibited. Use the operator client to confirm recovery. Transmission remains disabled."],
     runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
     runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
     runtime_preflight_ready: ["Route plan ready", "No route change has started. Transmission remains disabled until you confirm the switch."],
@@ -2469,7 +2471,7 @@ class Rp1RouteUiController {
         const draft=this.routeValue(`GPIO${getTxPin()}`);
         const changed=draft!=="Unavailable" && draft!==this.active;
         const recovery=["staged","mismatch","rollback_required","runtime_recovery"].includes(state);
-        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
+        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
         $("#rp1-route-cancel").prop("disabled",this.inFlight || draft===this.persisted);
         $("#rp1-route-rollback").prop("hidden",!recovery).prop("disabled",this.inFlight);
     }

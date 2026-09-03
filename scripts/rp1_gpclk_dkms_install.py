@@ -2793,7 +2793,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
 
     inspected = validate_readiness(runtime_call(
         runner, RUNTIME_PROVIDER, "inspect", (),
-        {"neutral_ready", "activation_required", "conflict"},
+        {"neutral_ready", "activation_required", "conflict", "recovery_required"},
     ))
     runtime = validate_runtime_update_identity(record, inspected)
     result = inspected.get("result")
@@ -2823,7 +2823,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
             "runtime update preparation refuses non-retry conflicts",
         )
         validate_runtime_update_retry_conflict(inspected, journal_value)
-    else:
+    elif result != "recovery_required":
         require(result == "neutral_ready", "runtime update preparation requires neutral readiness")
 
     activation_observation = inspected.get("activation", {})
@@ -2832,6 +2832,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     activation_controller = activation.get("controller", {})
     controller_endpoint = inspected.get("endpoints", {}).get("controller", {})
     controller_state = activation.get("controllerState")
+    recovered_route_state = result == "recovery_required"
     require(
         activation_observation.get("status") == "observed"
         and controller.get("status") == "loaded"
@@ -2841,15 +2842,34 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         and controller_endpoint.get("open") is False
         and isinstance(controller_state, dict)
         and controller_state.get("session") == runtime["controllerSession"]
-        and controller_state.get("generation") == runtime["controllerGeneration"]
         and not any(controller_state.get(name) for name in
-                    ("generation", "id", "error", "route", "flags"))
+                    ("id", "error", "route", "flags"))
         and journal.get("status") == "present"
-        and journal_value.get("phase") == "complete-neutral"
         and journal_value.get("requestId") == runtime["activationRequestId"]
-        and journal_value.get("planSha256") == runtime["activationPlanSha256"],
+        and journal_value.get("planSha256") == runtime["activationPlanSha256"]
+        and ((recovered_route_state
+              and controller_state.get("generation", 0) > 0
+              and journal_value.get("phase") in {"activation-failed", "rollback-failed"})
+             or (not recovered_route_state
+                 and controller_state.get("generation") == runtime["controllerGeneration"]
+                 and journal_value.get("phase") == "complete-neutral")),
         "runtime update preparation lacks exact neutral controller evidence",
     )
+
+    expected_route_recovery = None
+    if recovered_route_state:
+        journals = inspected.get("journals", {})
+        expected_route_recovery = {}
+        for name in ("transaction.json", "manager.json", "application.json"):
+            item = journals.get(name, {}) if isinstance(journals, dict) else {}
+            if item.get("status") == "absent":
+                expected_route_recovery[name] = None
+            else:
+                require(item.get("status") == "present" and
+                        isinstance(item.get("value"), dict),
+                        "runtime update route recovery journal is unavailable")
+                expected_route_recovery[name] = sha256_bytes(
+                    canonical(item["value"]))
 
     recovery = runtime_call(runner, RUNTIME_PROVIDER, "activation-recover-plan")
     require(
@@ -2861,20 +2881,23 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     recovery_plan = recovery.get("plan", {})
     recovery_plan_fields = {
         "version", "operation", "activationJournalSha256", "bindingSha256",
-        "bootId", "controllerLoaded", "socketWasActive", "alreadyRecovered",
+        "bootId", "controllerLoaded", "controllerState",
+        "routeRecoverySha256", "socketWasActive", "alreadyRecovered",
     }
     require(
         isinstance(recovery_digest, str) and SHA256.fullmatch(recovery_digest)
         and isinstance(recovery_plan, dict)
         and set(recovery_plan) == recovery_plan_fields
         and recovery_digest == sha256_bytes(canonical(recovery_plan))
-        and recovery_plan.get("version") == 1
+        and recovery_plan.get("version") == 2
         and recovery_plan.get("operation") == "neutral-activation-recovery"
         and recovery_plan.get("bindingSha256") == runtime["bindingSha256"]
         and recovery_plan.get("bootId") == activation.get("bootId")
         and recovery_plan.get("activationJournalSha256")
             == sha256_bytes(canonical(journal_value))
         and recovery_plan.get("controllerLoaded") is True
+        and recovery_plan.get("controllerState") == controller_state
+        and recovery_plan.get("routeRecoverySha256") == expected_route_recovery
         and recovery_plan.get("socketWasActive")
             is journal_value.get("plan", {}).get("socketWasActive")
         and recovery_plan.get("alreadyRecovered") is False,

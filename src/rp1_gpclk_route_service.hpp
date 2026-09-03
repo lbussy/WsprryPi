@@ -13,9 +13,10 @@ struct Rp1GpclkRouteExecutorOperations {
   std::function<bool(int, std::string *)> persist_gpio;
   std::function<void(bool, const std::string &)> set_transmission_inhibited;
   std::function<nlohmann::json(const std::string &)> runtime_route_plan;
-  std::function<nlohmann::json(const std::string &, const std::string &,
-                               const std::string &)>
-      runtime_route_ensure;
+  std::function<void(const std::string &, const std::string &,
+                     const std::string &, const std::string &,
+                     const std::string &)>
+      runtime_route_launch;
 };
 class Rp1GpclkRouteService {
 public:

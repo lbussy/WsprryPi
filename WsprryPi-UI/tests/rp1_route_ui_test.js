@@ -11,7 +11,7 @@ assert.match(view,/>Check route</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
-for(const state of ["runtime_preflight_ready","runtime_preflight_failed"])
+for(const state of ["runtime_preflight_ready","runtime_preflight_failed","runtime_switch_queued","runtime_recovery_queued"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
 assert.match(script,/body:JSON\.stringify\(\{operation, route:requested, generation:this\.generation\}\)/);
 assert.match(script,/operation:"preflight"[\s\S]*operation:"apply-and-reboot"/);
@@ -98,5 +98,8 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  controller.render({profile:"runtime",ok:false,state:"runtime_restoration_failed",persisted:"GPIO20",active:"GPIO4"});
  assert.equal(element("rp1-route-apply").disabled,true,"restoration failure cannot launch another switch");
  assert.match(element("rp1-route-feedback").textContent,/restore --execute/);
+ controller.render({profile:"runtime",ok:true,state:"runtime_recovery_queued",persisted:"GPIO20",active:"GPIO4"});
+ assert.equal(element("rp1-route-state").textContent,"Route recovery queued");
+ assert.equal(element("rp1-route-apply").disabled,true,"queued recovery cannot launch another switch");
  console.log("runtime route UI behavior: PASS");
 })().catch(error=>{console.error(error);process.exitCode=1});
