@@ -189,12 +189,14 @@ if ! awk '
 fi
 
 if ! awk '
+    /prepare_rp1_gpclk_runtime_update "\$debug" \|\| return 1/ { recovery = NR }
+    /handle_apt_packages "\$debug" \|\| return 1/ { packages = NR }
     /validate_support_bundle_age_dependency "\$debug" \|\| return 1/ { age = NR }
     /validate_rp1_gpclk_build_dependencies "\$debug" \|\| return 1/ { rp1 = NR }
     /apply_rp1_gpclk_dkms_installation "\$debug" \|\| return 1/ { apply = NR }
-    END { exit(age > 0 && rp1 == age + 1 && apply == rp1 + 1 ? 0 : 1) }
+    END { exit(recovery > 0 && packages == recovery + 1 && age == packages + 1 && rp1 == age + 1 && apply == rp1 + 1 ? 0 : 1) }
 ' "$INSTALLER"; then
-    echo "RP1 dependency validation must run after package handling and before provider apply" >&2
+    echo "RP1 runtime recovery must precede package mutation and provider apply" >&2
     exit 1
 fi
 

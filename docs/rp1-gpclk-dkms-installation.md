@@ -207,17 +207,27 @@ upstream evidence, rollback record, and captured upstream rollback entrypoint.
 Failed provider installs and dry runs create no ownership record. A stale record
 blocks a new provider installation rather than being overwritten.
 
-Before a repeat installation replaces application files or restarts the
-service, an exact WsprryPi-owned v3 neutral runtime is placed into its provider's
-inactive update state. The installer accepts a current `neutral_ready` result,
-an already `recovered-inhibited` retry, a valid post-reboot activation-required
-state, an exactly journaled same-boot route recovery that left a neutral
-nonzero-generation controller, or the narrow same-boot case where the only
-conflict is that the application's active PID changed after completed neutral
-activation. That last case must retain the exact binding, artifact set,
-activation journal, neutral controller, null routes, absent consumer, disabled
-output, matching controller observation, and otherwise unchanged
-application-service identity.
+Before package mutation or provider verification replaces or reuses provider
+state, and before a repeat installation replaces application files or restarts
+the service, an exact WsprryPi-owned v3 runtime is placed into its provider's
+inactive update state. If the runtime has an exact selected route, the installer
+first requires the recorded binding and artifact set, the bound installed route
+client, one
+unambiguous active route, closed owned endpoints, an exact loaded module pair,
+and the manager's matching output-disabled transaction evidence. It revalidates
+the ownership record and invokes the route client's synchronous `recover`
+operation. The recovered route must report the same binding, null active and
+configured routes, disabled output, and application inhibition before the
+installer continues with neutral recovery.
+
+The neutral-recovery stage accepts a current `neutral_ready` result, an already
+`recovered-inhibited` retry, a valid post-reboot activation-required state, an
+exactly journaled same-boot route recovery that left a neutral nonzero-generation
+controller, or the narrow same-boot case where the only conflict is that the
+application's active PID changed after completed neutral activation. That last
+case must retain the exact binding, artifact set, activation journal, neutral
+controller, null routes, absent consumer, disabled output, matching controller
+observation, and otherwise unchanged application-service identity.
 
 For a loaded neutral controller, the installer reviews
 `activation-recover-plan`, binds its canonical digest to the installed binding,
@@ -263,12 +273,16 @@ orchestration; it does not transfer ownership of upstream files, journals,
 modules, units, or systemd state.
 
 A repeat installation accepts an exact WsprryPi-owned v3 development runtime
-idempotently. In `neutral_ready`, the administrative route controller is
+idempotently. An exact selected route is recovered and inhibited before
+provider apply; in `neutral_ready`, the administrative route controller is
 expected to remain loaded while the transmission consumer, configured route,
 output, owner, and lease remain absent. Reuse still requires the exact source,
 kernel, DKMS registration, source tree, unique module pair, version, ownership
-record, and subsequent bound-runtime validation. An active transmission
-consumer, selected route, foreign state, or identity drift remains a refusal.
+record, and subsequent bound-runtime validation. An active consumer outside
+the exact owned selected-route recovery contract, foreign state, or identity
+drift remains a refusal. When the selected source differs, pre-update recovery
+is deferred to the predecessor-owned provider migration workflow rather than
+allowing candidate code to interpret predecessor state.
 
 After neutral administration succeeds, the installer finishes website and
 Apache publication and requires `wsprrypi.service` to become active. With web

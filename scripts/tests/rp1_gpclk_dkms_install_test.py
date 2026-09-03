@@ -1320,6 +1320,34 @@ class ApplyPolicyTests(unittest.TestCase):
         })
         return value
 
+    def selected_runtime_update_inspection(self):
+        value = self.runtime_update_inspection("exact_ready")
+        value["routes"]["active"] = "gpio4"
+        value["modules"][MOD.MODULE_NAME] = {"status": "loaded"}
+        value["endpoints"]["consumer"] = {
+            "status": "owned", "open": False,
+        }
+        value["routeSelected"] = True
+        value["executionReady"] = True
+        value["safety"] = {
+            "outputInhibited": False, "operationalReady": True,
+            "owner": False, "lease": False,
+            "clock": "quiescent", "gpio": "quiescent",
+            "dma": "quiescent",
+        }
+        value["artifacts"][str(MOD.RUNTIME_ROUTE_CLIENT)] = {
+            "status": "exact",
+        }
+        value["identities"]["installedBinding"]["value"]["files"] = {
+            str(MOD.RUNTIME_ROUTE_CLIENT): "f" * 64,
+        }
+        manager = value["manager"]["query"]["state"]
+        manager["activeRoute"] = "gpio4"
+        manager["pendingTransaction"] = {
+            "version": 1, "phase": "complete-inhibited",
+        }
+        return value
+
     def runtime_recovery_plan(self, inspected):
         journal = inspected["journals"]["activation.json"]["value"]
         route_recovery = None
@@ -1402,6 +1430,132 @@ class ApplyPolicyTests(unittest.TestCase):
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
 
+    def test_repeat_install_recovers_selected_route_before_provider_apply(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        selected = self.selected_runtime_update_inspection()
+        route_recovered = self.route_recovered_runtime_update_inspection()
+        planned = self.runtime_recovery_plan(route_recovered)
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover",
+            "planSha256": planned["planSha256"],
+            "response": {"status": "recovered-inhibited"},
+        }
+        final = self.recovered_runtime_update_inspection()
+        route_reply = {
+            "schemaVersion": 3,
+            "contract": MOD.RUNTIME_ROUTE_CONTRACT,
+            "operation": "recover",
+            "status": "recovered-inhibited",
+            "state": {
+                "bindingSha256": record["runtime"]["bindingSha256"],
+                "activeRoute": None, "configuredRoute": None,
+                "qualification": False, "outputEnabled": False,
+                "applicationInhibited": True,
+            },
+        }
+        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
+        route_client.write_text("# exact fixture\n")
+        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
+        selected["artifacts"][str(route_client)] = {"status": "exact"}
+        selected["identities"]["installedBinding"]["value"]["files"] = {
+            str(route_client): digest(route_client.read_bytes()),
+        }
+        runner = FakeRunner({
+            ("python3", str(route_client), "recover", "--execute"):
+                MOD.CommandResult(json.dumps(route_reply), "", 0),
+        })
+        with mock.patch.object(
+                MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
+             mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(
+                MOD, "runtime_call",
+                side_effect=[selected, route_recovered, planned,
+                             recovered, final]) as calls, \
+             mock.patch.object(
+                MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+            MOD.prepare_runtime_update(args, runner)
+        self.assertEqual(
+            runner.calls,
+            [("python3", str(route_client), "recover", "--execute")],
+        )
+        self.assertEqual(
+            [call.args[2] for call in calls.call_args_list],
+            ["inspect", "inspect", "activation-recover-plan",
+             "activation-recover", "inspect"],
+        )
+        preserve.assert_called_once_with(
+            record, "before-application-update"
+        )
+        self.assertEqual(unchanged.call_count, 4)
+
+    def test_selected_route_recovery_rejects_nonquiescent_state(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        selected = self.selected_runtime_update_inspection()
+        selected["safety"]["owner"] = True
+        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
+        route_client.write_text("# exact fixture\n")
+        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
+        selected["artifacts"][str(route_client)] = {"status": "exact"}
+        selected["identities"]["installedBinding"]["value"]["files"] = {
+            str(route_client): digest(route_client.read_bytes()),
+        }
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
+             mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call", return_value=selected):
+            with self.assertRaisesRegex(
+                    MOD.ContractError, "not closed and quiescent"):
+                MOD.prepare_runtime_update(args, runner)
+        self.assertEqual(runner.calls, [])
+
+    def test_selected_route_recovery_rejects_tampered_route_client(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        selected = self.selected_runtime_update_inspection()
+        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
+        route_client.write_text("# tampered fixture\n")
+        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
+        selected["artifacts"][str(route_client)] = {"status": "exact"}
+        selected["identities"]["installedBinding"]["value"]["files"] = {
+            str(route_client): "f" * 64,
+        }
+        runner = FakeRunner()
+        with mock.patch.object(MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
+             mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call", return_value=selected):
+            with self.assertRaisesRegex(
+                    MOD.ContractError, "missing or unbound"):
+                MOD.prepare_runtime_update(args, runner)
+        self.assertEqual(runner.calls, [])
+
+    def test_runtime_update_defers_changed_source_to_provider_migration(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        record["sourceCommit"] = "f" * 40
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        stdout = io.StringIO()
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call") as calls, \
+             mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.prepare_runtime_update(args, FakeRunner())
+        calls.assert_not_called()
+        self.assertIn("deferring exact predecessor recovery", stdout.getvalue())
+
     def test_runtime_update_recovers_route_after_completed_neutral_activation(self):
         args = self.runtime_update_args()
         record = self.runtime_update_record()
@@ -1432,6 +1586,13 @@ class ApplyPolicyTests(unittest.TestCase):
     def test_runtime_update_is_noop_for_first_install_and_resumable_states(self):
         args = self.runtime_update_args()
         identity = mock.Mock(st_dev=1, st_ino=2)
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(None, None, None)), \
+             mock.patch.object(MOD, "runtime_call") as calls:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        calls.assert_not_called()
+
         provider_only = {"schema": MOD.RECORD_SCHEMA,
                          "sourceCommit": "a" * 40}
         with mock.patch.object(
@@ -1876,6 +2037,67 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertIn(
             ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest),
             runner.calls,
+        )
+
+    def test_owned_runtime_migration_recovers_selected_route_first(self):
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        provider = pathlib.Path(self.temp.name) / "runtime_provider.py"
+        provider.write_text("# exact fixture\n")
+        selected = self.selected_runtime_update_inspection()
+        selected["identities"]["installedBinding"]["value"]["files"] = {}
+        routed = self.route_recovered_runtime_update_inspection()
+        recovery = self.runtime_recovery_plan(routed)
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover",
+            "planSha256": recovery["planSha256"],
+            "response": {"status": "recovered-inhibited"},
+        }
+        removable = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "activation_required", "state": "activation_required",
+            "routeSelected": False,
+            "modules": {MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
+                        MOD.MODULE_NAME: {"status": "absent"}},
+            "endpoints": {"controller": {"status": "absent"},
+                          "consumer": {"status": "absent"}},
+            "managerSocket": {"status": "absent"},
+        }
+        removal_digest = "d" * 64
+        removal = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": removal_digest,
+            "destinations": sorted(MOD.runtime_deployment_destinations({})),
+        }
+        removed = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove", "planSha256": removal_digest,
+            "response": {"status": "removed-exact-deployment"},
+        }
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(
+                MOD, "runtime_call",
+                side_effect=[selected, routed, recovery, recovered, removable,
+                             removal, removed]) as calls, \
+             mock.patch.object(
+                MOD, "recover_selected_runtime_route_for_update",
+                return_value=routed) as route_recover, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+             mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.recover_and_remove_owned_runtime(
+                self.record, record, identity, FakeRunner(), provider
+            )
+        route_recover.assert_called_once_with(
+            self.record, record, identity, selected, mock.ANY
+        )
+        self.assertEqual(
+            [call.args[2] for call in calls.call_args_list],
+            ["inspect", "inspect", "activation-recover-plan", "activation-recover",
+             "inspect", "remove-plan", "remove"],
         )
 
     def test_owned_post_reboot_runtime_uses_installed_provider_to_retire_then_remove(self):
@@ -2868,7 +3090,7 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertNotRegex(helper_source, r'\["(?:dtoverlay|modprobe|insmod|rmmod|systemctl|service|reboot|shutdown)"')
         self.assertNotRegex(helper_source, r"config\.txt[^\n]*(?:write|replace|unlink)")
 
-    def test_prepare_precedes_package_mutation_and_apply_follows_dependencies(self):
+    def test_prepare_precedes_packages_and_runtime_recovery_precedes_apply(self):
         source = (ROOT / "scripts/install.sh").read_text()
         prepare = source.index('prepare_rp1_gpclk_dkms_installation "$debug" || return 1')
         packages = source.index('handle_apt_packages "$debug" || return 1')
@@ -2876,10 +3098,10 @@ remove_owned_rp1_gpclk_dkms_provider debug
         apply = source.index('apply_rp1_gpclk_dkms_installation "$debug" || return 1')
         update = source.index('prepare_rp1_gpclk_runtime_update "$debug" || return 1')
         application = source.index('manage_wsprry_pi "$debug"')
-        self.assertLess(prepare, packages)
+        self.assertLess(prepare, update)
+        self.assertLess(update, packages)
         self.assertLess(packages, dependencies)
         self.assertLess(dependencies, apply)
-        self.assertLess(apply, update)
         self.assertLess(update, application)
         group = source[source.index("local install_group=("):]
         companion = group.index('"manage_route_application"')

@@ -29,9 +29,14 @@ wrapper suppresses ordinary child stdout and stderr and owns all status and
 failure diagnostics. Provider apply, pre-application-update neutral recovery,
 and final neutral activation each retain a sanitized, bounded tail of child
 output in the installer log when that command fails. On a repeat installation,
-an exact owned neutral runtime is digest-reviewed, recovered to an inhibited
-and inactive activation-required state before application files or services are
-changed, then freshly activated after the updated application is in place.
+an exact owned selected route is first recovered through its bound runtime
+route client. The resulting neutral controller is then digest-reviewed and
+recovered to an inhibited, inactive activation-required state before provider
+verification, package mutation, or application files and services are changed.
+The exact provider is subsequently verified and neutral administration is
+freshly activated after the updated application is in place. A different
+selected provider source bypasses this same-source step and remains subject to
+its predecessor-owned migration workflow.
 On a system not positively identified as Pi 5/CM5, automatic selection skips
 the helper and all RP1/DKMS planning, apply, recovery, and activation status
 lines. An explicit `INSTALL_RP1_GPCLK_DKMS=true` still reaches the helper's

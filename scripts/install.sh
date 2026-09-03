@@ -2629,7 +2629,7 @@ apply_rp1_gpclk_dkms_installation() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Recover exact neutral RP1 administration before application mutation.
+# @brief Recover owned RP1 administration before package/provider mutation.
 # @details A repeat installation must not invalidate a completed activation
 #          journal by replacing or restarting WsprryPi first. The helper
 #          performs only the provider's digest-reviewed recovery transaction;
@@ -9158,13 +9158,13 @@ _main() {
         detect_apache_web_mode "$debug"
     fi
 
-    # Install dependencies after system checks
+    # Prepare an owned runtime, then install and validate dependencies.
     if [[ "$ACTION" != "uninstall" ]]; then
+        prepare_rp1_gpclk_runtime_update "$debug" || return 1
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
         validate_rp1_gpclk_build_dependencies "$debug" || return 1
         apply_rp1_gpclk_dkms_installation "$debug" || return 1
-        prepare_rp1_gpclk_runtime_update "$debug" || return 1
     fi
 
     # Handle correcting timezone

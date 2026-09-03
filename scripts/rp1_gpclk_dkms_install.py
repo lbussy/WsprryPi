@@ -53,7 +53,9 @@ RUNTIME_RECORD_SCHEMA = "wsprrypi-rp1-gpclk-dkms-ownership-v3"
 STATE_SCHEMA = "wsprrypi-rp1-gpclk-dkms-plan-v1"
 RUNTIME_READINESS_CONTRACT = "rp1-gpclk-runtime-readiness-v1"
 RUNTIME_BINDING_CONTRACT = "rp1-gpclk-runtime-binding-v3"
+RUNTIME_ROUTE_CONTRACT = "rp1-gpclk-route-manager-runtime"
 RUNTIME_PROVIDER = pathlib.Path("/usr/lib/rp1-gpclk-dkms/runtime_provider.py")
+RUNTIME_ROUTE_CLIENT = pathlib.Path("/usr/lib/rp1-gpclk-dkms/runtime_route_client.py")
 RUNTIME_COMPANION = pathlib.Path("/usr/local/lib/wsprrypi/route_application.py")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -1703,7 +1705,7 @@ def recover_and_remove_owned_runtime(
             "runtime provider is missing or substituted")
     inspected = validate_readiness(runtime_call(
         runner, provider, "inspect", (),
-        {"activation_required", "recovery_required", "neutral_ready", "conflict"},
+        {"exact_ready", "activation_required", "recovery_required", "neutral_ready", "conflict"},
     ))
     binding = inspected.get("identities", {}).get("installedBinding", {})
     binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
@@ -1725,6 +1727,14 @@ def recover_and_remove_owned_runtime(
         and all(value.get("status") == "exact" for value in artifacts.values()),
         "installed runtime artifacts differ from the owned binding",
     )
+    if inspected.get("result") == "exact_ready":
+        require(
+            record.get("schema") == RUNTIME_RECORD_SCHEMA,
+            "selected runtime route lacks exact runtime ownership",
+        )
+        inspected = recover_selected_runtime_route_for_update(
+            record_path, record, record_identity, inspected, runner
+        )
     activation_journal = inspected.get("journals", {}).get("activation.json", {})
     reviewed_candidate_recovery = False
     if (inspected.get("result") in {"activation_required", "recovery_required"}
@@ -2699,6 +2709,123 @@ def validate_runtime_update_identity(
     return runtime
 
 
+def recover_selected_runtime_route_for_update(
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    inspected: Mapping[str, Any],
+    runner: Runner,
+) -> dict[str, Any]:
+    """Recover one exact owned active route before neutral update recovery."""
+    runtime = validate_runtime_ownership(record.get("runtime"), record)
+    binding = inspected.get("identities", {}).get("installedBinding", {})
+    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
+    artifacts = inspected.get("artifacts")
+    routes = inspected.get("routes")
+    modules = inspected.get("modules")
+    endpoints = inspected.get("endpoints")
+    manager = inspected.get("manager", {})
+    query = manager.get("query", {}) if isinstance(manager, dict) else {}
+    state = query.get("state", {}) if isinstance(query, dict) else {}
+    safety = inspected.get("safety", {})
+    require(
+        inspected.get("result") == "exact_ready"
+        and inspected.get("state") == "exact_ready"
+        and not inspected.get("conflicts")
+        and binding.get("status") == "valid"
+        and binding.get("sha256") == runtime["bindingSha256"]
+        and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"]
+        and binding_value.get("sourceCommit") == record.get("sourceCommit")
+        and isinstance(artifacts, dict) and artifacts
+        and all(isinstance(value, dict) and value.get("status") == "exact"
+                for value in artifacts.values()),
+        "selected runtime route differs from WsprryPi ownership",
+    )
+    require(
+        isinstance(routes, dict)
+        and set(routes) == {"requested", "configured", "persisted", "active"}
+        and routes["active"] in {"gpio4", "gpio20"}
+        and all(routes[name] in {None, routes["active"]} for name in routes)
+        and inspected.get("routeSelected") is True
+        and inspected.get("executionReady") is True,
+        "runtime update route recovery requires one exact selected route",
+    )
+    require(
+        isinstance(modules, dict)
+        and set(modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME}
+        and all(value.get("status") == "loaded" for value in modules.values())
+        and isinstance(endpoints, dict)
+        and set(endpoints) == {"consumer", "controller"}
+        and all(value.get("status") == "owned" and value.get("open") is False
+                for value in endpoints.values()),
+        "runtime update selected route lacks exact closed module endpoints",
+    )
+    require(
+        manager.get("status") == "observed"
+        and query.get("operation") == "query"
+        and query.get("status") == "ok"
+        and state.get("bindingSha256") == runtime["bindingSha256"]
+        and state.get("activeRoute") == routes["active"]
+        and state.get("configuredRoute") is None
+        and state.get("qualification") is False
+        and state.get("outputEnabled") is False
+        and state.get("applicationInhibited") is False
+        and state.get("pendingTransaction") is not None
+        and state.get("applicationRestoration") is True,
+        "runtime update selected route lacks exact manager evidence",
+    )
+    require(
+        safety.get("outputInhibited") is False
+        and safety.get("operationalReady") is True
+        and safety.get("owner") is False
+        and safety.get("lease") is False
+        and safety.get("clock") == "quiescent"
+        and safety.get("gpio") == "quiescent"
+        and safety.get("dma") == "quiescent",
+        "runtime update selected route is not closed and quiescent",
+    )
+    require(
+        isinstance(binding_value.get("files"), dict)
+        and isinstance(binding_value["files"].get(str(RUNTIME_ROUTE_CLIENT)), str)
+        and SHA256.fullmatch(binding_value["files"][str(RUNTIME_ROUTE_CLIENT)])
+        and RUNTIME_ROUTE_CLIENT.is_file() and not RUNTIME_ROUTE_CLIENT.is_symlink()
+        and str(RUNTIME_ROUTE_CLIENT) in artifacts
+        and artifacts[str(RUNTIME_ROUTE_CLIENT)].get("status") == "exact"
+        and sha256_file(RUNTIME_ROUTE_CLIENT)
+            == binding_value["files"][str(RUNTIME_ROUTE_CLIENT)],
+        "installed runtime route recovery client is missing or unbound",
+    )
+    require_unchanged_ownership(
+        record_path, record, record_identity, "runtime route recovery"
+    )
+    result = runner.run(
+        ["python3", str(RUNTIME_ROUTE_CLIENT), "recover", "--execute"],
+        check=False,
+    )
+    response = json_result(result, "runtime route recovery")
+    recovered_state = response.get("state", {})
+    require(
+        result.returncode == 0
+        and response.get("schemaVersion") == 3
+        and response.get("contract") == RUNTIME_ROUTE_CONTRACT
+        and response.get("operation") == "recover"
+        and response.get("status") == "recovered-inhibited"
+        and recovered_state.get("bindingSha256") == runtime["bindingSha256"]
+        and recovered_state.get("activeRoute") is None
+        and recovered_state.get("configuredRoute") is None
+        and recovered_state.get("qualification") is False
+        and recovered_state.get("outputEnabled") is False
+        and recovered_state.get("applicationInhibited") is True,
+        "runtime route recovery did not reach exact inhibited state",
+    )
+    require_unchanged_ownership(
+        record_path, record, record_identity, "post-route runtime inspection"
+    )
+    return validate_readiness(runtime_call(
+        runner, RUNTIME_PROVIDER, "inspect", (), {"recovery_required"}
+    ), "recovery_required")
+
+
 def validate_inactive_runtime_update_state(
     inspected: Mapping[str, Any], *, recovered: bool
 ) -> None:
@@ -2826,28 +2953,32 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         resolved = plan.get("resolved")
         require(isinstance(resolved, dict), "prepared runtime source identity is missing")
     record, record_identity, reason = load_ownership_record(args.record)
-    if args.command == "prepare-runtime-removal" and (
-        record is None or record_identity is None
-    ):
-        print(f"No owned RP1 runtime requires pre-uninstall recovery: {reason or 'ownership is unproven'}.")
+    if record is None or record_identity is None:
+        if args.command == "prepare-runtime-removal":
+            print(f"No owned RP1 runtime requires pre-uninstall recovery: {reason or 'ownership is unproven'}.")
+        else:
+            print(f"No existing owned RP1 runtime requires update preparation: {reason or 'ownership is unproven'}.")
         return
     require(
         record is not None and record_identity is not None,
         f"WsprryPi provider ownership is required before runtime update preparation: {reason or 'unknown record'}",
     )
     if args.command == "prepare-runtime-update":
-        require(
-            record.get("sourceCommit") == resolved.get("commit"),
-            "owned provider and runtime source commits differ",
-        )
+        if record.get("sourceCommit") != resolved.get("commit"):
+            print("Owned RP1 provider source differs from the selected source; deferring exact predecessor recovery to provider migration.")
+            return
     if record.get("schema") != RUNTIME_RECORD_SCHEMA:
         print("No existing neutral runtime administration requires update preparation.")
         return
 
     inspected = validate_readiness(runtime_call(
         runner, RUNTIME_PROVIDER, "inspect", (),
-        {"neutral_ready", "activation_required", "conflict", "recovery_required"},
+        {"exact_ready", "neutral_ready", "activation_required", "conflict", "recovery_required"},
     ))
+    if inspected.get("result") == "exact_ready":
+        inspected = recover_selected_runtime_route_for_update(
+            args.record, record, record_identity, inspected, runner
+        )
     runtime = validate_runtime_update_identity(record, inspected)
     result = inspected.get("result")
     journal = inspected.get("journals", {}).get("activation.json", {})
