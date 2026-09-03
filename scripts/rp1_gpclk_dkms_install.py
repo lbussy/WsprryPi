@@ -2921,6 +2921,24 @@ def retire_prior_boot_activation_for_update(
     return final
 
 
+def remove_owned_runtime_for_fresh_activation(
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    runner: Runner,
+) -> None:
+    """Remove exact inactive runtime files and retain provider-only ownership."""
+    recover_and_remove_owned_runtime(
+        record_path, record, record_identity, runner
+    )
+    replacement = copy.deepcopy(record)
+    replacement["schema"] = RECORD_SCHEMA
+    replacement.pop("runtime", None)
+    replace_owned_record(
+        record_path, record, record_identity, replacement
+    )
+
+
 def validate_inactive_runtime_update_state(
     inspected: Mapping[str, Any], *, recovered: bool
 ) -> None:
@@ -3088,16 +3106,21 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         retire_prior_boot_activation_for_update(
             args.record, record, record_identity, inspected, runner
         )
-        recover_and_remove_owned_runtime(
+        remove_owned_runtime_for_fresh_activation(
             args.record, record, record_identity, runner
         )
-        replacement = copy.deepcopy(record)
-        replacement["schema"] = RECORD_SCHEMA
-        replacement.pop("runtime", None)
-        replace_owned_record(
-            args.record, record, record_identity, replacement
-        )
         print("RP1-GPCLK-DKMS prior-boot runtime retired and removed for fresh application activation.")
+        return
+
+    if (result == "activation_required"
+            and journal.get("status") == "absent"
+            and all(value.get("status") == "absent"
+                    for value in inspected.get("modules", {}).values())):
+        validate_inactive_runtime_update_state(inspected, recovered=False)
+        remove_owned_runtime_for_fresh_activation(
+            args.record, record, record_identity, runner
+        )
+        print("RP1-GPCLK-DKMS retired runtime removal resumed for fresh application activation.")
         return
 
     if result == "activation_required":
