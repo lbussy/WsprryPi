@@ -1667,7 +1667,7 @@ function populateConfig(callback = null) {
                         "gpio"
                     ) || "gpio"
                 ).toLowerCase();
-                if (transmitBackend !== "gpio" && transmitBackend !== "si5351") {
+                if (!["gpio", "rp1-gpclk", "si5351"].includes(transmitBackend)) {
                     transmitBackend = "gpio";
                 }
                 let enableOnBoot = String(
@@ -1911,7 +1911,11 @@ function populateConfig(callback = null) {
                     if (typeof renderBandPreferenceRows === "function") {
                         renderBandPreferenceRows();
                     }
-                    $("#transmit_backend").val(transmitBackend).trigger("change");
+                    $("#transmit_backend").val(
+                        typeof transmitBackendForUi === "function"
+                            ? transmitBackendForUi(transmitBackend)
+                            : (transmitBackend === "si5351" ? "si5351" : "gpio")
+                    ).trigger("change");
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
                     }

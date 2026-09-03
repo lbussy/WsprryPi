@@ -703,9 +703,8 @@ namespace
             !runtime_gpio_clock_transmission_supported)
         {
             gpio_support_error =
-                "RP1 route selection is required before GPIO transmission. "
-                "Choose GPIO4 or GPIO20 below; transmission remains disabled "
-                "until the canonical provider is active.";
+                "The canonical RP1 GPCLK provider is unavailable. Review the "
+                "RP1 clock route status below; transmission remains disabled.";
         }
         else if (runtime_gpio_clock_transmission_supported &&
                  !gpio_clock_transmission_supported)
@@ -797,7 +796,24 @@ namespace
             if (operation.contains("Transmit"))
                 internal_json["Operation"]["Transmit"] = operation.at("Transmit");
             if (operation.contains("Transmit Backend"))
-                internal_json["Operation"]["Transmit Backend"] = operation.at("Transmit Backend");
+            {
+                const std::string backend =
+                    trim_copy(operation.at("Transmit Backend").get<std::string>());
+                std::string normalized_backend = backend;
+                std::transform(
+                    normalized_backend.begin(), normalized_backend.end(),
+                    normalized_backend.begin(),
+                    [](unsigned char c)
+                    {
+                        return static_cast<char>(std::tolower(c));
+                    });
+                internal_json["Operation"]["Transmit Backend"] =
+                    get_raspberry_pi_generation() == 5 &&
+                            operator_exposes_rp1_gpio() &&
+                            normalized_backend == "gpio"
+                        ? "rp1-gpclk"
+                        : backend;
+            }
             if (operation.contains("Enable on Boot"))
                 internal_json["Operation"]["Enable on Boot"] = operation.at("Enable on Boot");
             if (operation.contains("Use LED"))
@@ -2925,6 +2941,11 @@ bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message) noexce
         }
         ArgParserConfig candidate = config;
         candidate.gpio_tx_pin = gpio;
+        if (get_raspberry_pi_generation() == 5 && operator_exposes_rp1_gpio())
+        {
+            candidate.transmit_backend = TransmitBackendKind::RP1_GPCLK;
+            resolve_backend_specific_config(candidate);
+        }
         std::string validation_error;
         if (!validate_config_candidate(candidate, &validation_error, false))
         {

@@ -199,7 +199,7 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
                 ...(window.WSPRRYPI_PLATFORM || {}),
                 raspberryPiGeneration: 5,
                 gpioClockTransmissionSupported: false,
-                gpioClockTransmissionError: "RP1 route selection is required before GPIO transmission. Choose GPIO4 or GPIO20 below; transmission remains disabled until the canonical provider is active.",
+                gpioClockTransmissionError: "The canonical RP1 GPCLK provider is unavailable. Review the RP1 clock route status below; transmission remains disabled.",
                 rp1GpioOperatorVisible: true,
                 si5351Detected: true,
             };
@@ -711,24 +711,26 @@ async function browserTest() {
     window.WSPRRYPI_PLATFORM.raspberryPiGeneration = 5;
     window.WSPRRYPI_PLATFORM.gpioClockTransmissionSupported = false;
     window.WSPRRYPI_PLATFORM.gpioClockTransmissionError =
-        "RP1 route selection is required before GPIO transmission. Choose GPIO4 or GPIO20 below; transmission remains disabled until the canonical provider is active.";
+        "The canonical RP1 GPCLK provider is unavailable. Review the RP1 clock route status below; transmission remains disabled.";
     window.WSPRRYPI_PLATFORM.rp1GpioOperatorVisible = true;
+    equal(transmitBackendForUi("rp1-gpclk"), "gpio",
+        "canonical RP1 backend must load into the operator-facing GPIO selector");
     field("transmit_backend").value = "gpio";
     initializeRp1RouteUi();
     updateBackendPlatformSupportUi();
     equal(field("transmit_backend").value, "gpio",
         "route-neutral Pi 5 RP1 must preserve GPIO for route administration");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO (route required)",
-        "route-neutral Pi 5 RP1 must distinguish route setup from provider failure");
+        "GPIO (checking route)",
+        "route-neutral Pi 5 RP1 must show that route status is being checked");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, false,
         "route-neutral Pi 5 RP1 must keep GPIO selectable for route administration");
     equal(field("rp1-gpio-drive-group").hidden, false,
         "route-neutral Pi 5 RP1 must show its route-bound drive selector");
-    ok(field("backend-selector-hint").textContent.includes("Choose an RP1 GPIO route below"),
-        "route-neutral Pi 5 RP1 must point to the next operator action");
-    ok(field("backendPlatformHint").textContent.includes("route selection is required"),
-        "route-neutral Pi 5 RP1 must explain why transmission remains unavailable");
+    ok(field("backend-selector-hint").textContent.includes("Checking the selected RP1 GPIO route"),
+        "route-neutral Pi 5 RP1 must describe the pending route-state query");
+    ok(field("backendPlatformHint").textContent.includes("Checking the selected RP1 GPIO route"),
+        "route-neutral Pi 5 RP1 must explain that route readiness is being checked");
     equal(field("legacy-gpio-power-group").hidden, true,
         "Pi 5 must not substitute the legacy GPIO power control");
     equal(field("gpio-backend-panel").hidden, false,
@@ -739,8 +741,8 @@ async function browserTest() {
         "route administration must not imply Si5351 was selected");
     equal(buildConfigPayload().GPIO["RP1 Drive mA"], 8,
         "route administration must preserve retained RP1 configuration");
-    equal(buildConfigPayload().Operation["Transmit Backend"], "gpio",
-        "route administration must not silently rewrite the retained backend");
+    equal(buildConfigPayload().Operation["Transmit Backend"], "rp1-gpclk",
+        "Pi 5 route administration must preserve the canonical RP1 backend");
     populateRp1GpioDrive(8);
     field("tx_pin").querySelector('option[value="20"]').disabled = false;
     field("tx_pin").value = "20";
@@ -753,6 +755,37 @@ async function browserTest() {
         "route setup must preserve the selected RP1 drive state");
     equal(buildConfigPayload().GPIO["Transmit Pin"], 20,
         "route setup must preserve the selected GPIO pin draft");
+    rp1RouteUi.render({
+        profile: "runtime", ok: true, state: "runtime_inhibited",
+        requested: null, persisted: null, active: null,
+        compatible: true, generation: 0,
+    });
+    ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected as the route to apply"),
+        "RP1 empty-route warning must acknowledge the visible route draft");
+    equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
+        "GPIO (route not active)",
+        "RP1 backend label must distinguish a route draft from an active route");
+    rp1RouteUi.render({
+        profile: "runtime", ok: true, state: "runtime_inhibited",
+        requested: "GPIO20", persisted: "GPIO20", active: "GPIO4",
+        compatible: true, generation: 1,
+    });
+    updateBackendPlatformSupportUi();
+    ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected, but GPIO4 is active"),
+        "RP1 warning must describe a selected-versus-active mismatch");
+    equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
+        "GPIO (route change pending)",
+        "RP1 backend label must describe a selected-versus-active mismatch");
+    rp1RouteUi.render({
+        profile: "runtime", ok: true, state: "runtime_ready",
+        requested: "GPIO20", persisted: "GPIO20", active: "GPIO20",
+        compatible: true, generation: 2,
+    });
+    updateBackendPlatformSupportUi();
+    ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected and active"),
+        "RP1 warning must not ask for a route that is already active");
+    ok(field("backend-selector-hint").textContent.includes("GPIO20 is selected and active"),
+        "RP1 selector guidance must acknowledge an already-active selection");
     field("transmit_backend").value = "si5351";
     field("transmit_backend").dispatchEvent(new Event("change", { bubbles: true }));
     equal(buildConfigPayload().Operation["Transmit Backend"], "si5351",

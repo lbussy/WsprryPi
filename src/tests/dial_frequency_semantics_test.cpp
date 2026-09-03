@@ -384,6 +384,53 @@ namespace
         config_to_json();
     }
 
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+    void test_rp1_web_backend_persistence()
+    {
+        set_patch_all_from_web_runtime_apply_suppressed_for_test(true);
+        set_si5351_detection_override_for_test(true);
+        set_raspberry_pi_generation_override_for_test(5);
+        set_rp1_gpclk_provider_available_override_for_test(true);
+        require(
+            operator_exposes_rp1_gpio(),
+            "RP1 web backend persistence regression requires the RP1 backend");
+
+        ScopedTemporaryFile persistence_ini(
+            "/tmp/wsprrypi-rp1-web-backend-persistence-XXXXXX");
+        iniFile.set_filename(persistence_ini.path());
+        prime_valid_runtime_identity_config();
+        config.transmit = false;
+        config.transmit_backend = TransmitBackendKind::RP1_GPCLK;
+        resolve_backend_specific_config(config);
+        config_to_json();
+        patch_all_from_web({
+            {"Operation", {{"Transmit Backend", "gpio"}}},
+            {"GPIO", {{"Transmit Pin", 20}}}});
+        require(
+            config.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
+                config.gpio_tx_pin == 20 &&
+                jConfig["Operation"].value("Transmit Backend", std::string()) ==
+                    "rp1-gpclk",
+            "Pi 5 web GPIO changes must retain the canonical RP1 backend identity");
+
+        config.transmit_backend = TransmitBackendKind::GPIO;
+        resolve_backend_specific_config(config);
+        config_to_json();
+        std::string route_persistence_error;
+        require(
+            persist_rp1_gpclk_route_config(4, &route_persistence_error) &&
+                config.transmit_backend == TransmitBackendKind::RP1_GPCLK &&
+                config.gpio_tx_pin == 4 &&
+                jConfig["Operation"].value("Transmit Backend", std::string()) ==
+                    "rp1-gpclk",
+            "Pi 5 route persistence must promote route-neutral GPIO to the canonical RP1 backend: " +
+                route_persistence_error);
+
+        clear_rp1_gpclk_provider_available_override_for_test();
+        set_raspberry_pi_generation_override_for_test(4);
+    }
+#endif
+
     nlohmann::json make_identity_patch(
         const std::string &callsign,
         const std::string &grid_square,
@@ -613,6 +660,20 @@ void test_explicit_tone_experimental_policy()
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 &&
+        std::string(argv[1]) == "--rp1-web-backend-persistence-only")
+    {
+#if WSPRRYPI_BACKEND_RP1_GPCLK
+        test_rp1_web_backend_persistence();
+        std::cout << "RP1 web backend persistence tests passed" << std::endl;
+#else
+        std::cout <<
+            "RP1 web backend persistence test skipped: RP1 backend unavailable" <<
+            std::endl;
+#endif
+        return EXIT_SUCCESS;
+    }
+
     if (const char *cli_check = std::getenv("DIAL_FREQUENCY_SEMANTICS_CLI_CHECK");
         cli_check != nullptr && std::string(cli_check) == "1")
     {

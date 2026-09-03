@@ -436,7 +436,9 @@ function restorePersistedConfigDraft() {
         ? { ...wspr["Band Preferences"] }
         : {};
     renderBandPreferenceRows();
-    $("#transmit_backend").val(String(operation["Transmit Backend"] || "gpio")).trigger("change");
+    $("#transmit_backend").val(
+        transmitBackendForUi(operation["Transmit Backend"])
+    ).trigger("change");
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
     }
@@ -1881,6 +1883,20 @@ function selectedTransmitBackend() {
     return backend === "si5351" ? "si5351" : "gpio";
 }
 
+function transmitBackendForPersistence() {
+    const backend = selectedTransmitBackend();
+    if (backend === "gpio" && isRp1GpioPlatform() && rp1GpioOperatorVisible()) {
+        return "rp1-gpclk";
+    }
+    return backend;
+}
+
+function transmitBackendForUi(backend) {
+    return String(backend || "gpio").toLowerCase() === "si5351"
+        ? "si5351"
+        : "gpio";
+}
+
 function isRp1GpioPlatform() {
     const platform = window.WSPRRYPI_PLATFORM || {};
     return Number(platform.raspberryPiGeneration) === 5;
@@ -2057,6 +2073,9 @@ function selectedBackendUnavailableMessage() {
     const backend = selectedTransmitBackend();
 
     if (backend === "gpio" && platform.gpioClockTransmissionSupported === false) {
+        if (rp1GpioRouteSelectable()) {
+            return rp1RouteUnavailableMessage();
+        }
         return gpioPlatformRestrictionMessage();
     }
 
@@ -2065,6 +2084,30 @@ function selectedBackendUnavailableMessage() {
     }
 
     return "";
+}
+
+function rp1RouteUnavailableMessage() {
+    if (!rp1RouteUi || rp1RouteUi.state === "checking") {
+        return "Checking the selected RP1 GPIO route and canonical provider. Transmission remains disabled until readiness is confirmed.";
+    }
+
+    if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
+        return "RP1 route status and provider readiness could not be confirmed. Review the route status below and refresh after the controller reconnects; transmission remains disabled.";
+    }
+
+    const requested = rp1RouteUi.requested;
+    const active = rp1RouteUi.active;
+    if (requested === "Unavailable") {
+        const draft = rp1RouteUi.routeValue(`GPIO${getTxPin()}`);
+        return `${draft} is selected as the route to apply, but no active RP1 GPIO route is confirmed. Apply the route below; transmission remains disabled until the canonical provider is active.`;
+    }
+    if (active === requested) {
+        return `${requested} is selected and active, but the canonical RP1 GPCLK provider is unavailable. Review the route status below; transmission remains disabled.`;
+    }
+    if (active !== "Unavailable") {
+        return `${requested} is selected, but ${active} is active. Apply the route change or cancel the draft below; transmission remains disabled.`;
+    }
+    return `${requested} is selected, but no active RP1 GPIO route is confirmed. Apply the route change below; transmission remains disabled until the canonical provider is active.`;
 }
 
 function si5351UiSupported() {
@@ -2156,10 +2199,46 @@ function backendInlineHintMessage() {
     }
 
     if (backend === "gpio" && platform.gpioClockTransmissionSupported === false) {
+        if (rp1GpioRouteSelectable()) {
+            return rp1RouteUnavailableMessage();
+        }
         return gpioPlatformRestrictionMessage();
     }
 
     return "";
+}
+
+function rp1GpioOptionLabel() {
+    if (!rp1RouteUi || rp1RouteUi.state === "checking") {
+        return "GPIO (checking route)";
+    }
+    if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
+        return "GPIO (route status unavailable)";
+    }
+    if (rp1RouteUi.requested === "Unavailable") {
+        return "GPIO (route not active)";
+    }
+    if (rp1RouteUi.active === rp1RouteUi.requested) {
+        return "GPIO (provider unavailable)";
+    }
+    return "GPIO (route change pending)";
+}
+
+function rp1RouteSelectorHint() {
+    if (!rp1RouteUi || rp1RouteUi.state === "checking") {
+        return "Checking the selected RP1 GPIO route and provider readiness below.";
+    }
+    if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
+        return "RP1 route status is unavailable. Review the status below and refresh after the controller reconnects.";
+    }
+    if (rp1RouteUi.requested === "Unavailable") {
+        const draft = rp1RouteUi.routeValue(`GPIO${getTxPin()}`);
+        return `${draft} is selected as the route to apply. Review and apply it below; WsprryPi remains idle.`;
+    }
+    if (rp1RouteUi.active === rp1RouteUi.requested) {
+        return `${rp1RouteUi.requested} is selected and active. Review provider readiness below.`;
+    }
+    return `${rp1RouteUi.requested} is selected. Review and apply the pending route change below, or cancel the draft.`;
 }
 
 function formatBackendBannerMessage(reason) {
@@ -2249,7 +2328,7 @@ function updateBackendPlatformSupportUi() {
             ? "GPIO (RP1 unavailable)"
             : (gpioSupported
                 ? "GPIO"
-                : (rp1RouteSelectable ? "GPIO (route required)" : "GPIO (Unsupported on this Pi)"))
+                : (rp1RouteSelectable ? rp1GpioOptionLabel() : "GPIO (Unsupported on this Pi)"))
     );
     $gpioOption.prop("disabled", !gpioSupported && !rp1RouteSelectable);
     $si5351Option.text(getSi5351OptionLabel(si5351Detected));
@@ -2257,7 +2336,7 @@ function updateBackendPlatformSupportUi() {
     $backend.prop("disabled", !anyBackendSupported);
     $selectorHint.text(
         rp1RouteSelectable && !gpioSupported
-            ? "Choose an RP1 GPIO route below. Route selection keeps WsprryPi idle."
+            ? rp1RouteSelectorHint()
             : isRp1GpioPlatform() && !rp1GpioOperatorVisible()
             ? "Si5351 uses an attached synthesizer on the configured I2C bus."
             : "GPIO uses Raspberry Pi clock output pins directly. Si5351 uses an attached synthesizer on the configured I2C bus."
@@ -2383,11 +2462,13 @@ const RP1_ROUTE_STATES = Object.freeze({
 class Rp1RouteUiController {
     constructor(endpoint, request = window.fetch.bind(window)) {
         this.endpoint=endpoint; this.request=request; this.persisted=""; this.active=""; this.outputValidated=false;
+        this.requested="Unavailable"; this.state="checking";
         this.completionUnknown=false; this.runtimeProfile=false; this.developmentCompatible=false; this.generation=0; this.inFlight=false;
     }
     visible() { return !document.getElementById("rp1-route-panel")?.hidden; }
     routeValue(value) { return value === "GPIO4" || value === "GPIO20" ? value : "Unavailable"; }
     setState(state, message="") {
+        this.state=state;
         if(state==="runtime_unknown") this.completionUnknown=true;
         const panel=document.querySelector(".rp1-route-panel");
         const badge=document.getElementById("rp1-route-state");
@@ -2397,6 +2478,9 @@ class Rp1RouteUiController {
         if(badge){badge.dataset.state=state;badge.textContent=definition[0];}
         if(feedback) feedback.textContent=message || definition[1];
         this.syncActions(state);
+        if (typeof updateBackendPlatformSupportUi === "function" && rp1RouteUi === this) {
+            updateBackendPlatformSupportUi();
+        }
     }
     syncActions(state) {
         const draft=this.routeValue(`GPIO${getTxPin()}`);
@@ -2413,6 +2497,7 @@ class Rp1RouteUiController {
         this.developmentCompatible=data.compatible===true;
         this.generation=Number.isSafeInteger(data.generation) ? data.generation : 0;
         const requested=this.routeValue(data.requested || this.persisted);
+        this.requested=requested;
         if(requested!=="Unavailable") setTxPin(Number(requested.slice(4)));
         $("#rp1-route-requested").text(requested);
         $("#rp1-route-persisted").text(this.persisted);
@@ -2445,7 +2530,7 @@ class Rp1RouteUiController {
             typeof data.message==="string" ? data.message : "");
     }
     select(route) {
-        const requested=this.routeValue(route); $("#rp1-route-requested").text(requested);
+        const requested=this.routeValue(route); this.requested=requested; $("#rp1-route-requested").text(requested);
         this.setState(this.runtimeProfile ? "runtime_inhibited" : (requested === this.active ? "active" : "reboot_required"));
     }
     async query() {
@@ -3958,9 +4043,11 @@ function buildConfigPayload(options = {}) {
     const amp_pin = Number.isInteger(amp_pin_value) ? amp_pin_value : -1;
     const amp_pin_active_high = parseBool($("#amp_active_high").is(":checked"));
     let band_gpio = collectBandGpioConfig();
-    let transmit_backend = selectedTransmitBackend();
-    if (transmit_backend !== "gpio" && transmit_backend !== "si5351") {
-        transmit_backend = "gpio";
+    let transmit_backend = transmitBackendForPersistence();
+    if (!["gpio", "rp1-gpclk", "si5351"].includes(transmit_backend)) {
+        transmit_backend = isRp1GpioPlatform() && rp1GpioOperatorVisible()
+            ? "rp1-gpclk"
+            : "gpio";
     }
 
     // WSPR
