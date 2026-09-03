@@ -53,6 +53,10 @@ explicit switch. Prior-boot state is never used to restart automatically.
 Transmission is not resumed by either switching or restoration. The normal
 operator controls and application-owned RP1 operation authorization remain
 available; the kernel endpoint does not receive an authorization credential.
+An application update after same-boot route recovery may retire the neutral
+controller only through the provider's digest-bound activation-recovery plan;
+the completed neutral activation and recovered route journal chain must both
+remain exact.
 
 The application installer and `scripts/copy_exe.py` install
 `/usr/local/lib/wsprrypi/route_application.py` with the executable. Use a matching,

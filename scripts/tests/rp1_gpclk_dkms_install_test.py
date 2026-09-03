@@ -1402,6 +1402,33 @@ class ApplyPolicyTests(unittest.TestCase):
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
 
+    def test_runtime_update_recovers_route_after_completed_neutral_activation(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        initial = self.route_recovered_runtime_update_inspection()
+        initial["journals"]["activation.json"]["value"]["phase"] = "complete-neutral"
+        planned = self.runtime_recovery_plan(initial)
+        recovered = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover",
+            "planSha256": planned["planSha256"],
+            "response": {"status": "recovered-inhibited"},
+        }
+        final = self.recovered_runtime_update_inspection()
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(
+                MOD, "runtime_call",
+                side_effect=[initial, planned, recovered, final]) as calls, \
+             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+             mock.patch.object(MOD, "require_unchanged_ownership"):
+            MOD.prepare_runtime_update(args, FakeRunner())
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["inspect", "activation-recover-plan",
+                          "activation-recover", "inspect"])
+
     def test_runtime_update_is_noop_for_first_install_and_resumable_states(self):
         args = self.runtime_update_args()
         identity = mock.Mock(st_dev=1, st_ino=2)

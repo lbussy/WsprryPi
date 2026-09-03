@@ -2903,7 +2903,9 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         and journal_value.get("planSha256") == runtime["activationPlanSha256"]
         and ((recovered_route_state
               and controller_state.get("generation", 0) > 0
-              and journal_value.get("phase") in {"activation-failed", "rollback-failed"})
+              and journal_value.get("phase") in {
+                  "activation-failed", "rollback-failed", "complete-neutral"
+              })
              or (not recovered_route_state
                  and controller_state.get("generation") == runtime["controllerGeneration"]
                  and journal_value.get("phase") == "complete-neutral")),
