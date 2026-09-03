@@ -1832,6 +1832,22 @@ class ApplyPolicyTests(unittest.TestCase):
         pid = self.runtime_update_inspection("conflict")
         pid["activation"]["value"]["applicationService"]["MainPID"] = "42"
         unsafe_cases.append(pid)
+        for mutation in ("foreign-unit", "output-enabled"):
+            started = self.runtime_update_inspection("conflict")
+            started_journal = started["journals"]["activation.json"]["value"]
+            started_journal["plan"]["application"]["wasActive"] = False
+            started_journal["application"] = {
+                "phase": "stopped",
+                "service": {"LoadState": "loaded", "ActiveState": "inactive",
+                            "UnitFileState": "enabled", "MainPID": "0"},
+            }
+            if mutation == "foreign-unit":
+                started["activation"]["value"]["applicationService"]["fragment"] = (
+                    "/etc/systemd/system/foreign.service"
+                )
+            else:
+                started["manager"]["query"]["state"]["outputEnabled"] = True
+            unsafe_cases.append(started)
         for inspected in unsafe_cases:
             with self.subTest(inspected=inspected.get("conflicts")), \
                  mock.patch.object(
