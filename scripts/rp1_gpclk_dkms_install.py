@@ -3244,11 +3244,10 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         require(recovered or post_reboot,
                 "owned runtime is inactive without recoverable update or post-reboot evidence")
         validate_inactive_runtime_update_state(inspected, recovered=recovered)
-        print(
-            "RP1-GPCLK-DKMS runtime already recovered for application update."
-            if recovered else
-            "RP1-GPCLK-DKMS post-reboot runtime remains eligible for fresh neutral activation."
+        remove_owned_runtime_for_fresh_activation(
+            args.record, record, record_identity, runner
         )
+        print("RP1-GPCLK-DKMS inactive runtime removed for fresh application activation.")
         return
 
     if result == "conflict":
@@ -3363,7 +3362,10 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     ))
     validate_runtime_update_identity(record, final)
     validate_inactive_runtime_update_state(final, recovered=True)
-    print("RP1-GPCLK-DKMS neutral runtime recovered and inhibited for application update.")
+    remove_owned_runtime_for_fresh_activation(
+        args.record, record, record_identity, runner
+    )
+    print("RP1-GPCLK-DKMS neutral runtime recovered and removed for fresh application activation.")
 
 
 def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
@@ -3380,7 +3382,7 @@ def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
     require(record["schema"] in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}, "runtime deployment ownership schema is unsupported")
     require(record["sourceCommit"] == resolved.get("commit"), "owned provider and runtime source commits differ")
     if record["schema"] == RUNTIME_RECORD_SCHEMA:
-        print("Exact WsprryPi-owned neutral runtime administration already recorded; verifying idempotent readiness.")
+        print("Existing WsprryPi-owned runtime record detected; revalidating before neutral activation.")
     bundle, reviewed = build_runtime_bundle(state_dir, resolved, runner)
     provider = bundle / "runtime_provider.py"
     initial = runtime_call(runner, provider, "inspect", ["--bundle", str(bundle)],

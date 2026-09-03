@@ -1408,7 +1408,9 @@ class ApplyPolicyTests(unittest.TestCase):
                         side_effect=[initial, planned, recovered, final]) as calls, \
                      mock.patch.object(
                         MOD, "preserve_owned_activation_journal") as preserve, \
-                     mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+                     mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
+                     mock.patch.object(
+                         MOD, "remove_owned_runtime_for_fresh_activation") as remove:
                     MOD.prepare_runtime_update(args, FakeRunner())
                 self.assertEqual(
                     [call.args[2] for call in calls.call_args_list],
@@ -1416,6 +1418,9 @@ class ApplyPolicyTests(unittest.TestCase):
                 )
                 preserve.assert_called_once_with(record, "before-application-update")
                 self.assertEqual(unchanged.call_count, 2)
+                remove.assert_called_once_with(
+                    args.record, record, identity, mock.ANY
+                )
 
     def test_runtime_update_recovers_exact_same_boot_route_recovery(self):
         args = self.runtime_update_args()
@@ -1437,11 +1442,16 @@ class ApplyPolicyTests(unittest.TestCase):
                 MOD, "runtime_call",
                 side_effect=[initial, planned, recovered, final]) as calls, \
              mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "require_unchanged_ownership"):
+             mock.patch.object(MOD, "require_unchanged_ownership"), \
+             mock.patch.object(
+                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
             MOD.prepare_runtime_update(args, FakeRunner())
         self.assertEqual([call.args[2] for call in calls.call_args_list],
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
+        remove.assert_called_once_with(
+            args.record, record, identity, mock.ANY
+        )
 
     def test_repeat_install_recovers_selected_route_before_provider_apply(self):
         args = self.runtime_update_args()
@@ -1491,7 +1501,9 @@ class ApplyPolicyTests(unittest.TestCase):
                              recovered, final]) as calls, \
              mock.patch.object(
                 MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
+             mock.patch.object(
+                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
             MOD.prepare_runtime_update(args, runner)
         self.assertEqual(
             runner.calls,
@@ -1506,6 +1518,25 @@ class ApplyPolicyTests(unittest.TestCase):
             record, "before-application-update"
         )
         self.assertEqual(unchanged.call_count, 4)
+        remove.assert_called_once_with(
+            args.record, record, identity, mock.ANY
+        )
+
+    def test_runtime_update_removes_already_recovered_runtime_before_restart(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        recovered = self.recovered_runtime_update_inspection()
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call", return_value=recovered), \
+             mock.patch.object(
+                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        remove.assert_called_once_with(
+            args.record, record, identity, mock.ANY
+        )
 
     def test_runtime_update_retires_prior_boot_route_recovery(self):
         args = self.runtime_update_args()
@@ -1777,13 +1808,18 @@ class ApplyPolicyTests(unittest.TestCase):
                 MOD, "runtime_call",
                 side_effect=[initial, planned, recovered, final]) as calls, \
              mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "require_unchanged_ownership"):
+             mock.patch.object(MOD, "require_unchanged_ownership"), \
+             mock.patch.object(
+                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
             MOD.prepare_runtime_update(args, FakeRunner())
         self.assertEqual([call.args[2] for call in calls.call_args_list],
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
+        remove.assert_called_once_with(
+            args.record, record, identity, mock.ANY
+        )
 
-    def test_runtime_update_is_noop_for_first_install_and_resumable_states(self):
+    def test_runtime_update_skips_fresh_state_and_removes_inactive_runtime(self):
         args = self.runtime_update_args()
         identity = mock.Mock(st_dev=1, st_ino=2)
         with mock.patch.object(
@@ -1811,9 +1847,14 @@ class ApplyPolicyTests(unittest.TestCase):
                  mock.patch.object(
                     MOD, "runtime_call",
                     return_value=self.recovered_runtime_update_inspection(
-                        prior_boot=prior_boot)) as calls:
+                        prior_boot=prior_boot)) as calls, \
+                 mock.patch.object(
+                    MOD, "remove_owned_runtime_for_fresh_activation") as remove:
                 MOD.prepare_runtime_update(args, FakeRunner())
             calls.assert_called_once()
+            remove.assert_called_once_with(
+                args.record, record, identity, mock.ANY
+            )
 
     def test_runtime_update_refuses_unsafe_state_before_recovery(self):
         args = self.runtime_update_args()
@@ -3322,8 +3363,12 @@ remove_owned_rp1_gpclk_dkms_provider debug
         dependencies = source.index('validate_rp1_gpclk_build_dependencies "$debug" || return 1')
         apply = source.index('apply_rp1_gpclk_dkms_installation "$debug" || return 1')
         update = source.index('prepare_rp1_gpclk_runtime_update "$debug" || return 1')
+        package_notice = source.index(
+            'logI "Updating and managing required packages (this may take a few minutes)."'
+        )
         application = source.index('manage_wsprry_pi "$debug"')
         self.assertLess(prepare, update)
+        self.assertLess(package_notice, update)
         self.assertLess(update, packages)
         self.assertLess(packages, dependencies)
         self.assertLess(dependencies, apply)
@@ -3338,6 +3383,13 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertLess(service, activation)
         self.assertLess(activation, website)
         self.assertLess(website, readiness)
+
+        package_handler_start = source.index("handle_apt_packages() {")
+        package_handler_end = source.index("\n}\n", package_handler_start)
+        self.assertNotIn(
+            "Updating and managing required packages",
+            source[package_handler_start:package_handler_end],
+        )
 
     def test_runtime_activation_refreshes_systemd_before_service_validation(self):
         source = (ROOT / "scripts/install.sh").read_text()

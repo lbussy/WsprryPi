@@ -284,15 +284,19 @@ modules, units, or systemd state.
 
 A repeat installation accepts an exact WsprryPi-owned v3 development runtime
 idempotently. An exact selected route is recovered and inhibited before
-provider apply; in `neutral_ready`, the administrative route controller is
-expected to remain loaded while the transmission consumer, configured route,
-output, owner, and lease remain absent. Reuse still requires the exact source,
-kernel, DKMS registration, source tree, unique module pair, version, ownership
-record, and subsequent bound-runtime validation. An active consumer outside
-the exact owned selected-route recovery contract, foreign state, or identity
-drift remains a refusal. When the selected source differs, pre-update recovery
-is deferred to the predecessor-owned provider migration workflow rather than
-allowing candidate code to interpret predecessor state.
+provider apply. The recovered, inactive runtime deployment and its activation
+journal are then removed through a digest-reviewed plan while the application
+remains inhibited; this makes the later activation a fresh transaction bound
+to the replacement application instance. In `neutral_ready`, the newly
+activated administrative route controller is expected to remain loaded while
+the transmission consumer, configured route, output, owner, and lease remain
+absent. Reuse still requires the exact source, kernel, DKMS registration,
+source tree, unique module pair, version, ownership record, and subsequent
+bound-runtime validation. An active consumer outside the exact owned
+selected-route recovery contract, foreign state, or identity drift remains a
+refusal. When the selected source differs, pre-update recovery is deferred to
+the predecessor-owned provider migration workflow rather than allowing
+candidate code to interpret predecessor state.
 
 After neutral administration succeeds, the installer finishes website and
 Apache publication and requires `wsprrypi.service` to become active. It reloads

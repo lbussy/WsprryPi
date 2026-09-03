@@ -5596,8 +5596,6 @@ handle_apt_packages() {
     local runtime_pkg=""
     local packages_to_install=()
 
-    logI "Updating and managing required packages (this may take a few minutes)."
-
     # Update package list and fix broken installs
     if ! exec_command "Update local package index" apt-get update "$debug"; then
         warn "Failed to update package list."
@@ -9166,6 +9164,7 @@ _main() {
 
     # Prepare an owned runtime, then install and validate dependencies.
     if [[ "$ACTION" != "uninstall" ]]; then
+        logI "Updating and managing required packages (this may take a few minutes)."
         prepare_rp1_gpclk_runtime_update "$debug" || return 1
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
