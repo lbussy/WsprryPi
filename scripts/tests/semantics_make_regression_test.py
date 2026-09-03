@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
+AGENT_INSTRUCTIONS = ROOT / "AGENTS.md"
 
 
 def run(*arguments: str, expect: int) -> subprocess.CompletedProcess[str]:
@@ -28,6 +29,25 @@ def combined(result: subprocess.CompletedProcess[str]) -> str:
 
 
 def main() -> int:
+    agent_instructions = AGENT_INSTRUCTIONS.read_text(encoding="utf-8")
+    assert (
+        "WSPRRYPI_DISABLE_HARDWARE_ACCESS=1 make semantics-test SUDO="
+        in agent_instructions
+    )
+    assert "make semantics-test-portable SUDO=" in agent_instructions
+    assert "explicit subset, not an automatic fallback" in agent_instructions
+    assert "not evidence that the full suite passed" in agent_instructions
+
+    help_result = run("help", expect=0)
+    assert (
+        "semantics-test          Run the full Linux semantics suite "
+        "(requires gpiod.hpp)" in help_result.stdout
+    )
+    assert (
+        "semantics-test-portable Run the simulated-only portable semantics subset"
+        in help_result.stdout
+    )
+
     unsupported = run(
         "semantics-test",
         "HOST_OS=Darwin",

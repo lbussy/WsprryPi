@@ -314,12 +314,18 @@ Use the repository’s existing Makefile targets and test infrastructure.
 
 Run tests from `src` unless the project’s current instructions say otherwise.
 
-A typical non-hardware regression command is:
+Choose the semantics profile explicitly for the build host:
 
-```sh
-cd src
-make semantics-test
-```
+| Host/toolchain | Command | Coverage |
+| --- | --- | --- |
+| Linux with the libgpiod C++ development headers | `WSPRRYPI_DISABLE_HARDWARE_ACCESS=1 make semantics-test SUDO=` | Full semantics coverage for the default physical and simulated backend profile, with hardware access disabled. |
+| macOS, another non-Linux host, or Linux without the libgpiod C++ development headers | `make semantics-test-portable SUDO=` | Portable simulated-only coverage with `BACKENDS=simulated ANCILLARY_GPIO=0`. |
+
+`semantics-test-portable` is an explicit subset, not an automatic fallback and
+not evidence that the full suite passed. It excludes the backend-specific
+runtime-semantics and cleanup-lifecycle executables whose assertions require
+physical backend capabilities. Neither profile qualifies physical hardware,
+GPIO timing, installation, services, or RF output.
 
 Use focused targets when they cover the changed behavior, including as applicable:
 
