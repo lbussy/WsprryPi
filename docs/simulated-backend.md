@@ -202,6 +202,32 @@ The final JSON trace is `/tmp/wsprrypi-wspr-trace.json`. The second run's file-a
 
 This check validates application and backend software contracts. It does not qualify WSPR timing on physical hardware, GPIO, DMA, mailbox, MMIO, I2C, Si5351 output, RF output or accuracy, installation, services, a Raspberry Pi model, a band, or a transmitter chain.
 
+## Portable semantics validation
+
+`make semantics-test` has one deliberately stable meaning: the full Linux
+semantics suite. It compiles the physical and simulated backend integrations,
+requires the `gpiod.hpp` C++ development header, and fails before compilation
+with a portable-target recommendation when those prerequisites are absent.
+The full suite can still be hardware-free at runtime; CI sets
+`WSPRRYPI_DISABLE_HARDWARE_ACCESS=1` and audits device access separately.
+
+On macOS and other development hosts without the Linux GPIO toolchain, run:
+
+```sh
+cd src
+make semantics-test-portable SUDO=
+```
+
+The portable target pins `BACKENDS=simulated ANCILLARY_GPIO=0`; caller-provided
+backend values cannot broaden it. It builds the simulated application and runs
+the capability, band lookup, clock-model, correction, network-recovery,
+UI/source, GPIO band-policy, JavaScript, and UI-publication checks that are
+valid under that profile. It does not run the backend-specific runtime
+semantics executable or cleanup-lifecycle executable, whose current assertions
+require physical backend capabilities. Therefore a portable pass is not a full
+semantics pass and is not physical-backend, hardware, timing, installation,
+service, or RF qualification.
+
 ## Debian CI
 
 The `Debian non-hardware validation` workflow runs in a Debian Trixie container.

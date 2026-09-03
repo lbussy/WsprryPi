@@ -204,6 +204,7 @@ BACKEND_CAPABILITIES_HEADER := $(BUILD_METADATA_DIR)/backend_capabilities.hpp
 BACKEND_CAPABILITIES_GENERATOR := ../scripts/generate_backend_capabilities.py
 BACKEND_CAPABILITIES_REGRESSION_TEST := ../scripts/tests/backend_capabilities_regression_test.py
 BACKEND_CAPABILITIES_MAKE_REGRESSION_TEST := ../scripts/tests/backend_capabilities_make_regression_test.py
+SEMANTICS_MAKE_REGRESSION_TEST := ../scripts/tests/semantics_make_regression_test.py
 BUILD_METADATA_GENERATOR := ../scripts/generate_build_metadata.py
 BUILD_METADATA_REGRESSION_TEST := ../scripts/tests/build_metadata_regression_test.py
 BUILD_METADATA_MAKE_REGRESSION_TEST := ../scripts/tests/build_metadata_make_regression_test.py
@@ -480,6 +481,12 @@ DEPFILES := $(wildcard $(DEP_DIR)/*.d $(DEP_DIR)/*/*.d)
 # ─────────────────────────────────────────────────────────────────────────────
 
 CXX := g++
+
+# The full semantics suite intentionally compiles Linux GPIO integration even
+# though it does not operate hardware. Detect its C++ header up front so an
+# unsupported host receives an actionable error instead of a late compiler
+# failure. Tests may override this probe without changing the selected backend.
+GPIOD_CPP_HEADER_AVAILABLE ?= $(shell printf '%s\n' '\#include <gpiod.hpp>' | $(CXX) -x c++ -E - >/dev/null 2>&1 && echo 1 || echo 0)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Parallel build sizing (RAM + swap + current availability)
@@ -1126,7 +1133,7 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 .PHONY: support-bundle-contract-reconciliation-test
 .PHONY: support-bundle-intake-validation-test support-bundle-intake-state-test support-bundle-intake-retrieval-test
 .PHONY: support-bundle-intake-controller-test support-bundle-intake-runtime-test support-bundle-intake-production-test
-.PHONY: build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test
+.PHONY: build-dependency-regression-test backend-capabilities-regression-test backend-capabilities-make-regression-test semantics-make-regression-test
 .PHONY: backend-profile-factory-test update-check-comparison-test guarded-mode-change-persistence-test
 .PHONY: band-gpio-default-convergence-test band-gpio-rotation-test selector-shutdown-cleanup-test
 .PHONY: qualification-gpio-test-mode-test monitor-file-regression-test gpio-w
@@ -1161,6 +1168,9 @@ backend-capabilities-regression-test:
 backend-capabilities-make-regression-test:
 	$(Q)python3 $(BACKEND_CAPABILITIES_MAKE_REGRESSION_TEST)
 
+semantics-make-regression-test:
+	$(Q)python3 $(SEMANTICS_MAKE_REGRESSION_TEST)
+
 backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
 	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
 
@@ -1187,7 +1197,26 @@ test-oneshot: debug
 	$(Q)echo "Running test oneshot with sudo privileges."
 	$(Q)$(SUDO) ./$(BIN_DIR)/$(TEST_OUT) -D -x 1 $(WSPR_PARAMS)
 
-semantics-test: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test rp1-web-backend-persistence-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+.PHONY: semantics-test semantics-test-full semantics-test-portable semantics-test-portable-profile
+
+# Keep one stable meaning for the broad suite: Linux compilation and policy
+# coverage for the default physical and simulated backends. The recipe performs
+# its checks before a recursive make can begin compiling prerequisites.
+semantics-test:
+	$(Q)if [ "$(HOST_OS)" != "Linux" ]; then \
+		echo "Full semantics requires Linux and the libgpiod C++ development headers." >&2; \
+		echo "Run 'make semantics-test-portable' for the hardware-free simulated profile on $(HOST_OS)." >&2; \
+		exit 2; \
+	fi
+	$(Q)if [ "$(GPIOD_CPP_HEADER_AVAILABLE)" != "1" ]; then \
+		echo "Full semantics requires gpiod.hpp (install the libgpiod C++ development package)." >&2; \
+		echo "Run 'make semantics-test-portable' for the hardware-free simulated profile." >&2; \
+		exit 2; \
+	fi
+	$(Q)$(MAKE) --no-print-directory semantics-test-full \
+		BACKENDS=$(DEFAULT_BACKENDS) ANCILLARY_GPIO=1
+
+semantics-test-full: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test rp1-web-backend-persistence-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1202,6 +1231,30 @@ semantics-test: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-
 	$(Q)node tests/update_check_comparison_test.js
 	$(Q)node ../WsprryPi-UI/tests/gpio_correction_provenance_test.js
 	$(Q)echo "Running coherent UI publication tests."
+	$(Q)python3 ../scripts/tests/ui_publication_test.py
+
+# This is an explicit portable subset, not a transparent fallback from the full
+# suite. It compiles the real application with only the simulated backend and
+# retains capability-neutral source, policy, persistence, and publication
+# checks. Backend-specific runtime semantics and cleanup lifecycle coverage stay
+# in semantics-test-full because their current assertions require physical
+# backend capabilities.
+semantics-test-portable:
+	$(Q)echo "Running portable semantics with BACKENDS=simulated ANCILLARY_GPIO=0."
+	$(Q)$(MAKE) --no-print-directory semantics-test-portable-profile \
+		BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
+
+semantics-test-portable-profile: backend-capabilities-regression-test backend-capabilities-make-regression-test debug band-lookup-correlation-test chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+	$(Q)echo "Running portable UI/source regression tests."
+	$(Q)./$(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
+	$(Q)echo "Running portable GPIO band fail-closed policy tests."
+	$(Q)./$(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+	$(Q)echo "Running portable log timestamp display regression tests."
+	$(Q)node tests/log_timestamp_display_test.js
+	$(Q)echo "Running portable update-check comparison tests."
+	$(Q)node tests/update_check_comparison_test.js
+	$(Q)node ../WsprryPi-UI/tests/gpio_correction_provenance_test.js
+	$(Q)echo "Running portable coherent UI publication tests."
 	$(Q)python3 ../scripts/tests/ui_publication_test.py
 
 rp1-web-backend-persistence-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT)

@@ -21,13 +21,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Build portable simulated profile
+      - name: Run portable semantics profile
         working-directory: src
         run: |
-          make backend-capabilities-regression-test SUDO=
-          make backend-capabilities-make-regression-test SUDO=
-          make debug band-lookup-correlation-test \
-            BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
+          make semantics-make-regression-test SUDO=
+          make semantics-test-portable SUDO=
 
   strict-i2c-profile:
     runs-on: ubuntu-24.04
@@ -131,6 +129,7 @@ jobs:
       - name: Run parent semantics and cleanup lifecycle tests
         working-directory: src
         run: |
+          make semantics-make-regression-test SUDO=
           strace -f -e trace=openat,open \
             -o /tmp/wsprrypi-semantics.strace \
             make semantics-test SUDO=

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import time
@@ -17,7 +18,21 @@ DEFAULT = "rpi-gpio,rp1-gpclk,si5351,simulated"
 
 
 def run(*arguments: str, cwd: Path, expect: int = 0) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(arguments, cwd=cwd, capture_output=True, text=True)
+    environment = os.environ.copy()
+    # Keep the temporary fixture independent from an invoking recursive make's
+    # backend profile and jobserver state.
+    environment.pop("MAKEFLAGS", None)
+    environment.pop("MFLAGS", None)
+    environment.pop("MAKELEVEL", None)
+    environment.pop("BACKENDS", None)
+    environment.pop("ANCILLARY_GPIO", None)
+    result = subprocess.run(
+        arguments,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
     if result.returncode != expect:
         raise AssertionError(
             f"{' '.join(arguments)} returned {result.returncode}, expected {expect}; "
