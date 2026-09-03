@@ -1452,6 +1452,10 @@ function clearWebSocketReconnectTimer() {
 }
 
 function syncConnectionAlert() {
+    if (typeof window.isRp1RouteStatusModalActive === "function" && window.isRp1RouteStatusModalActive()) {
+        hideConnectionAlert();
+        return;
+    }
     if (!outageBannerArmed || pageUnloading) {
         hideConnectionAlert();
         return;

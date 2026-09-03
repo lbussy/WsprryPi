@@ -9,6 +9,10 @@ const header=fs.readFileSync(path.join(root,"data/header.php"),"utf8");
 assert.match(view,/Requested[\s\S]*Persisted[\s\S]*Configured[\s\S]*Active[\s\S]*Module reported[\s\S]*Reconciled[\s\S]*Boot ownership[\s\S]*Pending transaction[\s\S]*Fixed services[\s\S]*Endpoint[\s\S]*Output inhibited[\s\S]*Operational readiness[\s\S]*Development policy[\s\S]*Operation lifecycle[\s\S]*Product qualification/);
 assert.match(view,/>Check route</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
+assert.match(view,/<option value="">None<\/option>/);
+assert.match(view,/id="rp1-route-panel" data-debug-retained="true" hidden/);
+assert.match(view,/id="rp1-route-progress-modal"[\s\S]*aria-describedby="rp1-route-progress-message"/);
+assert.match(view,/id="rp1-route-progress-close"[\s\S]*disabled/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
 for(const state of ["runtime_preflight_ready","runtime_preflight_failed","runtime_switch_queued","runtime_recovery_queued"])
@@ -16,7 +20,12 @@ for(const state of ["runtime_preflight_ready","runtime_preflight_failed","runtim
 assert.match(script,/body:JSON\.stringify\(\{operation, route:requested, generation:this\.generation\}\)/);
 assert.match(script,/operation:"preflight"[\s\S]*operation:"apply-and-reboot"/);
 assert.match(script,/if \(rp1RouteUi && rp1RouteUi\.visible\(\)\)[\s\S]*return;[\s\S]*scheduleAutosave\(\)/);
-assert.match(script,/this\.developmentCompatible \? "Apply route and reboot" : "Check route"/);
+assert.match(script,/draft==="None" \? "Remove route"/);
+assert.match(script,/maxAutomaticPolls=12/);
+assert.match(script,/requestWithTimeout\(options,timeoutMs=8000\)/);
+assert.match(script,/this\.pollStatus\(\)/);
+assert.match(script,/select:not\(#tx_pin\)/);
+assert.match(siteScript,/isRp1RouteStatusModalActive/);
 assert.match(script,/rp1-development-policy/);
 assert.match(view,/id="rp1-development-policy">Disabled/);
 assert.match(view,/id="rp1-route-eligible">Unqualified/);
@@ -28,7 +37,7 @@ assert.match(script,/function rp1RouteUnavailableMessage\(\)/);
 assert.match(script,/function rp1GpioOptionLabel\(\)/);
 assert.match(script,/function rp1RouteSelectorHint\(\)/);
 assert.match(script,/function rp1GpioOptionLabel\(\) \{\s*return "GPIO";/);
-assert.match(script,/Route status and administration are shown below\./);
+assert.match(script,/Route status and administration are beside Transmit Pin\./);
 assert.match(siteScript,/if \(typeof initializeRp1RouteUi === "function"\) \{\s*initializeRp1RouteUi\(\);/);
 assert.match(siteScript,/\["gpio",\s*"rp1-gpclk",\s*"si5351"\]\.includes\(transmitBackend\)/);
 assert.match(siteScript,/transmitBackendForUi\(transmitBackend\)/);
@@ -43,13 +52,15 @@ console.log("rp1_route_ui_test passed");
 const vm=require("node:vm");
 const nodes=new Map();
 function element(id){
- if(!nodes.has(id)) nodes.set(id,{dataset:{},setAttribute(){},disabled:false,hidden:false,textContent:""});
+ if(!nodes.has(id)) nodes.set(id,{dataset:{},attributes:{},setAttribute(name,value){this.attributes[name]=value},getAttribute(name){return this.attributes[name]},querySelector(selector){return element(`${id}:${selector}`)},disabled:false,hidden:false,textContent:""});
  return nodes.get(id);
 }
 let pin=20;
-const context={window:{fetch:async()=>{throw Error("no fixture")},confirm:()=>true},
+const timers=[];
+const context={window:{fetch:async()=>{throw Error("no fixture")},confirm:()=>true,setTimeout:callback=>{timers.push(callback);return timers.length},clearTimeout:()=>{}},
  document:{getElementById:element,querySelector:element},
  getTxPin:()=>pin,setTxPin:value=>{pin=value},
+ bootstrap:{Modal:{getOrCreateInstance:()=>({show(){}})}},
  $:selector=>({prop(name,value){element(selector.slice(1))[name]=value;return this},
  text(value){element(selector.slice(1)).textContent=value;return this}})};
 vm.createContext(context);
@@ -57,8 +68,11 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  ';globalThis.controller=new Rp1RouteUiController("/offline");',context);
 (async()=>{
  const controller=context.controller;
+ controller.render({profile:"legacy",ok:true,state:"active",persisted:"GPIO20",active:"GPIO20",compatible:true});
+ assert.equal(element('#tx_pin option[value=""]').hidden,true,"None stays unavailable to the legacy development profile");
  controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO4",compatible:true});
- assert.equal(element("rp1-route-apply").textContent,"Switch route (stay idle)");
+ assert.equal(element('#tx_pin option[value=""]').hidden,false,"None is available to the runtime profile");
+ assert.equal(element("rp1-route-apply").textContent,"Switch route");
  let confirmations=0,requests=[];
  context.window.confirm=()=>{confirmations++;return true};
  controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));return {
@@ -91,8 +105,9 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  controller.render({profile:"runtime",ok:true,state:"runtime_recovery",persisted:"GPIO20",active:"GPIO4"});
  assert.equal(element("rp1-route-rollback").hidden,false);
  context.window.confirm=()=>false;
+ const beforeRollbackRequests=requests.length;
  await controller.operate("rollback");
- assert.equal(requests.length,1,"cancelled recovery has no effect");
+ assert.equal(requests.length,beforeRollbackRequests,"cancelled debug recovery performs no mutation");
  controller.render({profile:"runtime",ok:true,state:"runtime_ready",persisted:"GPIO20",active:"GPIO20"});
  assert.equal(element("rp1-route-state").textContent,"Route selected");
  for(const id of ["rp1-route-module-fact","rp1-route-endpoint-fact",
@@ -103,7 +118,31 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  assert.equal(element("rp1-route-apply").disabled,true,"restoration failure cannot launch another switch");
  assert.match(element("rp1-route-feedback").textContent,/restore --execute/);
  controller.render({profile:"runtime",ok:true,state:"runtime_recovery_queued",persisted:"GPIO20",active:"GPIO4"});
- assert.equal(element("rp1-route-state").textContent,"Route recovery queued");
+ assert.equal(element("rp1-route-state").textContent,"Route removal queued");
  assert.equal(element("rp1-route-apply").disabled,true,"queued recovery cannot launch another switch");
+
+ controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO20",compatible:true});
+ pin=null;controller.select("None");
+ assert.equal(element("rp1-route-apply").textContent,"Remove route");
+ controller.progressActive=true;let duplicateRequests=0;controller.request=async()=>{duplicateRequests++;throw Error("duplicate")};
+ await controller.applyAndReboot();
+ assert.equal(duplicateRequests,0,"an active progress cycle blocks duplicate route actions");
+ controller.progressActive=false;
+ let cancelRequestCount=0;context.window.confirm=()=>false;requests=[];controller.request=async()=>{cancelRequestCount++;throw Error("cancelled removal must not request")};
+ await controller.applyAndReboot();
+ assert.equal(pin,20,"cancelled removal restores the confirmed active route");
+ assert.equal(cancelRequestCount,0,"cancelled removal performs no request");
+ pin=null;controller.select("None");
+ requests=[];context.window.confirm=()=>true;
+ controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_recovery_queued",persisted:"GPIO20",active:"GPIO20",compatible:true})};};
+ await controller.applyAndReboot();
+ assert.deepEqual(requests,[{operation:"recover",route:"GPIO20",generation:0}],"None launches exactly one recovery for the confirmed active route");
+ assert.equal(controller.progressActive,true,"route recovery keeps the status modal active");
+ assert.equal(timers.length>0,true,"queued recovery schedules read-only status polling");
+ controller.request=async(url,options)=>{assert.equal(options.method,undefined,"polling is read-only");return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_inhibited",persisted:null,active:null,compatible:true,journal:"none"})};};
+ await controller.pollStatus();
+ assert.equal(element("rp1-route-progress-state").textContent,"No route selected");
+ assert.equal(element("rp1-route-progress-close").disabled,false,"confirmed neutral state makes the modal dismissible");
+ assert.equal(pin,null,"confirmed neutral state retains None in the selector");
  console.log("runtime route UI behavior: PASS");
 })().catch(error=>{console.error(error);process.exitCode=1});

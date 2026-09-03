@@ -718,7 +718,7 @@ function bindIndexActions() {
 
     $("#wsprform").on(
         "change input",
-        'input:not(#transmit, [name="mode_toggle"], [name="qrss_type"]), select, textarea',
+        'input:not(#transmit, [name="mode_toggle"], [name="qrss_type"]), select:not(#tx_pin), textarea',
         scheduleAutosave
     );
 
@@ -2044,6 +2044,15 @@ function clearBackendStatus(source = null) {
         .text("");
 }
 
+function clearRp1RouteBackendStatus() {
+    const $status = $("#backendStatus");
+    if (!$status.length) return;
+    const message=String($status.text() || "");
+    if ($status.attr("data-source") === "platform" || /\bRP1\b|clock route|route status|GPCLK provider/i.test(message)) {
+        clearBackendStatus();
+    }
+}
+
 function gpioPlatformRestrictionMessage() {
     const platform = window.WSPRRYPI_PLATFORM || {};
     if (
@@ -2092,22 +2101,27 @@ function rp1RouteUnavailableMessage() {
     }
 
     if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
-        return "RP1 route status and provider readiness could not be confirmed. Review the route status below and refresh after the controller reconnects; transmission remains disabled.";
+        return "RP1 route status and provider readiness could not be confirmed. Review the status beside Transmit Pin; transmission remains disabled.";
     }
 
     const requested = rp1RouteUi.requested;
     const active = rp1RouteUi.active;
+    if (requested === "None") {
+        return active === "None"
+            ? "No RP1 clock route is selected. Transmission remains disabled."
+            : `${active} is active. Choose Remove route to return RP1 clock routing to None; transmission remains disabled.`;
+    }
     if (requested === "Unavailable") {
         const draft = rp1RouteUi.routeValue(`GPIO${getTxPin()}`);
-        return `${draft} is selected as the route to apply, but no active RP1 GPIO route is confirmed. Apply the route below; transmission remains disabled until the canonical provider is active.`;
+        return `${draft} is selected as the route to apply, but no active RP1 GPIO route is confirmed. Use the route action beside Transmit Pin; transmission remains disabled until the canonical provider is active.`;
     }
     if (active === requested) {
-        return `${requested} is selected and active, but the canonical RP1 GPCLK provider is unavailable. Review the route status below; transmission remains disabled.`;
+        return `${requested} is selected and active, but the canonical RP1 GPCLK provider is unavailable. Review the status beside Transmit Pin; transmission remains disabled.`;
     }
     if (active !== "Unavailable") {
-        return `${requested} is selected, but ${active} is active. Apply the route change or cancel the draft below; transmission remains disabled.`;
+        return `${requested} is selected, but ${active} is active. Use the route action or choose ${active} again; transmission remains disabled.`;
     }
-    return `${requested} is selected, but no active RP1 GPIO route is confirmed. Apply the route change below; transmission remains disabled until the canonical provider is active.`;
+    return `${requested} is selected, but no active RP1 GPIO route is confirmed. Use the route action beside Transmit Pin; transmission remains disabled until the canonical provider is active.`;
 }
 
 function si5351UiSupported() {
@@ -2213,7 +2227,7 @@ function rp1GpioOptionLabel() {
 }
 
 function rp1RouteSelectorHint() {
-    return "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.";
+    return "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.";
 }
 
 function formatBackendBannerMessage(reason) {
@@ -2331,7 +2345,8 @@ function updateBackendPlatformSupportUi() {
     } else if (recoveryMessage) {
         showBackendStatus(recoveryMessage, "info", "platform");
     } else {
-        clearBackendStatus("platform");
+        if(rp1StatusOwnedByRoutePanel) clearRp1RouteBackendStatus();
+        else clearBackendStatus("platform");
     }
 
     syncTransmitAvailabilityUi();
@@ -2425,14 +2440,15 @@ function clickTransmitPin() {
 const RP1_ROUTE_STATES = Object.freeze({
     runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
     runtime_ready: ["Route selected", "The selected route is active and Wsprry Pi is online in idle mode. This does not start or authorize transmission."],
-    runtime_switch_queued: ["Route switch queued", "Wsprry Pi will disconnect briefly. Refresh after it reconnects to confirm the route. Transmission remains disabled."],
-    runtime_recovery_queued: ["Route recovery queued", "Wsprry Pi will stop and remain inhibited. Use the operator client to confirm recovery. Transmission remains disabled."],
-    runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
+    runtime_neutral: ["No route selected", "The RP1 clock route is removed. Transmission remains disabled."],
+    runtime_switch_queued: ["Route switch queued", "Wsprry Pi may disconnect briefly while the status dialog checks the selected route. Transmission remains disabled."],
+    runtime_recovery_queued: ["Route removal queued", "Wsprry Pi may disconnect and remain stopped while the status dialog checks for a neutral route. Transmission remains disabled."],
+    runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. The status dialog will check again automatically."],
     runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
     runtime_preflight_ready: ["Route plan ready", "No route change has started. Transmission remains disabled until you confirm the switch."],
     runtime_preflight_failed: ["Route not switched", "The route plan was rejected before any change began. Transmission remains disabled."],
     runtime_recovery: ["Recovery required", "Inspect the controller error and ownership before explicit cleanup recovery."],
-    runtime_unknown: ["Reconnecting", "Wsprry Pi disconnected during route administration. Refresh this page after it restarts; if it remains unavailable, run runtime_route_client.py query. Do not repeat the switch."],
+    runtime_unknown: ["Reconnecting", "Wsprry Pi is temporarily unavailable during route administration. Status checks will continue; do not repeat the route action."],
     checking: ["Checking", "Checking the external provider and active route…"],
     active: ["Active", "Requested and active routes match. No reboot is required."],
     reboot_required: ["Reboot required", "Review the requested route, then apply it and reboot or cancel the draft."],
@@ -2449,9 +2465,20 @@ class Rp1RouteUiController {
         this.endpoint=endpoint; this.request=request; this.persisted=""; this.active=""; this.outputValidated=false;
         this.requested="Unavailable"; this.state="checking";
         this.completionUnknown=false; this.runtimeProfile=false; this.developmentCompatible=false; this.generation=0; this.inFlight=false;
+        this.progressActive=false; this.progressOperation=""; this.progressRoute="";
+        this.pollAttempt=0; this.pollTimer=null; this.maxAutomaticPolls=12;
+        const initialPin=getTxPin();this.lastPersistableRoute=initialPin===20 ? "GPIO20" : "GPIO4";
     }
-    visible() { return !document.getElementById("rp1-route-panel")?.hidden; }
-    routeValue(value) { return value === "GPIO4" || value === "GPIO20" ? value : "Unavailable"; }
+    visible() { return isRp1GpioPlatform() && rp1GpioOperatorVisible(); }
+    routeValue(value) { return value === "GPIO4" || value === "GPIO20" || value === "None" ? value : "Unavailable"; }
+    selectedRoute() { const pin=getTxPin(); return pin===4 || pin===20 ? `GPIO${pin}` : "None"; }
+    async requestWithTimeout(options,timeoutMs=8000) {
+        if(typeof AbortController==="undefined")return this.request(this.endpoint,options);
+        const abortController=new AbortController();
+        const timeout=window.setTimeout(()=>abortController.abort(),timeoutMs);
+        try{return await this.request(this.endpoint,{...options,signal:abortController.signal});}
+        finally{window.clearTimeout(timeout);}
+    }
     setState(state, message="") {
         this.state=state;
         if(state==="runtime_unknown") this.completionUnknown=true;
@@ -2462,28 +2489,37 @@ class Rp1RouteUiController {
         if(panel) panel.setAttribute("aria-busy",this.inFlight ? "true" : "false");
         if(badge){badge.dataset.state=state;badge.textContent=definition[0];}
         if(feedback) feedback.textContent=message || definition[1];
+        this.renderProgress(state,message || definition[1]);
         this.syncActions(state);
         if (typeof updateBackendPlatformSupportUi === "function" && rp1RouteUi === this) {
             updateBackendPlatformSupportUi();
         }
     }
     syncActions(state) {
-        const draft=this.routeValue(`GPIO${getTxPin()}`);
+        const draft=this.selectedRoute();
         const changed=draft!=="Unavailable" && draft!==this.active;
         const recovery=["staged","mismatch","rollback_required","runtime_recovery"].includes(state);
         $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
         $("#rp1-route-cancel").prop("disabled",this.inFlight || draft===this.persisted);
         $("#rp1-route-rollback").prop("hidden",!recovery).prop("disabled",this.inFlight);
+        $("#rp1-route-apply").text(draft==="None" ? "Remove route" : (this.runtimeProfile ? "Switch route" : (this.developmentCompatible ? "Apply route and reboot" : "Check route")));
     }
     render(data) {
         this.completionUnknown=false;
-        this.persisted=this.routeValue(data.persisted); this.active=this.routeValue(data.active);
         this.runtimeProfile=data.profile==="runtime";
+        const noneOption=document.querySelector('#tx_pin option[value=""]');
+        if(noneOption){noneOption.hidden=!this.runtimeProfile;noneOption.disabled=!this.runtimeProfile;}
+        const confirmedNeutral=this.runtimeProfile && data.compatible===true && !data.active;
+        this.persisted=this.routeValue(data.persisted); this.active=confirmedNeutral ? "None" : this.routeValue(data.active);
+        if(this.persisted==="GPIO4" || this.persisted==="GPIO20")this.lastPersistableRoute=this.persisted;
         this.developmentCompatible=data.compatible===true;
         this.generation=Number.isSafeInteger(data.generation) ? data.generation : 0;
-        const requested=this.routeValue(data.requested || this.persisted);
+        const requested=this.progressActive && this.progressOperation==="recover"
+            ? "None"
+            : (confirmedNeutral ? "None" : this.routeValue(data.requested || this.persisted));
         this.requested=requested;
-        if(requested!=="Unavailable") setTxPin(Number(requested.slice(4)));
+        if(requested==="None") setTxPin(null);
+        else if(requested!=="Unavailable") setTxPin(Number(requested.slice(4)));
         $("#rp1-route-requested").text(requested);
         $("#rp1-route-persisted").text(this.persisted);
         $("#rp1-route-configured").text(this.routeValue(data.configured));
@@ -2515,11 +2551,12 @@ class Rp1RouteUiController {
             : "No active lease or generation";
         $("#rp1-operation-lifecycle").text(lifecycle);
         $("#rp1-route-eligible").text("Unqualified");
-        $("#rp1-route-apply").text(this.runtimeProfile ? "Switch route (stay idle)" : (this.developmentCompatible ? "Apply route and reboot" : "Check route"));
         $("#rp1-route-rollback").text(this.runtimeProfile ? "Recover to no route" : "Roll back");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
-        this.setState(reported,
+        const displayed=confirmedNeutral && reported==="runtime_inhibited" ? "runtime_neutral" : reported;
+        this.setState(displayed,
             typeof data.message==="string" ? data.message : "");
+        if(this.progressActive) this.handleProgressData(data,displayed);
     }
     select(route) {
         const requested=this.routeValue(route); this.requested=requested; $("#rp1-route-requested").text(requested);
@@ -2527,29 +2564,40 @@ class Rp1RouteUiController {
     }
     async query() {
         this.inFlight=true; this.setState("checking");
-        try { const response=await this.request(this.endpoint,{headers:{Accept:"application/json"}});
+        try { const response=await this.requestWithTimeout({headers:{Accept:"application/json"}});
             if(!response.ok) throw new Error(); this.inFlight=false; this.render(await response.json());
         } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
     }
     async operate(operation) {
         if(this.runtimeProfile && operation==="rollback") {
-            if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain inhibited. Verify the result with the operator client before further administration.")) return;
-            operation="recover";
+            if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain inhibited. The status dialog will check the result without repeating recovery."))return;
+            operation="recover";this.beginProgress("recover","None");
         }
-        const requested=this.routeValue(`GPIO${getTxPin()}`);
+        const requested=operation==="recover"
+            ? (this.active==="GPIO4" || this.active==="GPIO20" ? this.active : this.persisted)
+            : this.selectedRoute();
         this.inFlight=true; this.setState(operation==="rollback" ? "rollback" : "applying");
-        try { const response=await this.request(this.endpoint,{method:"POST",
+        try { const response=await this.requestWithTimeout({method:"POST",
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation, route:requested, generation:this.generation})});
             const data=await response.json(); this.inFlight=false;
             if(!response.ok && !data.state) throw new Error(); this.render(data);
-        } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
+            if(this.progressActive && ["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(this.state)) this.scheduleProgressPoll();
+        } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");if(this.progressActive)this.scheduleProgressPoll();}
     }
     async applyAndReboot() {
-        const requested=this.routeValue(`GPIO${getTxPin()}`);
+        if(this.inFlight || this.progressActive)return;
+        const requested=this.selectedRoute();
+        if(this.runtimeProfile && requested==="None") {
+            const confirmed=window.confirm("Remove the active RP1 clock route and keep transmission disabled? Wsprry Pi may disconnect and remain stopped after the route is removed.");
+            if(!confirmed){this.cancel();return;}
+            this.beginProgress("recover","None");
+            await this.operate("recover");
+            return;
+        }
         this.inFlight=true; this.setState("checking");
         try {
-            const preflightResponse=await this.request(this.endpoint,{method:"POST",
+            const preflightResponse=await this.requestWithTimeout({method:"POST",
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation:"preflight",route:requested,generation:this.generation})});
             const preflight=await preflightResponse.json();
@@ -2566,42 +2614,128 @@ class Rp1RouteUiController {
             }
             this.generation=preflight.generation;
             const confirmed=window.confirm(this.runtimeProfile
-                ? `Switch to ${requested} and keep WsprryPi idle? A running Wsprry Pi will restart in idle mode. This browser may disconnect; refresh after it reconnects. Transmission will not resume. No reboot is requested.`
+                ? `Switch to ${requested} and keep WsprryPi idle? A running Wsprry Pi will restart in idle mode. The status dialog will remain open and check the route while the browser reconnects. Transmission will not resume. No reboot is requested.`
                 :
                 `Apply ${requested} and reboot? The package executor will stop only wsprrypi.service and soapyremote-server.service before changing its owned boot block.`
             );
             if(!confirmed){
                 this.inFlight=false;
-                this.setState("runtime_inhibited",
+                this.cancel();
+                this.setState(this.active==="None" ? "runtime_neutral" : "runtime_inhibited",
                     "Route switch canceled. No changes were made. Transmission remains disabled.");
                 return;
             }
-            if(this.runtimeProfile) { await this.operate("switch"); return; }
+            if(this.runtimeProfile) { this.beginProgress("switch",requested); await this.operate("switch"); return; }
             this.setState("applying");
-            const applyResponse=await this.request(this.endpoint,{method:"POST",
+            const applyResponse=await this.requestWithTimeout({method:"POST",
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation:"apply-and-reboot",route:requested,generation:this.generation})});
             const applied=await applyResponse.json(); this.inFlight=false; this.render(applied);
         } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");}
     }
     cancel() {
-        if(this.persisted!=="Unavailable") setTxPin(Number(this.persisted.slice(4)));
-        this.select(this.persisted);
+        const restored=this.active!=="Unavailable" ? this.active : this.persisted;
+        if(restored==="None") setTxPin(null);
+        else if(restored!=="Unavailable") setTxPin(Number(restored.slice(4)));
+        this.select(restored);
+    }
+    modalElement() { return document.getElementById("rp1-route-progress-modal"); }
+    beginProgress(operation,route) {
+        this.stopProgressPoll(); this.progressActive=true; this.progressOperation=operation;this.progressRoute=route;this.pollAttempt=0;
+        const modal=this.modalElement(); if(!modal)return;
+        modal.querySelector(".modal-body")?.setAttribute("aria-busy","true");
+        $("#rp1-route-progress-title").text(operation==="recover" ? "Removing transmit route" : `Switching transmit route to ${route}`);
+        $("#rp1-route-progress-close").prop("disabled",true);
+        $("#rp1-route-progress-retry-button").prop("hidden",true);
+        this.renderProgress("checking","Confirming the route operation…");
+        if(typeof syncConnectionAlert==="function")syncConnectionAlert();
+        if(typeof bootstrap!=="undefined" && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(modal,{backdrop:"static",keyboard:false}).show();
+    }
+    renderProgress(state,message) {
+        if(!this.progressActive)return;
+        const definition=RP1_ROUTE_STATES[state] || RP1_ROUTE_STATES.unavailable;
+        const transient=["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(state);
+        const badge=document.getElementById("rp1-route-progress-state");
+        if(badge){badge.dataset.state=state;badge.textContent=definition[0];}
+        const pausedMessage=state==="runtime_unknown" && String(message).startsWith("Automatic status checks paused.");
+        $("#rp1-route-progress-message").text(transient && !pausedMessage ? definition[1] : (message || definition[1]));
+    }
+    handleProgressData(data,state) {
+        const switchComplete=this.progressOperation==="switch" && state==="runtime_ready" && this.active===this.progressRoute;
+        const removalComplete=this.progressOperation==="recover" && state==="runtime_neutral";
+        const failed=data.ok===false && !["runtime_unknown","runtime_restoring"].includes(state);
+        if(switchComplete || removalComplete || failed) this.finishProgress();
+    }
+    finishProgress() {
+        this.stopProgressPoll();
+        const modal=this.modalElement();modal?.querySelector(".modal-body")?.setAttribute("aria-busy","false");
+        $("#rp1-route-progress-retry").text("Status check complete");
+        $("#rp1-route-progress-retry-button").prop("hidden",true);
+        $("#rp1-route-progress-close").prop("disabled",false);
+    }
+    stopProgressPoll() { if(this.pollTimer!==null){window.clearTimeout(this.pollTimer);this.pollTimer=null;} }
+    scheduleProgressPoll() {
+        if(!this.progressActive || this.pollTimer!==null)return;
+        if(this.pollAttempt>=this.maxAutomaticPolls){
+            this.modalElement()?.querySelector(".modal-body")?.setAttribute("aria-busy","false");
+            $("#rp1-route-progress-retry").text("Automatic checks paused");
+            this.renderProgress("runtime_unknown","Automatic status checks paused. Retry status, or run runtime_route_client.py query from the operator client. Do not repeat the route action.");
+            $("#rp1-route-progress-retry-button").prop("hidden",false);
+            $("#rp1-route-progress-close").prop("disabled",false);
+            return;
+        }
+        const delays=[1000,2000,3000,5000,8000,10000];
+        const delay=delays[Math.min(this.pollAttempt,delays.length-1)];this.pollAttempt++;
+        $("#rp1-route-progress-retry").text(`Checking again in ${Math.ceil(delay/1000)} s`);
+        this.pollTimer=window.setTimeout(()=>{this.pollTimer=null;this.pollStatus();},delay);
+    }
+    async pollStatus() {
+        if(!this.progressActive)return;
+        $("#rp1-route-progress-retry").text("Checking current status…");
+        try {
+            const response=await this.requestWithTimeout({headers:{Accept:"application/json"}});
+            if(!response.ok)throw new Error();
+            this.render(await response.json());
+        } catch(_) {
+            this.completionUnknown=true;this.state="runtime_unknown";
+            this.renderProgress("runtime_unknown",RP1_ROUTE_STATES.runtime_unknown[1]);
+        }
+        if(this.progressActive && this.modalElement()?.querySelector(".modal-body")?.getAttribute("aria-busy")==="true") this.scheduleProgressPoll();
+    }
+    retryProgress() {
+        if(!this.progressActive)return;
+        this.pollAttempt=0;this.modalElement()?.querySelector(".modal-body")?.setAttribute("aria-busy","true");
+        $("#rp1-route-progress-retry-button").prop("hidden",true);$("#rp1-route-progress-close").prop("disabled",true);
+        this.pollStatus();
+    }
+    closeProgress() {
+        this.stopProgressPoll();this.progressActive=false;this.progressOperation="";this.progressRoute="";
+        if(typeof syncConnectionAlert==="function")syncConnectionAlert();
     }
 }
 
 function initializeRp1RouteUi() {
     const panel=document.getElementById("rp1-route-panel");
     const visible=panel && isRp1GpioPlatform() && rp1GpioOperatorVisible();
-    if(!panel) return; panel.hidden=!visible; if(!visible) return;
+    const action=document.getElementById("rp1-route-apply");
+    const badge=document.getElementById("rp1-route-state");
+    const noneOption=document.querySelector('#tx_pin option[value=""]');
+    if(!panel) return; panel.hidden=true;
+    if(action)action.hidden=!visible;if(badge)badge.hidden=!visible;
+    if(noneOption){noneOption.hidden=true;noneOption.disabled=true;}
+    if(!visible) return;
     if(!rp1RouteUi) {
         rp1RouteUi=new Rp1RouteUiController(window.WSPRRYPI_PATHS?.rp1RoutePath || "/api/rp1-gpclk-route");
         $("#rp1-route-apply").on("click",()=>rp1RouteUi.applyAndReboot());
         $("#rp1-route-cancel").on("click",()=>rp1RouteUi.cancel());
         $("#rp1-route-rollback").on("click",()=>rp1RouteUi.operate("rollback"));
+        $("#rp1-route-progress-retry-button").on("click",()=>rp1RouteUi.retryProgress());
+        document.getElementById("rp1-route-progress-modal")?.addEventListener("hidden.bs.modal",()=>rp1RouteUi.closeProgress());
     }
     rp1RouteUi.query();
 }
+
+window.isRp1RouteStatusModalActive=()=>!!(rp1RouteUi && rp1RouteUi.progressActive);
 
 // GPIO transmit power slider update
 function updateGpioPowerLabel() {
@@ -3785,8 +3919,8 @@ function clickUseSystemClockFrequencyEstimate() {
 }
 
 function setTxPin(gpioNumber) {
-    const normalizedPin = gpioNumber === 20 ? 20 : 4;
-    $("#tx_pin").val(String(normalizedPin));
+    const normalizedPin = gpioNumber === null ? "" : (gpioNumber === 20 ? "20" : "4");
+    $("#tx_pin").val(normalizedPin);
     refreshGpioConflictOptions();
 }
 
@@ -3865,7 +3999,7 @@ function validateTransmitterHardwareFields() {
     const si5351CrystalLoad = normalizeIntegerInputValue("#si5351_crystal_load_capacitance", 10);
 
     const txPin = getTxPin();
-    const txPinValid = txPin === 4 || txPin === 20;
+    const txPinValid = txPin === 4 || txPin === 20 || (txPin===null && rp1GpioOperatorVisible());
     const txPinField = document.getElementById("tx_pin");
     if (txPinField) {
         txPinField.setCustomValidity(
@@ -4119,7 +4253,9 @@ function buildConfigPayload(options = {}) {
 
     let gpio_tx_pin = parseInt(getTxPin(), 10);
     if (gpio_tx_pin !== 4 && gpio_tx_pin !== 20) {
-        gpio_tx_pin = 4;
+        const persistedRp1Pin=rp1RouteUi && (rp1RouteUi.lastPersistableRoute==="GPIO4" || rp1RouteUi.lastPersistableRoute==="GPIO20")
+            ? Number(rp1RouteUi.lastPersistableRoute.slice(4)) : 4;
+        gpio_tx_pin = persistedRp1Pin;
     }
 
     const raw = $("#gpio-power-range").val();

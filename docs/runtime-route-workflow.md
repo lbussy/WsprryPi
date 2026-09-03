@@ -32,9 +32,12 @@ in idle mode; a previously stopped or administrator-masked application stays
 stopped. Saved `Enable on Boot` preferences and unrelated configuration remain
 unchanged. A stopped application's first subsequent startup is also idle.
 
-The browser may disconnect when its application stops. Refresh after the
-application restarts. Do not repeat a switch merely because the connection was
-lost: `runtime_route_client.py query` reports the durable transaction. Application
+The browser may disconnect when its application stops. The Setup route-status
+dialog remains open, treats this interruption as expected, and retries read-only
+status queries with bounded backoff after the application restarts. It never
+repeats the route mutation. If automatic checks pause, the operator may retry a
+status query or close the dialog; `runtime_route_client.py query` reports the
+durable transaction when the application does not return. Application
 readiness is acknowledged only after startup reconciliation, loop setup and
 binding the HTTP listener when enabled; a
 systemd start request alone is not success. The UI distinguishes restoration in
@@ -53,6 +56,12 @@ explicit switch. Prior-boot state is never used to restart automatically.
 Transmission is not resumed by either switching or restoration. The normal
 operator controls and application-owned RP1 operation authorization remain
 available; the kernel endpoint does not receive an authorization credential.
+On a runtime-profile system, choosing **None** for **Transmit Pin** exposes the
+existing explicit recovery-to-neutral operation as **Remove route**. The UI
+passes the last confirmed GPIO route to recovery, does not persist an invalid
+pin, and leaves transmission disabled. The detailed route fact panel remains
+in the page source for debugging but is hidden from the normal operator layout;
+the action and concise state pill sit beside the selector.
 An application update after same-boot route recovery may retire the neutral
 controller only through the provider's digest-bound activation-recovery plan;
 the completed neutral activation and recovered route journal chain must both

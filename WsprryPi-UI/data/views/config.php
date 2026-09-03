@@ -736,35 +736,38 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </p>
 
                                 <div class="row gx-3 gy-3 align-items-start">
-                                    <div class="col-12 col-lg-4 config-stacked-field">
+                                    <div class="col-12 col-lg-8 config-stacked-field">
                                         <label for="tx_pin" class="form-label">Transmit Pin:</label>
-                                        <select
-                                            id="tx_pin"
-                                            class="form-select"
-                                            aria-describedby="tx-pin-hint tx-pin-error"
-                                            data-bs-toggle="tooltip"
-                                            title="Only GPIO4 and GPIO20 support GPCLK0 clock output on the 40-pin header.">
-                                            <option value="4">GPIO4</option>
-                                            <option value="20">GPIO20</option>
-                                        </select>
+                                        <div class="rp1-route-control-row">
+                                            <select
+                                                id="tx_pin"
+                                                class="form-select"
+                                                aria-describedby="tx-pin-hint tx-pin-error"
+                                                data-bs-toggle="tooltip"
+                                                title="Choose GPIO4 or GPIO20, or None to remove the RP1 clock route.">
+                                                <option value="4">GPIO4</option>
+                                                <option value="20">GPIO20</option>
+                                                <option value="">None</option>
+                                            </select>
+                                            <button type="button" id="rp1-route-apply" class="btn btn-primary" disabled hidden>Check route</button>
+                                            <span id="rp1-route-state" class="rp1-route-state" data-state="checking" role="status" aria-live="polite" aria-atomic="true" hidden>Checking</span>
+                                        </div>
                                         <div id="tx-pin-hint" class="form-text mt-2">
-                                            Only GPIO4 and GPIO20 support GPCLK0 clock output on the 40-pin header.
+                                            Choose GPIO4 or GPIO20 for GPCLK0 output. Choose None to remove the active RP1 route. Route changes keep Wsprry Pi idle and do not authorize transmission.
                                         </div>
                                         <div id="tx-pin-error" class="form-text text-danger mt-2" aria-live="polite" hidden></div>
                                     </div>
 
-                                    <div class="col-12" id="rp1-route-panel" hidden>
+                                    <div class="col-12" id="rp1-route-panel" data-debug-retained="true" hidden>
                                         <section class="rp1-route-panel" aria-labelledby="rp1-route-heading" aria-busy="false">
                                             <div class="rp1-route-panel__heading">
                                                 <div>
                                                     <h3 id="rp1-route-heading" class="cw-control-section__title mb-1">RP1 clock route</h3>
                                                     <p class="form-text mb-0">Installation leaves RP1 route-neutral. Choose GPIO4 or GPIO20 here; selecting a route keeps WsprryPi idle and does not authorize transmission.</p>
                                                 </div>
-                                                <span id="rp1-route-state" class="rp1-route-state" data-state="checking">Checking</span>
                                             </div>
                                             <div id="rp1-route-feedback" class="rp1-route-feedback" role="status" aria-live="polite" aria-atomic="true">Checking the external provider and active route…</div>
                                             <div class="rp1-route-actions">
-                                                <button type="button" id="rp1-route-apply" class="btn btn-primary" disabled>Check route</button>
                                                 <button type="button" id="rp1-route-cancel" class="btn btn-outline-secondary" disabled>Cancel</button>
                                                 <button type="button" id="rp1-route-rollback" class="btn btn-outline-danger" hidden>Roll back</button>
                                             </div>
@@ -786,6 +789,27 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                                 <div id="rp1-route-eligible-fact"><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
                                             </dl>
                                         </section>
+                                    </div>
+
+                                    <div class="modal fade" id="rp1-route-progress-modal" tabindex="-1" aria-labelledby="rp1-route-progress-title" aria-describedby="rp1-route-progress-message" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h3 class="modal-title h5" id="rp1-route-progress-title">Updating transmit route</h3>
+                                                </div>
+                                                <div class="modal-body" aria-busy="true">
+                                                    <div class="rp1-route-progress-heading">
+                                                        <span id="rp1-route-progress-state" class="rp1-route-state" data-state="checking">Checking</span>
+                                                        <span id="rp1-route-progress-retry" class="rp1-route-progress-retry">Preparing route change…</span>
+                                                    </div>
+                                                    <p id="rp1-route-progress-message" class="mb-0" role="status" aria-live="polite" aria-atomic="true">Checking the current route…</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" id="rp1-route-progress-retry-button" class="btn btn-outline-secondary" hidden>Retry status</button>
+                                                    <button type="button" id="rp1-route-progress-close" class="btn btn-primary" data-bs-dismiss="modal" disabled>Close</button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="col-12 col-lg-4" id="legacy-gpio-power-group">

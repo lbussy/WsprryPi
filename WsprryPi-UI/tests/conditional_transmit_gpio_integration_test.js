@@ -204,7 +204,11 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
                 si5351Detected: true,
             };
             document.getElementById("transmit_backend").value = "gpio";
-            document.getElementById("rp1-route-panel").hidden = false;
+            document.getElementById("rp1-route-panel").hidden = true;
+            document.getElementById("rp1-route-apply").hidden = false;
+            document.getElementById("rp1-route-state").hidden = false;
+            document.querySelector('#tx_pin option[value=""]').hidden = false;
+            document.querySelector('#tx_pin option[value=""]').disabled = false;
             updateBackendPlatformSupportUi();
             clickTransmitBackend();
             rp1RouteUi.render({
@@ -249,6 +253,35 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
         captureBeyondViewport: false,
     });
     fs.writeFileSync(outputPath, screenshot.data, "base64");
+}
+
+async function captureRouteProgressModalScreenshot(client, outputPath, theme) {
+    await client.send("Runtime.evaluate", {
+        expression: `(() => {
+            document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
+            window.WSPRRYPI_PLATFORM = {
+                ...(window.WSPRRYPI_PLATFORM || {}),
+                raspberryPiGeneration: 5,
+                gpioClockTransmissionSupported: false,
+                rp1GpioOperatorVisible: true,
+            };
+            document.getElementById("rp1-route-apply").hidden = false;
+            document.getElementById("rp1-route-state").hidden = false;
+            rp1RouteUi.beginProgress("switch", "GPIO20");
+            rp1RouteUi.renderProgress("runtime_unknown", "Wsprry Pi is restarting in idle mode. The route change is still being checked; no further action is needed.");
+            document.getElementById("rp1-route-progress-retry").textContent = "Checking again in 5 s";
+        })()`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const screenshot = await client.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: false,
+    });
+    fs.writeFileSync(outputPath, screenshot.data, "base64");
+    await client.send("Runtime.evaluate", {
+        expression: `bootstrap.Modal.getOrCreateInstance(document.getElementById("rp1-route-progress-modal")).hide()`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
 }
 
 async function captureBandPreferencesScreenshot(client, outputPath) {
@@ -717,6 +750,7 @@ async function browserTest() {
         "canonical RP1 backend must load into the operator-facing GPIO selector");
     field("transmit_backend").value = "gpio";
     initializeRp1RouteUi();
+    await rp1RouteUi.query();
     updateBackendPlatformSupportUi();
     equal(field("transmit_backend").value, "gpio",
         "route-neutral Pi 5 RP1 must preserve GPIO for route administration");
@@ -728,22 +762,24 @@ async function browserTest() {
     equal(field("rp1-gpio-drive-group").hidden, false,
         "route-neutral Pi 5 RP1 must show its route-bound drive selector");
     equal(field("backend-selector-hint").textContent,
-        "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.",
+        "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.",
         "route-neutral Pi 5 RP1 must use stable backend guidance");
     equal(field("backendPlatformHint").hidden, true,
-        "the dedicated RP1 route panel must own route and provider status");
+        "the compact RP1 route controls must own route and provider status");
     equal(field("backendPlatformHint").textContent, "",
         "the backend platform hint must not duplicate RP1 route status");
     equal(field("backendStatus").hidden, true,
-        "the backend alert must not duplicate RP1 route status");
+        `the backend alert must not duplicate RP1 route status (source=${field("backendStatus").dataset.source || "none"}, text=${field("backendStatus").textContent})`);
     equal(field("backendStatus").textContent, "",
         "the hidden backend alert must not retain provisional RP1 copy");
     equal(field("legacy-gpio-power-group").hidden, true,
         "Pi 5 must not substitute the legacy GPIO power control");
     equal(field("gpio-backend-panel").hidden, false,
-        "route-neutral Pi 5 RP1 must expose the GPIO route panel");
-    equal(field("rp1-route-panel").hidden, false,
-        "route-neutral Pi 5 RP1 must expose the route administration controls");
+        "route-neutral Pi 5 RP1 must expose the GPIO settings panel");
+    equal(field("rp1-route-panel").hidden, true,
+        "the detailed RP1 route panel must remain hidden for debugging");
+    equal(field("rp1-route-apply").hidden, false,
+        "route-neutral Pi 5 RP1 must expose the compact route action");
     equal(field("si5351-backend-panel").hidden, true,
         "route administration must not imply Si5351 was selected");
     equal(buildConfigPayload().GPIO["RP1 Drive mA"], 8,
@@ -767,11 +803,11 @@ async function browserTest() {
         requested: null, persisted: null, active: null,
         compatible: true, generation: 0,
     });
-    ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected as the route to apply"),
-        "RP1 empty-route warning must acknowledge the visible route draft");
+    ok(selectedBackendUnavailableMessage().includes("No RP1 clock route is selected"),
+        "RP1 empty-route warning must acknowledge the neutral selector state");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
         "GPIO",
-        "RP1 route state must remain in the dedicated route panel");
+        "RP1 route state must remain in the compact route controls");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_inhibited",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO4",
@@ -782,7 +818,7 @@ async function browserTest() {
         "RP1 warning must describe a selected-versus-active mismatch");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
         "GPIO",
-        "RP1 route mismatch must remain in the dedicated route panel");
+        "RP1 route mismatch must remain in the compact route controls");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_ready",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO20",
@@ -792,7 +828,7 @@ async function browserTest() {
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected and active"),
         "RP1 warning must not ask for a route that is already active");
     equal(field("backend-selector-hint").textContent,
-        "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.",
+        "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.",
         "RP1 selector guidance must remain stable after status changes");
     field("transmit_backend").value = "si5351";
     field("transmit_backend").dispatchEvent(new Event("change", { bubbles: true }));
@@ -905,6 +941,8 @@ async function main() {
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Dark.png"), "dark");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Dark.png"), "dark");
+            await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Light.png"), "light");
+            await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Dark.png"), "dark");
             await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Desktop.png"));
             await client.send("Emulation.setDeviceMetricsOverride", {
                 width: 390,
@@ -923,6 +961,8 @@ async function main() {
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Dark.png"), "dark");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Dark.png"), "dark");
+            await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Light.png"), "light");
+            await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Dark.png"), "dark");
         }
         console.log("conditional_transmit_gpio_integration_test passed");
     } finally {
