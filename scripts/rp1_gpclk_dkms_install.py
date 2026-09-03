@@ -1726,6 +1726,7 @@ def recover_and_remove_owned_runtime(
         "installed runtime artifacts differ from the owned binding",
     )
     activation_journal = inspected.get("journals", {}).get("activation.json", {})
+    reviewed_candidate_recovery = False
     if (inspected.get("result") in {"activation_required", "recovery_required"}
             and activation_journal.get("status") == "present"):
         activation_value = activation_journal.get("value", {})
@@ -1753,6 +1754,7 @@ def recover_and_remove_owned_runtime(
                     == record.get("sourceCommit"),
                 "recovery provider interpreted a different installed runtime binding",
             )
+            reviewed_candidate_recovery = True
         else:
             require(
                 activation_value.get("phase") == "complete-neutral"
@@ -1840,7 +1842,36 @@ def recover_and_remove_owned_runtime(
                     == "absent",
                 "post-reboot activation retirement left its journal present",
             )
-    if inspected.get("result") in {"recovery_required", "neutral_ready"}:
+    elif (inspected.get("result") == "conflict"
+          and activation_journal.get("status") == "present"
+          and activation_journal.get("value", {}).get("phase")
+              == "complete-neutral"
+          and inspected.get("conflicts")
+              == ["loaded-controller-without-completed-activation"]):
+        require(
+            migration_provider is not None
+            and migration_provider.is_file()
+            and not migration_provider.is_symlink(),
+            "installed runtime requires a reviewed route-recovery provider",
+        )
+        provider = migration_provider
+        inspected = validate_readiness(runtime_call(
+            runner, provider, "inspect", (), {"conflict"},
+        ), "conflict")
+        candidate_binding = inspected.get("identities", {}).get(
+            "installedBinding", {})
+        require(
+            inspected.get("conflicts")
+                == ["loaded-controller-without-completed-activation"]
+            and candidate_binding.get("status") == "valid"
+            and candidate_binding.get("sha256") == binding.get("sha256")
+            and candidate_binding.get("value", {}).get("sourceCommit")
+                == record.get("sourceCommit"),
+            "route-recovery provider interpreted a different owned conflict",
+        )
+        reviewed_candidate_recovery = True
+    if (inspected.get("result") in {"recovery_required", "neutral_ready"}
+            or reviewed_candidate_recovery):
         preserve_owned_activation_journal(record, "before-recovery")
         recovery = runtime_call(runner, provider, "activation-recover-plan")
         require(

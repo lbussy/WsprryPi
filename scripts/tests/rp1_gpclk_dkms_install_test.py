@@ -2059,32 +2059,57 @@ class ApplyPolicyTests(unittest.TestCase):
         removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
             "operation": "remove", "planSha256": removal_digest,
             "response": {"status": "removed-exact-deployment"}}
-        replies = iter((failed, failed, recovery, recovered, removable,
-                        removal, removed))
+        conflict = copy.deepcopy(failed)
+        conflict.update(result="conflict", state="conflict",
+                        conflicts=["loaded-controller-without-completed-activation"])
+        conflict["journals"]["activation.json"]["value"]["phase"] = (
+            "complete-neutral")
+        for initial in (failed, conflict):
+            with self.subTest(result=initial["result"]):
+                replies = iter((initial, initial, recovery, recovered, removable,
+                                removal, removed))
+                providers = []
+                def runtime_call(unused_runner, provider_arg, operation,
+                                 arguments=(), allowed_results=()):
+                    providers.append((operation, provider_arg))
+                    return next(replies)
+                identity = mock.Mock(st_dev=1, st_ino=2)
+                with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
+                     mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+                     mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+                     mock.patch.object(MOD, "load_ownership_record",
+                                       return_value=(record, identity, None)), \
+                     mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+                    MOD.recover_and_remove_owned_runtime(
+                        self.record, record, identity, FakeRunner(), candidate)
+                self.assertEqual(providers[0], ("inspect", installed))
+                self.assertTrue(all(provider == candidate
+                                    for _, provider in providers[1:]))
+                self.assertEqual([operation for operation, _ in providers], [
+                    "inspect", "inspect", "activation-recover-plan",
+                    "activation-recover", "inspect", "remove-plan", "remove",
+                ])
+                self.assertEqual(preserve.call_args_list, [
+                    mock.call(record, "before-recovery"),
+                    mock.call(record, "after-recovery", clear=True),
+                ])
+        different = copy.deepcopy(conflict)
+        different["conflicts"] = ["artifact-conflict:/foreign"]
         providers = []
-        def runtime_call(unused_runner, provider_arg, operation,
-                         arguments=(), allowed_results=()):
-            providers.append((operation, provider_arg))
-            return next(replies)
+        def different_runtime_call(unused_runner, provider_arg, operation,
+                                   arguments=(), allowed_results=()):
+            providers.append(provider_arg)
+            return different
         identity = mock.Mock(st_dev=1, st_ino=2)
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(MOD, "runtime_call",
+                               side_effect=different_runtime_call), \
              mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner(), candidate)
-        self.assertEqual(providers[0], ("inspect", installed))
-        self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
-        self.assertEqual([operation for operation, _ in providers], [
-            "inspect", "inspect", "activation-recover-plan",
-            "activation-recover", "inspect", "remove-plan", "remove",
-        ])
-        self.assertEqual(preserve.call_args_list, [
-            mock.call(record, "before-recovery"),
-            mock.call(record, "after-recovery", clear=True),
-        ])
+                               return_value=(record, identity, None)):
+            with self.assertRaises(MOD.ContractError):
+                MOD.recover_and_remove_owned_runtime(
+                    self.record, record, identity, FakeRunner(), candidate)
+        self.assertEqual(providers, [installed])
 
     def test_pre_uninstall_recovered_runtime_removes_without_retirement(self):
         provider = self.root / "installed/runtime_provider.py"
