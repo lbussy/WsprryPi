@@ -146,25 +146,28 @@ foreign installation or publish v3 readiness before final neutral proof.
 If a later exact development source is selected, the installer first reviews
 the ownership record and retained rollback paths, permissions, and hashes, but
 does not require ordinary DKMS inventory while the bound runtime deployment is
-still present. It executes migration logic from the newly selected, immutable
-source checkout rather than requiring the installed provider being replaced to
-understand its successor. That candidate logic reviews the installed binding
-and every bound artifact against WsprryPi ownership. A retained
+still present. The installed, ownership-bound runtime provider interprets and
+removes its own binding; the newly selected immutable source is not permitted
+to interpret predecessor state. The installed provider reviews its binding and
+every bound artifact against WsprryPi ownership. A retained
 neutral-activation journal, including `activation-failed`, is copied
 byte-for-byte into the WsprryPi-owned upstream evidence directory before it is
 handled through a digest-reviewed recovery transaction. A terminal
 `complete-neutral` journal from a prior boot may instead be archived and
-retired through the candidate provider's reviewed
+retired through the installed provider's reviewed
 `activation-retire-plan`/`activation-retire` pair when the route, modules,
 endpoints, manager socket and transactions are all absent. Only then does the
-candidate provider review and execute the old binding's fixed deployment
-inverse. With runtime residue gone, the installer performs the complete
+installed provider review and execute its binding's fixed deployment inverse.
+With runtime residue gone, the installer performs the complete
 ordinary provider/DKMS inventory check, revalidates the rollback authority,
 runs the recorded provider rollback, and installs the new exact source. The
-installed predecessor executable is not migration authority.
-The same migration applies to v2 partial-runtime and v3 neutral-ready ownership.
-It never migrates an unowned provider, an active route/consumer, a pending
-unrelated transaction, or drifted binding or artifact bytes.
+new candidate executable is not predecessor migration authority.
+The same migration applies to v2 partial-runtime and v3 ownership. A loaded
+consumer is admitted only when exact WsprryPi ownership and runtime residue
+lead to the installed provider's digest-reviewed recovery and removal path for
+an exact-provider migration. It never migrates an unowned provider, a
+boot-configured route, a pending unrelated transaction, or drifted binding or
+artifact bytes.
 
 ## Plan, record, and safety boundary
 

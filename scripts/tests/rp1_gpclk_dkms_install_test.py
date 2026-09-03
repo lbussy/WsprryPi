@@ -853,7 +853,7 @@ class DevelopmentInterfaceTests(unittest.TestCase):
                 MOD.apply_development(resolved, pathlib.Path(self.temp.name) / "record.json", runner)
         validate.assert_not_called()
 
-    def test_runtime_migration_defers_provider_inventory_until_after_runtime_removal(self):
+    def test_changed_source_migrates_owned_active_runtime_before_provider_inventory(self):
         source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
         resolved = {
             "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
@@ -865,23 +865,29 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         }
         before = {
             "packageVersion": None,
-            "dkms": f"{MOD.DKMS_NAME}/0.9.0, kernel, arm64: installed (Differences between built and installed modules)",
-            "activeModule": False, "activeController": True,
+            "dkms": f"{MOD.DKMS_NAME}/0.9.0, kernel, arm64: installed",
+            "activeModule": True, "activeController": True,
             "configuredRoute": False,
             "sourceTrees": [f"/usr/src/{MOD.PACKAGE_NAME}-0.9.0"],
-            "moduleCandidates": ["/lib/modules/kernel/updates/dkms/rp1_gpclk_dkms.ko",
-                                 "/lib/modules/kernel/updates/dkms/rp1_gpclk_dkms.ko.xz"],
+            "moduleCandidates": [
+                "/lib/modules/kernel/updates/dkms/rp1_gpclk_dkms.ko"
+            ],
+            "controllerCandidates": [
+                "/lib/modules/kernel/updates/dkms/rp1_route_controller.ko"
+            ],
             "installedOverlays": [], "enrollment": False,
             "developmentManager": False,
             "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
         }
         absent = {key: value for key, value in before.items()}
-        absent.update({"dkms": "", "activeController": False,
+        absent.update({"dkms": "", "activeModule": False,
+                       "activeController": False,
                        "sourceTrees": [], "moduleCandidates": [],
+                       "controllerCandidates": [],
                        "runtimeResidue": []})
         owned = {
             "schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development",
-            "sourceCommit": resolved["commit"], "productVersion": resolved["version"],
+            "sourceCommit": "e" * 40, "productVersion": resolved["version"],
             "sourceTree": resolved["sourceTree"], "uapiSha256": resolved["uapiSha256"],
             "versionSource": "include/rp1_gpclk/version.h",
             "versionSourceSha256": resolved["versionSourceSha256"],
@@ -922,6 +928,55 @@ class DevelopmentInterfaceTests(unittest.TestCase):
         self.assertEqual(runner.passthrough_calls, [
             (str(entrypoint), "--record", str(rollback)),
         ])
+
+    def test_exact_owned_runtime_does_not_adopt_an_active_consumer(self):
+        source = self.lifecycle_source(
+            "usage: development-install --route-neutral --runtime-controller"
+        )
+        resolved = {
+            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
+            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
+            "version": "0.9.0", "sourceTree": "b" * 40,
+            "uapiSha256": "c" * 64,
+            "versionSource": "include/rp1_gpclk/version.h",
+            "versionSourceSha256": "d" * 64,
+        }
+        before = {
+            "packageVersion": None, "dkms": "owned", "activeModule": True,
+            "activeController": True, "configuredRoute": False,
+            "sourceTrees": ["owned"], "moduleCandidates": ["owned"],
+            "controllerCandidates": ["owned"], "installedOverlays": [],
+            "enrollment": False, "developmentManager": False,
+            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
+        }
+        owned = {
+            "schema": MOD.RUNTIME_RECORD_SCHEMA, "channel": "development",
+            "sourceCommit": resolved["commit"],
+            "productVersion": resolved["version"],
+            "sourceTree": resolved["sourceTree"],
+            "uapiSha256": resolved["uapiSha256"],
+            "versionSource": resolved["versionSource"],
+            "versionSourceSha256": resolved["versionSourceSha256"],
+            "targetKernel": MOD.platform.release(),
+            "compatibilityIdentity": MOD.COMPATIBILITY_IDENTITY,
+        }
+        runner = FakeRunner({
+            (str(source / "scripts/development-install"), "--help"):
+                MOD.CommandResult(
+                    "usage: development-install --route-neutral "
+                    "--runtime-controller\n", "", 0
+                ),
+        })
+        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(MOD, "existing_inventory", return_value=before), \
+             mock.patch.object(MOD, "load_ownership_record", return_value=(
+                 owned, mock.Mock(st_dev=1, st_ino=2), None)), \
+             mock.patch.object(MOD, "recover_and_remove_owned_runtime") as recover:
+            with self.assertRaisesRegex(MOD.ContractError, "active RP1 GPCLK module"):
+                MOD.apply_development(
+                    resolved, pathlib.Path(self.temp.name) / "record.json", runner
+                )
+        recover.assert_not_called()
 
     def test_active_controller_requires_runtime_ownership(self):
         source = self.lifecycle_source("usage: development-install --route-neutral --runtime-controller")
@@ -1878,7 +1933,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "versionSourceSha256": "d" * 64,
         }
         inventory = {
-            "packageVersion": None, "dkms": "foreign", "activeModule": False,
+            "packageVersion": None, "dkms": "foreign", "activeModule": True,
             "activeController": False, "configuredRoute": False,
             "sourceTrees": ["/usr/src/rp1-gpclk-dkms-0.9.0"],
             "moduleCandidates": ["/lib/modules/kernel/rp1_gpclk_dkms.ko"],

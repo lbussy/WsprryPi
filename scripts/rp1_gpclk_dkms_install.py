@@ -1868,7 +1868,6 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
     interface, route_args = route_neutral_interface(source, runner)
     require(interface == resolved["interface"] and route_args == resolved["routeArguments"], "upstream development interface changed after preflight")
     before = existing_inventory(pathlib.Path("/"), runner)
-    require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
     require(not before["configuredRoute"], "a configured RP1 GPCLK route blocks exact-source development installation")
     existing_record, record_identity, record_reason = load_ownership_record(record)
     owned_runtime = bool(
@@ -1918,13 +1917,24 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
                 or "Differences between built and installed modules" in before["dkms"]
             )
         )
+        migration_required = not identity_matches or profile_migration_required
+        recoverable_runtime = bool(
+            migration_required
+            and before["runtimeResidue"]
+            and existing_record.get("schema")
+                in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}
+        )
+        require(
+            not before["activeModule"] or recoverable_runtime,
+            "an active RP1 GPCLK module blocks exact-source development installation",
+        )
         require(
             not before.get("activeController", False)
             or owned_runtime
             or identity_matches,
             "an active RP1 route controller blocks exact-source development installation",
         )
-        if ((not identity_matches or profile_migration_required)
+        if (migration_required
                 and existing_record.get("schema") in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}):
             if before["runtimeResidue"]:
                 entrypoint, rollback = validate_development_rollback_authority(
@@ -2005,6 +2015,7 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
             validate_development_removal(current_record, pathlib.Path("/"), runner)
         print("Exact WsprryPi-owned development provider already installed; no provider mutation performed.")
         return
+    require(not before["activeModule"], "an active RP1 GPCLK module blocks exact-source development installation")
     if provider_present and (existing_record is None or record_identity is None):
         require(False, f"an existing provider is not adoptable: {record_reason or 'WsprryPi ownership is unproven'}")
     if (not provider_present and existing_record is not None
