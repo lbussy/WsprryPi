@@ -1100,7 +1100,8 @@ def preserve_owned_activation_journal(record: Mapping[str, Any], label: str,
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ContractError("runtime activation journal is unreadable") from error
     phase = value.get("phase") if isinstance(value, dict) else None
-    require(phase in {"activation-failed", "recovered-inhibited", "complete-neutral"},
+    require(phase in {"activation-failed", "rollback-failed",
+                      "recovered-inhibited", "complete-neutral"},
             "runtime activation journal is not terminal owned evidence")
     request_id = value.get("requestId")
     require(isinstance(request_id, str)

@@ -1555,6 +1555,25 @@ class ApplyPolicyTests(unittest.TestCase):
             record, "after-recovery", clear=True, journal=journal)
         self.assertFalse(journal.exists())
 
+    def test_rollback_failure_is_archived_before_owned_recovery(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir(mode=0o700)
+        journal = self.root / "runtime-admin/activation.json"
+        journal.parent.mkdir(mode=0o700)
+        value = {"phase": "rollback-failed", "requestId": "request-rollback",
+                 "failure": "fixture"}
+        raw = json.dumps(value, sort_keys=True).encode() + b"\n"
+        journal.write_bytes(raw)
+        journal.chmod(0o600)
+        MOD.preserve_owned_activation_journal(
+            {"upstreamEvidence": str(evidence)}, "before-recovery",
+            journal=journal)
+        archive = evidence / (
+            "runtime-activation-archives/before-recovery-request-rollback.json")
+        archived = json.loads(archive.read_text())
+        self.assertEqual(base64.b64decode(archived["contentBase64"]), raw)
+        self.assertEqual(archived["phase"], "rollback-failed")
+
     def test_complete_neutral_is_terminal_owned_activation_evidence(self):
         evidence = self.root / "evidence"
         evidence.mkdir(mode=0o700)
