@@ -702,41 +702,42 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                     Choose the RF output path, then fill in only the hardware settings for that backend.
                                 </p>
                             </div>
-                            <fieldset class="config-panel">
-                                <legend>RF Output Path</legend>
+                            <fieldset class="config-panel transmitter-output-panel">
+                                <legend>RF Output</legend>
                                 <p class="config-panel__summary">
-                                    Choose how the transmitter generates RF output, then review the settings for that hardware.
+                                    Choose the output path, then configure the controls shown for that hardware.
                                 </p>
 
                                 <div class="row gx-3 gy-3 align-items-start">
-                                    <div class="col-12 col-lg-4">
-                                        <label for="transmit_backend" class="visually-hidden">RF output backend</label>
-                                        <select
-                                            id="transmit_backend"
-                                            class="form-select"
-                                            aria-describedby="backend-selector-hint backendPlatformHint"
-                                            data-bs-toggle="tooltip"
-                                            title="Choose the RF hardware backend used for transmission.">
-                                            <option value="gpio">GPIO</option>
-                                            <option value="si5351">Si5351</option>
-                                        </select>
+                                    <div class="col-12 transmitter-backend-switch config-stacked-field">
+                                        <label for="transmit_backend" class="form-label">RF Output Path</label>
+                                        <div class="transmitter-backend-choice">
+                                            <span aria-hidden="true">GPIO</span>
+                                            <div class="form-check form-switch config-wspr-switch">
+                                                <input
+                                                    id="transmit_backend"
+                                                    class="form-check-input"
+                                                    type="checkbox"
+                                                    role="switch"
+                                                    value="si5351"
+                                                    aria-describedby="backend-selector-hint backendPlatformHint"
+                                                    data-bs-toggle="tooltip"
+                                                    title="Switch on to use the Si5351 output path; switch off to use GPIO.">
+                                                <label id="transmit-backend-label" class="form-check-label" for="transmit_backend">Si5351</label>
+                                            </div>
+                                        </div>
                                         <div id="backend-selector-hint" class="form-text mt-2">
-                                            GPIO uses Raspberry Pi clock output pins directly. Si5351 uses an attached synthesizer on the configured I2C bus.
+                                            Off uses GPIO. On uses the attached Si5351 synthesizer.
                                         </div>
                                         <div id="backendPlatformHint" class="form-text mt-2" aria-live="polite" aria-atomic="true" hidden></div>
                                     </div>
                                 </div>
                                 <div id="backendStatus" class="alert mt-3 mb-0" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
-                            </fieldset>
 
-                            <fieldset class="config-panel backend-settings-panel" id="gpio-backend-panel">
-                                <legend>GPIO Output</legend>
-                                <p class="config-panel__summary">
-                                    Configure direct Raspberry Pi clock output, including the supported transmit pin and drive level.
-                                </p>
+                                <div class="transmitter-backend-fields" id="gpio-backend-panel" role="group" aria-label="GPIO output settings">
 
                                 <div class="row gx-3 gy-3 align-items-start">
-                                    <div class="col-12 col-lg-8 config-stacked-field">
+                                    <div class="col-12 config-stacked-field transmitter-pin-field">
                                         <label for="tx_pin" class="form-label">Transmit Pin:</label>
                                         <div class="rp1-route-control-row">
                                             <select
@@ -851,8 +852,8 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
 
                                 </div>
 
-                                <section class="backend-calibration-section mt-4" aria-labelledby="gpio-calibration-heading">
-                                    <h3 id="gpio-calibration-heading" class="cw-control-section__title">Frequency calibration</h3>
+                                <section class="backend-calibration-section" aria-labelledby="gpio-calibration-heading">
+                                    <h3 id="gpio-calibration-heading" class="visually-hidden">GPIO frequency calibration</h3>
                                     <div class="row gx-3 gy-3 align-items-start">
                                         <div class="col-12 col-lg-4 config-stacked-field">
                                             <label for="gpio_manual_ppm" class="form-label">Fallback PPM</label>
@@ -881,13 +882,9 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                         </div>
                                     </div>
                                 </section>
-                            </fieldset>
+                                </div>
 
-                            <fieldset class="config-panel backend-settings-panel" id="si5351-backend-panel" hidden>
-                                <legend>Si5351 Output</legend>
-                                <p class="config-panel__summary">
-                                    Configure the attached Si5351 synthesizer, including I2C details, reference frequency, and output power.
-                                </p>
+                                <div class="transmitter-backend-fields" id="si5351-backend-panel" role="group" aria-label="Si5351 output settings" hidden>
 
                                 <div class="row gx-3 gy-3 align-items-start">
                                     <div class="col-12 col-lg-3">
@@ -987,8 +984,8 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                     </div>
                                 </div>
 
-                                <section class="backend-calibration-section mt-4" aria-labelledby="si5351-calibration-heading">
-                                    <h3 id="si5351-calibration-heading" class="cw-control-section__title">Frequency calibration</h3>
+                                <section class="backend-calibration-section" aria-labelledby="si5351-calibration-heading">
+                                    <h3 id="si5351-calibration-heading" class="visually-hidden">Si5351 frequency calibration</h3>
                                     <div class="row gx-3 gy-3 align-items-start">
                                         <div class="col-12 col-lg-4 config-stacked-field">
                                             <label for="ppm" class="form-label">Reference calibration (PPM)</label>
@@ -999,6 +996,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                         </div>
                                     </div>
                                 </section>
+                                </div>
                             </fieldset>
                         </div>
 

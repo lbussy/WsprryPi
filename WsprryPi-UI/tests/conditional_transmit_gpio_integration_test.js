@@ -117,7 +117,8 @@ class CdpClient {
 async function captureConflictScreenshot(client, outputPath, tabId, selector) {
     await client.send("Runtime.evaluate", {
         expression: `(() => {
-            document.getElementById("transmit_backend").value = "gpio";
+            document.getElementById("transmit_backend").checked = false;
+            clickTransmitBackend();
             document.getElementById("tx_pin").value = "4";
             setLEDPin(4);
             document.getElementById("use_led").checked = true;
@@ -156,7 +157,7 @@ async function captureRp1DriveScreenshot(client, outputPath, theme) {
                 gpioClockTransmissionSupported: true,
                 rp1GpioOperatorVisible: true,
             };
-            document.getElementById("transmit_backend").value = "gpio";
+            document.getElementById("transmit_backend").checked = false;
             document.getElementById("rp1_gpio_drive_ma").value = "2";
             document.getElementById("use_led").checked = false;
             document.getElementById("use_shutdown").checked = false;
@@ -203,7 +204,7 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
                 rp1GpioOperatorVisible: true,
                 si5351Detected: true,
             };
-            document.getElementById("transmit_backend").value = "gpio";
+            document.getElementById("transmit_backend").checked = false;
             document.getElementById("rp1-route-panel").hidden = true;
             document.getElementById("rp1-route-apply").hidden = false;
             document.getElementById("rp1-route-state").hidden = false;
@@ -363,8 +364,19 @@ async function browserTest() {
         patches.push({ endpoint, options });
         return new ResolvedDeferred();
     };
-    showBackendStatus = () => {};
-    clearBackendStatus = () => {};
+    showBackendStatus = (message, _type, source = "backend") => {
+        const status = document.getElementById("backendStatus");
+        status.hidden = false;
+        status.textContent = message;
+        status.dataset.source = source;
+    };
+    clearBackendStatus = () => {
+        const status = document.getElementById("backendStatus");
+        status.hidden = true;
+        status.textContent = "";
+        delete status.dataset.source;
+    };
+    setConfigLoadFailureState = () => {};
     persistLocalConfigDraftIfPossible = () => {};
     removePersistedConfigDraft = () => {};
 
@@ -384,7 +396,7 @@ async function browserTest() {
         lastSavedConfigPayload = "";
         lastFailedConfigPayload = "";
         lastFailedConfigMessage = "";
-        field("transmit_backend").value = backend;
+        field("transmit_backend").checked = backend === "si5351";
         field("tx_pin").value = String(txPin);
         field("tx_pin").disabled = false;
         window.conditionalGpioTestTransmitState = transmit;
@@ -571,7 +583,7 @@ async function browserTest() {
     clock.tick(800);
     equal(patches.length, 0, "invalid GPIO ownership must block autosave");
     equal(field("configSaveStatus").textContent, "Invalid - not saved", "invalid ownership status");
-    field("transmit_backend").value = "si5351";
+    field("transmit_backend").checked = true;
     clickTransmitBackend();
     clock.tick(800);
     equal(patches.length, 1, "changing to Si5351 must recover and resume autosave");
@@ -604,7 +616,7 @@ async function browserTest() {
     field("gpio_frequency_residual_ppm").value = "-0.125";
     field("gpio_manual_ppm").value = "1.75";
     field("ppm").value = "2.409358";
-    field("transmit_backend").value = "gpio";
+    field("transmit_backend").checked = false;
     clickTransmitBackend();
     equal(field("rp1-gpio-drive-group").hidden, false,
         "Pi 5 GPIO must show the RP1 drive selector");
@@ -635,7 +647,7 @@ async function browserTest() {
     equal(field("gpio_manual_ppm").disabled, false,
         "GPIO manual fallback must remain editable while estimation is enabled");
 
-    field("transmit_backend").value = "si5351";
+    field("transmit_backend").checked = true;
     clickTransmitBackend();
     equal(field("rp1_gpio_drive_ma").disabled, true,
         "Si5351 must disable the inactive RP1 drive selector without clearing it");
@@ -701,7 +713,7 @@ async function browserTest() {
     equal(buildConfigPayload().GPIO["RP1 Drive mA"], 8,
         "repairing the retained RP1 value must preserve the selected value");
 
-    field("transmit_backend").value = "gpio";
+    field("transmit_backend").checked = false;
     clickTransmitBackend();
     equal(field("gpio-backend-panel").hidden, false,
         "switching back to GPIO must restore its calibration panel");
@@ -748,21 +760,20 @@ async function browserTest() {
     window.WSPRRYPI_PLATFORM.rp1GpioOperatorVisible = true;
     equal(transmitBackendForUi("rp1-gpclk"), "gpio",
         "canonical RP1 backend must load into the operator-facing GPIO selector");
-    field("transmit_backend").value = "gpio";
+    field("transmit_backend").checked = false;
     initializeRp1RouteUi();
     await rp1RouteUi.query();
     updateBackendPlatformSupportUi();
-    equal(field("transmit_backend").value, "gpio",
+    equal(selectedTransmitBackend(), "gpio",
         "route-neutral Pi 5 RP1 must preserve GPIO for route administration");
-    equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO",
-        "route-neutral Pi 5 RP1 must keep status out of the backend label");
-    equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, false,
-        "route-neutral Pi 5 RP1 must keep GPIO selectable for route administration");
+    equal(field("transmit_backend").checked, false,
+        "route-neutral Pi 5 RP1 must keep the backend switch on GPIO");
+    equal(field("transmit_backend").disabled, false,
+        "route-neutral Pi 5 RP1 must keep the backend switch available");
     equal(field("rp1-gpio-drive-group").hidden, false,
         "route-neutral Pi 5 RP1 must show its route-bound drive selector");
     equal(field("backend-selector-hint").textContent,
-        "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.",
+        "Off uses GPIO through the RP1 GPCLK provider. On uses the attached Si5351 synthesizer.",
         "route-neutral Pi 5 RP1 must use stable backend guidance");
     equal(field("backendPlatformHint").hidden, true,
         "the compact RP1 route controls must own route and provider status");
@@ -805,9 +816,8 @@ async function browserTest() {
     });
     ok(selectedBackendUnavailableMessage().includes("No RP1 clock route is selected"),
         "RP1 empty-route warning must acknowledge the neutral selector state");
-    equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO",
-        "RP1 route state must remain in the compact route controls");
+    equal(field("transmit_backend").checked, false,
+        "RP1 route state must not change the backend switch");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_inhibited",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO4",
@@ -816,9 +826,8 @@ async function browserTest() {
     updateBackendPlatformSupportUi();
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected, but GPIO4 is active"),
         "RP1 warning must describe a selected-versus-active mismatch");
-    equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO",
-        "RP1 route mismatch must remain in the compact route controls");
+    equal(field("transmit_backend").checked, false,
+        "RP1 route mismatch must not change the backend switch");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_ready",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO20",
@@ -828,9 +837,9 @@ async function browserTest() {
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected and active"),
         "RP1 warning must not ask for a route that is already active");
     equal(field("backend-selector-hint").textContent,
-        "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.",
+        "Off uses GPIO through the RP1 GPCLK provider. On uses the attached Si5351 synthesizer.",
         "RP1 selector guidance must remain stable after status changes");
-    field("transmit_backend").value = "si5351";
+    field("transmit_backend").checked = true;
     field("transmit_backend").dispatchEvent(new Event("change", { bubbles: true }));
     equal(buildConfigPayload().Operation["Transmit Backend"], "si5351",
         "an explicit Si5351 selection must update the persisted backend");

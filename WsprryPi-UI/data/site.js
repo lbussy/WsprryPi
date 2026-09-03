@@ -1915,11 +1915,13 @@ function populateConfig(callback = null) {
                     if (typeof renderBandPreferenceRows === "function") {
                         renderBandPreferenceRows();
                     }
-                    $("#transmit_backend").val(
-                        typeof transmitBackendForUi === "function"
-                            ? transmitBackendForUi(transmitBackend)
-                            : (transmitBackend === "si5351" ? "si5351" : "gpio")
-                    ).trigger("change");
+                    if (typeof setTransmitBackendSelection === "function") {
+                        setTransmitBackendSelection(transmitBackend, true);
+                    } else {
+                        $("#transmit_backend")
+                            .prop("checked", transmitBackend === "si5351")
+                            .trigger("change");
+                    }
                     if (typeof updateBackendPlatformSupportUi === "function") {
                         updateBackendPlatformSupportUi();
                     }

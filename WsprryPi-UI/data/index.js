@@ -436,9 +436,7 @@ function restorePersistedConfigDraft() {
         ? { ...wspr["Band Preferences"] }
         : {};
     renderBandPreferenceRows();
-    $("#transmit_backend").val(
-        transmitBackendForUi(operation["Transmit Backend"])
-    ).trigger("change");
+    setTransmitBackendSelection(operation["Transmit Backend"], true);
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
     }
@@ -1879,8 +1877,15 @@ function updateRuntimeControlStatusFromForm(mode) {
 }
 
 function selectedTransmitBackend() {
-    const backend = String($("#transmit_backend").val() || "gpio").toLowerCase();
-    return backend === "si5351" ? "si5351" : "gpio";
+    return $("#transmit_backend").is(":checked") ? "si5351" : "gpio";
+}
+
+function setTransmitBackendSelection(backend, triggerChange = false) {
+    const $backend = $("#transmit_backend");
+    $backend.prop("checked", transmitBackendForUi(backend) === "si5351");
+    if (triggerChange) {
+        $backend.trigger("change");
+    }
 }
 
 function transmitBackendForPersistence() {
@@ -2125,11 +2130,7 @@ function rp1RouteUnavailableMessage() {
 }
 
 function si5351UiSupported() {
-    return $('#transmit_backend option[value="si5351"]').length > 0;
-}
-
-function getSi5351OptionLabel(detected) {
-    return detected === false ? "Si5351 (Not detected)" : "Si5351";
+    return $("#si5351-backend-panel").length > 0;
 }
 
 function resolveSupportedTransmitBackend(preferredBackend = null) {
@@ -2222,12 +2223,8 @@ function backendInlineHintMessage() {
     return "";
 }
 
-function rp1GpioOptionLabel() {
-    return "GPIO";
-}
-
 function rp1RouteSelectorHint() {
-    return "GPIO uses the RP1 GPCLK provider. Route status and administration are beside Transmit Pin.";
+    return "Off uses GPIO through the RP1 GPCLK provider. On uses the attached Si5351 synthesizer.";
 }
 
 function formatBackendBannerMessage(reason) {
@@ -2280,12 +2277,9 @@ function updateBackendPlatformSupportUi() {
     const platform = window.WSPRRYPI_PLATFORM || {};
     const gpioSupported = platform.gpioClockTransmissionSupported !== false;
     const si5351Supported = si5351UiSupported();
-    const si5351Detected = platform.si5351Detected !== false;
     const anyBackendSupported = hasAnySupportedTransmitBackend();
     const currentBackend = selectedTransmitBackend();
     const resolvedBackend = resolveSupportedTransmitBackend(currentBackend);
-    const $gpioOption = $('#transmit_backend option[value="gpio"]');
-    const $si5351Option = $('#transmit_backend option[value="si5351"]');
     const $hint = $("#backendPlatformHint");
     const $selectorHint = $("#backend-selector-hint");
     const $backend = $("#transmit_backend");
@@ -2296,7 +2290,7 @@ function updateBackendPlatformSupportUi() {
         rp1RouteSelectable && !gpioSupported;
 
     if (currentBackend !== resolvedBackend && !hiddenRp1Selection) {
-        $backend.val(resolvedBackend);
+        setTransmitBackendSelection(resolvedBackend);
     }
 
     const recoveryMessage =
@@ -2318,23 +2312,13 @@ function updateBackendPlatformSupportUi() {
             ? backendInlineHintMessage()
             : noBackendAvailableMessage());
 
-    $gpioOption.text(
-        hiddenRp1Selection
-            ? "GPIO (RP1 unavailable)"
-            : (gpioSupported
-                ? "GPIO"
-                : (rp1RouteSelectable ? rp1GpioOptionLabel() : "GPIO (Unsupported on this Pi)"))
-    );
-    $gpioOption.prop("disabled", !gpioSupported && !rp1RouteSelectable);
-    $si5351Option.text(getSi5351OptionLabel(si5351Detected));
-    $si5351Option.prop("disabled", !si5351Supported);
     $backend.prop("disabled", !anyBackendSupported);
     $selectorHint.text(
         rp1RouteSelectable && !gpioSupported
             ? rp1RouteSelectorHint()
             : isRp1GpioPlatform() && !rp1GpioOperatorVisible()
-            ? "Si5351 uses an attached synthesizer on the configured I2C bus."
-            : "GPIO uses Raspberry Pi clock output pins directly. Si5351 uses an attached synthesizer on the configured I2C bus."
+            ? "GPIO is unavailable on this system. On uses the attached Si5351 synthesizer."
+            : "Off uses Raspberry Pi GPIO directly. On uses the attached Si5351 synthesizer."
     );
     $hint
         .prop("hidden", !inlineHint)
@@ -2405,6 +2389,8 @@ function clickTransmitBackend() {
         .find("input, select, button")
         .prop("disabled", gpioActive);
 
+    syncBackendControlAvailability();
+
     syncGpioDriveControls();
 
     syncCalibrationControls();
@@ -2412,6 +2398,12 @@ function clickTransmitBackend() {
     validateTransmitterHardwareFields();
     validatePage();
     scheduleAutosave();
+}
+
+function syncBackendControlAvailability() {
+    const gpioActive = selectedTransmitBackend() === "gpio" &&
+        !(isRp1GpioPlatform() && !rp1GpioOperatorVisible());
+    $("#tx_pin, #rp1-route-apply").prop("disabled", !gpioActive);
 }
 
 function syncBackendPanelVisibility() {
@@ -5176,6 +5168,7 @@ function setHardwareControlsDisabled(disabled) {
         syncStopButtonState();
         syncAmpControlState();
         syncGpioDriveControls();
+        syncBackendControlAvailability();
     }
 
     syncSi5351ReferenceControls();
@@ -5200,7 +5193,7 @@ function setHardwareControlsDisabled(disabled) {
 
 function setOfflineDefaults() {
     setTransmitFromBackend(false);
-    $("#transmit_backend").val(resolveSupportedTransmitBackend("gpio"));
+    setTransmitBackendSelection(resolveSupportedTransmitBackend("gpio"));
     setTxPin(4);
     $("#gpio-power-range").val(7);
     updateGpioPowerLabel.call(document.getElementById("gpio-power-range"));

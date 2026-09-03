@@ -888,6 +888,103 @@ legend {
     color: var(--bs-secondary-color);
 }
 
+.transmitter-output-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.transmitter-output-panel > legend,
+.transmitter-output-panel > .config-panel__summary,
+.transmitter-output-panel > #backendStatus,
+.transmitter-output-panel #rp1-route-panel,
+.transmitter-output-panel #rp1-route-progress-modal {
+    grid-column: 1 / -1;
+}
+
+.transmitter-output-panel > .row,
+.transmitter-backend-fields,
+.transmitter-backend-fields > .row,
+.transmitter-backend-fields > .backend-calibration-section,
+.transmitter-backend-fields > .backend-calibration-section > .row {
+    display: contents;
+}
+
+.transmitter-backend-fields[hidden] {
+    display: none !important;
+}
+
+.transmitter-output-panel [class*="col-"] {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.transmitter-output-panel .form-label {
+    margin-bottom: 0;
+}
+
+.transmitter-backend-switch .config-wspr-switch {
+    gap: 0.6rem;
+}
+
+.transmitter-backend-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 2.375rem;
+}
+
+.transmitter-backend-switch .form-check-label {
+    margin: 0;
+    line-height: var(--leading-snug);
+}
+
+.transmitter-output-panel .backend-calibration-section {
+    padding-top: 0;
+    border-top: 0;
+}
+
+@media (min-width: 768px) {
+    .transmitter-output-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 992px) {
+    .transmitter-output-panel {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .transmitter-pin-field {
+        grid-column: span 2;
+    }
+}
+
+@media (min-width: 1400px) {
+    .transmitter-output-panel {
+        grid-template-columns: repeat(16, minmax(0, 1fr));
+    }
+
+    .transmitter-output-panel > legend,
+    .transmitter-output-panel > .config-panel__summary,
+    .transmitter-output-panel > #backendStatus,
+    .transmitter-output-panel #rp1-route-panel,
+    .transmitter-output-panel #rp1-route-progress-modal {
+        grid-column: 1 / -1;
+    }
+
+    .transmitter-output-panel .transmitter-backend-switch,
+    .transmitter-output-panel .transmitter-backend-fields [class*="col-"] {
+        grid-column: span 2;
+    }
+
+    .transmitter-output-panel .transmitter-pin-field {
+        grid-column: span 5;
+    }
+}
+
 .cw-control-section {
     display: grid;
     gap: 0.9rem;
@@ -1239,7 +1336,8 @@ legend {
 
 .rp1-route-panel { padding: 1rem; background: color-mix(in srgb, var(--bs-secondary-bg) 58%, var(--bs-body-bg)); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); }
 .rp1-route-panel__heading, .rp1-route-actions { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-.rp1-route-control-row { display: grid; grid-template-columns: minmax(10rem,1fr) auto auto; align-items: center; gap: .75rem; }
+.rp1-route-control-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.rp1-route-control-row .form-select { flex: 0 1 9rem; width: 9rem; }
 .rp1-route-state { padding: .3rem .65rem; font-family: var(--font-display); font-weight: var(--weight-semibold); border: 1px solid var(--bs-border-color); border-radius: 999px; white-space: nowrap; }
 .rp1-route-state[data-state="active"], .rp1-route-state[data-state="runtime_ready"], .rp1-route-state[data-state="runtime_neutral"], .rp1-route-state[data-state="output_inhibited_validated"] { color: var(--wspr-state-success); }
 .rp1-route-state[data-state="checking"], .rp1-route-state[data-state="applying"], .rp1-route-state[data-state="rollback"] { color: rgb(var(--wspr-accent-rgb)); }
@@ -1253,5 +1351,4 @@ legend {
 .rp1-route-identities dd { margin: .15rem 0 0; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .rp1-route-feedback { max-width: 68ch; margin: .75rem 0 1rem; overflow-wrap: anywhere; }
 .rp1-route-actions { justify-content: flex-start; }
-@media (max-width: 767.98px) { .rp1-route-control-row { grid-template-columns: 1fr auto; } .rp1-route-control-row .form-select { grid-column: 1 / -1; } }
-@media (max-width: 575.98px) { .rp1-route-identities { grid-template-columns: 1fr; } .rp1-route-actions > .btn, .rp1-route-control-row .btn { min-height: 44px; } .rp1-route-control-row { grid-template-columns: 1fr; } .rp1-route-control-row .form-select { grid-column: auto; } .rp1-route-control-row .btn { width: 100%; } .rp1-route-state { justify-self: start; } .rp1-route-progress-heading { align-items: flex-start; flex-direction: column; } .rp1-route-progress-retry { text-align: start; } }
+@media (max-width: 575.98px) { .rp1-route-identities { grid-template-columns: 1fr; } .rp1-route-actions > .btn, .rp1-route-control-row .btn { min-height: 44px; } .rp1-route-control-row { align-items: stretch; flex-direction: column; } .rp1-route-control-row .form-select, .rp1-route-control-row .btn { flex-basis: auto; width: 100%; } .rp1-route-state { align-self: flex-start; } .rp1-route-progress-heading { align-items: flex-start; flex-direction: column; } .rp1-route-progress-retry { text-align: start; } }
