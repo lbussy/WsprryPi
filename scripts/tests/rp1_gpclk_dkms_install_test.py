@@ -1602,9 +1602,7 @@ class ApplyPolicyTests(unittest.TestCase):
         source = self.root / "provider-source"
         scripts = source / "scripts"
         scripts.mkdir(parents=True)
-        provider = scripts / "runtime_provider.py"
         deployment = scripts / "runtime_deployment.py"
-        provider.write_text("# exact provider fixture\n")
         deployment.write_text("# exact deployment fixture\n")
         missing_provider = self.root / "installed/runtime_provider.py"
         destinations = {
@@ -1625,35 +1623,35 @@ class ApplyPolicyTests(unittest.TestCase):
                     "Files deployed/recovered; application remains masked. No module activated.\n",
                     "", 0),
         })
-        initial = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "recovery_required", "state": "recovery_required",
-            "routeSelected": False,
-            "modules": {name: {"status": "absent"} for name in
-                        (MOD.MODULE_NAME, MOD.CONTROLLER_MODULE_NAME)},
-            "endpoints": {name: {"status": "absent", "open": False}
-                          for name in ("consumer", "controller")},
+        pending = pathlib.Path(
+            "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
+        )
+        pending_checks = 0
+        def exists(path):
+            nonlocal pending_checks
+            if path != pending:
+                return False
+            pending_checks += 1
+            return pending_checks == 1
+        inventory = {
+            "activeModule": False, "activeController": False,
+            "configuredRoute": False,
         }
-        final = copy.deepcopy(initial)
-        final.update({
-            "result": "absent", "state": "absent",
-            "identities": {"installedBinding": {"status": "absent"}},
-        })
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
              mock.patch.object(
                 MOD, "revalidate_checkout", return_value=source), \
              mock.patch.object(
-                MOD, "runtime_call", side_effect=[initial, final]) as calls, \
+                MOD, "existing_inventory", return_value=inventory), \
+             mock.patch.object(pathlib.Path, "exists", autospec=True,
+                               side_effect=exists), \
+             mock.patch.object(pathlib.Path, "is_symlink", autospec=True,
+                               return_value=False), \
              mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
              mock.patch.object(MOD, "replace_owned_record") as replace:
             MOD.resume_interrupted_runtime_removal(
                 self.record, record, identity,
                 {"checkout": str(source)}, runner,
             )
-        self.assertEqual(
-            [call.args[2] for call in calls.call_args_list],
-            ["inspect", "inspect"],
-        )
         self.assertEqual(unchanged.call_count, 2)
         replacement = copy.deepcopy(record)
         replacement["schema"] = MOD.RECORD_SCHEMA

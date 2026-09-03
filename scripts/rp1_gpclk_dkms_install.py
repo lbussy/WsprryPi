@@ -2949,27 +2949,26 @@ def resume_interrupted_runtime_removal(
     """Recover a digest-bound removal barrier after its provider was removed."""
     runtime = validate_runtime_ownership(record.get("runtime"), record)
     source = revalidate_checkout(pathlib.Path(resolved["checkout"]), runner)
-    provider = source / "scripts/runtime_provider.py"
     deployment = source / "scripts/runtime_deployment.py"
     require(
         not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink()
-        and provider.is_file() and not provider.is_symlink()
         and deployment.is_file() and not deployment.is_symlink(),
         "interrupted runtime removal lacks exact source recovery tools",
     )
-    inspected = validate_readiness(runtime_call(
-        runner, provider, "inspect", (), {"absent", "recovery_required"}
-    ))
+    inventory = existing_inventory(pathlib.Path("/"), runner)
     require(
-        inspected.get("result") in {"absent", "recovery_required"}
-        and not inspected.get("routeSelected")
-        and all(value.get("status") == "absent"
-                for value in inspected.get("modules", {}).values())
-        and all(value.get("status") == "absent"
-                for value in inspected.get("endpoints", {}).values()),
+        inventory.get("activeModule") is False
+        and inventory.get("activeController") is False
+        and inventory.get("configuredRoute") is False
+        and not pathlib.Path("/dev/rp1-route-admin").exists()
+        and not pathlib.Path("/dev/rp1-gpclk").exists()
+        and not pathlib.Path("/run/rp1-gpclk-dkms/route-manager.sock").exists(),
         "interrupted runtime removal is not inactive and attributable",
     )
-    if inspected.get("result") == "recovery_required":
+    pending = pathlib.Path(
+        "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
+    )
+    if pending.exists() or pending.is_symlink():
         planned_result = runner.run(
             ["python3", str(deployment), "recover"], check=False
         )
@@ -3007,15 +3006,13 @@ def resume_interrupted_runtime_removal(
         )
         require_unchanged_ownership(
             record_path, record, record_identity,
-            "post-recovery runtime inspection",
+            "post-recovery runtime verification",
         )
-        inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"absent"}
-        ), "absent")
     require(
-        inspected.get("result") == "absent"
-        and inspected.get("identities", {}).get("installedBinding", {}).get("status")
-            == "absent",
+        not pending.exists() and not pending.is_symlink()
+        and all(not pathlib.Path(path).exists()
+                and not pathlib.Path(path).is_symlink()
+                for path in runtime_deployment_destinations()),
         "recovered runtime removal did not reach exact absence",
     )
     replacement = copy.deepcopy(record)
