@@ -229,6 +229,7 @@ declare REMOVE_RP1_GPCLK_DKMS="${REMOVE_RP1_GPCLK_DKMS:-auto}"
 declare RP1_GPCLK_DKMS_STATE_DIR=""
 declare RP1_GPCLK_DKMS_HELPER=""
 declare RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
+declare -a RESOLVED_APT_PACKAGES=()
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -784,8 +785,9 @@ readonly SYSTEM_READS
 #          and attempt to install any missing packages as needed.
 #
 #          Packages included:
-#          - `jq`: JSON parsing utility.
 #          - `git`: Version control system.
+#          - `build-essential`: Compiler and build tools used for WsprryPi.
+#          - `python3`: Runtime used by installer helpers.
 #          - `libssl-dev`: OpenSSL EVP headers, libcrypto pkg-config metadata,
 #            and the matching libcrypto runtime dependency.
 #          - `age`: age encryption and age-keygen executables used by the
@@ -801,6 +803,8 @@ readonly SYSTEM_READS
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
     "git"
+    "build-essential"
+    "python3"
     "apache2"
     "php"
     "chrony"
@@ -808,6 +812,14 @@ readonly APT_PACKAGES=(
     "libsystemd-dev"
     "libssl-dev"
     "age"
+)
+
+# RP1 kernel-build packages are appended only when RP1 provider installation is
+# selected. The exact running-kernel header package is resolved at runtime.
+readonly RP1_GPCLK_DKMS_APT_PACKAGES=(
+    "dkms"
+    "device-tree-compiler"
+    "kmod"
 )
 
 # -----------------------------------------------------------------------------
@@ -2364,6 +2376,117 @@ rp1_gpclk_dkms_installation_selected() {
             return 0
             ;;
     esac
+}
+
+# -----------------------------------------------------------------------------
+# @brief Resolve the APT package closure for this installer invocation.
+# @details Base application build packages apply on every supported Pi. RP1
+#          DKMS, device-tree and kernel-module tools plus exact running-kernel
+#          headers are appended only when RP1 provider installation is selected.
+# @param $1 Optional resolved libgpiod runtime package.
+# -----------------------------------------------------------------------------
+resolve_apt_package_list() {
+    local runtime_pkg="${1:-}"
+    local kernel_release=""
+
+    RESOLVED_APT_PACKAGES=( "${APT_PACKAGES[@]}" )
+    if [[ -n "$runtime_pkg" ]]; then
+        RESOLVED_APT_PACKAGES+=( "$runtime_pkg" )
+    fi
+    if ! rp1_gpclk_dkms_installation_selected; then
+        return 0
+    fi
+
+    kernel_release=$(uname -r) || {
+        warn "Unable to identify the running kernel for RP1 DKMS headers."
+        return 1
+    }
+    if [[ ! "$kernel_release" =~ ^[0-9A-Za-z][0-9A-Za-z.+:~_-]*$ ]]; then
+        warn "The running kernel release cannot form a safe APT package name: $kernel_release"
+        return 1
+    fi
+    RESOLVED_APT_PACKAGES+=(
+        "${RP1_GPCLK_DKMS_APT_PACKAGES[@]}"
+        "linux-headers-${kernel_release}"
+    )
+}
+
+# -----------------------------------------------------------------------------
+# @brief Verify the exact RP1 DKMS build closure after package handling.
+# @details This check is conditional on RP1 installation, is observational only,
+#          and fails closed before provider apply. Optional path arguments exist
+#          solely so hardware-free tests can provide a synthetic header layout.
+# -----------------------------------------------------------------------------
+validate_rp1_gpclk_build_dependencies() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    [[ "$ACTION" == "install" ]] || return 0
+    rp1_gpclk_dkms_installation_selected || return 0
+    if [[ "$DRY_RUN" == "true" ]]; then
+        debug_print "Dry run: RP1 DKMS build dependency validation was not executed." "$debug"
+        debug_end "$debug"
+        return 0
+    fi
+
+    local kernel_release="${1:-}"
+    local modules_base="${2:-/lib/modules}"
+    local headers_base="${3:-/usr/src}"
+    local header_package=""
+    local expected_headers=""
+    local build_link=""
+    local expected_real=""
+    local build_real=""
+    local tool=""
+    local missing=0
+
+    if [[ -z "$kernel_release" ]]; then
+        kernel_release=$(uname -r) || {
+            warn "Unable to identify the running kernel for RP1 DKMS validation."
+            return 1
+        }
+    fi
+    if [[ ! "$kernel_release" =~ ^[0-9A-Za-z][0-9A-Za-z.+:~_-]*$ ]]; then
+        warn "Invalid running-kernel release for RP1 DKMS validation: $kernel_release"
+        return 1
+    fi
+
+    header_package="linux-headers-${kernel_release}"
+    expected_headers="${headers_base}/${header_package}"
+    build_link="${modules_base}/${kernel_release}/build"
+    if ! dpkg-query -W -f='${Status}' "$header_package" 2>/dev/null |
+        grep -q "install ok installed"; then
+        warn "Exact RP1 DKMS header package is not installed: $header_package"
+        ((missing++))
+    fi
+    expected_real=$(realpath "$expected_headers" 2>/dev/null) || expected_real=""
+    build_real=$(realpath "$build_link" 2>/dev/null) || build_real=""
+    if [[ -z "$expected_real" || -z "$build_real" ||
+        "$expected_real" != "$build_real" || ! -f "$build_real/Makefile" ]]; then
+        warn "RP1 DKMS headers do not resolve to the exact running-kernel tree: $build_link -> $expected_headers"
+        ((missing++))
+    fi
+
+    for tool in make dkms depmod modinfo sha256sum dtc fdtput; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            warn "Missing RP1 DKMS build dependency: $tool"
+            ((missing++))
+        fi
+    done
+    if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
+        warn "Missing RP1 DKMS compiler: expected cc or gcc."
+        ((missing++))
+    fi
+    if ((missing > 0)); then
+        warn "RP1 DKMS build dependency validation failed with $missing issue(s)."
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_print "RP1 DKMS build dependencies match kernel $kernel_release." "$debug"
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -5492,11 +5615,14 @@ handle_apt_packages() {
         debug_print "Using libgpiod runtime package '$runtime_pkg'." "$debug"
     fi
 
-    # Build final install list: base packages + resolved libgpiod runtime package.
-    packages_to_install=( "${APT_PACKAGES[@]}" )
-    if [[ -n "$runtime_pkg" ]]; then
-        packages_to_install+=( "$runtime_pkg" )
+    # Build the final platform-aware install list. RP1 kernel-development
+    # packages are absent unless provider installation is selected.
+    if ! resolve_apt_package_list "$runtime_pkg"; then
+        warn "Failed to resolve the platform-specific APT package list."
+        debug_end "$debug"
+        return 1
     fi
+    packages_to_install=( "${RESOLVED_APT_PACKAGES[@]}" )
 
     # Install or upgrade each package in the list
     for package in "${packages_to_install[@]}"; do
@@ -9036,6 +9162,7 @@ _main() {
     if [[ "$ACTION" != "uninstall" ]]; then
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
+        validate_rp1_gpclk_build_dependencies "$debug" || return 1
         apply_rp1_gpclk_dkms_installation "$debug" || return 1
         prepare_rp1_gpclk_runtime_update "$debug" || return 1
     fi

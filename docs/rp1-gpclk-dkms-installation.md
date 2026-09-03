@@ -33,6 +33,18 @@ repositories, unavailable branches or commits, and ambiguous WsprryPi source
 channels are refused. An explicit source selector can resolve an otherwise
 ambiguous WsprryPi source channel, but never weakens source verification.
 
+When provider installation is selected, package handling adds `dkms`, `kmod`,
+`device-tree-compiler`, and the exact running-kernel package
+`linux-headers-$(uname -r)`. Before provider apply, the installer requires that
+package to be installed, requires `/lib/modules/$(uname -r)/build` to resolve to
+the matching `/usr/src/linux-headers-$(uname -r)` tree, and verifies the DKMS,
+compiler, module, checksum, and Device Tree tools used by the reviewed runtime
+profile. Missing or mismatched prerequisites fail before provider mutation.
+These kernel-development packages are not added for automatic installations on
+non-Pi-5 systems or when `INSTALL_RP1_GPCLK_DKMS=false`. `build-essential` and
+`python3` remain ordinary WsprryPi installer prerequisites on every supported
+platform.
+
 Examples:
 
 ```sh

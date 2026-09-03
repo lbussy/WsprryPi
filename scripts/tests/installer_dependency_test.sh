@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2016
+# shellcheck disable=SC1091,SC2016,SC2034,SC2329
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -41,6 +41,143 @@ if ! awk '
     exit 1
 fi
 
+for package in build-essential python3; do
+    if ! awk -v required="$package" '
+        /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
+        in_packages && /^\)/ { exit }
+        in_packages && $0 ~ "^[[:space:]]*\"" required "\"[[:space:]]*$" { found = 1 }
+        END { exit(found ? 0 : 1) }
+    ' "$INSTALLER"; then
+        echo "$package must remain in the base install.sh APT_PACKAGES" >&2
+        exit 1
+    fi
+done
+
+for package in dkms device-tree-compiler kmod; do
+    if ! awk -v required="$package" '
+        /^readonly RP1_GPCLK_DKMS_APT_PACKAGES=\(/ { in_packages = 1; next }
+        in_packages && /^\)/ { exit }
+        in_packages && $0 ~ "^[[:space:]]*\"" required "\"[[:space:]]*$" { found = 1 }
+        END { exit(found ? 0 : 1) }
+    ' "$INSTALLER"; then
+        echo "$package must remain in the conditional RP1 package list" >&2
+        exit 1
+    fi
+done
+
+(
+    # shellcheck source=../install.sh
+    source "$INSTALLER"
+    warn() { :; }
+    contains_package() {
+        local expected="$1" package
+        shift
+        for package in "$@"; do
+            [[ "$package" == "$expected" ]] && return 0
+        done
+        return 1
+    }
+
+    INSTALL_RP1_GPCLK_DKMS=false
+    resolve_apt_package_list libgpiod-runtime-test
+    contains_package build-essential "${RESOLVED_APT_PACKAGES[@]}"
+    contains_package python3 "${RESOLVED_APT_PACKAGES[@]}"
+    contains_package libgpiod-runtime-test "${RESOLVED_APT_PACKAGES[@]}"
+    if contains_package dkms "${RESOLVED_APT_PACKAGES[@]}" ||
+        contains_package device-tree-compiler "${RESOLVED_APT_PACKAGES[@]}" ||
+        contains_package kmod "${RESOLVED_APT_PACKAGES[@]}"; then
+        echo "RP1 packages leaked into an explicit opt-out" >&2
+        exit 1
+    fi
+
+    INSTALL_RP1_GPCLK_DKMS=auto
+    is_rp1_system() { return 1; }
+    resolve_apt_package_list
+    if contains_package dkms "${RESOLVED_APT_PACKAGES[@]}" ||
+        contains_package "linux-headers-$(uname -r)" "${RESOLVED_APT_PACKAGES[@]}"; then
+        echo "RP1 packages leaked into a non-Pi-5 automatic install" >&2
+        exit 1
+    fi
+
+    is_rp1_system() { return 0; }
+    resolve_apt_package_list
+    contains_package dkms "${RESOLVED_APT_PACKAGES[@]}"
+    contains_package device-tree-compiler "${RESOLVED_APT_PACKAGES[@]}"
+    contains_package kmod "${RESOLVED_APT_PACKAGES[@]}"
+    contains_package "linux-headers-$(uname -r)" "${RESOLVED_APT_PACKAGES[@]}"
+)
+
+(
+    # shellcheck source=../install.sh
+    source "$INSTALLER"
+    dependency_fixture=$(mktemp -d /tmp/wsprrypi-rp1-dependencies.XXXXXX)
+    trap 'rm -rf -- "$dependency_fixture"' EXIT
+    kernel_release=6.18.34+rpt-rpi-2712
+    modules_base="$dependency_fixture/lib/modules"
+    headers_base="$dependency_fixture/usr/src"
+    expected_headers="$headers_base/linux-headers-$kernel_release"
+    fake_bin="$dependency_fixture/bin"
+    mkdir -p "$modules_base/$kernel_release" "$expected_headers" "$fake_bin"
+    : >"$expected_headers/Makefile"
+    ln -s "$expected_headers" "$modules_base/$kernel_release/build"
+    for tool in make dkms depmod modinfo sha256sum dtc fdtput cc; do
+        printf '#!/bin/sh\nexit 0\n' >"$fake_bin/$tool"
+        chmod 0755 "$fake_bin/$tool"
+    done
+    cat >"$fake_bin/dpkg-query" <<'EOF'
+#!/bin/sh
+if [ "${WSPRRYPi_TEST_HEADERS_MISSING:-0}" = 1 ]; then
+    exit 1
+fi
+printf 'install ok installed\n'
+EOF
+    chmod 0755 "$fake_bin/dpkg-query"
+    PATH="$fake_bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    ACTION=install
+    DRY_RUN=false
+    INSTALL_RP1_GPCLK_DKMS=true
+    debug_start() { printf ''; }
+    debug_filter() { printf ' %q' "$@"; }
+    debug_print() { :; }
+    debug_end() { :; }
+    warn() { :; }
+
+    validate_rp1_gpclk_build_dependencies \
+        "$kernel_release" "$modules_base" "$headers_base"
+
+    WSPRRYPi_TEST_HEADERS_MISSING=1
+    export WSPRRYPi_TEST_HEADERS_MISSING
+    if validate_rp1_gpclk_build_dependencies \
+        "$kernel_release" "$modules_base" "$headers_base"; then
+        echo "an unavailable exact header package must fail validation" >&2
+        exit 1
+    fi
+    WSPRRYPi_TEST_HEADERS_MISSING=0
+    export WSPRRYPi_TEST_HEADERS_MISSING
+
+    mv "$fake_bin/fdtput" "$fake_bin/fdtput.missing"
+    if validate_rp1_gpclk_build_dependencies \
+        "$kernel_release" "$modules_base" "$headers_base"; then
+        echo "a missing Device Tree tool must fail validation" >&2
+        exit 1
+    fi
+    mv "$fake_bin/fdtput.missing" "$fake_bin/fdtput"
+
+    rm "$modules_base/$kernel_release/build"
+    ln -s "$headers_base/linux-headers-other" "$modules_base/$kernel_release/build"
+    mkdir -p "$headers_base/linux-headers-other"
+    : >"$headers_base/linux-headers-other/Makefile"
+    if validate_rp1_gpclk_build_dependencies \
+        "$kernel_release" "$modules_base" "$headers_base"; then
+        echo "mismatched RP1 kernel headers must fail validation" >&2
+        exit 1
+    fi
+
+    INSTALL_RP1_GPCLK_DKMS=false
+    validate_rp1_gpclk_build_dependencies \
+        missing-kernel "$dependency_fixture/missing-modules" "$dependency_fixture/missing-headers"
+)
+
 if ! awk '
     /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
     in_packages && /^\)/ { exit }
@@ -48,6 +185,16 @@ if ! awk '
     END { exit(found ? 0 : 1) }
 ' "$INSTALLER"; then
     echo "age must remain in install.sh APT_PACKAGES" >&2
+    exit 1
+fi
+
+if ! awk '
+    /validate_support_bundle_age_dependency "\$debug" \|\| return 1/ { age = NR }
+    /validate_rp1_gpclk_build_dependencies "\$debug" \|\| return 1/ { rp1 = NR }
+    /apply_rp1_gpclk_dkms_installation "\$debug" \|\| return 1/ { apply = NR }
+    END { exit(age > 0 && rp1 == age + 1 && apply == rp1 + 1 ? 0 : 1) }
+' "$INSTALLER"; then
+    echo "RP1 dependency validation must run after package handling and before provider apply" >&2
     exit 1
 fi
 
