@@ -1695,8 +1695,8 @@ def recover_and_remove_owned_runtime(
     migration_provider: pathlib.Path | None = None,
 ) -> None:
     # The installed runtime first interprets its own binding. A reviewed
-    # candidate may become authority only for the exact cross-boot retirement
-    # case that an older installed provider cannot represent.
+    # candidate may become authority only for an exact failed-journal recovery
+    # or cross-boot retirement case that an older provider cannot represent.
     provider = RUNTIME_PROVIDER
     require(provider.is_file() and not provider.is_symlink(),
             "runtime provider is missing or substituted")
@@ -1730,6 +1730,28 @@ def recover_and_remove_owned_runtime(
         activation_value = activation_journal.get("value", {})
         if activation_value.get("phase") == "recovered-inhibited":
             validate_inactive_runtime_update_state(inspected, recovered=True)
+        elif (inspected.get("result") == "recovery_required" and
+              activation_value.get("phase") in
+              {"activation-failed", "rollback-failed"}):
+            require(
+                migration_provider is not None
+                and migration_provider.is_file()
+                and not migration_provider.is_symlink(),
+                "installed runtime requires a reviewed recovery provider",
+            )
+            provider = migration_provider
+            inspected = validate_readiness(runtime_call(
+                runner, provider, "inspect", (), {"recovery_required"},
+            ), "recovery_required")
+            candidate_binding = inspected.get("identities", {}).get(
+                "installedBinding", {})
+            require(
+                candidate_binding.get("status") == "valid"
+                and candidate_binding.get("sha256") == binding.get("sha256")
+                and candidate_binding.get("value", {}).get("sourceCommit")
+                    == record.get("sourceCommit"),
+                "recovery provider interpreted a different installed runtime binding",
+            )
         else:
             require(
                 activation_value.get("phase") == "complete-neutral"

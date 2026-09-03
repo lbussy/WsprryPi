@@ -1994,6 +1994,79 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(providers[0], ("inspect", installed))
         self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
 
+    def test_owned_same_boot_failed_activation_uses_reviewed_candidate_recovery(self):
+        installed = self.root / "installed/runtime_provider.py"
+        installed.parent.mkdir(parents=True)
+        installed.write_text("# installed provider without journal recovery\n")
+        candidate = self.root / "source/scripts/runtime_provider.py"
+        candidate.parent.mkdir(parents=True)
+        candidate.write_text("# reviewed candidate provider\n")
+        binding_digest, artifact_digest = "b" * 64, "f" * 64
+        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
+        failed = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "recovery_required", "state": "recovery_required",
+            "routeSelected": False,
+            "identities": {"installedBinding": {"status": "valid",
+                "sha256": binding_digest, "value": {
+                    "sourceCommit": record["sourceCommit"],
+                    "artifactSetSha256": artifact_digest, "files": {}}}},
+            "artifacts": {"/bound": {"status": "exact"}},
+            "journals": {"activation.json": {"status": "present",
+                "value": {"phase": "rollback-failed"}}},
+        }
+        recovery_plan = {"bindingSha256": binding_digest}
+        recovery_digest = digest(MOD.canonical(recovery_plan))
+        recovery = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover-plan",
+            "planSha256": recovery_digest, "plan": recovery_plan}
+        recovered = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-recover", "planSha256": recovery_digest,
+            "response": {"status": "recovered-inhibited"}}
+        removable = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "activation_required", "state": "activation_required",
+            "routeSelected": False,
+            "modules": {"rp1_route_controller": {"status": "absent"},
+                        "rp1_gpclk_dkms": {"status": "absent"}},
+            "endpoints": {"controller": {"status": "absent"},
+                          "consumer": {"status": "absent"}},
+            "managerSocket": {"status": "absent"},
+        }
+        removal_digest = "d" * 64
+        removal = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": removal_digest,
+            "destinations": sorted(MOD.runtime_deployment_destinations())}
+        removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove", "planSha256": removal_digest,
+            "response": {"status": "removed-exact-deployment"}}
+        replies = iter((failed, failed, recovery, recovered, removable,
+                        removal, removed))
+        providers = []
+        def runtime_call(unused_runner, provider_arg, operation,
+                         arguments=(), allowed_results=()):
+            providers.append((operation, provider_arg))
+            return next(replies)
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
+             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+             mock.patch.object(MOD, "load_ownership_record",
+                               return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.recover_and_remove_owned_runtime(
+                self.record, record, identity, FakeRunner(), candidate)
+        self.assertEqual(providers[0], ("inspect", installed))
+        self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
+        self.assertEqual([operation for operation, _ in providers], [
+            "inspect", "inspect", "activation-recover-plan",
+            "activation-recover", "inspect", "remove-plan", "remove",
+        ])
+        self.assertEqual(preserve.call_args_list, [
+            mock.call(record, "before-recovery"),
+            mock.call(record, "after-recovery", clear=True),
+        ])
+
     def test_pre_uninstall_recovered_runtime_removes_without_retirement(self):
         provider = self.root / "installed/runtime_provider.py"
         provider.parent.mkdir(parents=True)
