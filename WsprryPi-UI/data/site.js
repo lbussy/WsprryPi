@@ -1922,6 +1922,9 @@ function populateConfig(callback = null) {
                     if (typeof setTxPin === "function") {
                         setTxPin(tx_pin);
                     }
+                    if (typeof initializeRp1RouteUi === "function") {
+                        initializeRp1RouteUi();
+                    }
                     $("#use_led").prop("checked", use_led).trigger("change");
                     setLEDPin(led_pin);
                     $("#use_shutdown")

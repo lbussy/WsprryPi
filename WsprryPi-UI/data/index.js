@@ -2088,7 +2088,7 @@ function selectedBackendUnavailableMessage() {
 
 function rp1RouteUnavailableMessage() {
     if (!rp1RouteUi || rp1RouteUi.state === "checking") {
-        return "Checking the selected RP1 GPIO route and canonical provider. Transmission remains disabled until readiness is confirmed.";
+        return "RP1 route and provider readiness are unconfirmed. Transmission remains disabled.";
     }
 
     if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
@@ -2209,36 +2209,11 @@ function backendInlineHintMessage() {
 }
 
 function rp1GpioOptionLabel() {
-    if (!rp1RouteUi || rp1RouteUi.state === "checking") {
-        return "GPIO (checking route)";
-    }
-    if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
-        return "GPIO (route status unavailable)";
-    }
-    if (rp1RouteUi.requested === "Unavailable") {
-        return "GPIO (route not active)";
-    }
-    if (rp1RouteUi.active === rp1RouteUi.requested) {
-        return "GPIO (provider unavailable)";
-    }
-    return "GPIO (route change pending)";
+    return "GPIO";
 }
 
 function rp1RouteSelectorHint() {
-    if (!rp1RouteUi || rp1RouteUi.state === "checking") {
-        return "Checking the selected RP1 GPIO route and provider readiness below.";
-    }
-    if (["unavailable", "runtime_unknown"].includes(rp1RouteUi.state)) {
-        return "RP1 route status is unavailable. Review the status below and refresh after the controller reconnects.";
-    }
-    if (rp1RouteUi.requested === "Unavailable") {
-        const draft = rp1RouteUi.routeValue(`GPIO${getTxPin()}`);
-        return `${draft} is selected as the route to apply. Review and apply it below; WsprryPi remains idle.`;
-    }
-    if (rp1RouteUi.active === rp1RouteUi.requested) {
-        return `${rp1RouteUi.requested} is selected and active. Review provider readiness below.`;
-    }
-    return `${rp1RouteUi.requested} is selected. Review and apply the pending route change below, or cancel the draft.`;
+    return "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.";
 }
 
 function formatBackendBannerMessage(reason) {
@@ -2303,6 +2278,8 @@ function updateBackendPlatformSupportUi() {
     const rp1RouteSelectable = rp1GpioRouteSelectable();
     const hiddenRp1Selection = currentBackend === "gpio" &&
         isRp1GpioPlatform() && !rp1GpioOperatorVisible();
+    const rp1StatusOwnedByRoutePanel = currentBackend === "gpio" &&
+        rp1RouteSelectable && !gpioSupported;
 
     if (currentBackend !== resolvedBackend && !hiddenRp1Selection) {
         $backend.val(resolvedBackend);
@@ -2312,12 +2289,16 @@ function updateBackendPlatformSupportUi() {
         currentBackend !== resolvedBackend && !hiddenRp1Selection
             ? formatBackendRecoveryMessage(currentBackend, resolvedBackend)
             : "";
-    const backendWarning = hiddenRp1Selection
+    const backendWarning = rp1StatusOwnedByRoutePanel
+        ? ""
+        : hiddenRp1Selection
         ? gpioPlatformRestrictionMessage()
         : (anyBackendSupported
             ? selectedBackendUnavailableMessage()
             : noBackendAvailableMessage());
-    const inlineHint = hiddenRp1Selection
+    const inlineHint = rp1StatusOwnedByRoutePanel
+        ? ""
+        : hiddenRp1Selection
         ? gpioPlatformRestrictionMessage()
         : (anyBackendSupported
             ? backendInlineHintMessage()
@@ -2587,10 +2568,12 @@ function initializeRp1RouteUi() {
     const panel=document.getElementById("rp1-route-panel");
     const visible=panel && isRp1GpioPlatform() && rp1GpioOperatorVisible();
     if(!panel) return; panel.hidden=!visible; if(!visible) return;
-    rp1RouteUi=new Rp1RouteUiController(window.WSPRRYPI_PATHS?.rp1RoutePath || "/api/rp1-gpclk-route");
-    $("#rp1-route-apply").on("click",()=>rp1RouteUi.applyAndReboot());
-    $("#rp1-route-cancel").on("click",()=>rp1RouteUi.cancel());
-    $("#rp1-route-rollback").on("click",()=>rp1RouteUi.operate("rollback"));
+    if(!rp1RouteUi) {
+        rp1RouteUi=new Rp1RouteUiController(window.WSPRRYPI_PATHS?.rp1RoutePath || "/api/rp1-gpclk-route");
+        $("#rp1-route-apply").on("click",()=>rp1RouteUi.applyAndReboot());
+        $("#rp1-route-cancel").on("click",()=>rp1RouteUi.cancel());
+        $("#rp1-route-rollback").on("click",()=>rp1RouteUi.operate("rollback"));
+    }
     rp1RouteUi.query();
 }
 

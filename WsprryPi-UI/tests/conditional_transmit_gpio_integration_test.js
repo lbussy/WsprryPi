@@ -239,8 +239,8 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
                 pane.classList.toggle("show", selected);
             });
             document.documentElement.style.scrollBehavior = "auto";
-            const routePanel = document.getElementById("rp1-route-panel");
-            window.scrollTo(0, Math.max(0, routePanel.offsetTop - 120));
+            const outputPanel = document.getElementById("transmit_backend").closest("fieldset");
+            window.scrollTo(0, Math.max(0, outputPanel.offsetTop - 100));
         })()`,
     });
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -721,16 +721,23 @@ async function browserTest() {
     equal(field("transmit_backend").value, "gpio",
         "route-neutral Pi 5 RP1 must preserve GPIO for route administration");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO (checking route)",
-        "route-neutral Pi 5 RP1 must show that route status is being checked");
+        "GPIO",
+        "route-neutral Pi 5 RP1 must keep status out of the backend label");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').disabled, false,
         "route-neutral Pi 5 RP1 must keep GPIO selectable for route administration");
     equal(field("rp1-gpio-drive-group").hidden, false,
         "route-neutral Pi 5 RP1 must show its route-bound drive selector");
-    ok(field("backend-selector-hint").textContent.includes("Checking the selected RP1 GPIO route"),
-        "route-neutral Pi 5 RP1 must describe the pending route-state query");
-    ok(field("backendPlatformHint").textContent.includes("Checking the selected RP1 GPIO route"),
-        "route-neutral Pi 5 RP1 must explain that route readiness is being checked");
+    equal(field("backend-selector-hint").textContent,
+        "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.",
+        "route-neutral Pi 5 RP1 must use stable backend guidance");
+    equal(field("backendPlatformHint").hidden, true,
+        "the dedicated RP1 route panel must own route and provider status");
+    equal(field("backendPlatformHint").textContent, "",
+        "the backend platform hint must not duplicate RP1 route status");
+    equal(field("backendStatus").hidden, true,
+        "the backend alert must not duplicate RP1 route status");
+    equal(field("backendStatus").textContent, "",
+        "the hidden backend alert must not retain provisional RP1 copy");
     equal(field("legacy-gpio-power-group").hidden, true,
         "Pi 5 must not substitute the legacy GPIO power control");
     equal(field("gpio-backend-panel").hidden, false,
@@ -763,8 +770,8 @@ async function browserTest() {
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected as the route to apply"),
         "RP1 empty-route warning must acknowledge the visible route draft");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO (route not active)",
-        "RP1 backend label must distinguish a route draft from an active route");
+        "GPIO",
+        "RP1 route state must remain in the dedicated route panel");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_inhibited",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO4",
@@ -774,8 +781,8 @@ async function browserTest() {
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected, but GPIO4 is active"),
         "RP1 warning must describe a selected-versus-active mismatch");
     equal(field("transmit_backend").querySelector('option[value="gpio"]').textContent,
-        "GPIO (route change pending)",
-        "RP1 backend label must describe a selected-versus-active mismatch");
+        "GPIO",
+        "RP1 route mismatch must remain in the dedicated route panel");
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_ready",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO20",
@@ -784,8 +791,9 @@ async function browserTest() {
     updateBackendPlatformSupportUi();
     ok(selectedBackendUnavailableMessage().includes("GPIO20 is selected and active"),
         "RP1 warning must not ask for a route that is already active");
-    ok(field("backend-selector-hint").textContent.includes("GPIO20 is selected and active"),
-        "RP1 selector guidance must acknowledge an already-active selection");
+    equal(field("backend-selector-hint").textContent,
+        "GPIO uses the RP1 GPCLK provider. Route status and administration are shown below.",
+        "RP1 selector guidance must remain stable after status changes");
     field("transmit_backend").value = "si5351";
     field("transmit_backend").dispatchEvent(new Event("change", { bubbles: true }));
     equal(buildConfigPayload().Operation["Transmit Backend"], "si5351",
