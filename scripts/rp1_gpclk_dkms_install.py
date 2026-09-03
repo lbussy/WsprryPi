@@ -3210,6 +3210,7 @@ def validate_runtime_update_retry_conflict(
 
 def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     """Recover exact neutral administration before application replacement."""
+    resolved: Mapping[str, Any] | None = None
     if args.command == "prepare-runtime-update":
         state_dir = secure_state_dir(args.state_dir)
         plan = load_plan(state_dir)

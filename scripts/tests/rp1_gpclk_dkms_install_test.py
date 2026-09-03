@@ -1628,6 +1628,24 @@ class ApplyPolicyTests(unittest.TestCase):
             args.record, record, identity, mock.ANY, mock.ANY
         )
 
+    def test_runtime_removal_removes_already_recovered_runtime(self):
+        args = MOD.parser().parse_args([
+            "prepare-runtime-removal", "--record", str(self.record),
+        ])
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        recovered = self.recovered_runtime_update_inspection()
+        with mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_call", return_value=recovered), \
+             mock.patch.object(
+                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        remove.assert_called_once_with(
+            args.record, record, identity, mock.ANY, None
+        )
+
     def test_runtime_update_retires_prior_boot_route_recovery(self):
         args = self.runtime_update_args()
         record = self.runtime_update_record()
