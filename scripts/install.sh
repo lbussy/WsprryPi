@@ -2751,10 +2751,12 @@ prepare_owned_rp1_gpclk_runtime_removal() {
         chmod 0700 "$helper"
     fi
     local update_args=(prepare-runtime-removal)
+    local failure_output_file="$state_dir/runtime-removal-output.log"
     if [[ "$debug" == "debug" ]]; then
         update_args+=(--debug)
     fi
-    if ! exec_command "Prepare owned RP1 runtime for removal" \
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$failure_output_file" \
+        exec_command "Prepare owned RP1 runtime for removal" \
         python3 "$helper" "${update_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS runtime recovery failed before application teardown."
         rm -rf -- "$state_dir"

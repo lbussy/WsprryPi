@@ -1376,9 +1376,22 @@ class ApplyPolicyTests(unittest.TestCase):
         args = self.runtime_update_args()
         record = self.runtime_update_record()
         identity = mock.Mock(st_dev=1, st_ino=2)
-        for result in ("neutral_ready", "conflict"):
-            with self.subTest(result=result):
-                initial = self.runtime_update_inspection(result)
+        neutral = self.runtime_update_inspection("neutral_ready")
+        pid_drift = self.runtime_update_inspection("conflict")
+        installer_started = copy.deepcopy(pid_drift)
+        installer_journal = installer_started["journals"]["activation.json"]["value"]
+        installer_journal["plan"]["application"]["wasActive"] = False
+        installer_journal["application"] = {
+            "phase": "stopped",
+            "service": {"LoadState": "loaded", "ActiveState": "inactive",
+                        "UnitFileState": "enabled", "MainPID": "0"},
+        }
+        for label, initial in (
+            ("neutral-ready", neutral),
+            ("pid-drift", pid_drift),
+            ("installer-started", installer_started),
+        ):
+            with self.subTest(result=label):
                 planned = self.runtime_recovery_plan(initial)
                 recovered = {
                     "contract": MOD.RUNTIME_READINESS_CONTRACT,
@@ -3356,6 +3369,7 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertIn('EXEC_COMMAND_STATUS_MODE=info', source)
         self.assertGreaterEqual(source.count('args+=(--debug)'), 4)
         self.assertIn('runtime-update-output.log', source)
+        self.assertIn('runtime-removal-output.log', source)
         self.assertIn('activation-output.log', source)
 
     def test_explicit_true_reaches_planner_without_raspberry_pi_identity(self):

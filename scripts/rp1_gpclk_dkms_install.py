@@ -3075,7 +3075,7 @@ def validate_inactive_runtime_update_state(
 def validate_runtime_update_retry_conflict(
     inspected: Mapping[str, Any], journal_value: Mapping[str, Any]
 ) -> None:
-    """Admit only same-boot application PID drift after neutral activation."""
+    """Admit only exact safe service drift after neutral activation."""
     activation_observation = inspected.get("activation", {})
     activation = activation_observation.get("value", {})
     controller_state = activation.get("controllerState")
@@ -3089,6 +3089,7 @@ def validate_runtime_update_retry_conflict(
     manager = inspected.get("manager", {})
     query = manager.get("query", {}) if isinstance(manager, dict) else {}
     manager_state = query.get("state", {}) if isinstance(query, dict) else {}
+    planned_application = plan.get("application", {})
     require(
         activation_observation.get("status") == "observed"
         and journal_value.get("controller") == controller_state
@@ -3097,22 +3098,37 @@ def validate_runtime_update_retry_conflict(
         and plan.get("artifactSetSha256") == activation.get("artifactSetSha256"),
         "runtime update retry conflict lacks matching activation provenance",
     )
-    require(
+    exact_service_shape = (
         isinstance(outcome, dict)
-        and outcome.get("phase") == "restored"
-        and plan.get("application", {}).get("wasActive") is True
+        and isinstance(planned_application, dict)
         and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
         and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
         and prior_service.get("LoadState") == "loaded"
-        and prior_service.get("ActiveState") == "active"
-        and prior_service.get("MainPID", "0") != "0"
         and current_service.get("load") == prior_service.get("LoadState")
-        and current_service.get("active") == prior_service.get("ActiveState")
         and current_service.get("enabled") == prior_service.get("UnitFileState")
         and current_service.get("fragment") == "/etc/systemd/system/wsprrypi.service"
         and current_service.get("MainPID", "0") != "0"
-        and current_service.get("MainPID") != prior_service.get("MainPID"),
-        "runtime update preparation permits only application PID drift",
+    )
+    restored_pid_drift = (
+        exact_service_shape
+        and outcome.get("phase") == "restored"
+        and planned_application.get("wasActive") is True
+        and prior_service.get("ActiveState") == "active"
+        and prior_service.get("MainPID", "0") != "0"
+        and current_service.get("active") == "active"
+        and current_service.get("MainPID") != prior_service.get("MainPID")
+    )
+    installer_started_service = (
+        exact_service_shape
+        and outcome.get("phase") == "stopped"
+        and planned_application.get("wasActive") is False
+        and prior_service.get("ActiveState") == "inactive"
+        and prior_service.get("MainPID") == "0"
+        and current_service.get("active") == "active"
+    )
+    require(
+        restored_pid_drift or installer_started_service,
+        "runtime update preparation permits only exact active-service drift",
     )
     require(
         socket.get("active") == "active"

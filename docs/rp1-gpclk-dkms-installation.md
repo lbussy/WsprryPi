@@ -301,6 +301,9 @@ starts the service idempotently so cached unit conditions cannot suppress the
 restored application. With web
 mode enabled it also
 requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
+A later owned uninstall accepts that exact installer-started service transition
+as recoverable neutral state, while still requiring the bound unit path,
+route-neutral manager state, disabled output, and closed consumer endpoint.
 A systemd start request that returns success but is skipped by a false unit
 condition is an installation failure, so no success banner or configuration
 URLs are printed. `--no-web` installations require only active service state.
