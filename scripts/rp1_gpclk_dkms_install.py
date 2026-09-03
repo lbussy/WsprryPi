@@ -2252,7 +2252,13 @@ def remove_owned_provider(args: argparse.Namespace, runner: Runner) -> None:
         return
     record, identity, reason = load_ownership_record(args.record)
     if record is None or identity is None:
-        print(f"RP1-GPCLK-DKMS preserved: {reason or 'WsprryPi ownership is unproven'}.")
+        try:
+            root = args.root.resolve(strict=True)
+            verify_provider_absent(root, runner)
+        except (OSError, ContractError):
+            print(f"RP1-GPCLK-DKMS preserved: {reason or 'WsprryPi ownership is unproven'}.")
+        else:
+            print("RP1-GPCLK-DKMS absent: no provider removal was required.")
         return
     try:
         root = args.root.resolve(strict=True)

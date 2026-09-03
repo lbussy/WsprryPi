@@ -2608,7 +2608,7 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertIn("Refusing to remove unexpected", cleanup)
         self.assertIn('"prepare_owned_rp1_gpclk_runtime_removal"\n            "remove_owned_rp1_gpclk_dkms_provider"', source)
 
-    def run_uninstall_orchestration(self, failing_step=""):
+    def run_uninstall_orchestration(self, failing_step="", provider_unproven=False):
         install_script = ROOT / "scripts" / "install.sh"
         capture = self.root / f"uninstall-{failing_step or 'success'}.txt"
         shell = r'''
@@ -2631,7 +2631,12 @@ manage_support_bundle_runtime() { record_step manage_support_bundle_runtime; }
 manage_exe() { record_step manage_exe; }
 manage_sound() { record_step manage_sound; }
 prepare_owned_rp1_gpclk_runtime_removal() { record_step prepare_owned_rp1_gpclk_runtime_removal; }
-remove_owned_rp1_gpclk_dkms_provider() { record_step remove_owned_rp1_gpclk_dkms_provider; }
+remove_owned_rp1_gpclk_dkms_provider() {
+    record_step remove_owned_rp1_gpclk_dkms_provider || return $?
+    if [[ "$PROVIDER_UNPROVEN" == "true" ]]; then
+        RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN=true
+    fi
+}
 flag_need_reboot() { record_step flag_need_reboot; }
 eval "$(declare -f finish_script | sed '1s/finish_script/original_finish_script/')"
 finish_script() {
@@ -2650,6 +2655,7 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
             "INSTALL_SCRIPT": str(install_script),
             "CAPTURE": str(capture),
             "FAILING_STEP": failing_step,
+            "PROVIDER_UNPROVEN": "true" if provider_unproven else "false",
         })
         result = subprocess.run(
             ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
@@ -2688,6 +2694,48 @@ printf 'return_status=%s\n' "$status" >>"$CAPTURE"
         self.assertIn("finish_status=0", lines)
         self.assertIn("return_status=0", lines)
         self.assertIn("Uninstallation successful", stdout)
+        self.assertNotIn("RP1-GPCLK-DKMS provider was not removed", stdout)
+
+    def test_successful_uninstall_reports_unproven_provider_preservation(self):
+        lines, stdout = self.run_uninstall_orchestration(provider_unproven=True)
+        self.assertIn("finish_status=0", lines)
+        self.assertIn(
+            "The RP1-GPCLK-DKMS provider was not removed, as I was unable to prove\n"
+            "WsprryPi's secure ownership of the module.",
+            stdout,
+        )
+
+    def test_provider_helper_output_drives_only_unproven_summary_state(self):
+        install_script = ROOT / "scripts" / "install.sh"
+        shell = r'''
+source "$INSTALL_SCRIPT"
+ACTION=uninstall
+DRY_RUN=false
+REMOVE_RP1_GPCLK_DKMS=auto
+exec_command() {
+    printf '%s\n' "$HELPER_OUTPUT" >"$EXEC_COMMAND_FAILURE_OUTPUT_FILE"
+}
+remove_owned_rp1_gpclk_dkms_provider
+printf '%s\n' "$RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN"
+'''
+        outcomes = {
+            "WsprryPi-owned RP1-GPCLK-DKMS provider removed and absence verified.": "false",
+            "RP1-GPCLK-DKMS absent: no provider removal was required.": "false",
+            "RP1-GPCLK-DKMS preserved: WsprryPi ownership is unproven.": "true",
+        }
+        for helper_output, expected in outcomes.items():
+            with self.subTest(helper_output=helper_output):
+                environment = os.environ.copy()
+                environment.update({
+                    "INSTALL_SCRIPT": str(install_script),
+                    "HELPER_OUTPUT": helper_output,
+                })
+                result = subprocess.run(
+                    ["bash", "-c", shell], text=True, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, env=environment, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip().splitlines()[-1], expected)
 
     def test_owned_provider_removal_failure_fails_uninstall(self):
         lines, stdout = self.run_uninstall_orchestration("remove_owned_rp1_gpclk_dkms_provider")
@@ -2763,13 +2811,15 @@ class RemovalPolicyTests(unittest.TestCase):
     def args(self):
         return MOD.parser().parse_args(["remove", "--record", str(self.record), "--root", str(self.root)])
 
-    def test_missing_legacy_malformed_and_symlink_records_preserve_provider(self):
-        runner = FakeRunner()
+    def test_untrusted_records_report_absence_when_no_provider_exists(self):
+        runner = FakeRunner({
+            ("dpkg-query", "-W", "-f=${Status}\n${Version}\n", MOD.PACKAGE_NAME):
+                MOD.CommandResult("", "", 1),
+        })
         stdout = io.StringIO()
         with mock.patch.object(MOD.sys, "stdout", stdout):
             MOD.remove_owned_provider(self.args(), runner)
-        self.assertIn("preserved", stdout.getvalue())
-        self.assertEqual(runner.calls, [])
+        self.assertIn("absent", stdout.getvalue())
 
         for value in (
             {"schema": MOD.LEGACY_RECORD_SCHEMA},
@@ -2780,7 +2830,7 @@ class RemovalPolicyTests(unittest.TestCase):
             stdout = io.StringIO()
             with mock.patch.object(MOD.sys, "stdout", stdout):
                 MOD.remove_owned_provider(self.args(), runner)
-            self.assertIn("preserved", stdout.getvalue())
+            self.assertIn("absent", stdout.getvalue())
             self.assertTrue(self.record.exists())
             self.record.unlink()
 
@@ -2790,8 +2840,17 @@ class RemovalPolicyTests(unittest.TestCase):
         stdout = io.StringIO()
         with mock.patch.object(MOD.sys, "stdout", stdout):
             MOD.remove_owned_provider(self.args(), runner)
-        self.assertIn("preserved", stdout.getvalue())
+        self.assertIn("absent", stdout.getvalue())
         self.assertTrue(target.exists())
+
+    def test_missing_ownership_preserves_an_existing_provider(self):
+        source = self.root / "usr/src/rp1-gpclk-dkms-0.9.0"
+        source.mkdir(parents=True)
+        stdout = io.StringIO()
+        with mock.patch.object(MOD.sys, "stdout", stdout):
+            MOD.remove_owned_provider(self.args(), FakeRunner())
+        self.assertIn("preserved", stdout.getvalue())
+        self.assertTrue(source.exists())
 
     def test_explicit_opt_out_preserves_even_a_valid_owned_provider(self):
         self.write_record(self.release_record())

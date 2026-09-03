@@ -228,6 +228,7 @@ declare RP1_GPCLK_DKMS_SOURCE="${RP1_GPCLK_DKMS_SOURCE:-auto}"
 declare REMOVE_RP1_GPCLK_DKMS="${REMOVE_RP1_GPCLK_DKMS:-auto}"
 declare RP1_GPCLK_DKMS_STATE_DIR=""
 declare RP1_GPCLK_DKMS_HELPER=""
+declare RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -2659,6 +2660,7 @@ remove_owned_rp1_gpclk_dkms_provider() {
             ;;
     esac
     if [[ "$REMOVE_RP1_GPCLK_DKMS" == "false" ]]; then
+        RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
         logI "RP1-GPCLK-DKMS preserved by explicit operator opt-out."
         debug_end "$debug"
         return 0
@@ -2693,14 +2695,36 @@ remove_owned_rp1_gpclk_dkms_provider() {
     fi
 
     local remove_args=(remove --remove "$REMOVE_RP1_GPCLK_DKMS")
+    local removal_output_file=""
     if [[ "$debug" == "debug" ]]; then
         remove_args+=(--debug)
     fi
-    if ! exec_command "Check owned RP1 provider" \
-        python3 "$RP1_GPCLK_DKMS_HELPER" "${remove_args[@]}" "$debug"; then
+    if [[ "$DRY_RUN" != "true" ]]; then
+        removal_output_file="$RP1_GPCLK_DKMS_STATE_DIR/provider-removal-output.log"
+    fi
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$removal_output_file" \
+        exec_command "Check owned RP1 provider" \
+            python3 "$RP1_GPCLK_DKMS_HELPER" "${remove_args[@]}" "$debug"; then
         warn "RP1-GPCLK-DKMS owned-provider removal failed; the ownership record was retained for recovery."
         cleanup_rp1_gpclk_dkms_state
         return 1
+    fi
+    if [[ "$DRY_RUN" != "true" ]]; then
+        if grep -Fq "RP1-GPCLK-DKMS preserved:" "$removal_output_file"; then
+            RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="true"
+        elif grep -Fq \
+            "WsprryPi-owned RP1-GPCLK-DKMS provider removed and absence verified." \
+            "$removal_output_file"; then
+            RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
+        elif grep -Fq \
+            "RP1-GPCLK-DKMS absent: no provider removal was required." \
+            "$removal_output_file"; then
+            RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
+        else
+            warn "RP1-GPCLK-DKMS removal helper did not report a recognized outcome."
+            cleanup_rp1_gpclk_dkms_state
+            return 1
+        fi
     fi
     cleanup_rp1_gpclk_dkms_state
     debug_end "$debug"
@@ -8718,8 +8742,11 @@ finish_script() {
         fi
     elif [[ "$ACTION" == "uninstall" && "$overall_status" -eq 0 ]]; then
         printf "\n%s has been uninstalled. Shared apt packages were retained.\n" "$REPO_TITLE"
-        printf "An unchanged RP1-GPCLK-DKMS provider is removed only when\n"
-        printf "WsprryPi's secure ownership record proves it installed that provider.\n\n"
+        if [[ "$RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN" == "true" ]]; then
+            printf "The RP1-GPCLK-DKMS provider was not removed, as I was unable to prove\n"
+            printf "WsprryPi's secure ownership of the module.\n"
+        fi
+        printf "\n"
         if [[ "${REBOOT:-false}" == "true" ]]; then
             printf "Remember to reboot to re-enable your soundcard.\n\n"
         fi
