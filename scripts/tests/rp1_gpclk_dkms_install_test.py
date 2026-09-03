@@ -1650,7 +1650,7 @@ class ApplyPolicyTests(unittest.TestCase):
              mock.patch.object(MOD, "replace_owned_record") as replace:
             MOD.resume_interrupted_runtime_removal(
                 self.record, record, identity,
-                {"checkout": str(source)}, runner,
+                {"checkout": {"path": str(source)}}, runner,
             )
         self.assertEqual(unchanged.call_count, 2)
         replacement = copy.deepcopy(record)
@@ -1659,6 +1659,27 @@ class ApplyPolicyTests(unittest.TestCase):
         replace.assert_called_once_with(
             self.record, record, identity, replacement
         )
+
+    def test_runtime_update_dispatches_missing_provider_removal_recovery(self):
+        args = self.runtime_update_args()
+        plan = json.loads((self.state / "plan.json").read_text())
+        plan["resolved"]["checkout"] = {"path": str(self.root / "source")}
+        MOD.atomic_json(self.state / "plan.json", plan)
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        missing_provider = self.root / "installed/runtime_provider.py"
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
+             mock.patch.object(
+                MOD, "load_ownership_record",
+                return_value=(record, identity, None)), \
+             mock.patch.object(
+                MOD, "resume_interrupted_runtime_removal") as resume, \
+             mock.patch.object(MOD, "runtime_call") as runtime_calls:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        resume.assert_called_once_with(
+            args.record, record, identity, plan["resolved"], mock.ANY
+        )
+        runtime_calls.assert_not_called()
 
     def test_selected_route_recovery_rejects_nonquiescent_state(self):
         args = self.runtime_update_args()

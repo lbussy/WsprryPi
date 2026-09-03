@@ -2948,7 +2948,10 @@ def resume_interrupted_runtime_removal(
 ) -> None:
     """Recover a digest-bound removal barrier after its provider was removed."""
     runtime = validate_runtime_ownership(record.get("runtime"), record)
-    source = revalidate_checkout(pathlib.Path(resolved["checkout"]), runner)
+    checkout = resolved.get("checkout")
+    require(isinstance(checkout, dict),
+            "interrupted runtime removal lacks pinned source identity")
+    source = revalidate_checkout(checkout, runner)
     deployment = source / "scripts/runtime_deployment.py"
     require(
         not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink()
@@ -3169,7 +3172,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         return
     if (args.command == "prepare-runtime-update"
             and not RUNTIME_PROVIDER.exists()
-            and isinstance(resolved.get("checkout"), str)):
+            and isinstance(resolved.get("checkout"), dict)):
         resume_interrupted_runtime_removal(
             args.record, record, record_identity, resolved, runner
         )
