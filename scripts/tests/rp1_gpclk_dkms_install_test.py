@@ -1596,6 +1596,72 @@ class ApplyPolicyTests(unittest.TestCase):
             args.record, record, identity, mock.ANY
         )
 
+    def test_interrupted_runtime_removal_recovers_recorded_pending_plan(self):
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        source = self.root / "provider-source"
+        scripts = source / "scripts"
+        scripts.mkdir(parents=True)
+        provider = scripts / "runtime_provider.py"
+        deployment = scripts / "runtime_deployment.py"
+        provider.write_text("# exact provider fixture\n")
+        deployment.write_text("# exact deployment fixture\n")
+        missing_provider = self.root / "installed/runtime_provider.py"
+        destinations = {
+            path: {"before": None, "after": "a" * 64}
+            for path in MOD.runtime_deployment_destinations()
+        }
+        planned = {
+            "planSha256": record["runtime"]["deploymentPlanSha256"],
+            "destinations": destinations,
+            "applicationRemainsInhibited": True,
+        }
+        runner = FakeRunner({
+            ("python3", str(deployment), "recover"):
+                MOD.CommandResult(json.dumps(planned), "", 0),
+            ("python3", str(deployment), "recover", "--plan-sha256",
+             record["runtime"]["deploymentPlanSha256"]):
+                MOD.CommandResult(
+                    "Files deployed/recovered; application remains masked. No module activated.\n",
+                    "", 0),
+        })
+        initial = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "recovery_required", "state": "recovery_required",
+            "routeSelected": False,
+            "modules": {name: {"status": "absent"} for name in
+                        (MOD.MODULE_NAME, MOD.CONTROLLER_MODULE_NAME)},
+            "endpoints": {name: {"status": "absent", "open": False}
+                          for name in ("consumer", "controller")},
+        }
+        final = copy.deepcopy(initial)
+        final.update({
+            "result": "absent", "state": "absent",
+            "identities": {"installedBinding": {"status": "absent"}},
+        })
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
+             mock.patch.object(
+                MOD, "revalidate_checkout", return_value=source), \
+             mock.patch.object(
+                MOD, "runtime_call", side_effect=[initial, final]) as calls, \
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
+             mock.patch.object(MOD, "replace_owned_record") as replace:
+            MOD.resume_interrupted_runtime_removal(
+                self.record, record, identity,
+                {"checkout": str(source)}, runner,
+            )
+        self.assertEqual(
+            [call.args[2] for call in calls.call_args_list],
+            ["inspect", "inspect"],
+        )
+        self.assertEqual(unchanged.call_count, 2)
+        replacement = copy.deepcopy(record)
+        replacement["schema"] = MOD.RECORD_SCHEMA
+        replacement.pop("runtime")
+        replace.assert_called_once_with(
+            self.record, record, identity, replacement
+        )
+
     def test_selected_route_recovery_rejects_nonquiescent_state(self):
         args = self.runtime_update_args()
         record = self.runtime_update_record()

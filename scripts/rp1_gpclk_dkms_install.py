@@ -2939,6 +2939,93 @@ def remove_owned_runtime_for_fresh_activation(
     )
 
 
+def resume_interrupted_runtime_removal(
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    resolved: Mapping[str, Any],
+    runner: Runner,
+) -> None:
+    """Recover a digest-bound removal barrier after its provider was removed."""
+    runtime = validate_runtime_ownership(record.get("runtime"), record)
+    source = revalidate_checkout(pathlib.Path(resolved["checkout"]), runner)
+    provider = source / "scripts/runtime_provider.py"
+    deployment = source / "scripts/runtime_deployment.py"
+    require(
+        not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink()
+        and provider.is_file() and not provider.is_symlink()
+        and deployment.is_file() and not deployment.is_symlink(),
+        "interrupted runtime removal lacks exact source recovery tools",
+    )
+    inspected = validate_readiness(runtime_call(
+        runner, provider, "inspect", (), {"absent", "recovery_required"}
+    ))
+    require(
+        inspected.get("result") in {"absent", "recovery_required"}
+        and not inspected.get("routeSelected")
+        and all(value.get("status") == "absent"
+                for value in inspected.get("modules", {}).values())
+        and all(value.get("status") == "absent"
+                for value in inspected.get("endpoints", {}).values()),
+        "interrupted runtime removal is not inactive and attributable",
+    )
+    if inspected.get("result") == "recovery_required":
+        planned_result = runner.run(
+            ["python3", str(deployment), "recover"], check=False
+        )
+        planned = json_result(planned_result, "runtime deployment recovery plan")
+        destinations = planned.get("destinations")
+        require(
+            planned_result.returncode == 0
+            and set(planned) == {
+                "planSha256", "destinations", "applicationRemainsInhibited"
+            }
+            and planned.get("planSha256") == runtime["deploymentPlanSha256"]
+            and planned.get("applicationRemainsInhibited") is True
+            and isinstance(destinations, dict)
+            and set(destinations) == runtime_deployment_destinations()
+            and all(isinstance(value, dict)
+                    and set(value) == {"before", "after"}
+                    and all(item is None or
+                            (isinstance(item, str) and SHA256.fullmatch(item))
+                            for item in value.values())
+                    for value in destinations.values()),
+            "runtime deployment recovery plan differs from recorded ownership",
+        )
+        require_unchanged_ownership(
+            record_path, record, record_identity,
+            "interrupted runtime deployment recovery",
+        )
+        recovered = runner.run(
+            ["python3", str(deployment), "recover", "--plan-sha256",
+             runtime["deploymentPlanSha256"]],
+            check=False,
+        )
+        require(
+            recovered.returncode == 0,
+            "runtime deployment recovery execution failed",
+        )
+        require_unchanged_ownership(
+            record_path, record, record_identity,
+            "post-recovery runtime inspection",
+        )
+        inspected = validate_readiness(runtime_call(
+            runner, provider, "inspect", (), {"absent"}
+        ), "absent")
+    require(
+        inspected.get("result") == "absent"
+        and inspected.get("identities", {}).get("installedBinding", {}).get("status")
+            == "absent",
+        "recovered runtime removal did not reach exact absence",
+    )
+    replacement = copy.deepcopy(record)
+    replacement["schema"] = RECORD_SCHEMA
+    replacement.pop("runtime", None)
+    replace_owned_record(
+        record_path, record, record_identity, replacement
+    )
+
+
 def validate_inactive_runtime_update_state(
     inspected: Mapping[str, Any], *, recovered: bool
 ) -> None:
@@ -3082,6 +3169,14 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
             return
     if record.get("schema") != RUNTIME_RECORD_SCHEMA:
         print("No existing neutral runtime administration requires update preparation.")
+        return
+    if (args.command == "prepare-runtime-update"
+            and not RUNTIME_PROVIDER.exists()
+            and isinstance(resolved.get("checkout"), str)):
+        resume_interrupted_runtime_removal(
+            args.record, record, record_identity, resolved, runner
+        )
+        print("RP1-GPCLK-DKMS interrupted runtime removal recovered for fresh application activation.")
         return
 
     inspected = validate_readiness(runtime_call(
