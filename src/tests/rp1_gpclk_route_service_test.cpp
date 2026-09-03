@@ -549,6 +549,9 @@ int main() {
       {"boot","current-boot"}, {"binding",std::string(64,'a')}};
   auto restored = runtime_service.query();
   assert(restored.at("state") == "runtime_ready" && restored.at("reconciled") == true);
+  assert(restored.at("message") ==
+         "GPIO20 is active and Wsprry Pi is back online in idle mode. "
+         "This does not start or authorize transmission.");
   runtime["state"]["controller"]["flags"] = 7;
   assert(runtime_service.query().at("state") == "runtime_recovery");
   runtime["state"]["controller"] = ctl;

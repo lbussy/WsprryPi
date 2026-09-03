@@ -773,17 +773,17 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                                 <div><dt>Persisted</dt><dd id="rp1-route-persisted">—</dd></div>
                                                 <div><dt>Configured</dt><dd id="rp1-route-configured">—</dd></div>
                                                 <div><dt>Active</dt><dd id="rp1-route-active">—</dd></div>
-                                                <div><dt>Module reported</dt><dd id="rp1-route-module">—</dd></div>
+                                                <div id="rp1-route-module-fact"><dt>Module reported</dt><dd id="rp1-route-module">—</dd></div>
                                                 <div><dt>Reconciled</dt><dd id="rp1-route-reconciled">No</dd></div>
                                                 <div><dt>Boot ownership</dt><dd id="rp1-route-boot-ownership">—</dd></div>
                                                 <div><dt>Pending transaction</dt><dd id="rp1-route-pending">Unknown</dd></div>
                                                 <div><dt>Fixed services</dt><dd id="rp1-route-services">Not reported</dd></div>
-                                                <div><dt>Endpoint</dt><dd id="rp1-route-endpoint">Not inspected</dd></div>
-                                                <div><dt>Output inhibited</dt><dd id="rp1-route-output-inhibited">Unknown</dd></div>
-                                                <div><dt>Operational readiness</dt><dd id="rp1-route-operational-ready">Unknown</dd></div>
-                                                <div><dt>Development policy</dt><dd id="rp1-development-policy">Disabled</dd></div>
-                                                <div><dt>Operation lifecycle</dt><dd id="rp1-operation-lifecycle">No active lease or generation</dd></div>
-                                                <div><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
+                                                <div id="rp1-route-endpoint-fact"><dt>Endpoint</dt><dd id="rp1-route-endpoint">Not inspected</dd></div>
+                                                <div id="rp1-route-output-inhibited-fact"><dt>Output inhibited</dt><dd id="rp1-route-output-inhibited">Unknown</dd></div>
+                                                <div id="rp1-route-operational-ready-fact"><dt>Operational readiness</dt><dd id="rp1-route-operational-ready">Unknown</dd></div>
+                                                <div id="rp1-development-policy-fact"><dt>Development policy</dt><dd id="rp1-development-policy">Disabled</dd></div>
+                                                <div id="rp1-operation-lifecycle-fact"><dt>Operation lifecycle</dt><dd id="rp1-operation-lifecycle">No active lease or generation</dd></div>
+                                                <div id="rp1-route-eligible-fact"><dt>Product qualification</dt><dd id="rp1-route-eligible">Unqualified</dd></div>
                                             </dl>
                                         </section>
                                     </div>

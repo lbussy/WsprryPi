@@ -39,7 +39,12 @@ readiness is acknowledged only after startup reconciliation, loop setup and
 binding the HTTP listener when enabled; a
 systemd start request alone is not success. The UI distinguishes restoration in
 progress, successful completion, route recovery, and application restoration
-failure. Completed records describe the last transaction, not future uptime.
+failure. Successful completion is labeled **Route selected** and names the
+active GPIO while explicitly retaining idle mode. Runtime administration does
+not display development-provider fields that its response cannot substantiate;
+those absent fields are not evidence that the selected route failed. Completed
+records describe the last transaction, not future uptime or transmission
+authorization.
 
 `runtime_route_client.py restore --execute` retries incomplete application
 restoration on the installed route without repeating overlay removal/application.

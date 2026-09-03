@@ -2424,7 +2424,7 @@ function clickTransmitPin() {
 
 const RP1_ROUTE_STATES = Object.freeze({
     runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
-    runtime_ready: ["Route ready", "Route switching is complete. Transmission was not resumed."],
+    runtime_ready: ["Route selected", "The selected route is active and Wsprry Pi is online in idle mode. This does not start or authorize transmission."],
     runtime_switch_queued: ["Route switch queued", "Wsprry Pi will disconnect briefly. Refresh after it reconnects to confirm the route. Transmission remains disabled."],
     runtime_recovery_queued: ["Route recovery queued", "Wsprry Pi will stop and remain inhibited. Use the operator client to confirm recovery. Transmission remains disabled."],
     runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
@@ -2489,6 +2489,13 @@ class Rp1RouteUiController {
         $("#rp1-route-configured").text(this.routeValue(data.configured));
         $("#rp1-route-active").text(this.active);
         $("#rp1-route-module").text(this.routeValue(data.moduleRoute));
+        for (const id of ["rp1-route-module-fact", "rp1-route-endpoint-fact",
+            "rp1-route-output-inhibited-fact", "rp1-route-operational-ready-fact",
+            "rp1-development-policy-fact", "rp1-operation-lifecycle-fact",
+            "rp1-route-eligible-fact"]) {
+            const fact=document.getElementById(id);
+            if(fact) fact.hidden=this.runtimeProfile;
+        }
         $("#rp1-route-reconciled").text(data.reconciled===true ? "Yes" : "No");
         $("#rp1-route-boot-ownership").text(data.bootOwnership || "Unknown");
         $("#rp1-route-pending").text(data.journal || "Unknown");

@@ -94,7 +94,11 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  await controller.operate("rollback");
  assert.equal(requests.length,1,"cancelled recovery has no effect");
  controller.render({profile:"runtime",ok:true,state:"runtime_ready",persisted:"GPIO20",active:"GPIO20"});
- assert.equal(element("rp1-route-state").textContent,"Route ready");
+ assert.equal(element("rp1-route-state").textContent,"Route selected");
+ for(const id of ["rp1-route-module-fact","rp1-route-endpoint-fact",
+  "rp1-route-output-inhibited-fact","rp1-route-operational-ready-fact",
+  "rp1-development-policy-fact","rp1-operation-lifecycle-fact","rp1-route-eligible-fact"])
+  assert.equal(element(id).hidden,true,`${id} must not show unavailable provider facts in runtime administration`);
  controller.render({profile:"runtime",ok:false,state:"runtime_restoration_failed",persisted:"GPIO20",active:"GPIO4"});
  assert.equal(element("rp1-route-apply").disabled,true,"restoration failure cannot launch another switch");
  assert.match(element("rp1-route-feedback").textContent,/restore --execute/);

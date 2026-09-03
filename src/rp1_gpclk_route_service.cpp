@@ -424,7 +424,9 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
         result["reconciled"] = true;
         result["journal"] = "none";
         result["message"] = phase == "restored"
-            ? "Last route switch restored Wsprry Pi in idle mode. Transmission was not resumed."
+            ? field(result, "active") +
+                  " is active and Wsprry Pi is back online in idle mode. "
+                  "This does not start or authorize transmission."
             : phase == "stopped" ? "Route switched; Wsprry Pi remains stopped as requested by its prior state."
             : "Route switched; the administrator's service mask is preserved.";
       } else if (phase == "restored" || phase == "stopped" || phase == "administrator-masked") {
