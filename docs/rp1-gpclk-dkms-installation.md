@@ -146,22 +146,29 @@ foreign installation or publish v3 readiness before final neutral proof.
 If a later exact development source is selected, the installer first reviews
 the ownership record and retained rollback paths, permissions, and hashes, but
 does not require ordinary DKMS inventory while the bound runtime deployment is
-still present. The installed, ownership-bound runtime provider interprets and
-removes its own binding; the newly selected immutable source is not permitted
-to interpret predecessor state. The installed provider reviews its binding and
-every bound artifact against WsprryPi ownership. A retained
+still present. The installed, ownership-bound runtime provider first interprets
+its own binding and every bound artifact against WsprryPi ownership. Ordinarily
+it also performs recovery and removal. When a clean reboot has left a coherent
+terminal prior-boot journal set that the older installed provider cannot retire,
+the newly selected immutable provider may perform only its reviewed,
+digest-bound retirement and deployment inverse against that already validated
+binding. A retained
 neutral-activation journal, including `activation-failed`, is copied
 byte-for-byte into the WsprryPi-owned upstream evidence directory before it is
 handled through a digest-reviewed recovery transaction. A terminal
 `complete-neutral` journal from a prior boot may instead be archived and
-retired through the installed provider's reviewed
-`activation-retire-plan`/`activation-retire` pair when the route, modules,
-endpoints, manager socket and transactions are all absent. Only then does the
-installed provider review and execute its binding's fixed deployment inverse.
+retired through the reviewed `activation-retire-plan`/`activation-retire` pair
+when the route, modules, endpoints and manager socket are absent. The retirement
+plan binds any coherent terminal route, manager and application journals from
+that prior boot and removes them in retry-safe dependency order before removing
+the activation journal. Only then does the selected provider review and execute
+the predecessor binding's fixed deployment inverse.
 With runtime residue gone, the installer performs the complete
 ordinary provider/DKMS inventory check, revalidates the rollback authority,
 runs the recorded provider rollback, and installs the new exact source. The
-new candidate executable is not predecessor migration authority.
+new candidate executable has no route, activation, adoption, or general
+predecessor-migration authority beyond that exact inactive retirement/removal
+case.
 The same migration applies to v2 partial-runtime and v3 ownership. A loaded
 consumer is admitted only when exact WsprryPi ownership and runtime residue
 lead to the installed provider's digest-reviewed recovery and removal path for

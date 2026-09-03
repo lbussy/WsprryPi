@@ -1692,10 +1692,11 @@ def recover_and_remove_owned_runtime(
     record: Mapping[str, Any],
     record_identity: os.stat_result,
     runner: Runner,
+    migration_provider: pathlib.Path | None = None,
 ) -> None:
-    # An existing runtime must interpret and remove its own binding.  Candidate
-    # source may have a newer binding schema and is not cleanup authority for
-    # the installed, ownership-bound deployment.
+    # The installed runtime first interprets its own binding. A reviewed
+    # candidate may become authority only for the exact cross-boot retirement
+    # case that an older installed provider cannot represent.
     provider = RUNTIME_PROVIDER
     require(provider.is_file() and not provider.is_symlink(),
             "runtime provider is missing or substituted")
@@ -1724,7 +1725,7 @@ def recover_and_remove_owned_runtime(
         "installed runtime artifacts differ from the owned binding",
     )
     activation_journal = inspected.get("journals", {}).get("activation.json", {})
-    if (inspected.get("result") == "activation_required"
+    if (inspected.get("result") in {"activation_required", "recovery_required"}
             and activation_journal.get("status") == "present"):
         activation_value = activation_journal.get("value", {})
         if activation_value.get("phase") == "recovered-inhibited":
@@ -1735,6 +1736,26 @@ def recover_and_remove_owned_runtime(
                 and inspected.get("reboot", {}).get("occurred") is True,
                 "inactive runtime activation journal is neither recovered nor attributable to a prior boot",
             )
+            if inspected.get("result") == "recovery_required":
+                require(
+                    migration_provider is not None
+                    and migration_provider.is_file()
+                    and not migration_provider.is_symlink(),
+                    "installed runtime requires a reviewed cross-boot migration provider",
+                )
+                provider = migration_provider
+                inspected = validate_readiness(runtime_call(
+                    runner, provider, "inspect", (), {"recovery_required"},
+                ), "recovery_required")
+                candidate_binding = inspected.get("identities", {}).get(
+                    "installedBinding", {})
+                require(
+                    candidate_binding.get("status") == "valid"
+                    and candidate_binding.get("sha256") == binding.get("sha256")
+                    and candidate_binding.get("value", {}).get("sourceCommit")
+                        == record.get("sourceCommit"),
+                    "migration provider interpreted a different installed runtime binding",
+                )
             retirement = runtime_call(runner, provider, "activation-retire-plan")
             require(
                 retirement.get("contract") == RUNTIME_READINESS_CONTRACT
@@ -1752,6 +1773,17 @@ def recover_and_remove_owned_runtime(
                     == binding_value.get("artifactSetSha256"),
                 "post-reboot activation retirement plan lacks owned identities",
             )
+            transaction_digests = retirement_plan.get("transactionJournalSha256")
+            if retirement_plan.get("version") == 2:
+                require(
+                    isinstance(transaction_digests, dict)
+                    and set(transaction_digests)
+                        == {"transaction.json", "manager.json", "application.json"}
+                    and all(value is None or
+                            (isinstance(value, str) and SHA256.fullmatch(value))
+                            for value in transaction_digests.values()),
+                    "post-reboot activation retirement plan lacks fixed transaction identities",
+                )
             preserve_owned_activation_journal(record, "before-retirement")
             require_unchanged_ownership(
                 record_path, record, record_identity,
@@ -1941,7 +1973,8 @@ def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner:
                     existing_record, pathlib.Path("/")
                 )
                 recover_and_remove_owned_runtime(
-                    record, existing_record, record_identity, runner
+                    record, existing_record, record_identity, runner,
+                    source / "scripts/runtime_provider.py",
                 )
                 verified_entrypoint, verified_rollback = validate_development_removal(
                     existing_record, pathlib.Path("/"), runner

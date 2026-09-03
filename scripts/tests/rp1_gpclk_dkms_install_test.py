@@ -1791,12 +1791,16 @@ class ApplyPolicyTests(unittest.TestCase):
         artifact_digest = "f" * 64
         journal_digest = "a" * 64
         retirement_plan = {
-            "version": 1, "operation": "retire-post-reboot-activation",
+            "version": 2, "operation": "retire-post-reboot-activation",
             "bindingSha256": binding_digest,
             "artifactSetSha256": artifact_digest,
             "bootId": "00000000-0000-0000-0000-000000000002",
             "lastDeploymentSha256": "1" * 64,
             "activationJournalSha256": journal_digest,
+            "transactionJournalSha256": {
+                "transaction.json": None, "manager.json": None,
+                "application.json": None,
+            },
         }
         retirement_digest = digest(MOD.canonical(retirement_plan))
         removal_digest = "d" * 64
@@ -1864,6 +1868,77 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(operations, ["inspect", "activation-retire-plan",
             "preserve", "activation-retire", "inspect", "remove-plan", "remove"])
         preserve.assert_called_once_with(record, "before-retirement")
+
+    def test_owned_cross_boot_route_journals_use_reviewed_candidate_retirement(self):
+        installed = self.root / "installed/runtime_provider.py"
+        installed.parent.mkdir(parents=True)
+        installed.write_text("# installed provider without journal retirement\n")
+        candidate = self.root / "source/scripts/runtime_provider.py"
+        candidate.parent.mkdir(parents=True)
+        candidate.write_text("# reviewed candidate provider\n")
+        binding_digest, artifact_digest = "b" * 64, "f" * 64
+        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
+        base = {
+            "contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "result": "recovery_required", "state": "recovery_required",
+            "routeSelected": False,
+            "identities": {"installedBinding": {"status": "valid",
+                "sha256": binding_digest, "value": {
+                    "sourceCommit": record["sourceCommit"],
+                    "artifactSetSha256": artifact_digest, "files": {}}}},
+            "artifacts": {"/bound": {"status": "exact"}},
+            "journals": {"activation.json": {"status": "present",
+                "value": {"phase": "complete-neutral"}}},
+            "modules": {"rp1_route_controller": {"status": "absent"},
+                        "rp1_gpclk_dkms": {"status": "absent"}},
+            "endpoints": {"controller": {"status": "absent"},
+                          "consumer": {"status": "absent"}},
+            "managerSocket": {"status": "absent"},
+            "reboot": {"occurred": True, "required": False},
+        }
+        plan = {"version": 2, "operation": "retire-post-reboot-activation",
+            "bindingSha256": binding_digest, "artifactSetSha256": artifact_digest,
+            "bootId": "00000000-0000-0000-0000-000000000002",
+            "lastDeploymentSha256": "1" * 64,
+            "activationJournalSha256": "a" * 64,
+            "transactionJournalSha256": {
+                "transaction.json": "2" * 64, "manager.json": "3" * 64,
+                "application.json": "4" * 64}}
+        plan_digest = digest(MOD.canonical(plan))
+        retirement = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-retire-plan", "planSha256": plan_digest,
+            "plan": plan}
+        retired = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "activation-retire", "planSha256": plan_digest,
+            "response": {"status": "retired-post-reboot-activation",
+                         "activationJournalSha256": "a" * 64}}
+        removable = dict(base)
+        removable.update(result="activation_required", state="activation_required")
+        removable["journals"] = {"activation.json": {"status": "absent"}}
+        removal_digest = "d" * 64
+        removal = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove-plan", "planSha256": removal_digest,
+            "destinations": sorted(MOD.runtime_deployment_destinations())}
+        removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+            "operation": "remove", "planSha256": removal_digest,
+            "response": {"status": "removed-exact-deployment"}}
+        replies = iter((base, base, retirement, retired, removable, removal, removed))
+        providers = []
+        def runtime_call(unused_runner, provider_arg, operation,
+                         arguments=(), allowed_results=()):
+            providers.append((operation, provider_arg))
+            return next(replies)
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
+             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
+             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+             mock.patch.object(MOD, "load_ownership_record",
+                               return_value=(record, identity, None)), \
+             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
+            MOD.recover_and_remove_owned_runtime(
+                self.record, record, identity, FakeRunner(), candidate)
+        self.assertEqual(providers[0], ("inspect", installed))
+        self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
 
     def test_pre_uninstall_recovered_runtime_removes_without_retirement(self):
         provider = self.root / "installed/runtime_provider.py"
