@@ -220,6 +220,13 @@ operation. The recovered route must report the same binding, null active and
 configured routes, disabled output, and application inhibition before the
 installer continues with neutral recovery.
 
+If that recovery exposes exact terminal activation evidence from a prior boot,
+the installer reviews and retires the prior activation and route journals,
+removes the exact runtime deployment through its reviewed removal plan, and
+retains provider-only ownership. The later activation stage then performs a
+fresh inhibited deployment instead of attempting to reuse unchanged files
+without a current inhibition transaction.
+
 The neutral-recovery stage accepts a current `neutral_ready` result, an already
 `recovered-inhibited` retry, a valid post-reboot activation-required state, an
 exactly journaled same-boot route recovery that left a neutral nonzero-generation

@@ -36,7 +36,10 @@ verification, package mutation, or application files and services are changed.
 The exact provider is subsequently verified and neutral administration is
 freshly activated after the updated application is in place. A different
 selected provider source bypasses this same-source step and remains subject to
-its predecessor-owned migration workflow.
+its predecessor-owned migration workflow. If route recovery crosses a boot
+boundary, exact prior-boot journals are retired and the runtime deployment is
+removed before the fresh activation so unchanged files cannot bypass the
+required inhibition transaction.
 On a system not positively identified as Pi 5/CM5, automatic selection skips
 the helper and all RP1/DKMS planning, apply, recovery, and activation status
 lines. An explicit `INSTALL_RP1_GPCLK_DKMS=true` still reaches the helper's

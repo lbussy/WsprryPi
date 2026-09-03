@@ -1557,7 +1557,10 @@ class ApplyPolicyTests(unittest.TestCase):
                 side_effect=[prior, retirement, retired, final]) as calls, \
              mock.patch.object(
                 MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
+             mock.patch.object(
+                MOD, "recover_and_remove_owned_runtime") as remove_runtime, \
+             mock.patch.object(MOD, "replace_owned_record") as replace_record:
             MOD.prepare_runtime_update(args, FakeRunner())
         self.assertEqual(
             [call.args[2] for call in calls.call_args_list],
@@ -1565,6 +1568,15 @@ class ApplyPolicyTests(unittest.TestCase):
         )
         preserve.assert_called_once_with(record, "before-retirement")
         self.assertEqual(unchanged.call_count, 2)
+        remove_runtime.assert_called_once_with(
+            args.record, record, identity, mock.ANY
+        )
+        replacement = copy.deepcopy(record)
+        replacement["schema"] = MOD.RECORD_SCHEMA
+        replacement.pop("runtime")
+        replace_record.assert_called_once_with(
+            args.record, record, identity, replacement
+        )
 
     def test_selected_route_recovery_rejects_nonquiescent_state(self):
         args = self.runtime_update_args()

@@ -3088,7 +3088,16 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         retire_prior_boot_activation_for_update(
             args.record, record, record_identity, inspected, runner
         )
-        print("RP1-GPCLK-DKMS prior-boot runtime evidence retired for application update.")
+        recover_and_remove_owned_runtime(
+            args.record, record, record_identity, runner
+        )
+        replacement = copy.deepcopy(record)
+        replacement["schema"] = RECORD_SCHEMA
+        replacement.pop("runtime", None)
+        replace_owned_record(
+            args.record, record, record_identity, replacement
+        )
+        print("RP1-GPCLK-DKMS prior-boot runtime retired and removed for fresh application activation.")
         return
 
     if result == "activation_required":
