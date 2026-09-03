@@ -5165,10 +5165,16 @@ int main(int argc, char *argv[])
                 neutral_rp1_public_config["Platform"]
                   ["RP1 GPIO Operator Visible"].get<bool>(),
             "route-neutral Pi 5 must expose administration without claiming transmission readiness");
-        require(
+        const std::string neutral_gpio_error =
             neutral_rp1_public_config["Platform"]
-                ["GPIO Clock Transmission Error"].get<std::string>()
-                .find("route selection is required") != std::string::npos,
+                ["GPIO Clock Transmission Error"].get<std::string>();
+        require(
+            neutral_gpio_error.find(
+                "canonical RP1 GPCLK provider is unavailable") !=
+                    std::string::npos &&
+                neutral_gpio_error.find(
+                    "Review the RP1 clock route status below") !=
+                    std::string::npos,
             "route-neutral Pi 5 must report the explicit next operator action");
         std::string neutral_backend_error;
         require(
