@@ -160,8 +160,9 @@ handled through a digest-reviewed recovery transaction. A terminal
 retired through the reviewed `activation-retire-plan`/`activation-retire` pair
 when the route, modules, endpoints and manager socket are absent. The retirement
 plan binds any coherent terminal route, manager and application journals from
-that prior boot and removes them in retry-safe dependency order before removing
-the activation journal. Only then does the selected provider review and execute
+that prior boot plus its exact application-owned idle override. It removes the
+override while ownership is still proven, then removes journals in retry-safe
+dependency order before removing the activation journal. Only then does the selected provider review and execute
 the predecessor binding's fixed deployment inverse.
 With runtime residue gone, the installer performs the complete
 ordinary provider/DKMS inventory check, revalidates the rollback authority,

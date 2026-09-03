@@ -1797,6 +1797,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "bootId": "00000000-0000-0000-0000-000000000002",
             "lastDeploymentSha256": "1" * 64,
             "activationJournalSha256": journal_digest,
+            "applicationIdleSha256": None,
             "transactionJournalSha256": {
                 "transaction.json": None, "manager.json": None,
                 "application.json": None,
@@ -1901,6 +1902,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "bootId": "00000000-0000-0000-0000-000000000002",
             "lastDeploymentSha256": "1" * 64,
             "activationJournalSha256": "a" * 64,
+            "applicationIdleSha256": "5" * 64,
             "transactionJournalSha256": {
                 "transaction.json": "2" * 64, "manager.json": "3" * 64,
                 "application.json": "4" * 64}}

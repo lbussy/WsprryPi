@@ -1775,6 +1775,7 @@ def recover_and_remove_owned_runtime(
             )
             transaction_digests = retirement_plan.get("transactionJournalSha256")
             if retirement_plan.get("version") == 2:
+                idle_digest = retirement_plan.get("applicationIdleSha256")
                 require(
                     isinstance(transaction_digests, dict)
                     and set(transaction_digests)
@@ -1783,6 +1784,11 @@ def recover_and_remove_owned_runtime(
                             (isinstance(value, str) and SHA256.fullmatch(value))
                             for value in transaction_digests.values()),
                     "post-reboot activation retirement plan lacks fixed transaction identities",
+                )
+                require(
+                    idle_digest is None or
+                    (isinstance(idle_digest, str) and SHA256.fullmatch(idle_digest)),
+                    "post-reboot activation retirement plan has an invalid idle-override identity",
                 )
             preserve_owned_activation_journal(record, "before-retirement")
             require_unchanged_ownership(
