@@ -1202,6 +1202,96 @@ class ApplyPolicyTests(unittest.TestCase):
             },
         }
 
+    def test_runtime_call_reports_provider_failure_detail(self):
+        provider = self.root / "runtime_provider.py"
+        response = {
+            "result": "conflict",
+            "error": {"detail": "application restoration verification failed"},
+            "conflicts": ["application-not-neutral"],
+            "remediation": ["inspect wsprrypi.service"],
+        }
+        runner = FakeRunner({
+            ("python3", str(provider), "remove"):
+                MOD.CommandResult(json.dumps(response), "", 12),
+        })
+        with self.assertRaisesRegex(
+                MOD.RuntimeOperationError,
+                "application restoration verification failed.*"
+                "application-not-neutral.*inspect wsprrypi.service") as caught:
+            MOD.runtime_call(runner, provider, "remove")
+        self.assertEqual(caught.exception.operation, "remove")
+        self.assertEqual(caught.exception.value, response)
+
+    def test_runtime_removal_self_deletion_resumes_in_same_transaction(self):
+        record = self.runtime_update_record()
+        MOD.atomic_json(self.record, record)
+        identity = self.record.stat()
+        provider = self.root / "runtime_provider.py"
+        provider.write_text(
+            "import json, pathlib\n"
+            "pathlib.Path(__file__).unlink()\n"
+            "print(json.dumps({'result': 'conflict', 'error': "
+            "{'detail': 'post-removal publication failed'}}))\n"
+            "raise SystemExit(12)\n"
+        )
+        resolved = {"checkout": {"path": str(self.root / "source")}}
+        runner = MOD.Runner()
+
+        def remove_then_fail(*unused):
+            MOD.runtime_call(runner, provider, "remove")
+
+        def publish_provider_only(path, value, value_identity, unused_resolved,
+                                  unused_runner):
+            replacement = copy.deepcopy(value)
+            replacement["schema"] = MOD.RECORD_SCHEMA
+            replacement.pop("runtime", None)
+            MOD.replace_owned_record(path, value, value_identity, replacement)
+
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(
+                 MOD, "recover_and_remove_owned_runtime",
+                 side_effect=remove_then_fail), \
+             mock.patch.object(
+                 MOD, "load_ownership_record",
+                 return_value=(record, identity, None)), \
+             mock.patch.object(
+                 MOD, "resume_interrupted_runtime_removal",
+                 side_effect=publish_provider_only) as resume:
+            MOD.remove_owned_runtime_for_fresh_activation(
+                self.record, record, identity, runner, resolved
+            )
+
+        self.assertFalse(provider.exists())
+        resumed = json.loads(self.record.read_text())
+        self.assertEqual(resumed["schema"], MOD.RECORD_SCHEMA)
+        self.assertNotIn("runtime", resumed)
+        resume.assert_called_once_with(
+            self.record, record, identity, resolved, runner
+        )
+
+    def test_runtime_removal_failure_with_provider_present_stays_fail_closed(self):
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        provider = self.root / "runtime_provider.py"
+        provider.write_text("# provider remains installed\n")
+        failure = MOD.RuntimeOperationError(
+            "remove", {"result": "conflict"},
+            MOD.CommandResult("", "", 12),
+            "RP1 runtime remove failed with conflict",
+        )
+        resolved = {"checkout": {"path": str(self.root / "source")}}
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(
+                 MOD, "recover_and_remove_owned_runtime",
+                 side_effect=failure), \
+             mock.patch.object(
+                 MOD, "resume_interrupted_runtime_removal") as resume:
+            with self.assertRaises(MOD.RuntimeOperationError):
+                MOD.remove_owned_runtime_for_fresh_activation(
+                    self.record, record, identity, FakeRunner(), resolved
+                )
+        resume.assert_not_called()
+
     def runtime_update_inspection(self, result="neutral_ready"):
         controller_state = {
             "session": 42, "generation": 0, "id": 0, "error": 0,
@@ -1419,7 +1509,7 @@ class ApplyPolicyTests(unittest.TestCase):
                 preserve.assert_called_once_with(record, "before-application-update")
                 self.assertEqual(unchanged.call_count, 2)
                 remove.assert_called_once_with(
-                    args.record, record, identity, mock.ANY
+                    args.record, record, identity, mock.ANY, mock.ANY
                 )
 
     def test_runtime_update_recovers_exact_same_boot_route_recovery(self):
@@ -1450,7 +1540,7 @@ class ApplyPolicyTests(unittest.TestCase):
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
         remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY
+            args.record, record, identity, mock.ANY, mock.ANY
         )
 
     def test_repeat_install_recovers_selected_route_before_provider_apply(self):
@@ -1519,7 +1609,7 @@ class ApplyPolicyTests(unittest.TestCase):
         )
         self.assertEqual(unchanged.call_count, 4)
         remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY
+            args.record, record, identity, mock.ANY, mock.ANY
         )
 
     def test_runtime_update_removes_already_recovered_runtime_before_restart(self):
@@ -1535,7 +1625,7 @@ class ApplyPolicyTests(unittest.TestCase):
                  MOD, "remove_owned_runtime_for_fresh_activation") as remove:
             MOD.prepare_runtime_update(args, FakeRunner())
         remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY
+            args.record, record, identity, mock.ANY, mock.ANY
         )
 
     def test_runtime_update_retires_prior_boot_route_recovery(self):
@@ -1637,7 +1727,7 @@ class ApplyPolicyTests(unittest.TestCase):
                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
             MOD.prepare_runtime_update(args, FakeRunner())
         remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY
+            args.record, record, identity, mock.ANY, mock.ANY
         )
 
     def test_interrupted_runtime_removal_recovers_recorded_pending_plan(self):
@@ -1816,7 +1906,7 @@ class ApplyPolicyTests(unittest.TestCase):
                          ["inspect", "activation-recover-plan",
                           "activation-recover", "inspect"])
         remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY
+            args.record, record, identity, mock.ANY, mock.ANY
         )
 
     def test_runtime_update_skips_fresh_state_and_removes_inactive_runtime(self):
@@ -1853,7 +1943,7 @@ class ApplyPolicyTests(unittest.TestCase):
                 MOD.prepare_runtime_update(args, FakeRunner())
             calls.assert_called_once()
             remove.assert_called_once_with(
-                args.record, record, identity, mock.ANY
+                args.record, record, identity, mock.ANY, mock.ANY
             )
 
     def test_runtime_update_refuses_unsafe_state_before_recovery(self):

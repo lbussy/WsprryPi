@@ -226,9 +226,13 @@ removes the exact runtime deployment through its reviewed removal plan, and
 retains provider-only ownership. The later activation stage then performs a
 fresh inhibited deployment instead of attempting to reuse unchanged files
 without a current inhibition transaction. If runtime removal is interrupted
-after the installed provider is removed, the next installation accepts only
-the pending plan whose digest matches recorded runtime ownership, recovers it
-with the exact pinned source helper, and resumes from provider-only ownership.
+after the installed provider is removed, the same installation immediately
+accepts only the pending plan whose digest matches recorded runtime ownership,
+recovers it with the exact pinned source helper, and resumes from provider-only
+ownership. A later retry uses the same recovery contract if the process itself
+was interrupted before that publication. Structured provider failures expose
+their returned error detail, conflict identifiers, and remediation in the
+installer's bounded failure diagnostic.
 
 The neutral-recovery stage accepts a current `neutral_ready` result, an already
 `recovered-inhibited` retry, a valid post-reboot activation-required state, an
@@ -271,8 +275,12 @@ The bundle must be self-contained for these pre-deployment calls: its bootstrap
 set includes the route client imported by the provider and activation tools.
 The route-manager socket and service units are digest-bound deployment payloads,
 not assumed host prerequisites; the installed WsprryPi route companion and the
-DKMS-owned module pair are external bound prerequisites. A stock `Transmit Backend = gpio` configuration is
-valid for neutral inspection and is not rewritten during installation.
+DKMS-owned module pair are external bound prerequisites. A stock
+`Transmit Backend = gpio` configuration or an operator-selected
+`Transmit Backend = si5351` configuration is valid for neutral inspection and
+is not rewritten during installation. Only an explicit GPIO route selection
+changes the backend to `rp1-gpclk`, selects its saved pin, and forces
+transmission off.
 
 Only after that proof is the provider record upgraded to v3 with the readiness
 contract, binding and artifact-set digests, source commit,

@@ -64,8 +64,8 @@ def configuration(data, require_runtime_backend=False):
     if parser.defaults():
         raise ValueError('inherited configuration is not supported')
     backend = parser.get('Operation', 'Transmit Backend').lower()
-    if backend not in ('gpio', 'rp1-gpclk'):
-        raise ValueError('installed configuration must select a GPIO clock backend')
+    if backend not in ('gpio', 'rp1-gpclk', 'si5351'):
+        raise ValueError('installed configuration selects an unsupported transmit backend')
     if require_runtime_backend and backend != 'rp1-gpclk':
         raise ValueError('route configuration did not select rp1-gpclk')
     if parser.get('Operation', 'Mode').upper() not in ('WSPR', 'QRSS', 'FSKCW', 'DFCW'):

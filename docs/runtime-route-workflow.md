@@ -72,6 +72,10 @@ The application installer and `scripts/copy_exe.py` install
 newly bound DKMS runtime bundle reporting `applicationRestoration: true`.
 The companion supports the canonical `/usr/local/bin/wsprrypi -J -i
 /usr/local/etc/wsprrypi.ini` service command, optionally with `--no-web`.
+Route-neutral inspection accepts either the GPIO family or Si5351 as the saved
+transmit backend without rewriting it. A later explicit GPIO route selection
+atomically changes the backend to `rp1-gpclk`, applies the selected pin, and
+forces transmission off before the service can start.
 It refuses missing services, unsupported command overrides, alternate config
 paths or old binaries before stopping the application. Administrator-owned
 units using that command are preserved. An old service mask from a previous

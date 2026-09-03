@@ -36,7 +36,12 @@ verification, package mutation, or application files and services are changed.
 That exact inactive runtime deployment is removed through its reviewed removal
 plan while application inhibition is retained. The exact provider is
 subsequently verified and neutral administration is freshly activated after
-the updated application is in place. A different
+the updated application is in place. If the removal process deletes the
+installed provider before returning a structured failure, the same installer
+invocation enters the digest-bound interrupted-removal recovery path; it does
+not leave a repeat invocation to publish provider-only ownership. Structured
+provider failures retain their error detail, conflicts, and remediation in the
+bounded installer diagnostic. A different
 selected provider source bypasses this same-source step and remains subject to
 its predecessor-owned migration workflow. If route recovery crosses a boot
 boundary, exact prior-boot journals are retired and the runtime deployment is

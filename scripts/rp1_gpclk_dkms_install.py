@@ -174,6 +174,22 @@ class CommandResult:
     returncode: int
 
 
+class RuntimeOperationError(ContractError):
+    """Structured failure returned by the RP1 runtime provider."""
+
+    def __init__(
+        self,
+        operation: str,
+        value: Mapping[str, Any],
+        result: CommandResult,
+        message: str,
+    ) -> None:
+        super().__init__(message)
+        self.operation = operation
+        self.value = dict(value)
+        self.result = result
+
+
 class Runner:
     def __init__(self, debug: bool = False):
         self.debug = debug
@@ -2628,7 +2644,25 @@ def runtime_call(
     value = json_result(result, operation)
     if result.returncode != 0:
         classification = value.get("result")
-        require(classification in set(allowed_results), f"RP1 runtime {operation} failed with {classification or 'unknown state'}")
+        if classification not in set(allowed_results):
+            details = []
+            error = value.get("error")
+            if isinstance(error, dict) and isinstance(error.get("detail"), str):
+                details.append(error["detail"])
+            conflicts = value.get("conflicts")
+            if (isinstance(conflicts, list) and conflicts
+                    and all(isinstance(item, str) for item in conflicts)):
+                details.append("conflicts: " + ", ".join(conflicts))
+            remediation = value.get("remediation")
+            if (isinstance(remediation, list) and remediation
+                    and all(isinstance(item, str) for item in remediation)):
+                details.append("remediation: " + ", ".join(remediation))
+            detail = f" ({'; '.join(details)})" if details else ""
+            raise RuntimeOperationError(
+                operation, value, result,
+                f"RP1 runtime {operation} failed with "
+                f"{classification or 'unknown state'}{detail}",
+            )
     return value
 
 
@@ -2926,11 +2960,28 @@ def remove_owned_runtime_for_fresh_activation(
     record: Mapping[str, Any],
     record_identity: os.stat_result,
     runner: Runner,
+    resolved: Mapping[str, Any] | None = None,
 ) -> None:
     """Remove exact inactive runtime files and retain provider-only ownership."""
-    recover_and_remove_owned_runtime(
-        record_path, record, record_identity, runner
-    )
+    try:
+        recover_and_remove_owned_runtime(
+            record_path, record, record_identity, runner
+        )
+    except RuntimeOperationError as error:
+        # Removal restores the predeployment files before the provider can
+        # publish its response. If a later cleanup or response step fails, the
+        # provider may already be absent. Resume the existing digest-bound
+        # interrupted-removal workflow immediately instead of requiring a
+        # second installer invocation.
+        checkout = resolved.get("checkout") if isinstance(resolved, Mapping) else None
+        if (error.operation != "remove"
+                or RUNTIME_PROVIDER.exists() or RUNTIME_PROVIDER.is_symlink()
+                or not isinstance(checkout, dict)):
+            raise
+        resume_interrupted_runtime_removal(
+            record_path, record, record_identity, resolved, runner
+        )
+        return
     replacement = copy.deepcopy(record)
     replacement["schema"] = RECORD_SCHEMA
     replacement.pop("runtime", None)
@@ -3218,7 +3269,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
             args.record, record, record_identity, inspected, runner
         )
         remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner
+            args.record, record, record_identity, runner, resolved
         )
         print("RP1-GPCLK-DKMS prior-boot runtime retired and removed for fresh application activation.")
         return
@@ -3229,7 +3280,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
                     for value in inspected.get("modules", {}).values())):
         validate_inactive_runtime_update_state(inspected, recovered=False)
         remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner
+            args.record, record, record_identity, runner, resolved
         )
         print("RP1-GPCLK-DKMS retired runtime removal resumed for fresh application activation.")
         return
@@ -3245,7 +3296,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
                 "owned runtime is inactive without recoverable update or post-reboot evidence")
         validate_inactive_runtime_update_state(inspected, recovered=recovered)
         remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner
+            args.record, record, record_identity, runner, resolved
         )
         print("RP1-GPCLK-DKMS inactive runtime removed for fresh application activation.")
         return
@@ -3363,7 +3414,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     validate_runtime_update_identity(record, final)
     validate_inactive_runtime_update_state(final, recovered=True)
     remove_owned_runtime_for_fresh_activation(
-        args.record, record, record_identity, runner
+        args.record, record, record_identity, runner, resolved
     )
     print("RP1-GPCLK-DKMS neutral runtime recovered and removed for fresh application activation.")
 
