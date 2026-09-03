@@ -1243,7 +1243,7 @@ legend {
 .rp1-route-state[data-state="active"], .rp1-route-state[data-state="output_inhibited_validated"] { color: var(--wspr-state-success); }
 .rp1-route-state[data-state="checking"], .rp1-route-state[data-state="applying"], .rp1-route-state[data-state="rollback"] { color: rgb(var(--wspr-accent-rgb)); }
 .rp1-route-state[data-state="reboot_required"], .rp1-route-state[data-state="staged"], .rp1-route-state[data-state="compatible_unqualified"] { color: var(--wspr-state-warning); }
-.rp1-route-state[data-state="mismatch"], .rp1-route-state[data-state="unavailable"], .rp1-route-state[data-state="rollback_required"] { color: var(--wspr-state-danger); }
+.rp1-route-state[data-state="mismatch"], .rp1-route-state[data-state="unavailable"], .rp1-route-state[data-state="rollback_required"], .rp1-route-state[data-state="runtime_preflight_failed"] { color: var(--wspr-state-danger); }
 .rp1-route-identities { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; margin: 1rem 0; }
 .rp1-route-identities > div { min-width: 0; }
 .rp1-route-identities dt { font-family: var(--font-display); font-size: var(--text-kicker); letter-spacing: var(--tracking-kicker); text-transform: uppercase; }

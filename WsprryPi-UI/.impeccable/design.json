@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-20T18:50:08Z",
+  "generatedAt": "2026-09-03T12:28:02Z",
   "title": "Design System: Wsprry Pi Console",
   "extensions": {
     "colorMeta": {
       "transmitter-slate": { "role": "primary", "displayName": "Transmitter Slate", "canonical": "#405e7a", "tonalRamp": ["#18232e", "#273a4b", "#405e7a", "#6b8096", "#92a3b4", "#b8c4cf", "#dae1e7", "#f1f4f7"] },
       "transmitter-slate-dark": { "role": "primary", "displayName": "Low-Light Transmitter Slate", "canonical": "#344a60", "tonalRamp": ["#15202a", "#233240", "#344a60", "#5f7387", "#8999a8", "#afb9c3", "#d3d9df", "#eff2f4"] },
-      "zephyr-primary": { "role": "primary", "displayName": "Zephyr Action Blue", "canonical": "#3459e6", "tonalRamp": ["#101b45", "#172968", "#20398f", "#3459e6", "#718cf0", "#a5b5f6", "#d6defa", "#f0f3fd"] },
+      "zephyr-primary": { "role": "primary", "displayName": "Zephyr Action Blue", "canonical": "#3459e6", "tonalRamp": ["#101b45", "#172968", "#2a47b8", "#3459e6", "#718cf0", "#a5b5f6", "#d6defa", "#f0f3fd"] },
       "slate-muted": { "role": "secondary", "displayName": "Slate Muted", "canonical": "#6b8096", "tonalRamp": ["#1c252e", "#303f4d", "#4b6073", "#6b8096", "#91a1b1", "#b5c0ca", "#d8dee4", "#f2f4f6"] },
       "state-success": { "role": "tertiary", "displayName": "Signal Success", "canonical": "#5f8f74", "tonalRamp": ["#173024", "#28503b", "#3d7155", "#5f8f74", "#87ad99", "#adc9ba", "#d4e4dc", "#f0f6f3"] },
       "state-warning": { "role": "tertiary", "displayName": "Signal Warning", "canonical": "#b79256", "tonalRamp": ["#382b19", "#5b4628", "#83663b", "#b79256", "#ceb17f", "#dfcaa8", "#eee2d0", "#faf5ed"] },
@@ -88,6 +88,7 @@
     "rules": [
       { "name": "The State Color Rule", "body": "State colors are operational vocabulary, never decoration.", "section": "colors" },
       { "name": "The Slate Shell Rule", "body": "The shell owns transmitter slate. Interior panels stay neutral and use restrained tonal mixing only for grouping or state.", "section": "colors" },
+      { "name": "The Accessible State Badge Rule", "body": "Warning and danger on slate use signal text over a state-tinted slate badge, not raw semantic foreground text.", "section": "colors" },
       { "name": "The Label Discipline Rule", "body": "Uppercase Barlow labels are scan anchors, not body copy, help text, or button prose.", "section": "typography" },
       { "name": "The One-Shell Rule", "body": "Keep one dominant page card; use spacing, borders, and tonal panels for interior hierarchy.", "section": "layout" },
       { "name": "The Responsive Truth Rule", "body": "Mobile may stack or scroll, but it must preserve every operational distinction and behavior.", "section": "layout" },

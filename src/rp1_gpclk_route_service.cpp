@@ -513,26 +513,52 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       const auto binding = field(plan, "bindingSha256");
       const auto safety = raw.value("safety", nlohmann::json::object());
       const auto classification = raw.value("result", std::string{});
+      const bool operational_ready_reported =
+          safety.contains("operationalReady") &&
+          safety["operationalReady"].is_boolean();
+      const bool operational_ready =
+          operational_ready_reported && safety["operationalReady"].get<bool>();
+      const bool already_ready_reported =
+          plan.contains("alreadyReady") && plan["alreadyReady"].is_boolean();
+      const bool already_ready =
+          already_ready_reported && plan["alreadyReady"].get<bool>();
       const bool eligibility =
           (classification == "neutral_ready" &&
            !raw.value("routeSelected", true) &&
-           !raw.value("executionReady", true)) ||
+           !raw.value("executionReady", true) &&
+           already_ready_reported && !already_ready) ||
           (classification == "exact_ready" &&
            raw.value("routeSelected", false) &&
-           raw.value("executionReady", false));
-      const bool valid = raw.value("contract", std::string{}) ==
-                             "rp1-gpclk-runtime-readiness-v1" &&
-                         raw.value("state", std::string{}) == classification &&
+           raw.value("executionReady", false) &&
+           already_ready_reported && already_ready);
+      const bool readiness_consistent =
+          operational_ready_reported &&
+          ((classification == "neutral_ready" && !operational_ready) ||
+           (classification == "exact_ready" && operational_ready));
+      const bool contract_matches =
+          raw.value("contract", std::string{}) ==
+          "rp1-gpclk-runtime-readiness-v1";
+      const bool state_matches =
+          raw.value("state", std::string{}) == classification;
+      const bool neutral_idle_evidence =
+          contract_matches && state_matches &&
+          classification == "neutral_ready" && eligibility &&
+          raw.value("administrationEligible", false) &&
+          safety.value("outputInhibited", true) == false &&
+          safety.value("owner", true) == false &&
+          safety.value("lease", true) == false &&
+          field(plan, "operation") == "select" &&
+          field(plan, "route") == executor_route;
+      const bool valid = contract_matches &&
+                         state_matches &&
                          eligibility &&
                          raw.value("administrationEligible", false) &&
                          safety.value("outputInhibited", true) == false &&
-                         safety.value("operationalReady", false) == true &&
+                         readiness_consistent &&
                          safety.value("owner", true) == false &&
                          safety.value("lease", true) == false &&
                          field(plan, "operation") == "select" &&
                          field(plan, "route") == executor_route &&
-                         plan.contains("alreadyReady") &&
-                         plan["alreadyReady"].is_boolean() &&
                          binding.size() == 64 &&
                          binding
                                  .find_first_not_of("0123456789abcdef") ==
@@ -540,11 +566,21 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                          digest.size() == 64 &&
                          digest.find_first_not_of("0123456789abcdef") ==
                              std::string::npos;
+      const auto invalid_message = neutral_idle_evidence
+          ? "Route not switched. The provider route plan was rejected before any change began. Transmission remains disabled."
+          : "Route not switched. The provider route plan could not be validated. Current route state is unknown; refresh before further administration. Transmission remains disabled.";
       auto result = failure(
           valid ? "route_plan_reviewed" : "route_plan_failed",
-          valid ? "Digest-bound route plan reviewed. Transmission remains disabled until explicit apply."
-                : "The runtime provider did not return an exact administration-only route plan.");
+          valid ? "Route plan reviewed. No route change has started. Transmission remains disabled until you confirm the switch."
+                : invalid_message);
       result["ok"] = valid;
+      result["state"] = valid ? "runtime_preflight_ready"
+                              : neutral_idle_evidence
+                                    ? "runtime_preflight_failed"
+                                    : "runtime_unknown";
+      result["changeStarted"] = false;
+      if (valid || neutral_idle_evidence)
+        result["recoveryRequired"] = false;
       result["preflightValidated"] = valid;
       result["requested"] = route;
       if (valid) {

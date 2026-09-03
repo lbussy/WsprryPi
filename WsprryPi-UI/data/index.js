@@ -2427,6 +2427,8 @@ const RP1_ROUTE_STATES = Object.freeze({
     runtime_ready: ["Route ready", "Route switching is complete. Transmission was not resumed."],
     runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. Refresh status shortly."],
     runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
+    runtime_preflight_ready: ["Route plan ready", "No route change has started. Transmission remains disabled until you confirm the switch."],
+    runtime_preflight_failed: ["Route not switched", "The route plan was rejected before any change began. Transmission remains disabled."],
     runtime_recovery: ["Recovery required", "Inspect the controller error and ownership before explicit cleanup recovery."],
     runtime_unknown: ["Reconnecting", "Wsprry Pi disconnected during route administration. Refresh this page after it restarts; if it remains unavailable, run runtime_route_client.py query. Do not repeat the switch."],
     checking: ["Checking", "Checking the external provider and active route…"],
@@ -2542,14 +2544,29 @@ class Rp1RouteUiController {
                 headers:{"Content-Type":"application/json",Accept:"application/json"},
                 body:JSON.stringify({operation:"preflight",route:requested,generation:this.generation})});
             const preflight=await preflightResponse.json();
-            if(!preflightResponse.ok || preflight.ok!==true){this.inFlight=false;this.render(preflight);return;}
+            if(!preflightResponse.ok || preflight.ok!==true){
+                this.inFlight=false;
+                if(preflight.state==="runtime_preflight_failed" &&
+                    preflight.changeStarted===false && preflight.recoveryRequired===false) {
+                    this.setState("runtime_preflight_failed",
+                        typeof preflight.message==="string" ? preflight.message : "");
+                } else {
+                    this.render(preflight);
+                }
+                return;
+            }
             this.generation=preflight.generation;
             const confirmed=window.confirm(this.runtimeProfile
                 ? `Switch to ${requested} and keep WsprryPi idle? A running Wsprry Pi will restart in idle mode. This browser may disconnect; refresh after it reconnects. Transmission will not resume. No reboot is requested.`
                 :
                 `Apply ${requested} and reboot? The package executor will stop only wsprrypi.service and soapyremote-server.service before changing its owned boot block.`
             );
-            if(!confirmed){this.inFlight=false;this.render(preflight);return;}
+            if(!confirmed){
+                this.inFlight=false;
+                this.setState("runtime_inhibited",
+                    "Route switch canceled. No changes were made. Transmission remains disabled.");
+                return;
+            }
             if(this.runtimeProfile) { await this.operate("switch"); return; }
             this.setState("applying");
             const applyResponse=await this.request(this.endpoint,{method:"POST",

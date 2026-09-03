@@ -11,6 +11,8 @@ assert.match(view,/>Check route</); assert.match(view,/>Cancel</);
 assert.match(view,/role="status" aria-live="polite" aria-atomic="true"/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
+for(const state of ["runtime_preflight_ready","runtime_preflight_failed"])
+ assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
 assert.match(script,/body:JSON\.stringify\(\{operation, route:requested, generation:this\.generation\}\)/);
 assert.match(script,/operation:"preflight"[\s\S]*operation:"apply-and-reboot"/);
 assert.match(script,/if \(rp1RouteUi && rp1RouteUi\.visible\(\)\)[\s\S]*return;[\s\S]*scheduleAutosave\(\)/);
@@ -34,6 +36,7 @@ assert.match(script,/window\.confirm/);
 assert.match(script,/wsprrypi\.service and soapyremote-server\.service/);
 assert.match(header,/'rp1RoutePath' => \$basePath \. '\/api\/rp1-gpclk-route'/);
 assert.match(styles,/@media \(max-width: 575\.98px\)[\s\S]*\.rp1-route-actions > \.btn/);
+assert.match(styles,/runtime_preflight_failed[^}]*--wspr-state-danger/);
 console.log("rp1_route_ui_test passed");
 
 // Execute the real controller without a browser or external dependencies.
@@ -58,9 +61,27 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  assert.equal(element("rp1-route-apply").textContent,"Switch route (stay idle)");
  let confirmations=0,requests=[];
  context.window.confirm=()=>{confirmations++;return true};
- controller.request=async()=>({ok:true,json:async()=>({ok:false,profile:"runtime",state:"runtime_recovery"})});
+ controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));return {
+  ok:false,json:async()=>({ok:false,profile:"runtime",state:"runtime_preflight_failed",
+   message:"Route not switched. The provider route plan was rejected before any change began. Transmission remains disabled.",
+   changeStarted:false,recoveryRequired:false})};};
  await controller.applyAndReboot();
  assert.equal(confirmations,0,"failed preflight cannot request confirmation");
+ assert.deepEqual(requests,[{operation:"preflight",route:"GPIO20",generation:0}],
+  "failed preflight cannot send a switch request");
+ assert.equal(element("rp1-route-state").textContent,"Route not switched");
+ assert.equal(element("rp1-route-active").textContent,"GPIO4",
+  "failed preflight preserves the last confirmed route facts");
+ assert.equal(element("rp1-route-rollback").hidden,true,
+  "failed preflight does not expose transaction recovery");
+ controller.request=async()=>({ok:false,json:async()=>({ok:false,profile:"runtime",
+  state:"runtime_recovery",message:"Existing transaction requires recovery."})});
+ await controller.applyAndReboot();
+ assert.equal(element("rp1-route-state").textContent,"Recovery required",
+  "preflight handling preserves independently reported recovery evidence");
+ assert.equal(element("rp1-route-rollback").hidden,false,
+  "reported recovery evidence keeps explicit recovery available");
+ requests=[];
  controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));throw Error("disconnected")};
  await controller.operate("switch");
  assert.equal(requests.length,1,"no automatic effect retries");

@@ -124,6 +124,10 @@ int main() {
   int persisted_write = 0;
   bool inhibited = false;
   bool corrupt_runtime_ensure_digest = false;
+  std::string runtime_plan_classification = "neutral_ready";
+  bool runtime_plan_operational_ready = false;
+  bool runtime_plan_operational_ready_reported = true;
+  bool runtime_plan_already_ready_matches = true;
   std::vector<std::string> runtime_plans;
   std::vector<std::pair<std::string, std::string>> runtime_ensures;
 
@@ -142,17 +146,22 @@ int main() {
        [&](bool value, const std::string &) { inhibited = value; },
        [&](const std::string &route) {
          runtime_plans.push_back(route);
+         nlohmann::json safety = {{"outputInhibited", false},
+                                  {"owner", false}, {"lease", false}};
+         if (runtime_plan_operational_ready_reported)
+           safety["operationalReady"] = runtime_plan_operational_ready;
+         const bool exact = runtime_plan_classification == "exact_ready";
          return nlohmann::json{
              {"contract", "rp1-gpclk-runtime-readiness-v1"},
-             {"result", "neutral_ready"}, {"state", "neutral_ready"},
+             {"result", runtime_plan_classification},
+             {"state", runtime_plan_classification},
              {"administrationEligible", true},
-             {"executionReady", false},
-             {"routeSelected", false},
-             {"safety", {{"outputInhibited", false},
-                         {"operationalReady", true},
-                         {"owner", false}, {"lease", false}}},
+             {"executionReady", exact},
+             {"routeSelected", exact},
+             {"safety", safety},
              {"routePlan", {{"operation", "select"}, {"route", route},
-                            {"alreadyReady", false},
+                            {"alreadyReady", runtime_plan_already_ready_matches
+                                                 ? exact : !exact},
                             {"bindingSha256", std::string(64, 'a')},
                             {"planSha256", std::string(64, 'b')}}}};
        },
@@ -422,20 +431,58 @@ int main() {
   assert(inhibited);
   auto runtime_preflight = service.operate("preflight", "GPIO20", 0);
   assert(runtime_preflight.at("ok") == true);
-  const auto runtime_generation = runtime_preflight.at("generation").get<std::uint64_t>();
-  assert(runtime_plans == std::vector<std::string>{"gpio20"});
+  assert(runtime_preflight.at("state") == "runtime_preflight_ready");
+  assert(runtime_preflight.at("changeStarted") == false);
+  assert(runtime_preflight.at("recoveryRequired") == false);
+  assert(runtime_plans.back() == "gpio20");
   assert(runtime_preflight.at("planSha256") == std::string(64, 'b'));
-  assert(service.operate("switch", "GPIO20", runtime_generation + 1).at("ok") == false);
-  assert(service.operate("apply-and-reboot", "GPIO20", runtime_generation).at("ok") == false);
+  const auto initial_runtime_generation =
+      runtime_preflight.at("generation").get<std::uint64_t>();
+  runtime_plan_operational_ready = true;
+  auto contradictory_neutral = service.operate("preflight", "GPIO20", 0);
+  assert(contradictory_neutral.at("ok") == false);
+  assert(contradictory_neutral.at("state") == "runtime_preflight_failed");
+  assert(contradictory_neutral.at("changeStarted") == false);
+  assert(contradictory_neutral.at("recoveryRequired") == false);
+  assert(service.operate("switch", "GPIO20", initial_runtime_generation).at("ok") == false);
+  assert(runtime_ensures.empty());
+  runtime_plan_operational_ready_reported = false;
+  assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
+  runtime_plan_operational_ready_reported = true;
+  runtime_plan_operational_ready = false;
+  runtime_plan_already_ready_matches = false;
+  assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
+  runtime_plan_already_ready_matches = true;
+  runtime_plan_classification = "exact_ready";
+  runtime_plan_operational_ready = true;
+  assert(service.operate("preflight", "GPIO20", 0).at("ok") == true);
+  runtime_plan_already_ready_matches = false;
+  const auto contradictory_exact = service.operate("preflight", "GPIO20", 0);
+  assert(contradictory_exact.at("ok") == false);
+  assert(contradictory_exact.at("state") == "runtime_unknown");
+  assert(!contradictory_exact.contains("recoveryRequired"));
+  runtime_plan_already_ready_matches = true;
+  runtime_plan_operational_ready = false;
+  const auto unready_exact = service.operate("preflight", "GPIO20", 0);
+  assert(unready_exact.at("ok") == false);
+  assert(unready_exact.at("state") == "runtime_unknown");
+  assert(!unready_exact.contains("recoveryRequired"));
+  runtime_plan_classification = "neutral_ready";
+  runtime_preflight = service.operate("preflight", "GPIO20", 0);
+  assert(runtime_preflight.at("ok") == true);
+  const auto reviewed_generation =
+      runtime_preflight.at("generation").get<std::uint64_t>();
+  assert(service.operate("switch", "GPIO20", reviewed_generation + 1).at("ok") == false);
+  assert(service.operate("apply-and-reboot", "GPIO20", reviewed_generation).at("ok") == false);
   const int saved_before_runtime_switch = persisted;
   next["status"] = "complete-inhibited";
-  assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == true);
+  assert(service.operate("switch", "GPIO20", reviewed_generation).at("ok") == true);
   assert(persisted == saved_before_runtime_switch);
   assert(runtime_ensures.size() == 1);
   assert(runtime_ensures.front().first == "gpio20");
   assert(runtime_ensures.front().second == std::string(64, 'b'));
   assert(inhibited);
-  assert(service.operate("switch", "GPIO20", runtime_generation).at("ok") == false);
+  assert(service.operate("switch", "GPIO20", reviewed_generation).at("ok") == false);
   corrupt_runtime_ensure_digest = true;
   const auto corrupt_preflight = service.operate("preflight", "GPIO20", 0);
   assert(corrupt_preflight.at("ok") == true);
