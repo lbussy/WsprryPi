@@ -3077,6 +3077,43 @@ def resume_interrupted_runtime_removal(
     )
 
 
+def finalize_completed_runtime_removal(
+    record_path: pathlib.Path,
+    record: Mapping[str, Any],
+    record_identity: os.stat_result,
+    runner: Runner,
+) -> None:
+    """Retire runtime ownership after a provider-removal checkpoint."""
+    validate_runtime_ownership(record.get("runtime"), record)
+    inventory = existing_inventory(pathlib.Path("/"), runner)
+    pending = pathlib.Path(
+        "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
+    )
+    require(
+        inventory.get("activeModule") is False
+        and inventory.get("activeController") is False
+        and inventory.get("configuredRoute") is False
+        and not pathlib.Path("/dev/rp1-route-admin").exists()
+        and not pathlib.Path("/dev/rp1-gpclk").exists()
+        and not pathlib.Path("/run/rp1-gpclk-dkms/route-manager.sock").exists()
+        and not pending.exists() and not pending.is_symlink()
+        and all(not pathlib.Path(path).exists()
+                and not pathlib.Path(path).is_symlink()
+                for path in runtime_deployment_destinations()),
+        "interrupted runtime removal is not complete and attributable",
+    )
+    require_unchanged_ownership(
+        record_path, record, record_identity,
+        "completed runtime removal verification",
+    )
+    replacement = copy.deepcopy(record)
+    replacement["schema"] = RECORD_SCHEMA
+    replacement.pop("runtime", None)
+    replace_owned_record(
+        record_path, record, record_identity, replacement
+    )
+
+
 def validate_inactive_runtime_update_state(
     inspected: Mapping[str, Any], *, recovered: bool
 ) -> None:
@@ -3238,14 +3275,21 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     if record.get("schema") != RUNTIME_RECORD_SCHEMA:
         print("No existing neutral runtime administration requires update preparation.")
         return
-    if (args.command == "prepare-runtime-update"
-            and not RUNTIME_PROVIDER.exists()
-            and isinstance(resolved.get("checkout"), dict)):
-        resume_interrupted_runtime_removal(
-            args.record, record, record_identity, resolved, runner
-        )
-        print("RP1-GPCLK-DKMS interrupted runtime removal recovered for fresh application activation.")
-        return
+    if not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink():
+        if (args.command == "prepare-runtime-update"
+                and isinstance(resolved, Mapping)
+                and isinstance(resolved.get("checkout"), dict)):
+            resume_interrupted_runtime_removal(
+                args.record, record, record_identity, resolved, runner
+            )
+            print("RP1-GPCLK-DKMS interrupted runtime removal recovered for fresh application activation.")
+            return
+        if args.command == "prepare-runtime-removal":
+            finalize_completed_runtime_removal(
+                args.record, record, record_identity, runner
+            )
+            print("RP1-GPCLK-DKMS completed runtime removal checkpoint verified for uninstall.")
+            return
 
     inspected = validate_readiness(runtime_call(
         runner, RUNTIME_PROVIDER, "inspect", (),

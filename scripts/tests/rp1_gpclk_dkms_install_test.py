@@ -1635,7 +1635,11 @@ class ApplyPolicyTests(unittest.TestCase):
         record = self.runtime_update_record()
         identity = mock.Mock(st_dev=1, st_ino=2)
         recovered = self.recovered_runtime_update_inspection()
-        with mock.patch.object(
+        provider = self.root / "installed/runtime_provider.py"
+        provider.parent.mkdir()
+        provider.write_text("# exact installed provider fixture\n")
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
+             mock.patch.object(
                 MOD, "load_ownership_record",
                 return_value=(record, identity, None)), \
              mock.patch.object(MOD, "runtime_call", return_value=recovered), \
@@ -1645,6 +1649,43 @@ class ApplyPolicyTests(unittest.TestCase):
         remove.assert_called_once_with(
             args.record, record, identity, mock.ANY, None
         )
+
+    def test_runtime_removal_finalizes_missing_provider_checkpoint(self):
+        args = MOD.parser().parse_args([
+            "prepare-runtime-removal", "--record", str(self.record),
+        ])
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        missing_provider = self.root / "installed/runtime_provider.py"
+        inventory = {
+            "activeModule": False, "activeController": False,
+            "configuredRoute": False,
+        }
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
+             mock.patch.object(
+                 MOD, "load_ownership_record",
+                 return_value=(record, identity, None)), \
+             mock.patch.object(
+                 MOD, "existing_inventory", return_value=inventory), \
+             mock.patch.object(pathlib.Path, "exists", autospec=True,
+                               return_value=False), \
+             mock.patch.object(pathlib.Path, "is_symlink", autospec=True,
+                               return_value=False), \
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
+             mock.patch.object(MOD, "replace_owned_record") as replace, \
+             mock.patch.object(MOD, "runtime_call") as runtime_calls:
+            MOD.prepare_runtime_update(args, FakeRunner())
+        unchanged.assert_called_once_with(
+            args.record, record, identity,
+            "completed runtime removal verification",
+        )
+        replacement = copy.deepcopy(record)
+        replacement["schema"] = MOD.RECORD_SCHEMA
+        replacement.pop("runtime")
+        replace.assert_called_once_with(
+            args.record, record, identity, replacement
+        )
+        runtime_calls.assert_not_called()
 
     def test_runtime_update_retires_prior_boot_route_recovery(self):
         args = self.runtime_update_args()
