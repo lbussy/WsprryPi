@@ -295,7 +295,10 @@ is deferred to the predecessor-owned provider migration workflow rather than
 allowing candidate code to interpret predecessor state.
 
 After neutral administration succeeds, the installer finishes website and
-Apache publication and requires `wsprrypi.service` to become active. With web
+Apache publication and requires `wsprrypi.service` to become active. It reloads
+systemd after neutral activation removes any temporary inhibition drop-in, then
+starts the service idempotently so cached unit conditions cannot suppress the
+restored application. With web
 mode enabled it also
 requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
 A systemd start request that returns success but is skipped by a false unit

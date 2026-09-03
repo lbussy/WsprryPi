@@ -2701,6 +2701,10 @@ activate_rp1_gpclk_runtime_administration() {
         warn "RP1-GPCLK-DKMS neutral runtime activation failed closed; no GPIO route or output was requested."
         return 1
     fi
+    exec_command "Reload systemd after RP1 runtime activation" \
+        systemctl daemon-reload "$debug" || return 1
+    exec_command "Start WsprryPi after RP1 runtime activation" \
+        systemctl start "$WSPR_SERVICE.service" "$debug" || return 1
     debug_end "$debug"
     return 0
 }

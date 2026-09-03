@@ -2948,7 +2948,7 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("Complete: (dry)"), 3)
+            self.assertEqual(result.stdout.count("Complete: (dry)"), 5)
             self.assertIn(
                 "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
                 result.stdout,
@@ -2967,6 +2967,14 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertIn(
                 "Complete: (dry) Activate neutral RP1-GPCLK-DKMS administration",
+                result.stdout,
+            )
+            self.assertIn(
+                "Complete: (dry) Reload systemd after RP1 runtime activation",
+                result.stdout,
+            )
+            self.assertIn(
+                "Complete: (dry) Start WsprryPi after RP1 runtime activation",
                 result.stdout,
             )
             self.assertIn("Name:    Resolve RP1-GPCLK-DKMS installation plan", result.stderr)
@@ -3183,6 +3191,7 @@ python3() {
         printf 'ARG=%s\n' "$@"
     } >>"$CAPTURE"
 }
+systemctl() { :; }
 logI() { printf '[INFO ] %s\n' "$1"; }
 logD() { :; }
 DRY_RUN=false
@@ -3300,6 +3309,24 @@ remove_owned_rp1_gpclk_dkms_provider debug
         self.assertLess(service, activation)
         self.assertLess(activation, website)
         self.assertLess(website, readiness)
+
+    def test_runtime_activation_refreshes_systemd_before_service_validation(self):
+        source = (ROOT / "scripts/install.sh").read_text()
+        function = source[
+            source.index("activate_rp1_gpclk_runtime_administration()"):
+            source.index("prepare_owned_rp1_gpclk_runtime_removal()")
+        ]
+        activation = function.index(
+            'exec_command "Activate neutral RP1-GPCLK-DKMS administration"'
+        )
+        reload = function.index(
+            'exec_command "Reload systemd after RP1 runtime activation"'
+        )
+        start = function.index(
+            'exec_command "Start WsprryPi after RP1 runtime activation"'
+        )
+        self.assertLess(activation, reload)
+        self.assertLess(reload, start)
 
     def test_runtime_readiness_summary_follows_execution_loop(self):
         source = (ROOT / "scripts/install.sh").read_text()
