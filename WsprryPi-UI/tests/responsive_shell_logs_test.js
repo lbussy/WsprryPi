@@ -8,6 +8,8 @@ const root = path.resolve(__dirname, "..");
 const siteCss = fs.readFileSync(path.join(root, "data/site.css"), "utf8");
 const logsCss = fs.readFileSync(path.join(root, "data/view_logs.css"), "utf8");
 const logsJs = fs.readFileSync(path.join(root, "data/view_logs.js"), "utf8");
+const indexCss = fs.readFileSync(path.join(root, "data/index.css"), "utf8");
+const configView = fs.readFileSync(path.join(root, "data/views/config.php"), "utf8");
 const pageShell = fs.readFileSync(path.join(root, "data/page_shell_start.php"), "utf8");
 
 assert.match(
@@ -89,6 +91,26 @@ assert.doesNotMatch(
     logsJs.match(/function formatUnitFixed16\(unit\)[\s\S]*?\n\s*}/)?.[0] || "",
     /slice\(|padEnd\(/,
     "log service names must not be truncated or padded into fragments"
+);
+assert.match(
+    indexCss,
+    /\.transmitter-backend-fields\s*{[\s\S]*?display:\s*grid;[\s\S]*?border-top:/,
+    "each transmitter backend must retain a full-width grouped settings region"
+);
+assert.doesNotMatch(
+    indexCss,
+    /\.transmitter-backend-fields[^{}]*\{[^}]*display:\s*contents;/,
+    "transmitter backend wrappers must not flatten into the RF Output panel grid"
+);
+assert.match(
+    configView,
+    /id="gpio-backend-panel"[\s\S]*?id="gpio-output-heading"[\s\S]*?col-12 col-lg-8 config-stacked-field transmitter-pin-field/,
+    "GPIO route controls must lead a backend-specific row with useful desktop width"
+);
+assert.match(
+    configView,
+    /id="si5351-backend-panel"[\s\S]*?id="si5351-output-heading"[\s\S]*?id="si5351-calibration-heading"/,
+    "Si5351 device controls and calibration must expose distinct visual groups"
 );
 
 console.log("responsive_shell_logs_test passed");

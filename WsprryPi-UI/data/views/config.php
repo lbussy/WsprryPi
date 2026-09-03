@@ -734,10 +734,12 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </div>
                                 <div id="backendStatus" class="alert mt-3 mb-0" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
 
-                                <div class="transmitter-backend-fields" id="gpio-backend-panel" role="group" aria-label="GPIO output settings">
+                                <div class="transmitter-backend-fields" id="gpio-backend-panel" role="group" aria-labelledby="gpio-output-heading">
+
+                                <h3 id="gpio-output-heading" class="transmitter-backend-fields__title">GPIO output</h3>
 
                                 <div class="row gx-3 gy-3 align-items-start">
-                                    <div class="col-12 config-stacked-field transmitter-pin-field">
+                                    <div class="col-12 col-lg-8 config-stacked-field transmitter-pin-field">
                                         <label for="tx_pin" class="form-label">Transmit Pin:</label>
                                         <div class="rp1-route-control-row">
                                             <select
@@ -853,7 +855,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </div>
 
                                 <section class="backend-calibration-section" aria-labelledby="gpio-calibration-heading">
-                                    <h3 id="gpio-calibration-heading" class="visually-hidden">GPIO frequency calibration</h3>
+                                    <h3 id="gpio-calibration-heading" class="transmitter-backend-fields__title">Frequency calibration</h3>
                                     <div class="row gx-3 gy-3 align-items-start">
                                         <div class="col-12 col-lg-4 config-stacked-field">
                                             <label for="gpio_manual_ppm" class="form-label">Fallback PPM</label>
@@ -884,7 +886,9 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </section>
                                 </div>
 
-                                <div class="transmitter-backend-fields" id="si5351-backend-panel" role="group" aria-label="Si5351 output settings" hidden>
+                                <div class="transmitter-backend-fields" id="si5351-backend-panel" role="group" aria-labelledby="si5351-output-heading" hidden>
+
+                                <h3 id="si5351-output-heading" class="transmitter-backend-fields__title">Si5351 device and output</h3>
 
                                 <div class="row gx-3 gy-3 align-items-start">
                                     <div class="col-12 col-lg-3">
@@ -985,7 +989,7 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </div>
 
                                 <section class="backend-calibration-section" aria-labelledby="si5351-calibration-heading">
-                                    <h3 id="si5351-calibration-heading" class="visually-hidden">Si5351 frequency calibration</h3>
+                                    <h3 id="si5351-calibration-heading" class="transmitter-backend-fields__title">Frequency calibration</h3>
                                     <div class="row gx-3 gy-3 align-items-start">
                                         <div class="col-12 col-lg-4 config-stacked-field">
                                             <label for="ppm" class="form-label">Reference calibration (PPM)</label>

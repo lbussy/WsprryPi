@@ -889,8 +889,7 @@ legend {
 }
 
 .transmitter-output-panel {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
+    gap: 1.25rem;
 }
 
 .transmitter-output-panel > legend,
@@ -901,24 +900,12 @@ legend {
     grid-column: 1 / -1;
 }
 
-.transmitter-output-panel > .row,
-.transmitter-backend-fields,
-.transmitter-backend-fields > .row,
-.transmitter-backend-fields > .backend-calibration-section,
-.transmitter-backend-fields > .backend-calibration-section > .row {
-    display: contents;
-}
-
 .transmitter-backend-fields[hidden] {
     display: none !important;
 }
 
-.transmitter-output-panel [class*="col-"] {
-    width: auto;
-    max-width: none;
-    min-width: 0;
-    padding-right: 0;
-    padding-left: 0;
+.transmitter-backend-switch {
+    max-width: 44rem;
 }
 
 .transmitter-output-panel .form-label {
@@ -941,48 +928,30 @@ legend {
     line-height: var(--leading-snug);
 }
 
-.transmitter-output-panel .backend-calibration-section {
-    padding-top: 0;
-    border-top: 0;
+.transmitter-backend-fields {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid color-mix(in srgb, var(--bs-border-color) 78%, transparent);
 }
 
-@media (min-width: 768px) {
-    .transmitter-output-panel {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+.transmitter-backend-fields__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-display);
+    line-height: var(--leading-snug);
 }
 
-@media (min-width: 992px) {
-    .transmitter-output-panel {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .transmitter-pin-field {
-        grid-column: span 2;
-    }
+.transmitter-backend-fields > .row,
+.transmitter-backend-fields > .backend-calibration-section {
+    min-width: 0;
 }
 
-@media (min-width: 1400px) {
-    .transmitter-output-panel {
-        grid-template-columns: repeat(16, minmax(0, 1fr));
-    }
-
-    .transmitter-output-panel > legend,
-    .transmitter-output-panel > .config-panel__summary,
-    .transmitter-output-panel > #backendStatus,
-    .transmitter-output-panel #rp1-route-panel,
-    .transmitter-output-panel #rp1-route-progress-modal {
-        grid-column: 1 / -1;
-    }
-
-    .transmitter-output-panel .transmitter-backend-switch,
-    .transmitter-output-panel .transmitter-backend-fields [class*="col-"] {
-        grid-column: span 2;
-    }
-
-    .transmitter-output-panel .transmitter-pin-field {
-        grid-column: span 5;
-    }
+.transmitter-output-panel > #backendStatus {
+    margin-top: 0 !important;
 }
 
 .cw-control-section {

@@ -192,6 +192,41 @@ async function captureRp1DriveScreenshot(client, outputPath, theme) {
     fs.writeFileSync(outputPath, screenshot.data, "base64");
 }
 
+async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
+    await client.send("Runtime.evaluate", {
+        expression: `(() => {
+            document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
+            window.WSPRRYPI_PLATFORM = {
+                ...(window.WSPRRYPI_PLATFORM || {}),
+                si5351Detected: false,
+                si5351DetectionError: "No Si5351 detected on the configured I2C bus.",
+            };
+            document.getElementById("transmit_backend").checked = true;
+            clickTransmitBackend();
+            updateBackendPlatformSupportUi();
+            const tab = document.getElementById("transmitter-hardware-tab");
+            document.querySelectorAll("#configTabs .nav-link").forEach((item) => {
+                item.classList.toggle("active", item === tab);
+                item.setAttribute("aria-selected", item === tab ? "true" : "false");
+            });
+            document.querySelectorAll("#configTabsContent > .tab-pane").forEach((pane) => {
+                const selected = "#" + pane.id === tab.getAttribute("data-bs-target");
+                pane.classList.toggle("active", selected);
+                pane.classList.toggle("show", selected);
+            });
+            document.querySelectorAll(".toast.show").forEach((toast) => toast.classList.remove("show"));
+            const outputPanel = document.getElementById("transmit_backend").closest("fieldset");
+            window.scrollTo(0, Math.max(0, outputPanel.offsetTop - 100));
+        })()`,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const screenshot = await client.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: false,
+    });
+    fs.writeFileSync(outputPath, screenshot.data, "base64");
+}
+
 async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
     await client.send("Runtime.evaluate", {
         expression: `(() => {
@@ -948,6 +983,8 @@ async function main() {
             );
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Light.png"), "light");
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Dark.png"), "dark");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Desktop_Light.png"), "light");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Desktop_Dark.png"), "dark");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Dark.png"), "dark");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Light.png"), "light");
@@ -968,6 +1005,8 @@ async function main() {
             await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Mobile.png"));
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Light.png"), "light");
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Dark.png"), "dark");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Mobile_Light.png"), "light");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Mobile_Dark.png"), "dark");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Dark.png"), "dark");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Light.png"), "light");
