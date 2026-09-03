@@ -1703,7 +1703,7 @@ def recover_and_remove_owned_runtime(
             "runtime provider is missing or substituted")
     inspected = validate_readiness(runtime_call(
         runner, provider, "inspect", (),
-        {"activation_required", "recovery_required", "neutral_ready"},
+        {"activation_required", "recovery_required", "neutral_ready", "conflict"},
     ))
     binding = inspected.get("identities", {}).get("installedBinding", {})
     binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
@@ -1856,18 +1856,17 @@ def recover_and_remove_owned_runtime(
         )
         provider = migration_provider
         inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"conflict"},
-        ), "conflict")
+            runner, provider, "inspect", (), {"recovery_required"},
+        ), "recovery_required")
         candidate_binding = inspected.get("identities", {}).get(
             "installedBinding", {})
         require(
-            inspected.get("conflicts")
-                == ["loaded-controller-without-completed-activation"]
+            not inspected.get("conflicts")
             and candidate_binding.get("status") == "valid"
             and candidate_binding.get("sha256") == binding.get("sha256")
             and candidate_binding.get("value", {}).get("sourceCommit")
                 == record.get("sourceCommit"),
-            "route-recovery provider interpreted a different owned conflict",
+            "route-recovery provider did not prove the owned recovery state",
         )
         reviewed_candidate_recovery = True
     if (inspected.get("result") in {"recovery_required", "neutral_ready"}

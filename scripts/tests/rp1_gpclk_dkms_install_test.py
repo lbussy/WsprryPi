@@ -2093,8 +2093,13 @@ class ApplyPolicyTests(unittest.TestCase):
             "complete-neutral")
         for initial in (failed, conflict):
             with self.subTest(result=initial["result"]):
-                replies = iter((initial, initial, recovery, recovered, removable,
-                                removal, removed))
+                candidate_interpretation = copy.deepcopy(initial)
+                if initial["result"] == "conflict":
+                    candidate_interpretation.update(
+                        result="recovery_required", state="recovery_required",
+                        conflicts=[])
+                replies = iter((initial, candidate_interpretation, recovery,
+                                recovered, removable, removal, removed))
                 providers = []
                 def runtime_call(unused_runner, provider_arg, operation,
                                  arguments=(), allowed_results=()):
