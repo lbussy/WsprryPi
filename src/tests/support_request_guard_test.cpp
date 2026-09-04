@@ -8,6 +8,29 @@ static void expect(const SupportRequestGuard &g, const std::string &peer, const 
 int main(int argc, char **argv) {
     SupportRequestGuardSnapshot snapshot{true, "WsprryPi.Local.", {}, {{"192.168.50.10", "255.255.255.0"}, {"fd00::10", "ffff:ffff:ffff:ffff::"}}};
     SupportRequestGuard guard(snapshot);
+    SupportRequestGuard link_local({true, "wsprrypi", {},
+        {{"fe80::10", "ffff:ffff:ffff:ffff::"}}});
+    for (const std::string zone : {"wlan1", "3", "en0", "vlan.2"}) {
+        const auto peer = "fe80::42%" + zone;
+        expect(link_local, peer, "wsprrypi", Decision::allowed);
+        assert(link_local.evaluate("127.0.0.1", "wsprrypi", {}, true,
+                                   {peer}).allowed());
+        assert(guard.evaluate("127.0.0.1", "wsprrypi", {}, true,
+                              {peer}).decision == Decision::rejected_peer);
+    }
+    for (const std::string bad : {"fe80::42%", "fe80::42%wlan1%2",
+         "fe80::42%wlan 1", "fe80::42%wlan1,evil", "::1%lo",
+         "::ffff:127.0.0.1%lo", "192.168.50.42%wlan1", "fd00::42%en0",
+         "fe80::42%abcdefghijklmnop"}) {
+        assert(link_local.evaluate("127.0.0.1", "wsprrypi", {}, true,
+                                   {bad}).decision == Decision::invalid_trusted_proxy_identity);
+    }
+    expect(link_local, "fe80::42%wlan1", "evil.example", Decision::rejected_host);
+    assert(link_local.evaluate("127.0.0.1", "wsprrypi", {}, true,
+        {std::string("fe80::42\0junk%wlan1", 19)}).decision ==
+        Decision::invalid_trusted_proxy_identity);
+    expect(link_local, "fe80::42%wlan1", "wsprrypi", Decision::rejected_origin,
+           "http://evil.example");
     // Peer policy.
     expect(guard, "127.0.0.1", "localhost", Decision::allowed); expect(guard, "::1", "[::1]", Decision::allowed); expect(guard, "::ffff:127.0.0.1", "localhost", Decision::allowed);
     expect(guard, "192.168.50.42", "wsprrypi", Decision::allowed); expect(guard, "fd00::42", "wsprrypi", Decision::allowed);

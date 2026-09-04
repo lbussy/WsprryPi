@@ -21,6 +21,16 @@ std::string request(std::string host = "wsprrypi:31416",
 } // namespace
 
 int main() {
+    const SupportRequestGuardSnapshot scoped_snapshot{
+        true, "wsprrypi", {}, {{"fe80::10", "ffff:ffff:ffff:ffff::"}}};
+    assert(evaluate_websocket_upgrade(
+        request("wsprrypi", "http://wsprrypi",
+                "X-WsprryPi-Client-Address: fe80::42%wlan1\r\n"),
+        "127.0.0.1", scoped_snapshot).decision == WebSocketUpgradeGuardDecision::allowed);
+    assert(evaluate_websocket_upgrade(
+        request("wsprrypi", "http://wsprrypi",
+                "X-WsprryPi-Client-Address: fe80::42%wlan1%bad\r\n"),
+        "127.0.0.1", scoped_snapshot).decision == WebSocketUpgradeGuardDecision::rejected);
     const SupportRequestGuardSnapshot snapshot{
         true, "wsprrypi", {}, {{"192.168.50.10", "255.255.255.0"}}};
     const auto evaluate = [&](const std::string &upgrade, const std::string &peer) {
