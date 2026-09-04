@@ -496,6 +496,13 @@ int main() {
   assert(runtime_launches.back().at("operation") == "recover");
   assert(runtime_launches.back().at("digest") == "");
   assert(runtime_launches.back().at("binding") == "");
+  const auto runtime_remove = service.operate("remove", "GPIO20", 0);
+  assert(runtime_remove.at("ok") == true);
+  assert(runtime_remove.at("state") == "runtime_remove_queued");
+  assert(runtime_launches.back().at("operation") == "remove");
+  assert(runtime_launches.back().at("route") == "gpio20");
+  assert(runtime_launches.back().at("digest") == "");
+  assert(runtime_launches.back().at("binding") == "");
   runtime_launch_fails = true;
   assert(service.operate("recover", "GPIO20", 0).at("ok") == false);
   runtime_launch_fails = false;
@@ -558,6 +565,23 @@ int main() {
   runtime["state"]["application"]["phase"] = "restoration-failed";
   runtime["state"]["application"]["error"] = "start failed";
   assert(runtime_service.query().at("state") == "runtime_restoration_failed");
+  const nlohmann::json neutral_ctl = {{"id",0},{"route",0},{"flags",0},{"error",0},
+                                      {"session",1234},{"generation",8}};
+  runtime["state"]["controller"] = neutral_ctl;
+  runtime["state"]["activeRoute"] = nullptr;
+  runtime["state"]["pendingTransaction"] = {{"phase","recovered-inhibited"}};
+  runtime["state"]["application"] = {{"phase","neutral-restored"},
+      {"boot","current-boot"}, {"binding",std::string(64,'a')}};
+  const auto neutral_running = runtime_service.query();
+  assert(neutral_running.at("state") == "runtime_neutral_running");
+  assert(neutral_running.at("active") == "None");
+  assert(neutral_running.at("configured") == "None");
+  runtime["state"]["application"]["phase"] = "neutral-stopped";
+  assert(runtime_service.query().at("state") == "runtime_neutral_stopped");
+  runtime["state"]["application"]["phase"] = "neutral-restoration-failed";
+  runtime["state"]["application"]["error"] = "start failed";
+  assert(runtime_service.query().at("state") ==
+         "runtime_neutral_restoration_failed");
 
   std::cout << "rp1_gpclk_route_service_test: PASS\n";
 }

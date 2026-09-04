@@ -2432,11 +2432,14 @@ function clickTransmitPin() {
 const RP1_ROUTE_STATES = Object.freeze({
     runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
     runtime_ready: ["Route selected", "The selected route is active and Wsprry Pi is online in idle mode. This does not start or authorize transmission."],
-    runtime_neutral: ["No route selected", "The RP1 clock route is removed. Transmission remains disabled."],
+    runtime_neutral_running: ["Route removed", "The RP1 clock route is removed and Wsprry Pi is back online. Transmission remains disabled."],
+    runtime_neutral_stopped: ["Route removed; service stopped", "The RP1 clock route is removed. Wsprry Pi remains stopped because it was stopped before removal or is administrator-masked."],
     runtime_switch_queued: ["Route switch queued", "Wsprry Pi may disconnect briefly while the status dialog checks the selected route. Transmission remains disabled."],
-    runtime_recovery_queued: ["Route removal queued", "Wsprry Pi may disconnect and remain stopped while the status dialog checks for a neutral route. Transmission remains disabled."],
+    runtime_remove_queued: ["Removing route", "Wsprry Pi may disconnect while the route is removed and neutral state is verified. If it was running, it will return automatically. Transmission remains disabled."],
+    runtime_recovery_queued: ["Recovery queued", "Wsprry Pi may disconnect and remain stopped while recovery establishes a neutral inhibited state. Transmission remains disabled."],
     runtime_restoring: ["Restoring application", "Wsprry Pi is reconnecting on the selected route. The status dialog will check again automatically."],
     runtime_restoration_failed: ["Application restoration failed", "Run runtime_route_client.py restore --execute to retry application restoration without switching the overlay."],
+    runtime_neutral_restoration_failed: ["Route removed; service unavailable", "The RP1 clock route is neutral, but Wsprry Pi could not be restored. Correct the reported service error, then retry with the installed runtime route client."],
     runtime_preflight_ready: ["Route plan ready", "No route change has started. Transmission remains disabled until you confirm the switch."],
     runtime_preflight_failed: ["Route not switched", "The route plan was rejected before any change began. Transmission remains disabled."],
     runtime_recovery: ["Recovery required", "Inspect the controller error and ownership before explicit cleanup recovery."],
@@ -2491,7 +2494,7 @@ class Rp1RouteUiController {
         const draft=this.selectedRoute();
         const changed=draft!=="Unavailable" && draft!==this.active;
         const recovery=["staged","mismatch","rollback_required","runtime_recovery"].includes(state);
-        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
+        $("#rp1-route-apply").prop("disabled",this.inFlight || this.completionUnknown || ["runtime_switch_queued","runtime_remove_queued","runtime_recovery_queued","runtime_restoring","runtime_restoration_failed"].includes(state) || recovery || state==="runtime_unknown" || !changed);
         $("#rp1-route-cancel").prop("disabled",this.inFlight || draft===this.persisted);
         $("#rp1-route-rollback").prop("hidden",!recovery).prop("disabled",this.inFlight);
         $("#rp1-route-apply").text(draft==="None" ? "Remove route" : (this.runtimeProfile ? "Switch route" : (this.developmentCompatible ? "Apply route and reboot" : "Check route")));
@@ -2506,7 +2509,7 @@ class Rp1RouteUiController {
         if(this.persisted==="GPIO4" || this.persisted==="GPIO20")this.lastPersistableRoute=this.persisted;
         this.developmentCompatible=data.compatible===true;
         this.generation=Number.isSafeInteger(data.generation) ? data.generation : 0;
-        const requested=this.progressActive && this.progressOperation==="recover"
+        const requested=this.progressActive && ["remove","recover"].includes(this.progressOperation)
             ? "None"
             : (confirmedNeutral ? "None" : this.routeValue(data.requested || this.persisted));
         this.requested=requested;
@@ -2545,7 +2548,7 @@ class Rp1RouteUiController {
         $("#rp1-route-eligible").text("Unqualified");
         $("#rp1-route-rollback").text(this.runtimeProfile ? "Recover to no route" : "Roll back");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
-        const displayed=confirmedNeutral && reported==="runtime_inhibited" ? "runtime_neutral" : reported;
+        const displayed=confirmedNeutral && reported==="runtime_inhibited" ? "runtime_neutral_stopped" : reported;
         this.setState(displayed,
             typeof data.message==="string" ? data.message : "");
         if(this.progressActive) this.handleProgressData(data,displayed);
@@ -2565,7 +2568,7 @@ class Rp1RouteUiController {
             if(!window.confirm("Recover to no route? Wsprry Pi will stop and remain inhibited. The status dialog will check the result without repeating recovery."))return;
             operation="recover";this.beginProgress("recover","None");
         }
-        const requested=operation==="recover"
+        const requested=["remove","recover"].includes(operation)
             ? (this.active==="GPIO4" || this.active==="GPIO20" ? this.active : this.persisted)
             : this.selectedRoute();
         this.inFlight=true; this.setState(operation==="rollback" ? "rollback" : "applying");
@@ -2574,17 +2577,17 @@ class Rp1RouteUiController {
                 body:JSON.stringify({operation, route:requested, generation:this.generation})});
             const data=await response.json(); this.inFlight=false;
             if(!response.ok && !data.state) throw new Error(); this.render(data);
-            if(this.progressActive && ["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(this.state)) this.scheduleProgressPoll();
+            if(this.progressActive && ["runtime_switch_queued","runtime_remove_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(this.state)) this.scheduleProgressPoll();
         } catch(_){this.inFlight=false;this.setState(this.runtimeProfile ? "runtime_unknown" : "unavailable");if(this.progressActive)this.scheduleProgressPoll();}
     }
     async applyAndReboot() {
         if(this.inFlight || this.progressActive)return;
         const requested=this.selectedRoute();
         if(this.runtimeProfile && requested==="None") {
-            const confirmed=window.confirm("Remove the active RP1 clock route and keep transmission disabled? Wsprry Pi may disconnect and remain stopped after the route is removed.");
+            const confirmed=window.confirm("Remove the active RP1 clock route? Transmission will remain disabled. If Wsprry Pi is running, it will disconnect briefly and return after the neutral route is verified. A service that was already stopped or administrator-masked will remain stopped.");
             if(!confirmed){this.cancel();return;}
-            this.beginProgress("recover","None");
-            await this.operate("recover");
+            this.beginProgress("remove","None");
+            await this.operate("remove");
             return;
         }
         this.inFlight=true; this.setState("checking");
@@ -2636,7 +2639,7 @@ class Rp1RouteUiController {
         this.stopProgressPoll(); this.progressActive=true; this.progressOperation=operation;this.progressRoute=route;this.pollAttempt=0;
         const modal=this.modalElement(); if(!modal)return;
         modal.querySelector(".modal-body")?.setAttribute("aria-busy","true");
-        $("#rp1-route-progress-title").text(operation==="recover" ? "Removing transmit route" : `Switching transmit route to ${route}`);
+        $("#rp1-route-progress-title").text(operation==="remove" ? "Removing transmit route" : operation==="recover" ? "Recovering route controller" : `Switching transmit route to ${route}`);
         $("#rp1-route-progress-close").prop("disabled",true);
         $("#rp1-route-progress-retry-button").prop("hidden",true);
         this.renderProgress("checking","Confirming the route operation…");
@@ -2646,7 +2649,7 @@ class Rp1RouteUiController {
     renderProgress(state,message) {
         if(!this.progressActive)return;
         const definition=RP1_ROUTE_STATES[state] || RP1_ROUTE_STATES.unavailable;
-        const transient=["runtime_switch_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(state);
+        const transient=["runtime_switch_queued","runtime_remove_queued","runtime_recovery_queued","runtime_restoring","runtime_unknown"].includes(state);
         const badge=document.getElementById("rp1-route-progress-state");
         if(badge){badge.dataset.state=state;badge.textContent=definition[0];}
         const pausedMessage=state==="runtime_unknown" && String(message).startsWith("Automatic status checks paused.");
@@ -2654,7 +2657,7 @@ class Rp1RouteUiController {
     }
     handleProgressData(data,state) {
         const switchComplete=this.progressOperation==="switch" && state==="runtime_ready" && this.active===this.progressRoute;
-        const removalComplete=this.progressOperation==="recover" && state==="runtime_neutral";
+        const removalComplete=this.progressOperation==="remove" && ["runtime_neutral_running","runtime_neutral_stopped"].includes(state);
         const failed=data.ok===false && !["runtime_unknown","runtime_restoring"].includes(state);
         if(switchComplete || removalComplete || failed) this.finishProgress();
     }
