@@ -31,6 +31,7 @@ void prepare_runtime_config_candidate(
 void commit_runtime_config_candidate(const RuntimeConfigCandidate &candidate);
 
 void config_to_json();
+void persist_runtime_transmit_disabled();
 TestTonePlanningConfigSnapshot current_test_tone_planning_config_snapshot();
 
 #endif // RUNTIME_CONFIG_BRIDGE_HPP

@@ -345,6 +345,17 @@ void callback_ini_changed()
     (void)set_config(true);
 }
 
+void start_runtime_config_monitor(const std::string &filename)
+{
+    iniMonitor.filemon(filename, callback_ini_changed);
+    iniMonitor.setPriority(SCHED_RR, 10);
+}
+
+void stop_runtime_config_monitor() noexcept
+{
+    iniMonitor.stop();
+}
+
 static void normalize_wspr_callsign(std::string &callsign)
 {
     std::transform(callsign.begin(), callsign.end(), callsign.begin(), ::toupper);

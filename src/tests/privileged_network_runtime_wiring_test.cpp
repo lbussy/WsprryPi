@@ -18,7 +18,8 @@ int main() {
     const auto parser = read_file(root / "arg_parser.cpp");
     const auto http = read_file(root / "web_server.cpp");
     const auto websocket = read_file(root / "web_socket.cpp");
-    const auto scheduling = read_file(root / "scheduling.cpp");
+    const auto scheduling = read_file(root / "scheduling.cpp") +
+                            read_file(root / "scheduling_runtime.cpp");
     const auto stock_ini = read_file(root / "../config/wsprrypi.ini");
 
     assert(parser.find("initialize_privileged_network_runtime(") != std::string::npos);

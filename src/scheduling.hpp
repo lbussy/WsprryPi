@@ -40,7 +40,7 @@
 #define _SCHEDULING_HPP
 
 // Project headers
-#include "arg_parser.hpp"
+#include "config_types.hpp"
 #include "ppm_manager.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "transmission_request.hpp"

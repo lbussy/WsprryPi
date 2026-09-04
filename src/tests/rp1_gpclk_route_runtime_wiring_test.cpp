@@ -17,7 +17,12 @@ int main() {
     const auto service = read_file(root / "rp1_gpclk_route_service.cpp");
     const auto service_header = read_file(root / "rp1_gpclk_route_service.hpp");
     const auto http = read_file(root / "web_server.cpp");
-    const auto scheduling = read_file(root / "scheduling.cpp");
+    const auto scheduling = read_file(root / "scheduling.cpp") +
+                            read_file(root / "scheduling_config.cpp") +
+                            read_file(root / "scheduling_test_tone.cpp") +
+                            read_file(root / "scheduling_runtime.cpp") +
+                            read_file(root / "non_wspr_request_builder.cpp") +
+                            read_file(root / "rp1_route_bridge.cpp");
     const auto arg_parser = read_file(root / "arg_parser.cpp");
     const auto transmit = read_file(
         root / "WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp");
@@ -41,10 +46,10 @@ int main() {
     assert(service.find("reboot_system()") == std::string::npos);
     assert(http.find("svr->Get(\"/api/rp1-gpclk-route\"") != std::string::npos);
     assert(http.find("svr->Post(\"/api/rp1-gpclk-route\"") != std::string::npos);
-    const auto idle_startup = scheduling.find(".reconcileIdleStartup(");
+    const auto idle_startup = scheduling.find("reconcile_rp1_idle_startup(");
     const auto bounded_request = scheduling.find("if (tone_request.rp1_development.enabled)");
     const auto development_reconciliation =
-        scheduling.find(".reconcileDevelopmentStartup(", bounded_request);
+        scheduling.find("apply_test_tone_rp1_development_confirmation_bridge(", bounded_request);
     const auto request_commit =
         scheduling.find("commit_execution_request(request)", bounded_request);
     const auto listener_start =
@@ -55,7 +60,7 @@ int main() {
     assert(request_commit != std::string::npos);
     assert(listener_start != std::string::npos);
     assert(idle_startup < listener_start);
-    const auto restoration_ack = scheduling.find(".acknowledgeRestoration(");
+    const auto restoration_ack = scheduling.find("acknowledge_rp1_restoration(");
     const auto listener_ready = scheduling.find("!webServer.isListening()");
     assert(restoration_ack != std::string::npos && listener_ready > listener_start && listener_ready < restoration_ack);
     assert(http.find("return svr && svr->is_running();") != std::string::npos);
@@ -64,9 +69,9 @@ int main() {
     const auto direct_confirmation = scheduling.find(
         "apply_direct_rp1_development_confirmation(");
     const auto tone_request_builder = scheduling.find(
-        "static TransmissionRequest make_tone_request(");
+        "TransmissionRequest make_tone_request(");
     const auto direct_tone_start = scheduling.find(
-        "static bool start_direct_tone_execution(", tone_request_builder);
+        "bool start_direct_tone_execution(", tone_request_builder);
     const auto direct_tone_confirmation = scheduling.find(
         "apply_direct_rp1_development_confirmation(", direct_tone_start);
     const auto direct_tone_gate = scheduling.find(
@@ -74,7 +79,7 @@ int main() {
     const auto direct_tone_commit = scheduling.find(
         "commit_execution_request(request)", direct_tone_gate);
     const auto direct_start = scheduling.find(
-        "static bool start_non_wspr_transmission_now(");
+        "bool start_non_wspr_transmission_now(");
     const auto direct_reconciliation = scheduling.find(
         "apply_direct_rp1_development_confirmation(", direct_start);
     const auto direct_runtime_gate = scheduling.find(

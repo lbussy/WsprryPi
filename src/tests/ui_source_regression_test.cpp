@@ -124,7 +124,10 @@ int main()
     const std::string scheduling_source =
         read_repo_text_file("/src/scheduling.cpp") +
         read_repo_text_file("/src/scheduling_config.cpp") +
-        read_repo_text_file("/src/scheduling_websocket_status.cpp");
+        read_repo_text_file("/src/scheduling_websocket_status.cpp") +
+        read_repo_text_file("/src/scheduling_test_tone.cpp") +
+        read_repo_text_file("/src/scheduling_runtime.cpp") +
+        read_repo_text_file("/src/transmitter_runtime_bridge.cpp");
     require(
         scheduling_source.find("suppress_cancelled_ws_event_for_user_stop.store(true") != std::string::npos &&
             scheduling_source.find("Suppressing websocket canceled event because an explicit user stop will publish stopped.") !=

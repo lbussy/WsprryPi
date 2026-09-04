@@ -38,3 +38,9 @@ void commit_runtime_config_candidate(const RuntimeConfigCandidate &candidate)
         throw std::logic_error("Runtime configuration candidate has no prepared storage.");
     commit_config_candidate(candidate.storage->prepared);
 }
+
+void persist_runtime_transmit_disabled()
+{
+    iniFile.set_bool_value("Operation", "Transmit", false);
+    iniFile.commit_changes();
+}
