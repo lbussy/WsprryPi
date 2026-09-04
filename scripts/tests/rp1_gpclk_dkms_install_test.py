@@ -2700,7 +2700,7 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(providers[0], ("inspect", installed))
         self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
 
-    def test_owned_same_boot_failed_activation_uses_reviewed_candidate_recovery(self):
+    def test_owned_same_boot_activation_or_route_recovery_uses_reviewed_candidate(self):
         installed = self.root / "installed/runtime_provider.py"
         installed.parent.mkdir(parents=True)
         installed.write_text("# installed provider without journal recovery\n")
@@ -2751,7 +2751,10 @@ class ApplyPolicyTests(unittest.TestCase):
                         conflicts=["loaded-controller-without-completed-activation"])
         conflict["journals"]["activation.json"]["value"]["phase"] = (
             "complete-neutral")
-        for initial in (failed, conflict):
+        route_recovered = copy.deepcopy(failed)
+        route_recovered["journals"]["activation.json"]["value"]["phase"] = (
+            "complete-neutral")
+        for initial in (failed, conflict, route_recovered):
             with self.subTest(result=initial["result"]):
                 candidate_interpretation = copy.deepcopy(initial)
                 if initial["result"] == "conflict":
