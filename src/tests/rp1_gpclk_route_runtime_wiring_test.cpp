@@ -16,7 +16,8 @@ int main() {
     const auto root = std::filesystem::current_path();
     const auto service = read_file(root / "rp1_gpclk_route_service.cpp");
     const auto service_header = read_file(root / "rp1_gpclk_route_service.hpp");
-    const auto http = read_file(root / "web_server.cpp");
+    const auto http = read_file(root / "web_server.cpp") +
+                      read_file(root / "web_server_admin_routes.cpp");
     const auto scheduling = read_file(root / "scheduling.cpp") +
                             read_file(root / "scheduling_config.cpp") +
                             read_file(root / "scheduling_test_tone.cpp") +
@@ -44,8 +45,9 @@ int main() {
     assert(service.find("/boot/firmware/config.txt") == std::string::npos);
     assert(service.find("atomic_write_owned_fragment") == std::string::npos);
     assert(service.find("reboot_system()") == std::string::npos);
-    assert(http.find("svr->Get(\"/api/rp1-gpclk-route\"") != std::string::npos);
-    assert(http.find("svr->Post(\"/api/rp1-gpclk-route\"") != std::string::npos);
+    assert(http.find("server.Get(") != std::string::npos);
+    assert(http.find("server.Post(") != std::string::npos);
+    assert(http.find("\"/api/rp1-gpclk-route\"") != std::string::npos);
     const auto idle_startup = scheduling.find("reconcile_rp1_idle_startup(");
     const auto bounded_request = scheduling.find("if (tone_request.rp1_development.enabled)");
     const auto development_reconciliation =

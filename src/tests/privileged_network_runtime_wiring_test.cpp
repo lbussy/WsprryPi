@@ -16,7 +16,9 @@ std::string read_file(const std::filesystem::path &path) {
 int main() {
     const auto root = std::filesystem::current_path();
     const auto parser = read_file(root / "arg_parser.cpp");
-    const auto http = read_file(root / "web_server.cpp");
+    const auto http = read_file(root / "web_server.cpp") +
+                      read_file(root / "web_server_admin_routes.cpp") +
+                      read_file(root / "web_server_request_guard.cpp");
     const auto websocket = read_file(root / "web_socket.cpp");
     const auto scheduling = read_file(root / "scheduling.cpp") +
                             read_file(root / "scheduling_runtime.cpp");
@@ -25,8 +27,9 @@ int main() {
     assert(parser.find("initialize_privileged_network_runtime(") != std::string::npos);
     assert(http.find("active_privileged_network_mode()") != std::string::npos);
     assert(websocket.find("active_privileged_network_mode()") != std::string::npos);
-    assert(http.find("svr->Get(\"/api/network-safety\"") != std::string::npos);
-    assert(http.find("svr->Post(\"/api/network-safety\"") != std::string::npos);
+    assert(http.find("server.Get(") != std::string::npos);
+    assert(http.find("server.Post(") != std::string::npos);
+    assert(http.find("\"/api/network-safety\"") != std::string::npos);
     assert(http.find("Access-Control-Allow-Origin\", \"*\"") == std::string::npos);
     assert(scheduling.find("reconcile_privileged_network_policy(") == std::string::npos);
     assert(scheduling.find("PrivilegedNetworkStartupRecovery") == std::string::npos);
