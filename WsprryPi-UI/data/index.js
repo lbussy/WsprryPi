@@ -2598,8 +2598,9 @@ class Rp1RouteUiController {
             const preflight=await preflightResponse.json();
             if(!preflightResponse.ok || preflight.ok!==true){
                 this.inFlight=false;
-                if(preflight.state==="runtime_preflight_failed" &&
-                    preflight.changeStarted===false && preflight.recoveryRequired===false) {
+                if(["runtime_preflight_failed","runtime_unknown"].includes(preflight.state) &&
+                    preflight.changeStarted===false &&
+                    preflight.recoveryRequired!==true) {
                     this.setState("runtime_preflight_failed",
                         typeof preflight.message==="string" ? preflight.message : "");
                 } else {

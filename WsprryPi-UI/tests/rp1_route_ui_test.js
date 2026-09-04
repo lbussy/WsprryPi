@@ -88,6 +88,15 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
   "failed preflight preserves the last confirmed route facts");
  assert.equal(element("rp1-route-rollback").hidden,true,
   "failed preflight does not expose transaction recovery");
+ controller.completionUnknown=false;
+ controller.request=async()=>({ok:false,json:async()=>({ok:false,profile:"runtime",
+  state:"runtime_unknown",message:"Route plan evidence was inconsistent.",
+  changeStarted:false})});
+ await controller.applyAndReboot();
+ assert.equal(element("rp1-route-state").textContent,"Route not switched",
+  "known no-change preflight rejection is not presented as reconnecting");
+ assert.equal(controller.completionUnknown,false,
+  "known no-change preflight rejection remains retryable");
  controller.request=async()=>({ok:false,json:async()=>({ok:false,profile:"runtime",
   state:"runtime_recovery",message:"Existing transaction requires recovery."})});
  await controller.applyAndReboot();

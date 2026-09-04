@@ -611,6 +611,11 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
           plan.contains("alreadyReady") && plan["alreadyReady"].is_boolean();
       const bool already_ready =
           already_ready_reported && plan["alreadyReady"].get<bool>();
+      const auto routes = raw.value("routes", nlohmann::json::object());
+      const auto active_route = field(routes, "active");
+      const bool exact_route_state =
+          (active_route == "gpio4" || active_route == "gpio20") &&
+          already_ready == (active_route == executor_route);
       const bool eligibility =
           (classification == "neutral_ready" &&
            !raw.value("routeSelected", true) &&
@@ -619,7 +624,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
           (classification == "exact_ready" &&
            raw.value("routeSelected", false) &&
            raw.value("executionReady", false) &&
-           already_ready_reported && already_ready);
+           already_ready_reported && exact_route_state);
       const bool readiness_consistent =
           operational_ready_reported &&
           ((classification == "neutral_ready" && !operational_ready) ||
@@ -664,12 +669,9 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                 : invalid_message);
       result["ok"] = valid;
       result["state"] = valid ? "runtime_preflight_ready"
-                              : neutral_idle_evidence
-                                    ? "runtime_preflight_failed"
-                                    : "runtime_unknown";
+                              : "runtime_preflight_failed";
       result["changeStarted"] = false;
-      if (valid || neutral_idle_evidence)
-        result["recoveryRequired"] = false;
+      result["recoveryRequired"] = false;
       result["preflightValidated"] = valid;
       result["requested"] = route;
       if (valid) {
