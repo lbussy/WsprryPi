@@ -6719,8 +6719,15 @@ preflight_build_resources() {
     }
     required_swap_kb=$(required_non_zram_build_swap_kb "$mem_total_kb")
 
-    logI "Build resources: MemTotal=${mem_total_kb} KiB, MemAvailable=${mem_available_kb} KiB, swap-free=${swap_free_kb} KiB."
-    logI "Build swap classification: zram-free=${zram_swap_free_kb} KiB, file-free=${file_swap_free_kb} KiB, partition-free=${partition_swap_free_kb} KiB, other-independent-free=${other_swap_free_kb} KiB."
+    logI "Build resources:"
+    logI "  MemTotal=${mem_total_kb} KiB"
+    logI "  MemAvailable=${mem_available_kb} KiB"
+    logI "  swap-free=${swap_free_kb} KiB"
+    logI "Build swap classification:"
+    logI "  zram-free=${zram_swap_free_kb} KiB"
+    logI "  file-free=${file_swap_free_kb} KiB"
+    logI "  partition-free=${partition_swap_free_kb} KiB"
+    logI "  other-independent-free=${other_swap_free_kb} KiB"
     logI "Build swap independently-backed-free=${non_zram_swap_free_kb} KiB."
 
     if ((mem_total_kb < BUILD_RESOURCE_LOW_RAM_KB)); then
