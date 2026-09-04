@@ -1,7 +1,6 @@
 #include "privileged_network_admin.hpp"
 
 #include "privileged_network_runtime.hpp"
-#include "support_request_guard.hpp"
 
 #include <cerrno>
 #include <cctype>
@@ -246,7 +245,6 @@ PrivilegedNetworkTransactionResult PrivilegedNetworkAdmin::apply(
     const auto previous = snapshot();
     std::string expected_policy;
     const auto operations = PrivilegedNetworkTransactionOperations{
-        [] { return SupportRequestGuard::discover_local_networks().networks; },
         [&](const PrivilegedNetworkTransactionCandidate &candidate) {
             if (!previous.configured_known) return false;
             const auto rendered = render_privileged_network_ini(
@@ -294,12 +292,4 @@ PrivilegedNetworkTransactionResult PrivilegedNetworkAdmin::apply(
     if (result.status == PrivilegedNetworkTransactionStatus::rollback_failed)
         set_privileged_network_runtime_unknown();
     return result;
-}
-
-PrivilegedNetworkTransactionResult reconcile_privileged_network_policy(
-    const PrivilegedNetworkAdminPaths &paths) {
-    PrivilegedNetworkAdmin admin(paths);
-    const auto ini = read_text_file(paths.ini_file);
-    const auto requested = ini ? read_privileged_network_ini_value(*ini) : std::nullopt;
-    return admin.apply(requested);
 }

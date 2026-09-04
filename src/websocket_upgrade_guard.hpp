@@ -14,6 +14,8 @@ enum class WebSocketUpgradeGuardDecision {
 struct WebSocketUpgradeGuardResult {
     WebSocketUpgradeGuardDecision decision = WebSocketUpgradeGuardDecision::malformed;
     std::string key;
+    SupportRequestGuardDecision rejection_reason =
+        SupportRequestGuardDecision::rejected_peer;
 };
 
 [[nodiscard]] WebSocketUpgradeGuardResult evaluate_websocket_upgrade(

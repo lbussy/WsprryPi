@@ -8,7 +8,6 @@ const char *privileged_network_transaction_status_name(
     PrivilegedNetworkTransactionStatus status) noexcept {
     switch (status) {
     case PrivilegedNetworkTransactionStatus::applied: return "applied";
-    case PrivilegedNetworkTransactionStatus::discovery_failed: return "discovery_failed";
     case PrivilegedNetworkTransactionStatus::render_failed: return "render_failed";
     case PrivilegedNetworkTransactionStatus::application_validation_failed:
         return "application_validation_failed";
@@ -45,13 +44,7 @@ PrivilegedNetworkTransactionResult PrivilegedNetworkTransaction::apply(
     candidate.setting_was_missing = parsed.missing;
     const bool warning = !parsed.valid;
 
-    std::vector<SupportLocalNetwork> networks;
-    if (parsed.mode == PrivilegedNetworkMode::enforced) {
-        networks = operations_.discover_networks();
-        if (networks.empty())
-            return {PrivilegedNetworkTransactionStatus::discovery_failed, state_, warning};
-    }
-    const auto rendered = render_apache_privileged_network_policy(networks, parsed.mode);
+    const auto rendered = render_apache_privileged_network_policy(parsed.mode);
     if (!rendered.valid())
         return {PrivilegedNetworkTransactionStatus::render_failed, state_, warning};
     candidate.apache_policy = *rendered.configuration;

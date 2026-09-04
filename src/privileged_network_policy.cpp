@@ -69,6 +69,17 @@ std::string lower_ascii(std::string_view value) {
 
 } // namespace
 
+PrivilegedInterfaceKind classify_privileged_interface_link(
+    const PrivilegedInterfaceLinkEvidence &evidence) noexcept {
+    // Linux ARPHRD_ETHER is 1 for both ordinary Ethernet and Wi-Fi links.
+    // Requiring a physical device prevents renamed software links from
+    // becoming eligible merely because their names resemble Ethernet.
+    if (!evidence.has_physical_device || evidence.link_type != 1U)
+        return PrivilegedInterfaceKind::other;
+    return evidence.wireless ? PrivilegedInterfaceKind::wifi
+                             : PrivilegedInterfaceKind::ethernet;
+}
+
 PrivilegedOperationClass classify_privileged_http_operation(
     std::string_view method, std::string_view path) {
     if (!has_valid_path_syntax(path) || method.empty() ||
@@ -86,7 +97,8 @@ PrivilegedOperationClass classify_privileged_http_operation(
     }
     if (method == "POST" &&
         (path == "/config/repair" || path == "/control/stop" ||
-         path == "/api/network-safety")) {
+         path == "/api/network-safety" ||
+         path == "/api/rp1-gpclk-route")) {
         return PrivilegedOperationClass::protected_operation;
     }
     if (method == "GET" &&
@@ -95,6 +107,9 @@ PrivilegedOperationClass classify_privileged_http_operation(
         return PrivilegedOperationClass::read_only;
     }
     if (method == "GET" && path == "/api/network-safety") {
+        return PrivilegedOperationClass::read_only;
+    }
+    if (method == "GET" && path == "/api/rp1-gpclk-route") {
         return PrivilegedOperationClass::read_only;
     }
     return PrivilegedOperationClass::reject;

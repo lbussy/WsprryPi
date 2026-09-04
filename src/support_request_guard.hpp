@@ -21,6 +21,9 @@ enum class SupportRequestGuardDecision {
     rejected_peer,
     rejected_host,
     rejected_origin,
+    invalid_request,
+    no_eligible_network,
+    invalid_trusted_proxy_identity,
     interface_discovery_unavailable
 };
 
@@ -37,7 +40,8 @@ public:
         const std::string &peer_address,
         const std::string &host_header,
         const std::optional<std::string> &origin_header,
-        bool enforce_peer = true) const;
+        bool enforce_peer = true,
+        const std::vector<std::string> &trusted_proxy_identities = {}) const;
 
     [[nodiscard]] static SupportRequestGuardSnapshot discover_local_networks();
 

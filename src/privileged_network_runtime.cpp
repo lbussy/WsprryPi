@@ -7,7 +7,7 @@ std::atomic<PrivilegedNetworkMode> configured_mode{PrivilegedNetworkMode::enforc
 std::atomic<PrivilegedNetworkMode> active_mode{PrivilegedNetworkMode::enforced};
 std::atomic<bool> setting_valid{false};
 std::atomic<bool> setting_missing{true};
-std::atomic<bool> active_state_known{false};
+std::atomic<bool> active_state_known{true};
 }
 
 void initialize_privileged_network_runtime(
@@ -17,7 +17,7 @@ void initialize_privileged_network_runtime(
     active_mode.store(parsed.mode, std::memory_order_release);
     setting_valid.store(parsed.valid, std::memory_order_release);
     setting_missing.store(parsed.missing, std::memory_order_release);
-    active_state_known.store(false, std::memory_order_release);
+    active_state_known.store(true, std::memory_order_release);
 }
 
 void set_active_privileged_network_mode(PrivilegedNetworkMode mode) noexcept {

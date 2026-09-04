@@ -50,7 +50,7 @@ int main() {
             return true;
         });
     const auto before_apply = admin.status();
-    assert(before_apply.configured_known && !before_apply.active_known);
+    assert(before_apply.configured_known && before_apply.active_known);
     assert(before_apply.setting_was_valid && !before_apply.setting_was_missing);
     const auto applied = admin.apply("insecure-disabled");
     assert(applied.applied());

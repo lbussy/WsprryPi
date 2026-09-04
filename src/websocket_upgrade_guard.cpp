@@ -56,6 +56,7 @@ WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
     }
 
     std::map<std::string, std::string> headers;
+    std::vector<std::string> trusted_proxy_identities;
     std::size_t position = request_line_end + 2;
     while (position < request.size() - 2) {
         const auto end = request.find("\r\n", position);
@@ -71,7 +72,17 @@ WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
             })) return {};
         const std::string name = lower_ascii(raw_name);
         const std::string value = trim(line.substr(colon + 1));
-        if (name.empty() || value.empty() || headers.contains(name)) return {};
+        if (name.empty() || value.empty()) return {};
+        if (name == lower_ascii(
+                std::string(WSPRRYPI_TRUSTED_PROXY_IDENTITY_HEADER))) {
+            trusted_proxy_identities.push_back(value);
+            if (headers.contains(name)) {
+                position = end + 2;
+                continue;
+            }
+        } else if (headers.contains(name)) {
+            return {};
+        }
         headers.emplace(name, value);
         position = end + 2;
     }
@@ -93,10 +104,13 @@ WebSocketUpgradeGuardResult evaluate_websocket_upgrade(
     const std::optional<std::string> origin_value =
         origin == headers.end() ? std::nullopt
                                 : std::optional<std::string>(origin->second);
-    if (!SupportRequestGuard(snapshot).evaluate(
+    const auto guard = SupportRequestGuard(snapshot).evaluate(
             peer_address, host->second, origin_value,
-            mode != PrivilegedNetworkMode::insecure_disabled).allowed()) {
-        return {WebSocketUpgradeGuardDecision::rejected, {}};
+            mode != PrivilegedNetworkMode::insecure_disabled,
+            trusted_proxy_identities);
+    if (!guard.allowed()) {
+        return {WebSocketUpgradeGuardDecision::rejected, {}, guard.decision};
     }
-    return {WebSocketUpgradeGuardDecision::allowed, key->second};
+    return {WebSocketUpgradeGuardDecision::allowed, key->second,
+            SupportRequestGuardDecision::allowed};
 }

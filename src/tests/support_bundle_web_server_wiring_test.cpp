@@ -31,7 +31,8 @@ int main() {
     assert(construction < registration);
     assert(count(source, "SupportBundleRuntime::create_production()") == 1);
     assert(count(source, "register_support_bundle_http_routes(") == 1);
-    assert(source.find("SupportRequestGuard::discover_local_networks()") != std::string::npos);
+    assert(header.find("network_snapshot_provider_") != std::string::npos);
+    assert(source.find("network_snapshot_provider_()") != std::string::npos);
     assert(count(source, "resolve_support_bundle_intake_production") == 1);
     assert(source.find("resolve_support_bundle_intake_production);") != std::string::npos);
 

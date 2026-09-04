@@ -8064,7 +8064,7 @@ manage_apache() {
         if [[ "${APACHE_WEB_MODE:-unknown}" == "custom_site" ]]; then
 
             exec_command "Enable proxy modules" \
-                a2enmod proxy proxy_http proxy_wstunnel \
+                a2enmod headers proxy proxy_http proxy_wstunnel \
                 "$debug" || {
                 logE "Failed to enable proxy modules."
                 debug_end "$debug"
@@ -8128,7 +8128,7 @@ manage_apache() {
         fi
 
         # Enable required modules
-        exec_command "Enable proxy modules" a2enmod proxy proxy_http proxy_wstunnel "$debug" || {
+        exec_command "Enable proxy modules" a2enmod headers proxy proxy_http proxy_wstunnel "$debug" || {
             logE "Failed to enable proxy modules."
             debug_end "$debug"
             return 1

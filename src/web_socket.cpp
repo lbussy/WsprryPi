@@ -453,6 +453,7 @@ void WebSocketServer::stop()
         std::unique_lock<std::mutex> lock(clients_mutex_);
         client_handlers_cv_.wait(lock, [this] { return active_client_handlers_ == 0; });
         client_sockets_.clear();
+        client_authorizations_.clear();
         handshaking_sockets_.clear();
     }
 
@@ -1151,6 +1152,13 @@ void WebSocketServer::sendToClient(const std::string &message)
     // Broadcast to every connected client
     for (int fd : client_sockets_)
     {
+        const auto authorization = client_authorizations_.find(fd);
+        if (authorization == client_authorizations_.end() ||
+            !clientAuthorizationCurrent(authorization->second))
+        {
+            shutdown(fd, SHUT_RDWR);
+            continue;
+        }
         ssize_t sent = ::send(fd, frame.data(), frame.size(), 0);
         if (sent < 0)
         {
@@ -1216,6 +1224,13 @@ void WebSocketServer::sendAllClients(const std::string &message)
     // Send to every connected client
     for (int fd : client_sockets_)
     {
+        const auto authorization = client_authorizations_.find(fd);
+        if (authorization == client_authorizations_.end() ||
+            !clientAuthorizationCurrent(authorization->second))
+        {
+            shutdown(fd, SHUT_RDWR);
+            continue;
+        }
         if (::send(fd, frame.data(), frame.size(), 0) < 0)
         {
             std::perror("sendAllClients");
@@ -1291,8 +1306,8 @@ void WebSocketServer::serverLoop()
             inet_ntop(AF_INET6, &s6->sin6_addr, peer_ip, sizeof(peer_ip));
         }
 
-        // Perform WebSocket handshake using only the actual socket peer.
-        if (!performHandshake(client, peer_ip))
+        std::string upgrade_request;
+        if (!performHandshake(client, peer_ip, upgrade_request))
         {
             llog.logE(WARN, "Handshake failed for new client");
             std::lock_guard<std::mutex> lock(clients_mutex_);
@@ -1325,16 +1340,22 @@ void WebSocketServer::serverLoop()
                 continue;
             }
             client_sockets_.push_back(client);
+            const ClientAuthorizationContext authorization{
+                peer_ip, std::move(upgrade_request)};
+            client_authorizations_.emplace(client, authorization);
             ++active_client_handlers_;
             try
             {
-                std::thread(&WebSocketServer::clientLoop, this, client).detach();
+                std::thread(
+                    &WebSocketServer::clientLoop, this, client,
+                    authorization).detach();
             }
             catch (const std::system_error &e)
             {
                 llog.logE(ERROR, "Could not create WebSocket client handler: ", e.what());
                 --active_client_handlers_;
                 client_sockets_.erase(std::remove(client_sockets_.begin(), client_sockets_.end(), client), client_sockets_.end());
+                client_authorizations_.erase(client);
                 shutdown(client, SHUT_RDWR);
                 close(client);
                 client_handlers_cv_.notify_all();
@@ -1353,7 +1374,9 @@ void WebSocketServer::serverLoop()
  *
  * @param client_fd File descriptor of the accepted client socket.
  */
-void WebSocketServer::clientLoop(int client_fd)
+void WebSocketServer::clientLoop(
+    int client_fd,
+    ClientAuthorizationContext authorization)
 {
     struct HandlerExit
     {
@@ -1365,6 +1388,7 @@ void WebSocketServer::clientLoop(int client_fd)
             shutdown(fd, SHUT_RDWR);
             close(fd);
             server->client_sockets_.erase(std::remove(server->client_sockets_.begin(), server->client_sockets_.end(), fd), server->client_sockets_.end());
+            server->client_authorizations_.erase(fd);
             --server->active_client_handlers_;
             server->client_handlers_cv_.notify_all();
         }
@@ -1380,6 +1404,13 @@ void WebSocketServer::clientLoop(int client_fd)
         if (bytes <= 0)
         {
             // TCP FIN or error
+            break;
+        }
+        if (!clientAuthorizationCurrent(authorization))
+        {
+            llog.logS(INFO,
+                "Closing WebSocket client because its current network "
+                "authorization is no longer valid.");
             break;
         }
 
@@ -1470,6 +1501,13 @@ void WebSocketServer::keepAliveLoop(uint32_t interval)
                 clients_mutex_);
             for (int fd : client_sockets_)
             {
+                const auto authorization = client_authorizations_.find(fd);
+                if (authorization == client_authorizations_.end() ||
+                    !clientAuthorizationCurrent(authorization->second))
+                {
+                    shutdown(fd, SHUT_RDWR);
+                    continue;
+                }
                 unsigned char ping[2] = {0x89, 0x00};
                 if (::send(fd, ping, sizeof(ping), 0) < 0)
                 {
@@ -1496,7 +1534,10 @@ void WebSocketServer::keepAliveLoop(uint32_t interval)
  * @note If the handshake fails, this method does not close the socket.
  *       The caller is responsible for cleanup.
  */
-bool WebSocketServer::performHandshake(int client, const std::string &peer_address)
+bool WebSocketServer::performHandshake(
+    int client,
+    const std::string &peer_address,
+    std::string &upgrade_request)
 {
     const int buf_size = 4096;
     char buf[buf_size];
@@ -1515,10 +1556,26 @@ bool WebSocketServer::performHandshake(int client, const std::string &peer_addre
     }
 
     const auto guard = evaluate_websocket_upgrade(
-        request, peer_address, SupportRequestGuard::discover_local_networks(),
+        request, peer_address, network_snapshot_provider_(),
         active_privileged_network_mode());
     if (guard.decision != WebSocketUpgradeGuardDecision::allowed)
     {
+        if (guard.decision == WebSocketUpgradeGuardDecision::malformed)
+            llog.logS(DEBUG, "WebSocket upgrade rejected: malformed request.");
+        else if (guard.rejection_reason ==
+                 SupportRequestGuardDecision::invalid_trusted_proxy_identity)
+            llog.logS(WARN, "WebSocket upgrade rejected: invalid trusted-proxy identity.");
+        else if (guard.rejection_reason == SupportRequestGuardDecision::rejected_host)
+            llog.logS(DEBUG, "WebSocket upgrade rejected: invalid Host.");
+        else if (guard.rejection_reason == SupportRequestGuardDecision::rejected_origin)
+            llog.logS(DEBUG, "WebSocket upgrade rejected: invalid Origin.");
+        else if (guard.rejection_reason == SupportRequestGuardDecision::no_eligible_network)
+            llog.logS(DEBUG, "WebSocket upgrade rejected: enforced safety has no eligible LAN.");
+        else if (guard.rejection_reason ==
+                 SupportRequestGuardDecision::interface_discovery_unavailable)
+            llog.logS(DEBUG, "WebSocket upgrade rejected: current network discovery failed.");
+        else
+            llog.logS(DEBUG, "WebSocket upgrade rejected: client network is not eligible.");
         const char *status = guard.decision == WebSocketUpgradeGuardDecision::rejected
             ? "HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             : "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
@@ -1540,7 +1597,19 @@ bool WebSocketServer::performHandshake(int client, const std::string &peer_addre
         return false;
     }
 
+    upgrade_request = std::move(request);
     return true;
+}
+
+bool WebSocketServer::clientAuthorizationCurrent(
+    const ClientAuthorizationContext &authorization) const
+{
+    return evaluate_websocket_upgrade(
+               authorization.upgrade_request,
+               authorization.peer_address,
+               network_snapshot_provider_(),
+               active_privileged_network_mode()).decision ==
+           WebSocketUpgradeGuardDecision::allowed;
 }
 
 /**

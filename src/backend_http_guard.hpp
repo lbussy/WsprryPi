@@ -19,4 +19,6 @@ enum class BackendHttpGuardDecision {
     const std::string &host_header,
     const std::optional<std::string> &origin_header,
     const SupportRequestGuardSnapshot &snapshot,
-    PrivilegedNetworkMode mode = PrivilegedNetworkMode::enforced);
+    PrivilegedNetworkMode mode = PrivilegedNetworkMode::enforced,
+    const std::vector<std::string> &trusted_proxy_identities = {},
+    SupportRequestGuardDecision *rejection_reason = nullptr);

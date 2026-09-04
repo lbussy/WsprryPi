@@ -48,6 +48,3 @@ private:
     PrivilegedNetworkCommandRunner runner_;
     mutable std::mutex mutex_;
 };
-
-[[nodiscard]] PrivilegedNetworkTransactionResult
-reconcile_privileged_network_policy(const PrivilegedNetworkAdminPaths &paths);

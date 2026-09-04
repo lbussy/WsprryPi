@@ -7,13 +7,15 @@
 
 namespace {
 std::string request(std::string host = "wsprrypi:31416",
-                    std::string origin = {}) {
+                    std::string origin = {},
+                    std::string extra_headers = {}) {
     std::string value =
         "GET / HTTP/1.1\r\nHost: " + host +
         "\r\nUpgrade: websocket\r\nConnection: keep-alive, Upgrade\r\n"
         "Sec-WebSocket-Version: 13\r\n"
         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n";
     if (!origin.empty()) value += "Origin: " + origin + "\r\n";
+    value += extra_headers;
     return value + "\r\n";
 }
 } // namespace
@@ -46,6 +48,35 @@ int main() {
     forwarded.insert(forwarded.size() - 2,
                      "Forwarded: for=192.168.50.42\r\nX-Forwarded-For: 192.168.50.42\r\n");
     assert(evaluate(forwarded, "192.168.51.42") == WebSocketUpgradeGuardDecision::rejected);
+
+    const std::string trusted =
+        "X-WsprryPi-Client-Address: 192.168.50.42\r\n";
+    assert(evaluate(request("wsprrypi:31416", {}, trusted), "127.0.0.1") ==
+           WebSocketUpgradeGuardDecision::allowed);
+    assert(evaluate(request("wsprrypi:31416", {}, trusted), "192.168.51.42") ==
+           WebSocketUpgradeGuardDecision::rejected);
+    assert(evaluate(request("wsprrypi:31416", {},
+                            "X-WsprryPi-Client-Address: 192.168.51.42\r\n"),
+                    "127.0.0.1") == WebSocketUpgradeGuardDecision::rejected);
+    const auto duplicate_trusted = evaluate_websocket_upgrade(
+        request("wsprrypi:31416", {},
+                "X-WsprryPi-Client-Address: 192.168.50.42\r\n"
+                "X-WsprryPi-Client-Address: 192.168.50.43\r\n"),
+        "127.0.0.1", snapshot);
+    assert(duplicate_trusted.decision == WebSocketUpgradeGuardDecision::rejected);
+    assert(duplicate_trusted.rejection_reason ==
+           SupportRequestGuardDecision::invalid_trusted_proxy_identity);
+    assert(evaluate_websocket_upgrade(
+               request("wsprrypi:31416", {}, trusted), "127.0.0.1",
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}}).decision ==
+           WebSocketUpgradeGuardDecision::rejected);
+    assert(evaluate_websocket_upgrade(
+               request("wsprrypi:31416", {},
+                       "X-WsprryPi-Client-Address: 203.0.113.4\r\n"),
+               "127.0.0.1",
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}},
+               PrivilegedNetworkMode::insecure_disabled).decision ==
+           WebSocketUpgradeGuardDecision::allowed);
 
     for (const std::string &malformed : std::vector<std::string>{
              std::string{},

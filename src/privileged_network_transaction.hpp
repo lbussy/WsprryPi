@@ -1,12 +1,10 @@
 #pragma once
 
 #include "privileged_network_policy.hpp"
-#include "support_request_guard.hpp"
 
 #include <functional>
 #include <optional>
 #include <string>
-#include <vector>
 
 struct PrivilegedNetworkTransactionSnapshot {
     PrivilegedNetworkMode configured = PrivilegedNetworkMode::enforced;
@@ -30,7 +28,6 @@ struct PrivilegedNetworkTransactionCandidate {
 
 enum class PrivilegedNetworkTransactionStatus {
     applied,
-    discovery_failed,
     render_failed,
     application_validation_failed,
     apache_validation_failed,
@@ -59,7 +56,6 @@ struct PrivilegedNetworkTransactionResult {
 };
 
 struct PrivilegedNetworkTransactionOperations {
-    std::function<std::vector<SupportLocalNetwork>()> discover_networks;
     std::function<bool(const PrivilegedNetworkTransactionCandidate &)> validate_application;
     std::function<bool(const std::string &)> validate_apache;
     std::function<bool(const PrivilegedNetworkTransactionCandidate &)> publish;

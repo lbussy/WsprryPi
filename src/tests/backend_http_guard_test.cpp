@@ -25,6 +25,12 @@ int main() {
            BackendHttpGuardDecision::rejected);
     assert(evaluate("GET", "/api/network-safety", "192.168.50.42", "wsprrypi") ==
            BackendHttpGuardDecision::allowed);
+    assert(evaluate("POST", "/api/rp1-gpclk-route", "192.168.51.42", "wsprrypi") ==
+           BackendHttpGuardDecision::rejected);
+    assert(evaluate("POST", "/api/rp1-gpclk-route", "192.168.50.42", "wsprrypi") ==
+           BackendHttpGuardDecision::allowed);
+    assert(evaluate("GET", "/api/rp1-gpclk-route", "192.168.50.42", "wsprrypi") ==
+           BackendHttpGuardDecision::allowed);
     assert(evaluate("GET", "/api/support-bundles/job/download", "192.168.50.42",
                     "wsprrypi", "http://evil") == BackendHttpGuardDecision::rejected);
     assert(evaluate("GET", "/config", "203.0.113.4", "foreign") ==
@@ -52,6 +58,46 @@ int main() {
                "GET", "/config", "203.0.113.4", "wsprrypi", std::nullopt,
                snapshot, PrivilegedNetworkMode::insecure_disabled) ==
            BackendHttpGuardDecision::rejected);
+
+    // Apache loopback traffic is authorized using only the dedicated identity.
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "127.0.0.1", "wsprrypi", std::nullopt,
+               snapshot, PrivilegedNetworkMode::enforced,
+               {"192.168.50.42"}) == BackendHttpGuardDecision::allowed);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "127.0.0.1", "wsprrypi", std::nullopt,
+               snapshot, PrivilegedNetworkMode::enforced,
+               {"192.168.51.42"}) == BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "203.0.113.4", "wsprrypi", std::nullopt,
+               snapshot, PrivilegedNetworkMode::enforced,
+               {"192.168.50.42"}) == BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "127.0.0.1", "wsprrypi", std::nullopt,
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}},
+               PrivilegedNetworkMode::enforced,
+               {"192.168.50.42"}) == BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "GET", "/config", "127.0.0.1", "wsprrypi", std::nullopt,
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}},
+               PrivilegedNetworkMode::enforced,
+               {"192.168.50.42"}) == BackendHttpGuardDecision::allowed);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "127.0.0.1", "wsprrypi", std::nullopt,
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}},
+               PrivilegedNetworkMode::insecure_disabled,
+               {"203.0.113.4"}) == BackendHttpGuardDecision::allowed);
+    // A proxied future route fails closed until its operation is explicitly
+    // classified, so adding a handler cannot accidentally inherit loopback.
+    assert(evaluate_backend_http_request(
+               "POST", "/api/future-operation", "127.0.0.1", "wsprrypi",
+               std::nullopt, snapshot, PrivilegedNetworkMode::enforced,
+               {"192.168.50.42"}) == BackendHttpGuardDecision::rejected);
+    assert(evaluate_backend_http_request(
+               "PUT", "/config", "127.0.0.1", "evil", std::nullopt,
+               SupportRequestGuardSnapshot{true, "wsprrypi", {}, {}},
+               PrivilegedNetworkMode::insecure_disabled,
+               {"203.0.113.4"}) == BackendHttpGuardDecision::rejected);
 
     std::cout << "backend_http_guard_test: PASS\n";
 }

@@ -305,23 +305,57 @@ void WebServer::start(int port)
         register_support_bundle_http_routes(
             *svr,
             *supportBundleJobManager_,
-            [] { return SupportRequestGuard::discover_local_networks(); },
+            [this] { return network_snapshot_provider_(); },
             resolve_support_bundle_intake_production);
         supportBundleRoutesRegistered_ = true;
     }
 
     svr->set_pre_routing_handler(
-        [](const httplib::Request &request, httplib::Response &response) {
+        [this](const httplib::Request &request, httplib::Response &response) {
             const std::optional<std::string> origin = request.has_header("Origin")
                 ? std::optional<std::string>(request.get_header_value("Origin"))
                 : std::nullopt;
+            std::vector<std::string> trusted_proxy_identities;
+            const std::string trusted_header(
+                WSPRRYPI_TRUSTED_PROXY_IDENTITY_HEADER);
+            const auto trusted_count =
+                request.get_header_value_count(trusted_header);
+            for (std::size_t index = 0; index < trusted_count; ++index)
+                trusted_proxy_identities.push_back(
+                    request.get_header_value(trusted_header, "", index));
+            SupportRequestGuardDecision rejection_reason =
+                SupportRequestGuardDecision::allowed;
             if (evaluate_backend_http_request(
                     request.method, request.path, request.remote_addr,
                     request.get_header_value("Host"), origin,
-                    SupportRequestGuard::discover_local_networks(),
-                    active_privileged_network_mode()) ==
+                    network_snapshot_provider_(),
+                    active_privileged_network_mode(),
+                    trusted_proxy_identities, &rejection_reason) ==
                 BackendHttpGuardDecision::allowed) {
                 return httplib::Server::HandlerResponse::Unhandled;
+            }
+            switch (rejection_reason) {
+            case SupportRequestGuardDecision::invalid_trusted_proxy_identity:
+                llog.logS(WARN, "HTTP request rejected: invalid trusted-proxy identity.");
+                break;
+            case SupportRequestGuardDecision::rejected_host:
+                llog.logS(DEBUG, "HTTP request rejected: invalid Host.");
+                break;
+            case SupportRequestGuardDecision::rejected_origin:
+                llog.logS(DEBUG, "HTTP request rejected: invalid Origin.");
+                break;
+            case SupportRequestGuardDecision::invalid_request:
+                llog.logS(DEBUG, "HTTP request rejected: invalid method or route.");
+                break;
+            case SupportRequestGuardDecision::no_eligible_network:
+                llog.logS(DEBUG, "HTTP request rejected: enforced safety has no eligible LAN.");
+                break;
+            case SupportRequestGuardDecision::interface_discovery_unavailable:
+                llog.logS(DEBUG, "HTTP request rejected: current network discovery failed.");
+                break;
+            default:
+                llog.logS(DEBUG, "HTTP request rejected: client network is not eligible.");
+                break;
             }
             response.status = 403;
             response.headers.erase("Access-Control-Allow-Origin");

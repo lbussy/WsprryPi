@@ -31,7 +31,9 @@
 
 #include "httplib.hpp"
 #include "json.hpp"
+#include "support_request_guard.hpp"
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <stdexcept>
@@ -110,12 +112,16 @@ public:
     bool setThreadPriority(int schedPolicy, int priority);
 
 private:
+    friend class WebServerNetworkLifecycleTest;
+
     int port_;                         ///< Port on which the server listens.
     // Declared before svr so route captures are destroyed before the manager.
     std::unique_ptr<SupportBundleJobManager> supportBundleJobManager_;
     std::unique_ptr<PrivilegedNetworkAdmin> privilegedNetworkAdmin_;
     wsprrypi::Rp1GpclkRouteService* rp1GpclkRouteService_ = nullptr;
     bool supportBundleRoutesRegistered_ = false;
+    std::function<SupportRequestGuardSnapshot()> network_snapshot_provider_{
+        [] { return SupportRequestGuard::discover_local_networks(); }};
     std::unique_ptr<httplib::Server> svr; ///< Underlying HTTP server from cpp-httplib.
     std::thread serverThread;          ///< Thread running the HTTP server.
     std::mutex mtx;                    ///< Mutex for synchronizing start/stop operations.

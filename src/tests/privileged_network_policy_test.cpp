@@ -20,6 +20,17 @@ static PrivilegedInterfaceCandidate ethernet(std::string address,
 }
 
 int main() {
+    assert(classify_privileged_interface_link({true, false, 1}) ==
+           PrivilegedInterfaceKind::ethernet);
+    assert(classify_privileged_interface_link({true, true, 1}) ==
+           PrivilegedInterfaceKind::wifi);
+    assert(classify_privileged_interface_link({false, false, 1}) ==
+           PrivilegedInterfaceKind::other);
+    assert(classify_privileged_interface_link({false, true, 1}) ==
+           PrivilegedInterfaceKind::other);
+    assert(classify_privileged_interface_link({true, false, 772}) ==
+           PrivilegedInterfaceKind::other);
+
     for (std::string_view method : {"PUT", "PATCH"}) {
         expect_http(method, "/config", Classification::protected_operation);
     }
@@ -28,6 +39,9 @@ int main() {
     expect_http("POST", "/api/network-safety", Classification::protected_operation);
     expect_http("GET", "/api/network-safety", Classification::read_only);
     expect_http("PUT", "/api/network-safety", Classification::reject);
+    expect_http("POST", "/api/rp1-gpclk-route", Classification::protected_operation);
+    expect_http("GET", "/api/rp1-gpclk-route", Classification::read_only);
+    expect_http("PUT", "/api/rp1-gpclk-route", Classification::reject);
     for (const auto &request : std::vector<std::pair<std::string, std::string>>{
              {"POST", "/api/support-bundles"},
              {"GET", "/api/support-bundles/job-id"},

@@ -76,12 +76,15 @@ python3 scripts/tests/installer_dry_run_purity_test.py
 
 ## Support-bundle collector
 
-### Future support-route guard
+### Support-route guard
 
-`SupportRequestGuard` is not yet wired to HTTP routes. It limits a future
-support route to loopback or directly connected interface subnets and validates
-local Host/Origin identities. It is network-location access control, not user
-authentication; forwarded headers are deliberately ignored.
+`SupportRequestGuard` protects support-bundle routes and other privileged HTTP
+operations using the current eligible interface subnets, while continuing to
+validate local Host/Origin identities. Apache overwrites the dedicated
+`X-WsprryPi-Client-Address` header with its connection peer; the backend trusts
+that identity only from an actual loopback proxy peer. Direct clients use their
+socket peer, and generic forwarding headers are deliberately ignored. This is
+network-location access control, not user authentication.
 
 `collect-support-bundle.sh` retains its interactive behavior by creating a
 bundle in the current directory. A trusted future backend may instead invoke

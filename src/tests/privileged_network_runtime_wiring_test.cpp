@@ -22,18 +22,18 @@ int main() {
     const auto stock_ini = read_file(root / "../config/wsprrypi.ini");
 
     assert(parser.find("initialize_privileged_network_runtime(") != std::string::npos);
-    assert(http.find("active_privileged_network_mode())") != std::string::npos);
-    assert(websocket.find("active_privileged_network_mode());") != std::string::npos);
+    assert(http.find("active_privileged_network_mode()") != std::string::npos);
+    assert(websocket.find("active_privileged_network_mode()") != std::string::npos);
     assert(http.find("svr->Get(\"/api/network-safety\"") != std::string::npos);
     assert(http.find("svr->Post(\"/api/network-safety\"") != std::string::npos);
     assert(http.find("Access-Control-Allow-Origin\", \"*\"") == std::string::npos);
-    assert(scheduling.find("reconcile_privileged_network_policy(") != std::string::npos);
-    assert(scheduling.find("external HTTP and WebSocket listeners remain disabled") !=
+    assert(scheduling.find("reconcile_privileged_network_policy(") == std::string::npos);
+    assert(scheduling.find("PrivilegedNetworkStartupRecovery") == std::string::npos);
+    assert(scheduling.find("HTTP listener started on port") != std::string::npos);
+    assert(scheduling.find("HTTP listener failed to bind or listen") !=
            std::string::npos);
-    assert(scheduling.find("Startup reconciliation will retry every 5 seconds") !=
-           std::string::npos);
-    assert(scheduling.find("configured external listeners are available") !=
-           std::string::npos);
+    assert(scheduling.find("socketServer.start(") != std::string::npos);
+    assert(scheduling.find("no eligible LAN") != std::string::npos);
     assert(stock_ini.find("[Security]") != std::string::npos);
     assert(stock_ini.find("Privileged Network Safety = enforced") != std::string::npos);
 

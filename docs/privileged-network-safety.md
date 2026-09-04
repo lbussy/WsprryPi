@@ -8,11 +8,19 @@ This is network-location access control, not user authentication. It reduces exp
 
 ## Governing Architecture
 
-Apache is the browser-facing security boundary. It sees the browser's actual peer address and SHALL enforce the directly-connected-LAN restriction before forwarding protected HTTP requests or upgrading the WebSocket connection.
+Apache is the browser-facing proxy boundary. It sees the browser's actual TCP
+peer and SHALL overwrite the dedicated `X-WsprryPi-Client-Address` request
+header with that connection address before forwarding HTTP requests or a
+WebSocket upgrade. WsprryPi is the authorization boundary: it accepts this
+dedicated identity only from an actual loopback backend peer and evaluates the
+effective client against current eligible interfaces for every request or
+upgrade.
 
 The backend remains a defense-in-depth boundary. It SHALL:
 
 - validate the actual socket peer for direct backend-port access;
+- reject an invalid or duplicate dedicated proxy identity received from loopback;
+- ignore a dedicated proxy identity received from a non-loopback direct client;
 - validate a local `Host` identity;
 - validate an `Origin` when one is supplied;
 - ignore `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, and every equivalent forwarded-client header; and
@@ -38,6 +46,8 @@ The following operations are privileged:
 | `GET` | `/api/support-bundles/{id}` | Read support-bundle job status |
 | `GET` | `/api/support-bundles/{id}/download` | Download a support bundle |
 | `DELETE` | `/api/support-bundles/{id}` | Delete a support bundle |
+| `POST` | `/api/network-safety` | Change privileged network safety |
+| `POST` | `/api/rp1-gpclk-route` | Apply or recover an RP1 GPCLK route |
 
 Preflight and other method handling for a protected route SHALL NOT provide a bypass. A request that would enable or target a protected operation SHALL pass the same Apache boundary and retain the protected route's Host, Origin, CORS, malformed-request, and method-validation policies.
 
@@ -82,36 +92,52 @@ Eligible interfaces are active non-loopback Ethernet or Wi-Fi interfaces with a 
 - multicast and unspecified addresses; and
 - interfaces without a usable address and netmask/prefix.
 
+On Linux, physical Ethernet and Wi-Fi eligibility requires kernel sysfs device
+evidence in addition to the link type. Interface names are only a defensive
+exclusion signal; renaming a bridge, veth pair, tunnel, or other software link
+to resemble Ethernet does not make it eligible.
+
 IPv4-mapped IPv6 addresses SHALL be normalized before comparison. IPv4 and IPv6 subnet matching SHALL use the interface's actual netmask or prefix. A host is not considered local merely because its address is private, unique-local, link-local, or resolves to a local-sounding name.
 
 Multiple eligible physical interfaces and their directly assigned subnets MAY be allowed simultaneously. Extending eligibility to a VPN, tunnel, bridge, container network, or manually declared subnet requires a separate reviewed feature; it SHALL NOT happen implicitly.
 
 If no eligible subnet can be discovered, enforced mode SHALL fail closed for non-loopback protected access and report the discovery failure without silently disabling protection.
 
+Discovery does not require an Internet route, upstream gateway, DNS, or a
+network manager. An isolated Ethernet or Wi-Fi LAN, direct link, or Pi-hosted
+Wi-Fi network is eligible when it supplies an active usable address and prefix
+on an otherwise eligible interface.
+
+Configured HTTP and WebSocket listeners are independent of discovery. They
+start once during normal application startup, remain listening through network
+loss and reconnection, and are not restarted for interface or subnet changes.
+An actual bind or listen error is a listener failure; absence of an eligible LAN
+is an authorization state and leaves legitimate loopback access available.
+
 ## Apache Enforcement
 
-Apache SHALL use the browser's actual connection address. It SHALL NOT derive authorization from a forwarded-client header.
+Apache SHALL use the browser's actual connection address. It SHALL NOT derive
+identity from an inbound client header.
 
 The managed Apache configuration SHALL:
 
 - preserve the incoming browser-visible `Host`;
-- add explicit proxy mappings for every protected proxied HTTP route, including `/config/repair` and `/control/stop`;
-- distinguish protected methods on mixed-use paths such as `/config`;
-- reject off-LAN protected HTTP requests before proxying;
-- reject off-LAN `/wsprrypi/socket` upgrades before proxying;
+- retain explicit proxy mappings for the HTTP and WebSocket routes exposed
+  through Apache;
+- scope identity replacement to the WsprryPi configuration, control, API,
+  version, and WebSocket namespaces;
+- remove any inbound copy of the dedicated identity header;
+- overwrite that header with Apache's connection peer address for both HTTP and
+  WebSocket proxy requests;
+- leave per-client authorization to WsprryPi;
 - keep unrelated status and telemetry mappings readable where practical; and
 - avoid broad proxy grants that accidentally expose future API routes.
 
-Apache requires concrete allowed CIDRs. WsprryPi's privileged-network-safety application path SHALL discover eligible subnets, generate a managed Apache include, and validate the complete Apache configuration before publishing or reloading it.
-
-Network changes after successful startup do not silently rewrite Apache policy.
-If startup reconciliation cannot discover an eligible subnet, external listeners
-remain disabled and WsprryPi retries the same validated startup transaction until
-it succeeds or shutdown is requested. This completes an interrupted startup; it
-does not continuously regenerate policy after listeners become available.
-Post-start interface-change regeneration remains outside the initial scope and
-requires the explicit validated apply/reload path used for an administrator
-setting change.
+The managed Apache include is static with respect to network addresses. It uses
+`mod_headers` and `CONN_REMOTE_ADDR`, is validated before publication, and does
+not contain generated subnet allowlists. Network changes therefore require no
+Apache reload and cannot leave stale CIDR authorization behind. Generic
+`Forwarded`, `X-Forwarded-For`, `X-Real-IP`, and similar headers remain ignored.
 
 ## Backend Enforcement
 
@@ -123,9 +149,18 @@ For protected HTTP operations on backend port `31415`, the backend SHALL require
 
 For direct WebSocket access on backend port `31416`, the backend SHALL apply the same peer, Host, and optional Origin rules before completing the upgrade. Because direct WebSocket access is for non-browser clients, no port-80-to-31416 browser Origin exception is provided.
 
+An established WebSocket SHALL be reauthorized against current eligible
+networks before processing inbound frames and before sending broadcasts or
+keepalives. If its client is no longer eligible, WsprryPi SHALL close the
+connection rather than retaining startup-time authorization.
+
 When `Origin` is supplied, its host identity and explicit/effective port SHALL match `Host`. A non-browser client MAY omit `Origin`. Missing `Host`, malformed Host or Origin syntax, `Origin: null`, a foreign identity, or a port mismatch SHALL fail closed.
 
-Proxied backend traffic arrives from Apache loopback. Backend peer acceptance of loopback does not replace Apache browser-peer enforcement.
+Proxied backend traffic arrives from Apache loopback. Without the dedicated
+identity header, it remains within the existing local-process trust boundary.
+With the header, WsprryPi validates the represented browser peer against the
+current eligible networks. A non-loopback direct client always uses its actual
+socket peer and cannot promote an attacker-supplied identity header.
 
 ## Administrator Override
 
@@ -158,16 +193,15 @@ Normal configuration autosave SHALL NOT read, write, normalize, delete, or other
 
 ## Apply and Reload Transaction
 
-Changing the administrator override or reapplying policy after an eligible network change SHALL use one validated transaction:
+Changing the administrator override SHALL use one validated transaction:
 
 1. Parse and validate the requested setting.
-2. Discover eligible local subnets when enforcement is requested.
-3. Generate candidate backend and Apache policy artifacts.
-4. Validate the candidate WsprryPi configuration.
-5. Validate the complete candidate Apache configuration with the platform's Apache configuration test.
-6. Publish the candidate configuration atomically.
-7. Reload Apache without rebooting the Pi or restarting WsprryPi solely for this setting.
-8. Confirm the active Apache and backend policy state.
+2. Generate candidate backend and static Apache identity policy artifacts.
+3. Validate the candidate WsprryPi configuration.
+4. Validate the complete candidate Apache configuration with the platform's Apache configuration test.
+5. Publish the candidate configuration atomically.
+6. Reload Apache without rebooting the Pi or restarting WsprryPi solely for this setting.
+7. Confirm the published static Apache identity policy and active backend mode.
 
 If any step fails, the operation SHALL report failure, preserve or restore the previously active configuration and policy, and leave protection enforced unless the previously active state was already the explicit insecure override. A failed apply must never convert an enforced system into an insecure-disabled system.
 
@@ -206,12 +240,19 @@ When network safety is disabled, logs, status output, configuration reporting, a
 NETWORK SAFETY OFF
 ```
 
-Status and configuration reporting SHALL expose both configured and active state without exposing sensitive network details unnecessarily.
+The backend begins enforcing the parsed configuration as soon as its runtime is
+initialized, so the initial active state is known without an Apache reload or
+network-discovery pass. Status and configuration reporting SHALL expose both
+configured and active state without exposing sensitive network details
+unnecessarily. An active state becomes unknown only if an administrative
+transaction cannot restore a known-good configuration after failure.
 
 Security logs SHALL distinguish at least:
 
 - off-LAN peer rejection;
+- enforced operation with no eligible LAN;
 - eligible-interface discovery failure;
+- invalid trusted-proxy identity;
 - invalid or foreign Host;
 - invalid, foreign, or mismatched Origin;
 - malformed request or WebSocket upgrade;
@@ -226,7 +267,10 @@ Logs SHOULD contain enough peer and policy context for diagnosis while avoiding 
 
 Protected HTTP responses SHALL NOT use a permissive wildcard CORS policy. Allowed browser requests use the normal same-origin Apache path. The insecure override SHALL NOT change CORS behavior.
 
-An off-LAN protected HTTP request SHALL receive a generic `403 Forbidden` response before proxying. A rejected Apache WebSocket upgrade SHALL receive a generic HTTP `403` and SHALL NOT establish a WebSocket connection.
+An off-LAN protected HTTP request SHALL receive a generic `403 Forbidden`
+response from WsprryPi before executing the operation. A rejected WebSocket
+upgrade SHALL receive a generic HTTP `403` and SHALL NOT establish a WebSocket
+connection.
 
 A direct backend HTTP or WebSocket rejection SHALL likewise fail before executing an operation. Error responses and close behavior SHALL avoid disclosing whether a particular privileged resource, job identifier, or command would otherwise be valid.
 
@@ -249,5 +293,5 @@ The implementation does not provide:
 - protection from another client already on an allowed LAN;
 - remotely available read-only commands through the protected WebSocket endpoint;
 - automatic VPN, tunnel, bridge, container, or manually declared subnet trust;
-- automatic Apache regeneration on every interface or DHCP change; or
+- network monitoring or Apache regeneration on interface or DHCP changes; or
 - a replacement for firewall, router, VPN, or operating-system security.

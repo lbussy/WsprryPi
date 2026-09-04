@@ -10,7 +10,7 @@ int main() {
     assert(state.configured == PrivilegedNetworkMode::enforced);
     assert(state.active == PrivilegedNetworkMode::enforced);
     assert(!state.setting_was_valid && state.setting_was_missing);
-    assert(!state.active_known);
+    assert(state.active_known);
 
     initialize_privileged_network_runtime("TRUE");
     state = privileged_network_runtime_state();
@@ -22,10 +22,7 @@ int main() {
     assert(state.configured == PrivilegedNetworkMode::insecure_disabled);
     assert(state.active == PrivilegedNetworkMode::insecure_disabled);
     assert(state.setting_was_valid);
-    assert(!state.active_known);
-    assert(privileged_network_runtime_status_text() ==
-           "NETWORK SAFETY STATE UNKNOWN");
-    set_privileged_network_runtime_mode(PrivilegedNetworkMode::insecure_disabled);
+    assert(state.active_known);
     assert(privileged_network_runtime_status_text() == "NETWORK SAFETY OFF");
 
     set_active_privileged_network_mode(PrivilegedNetworkMode::enforced);

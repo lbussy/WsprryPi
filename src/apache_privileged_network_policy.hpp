@@ -1,11 +1,9 @@
 #pragma once
 
-#include "support_request_guard.hpp"
 #include "privileged_network_policy.hpp"
 
 #include <optional>
 #include <string>
-#include <vector>
 
 struct ApachePrivilegedNetworkPolicyResult {
     std::optional<std::string> configuration;
@@ -16,5 +14,4 @@ struct ApachePrivilegedNetworkPolicyResult {
 
 [[nodiscard]] ApachePrivilegedNetworkPolicyResult
 render_apache_privileged_network_policy(
-    const std::vector<SupportLocalNetwork> &networks,
     PrivilegedNetworkMode mode = PrivilegedNetworkMode::enforced);

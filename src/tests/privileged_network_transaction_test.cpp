@@ -18,8 +18,6 @@ struct Controls {
     bool publish_ok = true;
     bool confirm_ok = true;
     bool restore_ok = true;
-    std::vector<SupportLocalNetwork> networks{
-        {"192.168.50.10", "255.255.255.0"}};
     std::vector<bool> reload_results{true};
     std::vector<std::string> calls;
 };
@@ -28,10 +26,6 @@ PrivilegedNetworkTransaction make_transaction(
     Controls &controls,
     PrivilegedNetworkTransactionSnapshot initial = {}) {
     auto operations = PrivilegedNetworkTransactionOperations{
-        [&] {
-            controls.calls.push_back("discover");
-            return controls.networks;
-        },
         [&](const PrivilegedNetworkTransactionCandidate &) {
             controls.calls.push_back("validate_application");
             return controls.application_valid;
@@ -88,7 +82,7 @@ int main() {
         assert(result.applied() && !result.warning_defaulted_to_enforced);
         assert(result.state.active == PrivilegedNetworkMode::enforced);
         assert(result.state.persisted_setting == "enforced");
-        require_calls(controls, {"discover", "validate_application",
+        require_calls(controls, {"validate_application",
                                  "validate_apache", "publish", "reload", "confirm"});
     }
     {
@@ -117,28 +111,12 @@ int main() {
     }
     {
         Controls controls;
-        controls.networks.clear();
-        auto transaction = make_transaction(controls);
-        const auto result = transaction.apply("enforced");
-        assert(result.status == PrivilegedNetworkTransactionStatus::discovery_failed);
-        require_calls(controls, {"discover"});
-    }
-    {
-        Controls controls;
-        controls.networks = {{"not-an-address", "255.255.255.0"}};
-        auto transaction = make_transaction(controls);
-        const auto result = transaction.apply("enforced");
-        assert(result.status == PrivilegedNetworkTransactionStatus::render_failed);
-        require_calls(controls, {"discover"});
-    }
-    {
-        Controls controls;
         controls.application_valid = false;
         auto transaction = make_transaction(controls);
         const auto result = transaction.apply("enforced");
         assert(result.status ==
                PrivilegedNetworkTransactionStatus::application_validation_failed);
-        require_calls(controls, {"discover", "validate_application"});
+        require_calls(controls, {"validate_application"});
     }
     {
         Controls controls;
@@ -146,7 +124,7 @@ int main() {
         auto transaction = make_transaction(controls);
         const auto result = transaction.apply("enforced");
         assert(result.status == PrivilegedNetworkTransactionStatus::apache_validation_failed);
-        require_calls(controls, {"discover", "validate_application", "validate_apache"});
+        require_calls(controls, {"validate_application", "validate_apache"});
     }
     {
         Controls controls;

@@ -10,6 +10,8 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <set>
 
 namespace {
@@ -118,13 +120,6 @@ std::optional<ParsedHost> origin_host(const std::string &origin, bool &https) {
     return host(authority);
 }
 
-PrivilegedInterfaceKind physical_interface_kind(const std::string &name) {
-    const auto begins = [&](std::string_view prefix) { return name.starts_with(prefix); };
-    if (begins("wlan") || begins("wl")) return PrivilegedInterfaceKind::wifi;
-    if (begins("eth") || begins("en")) return PrivilegedInterfaceKind::ethernet;
-    return PrivilegedInterfaceKind::other;
-}
-
 bool excluded_interface_name(const std::string &name) {
     static constexpr std::array<std::string_view, 14> prefixes = {
         "lo", "tun", "tap", "utun", "wg", "tailscale", "zt", "docker",
@@ -132,17 +127,62 @@ bool excluded_interface_name(const std::string &name) {
     return std::any_of(prefixes.begin(), prefixes.end(),
                        [&](std::string_view prefix) { return name.starts_with(prefix); });
 }
+
+std::optional<PrivilegedInterfaceKind> discovered_interface_kind(
+    const std::string &name) {
+#if defined(__linux__)
+    const std::filesystem::path root =
+        std::filesystem::path("/sys/class/net") / name;
+    std::error_code error;
+    const bool interface_exists = std::filesystem::exists(root, error);
+    if (error || !interface_exists) return std::nullopt;
+    error.clear();
+    const bool has_device = std::filesystem::exists(root / "device", error);
+    if (error) return std::nullopt;
+    error.clear();
+    const bool wireless = std::filesystem::exists(root / "wireless", error);
+    if (error) return std::nullopt;
+    std::ifstream type_file(root / "type");
+    unsigned int link_type = 0;
+    if (!(type_file >> link_type)) return std::nullopt;
+    return classify_privileged_interface_link(
+        {has_device, wireless, link_type});
+#else
+    // Production is Linux. This is a conservative portability path for
+    // development builds, which never qualify target networking.
+    const bool wireless = name.starts_with("wlan") || name.starts_with("wl");
+    const bool ethernet = name.starts_with("eth") || name.starts_with("en");
+    return wireless ? PrivilegedInterfaceKind::wifi
+                    : ethernet ? PrivilegedInterfaceKind::ethernet
+                               : PrivilegedInterfaceKind::other;
+#endif
+}
 }
 
 SupportRequestGuard::SupportRequestGuard(SupportRequestGuardSnapshot snapshot) : snapshot_(std::move(snapshot)) {}
 
-SupportRequestGuardResult SupportRequestGuard::evaluate(const std::string &peer_address, const std::string &host_header, const std::optional<std::string> &origin_header, bool enforce_peer) const {
+SupportRequestGuardResult SupportRequestGuard::evaluate(
+    const std::string &peer_address,
+    const std::string &host_header,
+    const std::optional<std::string> &origin_header,
+    bool enforce_peer,
+    const std::vector<std::string> &trusted_proxy_identities) const {
     const auto peer = address(peer_address);
     if (!peer || prohibited(*peer)) return {SupportRequestGuardDecision::rejected_peer};
-    if (enforce_peer && !loopback(*peer)) {
+    ParsedAddress client = *peer;
+    if (loopback(*peer) && !trusted_proxy_identities.empty()) {
+        if (trusted_proxy_identities.size() != 1)
+            return {SupportRequestGuardDecision::invalid_trusted_proxy_identity};
+        const auto proxied = address(trusted_proxy_identities.front());
+        if (!proxied || prohibited(*proxied))
+            return {SupportRequestGuardDecision::invalid_trusted_proxy_identity};
+        client = *proxied;
+    }
+    if (enforce_peer && !loopback(client)) {
         if (!snapshot_.discovery_succeeded) return {SupportRequestGuardDecision::interface_discovery_unavailable};
+        if (snapshot_.networks.empty()) return {SupportRequestGuardDecision::no_eligible_network};
         bool matched = false;
-        for (const auto &item : snapshot_.networks) { const auto network = address(item.address); const auto mask = address(item.netmask); if (network && mask && same_subnet(*peer, *network, *mask)) { matched = true; break; } }
+        for (const auto &item : snapshot_.networks) { const auto network = address(item.address); const auto mask = address(item.netmask); if (network && mask && same_subnet(client, *network, *mask)) { matched = true; break; } }
         if (!matched) return {SupportRequestGuardDecision::rejected_peer};
     }
     const auto request_host = host(host_header); if (!request_host || !approved_host(*request_host, snapshot_)) return {SupportRequestGuardDecision::rejected_host};
@@ -159,6 +199,7 @@ SupportRequestGuardSnapshot SupportRequestGuard::discover_local_networks() {
     SupportRequestGuardSnapshot result; char hostname[256]{};
     if (gethostname(hostname, sizeof(hostname) - 1) == 0) result.hostname = hostname;
     ifaddrs *interfaces = nullptr; if (getifaddrs(&interfaces) != 0) return result;
+    result.discovery_succeeded = true;
     for (auto *item = interfaces; item != nullptr; item = item->ifa_next) {
         if (!item->ifa_name || !item->ifa_addr || !item->ifa_netmask ||
             item->ifa_addr->sa_family != item->ifa_netmask->sa_family) continue;
@@ -174,9 +215,14 @@ SupportRequestGuardSnapshot SupportRequestGuard::discover_local_networks() {
             const auto *a = reinterpret_cast<sockaddr_in6 *>(item->ifa_addr); const auto *m = reinterpret_cast<sockaddr_in6 *>(item->ifa_netmask);
             if (inet_ntop(AF_INET6, &a->sin6_addr, buffer, sizeof(buffer))) { address_text = buffer; if (inet_ntop(AF_INET6, &m->sin6_addr, buffer, sizeof(buffer))) mask_text = buffer; }
         }
+        const auto interface_kind = discovered_interface_kind(name);
+        if (!interface_kind) {
+            result.discovery_succeeded = false;
+            continue;
+        }
         const PrivilegedInterfaceCandidate candidate{
             (item->ifa_flags & IFF_UP) != 0,
-            physical_interface_kind(name),
+            *interface_kind,
             (item->ifa_flags & IFF_LOOPBACK) != 0,
             (item->ifa_flags & IFF_POINTOPOINT) != 0,
             false, false, false, false,
@@ -185,6 +231,6 @@ SupportRequestGuardSnapshot SupportRequestGuard::discover_local_networks() {
             result.networks.push_back({address_text, mask_text});
     }
     freeifaddrs(interfaces);
-    result.discovery_succeeded = !result.networks.empty();
+    if (!result.discovery_succeeded) result.networks.clear();
     return result;
 }

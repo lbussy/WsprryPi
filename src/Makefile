@@ -156,7 +156,6 @@ PRIVILEGED_NETWORK_TRANSACTION_TEST_OUT := privileged_network_transaction_test
 PRIVILEGED_NETWORK_RUNTIME_TEST_OUT := privileged_network_runtime_test
 PRIVILEGED_NETWORK_RUNTIME_WIRING_TEST_OUT := privileged_network_runtime_wiring_test
 PRIVILEGED_NETWORK_ADMIN_TEST_OUT := privileged_network_admin_test
-PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT := privileged_network_startup_recovery_test
 SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT := support_bundle_job_manager_test
 SUPPORT_BUNDLE_RESULT_VALIDATOR_TEST_OUT := support_bundle_result_validator_test
 SUPPORT_BUNDLE_COLLECTOR_EXECUTOR_TEST_OUT := support_bundle_collector_executor_test
@@ -329,6 +328,10 @@ WEBSOCKET_LIFECYCLE_TEST_SRC := tests/websocket_lifecycle_test.cpp
 WEBSOCKET_LIFECYCLE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/websocket_lifecycle_test.o
 WEBSOCKET_LIFECYCLE_TEST_DEPS := $(WEBSOCKET_LIFECYCLE_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
 WEBSOCKET_LIFECYCLE_TEST_OUT := websocket_lifecycle_test
+WEB_SERVER_NETWORK_LIFECYCLE_TEST_SRC := tests/web_server_network_lifecycle_test.cpp
+WEB_SERVER_NETWORK_LIFECYCLE_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/web_server_network_lifecycle_test.o
+WEB_SERVER_NETWORK_LIFECYCLE_TEST_DEPS := $(WEB_SERVER_NETWORK_LIFECYCLE_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
+WEB_SERVER_NETWORK_LIFECYCLE_TEST_OUT := web_server_network_lifecycle_test
 WSPR_BAND_CATALOG_TEST_SRC := tests/wspr_band_catalog_test.cpp
 WSPR_BAND_CATALOG_TEST_OBJ := $(OBJ_DIR_DEBUG)/tests/wspr_band_catalog_test.o
 WSPR_BAND_CATALOG_TEST_DEPS := $(WSPR_BAND_CATALOG_TEST_OBJ) $(filter-out $(MAIN_DEBUG_OBJECT),$(CPP_DEBUG_OBJECTS))
@@ -730,6 +733,10 @@ $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT): $(WEBSOCKET_LIFECYCLE_TEST_DEPS)
 	$(Q)mkdir -p $(BIN_DIR)
 	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
 
+$(BIN_DIR)/$(WEB_SERVER_NETWORK_LIFECYCLE_TEST_OUT): $(WEB_SERVER_NETWORK_LIFECYCLE_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) $^ -o $@ $(LDFLAGS)
+
 $(WSPR_BAND_CATALOG_TEST_OBJ): $(WSPR_BAND_CATALOG_TEST_SRC)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)mkdir -p $(DEP_DIR)/tests
@@ -1116,8 +1123,8 @@ $(BIN_DIR)/$(OUT): $(PROFILE_RELEASE_BIN) FORCE_PROFILE_BINARY
 # ─────────────────────────────────────────────────────────────────────────────
 
 .PHONY: clean debug test test-tone test-oneshot install-binary FORCE_PROFILE_BINARY
-.PHONY: semantics-test rp1-web-backend-persistence-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
-.PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test privileged-network-startup-recovery-test support-bundle-job-manager-test support-bundle-result-validator-test
+.PHONY: semantics-test rp1-web-backend-persistence-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test machine-power-control-test websocket-lifecycle-test web-server-network-lifecycle-test wspr-band-catalog-test gpio-band-policy-test
+.PHONY: support-request-guard-test privileged-network-policy-test backend-http-guard-test websocket-upgrade-guard-test apache-privileged-network-policy-test privileged-network-transaction-test privileged-network-runtime-test privileged-network-runtime-wiring-test privileged-network-admin-test support-bundle-job-manager-test support-bundle-result-validator-test
 .PHONY: support-bundle-collector-executor-test support-bundle-runtime-test support-bundle-runtime-installer-test
 .PHONY: installer-dependency-test rp1-gpclk-dkms-installer-test ui-publication-test support-bundle-age-dependency-test support-bundle-http-test support-bundle-web-server-wiring-test
 .PHONY: support-bundle-download-file-test support-bundle-checksum-file-test support-bundle-archive-digest-test
@@ -1216,7 +1223,7 @@ semantics-test:
 	$(Q)$(MAKE) --no-print-directory semantics-test-full \
 		BACKENDS=$(DEFAULT_BACKENDS) ANCILLARY_GPIO=1
 
-semantics-test-full: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test rp1-web-backend-persistence-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test-full: chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test rp1-web-backend-persistence-test websocket-lifecycle-test web-server-network-lifecycle-test $(BIN_DIR)/$(SEMANTICS_TEST_OUT) $(BIN_DIR)/$(CLEANUP_LIFECYCLE_TEST_OUT) $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running runtime semantics tests."
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)echo "Running cleanup lifecycle tests."
@@ -1244,7 +1251,7 @@ semantics-test-portable:
 	$(Q)$(MAKE) --no-print-directory semantics-test-portable-profile \
 		BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
 
-semantics-test-portable-profile: backend-capabilities-regression-test backend-capabilities-make-regression-test debug band-lookup-correlation-test chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test privileged-network-startup-recovery-test $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test-portable-profile: backend-capabilities-regression-test backend-capabilities-make-regression-test debug band-lookup-correlation-test chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test websocket-lifecycle-test web-server-network-lifecycle-test $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running portable UI/source regression tests."
 	$(Q)./$(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
 	$(Q)echo "Running portable GPIO band fail-closed policy tests."
@@ -1290,6 +1297,9 @@ gpio-frequency-correction-test: $(BIN_DIR)/$(GPIO_FREQUENCY_CORRECTION_TEST_OUT)
 
 websocket-lifecycle-test: $(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(WEBSOCKET_LIFECYCLE_TEST_OUT)
+
+web-server-network-lifecycle-test: $(BIN_DIR)/$(WEB_SERVER_NETWORK_LIFECYCLE_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(WEB_SERVER_NETWORK_LIFECYCLE_TEST_OUT)
 
 wspr-band-catalog-test: $(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(WSPR_BAND_CATALOG_TEST_OUT)
@@ -1368,13 +1378,6 @@ $(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT): tests/privileged_network_admin_
 
 privileged-network-admin-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_ADMIN_TEST_OUT)
-
-$(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT): tests/privileged_network_startup_recovery_test.cpp privileged_network_startup_recovery.cpp privileged_network_startup_recovery.hpp
-	$(Q)mkdir -p $(BIN_DIR)
-	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) tests/privileged_network_startup_recovery_test.cpp privileged_network_startup_recovery.cpp -o $@ $(LDFLAGS)
-
-privileged-network-startup-recovery-test: $(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT)
-	$(Q)./$(BIN_DIR)/$(PRIVILEGED_NETWORK_STARTUP_RECOVERY_TEST_OUT)
 
 support-bundle-job-manager-test: $(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SUPPORT_BUNDLE_JOB_MANAGER_TEST_OUT)

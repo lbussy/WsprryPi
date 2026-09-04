@@ -34,12 +34,14 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <map>
 #include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "websocket_listener_config.hpp"
+#include "support_request_guard.hpp"
 
 /**
  * @brief Default keep-alive interval for WebSocket ping frames (in seconds).
@@ -136,6 +138,12 @@ public:
     void sendAllClients(const std::string &message);
 
 private:
+    struct ClientAuthorizationContext
+    {
+        std::string peer_address;
+        std::string upgrade_request;
+    };
+
     int listen_fd_;             ///< Socket file descriptor for listening.
     std::atomic<bool> running_; ///< Indicates whether the server is running.
     uint32_t keep_alive_secs_;  ///< Interval for keep-alive pings.
@@ -143,6 +151,7 @@ private:
     // For each connection:
     std::mutex clients_mutex_;
     std::vector<int> client_sockets_;
+    std::map<int, ClientAuthorizationContext> client_authorizations_;
     std::vector<int> handshaking_sockets_;
     std::size_t active_client_handlers_{0};
     bool client_registration_closed_{false};
@@ -156,6 +165,8 @@ private:
     std::thread bounded_tone_watchdog_;
     bool loopback_only_{false};
     std::string listening_address_;
+    std::function<SupportRequestGuardSnapshot()> network_snapshot_provider_{
+        [] { return SupportRequestGuard::discover_local_networks(); }};
 
     enum class StartupFailureStage
     {
@@ -192,7 +203,7 @@ private:
     // std::mutex client_mutex_;       ///< Mutex to guard access to client socket.
 
     // Helper for per‐client work:
-    void clientLoop(int client_fd);
+    void clientLoop(int client_fd, ClientAuthorizationContext authorization);
 
     /**
      * @brief Main server loop that accepts and manages the client connection.
@@ -216,7 +227,12 @@ private:
      * @param client Socket descriptor for the client.
      * @return true if handshake succeeded, false otherwise.
      */
-    bool performHandshake(int client, const std::string &peer_address);
+    bool performHandshake(
+        int client,
+        const std::string &peer_address,
+        std::string &upgrade_request);
+    [[nodiscard]] bool clientAuthorizationCurrent(
+        const ClientAuthorizationContext &authorization) const;
 
     /**
      * @brief Trims whitespace from both ends of a string.

@@ -1,5 +1,7 @@
 #include "../web_socket.hpp"
+#include "../privileged_network_runtime.hpp"
 #include <arpa/inet.h>
+#include <atomic>
 #include <cassert>
 #include <cerrno>
 #include <chrono>
@@ -7,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <poll.h>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -22,12 +25,46 @@ class WebSocketLifecycleTest {
         for(std::size_t i=0;i<text.size();++i) frame.push_back(static_cast<char>(text[i]^mask[i%4]));
         assert(send(fd,frame.data(),frame.size(),0)==static_cast<ssize_t>(frame.size()));
     }
-    static int connect_client(unsigned short port) {
+    static int connect_client(
+        unsigned short port,
+        const std::string &represented_client = {}) {
         int fd=socket(AF_INET,SOCK_STREAM,0); assert(fd>=0);
         sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(port); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
         assert(connect(fd,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
-        const std::string h="GET / HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port) + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+        const std::string host = represented_client.empty()
+            ? "127.0.0.1:" + std::to_string(port)
+            : "wsprrypi";
+        std::string h="GET / HTTP/1.1\r\nHost: " + host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n";
+        if (!represented_client.empty())
+            h += "X-WsprryPi-Client-Address: " + represented_client + "\r\n";
+        h += "\r\n";
         assert(send(fd,h.data(),h.size(),0)>0); char b[512]{}; auto n=recv(fd,b,sizeof(b),0); assert(n>0); assert(std::string(b,n).find("HTTP/1.1 101") == 0); return fd;
+    }
+    static void expect_rejected_upgrade(
+        unsigned short port,
+        const std::string &represented_client) {
+        int fd=socket(AF_INET,SOCK_STREAM,0); assert(fd>=0);
+        sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(port); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr);
+        assert(connect(fd,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
+        const std::string request =
+            "GET / HTTP/1.1\r\nHost: wsprrypi\r\nUpgrade: websocket\r\n"
+            "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            "X-WsprryPi-Client-Address: " + represented_client + "\r\n\r\n";
+        assert(send(fd,request.data(),request.size(),0)>0);
+        char response[512]{};
+        const auto size=recv(fd,response,sizeof(response),0);
+        assert(size>0);
+        assert(std::string(response,size).find("HTTP/1.1 403") == 0);
+        close(fd);
+    }
+    static bool wait_disconnected(int fd) {
+        pollfd descriptor{fd, POLLIN | POLLHUP | POLLERR, 0};
+        const int ready = poll(&descriptor, 1, 2000);
+        if (ready <= 0)
+            return false;
+        char byte{};
+        return recv(fd, &byte, 1, 0) <= 0;
     }
     static bool wait_zero(WebSocketServer &s) {
         std::unique_lock<std::mutex> l(s.clients_mutex_);
@@ -164,6 +201,66 @@ class WebSocketLifecycleTest {
         assert(blocked.start(port, 0, true, WebSocketLoopbackFamily::IPv6));
         blocked.stop();
     }
+    static void verify_current_network_reauthorization(unsigned short port) {
+        WebSocketServer local;
+        std::atomic<int> phase{1};
+        local.network_snapshot_provider_ = [&] {
+            SupportRequestGuardSnapshot snapshot{true, "wsprrypi", {}, {}};
+            if (phase.load(std::memory_order_acquire) == 1)
+                snapshot.networks = {{"192.168.50.10", "255.255.255.0"}};
+            else if (phase.load(std::memory_order_acquire) == 2)
+                snapshot.networks = {{"10.20.30.2", "255.255.255.0"}};
+            else if (phase.load(std::memory_order_acquire) == 3)
+                snapshot.discovery_succeeded = false;
+            return snapshot;
+        };
+        const WebSocketServer::ClientAuthorizationContext authorization{
+            "127.0.0.1",
+            "GET /socket HTTP/1.1\r\n"
+            "Host: wsprrypi\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            "X-WsprryPi-Client-Address: 192.168.50.42\r\n\r\n"};
+        assert(local.clientAuthorizationCurrent(authorization));
+        phase.store(0, std::memory_order_release);
+        assert(!local.clientAuthorizationCurrent(authorization));
+        phase.store(2, std::memory_order_release);
+        assert(!local.clientAuthorizationCurrent(authorization));
+        phase.store(3, std::memory_order_release);
+        assert(!local.clientAuthorizationCurrent(authorization));
+        phase.store(1, std::memory_order_release);
+        assert(local.clientAuthorizationCurrent(authorization));
+
+        // Exercise the same transition through a real upgraded socket.  A
+        // message received after the eligible LAN disappears must close the
+        // connection without dispatching a command response.
+        initialize_privileged_network_runtime("enforced");
+        phase.store(0, std::memory_order_release);
+        assert(local.start(port, 0));
+        expect_rejected_upgrade(port, "192.168.50.42");
+        phase.store(1, std::memory_order_release);
+        int inbound = connect_client(port, "192.168.50.42");
+        send_text(inbound, "{\"command\":42}");
+        char response[512]{};
+        assert(recv(inbound, response, sizeof(response), 0) > 0);
+        phase.store(0, std::memory_order_release);
+        send_text(inbound, "{\"command\":42}");
+        assert(wait_disconnected(inbound));
+        close(inbound);
+        assert(wait_zero(local));
+
+        // The outbound path must also reauthorize before broadcasting.
+        phase.store(1, std::memory_order_release);
+        int outbound = connect_client(port, "192.168.50.42");
+        phase.store(2, std::memory_order_release);
+        local.sendAllClients("{\"status\":\"must-not-send\"}");
+        assert(wait_disconnected(outbound));
+        close(outbound);
+        assert(wait_zero(local));
+        local.stop();
+    }
 public:
     static int run() {
         verify_loopback_binding(39518);
@@ -172,6 +269,7 @@ public:
         verify_bounded_fallback(39521);
         verify_prohibited_fallback(39522);
         verify_failed_bind_cleanup(39523);
+        verify_current_network_reauthorization(39525);
         WebSocketServer s; verify_test_tone_transaction_lock(s); const unsigned short p=39519; assert(s.start(p,0));
         int raw=socket(AF_INET,SOCK_STREAM,0); assert(raw>=0); sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons(p); inet_pton(AF_INET,"127.0.0.1",&a.sin_addr); assert(connect(raw,reinterpret_cast<sockaddr*>(&a),sizeof(a))==0);
         assert(wait_handshake(s)); std::thread incomplete_stopper([&]{s.stop();}); incomplete_stopper.join(); close(raw);

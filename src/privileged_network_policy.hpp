@@ -5,6 +5,9 @@
 #include <string_view>
 #include <vector>
 
+inline constexpr std::string_view WSPRRYPI_TRUSTED_PROXY_IDENTITY_HEADER =
+    "X-WsprryPi-Client-Address";
+
 enum class PrivilegedOperationClass {
     read_only,
     protected_operation,
@@ -27,6 +30,15 @@ enum class PrivilegedInterfaceKind {
     wifi,
     other
 };
+
+struct PrivilegedInterfaceLinkEvidence {
+    bool has_physical_device = false;
+    bool wireless = false;
+    unsigned int link_type = 0;
+};
+
+[[nodiscard]] PrivilegedInterfaceKind classify_privileged_interface_link(
+    const PrivilegedInterfaceLinkEvidence &evidence) noexcept;
 
 struct PrivilegedInterfaceCandidate {
     bool active = false;
