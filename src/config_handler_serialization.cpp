@@ -142,6 +142,91 @@ void serialize_runtime_config_to_json(
     }
 }
 
+nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
+{
+    std::string gpio_support_error;
+    const bool runtime_gpio_clock_transmission_supported =
+        platform_supports_gpio_clock_transmission(&gpio_support_error);
+    const bool rp1_gpio_operator_visible = operator_exposes_rp1_gpio();
+    const bool gpio_clock_transmission_supported =
+        runtime_gpio_clock_transmission_supported &&
+        (get_raspberry_pi_generation() != 5 || rp1_gpio_operator_visible);
+    if (get_raspberry_pi_generation() == 5 &&
+        rp1_gpio_operator_visible &&
+        !runtime_gpio_clock_transmission_supported)
+    {
+        gpio_support_error =
+            "The canonical RP1 GPCLK provider is unavailable. Review the "
+            "RP1 clock route status below; transmission remains disabled.";
+    }
+    else if (runtime_gpio_clock_transmission_supported &&
+             !gpio_clock_transmission_supported)
+    {
+        gpio_support_error =
+            "GPIO controls on Raspberry Pi 5 require a compatible RP1 route "
+            "controller and an active canonical provider. Transmission remains "
+            "disabled until both are available.";
+    }
+    bool si5351_detected = true;
+    std::string si5351_detection_error;
+    if (source.contains("Si5351") && source.at("Si5351").is_object())
+    {
+        const nlohmann::json &si5351 = source.at("Si5351");
+        const int i2c_bus =
+            si5351.contains("I2C Bus")
+                ? config_serialization_integer(si5351.at("I2C Bus"), "Si5351.I2C Bus")
+                : kDefaultSi5351I2cBus;
+        const int i2c_address =
+            si5351.contains("I2C Address")
+                ? config_serialization_integer(
+                      si5351.at("I2C Address"),
+                      "Si5351.I2C Address",
+                      0)
+                : kDefaultSi5351I2cAddress;
+        const int reference_hz =
+            si5351.contains("Reference Frequency")
+                ? config_serialization_integer(
+                      si5351.at("Reference Frequency"),
+                      "Si5351.Reference Frequency")
+                : kDefaultSi5351ReferenceHz;
+        si5351_detected = si5351_device_detected(
+            i2c_bus,
+            i2c_address,
+            reference_hz,
+            &si5351_detection_error);
+    }
+
+    nlohmann::json public_json;
+    public_json["Operation"] = source.at("Operation");
+    public_json["GPIO"] = source.at("GPIO");
+    public_json["Calibration"] = source.at("Calibration");
+    public_json["Si5351"] = source.at("Si5351");
+    public_json["WSPR"] = {
+        {"Call Sign", source.at("WSPR").at("Call Sign")},
+        {"Grid Square", source.at("WSPR").at("Grid Square")},
+        {"TX Power", source.at("WSPR").at("TX Power")},
+        {"Frequency", source.at("WSPR").at("Frequency")},
+        {"Frequency Profile", source.at("WSPR").at("Frequency Profile")},
+        {"Band Preferences", source.at("WSPR").at("Band Preferences")},
+        {"Planner Preference", source.at("WSPR").at("Planner Preference")},
+        {"Use Random Offset", source.at("WSPR").at("Use Random Offset")}};
+    public_json["CW"] = source.at("CW");
+    public_json["Band GPIO"] = source.at("Band GPIO");
+    public_json["Platform"] = {
+        {"Model", get_pi_model()},
+        {"Raspberry Pi Generation", get_raspberry_pi_generation()},
+        {"GPIO Clock Transmission Supported",
+         gpio_clock_transmission_supported},
+        {"GPIO Clock Transmission Error",
+         gpio_clock_transmission_supported ? std::string()
+                                           : gpio_support_error},
+        {"RP1 GPIO Operator Visible", rp1_gpio_operator_visible},
+        {"Si5351 Detected", si5351_detected},
+        {"Si5351 Detection Error",
+         si5351_detected ? std::string() : si5351_detection_error}};
+    return public_json;
+}
+
 void apply_public_config_to_internal_json(
     const nlohmann::json &public_json,
     nlohmann::json &internal_json)

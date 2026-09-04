@@ -27,6 +27,8 @@ int config_serialization_integer(
 std::string config_serialization_si5351_i2c_address(int address);
 int config_serialization_gpio_transmit_pin(int gpio) noexcept;
 const BandJsonKeys &band_json_keys() noexcept;
+nlohmann::json public_config_from_internal_json(
+    const nlohmann::json &source);
 
 void serialize_runtime_config_to_json(
     const ArgParserConfig &source,
