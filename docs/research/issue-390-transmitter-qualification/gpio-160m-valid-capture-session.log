@@ -1,7 +1,0 @@
-capture_launch_utc=2026-08-09T01:35:55Z
-expected_frame_start_utc=2026-08-09T01:36:00Z
-center_hz=1863100
-gain_db=40
-capture_rc=0
-cleanup_utc=2026-08-09T01:42:07Z
-service=active

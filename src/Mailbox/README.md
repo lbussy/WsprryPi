@@ -4,9 +4,8 @@ Mailbox is a C++20 interface to the Raspberry Pi GPU mailbox and physical
 memory-mapping facilities used by WsprryPi. It is retained as a coherent
 component under `src/Mailbox`.
 
-The current component was written by Lee Bussy. Earlier Broadcom mailbox code
-was a historical design predecessor, but no Broadcom source is present in this
-tree and Broadcom is not code-level provenance for this snapshot.
+The component was written by Lee Bussy. No Broadcom source is present in this
+tree.
 
 ## Retained files
 
@@ -42,8 +41,7 @@ unit test.
 ## Parent integration
 
 WsprryPi compiles `src/Mailbox/src/mailbox.cpp` and includes
-`src/Mailbox/src/mailbox.hpp` directly. Consumers use the public API without a
-submodule or legacy shim:
+`src/Mailbox/src/mailbox.hpp` directly. Consumers use the public API directly:
 
 ```cpp
 #include "mailbox.hpp"
@@ -89,5 +87,4 @@ build-only test as hardware qualification.
 ## License
 
 Covered by the WsprryPi root MIT license. An extracted copy should carry its own
-license file. The Broadcom historical predecessor creates no separate license
-or notice obligation for the current source tree.
+license file.

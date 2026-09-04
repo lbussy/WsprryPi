@@ -79,9 +79,9 @@ Keep temporary remote evidence under `/tmp` or another non-repository temporary 
    git rev-parse HEAD
    git status --short --branch
    git rev-list --left-right --count HEAD...@{upstream}
-   test ! -e .gitmodules
-   test -f docs/components/provenance.md
-   for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+   test -f docs/components/README.md
+   for component in WsprryPi-UI src/Band-Lookup src/Chipset-Offsets \
+       src/INI-Handler src/LCBLog src/Mailbox \
        src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
        src/WSPR-Transmitter src/WSPR-Reference; do
        test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
@@ -93,8 +93,8 @@ Keep temporary remote evidence under `/tmp` or another non-repository temporary 
    git ls-files -s | awk '$1 == "160000" { found=1; print > "/dev/stderr" } END { exit found }'
    ```
 
-3. Stop and report any unexpected dirty, divergent, missing-component,
-   nested-Git, or gitlink state. Do not reset, clean, stash, switch, pull, or
+3. Stop and report any unexpected dirty, divergent, missing-component, or
+   nested-Git state. Do not reset, clean, stash, switch, pull, or
    overwrite it.
 4. Record the running service state, installed application version, served UI build identity when available, failed systemd units, and recent warning/error journal entries.
 5. Inspect current configuration without changing it. Record the station identity, mode, transmit gate, backend, GPIO assignments and polarities, boot policy, LED, amplifier, and shutdown settings.
@@ -220,8 +220,8 @@ Using the authorized temporary identity and hardware assignments:
 5. Verify the restored identity, mode, backend, boot policy, transmit gate, LED, amplifier, shutdown, selector, and GPIO values through runtime readback.
 6. Confirm all tested output pins are at safe inactive levels.
 7. Verify service active state, zero unexpected failed units, controller connectivity, current version, and no new warning/error journal entries.
-8. Recheck parent status, upstream divergence, component presence, provenance,
-   and the absence of `.gitmodules`, gitlinks, and nested Git administration.
+8. Recheck parent status, upstream divergence, component presence, component
+   documentation, and the absence of nested Git administration.
    The test must not leave repository changes.
 9. Remove temporary sensitive material when safe, but retain the local issue list and the baseline backup until restoration is conclusively verified.
 

@@ -56,8 +56,7 @@ The normal development model has two computers:
 The active development branch is `devel`. One repository tracks the
 first-party `WsprryPi-UI` component and the named reusable components under
 `src/` as ordinary directories. A normal clone contains the complete source
-tree. `docs/components/provenance.md` records the historical repositories and
-exact revisions from which those components were imported.
+tree. `docs/components/README.md` records the maintained component boundaries.
 
 Use an SSHFS mount only for editing and source inspection. Run Git commands,
 compilation, tests, service commands, and program execution in an SSH session
@@ -100,11 +99,11 @@ explain each step and provide alternatives.
    ```bash
    git branch --show-current
    git status --short --branch
-   test -f docs/components/provenance.md
+   test -f docs/components/README.md
    ```
 
    The branch must be `devel`. A clean new checkout should have no changed-file
-   lines. The provenance check should return successfully.
+   lines. The component-documentation check should return successfully.
 
 6. Choose an editing workflow:
 
@@ -279,8 +278,9 @@ From the **repository root on the Pi**:
 cd ~/WsprryPi
 git branch --show-current
 git status --short --branch
-test -f docs/components/provenance.md
-for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+test -f docs/components/README.md
+for component in WsprryPi-UI src/Band-Lookup src/Chipset-Offsets \
+    src/INI-Handler src/LCBLog src/Mailbox \
     src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
     src/WSPR-Transmitter src/WSPR-Reference; do
     test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }
@@ -292,7 +292,7 @@ Confirm the following before editing or building:
 - The branch is `devel`.
 - Existing staged, unstaged, and untracked changes are understood and
   preserved.
-- All ten component directories and the provenance record are present.
+- All component directories and the component-maintenance document are present.
 
 Component files participate directly in the parent working tree and index, so
 they require no separate repository initialization or state checks.
@@ -742,10 +742,11 @@ Confirm that no transmission or other required operation is in progress first.
 
 ### Understand the Component Layout
 
-Wsprry Pi tracks the application and all ten components in one repository:
+Wsprry Pi tracks the application and all twelve components in one repository:
 
 - `WsprryPi-UI` is the editable first-party web interface.
-- `src/INI-Handler`, `src/LCBLog`, `src/Mailbox`, `src/MonitorFile`,
+- `src/Band-Lookup`, `src/Chipset-Offsets`, `src/INI-Handler`, `src/LCBLog`,
+  `src/Mailbox`, `src/MonitorFile`,
   `src/PPM-Manager`, `src/Signal-Handler`, `src/Singleton`,
   `src/WSPR-Transmitter`, and `src/WSPR-Reference` are coherent reusable or
   supporting components.
@@ -754,8 +755,6 @@ Component files are ordinary parent-repository content. Preserve each named
 root, public interface, standalone build/test entry points, attribution, and
 extraction potential. `LCBLog` and `WSPR-Reference` in particular must remain
 independently understandable and free of new WsprryPi-internal dependencies.
-The former component repositories are untouched historical references, not
-active synchronization or publication targets.
 
 ### Inspect Component State
 
@@ -777,10 +776,9 @@ git diff -- src/LCBLog
 git diff --cached -- src/LCBLog
 ```
 
-Use `docs/components/provenance.md` for original repository URLs, imported
-revisions, licensing disposition, exclusions, standalone entry points, and
-extraction guidance. Do not initialize nested Git repositories or copy files
-from former remotes to repair an ordinary component directory.
+Use `docs/components/README.md` for the component inventory, maintenance rules,
+licensing, and extraction guidance. Do not initialize nested Git repositories
+inside ordinary component directories.
 
 ### Change a Component Intentionally
 
@@ -794,8 +792,8 @@ When an approved change belongs in a component:
 6. Review the component portion and complete staged parent diff.
 7. Commit and push through only the authorized parent branch and remote.
 
-Do not commit or push to a former component repository. Future extraction or
-publication requires a separate reviewed workflow and authorization.
+Future extraction or publication requires a separate reviewed workflow and
+authorization.
 
 ## Troubleshooting
 
@@ -822,7 +820,7 @@ ssh pi@{hostname}.local
 
 ### A component directory is missing
 
-An ordinary clone should contain all ten component directories. First preserve
+An ordinary clone should contain all twelve component directories. First preserve
 and inspect the current parent state:
 
 ```bash
@@ -832,7 +830,7 @@ git log -5 --oneline
 git ls-tree HEAD -- WsprryPi-UI src
 ```
 
-Do not copy a replacement from an installed system or former component remote,
+Do not copy a replacement from an installed system or another checkout,
 and do not clean or reset a checkout that contains unexplained work. If the
 directory is absent from `HEAD`, confirm that the intended branch and commit are
 checked out. If it is tracked at `HEAD` but absent from disk, stop and determine
@@ -922,11 +920,12 @@ git branch --show-current
 git status --short --branch
 ```
 
-Confirm the retained component inventory and provenance:
+Confirm the component inventory:
 
 ```bash
-test -f docs/components/provenance.md
-for component in WsprryPi-UI src/INI-Handler src/LCBLog src/Mailbox \
+test -f docs/components/README.md
+for component in WsprryPi-UI src/Band-Lookup src/Chipset-Offsets \
+    src/INI-Handler src/LCBLog src/Mailbox \
     src/MonitorFile src/PPM-Manager src/Signal-Handler src/Singleton \
     src/WSPR-Transmitter src/WSPR-Reference; do
     test -d "$component" || { printf 'Missing component: %s\n' "$component" >&2; exit 1; }

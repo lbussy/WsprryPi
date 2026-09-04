@@ -1,7 +1,7 @@
 # Support Bundle Intake Maintainer Runbook
 
 This runbook is the durable operational companion to the
-[private intake contract](plans/support-bundle-private-intake.md). It covers key
+[private intake contract](support-bundle-private-intake.md). It covers key
 custody, signed route administration, received-bundle processing, retention,
 and abuse recovery. Operator-facing instructions live in the separate
 `Wsprry_Pi_Docs` repository.

@@ -12,12 +12,8 @@ with this component's `src` directory on the include path.
 | BCM2711 | 0 |
 | RP1 | -46.245 |
 
-Unknown chipsets throw rather than silently acquiring a zero default. These
-are policy defaults, not individual-board calibration certificates. RP1's
-operator-approved value is the rounded equal-band mean of the fourteen-band
-Issue 429 wspr5 GPIO20 measurement sweep; the zero values remain discovery
-baselines. See `docs/research/issue-429-rp1-accuracy/` in the parent repository
-for RP1 evidence and limitations.
+Unknown chipsets throw rather than silently acquiring a zero default. These are
+product policy defaults, not individual-board calibration certificates.
 
 Consumers add the selected offset exactly once to their caller's manual or
 system-clock correction when planning RF dividers:

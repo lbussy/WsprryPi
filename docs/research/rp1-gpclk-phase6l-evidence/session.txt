@@ -1,8 +1,0 @@
-frame_start_epoch=1786407841
-frame_start_utc=2026-08-11T00:24:01Z
-center_hz=14122100
-sample_rate=250000
-gain_db=25
-drive_ma=2
-scheduler_rc=0
-capture_rc=0

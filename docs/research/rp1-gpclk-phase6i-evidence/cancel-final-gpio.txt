@@ -1,1 +1,0 @@
-gpiochip0 4	"GPIO4"         	input

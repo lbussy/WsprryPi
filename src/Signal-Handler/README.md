@@ -35,8 +35,6 @@ guarded behind explicit opt-in:
 make live-test SIGNAL_HANDLER_LIVE_TEST=YES
 ```
 
-The interactive target was not run during Issue 415.
-
 ## Integration notes
 
 Call `block_signals()` before creating application worker threads so they
@@ -44,16 +42,14 @@ inherit the mask. Register a short, non-blocking callback, start the handler,
 and call `stop()` before destroying dependent state. Real-time scheduling is
 optional and may require additional host privileges.
 
-## Retained component and extraction boundary
+## Component and extraction boundary
 
-This directory is ordinary tracked content in the WsprryPi monorepo, not a Git
-submodule. Keep the source hierarchy, README, standalone Makefile, demonstration,
-and bounded test together.
+This directory is ordinary tracked content in the WsprryPi repository. Keep the
+source hierarchy, README, standalone Makefile, demonstration, and bounded test
+together.
 
-For a future standalone extraction, copy `src/Signal-Handler`, initialize a new
-repository, and add an appropriate license file. The imported revision and
-historical repository are recorded in `docs/components/provenance.md`.
-Extraction does not imply synchronization with that former remote.
+For standalone extraction, copy `src/Signal-Handler`, initialize a new
+repository, and add an appropriate license file.
 
 ## License
 

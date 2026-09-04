@@ -102,24 +102,14 @@ transmission tests that do not require physical hardware.
 
 Maintainer kernel work can use the Debian ARM64 build worker prepared outside
 the WsprryPi repositories. Agents working on kernel source, configuration,
-builds, staging, or deployment planning must discover and read these documents
-before operating the worker:
+builds, staging, or deployment planning must read this document before
+operating the worker:
 
-- `docs/raspberry-pi-kernel-build-worker-setup.md` is the canonical handoff.
+- `docs/raspberry-pi-kernel-build-worker-setup.md` is the canonical guide.
   It defines VM requirements, package installation, workspace creation, exact
   source pinning, target-config import and normalization, stock validation,
   staging, checksums, acceptance criteria, repeat runs, cleanup, and the
   validated safety boundary.
-- `docs/research/raspberry-pi-kernel-build-worker.md` records the worker's
-  demonstrated functionality, reference custom-kernel reproduction, retained
-  evidence, limitations, and preservation boundary. Read it when deciding
-  whether existing worker capability is sufficient for a new kernel issue.
-
-`docs/research/raspberry-pi-kernel-build-worker-bootstrap-research.md` is the
-research specification that preceded the validated setup guide. It is retained
-for audit context, but it is not the operational handoff and must not override
-the canonical guide.
-
 The worker contract is build-and-stage only. Keep kernel source, out-of-tree
 build output, staged artifacts, and WsprryPi repositories separate. Never
 install a built kernel into the worker's `/boot` or `/lib/modules`. Target-Pi
@@ -157,7 +147,8 @@ Do not commit local skill/runtime artifacts such as `.agents/`, `.impeccable/`, 
 
 ## Operator Documentation Repository
 
-Operator documentation lives in the separate sibling Git repository `../Wsprry_Pi_Docs`; it is not a submodule of `WsprryPi`.
+Operator documentation lives in the separate sibling Git repository
+`../Wsprry_Pi_Docs`.
 
 - Inspect and follow `Wsprry_Pi_Docs/AGENTS.md` before working there.
 - Do not write to that repository without explicit cross-repository authorization.
@@ -180,8 +171,7 @@ one Git repository:
 Treat every component as a coherent source and test boundary inside the parent
 repository. Preserve its named root, internal hierarchy, public interfaces,
 README, attribution, standalone build or test entry points, and extraction
-potential where present. The former component repositories are untouched
-historical references, not active synchronization targets.
+potential where present.
 
 ### Initial Inspection
 
@@ -260,8 +250,7 @@ When an authorized change includes a component:
    boundary appropriate to the approved task.
 6. Push only the parent branch and remote the user authorized.
 
-Do not commit or push changes to former component repositories. Any future
-extraction or publication workflow requires separate authorization.
+Any future extraction or publication workflow requires separate authorization.
 
 ### Validation and Reporting
 

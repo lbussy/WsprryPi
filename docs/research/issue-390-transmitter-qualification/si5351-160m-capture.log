@@ -1,8 +1,0 @@
-[INFO] devIdx: 0
-[INFO] SerNo: 2404058C60
-[INFO] hwVer: 6
-[INFO] rspDuoMode: 0
-[INFO] tuner: 1
-[INFO] rspDuoSampleFreq: 0.000000
-[INFO] Using format CF32.
-center_hz=1863100.000 sample_rate=250000.000 samples=7500000 overflows=0 agc=off requested_gain_db=25.000 actual_gain_db=25.000 capture_start_monotonic_ns=51048907798344 capture_end_monotonic_ns=51078937785823 output=/home/pi/issue390/si5351-160m-tone.cf32

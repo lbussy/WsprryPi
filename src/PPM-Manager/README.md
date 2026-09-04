@@ -35,8 +35,8 @@ testing and guarded behind explicit opt-in:
 make live-test PPM_MANAGER_LIVE_TEST=YES
 ```
 
-That live diagnostic is outside Issue 415 validation. Installing, starting,
-stopping, or configuring Chrony is also outside this component migration.
+Installing, starting, stopping, or configuring Chrony is outside the component's
+ordinary test boundary.
 
 ## API outline
 
@@ -48,16 +48,14 @@ stopping, or configuring Chrony is also outside this component migration.
 - `startPPMUpdateLoop()` and `stop()` manage periodic live-provider refreshes.
 - `setPPMCallback()` registers an estimate callback.
 
-## Retained component and extraction boundary
+## Component and extraction boundary
 
-This directory is ordinary tracked content in the WsprryPi monorepo, not a Git
-submodule. Keep the source hierarchy, standalone Makefile and demo, parser test,
-README, and weighting discussion together.
+This directory is ordinary tracked content in the WsprryPi repository. Keep the
+source hierarchy, standalone Makefile and demo, parser test, README, and
+weighting discussion together.
 
-For a future standalone extraction, copy `src/PPM-Manager`, initialize a new
-repository, and add an appropriate license file. The exact imported revision
-and historical repository are recorded in `docs/components/provenance.md`.
-Extraction does not imply synchronization with the former remote.
+For standalone extraction, copy `src/PPM-Manager`, initialize a new repository,
+and add an appropriate license file.
 
 ## License
 

@@ -11,17 +11,16 @@ operational readiness, and cleanup remain required. WsprryPi translates every
 supported product mode into the provider's generic finite-event UAPI; product
 mode and operator authorization remain application policy and are not sent to
 the kernel. GPIO4 and GPIO20 are independent routes. The root-owned, mode-0600
-endpoint is the production authority. The provider's package version or build label is not an application
-allowlist. Earlier version-specific consumer-contract documents remain
-historical audit evidence, not the current provisioning policy.
+endpoint is the production authority. The provider's package version or build
+label is not an application allowlist.
 
 ### Shared chipset clock offsets
 
 The reusable `../Chipset-Offsets` component owns the single intrinsic offset
 selector: BCM2835 (Pi1) -2.5 ppm, BCM2836/BCM2837 and BCM2711 0 ppm, and RP1
--46.245 ppm. Both physical GPIO backends and the historical GPIO clock-model
-API consume it; no offset table is owned by `WSPR-Transmitter`.
-The live DMA backend now distinguishes BCM2835 from the later 500 MHz chipsets
+-46.245 ppm. Both physical GPIO backends and the GPIO clock-model API consume
+it; no offset table is owned by `WSPR-Transmitter`.
+The live DMA backend distinguishes BCM2835 from the 500 MHz chipsets
 and applies the Pi1 baseline to RF divider planning. Its separate PWM/DMA
 timing correction is unchanged.
 
@@ -55,11 +54,8 @@ application stops it. Long QRSS events are submitted directly; the provider's
 fixed one-second DMA chunks bound coherent allocation and cancellation latency
 without imposing a 120-second logical-event limit.
 
-The baseline is the operator-approved, rounded equal-band mean of the Issue 429
-fourteen-point wspr5 GPIO20 sweep, applied as a shared RP1 default. It is not
-evidence that every board or GPIO4 was measured. Si5351 behavior is unchanged.
-Corrected live RF measurements remain required for these runtime changes;
-the earlier zero-correction sweep is not post-change validation.
+The intrinsic baseline is a shared RP1 product default. It is not an
+individual-board calibration. Si5351 behavior is unchanged.
 
 The current production-proven path is a Raspberry Pi backend that uses Broadcom
 mailbox, DMA, PWM, and clock hardware to emit RF. The codebase has been
@@ -239,17 +235,16 @@ executables requires a separate, reviewed hardware/RF procedure.
 No hardware test, installation, service operation, GPIO, mailbox, DMA, I2C, or
 RF activity is part of the ordinary `test` target.
 
-## Debian Contract CI
+## Debian contract CI
 
-The component's retained `Debian backend contracts` workflow records its former
-standalone CI. In the monorepo, `.github/workflows/debian-non-hardware.yml` is
-the active workflow and runs the simulator, transmission-controller,
+The active `.github/workflows/debian-non-hardware.yml` workflow runs the
+simulator, transmission-controller,
 startup-quiescence, and fake-I2C transition contracts in an isolated Debian
 Trixie checkout without hardware or elevated privileges.
 
 Si5351 transition, startup-quiescence, full debug-build, and physical-backend
 regressions use the ordinary sibling component trees recorded by WsprryPi.
-Neither workflow performs installation,
+The workflow does not perform installation,
 service management, transmitter device access, live transmission, or RF
 qualification.
 
@@ -260,18 +255,9 @@ qualification.
 - Power reporting helpers return estimated milliwatts (mW)
 - The Raspberry Pi backend is the only production-verified backend at present
 
-## Current Status
-
-- Controller/backend refactor complete
-- Generic backend interface in place
-- Raspberry Pi RF path re-verified after refactor
-- `WsprTransmissionPlan` and `WsprTransmissionConfigureResult` are part of the
-  stable shared interface
-
 ## License
 
 This component is covered by the WsprryPi repository's root `LICENSE.md` (MIT).
-The former component repository remains an untouched historical reference.
 
 ## Extraction
 

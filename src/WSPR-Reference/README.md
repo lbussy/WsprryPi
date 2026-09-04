@@ -2,10 +2,9 @@
 
 A correctness-first WSPR reference encoder/decoder with explicit ambiguity handling.
 
-This component is ordinary tracked content in the WsprryPi monorepo. Active
-Debian build, regression, install/export, and consumer coverage runs in the
-parent repository's non-hardware workflow; the former standalone repository's
-CI status does not qualify this imported snapshot.
+This component is ordinary tracked content in the WsprryPi repository. Debian
+build, regression, install/export, and consumer coverage runs in the parent
+repository's non-hardware workflow.
 
 ## Quick Start
 
@@ -241,13 +240,6 @@ int main()
 }
 ```
 
-## Status
-
-- Core features complete
-- Ambiguity handling complete
-- Library export complete
-- External consumption verified
-
 ## License
 
 WsprryPi-authored code in this component is covered by the repository-root
@@ -259,7 +251,4 @@ Apache-2.0 texts are in `docs/licenses/nlohmann-json/`.
 
 To extract WSPR-Reference, copy `src/WSPR-Reference`, initialize a new
 repository, add an appropriate license for the WSPR-Reference code, and retain
-the bundled-header notices plus the license texts identified above. The exact
-imported revision and historical repository are recorded in
-`docs/components/provenance.md`. No synchronization with that former remote is
-implied.
+the bundled-header notices plus the license texts identified above.

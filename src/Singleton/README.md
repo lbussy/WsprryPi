@@ -20,15 +20,13 @@ the port can be acquired again after the first instance is destroyed. It uses
 no fixed operator port, privileged port, external process, service, hardware,
 or elevated permission.
 
-The historical standalone demonstration includes fixed-port, child-process,
-and restricted-port examples. It is retained for reference but excluded from
+The standalone demonstration includes fixed-port, child-process, and
+restricted-port examples. It is excluded from
 ordinary validation and guarded behind explicit opt-in:
 
 ```sh
 make demo SINGLETON_DEMO=YES
 ```
-
-The demonstration was not run during Issue 415.
 
 ## Usage
 
@@ -44,16 +42,13 @@ if (!singleton()) {
 Choose a stable, application-specific loopback port for production. The socket
 is released when `SingletonProcess` is destroyed.
 
-## Retained component and extraction boundary
+## Component and extraction boundary
 
-This directory is ordinary tracked content in the WsprryPi monorepo, not a Git
-submodule. Keep the header, README, Makefile, bounded test, and retained
-demonstration together.
+This directory is ordinary tracked content in the WsprryPi repository. Keep the
+header, README, Makefile, bounded test, and demonstration together.
 
-For a future standalone extraction, copy `src/Singleton`, initialize a new
-repository, and add an appropriate license file. The exact imported revision
-and historical repository are recorded in `docs/components/provenance.md`.
-Extraction does not imply synchronization with that former remote.
+For standalone extraction, copy `src/Singleton`, initialize a new repository,
+and add an appropriate license file.
 
 ## License
 

@@ -87,10 +87,9 @@ the manager's owned drop-in. It is not a transmission permit or operator setting
 Startup forces `Transmit=false` while preserving the stored boot preference;
 the token binds the application's readiness acknowledgement to this transaction.
 
-These changes have offline software validation only. Coherent target deployment,
-clock-disabled route switching and actual service restart still require separate
-authorization and target evidence. No module installation, GPIO changes, reboot
-or RF operation is performed by the offline test suite.
+Source-level validation does not qualify target deployment, route switching,
+service restart, GPIO, or RF behavior. Those operations require separate
+authorization and target-specific validation.
 
 Bounded-tone start acknowledgements are asynchronous. A response includes an
 RP1 operation record only when it belongs to that request; the terminal record

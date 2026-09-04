@@ -14,7 +14,7 @@ debug issues efficiently.
 - Scripts and installer: `./scripts`
 - Developer notes and release tooling: `./release_tools`
 - Core source and reusable components: `./src/`
-- Component provenance: `./docs/components/provenance.md`
+- Component maintenance: `./docs/components/README.md`
 - Deployment target: systemd-managed service
 - CLI interface available alongside daemon operation
 
@@ -150,9 +150,8 @@ named roots, source hierarchies, documentation, and standalone build or test
 entry points where provided. `src/LCBLog` remains independently reusable and
 extractable without WsprryPi-internal dependencies. `src/WSPR-Reference`
 retains its standalone CMake project, `wspr_ref_lib` API, tools, examples,
-vectors, and tests. Original repository URLs and imported revisions are recorded
-in `docs/components/provenance.md`; the former repositories are historical
-references rather than active synchronization targets.
+vectors, and tests. Maintenance and licensing boundaries are documented in
+`docs/components/README.md`.
 
 ------------------------------------------------------------------------
 

@@ -1,6 +1,10 @@
 # Hardware-free simulated backend
 
-Issue 400 adds an explicitly selected, non-RF backend for Debian development and CI. It runs the normal request planning, execution-plan scheduling, cancellation, status, failure, and cleanup lifecycle through `ITransmissionBackend`, but it does not initialize GPIO, MMIO, mailbox, DMA, I2C, or transmitter device nodes.
+The simulated backend provides an explicitly selected, non-RF path for Debian
+development and CI. It runs the normal request planning, execution-plan
+scheduling, cancellation, status, failure, and cleanup lifecycle through
+`ITransmissionBackend`, but it does not initialize GPIO, MMIO, mailbox, DMA,
+I2C, or transmitter device nodes.
 
 ## Build and run
 

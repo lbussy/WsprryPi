@@ -26,17 +26,14 @@ application. The class can invoke a callback after a monitored file change has
 stabilized. `setPriority()` is optional and can require additional privileges
 for real-time scheduling policies; the ordinary test does not call it.
 
-## Retained component boundary
+## Component boundary
 
-This directory is ordinary tracked content in the WsprryPi monorepo, not a Git
-submodule. Keep the README, Makefile, test entry point, header, and implementation
-together so the component remains independently understandable and buildable.
+This directory is ordinary tracked content in the WsprryPi repository. Keep the
+README, Makefile, test entry point, header, and implementation together so the
+component remains independently understandable and buildable.
 
-For a future standalone extraction, copy `src/MonitorFile`, initialize a new
-repository, and add an appropriate license file. The imported source revision
-and original historical repository are recorded in
-`docs/components/provenance.md`. No synchronization with that historical remote
-is implied.
+For standalone extraction, copy `src/MonitorFile`, initialize a new repository,
+and add an appropriate license file.
 
 ## License
 

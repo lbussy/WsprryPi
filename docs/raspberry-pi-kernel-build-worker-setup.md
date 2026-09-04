@@ -4,16 +4,11 @@ This guide creates a Debian ARM64 worker that builds Raspberry Pi kernels
 natively, keeps generated output outside the WsprryPi repositories, and stages
 deployable artifacts without installing them on the worker or a Raspberry Pi.
 
-The procedure was clean-room validated on Debian 13 ARM64. The reference build
-uses the Raspberry Pi OS `6.18.34+rpt-rpi-2712` source and configuration for a
-Pi 5. Substitute a different reviewed source pin and target configuration for
-other releases or models; never assume that the reference pin is current.
-
-This is the canonical handoff for another maintainer or AI agent creating or
-using the kernel compilation environment. Read
-[Raspberry Pi kernel build worker](research/raspberry-pi-kernel-build-worker.md)
-for the worker's demonstrated capabilities, retained reference evidence, and
-known limitations. Repository agents are routed here by the root `AGENTS.md`.
+The reference build uses the Raspberry Pi OS `6.18.34+rpt-rpi-2712` source and
+configuration for a Pi 5. Substitute a different reviewed source pin and target
+configuration for other releases or models; never assume that the reference
+pin is current. This is the canonical guide for creating or using the kernel
+compilation environment.
 
 ## Safety boundary
 
@@ -214,7 +209,7 @@ pinned_commit=$SOURCE_COMMIT
 authoritative_kernel_release=6.18.34+rpt-rpi-2712
 configuration_sha256=d5ba966d17d456a6f29e53baf53464e1fd53f9f8e31481da18f2221f1da2593d
 provenance=Installed signed Raspberry Pi OS binary package metadata and changelog map this package version to the official Git commit.
-historical_source_package_note=Historical source archives whose dsc signer is not authenticated by the available trusted keyrings must not be used.
+source_package_authentication_note=Source archives whose dsc signer is not authenticated by the available trusted keyrings must not be used.
 update_policy=Detached exact-release pin; changes require a separately reviewed input lane.
 EOF
 
@@ -541,10 +536,9 @@ test "$OVERLAY_COUNT" -eq 368
 )
 ```
 
-The exact reference inputs previously produced 1,895 modules, eight BCM2712
-DTBs, 368 overlays, and a 2,312-entry manifest. Module, DTB, and overlay counts
-are strict structural checks for the pinned reference input. The manifest count
-may differ if the maintained evidence set changes; inspect and record it.
+For the exact reference inputs, require 1,895 modules, eight BCM2712 DTBs, and
+368 overlays. These counts are strict structural checks for the pinned input.
+The manifest count depends on the generated record set; inspect and record it.
 
 Verify archive portability from a second directory:
 
@@ -608,56 +602,3 @@ Kernel deployment remains separate from worker setup. Before any live Pi
 change, independently review the target boot layout, kernel filename, module
 release, firmware expectations, rollback configuration, copy procedure, and
 post-boot verification plan.
-
-## Clean-room validation record
-
-This guide was validated end to end on 2026-08-12 using the fresh VirtualBox
-VM `WsprryPi-Dev Clean Kernel Test`. The guest began as Debian 13.6 ARM64 with
-four vCPUs, 8 GiB RAM, a 59 GiB filesystem, no WsprryPi checkout, and no
-kernel-worker workspace. The test installed the documented packages, created
-the workspace, fetched the official source commit inside the guest, imported
-and normalized the retained target configuration, built the unchanged kernel,
-staged it, archived it, and verified a fresh extraction.
-
-The clean-room run corrected three defects found in the reconstructed
-procedure:
-
-- Debian's normal-user SSH path did not contain `/usr/sbin`, so the guide now
-  calls `/usr/sbin/depmod` explicitly.
-- exact source acquisition now initializes a repository and fetches the pinned
-  commit directly instead of relying on a branch clone and later checkout;
-- the overlay `README` is copied from the source tree, while generated overlay
-  binaries are copied from the out-of-tree build.
-
-The final acceptance result was:
-
-| Evidence | Result |
-| --- | --- |
-| Source commit | `c8c7494100e99ee05b11aaa4f0588a223a63d1af`, detached and clean |
-| Raw configuration SHA-256 | `d5ba966d17d456a6f29e53baf53464e1fd53f9f8e31481da18f2221f1da2593d` |
-| Normalized configuration SHA-256 | `a5dde4cec5f4b9526d8c5e55a308d94fd49d2912145891f469212f650075ac6a` |
-| Kernel release | `6.18.34-v8-16k-kernel-worker-stock` |
-| Clean build | Exit 0 in 19:48.30 |
-| Build-log SHA-256 | `fa440767d2e669bc6bfc108bceef85cd5edfc84ccad778d59a240b8d247377f6` |
-| Modules | 1,895 |
-| BCM2712 DTBs | 8 |
-| Overlays | 368 |
-| Manifest entries | 2,317 |
-| Archive SHA-256 | `86d5fd8c198803adad97a1dd7ffa2cb9d2e48ef979c1858d8f276c6a2610353a` |
-| Acceptance-log SHA-256 | `c491cc83bcefb2119b1dae0e91bf71b9f139c262bcd4774bd3bd9f6c7378872d` |
-| Live manifest | Verified |
-| Freshly extracted manifest | Verified |
-| Embedded log sidecars | Verified using portable basenames |
-| Worker `/boot` and `/lib/modules` | Built kernel not installed |
-| Filesystem after validation | 48 GiB free |
-
-The final bundle remains on the validation VM at:
-
-```text
-/home/pi/kernel-work/stage/
-  6.18.34-v8-16k-kernel-worker-stock-20260812T115357Z/
-```
-
-This record validates the reference procedure and exact reference input. It
-does not qualify deployment, boot behavior, Raspberry Pi hardware, GPIO, or RF
-operation.
