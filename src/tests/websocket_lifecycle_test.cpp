@@ -92,6 +92,20 @@ class WebSocketLifecycleTest {
         std::unique_lock<std::mutex> l(s.clients_mutex_);
         return s.client_handlers_cv_.wait_for(l,std::chrono::seconds(2),[&]{return s.active_client_handlers_==0;});
     }
+    static bool wait_client_count(WebSocketServer &s, std::size_t expected) {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(2);
+        while (std::chrono::steady_clock::now() < deadline) {
+            {
+                std::lock_guard<std::mutex> lock(s.clients_mutex_);
+                if (s.client_sockets_.size() == expected &&
+                    s.active_client_handlers_ == expected)
+                    return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return false;
+    }
     static bool wait_handshake(WebSocketServer &s) {
         std::unique_lock<std::mutex> l(s.clients_mutex_);
         return s.client_handlers_cv_.wait_for(l,std::chrono::seconds(2),[&]{return !s.handshaking_sockets_.empty();});
@@ -276,6 +290,7 @@ class WebSocketLifecycleTest {
         // The outbound path must also reauthorize before broadcasting.
         phase.store(1, std::memory_order_release);
         int outbound = connect_client(port, "192.168.50.42");
+        assert(wait_client_count(local, 1));
         phase.store(2, std::memory_order_release);
         local.sendAllClients("{\"status\":\"must-not-send\"}");
         assert(wait_disconnected(outbound, "must-not-send"));
