@@ -261,6 +261,9 @@ private:
      */
     void handleMessage(const std::string &message);
 
+    /** Stops and joins any bounded-tone command owned by this server. */
+    void stopBoundedTone();
+
     /**
      * @brief Serialize a given object to JSON and send it to the connected client.
      *

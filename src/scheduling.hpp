@@ -46,7 +46,7 @@
 #include "transmission_request.hpp"
 #include "transmission_backend.hpp"
 #include "wspr_transmit_types.hpp"
-#include "test_tone_request.hpp"
+#include "test_tone_types.hpp"
 
 // Standard library headers
 #include <atomic>
@@ -480,11 +480,6 @@ void reset_test_tone_commit_invoker_for_test() noexcept;
 using DirectToneStartInvokerForTest = std::function<void()>;
 void set_direct_tone_start_invoker_for_test(DirectToneStartInvokerForTest invoker);
 void reset_direct_tone_start_invoker_for_test() noexcept;
-using Rp1DevelopmentReconcileInvokerForTest =
-    std::function<nlohmann::json(const std::string &)>;
-void set_rp1_development_reconcile_invoker_for_test(
-    Rp1DevelopmentReconcileInvokerForTest invoker);
-void reset_rp1_development_reconcile_invoker_for_test() noexcept;
 bool start_direct_tone_execution_for_test(
     const ArgParserConfig &cfg,
     const WsprFrequencyEntry &entry,

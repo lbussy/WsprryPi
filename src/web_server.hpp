@@ -29,8 +29,6 @@
 #ifndef WEB_SERVER_HPP
 #define WEB_SERVER_HPP
 
-#include "httplib.hpp"
-#include "json.hpp"
 #include "support_request_guard.hpp"
 #include <condition_variable>
 #include <functional>
@@ -43,6 +41,7 @@
 
 class SupportBundleJobManager;
 class PrivilegedNetworkAdmin;
+namespace httplib { class Server; struct Response; }
 namespace wsprrypi { class Rp1GpclkRouteService; }
 
 /**

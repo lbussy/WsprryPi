@@ -30,6 +30,8 @@
 
 #include "backend_http_guard.hpp"
 #include "config_handler.hpp"
+#include "httplib.hpp"
+#include "json.hpp"
 #include "logging.hpp"
 #include "privileged_network_runtime.hpp"
 #include "privileged_network_admin.hpp"

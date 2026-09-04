@@ -1,5 +1,6 @@
 #include "../privileged_network_runtime.hpp"
 #include "../web_server.hpp"
+#include "../httplib.hpp"
 
 #include <atomic>
 #include <cassert>

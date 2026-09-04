@@ -6,6 +6,7 @@
 #include "gpio_band_policy.hpp"
 #include "gpio_output.hpp"
 #include "scheduling.hpp"
+#include "scheduling_rp1_test_support.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "ppm_manager.hpp"
 #include "band_lookup.hpp"
