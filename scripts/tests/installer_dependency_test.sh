@@ -31,6 +31,7 @@ fi
 python3 "${SCRIPT_DIR}/ini_upgrade_schema_test.py"
 python3 "${SCRIPT_DIR}/installer_dry_run_purity_test.py"
 python3 "${SCRIPT_DIR}/service_install_recovery_test.py"
+"${SCRIPT_DIR}/build_resource_preflight_test.sh"
 
 if ! awk '
     /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
@@ -142,6 +143,13 @@ EOF
     debug_print() { :; }
     debug_end() { :; }
     warn() { :; }
+    command() {
+        if [[ "${WSPRRYPi_TEST_FDTPUT_MISSING:-0}" == "1" &&
+            "${1:-}" == "-v" && "${2:-}" == "fdtput" ]]; then
+            return 1
+        fi
+        builtin command "$@"
+    }
 
     validate_rp1_gpclk_build_dependencies \
         "$kernel_release" "$modules_base" "$headers_base"
@@ -156,13 +164,13 @@ EOF
     WSPRRYPi_TEST_HEADERS_MISSING=0
     export WSPRRYPi_TEST_HEADERS_MISSING
 
-    mv "$fake_bin/fdtput" "$fake_bin/fdtput.missing"
+    WSPRRYPi_TEST_FDTPUT_MISSING=1
     if validate_rp1_gpclk_build_dependencies \
         "$kernel_release" "$modules_base" "$headers_base"; then
         echo "a missing Device Tree tool must fail validation" >&2
         exit 1
     fi
-    mv "$fake_bin/fdtput.missing" "$fake_bin/fdtput"
+    WSPRRYPi_TEST_FDTPUT_MISSING=0
 
     rm "$modules_base/$kernel_release/build"
     ln -s "$headers_base/linux-headers-other" "$modules_base/$kernel_release/build"

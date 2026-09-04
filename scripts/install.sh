@@ -191,6 +191,26 @@ declare ACTION="${ACTION:-install}"
 # -----------------------------------------------------------------------------
 declare DRY_RUN="${DRY_RUN:-false}"
 
+# Temporary build swap is an explicit installer opt-in. The remaining
+# BUILD_RESOURCE_* variables are test seams and reviewed policy constants; the
+# installer does not expose them as operator controls.
+declare ALLOW_TEMP_BUILD_SWAP="${ALLOW_TEMP_BUILD_SWAP:-false}"
+declare BUILD_RESOURCE_MEMINFO_PATH="/proc/meminfo"
+declare BUILD_RESOURCE_SWAPS_PATH="/proc/swaps"
+declare BUILD_RESOURCE_SWAP_ROOT="/var/lib/wsprrypi/build-swap"
+declare BUILD_RESOURCE_DISK_AVAILABLE_KB=""
+declare BUILD_RESOURCE_LOW_RAM_KB=$((1536 * 1024))
+declare BUILD_RESOURCE_VERY_LOW_RAM_KB=$((768 * 1024))
+declare BUILD_RESOURCE_LOW_RAM_SWAP_KB=$((1024 * 1024))
+declare BUILD_RESOURCE_VERY_LOW_RAM_SWAP_KB=$((2048 * 1024))
+declare BUILD_RESOURCE_DISK_RESERVE_KB=$((512 * 1024))
+declare BUILD_RESOURCE_SWAP_METADATA_ALLOWANCE_KB=1024
+declare BUILD_RESOURCE_SWAP_ALLOCATION_QUANTUM_KB=1024
+declare TEMP_BUILD_SWAP_PATH=""
+declare TEMP_BUILD_SWAP_OWNED="false"
+declare TEMP_BUILD_SWAP_ACTIVE="false"
+declare TEMP_BUILD_SWAP_ROOT_OWNED="false"
+
 # -----------------------------------------------------------------------------
 # @brief Defines global repository-related variables.
 # @details These variables are used to determine the repository context,
@@ -999,7 +1019,13 @@ egress() {
     local status=$?
     report_ui_publication_result
     cleanup_rp1_gpclk_dkms_state
-    return "$status"
+    if ! cleanup_temp_build_swap; then
+        if [[ "$status" -eq 0 ]]; then
+            status=1
+        fi
+    fi
+    trap - EXIT
+    exit "$status"
 }
 
 # -----------------------------------------------------------------------------
@@ -6410,6 +6436,322 @@ start_script() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Read one numeric KiB value from a meminfo-format file.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+build_resource_meminfo_kb() {
+    local path="${1:-}"
+    local key="${2:-}"
+
+    [[ -n "$path" && -n "$key" && -r "$path" ]] || return 1
+    awk -v wanted="${key}:" '$1 == wanted { print $2; found = 1; exit }
+        END { if (!found) exit 1 }' "$path"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Report free active swap as total, zram, file, partition, other, and
+#        independently backed values (KiB).
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+build_resource_swap_free_kb() {
+    local path="${1:-}"
+
+    [[ -n "$path" && -r "$path" ]] || return 1
+    awk '
+        NR == 1 { next }
+        NF >= 4 {
+            available = $3 - $4
+            if (available < 0) available = 0
+            total += available
+            if ($1 ~ /(^|\/)zram[0-9]+$/) zram += available
+            else {
+                independent += available
+                if ($2 == "file") file += available
+                else if ($2 == "partition") partition += available
+                else other += available
+            }
+        }
+        END {
+            printf "%d %d %d %d %d %d\n", total + 0, zram + 0,
+                file + 0, partition + 0, other + 0, independent + 0
+        }
+    ' "$path"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Return the required free non-zram swap for the supplied total RAM.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+required_non_zram_build_swap_kb() {
+    local mem_total_kb="${1:-0}"
+
+    if ((mem_total_kb < BUILD_RESOURCE_VERY_LOW_RAM_KB)); then
+        printf '%s\n' "$BUILD_RESOURCE_VERY_LOW_RAM_SWAP_KB"
+    elif ((mem_total_kb < BUILD_RESOURCE_LOW_RAM_KB)); then
+        printf '%s\n' "$BUILD_RESOURCE_LOW_RAM_SWAP_KB"
+    else
+        printf '0\n'
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Test whether this invocation's temporary swap is still active.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+temp_build_swap_is_active() {
+    local path="${1:-}"
+    [[ -n "$path" && -r "$BUILD_RESOURCE_SWAPS_PATH" ]] || return 1
+    awk -v expected="$path" 'NR > 1 && $1 == expected { found = 1 }
+        END { exit(found ? 0 : 1) }' "$BUILD_RESOURCE_SWAPS_PATH"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Disable and remove only temporary swap created by this invocation.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+cleanup_temp_build_swap() {
+    local path="${TEMP_BUILD_SWAP_PATH:-}"
+
+    if [[ "${TEMP_BUILD_SWAP_OWNED:-false}" != "true" || -z "$path" ]]; then
+        return 0
+    fi
+
+    if [[ "${TEMP_BUILD_SWAP_ACTIVE:-false}" == "true" ]] ||
+        temp_build_swap_is_active "$path"; then
+        if ! swapoff "$path"; then
+            logE "Unable to disable installer-owned temporary build swap: $path"
+            logE "The active file was preserved. Recover with: sudo swapoff '$path' && sudo rm -f '$path'"
+            return 1
+        fi
+        TEMP_BUILD_SWAP_ACTIVE="false"
+    fi
+
+    if temp_build_swap_is_active "$path"; then
+        logE "Temporary build swap still appears active after swapoff: $path"
+        logE "The file was preserved; do not remove it until swapoff succeeds."
+        return 1
+    fi
+
+    if [[ -e "$path" ]]; then
+        rm -f -- "$path"
+    fi
+    if [[ -e "$path" ]]; then
+        logE "Unable to remove installer-owned temporary build swap: $path"
+        return 1
+    fi
+
+    if [[ "${TEMP_BUILD_SWAP_ROOT_OWNED:-false}" == "true" ]]; then
+        rmdir -- "$BUILD_RESOURCE_SWAP_ROOT" 2>/dev/null || true
+    fi
+
+    logI "Removed installer-owned temporary build swap."
+    TEMP_BUILD_SWAP_PATH=""
+    TEMP_BUILD_SWAP_OWNED="false"
+    TEMP_BUILD_SWAP_ROOT_OWNED="false"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Create enough invocation-owned disk swap to meet the reviewed gate.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+create_temp_build_swap() {
+    local required_kb="${1:-0}"
+    local existing_non_zram_kb="${2:-0}"
+    local shortfall_kb
+    local allocation_kb
+    local required_disk_kb
+    local disk_probe_path
+    local disk_available_kb
+    local directory_mode
+    local directory_owner
+    local tool
+
+    if [[ "${TEMP_BUILD_SWAP_OWNED:-false}" == "true" ]]; then
+        if temp_build_swap_is_active "${TEMP_BUILD_SWAP_PATH:-}"; then
+            logI "Invocation-owned temporary build swap is already active."
+            return 0
+        fi
+        logE "Refusing to replace tracked temporary build swap that is not active: ${TEMP_BUILD_SWAP_PATH:-unknown}"
+        return 1
+    fi
+
+    shortfall_kb=$((required_kb - existing_non_zram_kb))
+    ((shortfall_kb > 0)) || return 0
+    allocation_kb=$((
+        (shortfall_kb + BUILD_RESOURCE_SWAP_METADATA_ALLOWANCE_KB +
+            BUILD_RESOURCE_SWAP_ALLOCATION_QUANTUM_KB - 1) /
+        BUILD_RESOURCE_SWAP_ALLOCATION_QUANTUM_KB *
+        BUILD_RESOURCE_SWAP_ALLOCATION_QUANTUM_KB
+    ))
+    required_disk_kb=$((allocation_kb + BUILD_RESOURCE_DISK_RESERVE_KB))
+
+    disk_probe_path="$BUILD_RESOURCE_SWAP_ROOT"
+    while [[ ! -e "$disk_probe_path" && "$disk_probe_path" != "/" ]]; do
+        disk_probe_path=$(dirname "$disk_probe_path")
+    done
+
+    if [[ -n "$BUILD_RESOURCE_DISK_AVAILABLE_KB" ]]; then
+        disk_available_kb="$BUILD_RESOURCE_DISK_AVAILABLE_KB"
+    else
+        disk_available_kb=$(df -Pk "$disk_probe_path" 2>/dev/null |
+            awk 'NR == 2 { print $4 }')
+    fi
+    if [[ ! "$disk_available_kb" =~ ^[0-9]+$ ]]; then
+        logE "Unable to determine free space for temporary build swap."
+        return 1
+    fi
+    if ((disk_available_kb < required_disk_kb)); then
+        logE "Insufficient disk space for temporary build swap."
+        logE "Need ${allocation_kb} KiB plus a ${BUILD_RESOURCE_DISK_RESERVE_KB} KiB safety reserve; ${disk_available_kb} KiB is available."
+        return 1
+    fi
+
+    logW "Temporary build swap may be slow and can increase flash-media writes."
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: would create ${allocation_kb} KiB of protected temporary build swap beneath ${BUILD_RESOURCE_SWAP_ROOT}."
+        logI "Dry run: would disable and remove only that invocation-owned swap after the installer exits."
+        return 0
+    fi
+
+    for tool in df dirname stat install mktemp chmod fallocate mkswap swapon swapoff rm rmdir; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            logE "Cannot create temporary build swap because '$tool' is unavailable."
+            return 1
+        fi
+    done
+
+    if [[ -e "$BUILD_RESOURCE_SWAP_ROOT" || -L "$BUILD_RESOURCE_SWAP_ROOT" ]]; then
+        if [[ ! -d "$BUILD_RESOURCE_SWAP_ROOT" || -L "$BUILD_RESOURCE_SWAP_ROOT" ]]; then
+            logE "Temporary build swap root is not a directory: $BUILD_RESOURCE_SWAP_ROOT"
+            return 1
+        fi
+        directory_mode=$(stat -c '%a' "$BUILD_RESOURCE_SWAP_ROOT" 2>/dev/null || true)
+        directory_owner=$(stat -c '%u' "$BUILD_RESOURCE_SWAP_ROOT" 2>/dev/null || true)
+        if [[ ! "$directory_mode" =~ ^[0-7]+$ ||
+            ! "$directory_owner" =~ ^[0-9]+$ ||
+            "$directory_owner" -ne "$EUID" ||
+            $((8#$directory_mode & 077)) -ne 0 ]]; then
+            logE "Temporary build swap root must be owned by the installer user and inaccessible to group/other: $BUILD_RESOURCE_SWAP_ROOT"
+            return 1
+        fi
+    else
+        install -d -m 0700 "$BUILD_RESOURCE_SWAP_ROOT" || return 1
+        TEMP_BUILD_SWAP_ROOT_OWNED="true"
+    fi
+
+    TEMP_BUILD_SWAP_PATH=$(mktemp "${BUILD_RESOURCE_SWAP_ROOT}/wsprrypi-build.XXXXXXXX.swap") || {
+        cleanup_temp_build_swap || true
+        return 1
+    }
+    TEMP_BUILD_SWAP_OWNED="true"
+    chmod 0600 "$TEMP_BUILD_SWAP_PATH" || {
+        cleanup_temp_build_swap || true
+        return 1
+    }
+    fallocate -l "${allocation_kb}K" -- "$TEMP_BUILD_SWAP_PATH" || {
+        cleanup_temp_build_swap || true
+        return 1
+    }
+    mkswap "$TEMP_BUILD_SWAP_PATH" >/dev/null || {
+        cleanup_temp_build_swap || true
+        return 1
+    }
+    swapon -p 10 "$TEMP_BUILD_SWAP_PATH" || {
+        cleanup_temp_build_swap || true
+        return 1
+    }
+    TEMP_BUILD_SWAP_ACTIVE="true"
+
+    if ! temp_build_swap_is_active "$TEMP_BUILD_SWAP_PATH"; then
+        logE "Temporary build swap did not appear in the active swap inventory."
+        cleanup_temp_build_swap || true
+        return 1
+    fi
+
+    logI "Enabled ${allocation_kb} KiB of invocation-owned temporary build swap."
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Enforce deterministic build resources before installer mutation.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+preflight_build_resources() {
+    local mem_total_kb
+    local mem_available_kb
+    local swap_free_kb
+    local zram_swap_free_kb
+    local file_swap_free_kb
+    local partition_swap_free_kb
+    local other_swap_free_kb
+    local non_zram_swap_free_kb
+    local required_swap_kb
+
+    case "$ALLOW_TEMP_BUILD_SWAP" in
+        true|false) ;;
+        *)
+            logE "ALLOW_TEMP_BUILD_SWAP must be 'true' or 'false'."
+            return 1
+            ;;
+    esac
+
+    mem_total_kb=$(build_resource_meminfo_kb "$BUILD_RESOURCE_MEMINFO_PATH" MemTotal) || {
+        logE "Unable to read MemTotal from $BUILD_RESOURCE_MEMINFO_PATH."
+        return 1
+    }
+    mem_available_kb=$(build_resource_meminfo_kb "$BUILD_RESOURCE_MEMINFO_PATH" MemAvailable) || {
+        logE "Unable to read MemAvailable from $BUILD_RESOURCE_MEMINFO_PATH."
+        return 1
+    }
+    if [[ ! "$mem_total_kb" =~ ^[0-9]+$ || "$mem_total_kb" -le 0 ||
+        ! "$mem_available_kb" =~ ^[0-9]+$ ]]; then
+        logE "Invalid memory values reported by $BUILD_RESOURCE_MEMINFO_PATH."
+        return 1
+    fi
+
+    IFS=' ' read -r swap_free_kb zram_swap_free_kb file_swap_free_kb \
+        partition_swap_free_kb other_swap_free_kb non_zram_swap_free_kb < <(
+        build_resource_swap_free_kb "$BUILD_RESOURCE_SWAPS_PATH"
+    ) || {
+        logE "Unable to inventory active swap from $BUILD_RESOURCE_SWAPS_PATH."
+        return 1
+    }
+    required_swap_kb=$(required_non_zram_build_swap_kb "$mem_total_kb")
+
+    logI "Build resources: MemTotal=${mem_total_kb} KiB, MemAvailable=${mem_available_kb} KiB, swap-free=${swap_free_kb} KiB."
+    logI "Build swap classification: zram-free=${zram_swap_free_kb} KiB, file-free=${file_swap_free_kb} KiB, partition-free=${partition_swap_free_kb} KiB, other-independent-free=${other_swap_free_kb} KiB."
+    logI "Build swap independently-backed-free=${non_zram_swap_free_kb} KiB."
+
+    if ((mem_total_kb < BUILD_RESOURCE_LOW_RAM_KB)); then
+        if [[ "${JOBS:-}" != "1" ]]; then
+            logW "Low-memory build detected; forcing single-job compilation."
+        fi
+        export JOBS=1
+    fi
+
+    if ((required_swap_kb == 0)); then
+        return 0
+    fi
+    if ((non_zram_swap_free_kb + BUILD_RESOURCE_SWAP_METADATA_ALLOWANCE_KB >=
+        required_swap_kb)); then
+        logI "Low-memory build has sufficient independently backed swap."
+        return 0
+    fi
+
+    if ((zram_swap_free_kb > 0)); then
+        logW "Active zram swap is not counted as independently backed build swap."
+    fi
+    if [[ "$ALLOW_TEMP_BUILD_SWAP" != "true" ]]; then
+        logE "Low-memory build requires at least ${required_swap_kb} KiB of free non-zram swap; ${non_zram_swap_free_kb} KiB is available."
+        logE "Enable adequate file/partition swap, or explicitly retry with ALLOW_TEMP_BUILD_SWAP=true."
+        return 1
+    fi
+
+    create_temp_build_swap "$required_swap_kb" "$non_zram_swap_free_kb"
+}
+
+# -----------------------------------------------------------------------------
 # @brief  Analyze system resources and display compilation concurrency notes.
 # @details
 #   Evaluates the system environment using the same heuristics as the Makefile
@@ -9421,6 +9763,12 @@ _main() {
     # Start the script
     start_script "$debug"
 
+    # The operator has confirmed the install; enforce build resources before
+    # any package, service, or compilation mutation begins.
+    if [[ "$ACTION" != "uninstall" ]]; then
+        preflight_build_resources "$debug" || return 1
+    fi
+
     # Print/display the environment
     print_model_name "$debug"   # Log board variant
     print_system "$debug"       # Log system information
@@ -9488,6 +9836,9 @@ main() {
 # -----------------------------------------------------------------------------
 if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
     trap egress EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
 
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
