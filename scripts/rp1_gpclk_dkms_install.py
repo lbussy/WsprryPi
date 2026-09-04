@@ -3214,9 +3214,46 @@ def validate_runtime_update_retry_conflict(
         and prior_service.get("MainPID") == "0"
         and current_service.get("active") == "active"
     )
+    masked_service_drift = (
+        isinstance(outcome, dict)
+        and isinstance(planned_application, dict)
+        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
+        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
+        and outcome.get("phase") == "restored"
+        and planned_application.get("wasActive") is True
+        and prior_service.get("LoadState") == "loaded"
+        and prior_service.get("ActiveState") == "active"
+        and prior_service.get("UnitFileState") == "enabled"
+        and prior_service.get("MainPID", "0") != "0"
+        and current_service.get("load") == "masked"
+        and current_service.get("active") in {"inactive", "failed"}
+        and current_service.get("enabled") == "masked"
+        and current_service.get("fragment") ==
+            "/etc/systemd/system/wsprrypi.service"
+        and current_service.get("MainPID") == "0"
+    )
+    externally_stopped_service = (
+        isinstance(outcome, dict)
+        and isinstance(planned_application, dict)
+        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
+        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
+        and outcome.get("phase") == "restored"
+        and planned_application.get("wasActive") is True
+        and prior_service.get("LoadState") == "loaded"
+        and prior_service.get("ActiveState") == "active"
+        and prior_service.get("UnitFileState") == "enabled"
+        and prior_service.get("MainPID", "0") != "0"
+        and current_service.get("load") == "loaded"
+        and current_service.get("active") in {"inactive", "failed"}
+        and current_service.get("enabled") == "enabled"
+        and current_service.get("fragment") ==
+            "/etc/systemd/system/wsprrypi.service"
+        and current_service.get("MainPID") == "0"
+    )
     require(
-        restored_pid_drift or installer_started_service,
-        "runtime update preparation permits only exact active-service drift",
+        restored_pid_drift or installer_started_service or
+        masked_service_drift or externally_stopped_service,
+        "runtime update preparation permits only exact service drift",
     )
     require(
         socket.get("active") == "active"

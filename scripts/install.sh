@@ -2221,8 +2221,14 @@ replace_string_in_script() {
 
     local pattern="%${search_string}%"
 
-    # Use sed to replace all occurrences of %SEARCH_STRING% with REPLACE_STRING
-    sed -i "s|${pattern}|${replace_string}|g" "$file_path"
+    # Use sed to replace all occurrences of %SEARCH_STRING% with REPLACE_STRING.
+    # Propagate failure so callers staging privileged files cannot continue with
+    # an incomplete render.
+    if ! sed -i "s|${pattern}|${replace_string}|g" "$file_path"; then
+        logE "Failed to replace '${pattern}' in '$file_path'."
+        debug_end "$debug"
+        return 1
+    fi
 
     debug_print "Replaced occurrences of '${pattern}' with '${replace_string}' in '$file_path'." "$debug"
 
@@ -7179,6 +7185,219 @@ upgrade_ini() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
+service_unit_path_is_mask() {
+    local unit_path="${1:-}"
+    local mask_target="${2:-/dev/null}"
+    local link_target=""
+
+    [[ -n "$unit_path" && -L "$unit_path" ]] || return 1
+    link_target=$(readlink -- "$unit_path") || return 1
+    [[ "$link_target" == "$mask_target" ]]
+}
+
+# -----------------------------------------------------------------------------
+# @brief Return systemd's textual enablement state without treating a nonzero
+#        status as loss of the state text.
+# @details `systemctl is-enabled` intentionally exits nonzero for states such as
+#          masked, disabled and not-found. Capturing the output separately keeps
+#          `set -o pipefail` from hiding a reported mask.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+service_unit_enablement_state() {
+    local unit_name="${1:-}"
+    local state=""
+
+    state=$(systemctl is-enabled "$unit_name" 2>/dev/null) || :
+    printf '%s\n' "$state"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Verify that neither systemd nor either exact unit path reports a mask.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+verify_systemd_service_unmasked() {
+    local unit_name="${1:-}"
+    local persistent_path="${2:-}"
+    local runtime_path="${3:-}"
+    local mask_target="${4:-/dev/null}"
+    local state=""
+
+    state=$(service_unit_enablement_state "$unit_name")
+    if [[ "$state" == "masked" || "$state" == "masked-runtime" ]]; then
+        logE "Systemd service $unit_name remains $state after mask recovery."
+        return 1
+    fi
+    if service_unit_path_is_mask "$persistent_path" "$mask_target"; then
+        logE "Persistent systemd mask remains at $persistent_path."
+        return 1
+    fi
+    if service_unit_path_is_mask "$runtime_path" "$mask_target"; then
+        logE "Runtime systemd mask remains at $runtime_path."
+        return 1
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Recover persistent or runtime masks before replacing a service unit.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+repair_systemd_service_mask() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local unit_name="${1:-}"
+    local persistent_path="${2:-}"
+    local runtime_path="${3:-}"
+    local mask_target="${4:-/dev/null}"
+    local state=""
+    local persistent_mask=false
+    local runtime_mask=false
+
+    state=$(service_unit_enablement_state "$unit_name")
+    if [[ "$state" == "masked" ]] ||
+        service_unit_path_is_mask "$persistent_path" "$mask_target"; then
+        persistent_mask=true
+    fi
+    if [[ "$state" == "masked-runtime" ]] ||
+        service_unit_path_is_mask "$runtime_path" "$mask_target"; then
+        runtime_mask=true
+    fi
+
+    if [[ "$persistent_mask" != "true" && "$runtime_mask" != "true" ]]; then
+        debug_end "$debug"
+        return 0
+    fi
+
+    if [[ "$persistent_mask" == "true" ]]; then
+        if ! exec_command "Remove persistent systemd service mask" \
+            systemctl unmask "$unit_name" "$debug"; then
+            logE "Unable to repair the persistent systemd mask for $unit_name; installation cannot safely replace the unit."
+            debug_end "$debug"
+            return 1
+        fi
+    fi
+    if [[ "$runtime_mask" == "true" ]]; then
+        if ! exec_command "Remove runtime systemd service mask" \
+            systemctl unmask --runtime "$unit_name" "$debug"; then
+            logE "Unable to repair the runtime systemd mask for $unit_name; installation cannot safely replace the unit."
+            debug_end "$debug"
+            return 1
+        fi
+    fi
+
+    # A dry run deliberately leaves the observed mask in place.
+    if [[ "$DRY_RUN" != "true" ]] &&
+        ! verify_systemd_service_unmasked \
+            "$unit_name" "$persistent_path" "$runtime_path" "$mask_target"; then
+        logE "Systemd mask recovery for $unit_name did not remove every persistent and runtime mask."
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Render and atomically install a regular systemd unit without following
+#        a destination symlink.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+install_systemd_service_unit() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local source_path="${1:-}"
+    local service_path="${2:-}"
+    local runtime_path="${3:-}"
+    local unit_name="${4:-}"
+    local semantic_version="${5:-}"
+    local daemon_name="${6:-}"
+    local exec_start="${7:-}"
+    local syslog_identifier="${8:-}"
+    local mask_target="${9:-/dev/null}"
+    local staged_path=""
+
+    if [[ ! -f "$source_path" || -L "$source_path" ]]; then
+        logE "Systemd unit template is not a regular file: $source_path"
+        debug_end "$debug"
+        return 1
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        debug_print "Dry run: would render and atomically install $service_path without following destination symlinks." "$debug"
+        debug_end "$debug"
+        return 0
+    fi
+
+    staged_path=$(mktemp "${service_path}.tmp.XXXXXX") || {
+        logE "Unable to create a same-directory temporary service unit for $service_path."
+        debug_end "$debug"
+        return 1
+    }
+    if [[ ! -f "$staged_path" || -L "$staged_path" ]]; then
+        rm -f -- "$staged_path"
+        logE "Temporary systemd unit is not a regular file: $staged_path"
+        debug_end "$debug"
+        return 1
+    fi
+
+    if ! exec_command "Stage systemd service unit" cp -- "$source_path" "$staged_path" "$debug" ||
+        ! replace_string_in_script "$staged_path" "SEMANTIC_VERSION" "$semantic_version" "$debug" ||
+        ! replace_string_in_script "$staged_path" "DAEMON_NAME" "$daemon_name" "$debug" ||
+        ! replace_string_in_script "$staged_path" "EXEC_START" "$exec_start" "$debug" ||
+        ! replace_string_in_script "$staged_path" "SYSLOG_IDENTIFIER" "$syslog_identifier" "$debug" ||
+        ! exec_command "Change ownership on staged systemd unit" \
+            chown root:root "$staged_path" "$debug" ||
+        ! exec_command "Change permissions on staged systemd unit" \
+            chmod 0644 "$staged_path" "$debug"; then
+        rm -f -- "$staged_path"
+        logE "Unable to render a safe replacement unit for $unit_name."
+        debug_end "$debug"
+        return 1
+    fi
+
+    if [[ ! -f "$staged_path" || -L "$staged_path" ]]; then
+        rm -f -- "$staged_path"
+        logE "Rendered systemd unit is not a regular file: $staged_path"
+        debug_end "$debug"
+        return 1
+    fi
+    if ! verify_systemd_service_unmasked \
+        "$unit_name" "$service_path" "$runtime_path" "$mask_target"; then
+        rm -f -- "$staged_path"
+        logE "Refusing to replace $unit_name because a mask reappeared during unit rendering."
+        debug_end "$debug"
+        return 1
+    fi
+    if ! exec_command "Atomically install systemd service unit" \
+        mv -Tf -- "$staged_path" "$service_path" "$debug"; then
+        rm -f -- "$staged_path"
+        logE "Unable to atomically install $service_path."
+        debug_end "$debug"
+        return 1
+    fi
+    staged_path=""
+
+    if [[ ! -f "$service_path" || -L "$service_path" ]]; then
+        logE "Installed systemd unit is not a regular file: $service_path"
+        debug_end "$debug"
+        return 1
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 manage_service() {
     local debug
     debug=$(debug_start "$@")
@@ -7202,68 +7421,81 @@ manage_service() {
     local source_path
     local daemon_systemd_name
     local service_path
+    local runtime_service_path
     local syslog_identifier
-    local retval=0 # Initialize return value
+    local service_state=""
+    local semantic_version=""
+    local retval=0
 
     daemon_name="${WSPR_SERVICE}" # Remove path
     source_path="$LOCAL_SYSTEMD_DIR/generic.service"
     daemon_systemd_name="${daemon_name}.service"
     # Install under /etc so it overrides anything in /lib
     service_path="/etc/systemd/system/${daemon_systemd_name}"
+    runtime_service_path="/run/systemd/system/${daemon_systemd_name}"
     syslog_identifier="$daemon_name"       # Use stripped daemon_exe
 
     if [[ "$ACTION" == "install" ]]; then
-        if systemctl list-unit-files --type=service | grep -q "$daemon_systemd_name"; then
-            if [[ "$DRY_RUN" != "true" ]]; then
-                exec_command "Disable systemd service" systemctl disable "${daemon_systemd_name}" "$debug" || retval=1
-                exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1
+        if [[ ! -f "$source_path" || -L "$source_path" ]]; then
+            logE "Systemd unit template is not a regular file: $source_path"
+            debug_end "$debug"
+            return 1
+        fi
+        semantic_version=$(get_sem_ver "$debug") || {
+            logE "Unable to resolve the version for $daemon_systemd_name."
+            debug_end "$debug"
+            return 1
+        }
+        repair_systemd_service_mask \
+            "$daemon_systemd_name" "$service_path" "$runtime_service_path" "/dev/null" "$debug" || {
+            debug_end "$debug"
+            return 1
+        }
 
-                if systemctl is-enabled "$daemon_systemd_name" 2>/dev/null | grep -q "^masked$"; then
-                    exec_command "Unmask systemd service" systemctl unmask "${daemon_systemd_name}" "$debug" || retval=1
-                fi
+        if [[ "$DRY_RUN" != "true" ]]; then
+            if systemctl is-active --quiet "$daemon_systemd_name" 2>/dev/null; then
+                exec_command "Stop systemd service" \
+                    systemctl stop "$daemon_systemd_name" "$debug" || {
+                    debug_end "$debug"
+                    return 1
+                }
             fi
+            service_state=$(service_unit_enablement_state "$daemon_systemd_name")
+            case "$service_state" in
+                enabled|enabled-runtime|linked|linked-runtime|alias)
+                    exec_command "Disable systemd service" \
+                        systemctl disable "$daemon_systemd_name" "$debug" || {
+                        debug_end "$debug"
+                        return 1
+                    }
+                    ;;
+            esac
         fi
 
-        if [[ ! -f "$source_path" ]]; then
-            warn "$source_path not found."
-            retval=1
-        elif [[ "$DRY_RUN" != "true" ]]; then
-            # Remove any existing override in /etc
-            if [[ -f "$service_path" ]]; then
-                exec_command "Remove old unit in /etc" rm -f "${service_path}" "$debug" || retval=1
-            fi
-            # Now copy our fresh unit into /etc
-            exec_command "Copy systemd file" cp -f "${source_path}" "${service_path}" "$debug" || retval=1
-            debug_print "Updating $service_path." "$debug"
-
-            replace_string_in_script "$service_path" "SEMANTIC_VERSION" "$(get_sem_ver "$debug")" "$debug"
-            replace_string_in_script "$service_path" "DAEMON_NAME" "$daemon_name" "$debug"
-            replace_string_in_script "$service_path" "EXEC_START" "$exec_start" "$debug"
-            replace_string_in_script "$service_path" "SYSLOG_IDENTIFIER" "$syslog_identifier" "$debug"
-
-            exec_command "Change ownership on systemd file" \
-                chown root:root "$service_path" \
-                "$debug" || retval=1
-
-            exec_command "Change permissions on systemd file" \
-                chmod 644 "$service_path" \
-                "$debug" || retval=1
-
-            exec_command "Enable systemd service" \
-                systemctl enable "$daemon_systemd_name" \
-                "$debug" || retval=1
-
-            exec_command "Reload systemd" \
-                systemctl daemon-reload \
-                "$debug" || retval=1
-
-            exec_command "Start systemd service" \
-                systemctl restart "$daemon_systemd_name" \
-                "$debug" || retval=1
-        fi
+        install_systemd_service_unit \
+            "$source_path" "$service_path" "$runtime_service_path" \
+            "$daemon_systemd_name" "$semantic_version" "$daemon_name" \
+            "$exec_start" "$syslog_identifier" "/dev/null" "$debug" || {
+            debug_end "$debug"
+            return 1
+        }
+        exec_command "Reload systemd" systemctl daemon-reload "$debug" || {
+            debug_end "$debug"
+            return 1
+        }
+        exec_command "Enable systemd service" \
+            systemctl enable "$daemon_systemd_name" "$debug" || {
+            debug_end "$debug"
+            return 1
+        }
+        exec_command "Start systemd service" \
+            systemctl restart "$daemon_systemd_name" "$debug" || {
+            debug_end "$debug"
+            return 1
+        }
 
     elif [[ "$ACTION" == "uninstall" ]]; then
-        if [[ -f "$service_path" ]]; then
+        if [[ -e "$service_path" || -L "$service_path" ]]; then
             if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
                 if systemctl is-active --quiet "$daemon_systemd_name"; then
                     exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1

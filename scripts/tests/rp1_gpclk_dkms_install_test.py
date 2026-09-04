@@ -1476,10 +1476,24 @@ class ApplyPolicyTests(unittest.TestCase):
             "service": {"LoadState": "loaded", "ActiveState": "inactive",
                         "UnitFileState": "enabled", "MainPID": "0"},
         }
+        masked = copy.deepcopy(pid_drift)
+        masked["activation"]["value"]["applicationService"] = {
+            "load": "masked", "active": "inactive", "enabled": "masked",
+            "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
+        }
+        externally_stopped = copy.deepcopy(pid_drift)
+        externally_stopped["activation"]["value"]["applicationService"][
+            "active"
+        ] = "inactive"
+        externally_stopped["activation"]["value"]["applicationService"][
+            "MainPID"
+        ] = "0"
         for label, initial in (
             ("neutral-ready", neutral),
             ("pid-drift", pid_drift),
             ("installer-started", installer_started),
+            ("masked", masked),
+            ("externally-stopped", externally_stopped),
         ):
             with self.subTest(result=label):
                 planned = self.runtime_recovery_plan(initial)
@@ -2022,6 +2036,24 @@ class ApplyPolicyTests(unittest.TestCase):
         pid = self.runtime_update_inspection("conflict")
         pid["activation"]["value"]["applicationService"]["MainPID"] = "42"
         unsafe_cases.append(pid)
+        for mutation, value in (
+            ("mask-wrong-fragment", "/etc/systemd/system/wsprrypi.service"),
+            ("mask-active", "active"),
+            ("mask-running-pid", "7"),
+        ):
+            masked = self.runtime_update_inspection("conflict")
+            service = masked["activation"]["value"]["applicationService"]
+            service.update({
+                "load": "masked", "active": "inactive", "enabled": "masked",
+                "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
+            })
+            if mutation == "mask-wrong-fragment":
+                service["fragment"] = "/dev/null"
+            elif mutation == "mask-active":
+                service["active"] = value
+            else:
+                service["MainPID"] = value
+            unsafe_cases.append(masked)
         for mutation in ("foreign-unit", "output-enabled"):
             started = self.runtime_update_inspection("conflict")
             started_journal = started["journals"]["activation.json"]["value"]
