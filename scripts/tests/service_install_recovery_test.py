@@ -44,6 +44,7 @@ source "$INSTALLER"
 FGGLD= RESET= FGGRN= FGRED= MOVE_UP= CLEAR_LINE=
 ACTION=install
 LOCAL_SYSTEMD_DIR="$TEMPLATE_DIR"
+SEM_VER=9.9.9-test
 
 record() { local IFS=' '; printf '%s\n' "$*" >>"$CALLS"; }
 logD() { :; }
@@ -52,7 +53,7 @@ logW() { printf '%s\n' "$1" >>"$MESSAGES"; }
 logE() { printf '%s\n' "$1" >>"$MESSAGES"; }
 warn() { printf '%s\n' "$1" >>"$MESSAGES"; }
 sleep() { :; }
-get_sem_ver() { printf '9.9.9-test\n'; }
+get_sem_ver() { return 91; }
 sed() {
     if [[ "${FAIL_STEP:-}" == render && "${1:-}" == -i ]]; then
         return 28
@@ -397,8 +398,16 @@ class ServiceInstallRecoveryTest(unittest.TestCase):
         self.assertIn('mv -Tf -- "$staged_path" "$service_path"', source)
         self.assertNotIn('cp -f "${source_path}" "${service_path}"', source)
         manage = source[source.index("manage_service() {"):source.index("resolve_wsprrypi_service_ports() {")]
+        config = source[source.index("manage_config() {"):source.index("upgrade_ini() {")]
+        group = source[source.index("local install_group=("):]
         self.assertLess(manage.index("repair_systemd_service_mask"), manage.index("systemctl is-active"))
         self.assertLess(manage.index("install_systemd_service_unit"), manage.index('exec_command "Reload systemd"'))
+        self.assertNotIn("get_sem_ver", manage)
+        self.assertNotIn("get_sem_ver", config)
+        self.assertLess(
+            group.index('"capture_install_sem_ver"'),
+            group.index('"manage_config'),
+        )
 
 
 if __name__ == "__main__":

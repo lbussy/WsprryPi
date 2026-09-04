@@ -5424,6 +5424,40 @@ git_clone() {
     return "$retval"
 }
 
+# -----------------------------------------------------------------------------
+# @brief Capture one stable source version before installation creates any
+#        temporary files inside the checkout.
+# @details Reinstall configuration merging temporarily creates a generated INI
+#          below the repository root. Later version rendering must use this
+#          pre-mutation value so identical installs produce identical artifacts.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
+capture_install_sem_ver() {
+    local debug
+    debug=$(debug_start "$@")
+    eval set -- "$(debug_filter "$@")"
+
+    local captured_version=""
+
+    captured_version=$(cd "$LOCAL_REPO_DIR" && get_sem_ver "$debug") || {
+        logE "Unable to capture the installation source version."
+        debug_end "$debug"
+        return 1
+    }
+    if [[ -z "$captured_version" ]]; then
+        logE "Installation source version is empty."
+        debug_end "$debug"
+        return 1
+    fi
+
+    SEM_VER="$captured_version"
+    export SEM_VER
+    debug_print "Captured stable installation version: $SEM_VER" "$debug"
+    debug_end "$debug"
+    return 0
+}
+
 ############
 ### Common Script Functions
 ############
@@ -6861,7 +6895,7 @@ manage_config() {
         replace_string_in_script \
             "$config_path" \
             "SEMANTIC_VERSION" \
-            "$(get_sem_ver "$debug")" \
+            "$SEM_VER" \
             "$debug" || retval=1
 
         # Install the stock configuration copy for the primary INI
@@ -6881,7 +6915,7 @@ manage_config() {
             replace_string_in_script \
                 "$stock_config_path" \
                 "SEMANTIC_VERSION" \
-                "$(get_sem_ver "$debug")" \
+                "$SEM_VER" \
                 "$debug" || retval=1
 
             debug_print \
@@ -7441,11 +7475,12 @@ manage_service() {
             debug_end "$debug"
             return 1
         fi
-        semantic_version=$(get_sem_ver "$debug") || {
+        semantic_version="$SEM_VER"
+        if [[ -z "$semantic_version" ]]; then
             logE "Unable to resolve the version for $daemon_systemd_name."
             debug_end "$debug"
             return 1
-        }
+        fi
         repair_systemd_service_mask \
             "$daemon_systemd_name" "$service_path" "$runtime_service_path" "/dev/null" "$debug" || {
             debug_end "$debug"
@@ -9155,6 +9190,7 @@ manage_wsprry_pi() {
     # Define the group of functions to install/uninstall
     local install_group=(
         "git_clone"
+        "capture_install_sem_ver"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
         "compile_binary \"$WSPR_EXE\""
@@ -9176,6 +9212,7 @@ manage_wsprry_pi() {
     # Define functions to skip on uninstall using an indexed array
     local skip_on_uninstall=(
         "git_clone"
+        "capture_install_sem_ver"
         "compile_binary"
         "cleanup_files_in_directories"
         "remove_legacy_services"
