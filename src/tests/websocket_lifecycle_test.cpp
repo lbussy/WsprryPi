@@ -1,11 +1,13 @@
 #include "../web_socket.hpp"
 #include "../privileged_network_runtime.hpp"
 #include <arpa/inet.h>
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -58,13 +60,33 @@ class WebSocketLifecycleTest {
         assert(std::string(response,size).find("HTTP/1.1 403") == 0);
         close(fd);
     }
-    static bool wait_disconnected(int fd) {
-        pollfd descriptor{fd, POLLIN | POLLHUP | POLLERR, 0};
-        const int ready = poll(&descriptor, 1, 2000);
-        if (ready <= 0)
-            return false;
-        char byte{};
-        return recv(fd, &byte, 1, 0) <= 0;
+    static bool wait_disconnected(
+        int fd,
+        const std::string &forbidden_payload = {}) {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(2);
+        std::string received;
+        while (std::chrono::steady_clock::now() < deadline) {
+            const auto remaining = std::chrono::duration_cast<
+                std::chrono::milliseconds>(
+                    deadline - std::chrono::steady_clock::now());
+            pollfd descriptor{fd, POLLIN | POLLHUP | POLLERR, 0};
+            const int ready = poll(
+                &descriptor, 1,
+                static_cast<int>(std::max<std::int64_t>(1, remaining.count())));
+            if (ready <= 0)
+                return false;
+            char buffer[512]{};
+            const auto size = recv(fd, buffer, sizeof(buffer), 0);
+            if (size <= 0)
+                return forbidden_payload.empty() ||
+                       received.find(forbidden_payload) == std::string::npos;
+            received.append(buffer, static_cast<std::size_t>(size));
+            if (!forbidden_payload.empty() &&
+                received.find(forbidden_payload) != std::string::npos)
+                return false;
+        }
+        return false;
     }
     static bool wait_zero(WebSocketServer &s) {
         std::unique_lock<std::mutex> l(s.clients_mutex_);
@@ -256,7 +278,7 @@ class WebSocketLifecycleTest {
         int outbound = connect_client(port, "192.168.50.42");
         phase.store(2, std::memory_order_release);
         local.sendAllClients("{\"status\":\"must-not-send\"}");
-        assert(wait_disconnected(outbound));
+        assert(wait_disconnected(outbound, "must-not-send"));
         close(outbound);
         assert(wait_zero(local));
         local.stop();
