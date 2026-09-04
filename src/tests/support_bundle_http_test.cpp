@@ -210,6 +210,22 @@ void wait_for_state(httplib::Client &client,
     }
     assert(false);
 }
+
+void wait_for_workflow_state(httplib::Client &client,
+                             const httplib::Headers &headers,
+                             const std::string &id,
+                             const char *expected) {
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto response = get_status(client, headers, id);
+        if (response.status == 200 &&
+            response_json(response)["workflow_state"] == expected) {
+            return;
+        }
+        std::this_thread::sleep_for(5ms);
+    }
+    assert(false);
+}
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -582,8 +598,8 @@ int main(int argc, char **argv) {
         "application/json"));
     assert(body_finalize.status == 400);
     assert(get_download(client, headers, private_id).status == 200);
-    assert(response_json(get_status(client, headers, private_id))["workflow_state"] ==
-           "candidate_downloaded");
+    wait_for_workflow_state(
+        client, headers, private_id, "candidate_downloaded");
     const auto finalized = finalize_bundle(client, headers, private_id);
     assert(finalized.status == 200);
     assert(response_json(finalized)["workflow_state"] == "finalized");
@@ -602,6 +618,8 @@ int main(int argc, char **argv) {
     const auto encrypted_download = require_response(client.Get(
         "/api/support-bundles/" + private_id + "/encrypted", headers));
     assert(encrypted_download.status == 200 && !encrypted_download.body.empty());
+    wait_for_workflow_state(
+        client, headers, private_id, "encrypted_downloaded");
     assert(manager.receipt_reference(private_id).status ==
            SupportBundleDownloadReferenceStatus::available);
     const std::string upload_report_path =

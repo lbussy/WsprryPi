@@ -38,6 +38,18 @@ int main() {
         read_file(source_root / "web_server_request_guard.cpp");
     const std::string version_routes =
         read_file(source_root / "web_server_version_routes.cpp");
+    const std::string support_http =
+        read_file(source_root / "support_bundle_http.cpp");
+    const std::string support_http_header =
+        read_file(source_root / "support_bundle_http.hpp");
+    const std::string support_intake_routes =
+        read_file(source_root / "support_bundle_http_intake_routes.cpp");
+    const std::string support_job_routes =
+        read_file(source_root / "support_bundle_http_job_routes.cpp");
+    const std::string support_download_routes =
+        read_file(source_root / "support_bundle_http_download_routes.cpp");
+    const std::string support_query_routes =
+        read_file(source_root / "support_bundle_http_query_routes.cpp");
     const std::string route_sources =
         config_routes + config_http + control_routes + admin_routes +
         admin_http + request_guard + version_routes;
@@ -110,6 +122,32 @@ int main() {
                .find("true};") == std::string::npos);
     assert(route_sources.find("create_directory") == std::string::npos);
     assert(route_sources.find("supportBundleJobManager_->create(") == std::string::npos);
+
+    const std::size_t intake_routes =
+        support_http.find("register_intake_routes(");
+    const std::size_t job_routes =
+        support_http.find("register_job_mutation_routes(");
+    const std::size_t download_routes =
+        support_http.find("register_download_routes(");
+    const std::size_t query_routes =
+        support_http.find("register_query_routes(");
+    assert(intake_routes != std::string::npos &&
+           job_routes != std::string::npos &&
+           download_routes != std::string::npos &&
+           query_routes != std::string::npos);
+    assert(intake_routes < job_routes &&
+           job_routes < download_routes &&
+           download_routes < query_routes);
+    assert(count(support_http, "register_intake_routes(") == 1);
+    assert(count(support_http, "register_job_mutation_routes(") == 1);
+    assert(count(support_http, "register_download_routes(") == 1);
+    assert(count(support_http, "register_query_routes(") == 1);
+    assert(count(support_intake_routes, "\"/api/support-intake\"") == 2);
+    assert(count(support_job_routes, "\"/api/support-bundles\"") == 1);
+    assert(count(support_download_routes, "/download)") == 1);
+    assert(count(support_query_routes, "\"/api/support-bundles\"") == 2);
+    assert(support_http_header.find("support_bundle_http_internal") ==
+           std::string::npos);
 
     std::cout << "support_bundle_web_server_wiring_test: PASS\n";
 }
