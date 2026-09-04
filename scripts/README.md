@@ -105,6 +105,17 @@ and open-file-descriptor count. Unavailable, stopped, permission, and process
 race states are labeled explicitly rather than reported as zero. This snapshot
 does not provide historical resource monitoring.
 
+On systems using the external RP1-GPCLK-DKMS provider, the bundle includes
+passive, kernel-specific DKMS and `modinfo` reports for both modules, loaded
+module state, running-kernel header availability, WsprryPi installation-record
+presence, and the runtime provider's read-only `inspect` result. Missing tools,
+files, permissions, and nonzero inspection results are retained as diagnostic
+evidence. The collector executes the provider only when it is a root-owned,
+non-symlink regular file without group or world write access, and bounds that
+inspection to 30 seconds. The ownership record itself is not copied, and these
+reports do not load modules, change routes, authorize output, or establish
+qualification.
+
 I2C bus scanning is opt-in: `--probe-i2c` permits only `i2cdetect -y 1`.
 Without it, the collector gathers passive I2C details but records that active
 probing was skipped. Running as a non-root user is supported; restricted system

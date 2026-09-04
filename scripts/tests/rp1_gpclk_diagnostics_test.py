@@ -7,16 +7,38 @@ runtime = (root / "src/scheduling.cpp").read_text()
 websocket = (root / "src/web_socket.cpp").read_text()
 admin_probe = (root / "src/WSPR-Transmitter/src/rp1_gpclk_admin_probe.cpp").read_text()
 
-for command in ("dkms status", "modinfo", "overlay-sha256.txt",
-                "rp1_gpclk_module_state", "rp1_gpclk_boot_route"):
+for command in ("status -m rp1-gpclk-dkms", "-k \"$RP1_KERNEL\" -F",
+                "rp1_gpclk_runtime_provider_inspect",
+                "rp1_gpclk_loaded_modules"):
+    assert command in collector, command
+for command in ("overlay-sha256.txt", "rp1_gpclk_module_state",
+                "rp1_gpclk_boot_route"):
     assert command not in collector, command
 for evidence in ("/dev/rp1-gpclk",
-                 "/var/lib/rp1-gpclk-dkms/route-transactions"):
+                 "/var/lib/rp1-gpclk-dkms/route-transactions",
+                 "/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json",
+                 "/usr/src/linux-headers-$RP1_KERNEL"):
     assert evidence in collector, evidence
 for evidence in ("Provider provisioning and package identity: external to WsprryPi",
+                 "DKMS registration and kernel-specific module identity",
+                 "WsprryPi ownership record: presence only",
+                 "read-only inspect operation",
                  "Persisted route", "Active route and operation readiness",
                  "Qualification: not established"):
     assert evidence in collector, evidence
+for guard in ("safe_root_owned_regular_file", '"$owner" == "0"',
+              "! -L", "run_bounded_absolute_cmd", "--kill-after=5s 30s",
+              "runtime provider absent, inaccessible, or unsafe",
+              "Neither RP1 GPCLK module is loaded",
+              "/proc/modules absent or inaccessible"):
+    assert guard in collector, guard
+for module in ("rp1_gpclk_dkms", "rp1_route_controller"):
+    for field in ("filename", "version", "vermagic"):
+        assert f"rp1_gpclk_modinfo_{module}_{field}" in collector
+for prohibited in ("sudo ", " modprobe ", " insmod ", " rmmod ",
+                   '"$RP1_RUNTIME_PROVIDER" ensure',
+                   '"$RP1_RUNTIME_PROVIDER" plan'):
+    assert prohibited not in collector, prohibited
 for identity in ("source_commit=", "module=rp1-gpclk-dkms/",
                  "package=unreleased", "development-candidate"):
     assert identity not in collector and identity not in runtime, identity

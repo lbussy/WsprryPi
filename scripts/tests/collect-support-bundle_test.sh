@@ -238,6 +238,15 @@ run_collector "$TEST_ROOT/out" "$TEST_ROOT/mocks" "$TEST_ROOT/private-i2c.log" \
   --contact-file "$TEST_ROOT/contact.txt" > "$TEST_ROOT/private.stdout"
 extract_bundle "$TEST_ROOT/extracted-private"
 assert_file "$TEST_ROOT/extracted-private/bundle/manifest.json"
+assert_file "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_dkms.txt"
+assert_file "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_modinfo_rp1_gpclk_dkms_filename.txt"
+assert_file "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_modinfo_rp1_route_controller_vermagic.txt"
+assert_file "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_running_kernel_headers.txt"
+assert_file "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_runtime_provider_inspect.txt"
+assert_file "$TEST_ROOT/extracted-private/bundle/hardware/rp1-gpclk/wsprrypi-installation-record.txt"
+assert_contains "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_dkms.txt" '/usr/sbin/dkms status -m rp1-gpclk-dkms'
+assert_contains "$TEST_ROOT/extracted-private/bundle/commands/rp1_gpclk_runtime_provider_inspect.txt" 'runtime_provider.py inspect'
+assert_contains "$TEST_ROOT/extracted-private/bundle/hardware/rp1-gpclk/evidence-summary.txt" 'Qualification: not established by this support bundle'
 assert_contains "$TEST_ROOT/extracted-private/bundle/README.txt" 'This .tar.gz is the readable review copy.'
 assert_contains "$TEST_ROOT/extracted-private/bundle/NEXT-STEPS.txt" 'Upload only the later encrypted .age artifact'
 assert_not_contains "$TEST_ROOT/extracted-private/bundle/NEXT-STEPS.txt" 'Upload this .tar.gz archive'

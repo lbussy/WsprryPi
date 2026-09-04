@@ -14,6 +14,12 @@ LEGACY_LOG_DIR="/var/log/wsprrypi"
 INSTALL_LOG_NAME="wsprrypi.log"
 DEFAULT_WEB_PORT="31415"
 DEFAULT_SOCKET_PORT="31416"
+RP1_DKMS="/usr/sbin/dkms"
+RP1_MODINFO="/usr/sbin/modinfo"
+RP1_PYTHON="/usr/bin/python3"
+RP1_TIMEOUT="/usr/bin/timeout"
+RP1_RUNTIME_PROVIDER="/usr/lib/rp1-gpclk-dkms/runtime_provider.py"
+RP1_INSTALLATION_RECORD="/var/lib/wsprrypi/rp1-gpclk-dkms-installation.json"
 
 STAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
 HOST="$(hostname -s 2>/dev/null || echo raspberrypi)"
@@ -309,6 +315,43 @@ run_cmd() {
       echo "[command exited with status: $status]"
     } >>"$outfile"
   }
+}
+
+run_optional_absolute_cmd() {
+  local name="$1" executable="$2"
+  shift 2
+  if [[ -x "$executable" ]]; then
+    run_cmd "$name" "$executable" "$@"
+  else
+    {
+      echo "\$ $executable $*"
+      echo
+      echo "Collection status: command unavailable ($executable)"
+    } > "${OUT_DIR}/commands/${name}.txt"
+  fi
+}
+
+run_bounded_absolute_cmd() {
+  local name="$1"
+  shift
+  if [[ -x "$RP1_TIMEOUT" ]]; then
+    run_cmd "$name" "$RP1_TIMEOUT" --signal=TERM --kill-after=5s 30s "$@"
+  else
+    {
+      echo "\$ $*"
+      echo
+      echo "Collection status: bounded command runner unavailable ($RP1_TIMEOUT)"
+    } > "${OUT_DIR}/commands/${name}.txt"
+  fi
+}
+
+safe_root_owned_regular_file() {
+  local path="$1" owner mode
+  [[ -f "$path" && ! -L "$path" ]] || return 1
+  owner="$(stat -c '%u' "$path" 2>/dev/null || true)"
+  mode="$(stat -c '%a' "$path" 2>/dev/null || true)"
+  [[ "$owner" == "0" && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#${mode: -2:1} & 2) == 0 && (8#${mode: -1} & 2) == 0 ))
 }
 
 copy_if_exists() {
@@ -1081,13 +1124,75 @@ fi
 
 log "Collecting package information..."
 
-log "Collecting RP1 GPCLK runtime endpoint and route state..."
+log "Collecting RP1 GPCLK DKMS, module, runtime endpoint, and route state..."
 mkdir -p "${OUT_DIR}/hardware/rp1-gpclk"
+RP1_KERNEL="$(uname -r 2>/dev/null || true)"
+if [[ -n "$RP1_KERNEL" ]]; then
+  run_optional_absolute_cmd rp1_gpclk_dkms "$RP1_DKMS" status -m rp1-gpclk-dkms
+  for rp1_module in rp1_gpclk_dkms rp1_route_controller; do
+    for rp1_field in filename version vermagic; do
+      run_optional_absolute_cmd \
+        "rp1_gpclk_modinfo_${rp1_module}_${rp1_field}" \
+        "$RP1_MODINFO" -k "$RP1_KERNEL" -F "$rp1_field" "$rp1_module"
+    done
+  done
+  {
+    echo "\$ test -d /usr/src/linux-headers-$RP1_KERNEL"
+    echo
+    if [[ -d "/usr/src/linux-headers-$RP1_KERNEL" ]]; then
+      echo "Running-kernel headers present"
+    else
+      echo "Running-kernel headers MISSING"
+    fi
+  } > "${OUT_DIR}/commands/rp1_gpclk_running_kernel_headers.txt"
+else
+  for rp1_name in \
+    rp1_gpclk_dkms \
+    rp1_gpclk_running_kernel_headers \
+    rp1_gpclk_modinfo_rp1_gpclk_dkms_filename \
+    rp1_gpclk_modinfo_rp1_gpclk_dkms_version \
+    rp1_gpclk_modinfo_rp1_gpclk_dkms_vermagic \
+    rp1_gpclk_modinfo_rp1_route_controller_filename \
+    rp1_gpclk_modinfo_rp1_route_controller_version \
+    rp1_gpclk_modinfo_rp1_route_controller_vermagic; do
+    echo "Collection status: running kernel unavailable" \
+      > "${OUT_DIR}/commands/${rp1_name}.txt"
+  done
+fi
+if [[ -r /proc/modules ]]; then
+  # shellcheck disable=SC2016  # $1 is an awk field, not a shell parameter.
+  run_cmd rp1_gpclk_loaded_modules awk \
+    '$1 == "rp1_gpclk_dkms" || $1 == "rp1_route_controller" { print; found=1 } END { if (!found) print "Neither RP1 GPCLK module is loaded" }' \
+    /proc/modules
+else
+  echo "Collection status: /proc/modules absent or inaccessible" \
+    > "${OUT_DIR}/commands/rp1_gpclk_loaded_modules.txt"
+fi
+if [[ -f "$RP1_INSTALLATION_RECORD" ]]; then
+  echo "WsprryPi installation record present" \
+    > "${OUT_DIR}/hardware/rp1-gpclk/wsprrypi-installation-record.txt"
+else
+  echo "WsprryPi installation record absent or inaccessible" \
+    > "${OUT_DIR}/hardware/rp1-gpclk/wsprrypi-installation-record.txt"
+fi
+if safe_root_owned_regular_file "$RP1_RUNTIME_PROVIDER"; then
+  run_bounded_absolute_cmd rp1_gpclk_runtime_provider_inspect \
+    "$RP1_PYTHON" "$RP1_RUNTIME_PROVIDER" inspect
+else
+  {
+    echo "\$ $RP1_PYTHON $RP1_RUNTIME_PROVIDER inspect"
+    echo
+    echo "Collection status: runtime provider absent, inaccessible, or unsafe ($RP1_RUNTIME_PROVIDER)"
+  } > "${OUT_DIR}/commands/rp1_gpclk_runtime_provider_inspect.txt"
+fi
 run_cmd rp1_gpclk_device_state sh -c "if [ -e /dev/rp1-gpclk ]; then ls -l /dev/rp1-gpclk; else echo 'device unavailable'; fi"
 run_cmd rp1_gpclk_route_socket systemctl show rp1-gpclk-route-manager.socket --property=ActiveState,UnitFileState,FragmentPath
 run_cmd rp1_gpclk_route_journals sh -c "find /var/lib/rp1-gpclk-dkms/route-transactions -maxdepth 1 -type f -name '*.json' -printf '%f %u:%g %m %s bytes\n' 2>/dev/null | sort || true"
 {
   echo "Provider provisioning and package identity: external to WsprryPi"
+  echo "DKMS registration and kernel-specific module identity: captured as passive command reports"
+  echo "WsprryPi ownership record: presence only; record contents are not copied"
+  echo "Runtime provider readiness: captured through the read-only inspect operation when available"
   echo "Persisted route: GPIO$(ini_value "$INSTALLED_INI" "GPIO" "Transmit Pin" "unavailable")"
   echo "Active route and operation readiness: reported through the runtime provider protocol"
   echo "Qualification: not established by this support bundle"
