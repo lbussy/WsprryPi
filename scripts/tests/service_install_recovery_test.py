@@ -370,6 +370,22 @@ class ServiceInstallRecoveryTest(unittest.TestCase):
         self.assertFalse(self.persistent.is_symlink())
         self.assert_mask_target_unchanged(target_before)
 
+    def test_uninstall_stops_disables_removes_and_reloads_an_active_unit(self) -> None:
+        self.persistent.write_text("installed unit\n", encoding="utf-8")
+        self.set_state("enabled", 0)
+        self.active.write_text("1\n", encoding="utf-8")
+
+        self.run_case("uninstall")
+
+        self.assertEqual(self.active.read_text(encoding="utf-8"), "0\n")
+        self.assertFalse(self.persistent.exists())
+        calls = self.call_lines()
+        self.assertIn("systemctl is-active --quiet wsprrypi.service", calls)
+        self.assertIn("systemctl stop wsprrypi.service", calls)
+        self.assertIn("systemctl disable wsprrypi.service", calls)
+        self.assertIn("systemctl daemon-reload", calls)
+        self.assertFalse(any(line.startswith("systemctl list-unit-files") for line in calls))
+
     def test_dry_run_preserves_mask_and_every_fixture_byte(self) -> None:
         self.mask(self.persistent)
         self.set_state("masked", 1)

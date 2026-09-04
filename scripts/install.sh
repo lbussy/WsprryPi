@@ -7531,17 +7531,21 @@ manage_service() {
 
     elif [[ "$ACTION" == "uninstall" ]]; then
         if [[ -e "$service_path" || -L "$service_path" ]]; then
-            if systemctl list-unit-files | grep -q "^$daemon_systemd_name"; then
-                if systemctl is-active --quiet "$daemon_systemd_name"; then
-                    exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1
-                fi
-
-                if systemctl is-enabled --quiet "$daemon_systemd_name"; then
-                    exec_command "Disable systemd service" systemctl disable "${daemon_systemd_name}" "$debug" || retval=1
-                fi
+            if systemctl is-active --quiet "$daemon_systemd_name" 2>/dev/null; then
+                exec_command "Stop systemd service" systemctl stop "${daemon_systemd_name}" "$debug" || retval=1
             fi
 
+            service_state=$(service_unit_enablement_state "$daemon_systemd_name")
+            case "$service_state" in
+                enabled|enabled-runtime|linked|linked-runtime|alias)
+                    exec_command "Disable systemd service" systemctl disable "${daemon_systemd_name}" "$debug" || retval=1
+                    ;;
+            esac
+
             exec_command "Remove service file" rm -f "${service_path}" "$debug" || retval=1
+            if [[ "$DRY_RUN" != "true" ]]; then
+                exec_command "Reload systemd" systemctl daemon-reload "$debug" || retval=1
+            fi
         else
             debug_print "Service file $service_path does not exist. Skipping removal." "$debug"
         fi
