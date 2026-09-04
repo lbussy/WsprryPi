@@ -1771,8 +1771,13 @@ def recover_and_remove_owned_runtime(
             )
             provider = migration_provider
             inspected = validate_readiness(runtime_call(
-                runner, provider, "inspect", (), {"recovery_required"},
-            ), "recovery_required")
+                runner, provider, "inspect", (),
+                {"recovery_required", "neutral_ready"},
+            ))
+            require(
+                inspected.get("result") in {"recovery_required", "neutral_ready"},
+                "reviewed recovery provider did not recognize the owned neutral state",
+            )
             candidate_binding = inspected.get("identities", {}).get(
                 "installedBinding", {})
             require(
@@ -1884,8 +1889,13 @@ def recover_and_remove_owned_runtime(
         )
         provider = migration_provider
         inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"recovery_required"},
-        ), "recovery_required")
+            runner, provider, "inspect", (),
+            {"recovery_required", "neutral_ready"},
+        ))
+        require(
+            inspected.get("result") in {"recovery_required", "neutral_ready"},
+            "reviewed route-recovery provider did not recognize the owned neutral state",
+        )
         candidate_binding = inspected.get("identities", {}).get(
             "installedBinding", {})
         require(

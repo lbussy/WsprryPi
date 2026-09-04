@@ -2761,12 +2761,17 @@ class ApplyPolicyTests(unittest.TestCase):
                     candidate_interpretation.update(
                         result="recovery_required", state="recovery_required",
                         conflicts=[])
+                elif initial is route_recovered:
+                    candidate_interpretation.update(
+                        result="neutral_ready", state="neutral_ready")
                 replies = iter((initial, candidate_interpretation, recovery,
                                 recovered, removable, removal, removed))
                 providers = []
+                allowed_result_sets = []
                 def runtime_call(unused_runner, provider_arg, operation,
                                  arguments=(), allowed_results=()):
                     providers.append((operation, provider_arg))
+                    allowed_result_sets.append((operation, set(allowed_results)))
                     return next(replies)
                 identity = mock.Mock(st_dev=1, st_ino=2)
                 with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
@@ -2784,6 +2789,10 @@ class ApplyPolicyTests(unittest.TestCase):
                     "inspect", "inspect", "activation-recover-plan",
                     "activation-recover", "inspect", "remove-plan", "remove",
                 ])
+                self.assertEqual(
+                    allowed_result_sets[1],
+                    ("inspect", {"recovery_required", "neutral_ready"}),
+                )
                 self.assertEqual(preserve.call_args_list, [
                     mock.call(record, "before-recovery"),
                     mock.call(record, "after-recovery", clear=True),
