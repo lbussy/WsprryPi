@@ -127,7 +127,8 @@ int main() {
   std::string runtime_plan_classification = "neutral_ready";
   bool runtime_plan_operational_ready = false;
   bool runtime_plan_operational_ready_reported = true;
-  bool runtime_plan_already_ready_matches = true;
+  bool runtime_plan_already_ready = false;
+  std::string runtime_plan_active_route;
   std::vector<std::string> runtime_plans;
   std::vector<nlohmann::json> runtime_launches;
 
@@ -158,10 +159,12 @@ int main() {
              {"administrationEligible", true},
              {"executionReady", exact},
              {"routeSelected", exact},
+             {"routes", {{"active", runtime_plan_active_route.empty()
+                                          ? nlohmann::json(nullptr)
+                                          : nlohmann::json(runtime_plan_active_route)}}},
              {"safety", safety},
              {"routePlan", {{"operation", "select"}, {"route", route},
-                            {"alreadyReady", runtime_plan_already_ready_matches
-                                                 ? exact : !exact},
+                            {"alreadyReady", runtime_plan_already_ready},
                             {"bindingSha256", std::string(64, 'a')},
                             {"planSha256", std::string(64, 'b')}}}};
        },
@@ -448,24 +451,45 @@ int main() {
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
   runtime_plan_operational_ready_reported = true;
   runtime_plan_operational_ready = false;
-  runtime_plan_already_ready_matches = false;
+  runtime_plan_already_ready = true;
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == false);
-  runtime_plan_already_ready_matches = true;
+  runtime_plan_already_ready = false;
   runtime_plan_classification = "exact_ready";
   runtime_plan_operational_ready = true;
+  const auto missing_exact_route = service.operate("preflight", "GPIO20", 0);
+  assert(missing_exact_route.at("ok") == false);
+  assert(missing_exact_route.at("state") == "runtime_preflight_failed");
+  runtime_plan_active_route = "gpio4";
+  const auto gpio4_to_gpio20 = service.operate("preflight", "GPIO20", 0);
+  assert(gpio4_to_gpio20.at("ok") == true);
+  assert(gpio4_to_gpio20.at("state") == "runtime_preflight_ready");
+  runtime_plan_active_route = "gpio20";
+  const auto gpio20_idempotent = service.operate("preflight", "GPIO20", 0);
+  assert(gpio20_idempotent.at("ok") == false);
+  runtime_plan_already_ready = true;
   assert(service.operate("preflight", "GPIO20", 0).at("ok") == true);
-  runtime_plan_already_ready_matches = false;
+  const auto gpio20_to_gpio4 = service.operate("preflight", "GPIO4", 0);
+  assert(gpio20_to_gpio4.at("ok") == false);
+  runtime_plan_already_ready = false;
+  assert(service.operate("preflight", "GPIO4", 0).at("ok") == true);
+  runtime_plan_active_route = "gpio4";
+  runtime_plan_already_ready = true;
+  assert(service.operate("preflight", "GPIO4", 0).at("ok") == true);
   const auto contradictory_exact = service.operate("preflight", "GPIO20", 0);
   assert(contradictory_exact.at("ok") == false);
-  assert(contradictory_exact.at("state") == "runtime_unknown");
-  assert(!contradictory_exact.contains("recoveryRequired"));
-  runtime_plan_already_ready_matches = true;
+  assert(contradictory_exact.at("state") == "runtime_preflight_failed");
+  assert(contradictory_exact.at("changeStarted") == false);
+  assert(contradictory_exact.at("recoveryRequired") == false);
+  runtime_plan_already_ready = false;
   runtime_plan_operational_ready = false;
   const auto unready_exact = service.operate("preflight", "GPIO20", 0);
   assert(unready_exact.at("ok") == false);
-  assert(unready_exact.at("state") == "runtime_unknown");
-  assert(!unready_exact.contains("recoveryRequired"));
+  assert(unready_exact.at("state") == "runtime_preflight_failed");
+  assert(unready_exact.at("changeStarted") == false);
+  assert(unready_exact.at("recoveryRequired") == false);
   runtime_plan_classification = "neutral_ready";
+  runtime_plan_active_route.clear();
+  runtime_plan_already_ready = false;
   runtime_preflight = service.operate("preflight", "GPIO20", 0);
   assert(runtime_preflight.at("ok") == true);
   const auto reviewed_generation =
@@ -494,6 +518,13 @@ int main() {
   assert(runtime_failure.at("ok") == true);
   assert(runtime_failure.at("state") == "runtime_recovery_queued");
   assert(runtime_launches.back().at("operation") == "recover");
+  assert(runtime_launches.back().at("digest") == "");
+  assert(runtime_launches.back().at("binding") == "");
+  const auto runtime_remove = service.operate("remove", "GPIO20", 0);
+  assert(runtime_remove.at("ok") == true);
+  assert(runtime_remove.at("state") == "runtime_remove_queued");
+  assert(runtime_launches.back().at("operation") == "remove");
+  assert(runtime_launches.back().at("route") == "gpio20");
   assert(runtime_launches.back().at("digest") == "");
   assert(runtime_launches.back().at("binding") == "");
   runtime_launch_fails = true;
@@ -558,6 +589,23 @@ int main() {
   runtime["state"]["application"]["phase"] = "restoration-failed";
   runtime["state"]["application"]["error"] = "start failed";
   assert(runtime_service.query().at("state") == "runtime_restoration_failed");
+  const nlohmann::json neutral_ctl = {{"id",0},{"route",0},{"flags",0},{"error",0},
+                                      {"session",1234},{"generation",8}};
+  runtime["state"]["controller"] = neutral_ctl;
+  runtime["state"]["activeRoute"] = nullptr;
+  runtime["state"]["pendingTransaction"] = {{"phase","recovered-inhibited"}};
+  runtime["state"]["application"] = {{"phase","neutral-restored"},
+      {"boot","current-boot"}, {"binding",std::string(64,'a')}};
+  const auto neutral_running = runtime_service.query();
+  assert(neutral_running.at("state") == "runtime_neutral_running");
+  assert(neutral_running.at("active") == "None");
+  assert(neutral_running.at("configured") == "None");
+  runtime["state"]["application"]["phase"] = "neutral-stopped";
+  assert(runtime_service.query().at("state") == "runtime_neutral_stopped");
+  runtime["state"]["application"]["phase"] = "neutral-restoration-failed";
+  runtime["state"]["application"]["error"] = "start failed";
+  assert(runtime_service.query().at("state") ==
+         "runtime_neutral_restoration_failed");
 
   std::cout << "rp1_gpclk_route_service_test: PASS\n";
 }

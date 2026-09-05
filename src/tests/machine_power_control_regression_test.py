@@ -13,7 +13,10 @@ def require(text: str, needle: str, context: str) -> None:
 
 linux = (ROOT / "machine_power_control_linux.cpp").read_text(encoding="utf-8")
 unavailable = (ROOT / "machine_power_control_unavailable.cpp").read_text(encoding="utf-8")
-scheduling = (ROOT / "scheduling.cpp").read_text(encoding="utf-8")
+scheduling = "".join(
+    (ROOT / path).read_text(encoding="utf-8")
+    for path in ("scheduling.cpp", "scheduling_runtime.cpp")
+)
 main = (ROOT / "main.cpp").read_text(encoding="utf-8")
 makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 

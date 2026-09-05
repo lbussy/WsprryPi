@@ -27,6 +27,8 @@
  */
 
 #include "config_handler.hpp"
+#include "config_handler_deserialization.hpp"
+#include "config_handler_serialization.hpp"
 
 #include <atomic>
 #include "backend_capabilities.hpp"
@@ -105,9 +107,6 @@ std::string transmit_backend_unavailable_message(TransmitBackendKind backend)
 
 namespace
 {
-    constexpr double kManualPpmMin = -200.0;
-    constexpr double kManualPpmMax = 200.0;
-
     bool g_patch_all_from_web_runtime_apply_suppressed_for_test = false;
     std::mutex g_config_update_mutex;
     std::atomic<double> g_published_wspr_audio_offset_hz{WSPR_AUDIO_OFFSET_HZ};
@@ -150,127 +149,6 @@ namespace
 
     std::string trim_copy(const std::string &value);
 
-    WsprPlannerPreference parse_wspr_planner_preference(
-        const nlohmann::json &wspr)
-    {
-        const std::string raw =
-            trim_copy(wspr.value("Planner Preference", std::string("auto")));
-        std::string lowered = raw;
-        std::transform(
-            lowered.begin(),
-            lowered.end(),
-            lowered.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::tolower(c));
-            });
-
-        if (lowered.empty() || lowered == "auto")
-        {
-            return WsprPlannerPreference::Auto;
-        }
-
-        if (lowered == "prefer_paired" || lowered == "prefer-paired")
-        {
-            return WsprPlannerPreference::PreferPaired;
-        }
-
-        if (lowered == "require_paired" || lowered == "require-paired")
-        {
-            return WsprPlannerPreference::RequirePaired;
-        }
-
-        throw std::runtime_error(
-            "Invalid planner preference '" + raw +
-            "'. Expected auto, prefer_paired, or require_paired.");
-    }
-
-    std::string parse_wspr_frequency_profile(const nlohmann::json &wspr)
-    {
-        const std::string raw =
-            trim_copy(wspr.value("Frequency Profile", std::string("existing_common")));
-        std::string lowered = raw;
-        std::transform(
-            lowered.begin(), lowered.end(), lowered.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::replace(lowered.begin(), lowered.end(), '-', '_');
-
-        if (lowered.empty() || lowered == "existing_common" ||
-            lowered == "existing/common")
-            return "existing_common";
-        if (lowered == "wrc15" || lowered == "wrc_15")
-            return "wrc15";
-
-        throw std::runtime_error(
-            "Invalid WSPR.Frequency Profile '" + raw +
-            "'. Expected existing_common or wrc15.");
-    }
-
-    TransmitBackendKind parse_transmit_backend_kind(
-        const nlohmann::json &operation)
-    {
-        const std::string raw =
-            trim_copy(operation.value("Transmit Backend", std::string("gpio")));
-        std::string lowered = raw;
-        std::transform(
-            lowered.begin(),
-            lowered.end(),
-            lowered.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::tolower(c));
-            });
-
-        if (lowered.empty() || lowered == "gpio")
-        {
-            return TransmitBackendKind::GPIO;
-        }
-        if (lowered == "si5351")
-        {
-            return TransmitBackendKind::SI5351;
-        }
-        if (lowered == "rp1-gpclk")
-        {
-            return TransmitBackendKind::RP1_GPCLK;
-        }
-        if (lowered == "simulated")
-            throw std::runtime_error(
-                "Operation.Transmit Backend 'simulated' is transient and cannot be persisted.");
-
-        throw std::runtime_error(
-            "Invalid Operation.Transmit Backend. Expected 'gpio', 'rp1-gpclk', or 'si5351'; simulated is CLI-only.");
-    }
-
-    EnableOnBootBehavior parse_enable_on_boot_behavior(
-        const nlohmann::json &operation)
-    {
-        if (!operation.contains("Enable on Boot"))
-        {
-            return EnableOnBootBehavior::Never;
-        }
-
-        const std::string raw =
-            trim_copy(operation.at("Enable on Boot").get<std::string>());
-        std::string lowered = raw;
-        std::transform(
-            lowered.begin(),
-            lowered.end(),
-            lowered.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::tolower(c));
-            });
-
-        if (lowered == "never")
-            return EnableOnBootBehavior::Never;
-        if (lowered == "follow")
-            return EnableOnBootBehavior::Follow;
-        if (lowered == "always")
-            return EnableOnBootBehavior::Always;
-
-        throw std::runtime_error(
-            "Invalid Operation.Enable on Boot. Expected 'Never', 'Follow', or 'Always'.");
-    }
 
     int parse_integer_config_value(
         const nlohmann::json &source,
@@ -316,292 +194,6 @@ namespace
         throw std::runtime_error(context + " must be an integer.");
     }
 
-    int parse_strict_integer_config_value(
-        const nlohmann::json &source,
-        const std::string &context)
-    {
-        if (!source.is_number_integer() && !source.is_number_unsigned())
-        {
-            throw std::runtime_error(context + " must be an integer.");
-        }
-        return parse_integer_config_value(source, context);
-    }
-
-    double parse_manual_ppm_value(
-        const nlohmann::json &source,
-        const std::string &context)
-    {
-        double ppm = 0.0;
-        if (source.is_number())
-        {
-            ppm = source.get<double>();
-        }
-        else if (source.is_string())
-        {
-            const std::string raw = trim_copy(source.get<std::string>());
-            std::size_t consumed = 0;
-            try
-            {
-                ppm = std::stod(raw, &consumed);
-            }
-            catch (const std::invalid_argument &)
-            {
-                throw std::runtime_error(context + " must be a number.");
-            }
-            catch (const std::out_of_range &)
-            {
-                throw std::runtime_error(context + " is out of range.");
-            }
-
-            if (consumed != raw.size())
-            {
-                throw std::runtime_error(context + " must be a number.");
-            }
-        }
-        else
-        {
-            throw std::runtime_error(context + " must be a number.");
-        }
-
-        if (!std::isfinite(ppm))
-        {
-            throw std::runtime_error(context + " must be a finite number.");
-        }
-
-        const double clamped_ppm = std::clamp(ppm, kManualPpmMin, kManualPpmMax);
-        if (ppm != clamped_ppm)
-        {
-            llog.logS(
-                WARN,
-                context,
-                " is outside bounds (-200 to 200), applying clamped value: ",
-                clamped_ppm);
-        }
-
-        return clamped_ppm;
-    }
-
-    double parse_gpio_ppm_value(
-        const nlohmann::json &source,
-        const std::string &context)
-    {
-        double ppm = 0.0;
-        if (source.is_number())
-        {
-            ppm = source.get<double>();
-        }
-        else if (source.is_string())
-        {
-            const std::string raw = trim_copy(source.get<std::string>());
-            std::size_t consumed = 0;
-            try
-            {
-                ppm = std::stod(raw, &consumed);
-            }
-            catch (const std::exception &)
-            {
-                throw std::runtime_error(context + " must be a number.");
-            }
-            if (consumed != raw.size())
-            {
-                throw std::runtime_error(context + " must be a number.");
-            }
-        }
-        else
-        {
-            throw std::runtime_error(context + " must be a number.");
-        }
-
-        if (!std::isfinite(ppm))
-        {
-            throw std::runtime_error(context + " must be a finite number.");
-        }
-        if (ppm < kManualPpmMin || ppm > kManualPpmMax)
-        {
-            throw std::runtime_error(context + " must be within -200 to 200 PPM.");
-        }
-        return ppm;
-    }
-
-    double parse_cw_base_frequency_value(
-        const nlohmann::json &source,
-        const std::string &context)
-    {
-        auto normalize_frequency_hz = [&](double value) -> double
-        {
-            if (!std::isfinite(value) || value <= 0.0)
-            {
-                throw std::runtime_error(
-                    context +
-                    " must be a positive whole-number Hz value or a value with Hz, kHz, MHz, or GHz.");
-            }
-
-            const double rounded = std::round(value);
-            if (std::fabs(value - rounded) > 1e-6)
-            {
-                throw std::runtime_error(
-                    context +
-                    " must resolve to a whole-number frequency in Hz.");
-            }
-
-            return rounded;
-        };
-
-        if (source.is_number())
-        {
-            return normalize_frequency_hz(source.get<double>());
-        }
-
-        if (source.is_string())
-        {
-            const std::string raw = trim_copy(source.get<std::string>());
-            if (raw.empty())
-            {
-                throw std::runtime_error(
-                    context +
-                    " must be a whole-number Hz value or a value with Hz, kHz, MHz, or GHz.");
-            }
-
-            const std::size_t unit_start = raw.find_first_not_of("0123456789.");
-            const std::string numeric_part =
-                unit_start == std::string::npos ? raw : raw.substr(0, unit_start);
-            const std::string unit_part =
-                unit_start == std::string::npos ? std::string() : trim_copy(raw.substr(unit_start));
-
-            if (numeric_part.empty())
-            {
-                throw std::runtime_error(
-                    context +
-                    " must start with a numeric frequency value.");
-            }
-
-            double value = 0.0;
-            std::size_t consumed = 0;
-            try
-            {
-                value = std::stod(numeric_part, &consumed);
-            }
-            catch (const std::invalid_argument &)
-            {
-                throw std::runtime_error(
-                    context +
-                    " must be a whole-number Hz value or a value with Hz, kHz, MHz, or GHz.");
-            }
-            catch (const std::out_of_range &)
-            {
-                throw std::runtime_error(context + " is out of range.");
-            }
-
-            if (consumed != numeric_part.size())
-            {
-                throw std::runtime_error(
-                    context +
-                    " must be a whole-number Hz value or a value with Hz, kHz, MHz, or GHz.");
-            }
-
-            std::string lowered_unit = unit_part;
-            std::transform(
-                lowered_unit.begin(),
-                lowered_unit.end(),
-                lowered_unit.begin(),
-                [](unsigned char c)
-                {
-                    return static_cast<char>(std::tolower(c));
-                });
-
-            if (lowered_unit.empty())
-            {
-                if (numeric_part.find('.') != std::string::npos)
-                {
-                    const std::size_t decimal_point = numeric_part.find('.');
-                    const std::string fractional_part = numeric_part.substr(decimal_point + 1);
-                    const bool zero_fraction =
-                        !fractional_part.empty() &&
-                        std::all_of(
-                            fractional_part.begin(),
-                            fractional_part.end(),
-                            [](char c)
-                            {
-                                return c == '0';
-                            });
-                    if (!zero_fraction)
-                    {
-                        throw std::runtime_error(
-                            context +
-                            " must use Hz, kHz, MHz, or GHz when the value includes a decimal point.");
-                    }
-                }
-                return normalize_frequency_hz(value);
-            }
-
-            if (lowered_unit == "ghz")
-            {
-                value *= 1e9;
-            }
-            else if (lowered_unit == "mhz")
-            {
-                value *= 1e6;
-            }
-            else if (lowered_unit == "khz")
-            {
-                value *= 1e3;
-            }
-            else if (lowered_unit != "hz")
-            {
-                throw std::runtime_error(
-                    context +
-                    " must use a supported unit suffix: Hz, kHz, MHz, or GHz.");
-            }
-
-            return normalize_frequency_hz(value);
-        }
-
-        throw std::runtime_error(
-            context +
-            " must be a whole-number Hz value or a value with Hz, kHz, MHz, or GHz.");
-    }
-
-    int parse_si5351_tx_output(const nlohmann::json &source)
-    {
-        if (source.is_number_integer() || source.is_number_unsigned())
-        {
-            return parse_integer_config_value(
-                source,
-                "Si5351.TX Output");
-        }
-
-        const std::string raw =
-            trim_copy(source.get<std::string>());
-        std::string lowered = raw;
-        std::transform(
-            lowered.begin(),
-            lowered.end(),
-            lowered.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::tolower(c));
-            });
-
-        if (lowered == "clk0" || lowered == "0")
-            return 0;
-        if (lowered == "clk1" || lowered == "1")
-            return 1;
-        if (lowered == "clk2" || lowered == "2")
-            return 2;
-
-        throw std::runtime_error(
-            "Invalid Si5351.TX Output. Expected CLK0, CLK1, CLK2, 0, 1, or 2.");
-    }
-
-    std::string parse_si5351_reference_source(const nlohmann::json &source)
-    {
-        std::string value = trim_copy(source.get<std::string>());
-        std::transform(value.begin(), value.end(), value.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (value == "external_tcxo" || value == "crystal") return value;
-        throw std::runtime_error(
-            "Invalid Si5351.Reference Source. Expected external_tcxo or crystal.");
-    }
 
     std::string format_si5351_i2c_address(int address)
     {
@@ -618,40 +210,6 @@ namespace
         return is_supported_transmit_gpio(gpio) ? gpio : kDefaultTransmitGpio;
     }
 
-    ModeType parse_mode_type(const nlohmann::json &operation)
-    {
-        if (!operation.contains("Mode"))
-        {
-            throw std::runtime_error("Missing Operation.Mode.");
-        }
-
-        const std::string raw =
-            trim_copy(operation.at("Mode").get<std::string>());
-        std::string upper = raw;
-        std::transform(
-            upper.begin(),
-            upper.end(),
-            upper.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::toupper(c));
-            });
-
-        if (upper.empty() || upper == "WSPR")
-            return ModeType::WSPR;
-        if (upper == "QRSS")
-            return ModeType::QRSS;
-        if (upper == "FSKCW")
-            return ModeType::FSKCW;
-        if (upper == "DFCW")
-            return ModeType::DFCW;
-        if (upper == "TONE")
-            return ModeType::TONE;
-
-        throw std::runtime_error(
-            "Invalid mode '" + raw +
-            "'. Expected WSPR, QRSS, FSKCW, DFCW, or TONE.");
-    }
 
     const char *mode_type_to_string(ModeType mode) noexcept
     {
@@ -667,232 +225,7 @@ namespace
         return "WSPR";
     }
 
-    std::string parse_cw_fade_shape(const nlohmann::json &cw)
-    {
-        std::string raw = trim_copy(cw.value("Fade Shape", std::string("none")));
-        std::transform(
-            raw.begin(),
-            raw.end(),
-            raw.begin(),
-            [](unsigned char c)
-            {
-                return static_cast<char>(std::tolower(c));
-            });
-        std::replace(raw.begin(), raw.end(), '-', '_');
 
-        if (raw.empty() || raw == "none" || raw == "linear" || raw == "raised_cosine")
-        {
-            return raw.empty() ? std::string("none") : raw;
-        }
-
-        throw std::runtime_error(
-            "Invalid CW.Fade Shape. Expected none, linear, or raised_cosine.");
-    }
-
-    nlohmann::json public_config_from_internal(const nlohmann::json &source)
-    {
-        std::string gpio_support_error;
-        const bool runtime_gpio_clock_transmission_supported =
-            platform_supports_gpio_clock_transmission(&gpio_support_error);
-        const bool rp1_gpio_operator_visible = operator_exposes_rp1_gpio();
-        const bool gpio_clock_transmission_supported =
-            runtime_gpio_clock_transmission_supported &&
-            (get_raspberry_pi_generation() != 5 || rp1_gpio_operator_visible);
-        if (get_raspberry_pi_generation() == 5 &&
-            rp1_gpio_operator_visible &&
-            !runtime_gpio_clock_transmission_supported)
-        {
-            gpio_support_error =
-                "The canonical RP1 GPCLK provider is unavailable. Review the "
-                "RP1 clock route status below; transmission remains disabled.";
-        }
-        else if (runtime_gpio_clock_transmission_supported &&
-                 !gpio_clock_transmission_supported)
-        {
-            gpio_support_error =
-                "GPIO controls on Raspberry Pi 5 require a compatible RP1 route "
-                "controller and an active canonical provider. Transmission remains "
-                "disabled until both are available.";
-        }
-        bool si5351_detected = true;
-        std::string si5351_detection_error;
-        if (source.contains("Si5351") && source.at("Si5351").is_object())
-        {
-            const nlohmann::json &si5351 = source.at("Si5351");
-            const int i2c_bus =
-                si5351.contains("I2C Bus")
-                    ? parse_integer_config_value(si5351.at("I2C Bus"), "Si5351.I2C Bus")
-                    : kDefaultSi5351I2cBus;
-            const int i2c_address =
-                si5351.contains("I2C Address")
-                    ? parse_integer_config_value(
-                          si5351.at("I2C Address"),
-                          "Si5351.I2C Address",
-                          0)
-                    : kDefaultSi5351I2cAddress;
-            const int reference_hz =
-                si5351.contains("Reference Frequency")
-                    ? parse_integer_config_value(
-                          si5351.at("Reference Frequency"),
-                          "Si5351.Reference Frequency")
-                    : kDefaultSi5351ReferenceHz;
-            si5351_detected = si5351_device_detected(
-                i2c_bus,
-                i2c_address,
-                reference_hz,
-                &si5351_detection_error);
-        }
-
-        nlohmann::json public_json;
-        public_json["Operation"] = source.at("Operation");
-        public_json["GPIO"] = source.at("GPIO");
-        public_json["Calibration"] = source.at("Calibration");
-        public_json["Si5351"] = source.at("Si5351");
-        public_json["WSPR"] = {
-            {"Call Sign", source.at("WSPR").at("Call Sign")},
-            {"Grid Square", source.at("WSPR").at("Grid Square")},
-            {"TX Power", source.at("WSPR").at("TX Power")},
-            {"Frequency", source.at("WSPR").at("Frequency")},
-            {"Frequency Profile", source.at("WSPR").at("Frequency Profile")},
-            {"Band Preferences", source.at("WSPR").at("Band Preferences")},
-            {"Planner Preference", source.at("WSPR").at("Planner Preference")},
-            {"Use Random Offset", source.at("WSPR").at("Use Random Offset")}};
-        public_json["CW"] = source.at("CW");
-        public_json["Band GPIO"] = source.at("Band GPIO");
-        public_json["Platform"] = {
-            {"Model", get_pi_model()},
-            {"Raspberry Pi Generation", get_raspberry_pi_generation()},
-            {"GPIO Clock Transmission Supported",
-             gpio_clock_transmission_supported},
-            {"GPIO Clock Transmission Error",
-             gpio_clock_transmission_supported ? std::string()
-                                               : gpio_support_error},
-            {"RP1 GPIO Operator Visible", rp1_gpio_operator_visible},
-            {"Si5351 Detected", si5351_detected},
-            {"Si5351 Detection Error",
-             si5351_detected ? std::string() : si5351_detection_error}};
-        return public_json;
-    }
-
-    void apply_public_config_to_internal(
-        const nlohmann::json &public_json,
-        nlohmann::json &internal_json)
-    {
-        if (public_json.contains("Meta"))
-        {
-            const auto &meta = public_json.at("Meta");
-            if (meta.contains("debug_logging"))
-            {
-                internal_json["Meta"]["debug_logging"] =
-                    meta.at("debug_logging");
-            }
-        }
-
-        if (public_json.contains("Operation"))
-        {
-            const auto &operation = public_json.at("Operation");
-            if (operation.contains("Mode"))
-                internal_json["Operation"]["Mode"] = operation.at("Mode");
-            if (operation.contains("Transmit"))
-                internal_json["Operation"]["Transmit"] = operation.at("Transmit");
-            if (operation.contains("Transmit Backend"))
-            {
-                const std::string backend =
-                    trim_copy(operation.at("Transmit Backend").get<std::string>());
-                std::string normalized_backend = backend;
-                std::transform(
-                    normalized_backend.begin(), normalized_backend.end(),
-                    normalized_backend.begin(),
-                    [](unsigned char c)
-                    {
-                        return static_cast<char>(std::tolower(c));
-                    });
-                internal_json["Operation"]["Transmit Backend"] =
-                    get_raspberry_pi_generation() == 5 &&
-                            operator_exposes_rp1_gpio() &&
-                            normalized_backend == "gpio"
-                        ? "rp1-gpclk"
-                        : backend;
-            }
-            if (operation.contains("Enable on Boot"))
-                internal_json["Operation"]["Enable on Boot"] = operation.at("Enable on Boot");
-            if (operation.contains("Use LED"))
-                internal_json["Operation"]["Use LED"] = operation.at("Use LED");
-            if (operation.contains("LED Pin"))
-                internal_json["Operation"]["LED Pin"] = operation.at("LED Pin");
-            if (operation.contains("Use Amp"))
-                internal_json["Operation"]["Use Amp"] = operation.at("Use Amp");
-            if (operation.contains("Amp Pin"))
-                internal_json["Operation"]["Amp Pin"] = operation.at("Amp Pin");
-            if (!operation.contains("Use Amp") && operation.contains("Amp Pin"))
-            {
-                internal_json["Operation"]["Use Amp"] =
-                    parse_integer_config_value(
-                        operation.at("Amp Pin"),
-                        "Operation.Amp Pin") >= 0;
-            }
-            if (operation.contains("Amp Pin Active High"))
-                internal_json["Operation"]["Amp Pin Active High"] = operation.at("Amp Pin Active High");
-            if (operation.contains("Web Port"))
-                internal_json["Operation"]["Web Port"] = operation.at("Web Port");
-            if (operation.contains("Socket Port"))
-                internal_json["Operation"]["Socket Port"] = operation.at("Socket Port");
-            if (operation.contains("Use Shutdown"))
-                internal_json["Operation"]["Use Shutdown"] = operation.at("Use Shutdown");
-            if (operation.contains("Shutdown Button"))
-                internal_json["Operation"]["Shutdown Button"] = operation.at("Shutdown Button");
-        }
-
-        if (public_json.contains("GPIO"))
-        {
-            if (public_json.at("GPIO").is_object() &&
-                public_json.at("GPIO").contains("Use NTP"))
-            {
-                throw std::runtime_error(
-                    "GPIO.Use NTP is retired and accepted only during INI migration; "
-                    "use GPIO.Use System Clock Frequency Estimate.");
-            }
-            const bool rp1_gpio_hidden_from_operator =
-                get_raspberry_pi_generation() == 5 &&
-                !operator_exposes_rp1_gpio();
-            if (!rp1_gpio_hidden_from_operator)
-            {
-                internal_json["GPIO"] = public_json.at("GPIO");
-            }
-        }
-        if (public_json.contains("Calibration"))
-            internal_json["Calibration"] = public_json.at("Calibration");
-        if (public_json.contains("Si5351"))
-            internal_json["Si5351"] = public_json.at("Si5351");
-        if (public_json.contains("WSPR"))
-        {
-            const auto &wspr = public_json.at("WSPR");
-            if (wspr.contains("Call Sign"))
-                internal_json["WSPR"]["Call Sign"] = wspr.at("Call Sign");
-            if (wspr.contains("Grid Square"))
-                internal_json["WSPR"]["Grid Square"] = wspr.at("Grid Square");
-            if (wspr.contains("TX Power"))
-                internal_json["WSPR"]["TX Power"] = wspr.at("TX Power");
-            if (wspr.contains("Frequency"))
-                internal_json["WSPR"]["Frequency"] = wspr.at("Frequency");
-            if (wspr.contains("Frequency Profile"))
-                internal_json["WSPR"]["Frequency Profile"] = wspr.at("Frequency Profile");
-            if (wspr.contains("Band Preferences"))
-                internal_json["WSPR"]["Band Preferences"] = wspr.at("Band Preferences");
-            if (wspr.contains("Planner Preference"))
-                internal_json["WSPR"]["Planner Preference"] = wspr.at("Planner Preference");
-            if (wspr.contains("Use Random Offset"))
-                internal_json["WSPR"]["Use Random Offset"] = wspr.at("Use Random Offset");
-            if (internal_json.contains("WSPR") && internal_json["WSPR"].is_object())
-            {
-                internal_json["WSPR"].erase("WSPR Dial Frequency Set");
-            }
-        }
-        if (public_json.contains("CW"))
-            internal_json["CW"] = public_json.at("CW");
-        if (public_json.contains("Band GPIO"))
-            internal_json["Band GPIO"] = public_json.at("Band GPIO");
-    }
 
     nlohmann::json make_plan_validation_error_details(
         const wspr::TransmissionPlanResult &plan)
@@ -1154,6 +487,51 @@ namespace
 
 } // namespace
 
+namespace config_handler_serialization
+{
+const char *config_serialization_mode_name(ModeType mode) noexcept
+{
+    return mode_type_to_string(mode);
+}
+
+std::string config_serialization_trim(const std::string &value)
+{
+    return trim_copy(value);
+}
+
+int config_serialization_integer(
+    const nlohmann::json &source,
+    const std::string &context,
+    int base)
+{
+    return parse_integer_config_value(source, context, base);
+}
+
+std::string config_serialization_si5351_i2c_address(int address)
+{
+    return format_si5351_i2c_address(address);
+}
+
+int config_serialization_gpio_transmit_pin(int gpio) noexcept
+{
+    return normalize_gpio_transmit_pin(gpio);
+}
+
+const BandJsonKeys &band_json_keys() noexcept
+{
+    return kHamBandJsonKeys;
+}
+} // namespace config_handler_serialization
+
+namespace config_handler_deserialization
+{
+void default_band_gpio_config(
+    std::array<BandGPIOConfig, HAM_BAND_COUNT> &band_gpio)
+{
+    set_default_band_gpio_config(band_gpio);
+}
+} // namespace config_handler_deserialization
+
 void init_default_config()
 {
     // Runtime
@@ -1395,36 +773,6 @@ namespace
         return trimmed;
     }
 
-    std::string json_to_string(const nlohmann::json &j)
-    {
-        if (j.is_string())
-        {
-            return j.get<std::string>();
-        }
-
-        if (j.is_number())
-        {
-            return std::to_string(j.get<double>());
-        }
-
-        return j.dump();
-    }
-
-    std::string parse_cw_message_value(const nlohmann::json &value)
-    {
-        if (value.is_string())
-        {
-            return trim_copy(value.get<std::string>());
-        }
-
-        if (value.is_number_integer() || value.is_number_unsigned())
-        {
-            return value.dump();
-        }
-
-        throw std::runtime_error(
-            "Invalid CW.Message. Expected a string or integer number.");
-    }
 
     std::string default_json_value_to_string(const nlohmann::json &value)
     {
@@ -1667,457 +1015,6 @@ namespace
         }
     }
 
-    void json_to_config_impl(const nlohmann::json &source, ArgParserConfig &target)
-    {
-        set_default_band_gpio_config(target.band_gpio);
-        target.enable_web = true;
-
-        target.use_ini = source.at("Meta").at("Use INI").get<bool>();
-        target.ini_filename = source.at("Meta").at("INI Filename").get<std::string>();
-        target.date_time_log = source.at("Meta").at("Date Time Log").get<bool>();
-        target.debug_logging =
-            source.at("Meta").value("debug_logging", false);
-        target.mode = parse_mode_type(source.at("Operation"));
-        target.wspr_planner_preference =
-            parse_wspr_planner_preference(source.at("WSPR"));
-        target.loop_tx = source.at("Meta").at("Loop TX").get<bool>();
-        target.tx_iterations.store(source.at("Meta").at("TX Iterations").get<int>());
-        target.wspr_dial_freq_set.clear();
-
-        target.transmit = source.at("Operation").at("Transmit").get<bool>();
-        target.enable_on_boot =
-            parse_enable_on_boot_behavior(source.at("Operation"));
-        target.transmit_backend =
-            parse_transmit_backend_kind(source.at("Operation"));
-        const nlohmann::json gpio =
-            source.contains("GPIO") ? source.at("GPIO") : nlohmann::json::object();
-        target.gpio_tx_pin =
-            gpio.contains("Transmit Pin")
-                ? gpio.at("Transmit Pin").get<int>()
-                : kDefaultTransmitGpio;
-        if (transmit_backend_uses_gpio_output(target.transmit_backend))
-        {
-            target.gpio_tx_pin = normalize_gpio_transmit_pin(target.gpio_tx_pin);
-        }
-        target.gpio_power_level =
-            gpio.contains("Power Level")
-                ? gpio.at("Power Level").get<int>()
-                : 7;
-        target.rp1_gpio_drive_ma =
-            gpio.contains("RP1 Drive mA")
-                ? gpio.at("RP1 Drive mA").get<int>()
-                : kDefaultRp1GpioDriveMa;
-        if (!is_supported_rp1_gpio_drive_ma(target.rp1_gpio_drive_ma))
-        {
-            throw std::runtime_error(
-                "GPIO.RP1 Drive mA must be 2, 4, 8, or 12.");
-        }
-        target.gpio_use_system_clock_frequency_estimate =
-            gpio.contains("Use System Clock Frequency Estimate")
-                ? gpio.at("Use System Clock Frequency Estimate").get<bool>()
-                : true;
-        target.gpio_frequency_residual_ppm = parse_gpio_ppm_value(
-            gpio.value("Frequency Residual PPM", 0.0),
-            "GPIO.Frequency Residual PPM");
-        target.gpio_manual_ppm = parse_gpio_ppm_value(
-            gpio.value("Manual PPM", 0.0),
-            "GPIO.Manual PPM");
-        const nlohmann::json si5351 =
-            source.contains("Si5351") ? source.at("Si5351") : nlohmann::json::object();
-        target.si5351_i2c_bus =
-            si5351.contains("I2C Bus")
-                ? parse_integer_config_value(si5351.at("I2C Bus"), "Si5351.I2C Bus")
-                : kDefaultSi5351I2cBus;
-        target.si5351_i2c_address =
-            si5351.contains("I2C Address")
-                ? parse_integer_config_value(si5351.at("I2C Address"), "Si5351.I2C Address", 0)
-                : kDefaultSi5351I2cAddress;
-        target.si5351_reference_hz =
-            si5351.contains("Reference Frequency")
-                ? parse_integer_config_value(
-                      si5351.at("Reference Frequency"),
-                      "Si5351.Reference Frequency")
-                : kDefaultSi5351ReferenceHz;
-        target.si5351_reference_source = si5351.contains("Reference Source")
-            ? parse_si5351_reference_source(si5351.at("Reference Source"))
-            : kDefaultSi5351ReferenceSource;
-        target.si5351_crystal_load_capacitance_pf =
-            si5351.contains("Crystal Load Capacitance")
-                ? parse_integer_config_value(si5351.at("Crystal Load Capacitance"),
-                                             "Si5351.Crystal Load Capacitance")
-                : kDefaultSi5351CrystalLoadCapacitancePf;
-        target.si5351_tx_output =
-            si5351.contains("TX Output")
-                ? parse_si5351_tx_output(si5351.at("TX Output"))
-                : kDefaultSi5351TxOutput;
-        target.si5351_power_level =
-            si5351.contains("Power Level")
-                ? si5351.at("Power Level").get<int>()
-                : 1;
-        target.si5351_ppm = parse_manual_ppm_value(
-            source.at("Calibration").at("PPM"),
-            "Calibration.PPM");
-        resolve_backend_specific_config(target);
-        target.use_offset = source.at("WSPR").at("Use Random Offset").get<bool>();
-        target.modulation_dot_seconds =
-            source.contains("CW") &&
-                    source.at("CW").contains("Dot Seconds")
-                ? source.at("CW").at("Dot Seconds").get<double>()
-                : target.modulation_dot_seconds;
-        target.modulation_fsk_offset_hz =
-            source.contains("CW") &&
-                    source.at("CW").contains("Shift Hz")
-                ? source.at("CW").at("Shift Hz").get<double>()
-                : target.modulation_fsk_offset_hz;
-        target.cw_intra_element_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("Intra Element Gap")
-                ? source.at("CW").at("Intra Element Gap").get<double>()
-                : target.cw_intra_element_gap;
-        target.cw_inter_character_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("Inter Character Gap")
-                ? source.at("CW").at("Inter Character Gap").get<double>()
-                : target.cw_inter_character_gap;
-        target.cw_inter_word_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("Inter Word Gap")
-                ? source.at("CW").at("Inter Word Gap").get<double>()
-                : target.cw_inter_word_gap;
-        target.dfcw_intra_element_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("DFCW Intra Element Gap")
-                ? source.at("CW").at("DFCW Intra Element Gap").get<double>()
-                : kDefaultDfcwIntraElementGap;
-        target.dfcw_inter_character_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("DFCW Inter Character Gap")
-                ? source.at("CW").at("DFCW Inter Character Gap").get<double>()
-                : kDefaultDfcwInterCharacterGap;
-        target.dfcw_inter_word_gap =
-            source.contains("CW") &&
-                    source.at("CW").contains("DFCW Inter Word Gap")
-                ? source.at("CW").at("DFCW Inter Word Gap").get<double>()
-                : kDefaultDfcwInterWordGap;
-        target.cw_fade_shape =
-            source.contains("CW") ? parse_cw_fade_shape(source.at("CW")) : "none";
-        target.cw_fade_in_ms =
-            source.contains("CW") &&
-                    source.at("CW").contains("Fade In Ms")
-                ? source.at("CW").at("Fade In Ms").get<int>()
-                : target.cw_fade_in_ms;
-        target.cw_fade_out_ms =
-            source.contains("CW") &&
-                    source.at("CW").contains("Fade Out Ms")
-                ? source.at("CW").at("Fade Out Ms").get<int>()
-                : target.cw_fade_out_ms;
-        target.cw_fade_slice_ms =
-            source.contains("CW") &&
-                    source.at("CW").contains("Fade Slice Ms")
-                ? source.at("CW").at("Fade Slice Ms").get<int>()
-                : target.cw_fade_slice_ms;
-        target.schedule_start_minute =
-            source.contains("CW") &&
-                    source.at("CW").contains("Start Minute")
-                ? source.at("CW").at("Start Minute").get<int>()
-                : target.schedule_start_minute;
-        target.schedule_start_second =
-            source.contains("CW") &&
-                    source.at("CW").contains("Start Second")
-                ? parse_strict_integer_config_value(
-                      source.at("CW").at("Start Second"),
-                      "CW.Start Second")
-                : 5;
-        target.schedule_repeat_minutes =
-            source.contains("CW") &&
-                    source.at("CW").contains("Repeat Minutes")
-                ? source.at("CW").at("Repeat Minutes").get<int>()
-                : target.schedule_repeat_minutes;
-        target.wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
-        target.wspr.callsign =
-            source.at("WSPR").at("Call Sign").get<std::string>();
-        target.wspr.grid_square =
-            source.at("WSPR").at("Grid Square").get<std::string>();
-        target.wspr.power_dbm =
-            source.at("WSPR").at("TX Power").get<int>();
-        target.wspr.frequencies =
-            json_to_string(source.at("WSPR").at("Frequency"));
-        target.wspr.frequency_profile =
-            parse_wspr_frequency_profile(source.at("WSPR"));
-        target.wspr.band_preferences.clear();
-        const auto &band_preferences = source.at("WSPR").value(
-            "Band Preferences", nlohmann::json::object());
-        if (!band_preferences.is_object())
-            throw std::runtime_error("WSPR.Band Preferences must be an object.");
-        BandLookup preference_lookup;
-        for (const auto &item : band_preferences.items())
-        {
-            std::string band = trim_copy(item.key());
-            std::transform(
-                band.begin(), band.end(), band.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (item.value().is_string())
-            {
-                const std::string preset = item.value().get<std::string>();
-                if (band == "60m" && preset.find(':') == std::string::npos)
-                    throw std::runtime_error(
-                        "WSPR band preference for 60m must use a qualified preset.");
-                const double frequency =
-                    preference_lookup.parse_string_to_frequency(preset, false);
-                const auto correlated = preference_lookup.lookup_ham_band(frequency);
-                if (!correlated || band_to_string(*correlated) != band)
-                    throw std::runtime_error(
-                        "WSPR band preference for " + band +
-                        " must resolve within that band.");
-                target.wspr.band_preferences[band] = preset;
-                continue;
-            }
-            if (!item.value().is_number_unsigned() &&
-                !item.value().is_number_integer())
-                throw std::runtime_error(
-                    "WSPR.Band Preferences values must be preset strings or integral Hz values.");
-            if (item.value().is_number_integer() &&
-                !item.value().is_number_unsigned() &&
-                item.value().get<std::int64_t>() <= 0)
-                throw std::runtime_error(
-                    "WSPR band preference frequencies must be positive integral Hz values.");
-            const auto frequency = item.value().get<std::uint64_t>();
-            if (frequency == 0)
-                throw std::runtime_error(
-                    "WSPR band preference frequencies must be positive integral Hz values.");
-            const auto correlated = preference_lookup.lookup_ham_band(
-                static_cast<double>(frequency));
-            if (!correlated || band_to_string(*correlated) != band)
-                throw std::runtime_error(
-                    "WSPR band preference for " + band +
-                    " must resolve within that band.");
-            target.wspr.band_preferences[band] = frequency;
-        }
-        target.wspr.audio_offset_hz =
-            WSPR_AUDIO_OFFSET_HZ;
-        target.wspr.planner_preference =
-            parse_wspr_planner_preference(source.at("WSPR"));
-        const auto &cw = source.at("CW");
-        const std::string cw_message =
-            cw.contains("Message")
-                ? parse_cw_message_value(cw.at("Message"))
-                : std::string();
-        const double cw_base_frequency_hz =
-            cw.contains("Base Frequency")
-                ? parse_cw_base_frequency_value(cw.at("Base Frequency"), "CW.Base Frequency")
-                : 14096900.0;
-        const double cw_shift_hz =
-            cw.value("Shift Hz", target.modulation_fsk_offset_hz);
-        target.qrss.message =
-            cw_message;
-        target.qrss.frequency_hz = cw_base_frequency_hz;
-        target.qrss.dot_seconds = target.modulation_dot_seconds;
-        target.fskcw.message = cw_message;
-        target.fskcw.space_frequency_hz = cw_base_frequency_hz;
-        target.fskcw.mark_frequency_hz = cw_base_frequency_hz + cw_shift_hz;
-        target.fskcw.dot_seconds = target.modulation_dot_seconds;
-        target.dfcw.message = cw_message;
-        target.dfcw.dot_frequency_hz = cw_base_frequency_hz;
-        target.dfcw.dash_frequency_hz = cw_base_frequency_hz + cw_shift_hz;
-        target.dfcw.dot_seconds = target.modulation_dot_seconds;
-
-        target.callsign = target.wspr.callsign;
-        target.grid_square = target.wspr.grid_square;
-        target.power_dbm = target.wspr.power_dbm;
-        target.frequencies = target.wspr.frequencies;
-        target.wspr_audio_offset_hz = WSPR_AUDIO_OFFSET_HZ;
-        target.wspr_planner_preference = target.wspr.planner_preference;
-        target.use_led = source.at("Operation").at("Use LED").get<bool>();
-        target.led_pin = source.at("Operation").at("LED Pin").get<int>();
-        target.amp_pin =
-            source.at("Operation").contains("Amp Pin")
-                ? parse_integer_config_value(
-                      source.at("Operation").at("Amp Pin"),
-                      "Operation.Amp Pin")
-                : -1;
-        target.use_amp =
-            source.at("Operation").contains("Use Amp")
-                ? source.at("Operation").value("Use Amp", false)
-                : target.amp_pin >= 0;
-        if (target.amp_pin < 0)
-        {
-            target.use_amp = false;
-        }
-        target.amp_pin_active_high =
-            source.at("Operation").value("Amp Pin Active High", false);
-
-        target.web_port = source.at("Operation").at("Web Port").get<int>();
-        target.socket_port = source.at("Operation").at("Socket Port").get<int>();
-        target.use_shutdown = source.at("Operation").at("Use Shutdown").get<bool>();
-        target.shutdown_pin = source.at("Operation").at("Shutdown Button").get<int>();
-        target.use_journald = false;
-        const auto experimental =
-            source.value("Experimental", nlohmann::json::object());
-        target.allow_unqualified_frequency =
-            experimental.value("Allow Unqualified Frequency", false);
-        target.allow_non_amateur_frequency =
-            experimental.value("Allow Non-Amateur Frequency", false);
-
-        // Missing Band GPIO data is allowed; explicit disabled defaults stay in place.
-        const auto band_gpio_section_it = source.find("Band GPIO");
-        if (band_gpio_section_it == source.end() || !band_gpio_section_it->is_object())
-        {
-            return;
-        }
-
-        for (const auto &[band, band_name] : kHamBandJsonKeys)
-        {
-            const auto band_config_it = band_gpio_section_it->find(band_name);
-            if (band_config_it == band_gpio_section_it->end() || !band_config_it->is_object())
-            {
-                continue;
-            }
-
-            BandGPIOConfig &band_config = target.band_gpio[ham_band_index(band)];
-
-            if (band_config_it->contains("GPIO"))
-            {
-                band_config.gpio = band_config_it->at("GPIO").get<int>();
-            }
-
-            if (band_config_it->contains("Enabled"))
-            {
-                band_config.enabled = band_config_it->at("Enabled").get<bool>();
-            }
-
-            if (band_config_it->contains("Active High"))
-            {
-                band_config.active_high = band_config_it->at("Active High").get<bool>();
-            }
-        }
-    }
-
-    void config_to_json_impl(const ArgParserConfig &source, nlohmann::json &target)
-    {
-        target["Meta"]["Use INI"] = source.use_ini;
-        target["Meta"]["INI Filename"] = source.ini_filename;
-        target["Meta"]["Date Time Log"] = source.date_time_log;
-        target["Meta"]["debug_logging"] = source.debug_logging;
-        target["Meta"]["Loop TX"] = source.loop_tx;
-        target["Meta"]["TX Iterations"] = source.tx_iterations.load();
-
-        target["Operation"]["Mode"] =
-            mode_type_to_string(
-                source.mode == ModeType::TONE ? ModeType::WSPR : source.mode);
-        target["Operation"]["Transmit"] = source.transmit;
-        if (source.transmit_backend != TransmitBackendKind::SIMULATED)
-            target["Operation"]["Transmit Backend"] =
-                transmit_backend_kind_to_string(source.transmit_backend);
-        else if (!target["Operation"].contains("Transmit Backend"))
-            target["Operation"]["Transmit Backend"] = "gpio";
-        target["Operation"]["Enable on Boot"] =
-            enable_on_boot_behavior_to_string(source.enable_on_boot);
-        target["Operation"]["Use LED"] = source.use_led;
-        target["Operation"]["LED Pin"] = source.led_pin;
-        const bool use_amp =
-            source.use_amp && source.amp_pin >= 0 && source.amp_pin <= 27;
-        target["Operation"]["Use Amp"] = use_amp;
-        target["Operation"]["Amp Pin"] = source.amp_pin;
-        target["Operation"]["Amp Pin Active High"] = source.amp_pin_active_high;
-        target["Operation"]["Web Port"] = source.web_port;
-        target["Operation"]["Socket Port"] = source.socket_port;
-        target["Operation"]["Use Shutdown"] = source.use_shutdown;
-        target["Operation"]["Shutdown Button"] = source.shutdown_pin;
-        target["Experimental"]["Allow Unqualified Frequency"] =
-            source.allow_unqualified_frequency;
-        target["Experimental"]["Allow Non-Amateur Frequency"] =
-            source.allow_non_amateur_frequency;
-
-        target["GPIO"]["Transmit Pin"] =
-            normalize_gpio_transmit_pin(source.gpio_tx_pin);
-        target["GPIO"]["Power Level"] = source.gpio_power_level;
-        target["GPIO"]["RP1 Drive mA"] = source.rp1_gpio_drive_ma;
-        target["GPIO"]["Use System Clock Frequency Estimate"] =
-            source.gpio_use_system_clock_frequency_estimate;
-        target["GPIO"]["Frequency Residual PPM"] =
-            source.gpio_frequency_residual_ppm;
-        target["GPIO"]["Manual PPM"] = source.gpio_manual_ppm;
-
-        target["Calibration"]["PPM"] = source.si5351_ppm;
-
-        target["Si5351"]["I2C Bus"] = source.si5351_i2c_bus;
-        target["Si5351"]["I2C Address"] =
-            format_si5351_i2c_address(source.si5351_i2c_address);
-        target["Si5351"]["Reference Frequency"] = source.si5351_reference_hz;
-        target["Si5351"]["Reference Source"] = source.si5351_reference_source;
-        target["Si5351"]["Crystal Load Capacitance"] =
-            source.si5351_crystal_load_capacitance_pf;
-        target["Si5351"]["TX Output"] =
-            std::string("CLK") + std::to_string(source.si5351_tx_output);
-        target["Si5351"]["Power Level"] = source.si5351_power_level;
-
-        target["WSPR"]["Call Sign"] = source.wspr.callsign;
-        target["WSPR"]["Grid Square"] = source.wspr.grid_square;
-        target["WSPR"]["TX Power"] = source.wspr.power_dbm;
-        target["WSPR"]["Frequency"] = source.wspr.frequencies;
-        target["WSPR"]["Frequency Profile"] = source.wspr.frequency_profile;
-        nlohmann::json serialized_band_preferences = nlohmann::json::object();
-        for (const auto &[band, preference] : source.wspr.band_preferences)
-        {
-            if (const auto *preset = std::get_if<std::string>(&preference))
-                serialized_band_preferences[band] = *preset;
-            else
-                serialized_band_preferences[band] =
-                    std::get<std::uint64_t>(preference);
-        }
-        target["WSPR"]["Band Preferences"] =
-            std::move(serialized_band_preferences);
-        target["WSPR"]["Planner Preference"] =
-            wspr_planner_preference_to_string(source.wspr.planner_preference);
-        target["WSPR"]["Use Random Offset"] = source.use_offset;
-
-        std::string cw_message = source.qrss.message;
-        double cw_base_frequency_hz = source.qrss.frequency_hz;
-        double cw_shift_hz = source.modulation_fsk_offset_hz;
-        if (source.mode == ModeType::FSKCW)
-        {
-            cw_message = source.fskcw.message;
-            cw_base_frequency_hz = source.fskcw.space_frequency_hz;
-            cw_shift_hz =
-                source.fskcw.mark_frequency_hz - source.fskcw.space_frequency_hz;
-        }
-        else if (source.mode == ModeType::DFCW)
-        {
-            cw_message = source.dfcw.message;
-            cw_base_frequency_hz = source.dfcw.dot_frequency_hz;
-            cw_shift_hz =
-                source.dfcw.dash_frequency_hz - source.dfcw.dot_frequency_hz;
-        }
-        if (!std::isfinite(cw_base_frequency_hz) || cw_base_frequency_hz <= 0.0)
-        {
-            cw_base_frequency_hz = 14096900.0;
-        }
-        target["CW"]["Message"] = cw_message;
-        target["CW"]["Base Frequency"] = cw_base_frequency_hz;
-        target["CW"]["Shift Hz"] = cw_shift_hz;
-        target["CW"]["Dot Seconds"] = source.modulation_dot_seconds;
-        target["CW"]["Intra Element Gap"] = source.cw_intra_element_gap;
-        target["CW"]["Inter Character Gap"] = source.cw_inter_character_gap;
-        target["CW"]["Inter Word Gap"] = source.cw_inter_word_gap;
-        target["CW"]["DFCW Intra Element Gap"] = source.dfcw_intra_element_gap;
-        target["CW"]["DFCW Inter Character Gap"] = source.dfcw_inter_character_gap;
-        target["CW"]["DFCW Inter Word Gap"] = source.dfcw_inter_word_gap;
-        target["CW"]["Fade Shape"] = source.cw_fade_shape;
-        target["CW"]["Fade In Ms"] = source.cw_fade_in_ms;
-        target["CW"]["Fade Out Ms"] = source.cw_fade_out_ms;
-        target["CW"]["Fade Slice Ms"] = source.cw_fade_slice_ms;
-        target["CW"]["Start Minute"] = source.schedule_start_minute;
-        target["CW"]["Start Second"] = source.schedule_start_second;
-        target["CW"]["Repeat Minutes"] = source.schedule_repeat_minutes;
-
-        for (const auto &[band, band_name] : kHamBandJsonKeys)
-        {
-            const BandGPIOConfig &band_config = source.band_gpio[ham_band_index(band)];
-            target["Band GPIO"][band_name]["GPIO"] = band_config.gpio;
-            target["Band GPIO"][band_name]["Enabled"] = band_config.enabled;
-            target["Band GPIO"][band_name]["Active High"] = band_config.active_high;
-        }
-    }
 
     void copy_config(const ArgParserConfig &source, ArgParserConfig &target)
     {
@@ -2394,7 +1291,8 @@ namespace
                 missing_required_tx_item);
 
             ini_to_json_impl(filename, ini_data, candidate_json);
-            json_to_config_impl(candidate_json, candidate_config);
+            config_handler_deserialization::deserialize_json_to_runtime_config(
+                candidate_json, candidate_config);
             candidate_config.enable_web = config.enable_web;
 
             if (missing_required_tx_item)
@@ -2452,7 +1350,8 @@ namespace
                 candidate_json["Meta"]["Legacy GPIO Migration Required"] = true;
             }
 
-            config_to_json_impl(candidate_config, candidate_json);
+            config_handler_serialization::serialize_runtime_config_to_json(
+                candidate_config, candidate_json);
             return true;
         }
         catch (const std::exception &e)
@@ -2478,18 +1377,15 @@ void ini_to_json(std::string filename)
 
 void json_to_config()
 {
-    json_to_config_impl(jConfig, config);
+    config_handler_deserialization::deserialize_json_to_runtime_config(
+        jConfig, config);
     publish_test_tone_planning_config(config);
 }
 
 nlohmann::json get_public_config_json()
 {
-    return public_config_from_internal(jConfig);
-}
-
-void config_to_json()
-{
-    config_to_json_impl(config, jConfig);
+    return config_handler_serialization::public_config_from_internal_json(
+        jConfig);
 }
 
 namespace
@@ -2831,11 +1727,13 @@ void dump_json(const nlohmann::json &j, std::string tag)
 void patch_all_from_web(const nlohmann::json &j)
 {
     std::lock_guard<std::mutex> update_lock(g_config_update_mutex);
-    nlohmann::json candidate_public_json = public_config_from_internal(jConfig);
+    nlohmann::json candidate_public_json =
+        config_handler_serialization::public_config_from_internal_json(jConfig);
     candidate_public_json.merge_patch(j);
 
     nlohmann::json candidate_json = jConfig;
-    apply_public_config_to_internal(candidate_public_json, candidate_json);
+    config_handler_serialization::apply_public_config_to_internal_json(
+        candidate_public_json, candidate_json);
 
     ArgParserConfig candidate_config;
     std::string error_message;
@@ -2843,7 +1741,8 @@ void patch_all_from_web(const nlohmann::json &j)
 
     try
     {
-        json_to_config_impl(candidate_json, candidate_config);
+        config_handler_deserialization::deserialize_json_to_runtime_config(
+            candidate_json, candidate_config);
         candidate_config.enable_web = config.enable_web;
 
         if (!validate_config_candidate(candidate_config, &error_message))
@@ -2901,7 +1800,8 @@ void patch_all_from_web(const nlohmann::json &j)
             throw ConfigValidationError(error_message, error_details);
         }
 
-        config_to_json_impl(candidate_config, candidate_json);
+        config_handler_serialization::serialize_runtime_config_to_json(
+            candidate_config, candidate_json);
     }
     catch (const ConfigValidationError &)
     {
@@ -2953,7 +1853,8 @@ bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message) noexce
             return false;
         }
         nlohmann::json candidate_json = jConfig;
-        config_to_json_impl(candidate, candidate_json);
+        config_handler_serialization::serialize_runtime_config_to_json(
+            candidate, candidate_json);
         persist_config_json(candidate_json);
         copy_config(candidate, config);
         publish_test_tone_planning_config(config);

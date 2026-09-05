@@ -13,6 +13,40 @@ boundaries. Successful dry runs end with an explicit notice that the selected
 plan completed without applying changes; they do not report an installation or
 uninstallation as completed.
 
+## Low-memory build preflight
+
+Before an approved installation changes packages, services, or compiled
+artifacts, the installer records total and available RAM and inventories active
+swap. Compressed RAM swap such as `/dev/zram0` is reported but is not counted as
+independently backed capacity for the compile gate. Systems below 1.5 GiB of RAM
+are forced to single-job compilation. They must also have this much *free*
+file- or partition-backed swap:
+
+- below 768 MiB RAM: 2 GiB
+- from 768 MiB up to, but not including, 1.5 GiB RAM: 1 GiB
+
+The default is fail-closed and does not modify swap. An operator who accepts
+the additional disk or flash writes may explicitly allow invocation-owned
+temporary swap:
+
+```sh
+sudo env ALLOW_TEMP_BUILD_SWAP=true ./scripts/install.sh
+```
+
+The installer allocates only the shortfall plus a small allowance for kernel
+swap metadata, rounded up to 1 MiB, and requires another 512 MiB of free storage
+as a safety reserve. It creates a
+mode-0600 file with a unique name beneath the protected
+`/var/lib/wsprrypi/build-swap` directory, preserves every pre-existing swap
+device and file, and removes only its own swap when the installer exits. The
+same invocation can repeat the preflight without creating a second file.
+
+If disabling the temporary swap fails, the installer returns failure and
+preserves the active file instead of risking its removal. The log gives the
+exact path and recovery command; run that command only after confirming the
+named file is the installer-owned path. `DRY_RUN=true` reports the planned size
+and lifecycle without creating or enabling swap.
+
 ## RP1-GPCLK-DKMS provider
 
 `install.sh` uses `rp1_gpclk_dkms_install.py` to resolve and validate the

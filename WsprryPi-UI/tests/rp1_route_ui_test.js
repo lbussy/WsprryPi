@@ -17,7 +17,7 @@ assert.match(view,/id="rp1-route-progress-modal"[\s\S]*aria-describedby="rp1-rou
 assert.match(view,/id="rp1-route-progress-close"[\s\S]*disabled/);
 for(const state of ["checking","active","reboot_required","applying","staged","mismatch","unavailable","rollback","rollback_required"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
-for(const state of ["runtime_preflight_ready","runtime_preflight_failed","runtime_switch_queued","runtime_recovery_queued"])
+for(const state of ["runtime_preflight_ready","runtime_preflight_failed","runtime_switch_queued","runtime_remove_queued","runtime_recovery_queued","runtime_neutral_running","runtime_neutral_stopped","runtime_neutral_restoration_failed"])
  assert.match(script,new RegExp(`${state}:`),`missing ${state} state`);
 assert.match(script,/body:JSON\.stringify\(\{operation, route:requested, generation:this\.generation\}\)/);
 assert.match(script,/operation:"preflight"[\s\S]*operation:"apply-and-reboot"/);
@@ -88,6 +88,15 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
   "failed preflight preserves the last confirmed route facts");
  assert.equal(element("rp1-route-rollback").hidden,true,
   "failed preflight does not expose transaction recovery");
+ controller.completionUnknown=false;
+ controller.request=async()=>({ok:false,json:async()=>({ok:false,profile:"runtime",
+  state:"runtime_unknown",message:"Route plan evidence was inconsistent.",
+  changeStarted:false})});
+ await controller.applyAndReboot();
+ assert.equal(element("rp1-route-state").textContent,"Route not switched",
+  "known no-change preflight rejection is not presented as reconnecting");
+ assert.equal(controller.completionUnknown,false,
+  "known no-change preflight rejection remains retryable");
  controller.request=async()=>({ok:false,json:async()=>({ok:false,profile:"runtime",
   state:"runtime_recovery",message:"Existing transaction requires recovery."})});
  await controller.applyAndReboot();
@@ -118,12 +127,18 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  assert.equal(element("rp1-route-apply").disabled,true,"restoration failure cannot launch another switch");
  assert.match(element("rp1-route-feedback").textContent,/restore --execute/);
  controller.render({profile:"runtime",ok:true,state:"runtime_recovery_queued",persisted:"GPIO20",active:"GPIO4"});
- assert.equal(element("rp1-route-state").textContent,"Route removal queued");
+ assert.equal(element("rp1-route-state").textContent,"Recovery queued");
  assert.equal(element("rp1-route-apply").disabled,true,"queued recovery cannot launch another switch");
 
  controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO20",compatible:true});
  pin=null;controller.select("None");
  assert.equal(element("rp1-route-apply").textContent,"Remove route");
+ assert.equal(element("rp1-route-state").textContent,"Route Unsaved",
+  "an unapplied route selection is distinguished from application idle state");
+ pin=20;controller.select("GPIO20");
+ assert.equal(element("rp1-route-state").textContent,"Application idle",
+  "restoring the active selection restores the confirmed provider state");
+ pin=null;controller.select("None");
  controller.progressActive=true;let duplicateRequests=0;controller.request=async()=>{duplicateRequests++;throw Error("duplicate")};
  await controller.applyAndReboot();
  assert.equal(duplicateRequests,0,"an active progress cycle blocks duplicate route actions");
@@ -134,14 +149,14 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  assert.equal(cancelRequestCount,0,"cancelled removal performs no request");
  pin=null;controller.select("None");
  requests=[];context.window.confirm=()=>true;
- controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_recovery_queued",persisted:"GPIO20",active:"GPIO20",compatible:true})};};
+ controller.request=async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_remove_queued",persisted:"GPIO20",active:"GPIO20",compatible:true})};};
  await controller.applyAndReboot();
- assert.deepEqual(requests,[{operation:"recover",route:"GPIO20",generation:0}],"None launches exactly one recovery for the confirmed active route");
- assert.equal(controller.progressActive,true,"route recovery keeps the status modal active");
- assert.equal(timers.length>0,true,"queued recovery schedules read-only status polling");
- controller.request=async(url,options)=>{assert.equal(options.method,undefined,"polling is read-only");return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_inhibited",persisted:null,active:null,compatible:true,journal:"none"})};};
+ assert.deepEqual(requests,[{operation:"remove",route:"GPIO20",generation:0}],"None launches exactly one removal for the confirmed active route");
+ assert.equal(controller.progressActive,true,"route removal keeps the status modal active");
+ assert.equal(timers.length>0,true,"queued removal schedules read-only status polling");
+ controller.request=async(url,options)=>{assert.equal(options.method,undefined,"polling is read-only");return {ok:true,json:async()=>({ok:true,profile:"runtime",state:"runtime_neutral_running",persisted:"GPIO20",active:"None",compatible:true,journal:"recovered-inhibited"})};};
  await controller.pollStatus();
- assert.equal(element("rp1-route-progress-state").textContent,"No route selected");
+ assert.equal(element("rp1-route-progress-state").textContent,"Route removed");
  assert.equal(element("rp1-route-progress-close").disabled,false,"confirmed neutral state makes the modal dismissible");
  assert.equal(pin,null,"confirmed neutral state retains None in the selector");
  console.log("runtime route UI behavior: PASS");

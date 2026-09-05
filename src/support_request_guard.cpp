@@ -37,6 +37,24 @@ std::optional<unsigned short> strict_port(const std::string &value) {
 
 std::optional<ParsedAddress> address(const std::string &text) {
     ParsedAddress result;
+    if (text.find('\0') != std::string::npos) return std::nullopt;
+    // Apache's connection peer can include the local interface zone. Parse it
+    // only for link-local IPv6; it must never disguise IPv4 or loopback.
+    const auto percent = text.find('%');
+    if (percent != std::string::npos) {
+        const auto literal = text.substr(0, percent);
+        const auto zone = text.substr(percent + 1);
+        if (zone.empty() || zone.size() >= IF_NAMESIZE ||
+            !std::all_of(zone.begin(), zone.end(), [](unsigned char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                       (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+            }) ||
+            inet_pton(AF_INET6, literal.c_str(), result.bytes.data()) != 1 ||
+            result.bytes[0] != 0xfe || (result.bytes[1] & 0xc0) != 0x80)
+            return std::nullopt;
+        result.family = AF_INET6;
+        return result;
+    }
     if (inet_pton(AF_INET, text.c_str(), result.bytes.data()) == 1) { result.family = AF_INET; return result; }
     if (inet_pton(AF_INET6, text.c_str(), result.bytes.data()) == 1) {
         // Normalize IPv4-mapped IPv6 peers and host literals.

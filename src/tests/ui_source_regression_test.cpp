@@ -93,11 +93,13 @@ namespace
 int main()
 {
     const std::string websocket_source =
-        read_repo_text_file("/src/web_socket.cpp");
+        read_repo_text_file("/src/web_socket.cpp") +
+        read_repo_text_file("/src/web_socket_commands.cpp");
     const std::string websocket_header_source =
         read_repo_text_file("/src/web_socket.hpp");
     const std::string web_server_source =
-        read_repo_text_file("/src/web_server.cpp");
+        read_repo_text_file("/src/web_server.cpp") +
+        read_repo_text_file("/src/web_server_version_routes.cpp");
     const std::string makefile_source =
         read_repo_text_file("/src/Makefile");
     const std::string version_source =
@@ -121,7 +123,12 @@ int main()
         "websocket Test Tone Start and End commands must share one transaction lock through their broadcast reply");
 
     const std::string scheduling_source =
-        read_repo_text_file("/src/scheduling.cpp");
+        read_repo_text_file("/src/scheduling.cpp") +
+        read_repo_text_file("/src/scheduling_config.cpp") +
+        read_repo_text_file("/src/scheduling_websocket_status.cpp") +
+        read_repo_text_file("/src/scheduling_test_tone.cpp") +
+        read_repo_text_file("/src/scheduling_runtime.cpp") +
+        read_repo_text_file("/src/transmitter_runtime_bridge.cpp");
     require(
         scheduling_source.find("suppress_cancelled_ws_event_for_user_stop.store(true") != std::string::npos &&
             scheduling_source.find("Suppressing websocket canceled event because an explicit user stop will publish stopped.") !=
@@ -684,7 +691,7 @@ int main()
             site_source.find("maybePromptForUiRefresh(response);\n                checkForWsprryPiUpdate(response);") == std::string::npos &&
             web_server_source.find("j[\"ui_version\"] = get_raw_version_string();") != std::string::npos &&
             web_server_source.find("j[\"wspr_version_raw\"] = get_exe_version();") != std::string::npos &&
-            web_server_source.find("j[\"wspr_version_parsed\"] = parse_version_for_update_metadata(get_exe_version());") != std::string::npos &&
+            web_server_source.find("j[\"wspr_version_parsed\"] = parse_version_for_update_metadata(") != std::string::npos &&
             web_server_source.find("j[\"wspr_branch\"] = get_exe_raw_branch();") != std::string::npos &&
             web_server_source.find("j[\"wspr_branch_state\"] = get_exe_branch_state();") != std::string::npos &&
             web_server_source.find("j[\"wspr_display_branch\"] = get_exe_branch();") != std::string::npos &&
@@ -755,7 +762,7 @@ int main()
             web_server_source.find("{\"major\", nullptr}") != std::string::npos &&
             web_server_source.find("{\"prerelease\", nlohmann::json::array()}") != std::string::npos &&
             web_server_source.find("j[\"wspr_build_dirty\"] = get_exe_build_dirty();") != std::string::npos &&
-            web_server_source.find("j[\"wspr_build_dirty_state\"] = build_dirty_metadata(get_exe_build_dirty());") != std::string::npos,
+            web_server_source.find("j[\"wspr_build_dirty_state\"] = build_dirty_metadata(") != std::string::npos,
         "build metadata must pass sanitized MAKE_BRH for display, raw MAKE_RAW_BRH and branch-state for update lookup, full commit and build-time dirty state to version.cpp, and expose structured version, branch, commit, and dirty metadata in /version");
     require(
         site_source.find("const UPDATE_CHECK_CACHE_SCHEMA_VERSION = 7;") != std::string::npos &&

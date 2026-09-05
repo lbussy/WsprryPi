@@ -1759,8 +1759,10 @@ def recover_and_remove_owned_runtime(
         if activation_value.get("phase") == "recovered-inhibited":
             validate_inactive_runtime_update_state(inspected, recovered=True)
         elif (inspected.get("result") == "recovery_required" and
-              activation_value.get("phase") in
-              {"activation-failed", "rollback-failed"}):
+              (activation_value.get("phase") in
+               {"activation-failed", "rollback-failed"} or
+               (activation_value.get("phase") == "complete-neutral" and
+                inspected.get("reboot", {}).get("occurred") is not True))):
             require(
                 migration_provider is not None
                 and migration_provider.is_file()
@@ -1769,8 +1771,13 @@ def recover_and_remove_owned_runtime(
             )
             provider = migration_provider
             inspected = validate_readiness(runtime_call(
-                runner, provider, "inspect", (), {"recovery_required"},
-            ), "recovery_required")
+                runner, provider, "inspect", (),
+                {"recovery_required", "neutral_ready"},
+            ))
+            require(
+                inspected.get("result") in {"recovery_required", "neutral_ready"},
+                "reviewed recovery provider did not recognize the owned neutral state",
+            )
             candidate_binding = inspected.get("identities", {}).get(
                 "installedBinding", {})
             require(
@@ -1882,8 +1889,13 @@ def recover_and_remove_owned_runtime(
         )
         provider = migration_provider
         inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"recovery_required"},
-        ), "recovery_required")
+            runner, provider, "inspect", (),
+            {"recovery_required", "neutral_ready"},
+        ))
+        require(
+            inspected.get("result") in {"recovery_required", "neutral_ready"},
+            "reviewed route-recovery provider did not recognize the owned neutral state",
+        )
         candidate_binding = inspected.get("identities", {}).get(
             "installedBinding", {})
         require(

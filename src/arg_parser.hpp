@@ -36,7 +36,7 @@
 #define ARG_PARSER_HPP
 
 // Project headers
-#include "config_handler.hpp"
+#include "config_types.hpp"
 #include "ini_file.hpp"
 #include "lcblog.hpp"
 #include "monitorfile.hpp"

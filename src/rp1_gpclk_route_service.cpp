@@ -159,7 +159,8 @@ void launchRuntimeRouteOperation(const std::string &operation,
                                  const std::string &route,
                                  const std::string &digest,
                                  const std::string &request_id) {
-  if ((operation != "switch" && operation != "recover") ||
+  if ((operation != "switch" && operation != "remove" &&
+       operation != "recover") ||
       (route != "gpio4" && route != "gpio20") ||
       request_id.empty() || request_id.find_first_not_of(
           "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") !=
@@ -167,7 +168,7 @@ void launchRuntimeRouteOperation(const std::string &operation,
       (operation == "switch" &&
        (digest.size() != 64 ||
         digest.find_first_not_of("0123456789abcdef") != std::string::npos)) ||
-      (operation == "recover" && !digest.empty()))
+      ((operation == "remove" || operation == "recover") && !digest.empty()))
     throw std::runtime_error("Invalid detached RP1 route operation.");
 
   const std::string unit = "wsprrypi-rp1-route-" +
@@ -186,6 +187,16 @@ void launchRuntimeRouteOperation(const std::string &operation,
               "--property=RuntimeMaxSec=90s",
               "/usr/bin/python3", provider, "route-ensure", "--route",
               route.c_str(), "--plan-sha256", digest.c_str(),
+              static_cast<char *>(nullptr));
+    } else if (operation == "remove") {
+      const char *client =
+          "/usr/lib/rp1-gpclk-dkms/runtime_route_client.py";
+      ::execl(systemd_run, "systemd-run", "--quiet", "--no-block",
+              "--collect", "--unit", unit.c_str(),
+              "--property=Type=exec", "--property=TimeoutStartSec=60s",
+              "--property=RuntimeMaxSec=90s",
+              "/usr/bin/python3", client, operation.c_str(), route.c_str(),
+              "--execute",
               static_cast<char *>(nullptr));
     } else {
       const char *client =
@@ -413,7 +424,26 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
       const auto phase = field(application, "phase");
       result["application"] = application;
       result["services"] = {{"wsprrypi.service", phase}};
-      if ((phase == "restored" || phase == "stopped" || phase == "administrator-masked") &&
+      if ((phase == "neutral-restored" || phase == "neutral-stopped" ||
+           phase == "neutral-administrator-masked") && valid &&
+          state["controller"].value("id", -1) == 0 &&
+          state["controller"].value("route", -1) == 0 &&
+          state["controller"].value("flags", -1) == 0 &&
+          state["controller"].value("error", -1) == 0 &&
+          field(application, "boot") == field(state, "bootId") &&
+          field(application, "binding") == field(state, "bindingSha256")) {
+        result["state"] = phase == "neutral-restored"
+                              ? "runtime_neutral_running"
+                              : "runtime_neutral_stopped";
+        result["configured"] = "None";
+        result["active"] = "None";
+        result["reconciled"] = true;
+        result["message"] = phase == "neutral-restored"
+            ? "The RP1 clock route is removed and Wsprry Pi is back online. Transmission remains disabled."
+            : phase == "neutral-stopped"
+                  ? "The RP1 clock route is removed. Wsprry Pi remains stopped because it was stopped before removal."
+                  : "The RP1 clock route is removed. Wsprry Pi remains stopped because the administrator mask is preserved.";
+      } else if ((phase == "restored" || phase == "stopped" || phase == "administrator-masked") &&
           valid && application.value("controller", nlohmann::json::object()) == state["controller"] &&
           state["controller"].value("flags", 0) == 6 && state["controller"].value("error", -1) == 0 &&
           routeForGpio(operations_.persisted_gpio()) == field(result, "active") &&
@@ -437,6 +467,10 @@ nlohmann::json Rp1GpclkRouteService::render(const nlohmann::json &response,
         result["state"] = "runtime_restoration_failed";
         result["ok"] = false;
         result["message"] = "Route is installed, but application restoration failed. Run runtime_route_client.py restore --execute. " + field(application, "error");
+      } else if (phase == "neutral-restoration-failed") {
+        result["state"] = "runtime_neutral_restoration_failed";
+        result["ok"] = false;
+        result["message"] = "The RP1 clock route was removed, but Wsprry Pi could not be restored. Transmission remains disabled. After correcting the reported service error, retry removal with runtime_route_client.py remove " + field(application, "route") + " --execute. " + field(application, "error");
       } else if (phase == "route-failed" || phase == "route-recovered") {
         result["state"] = "runtime_recovery";
       } else {
@@ -577,6 +611,11 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
           plan.contains("alreadyReady") && plan["alreadyReady"].is_boolean();
       const bool already_ready =
           already_ready_reported && plan["alreadyReady"].get<bool>();
+      const auto routes = raw.value("routes", nlohmann::json::object());
+      const auto active_route = field(routes, "active");
+      const bool exact_route_state =
+          (active_route == "gpio4" || active_route == "gpio20") &&
+          already_ready == (active_route == executor_route);
       const bool eligibility =
           (classification == "neutral_ready" &&
            !raw.value("routeSelected", true) &&
@@ -585,7 +624,7 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
           (classification == "exact_ready" &&
            raw.value("routeSelected", false) &&
            raw.value("executionReady", false) &&
-           already_ready_reported && already_ready);
+           already_ready_reported && exact_route_state);
       const bool readiness_consistent =
           operational_ready_reported &&
           ((classification == "neutral_ready" && !operational_ready) ||
@@ -630,12 +669,9 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
                 : invalid_message);
       result["ok"] = valid;
       result["state"] = valid ? "runtime_preflight_ready"
-                              : neutral_idle_evidence
-                                    ? "runtime_preflight_failed"
-                                    : "runtime_unknown";
+                              : "runtime_preflight_failed";
       result["changeStarted"] = false;
-      if (valid || neutral_idle_evidence)
-        result["recoveryRequired"] = false;
+      result["recoveryRequired"] = false;
       result["preflightValidated"] = valid;
       result["requested"] = route;
       if (valid) {
@@ -647,8 +683,8 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
       }
       return result;
     }
-    if (operation != "switch" && operation != "recover")
-      return failure("invalid_operation", "Runtime profile requires explicit switch or recover; reboot operations are not translated.");
+    if (operation != "switch" && operation != "remove" && operation != "recover")
+      return failure("invalid_operation", "Runtime profile requires explicit switch, remove, or recover; reboot operations are not translated.");
     if (operation == "switch" && (generation == 0 || generation != generation_ ||
         runtime_plan_digest_.empty() || runtime_binding_digest_.empty() ||
         executor_route != preflight_route_))
@@ -681,20 +717,25 @@ nlohmann::json Rp1GpclkRouteService::operate(const std::string &operation,
     }
     if (!operations_.runtime_route_launch)
       return failure("provider_unavailable", "The detached runtime route executor is unavailable.");
-    const auto request_id = requestId("recover", ++generation_);
+    const auto request_id = requestId(operation.c_str(), ++generation_);
     runtime_plan_digest_.clear();
     runtime_binding_digest_.clear();
     preflight_route_.clear();
     try {
-      operations_.runtime_route_launch("recover", executor_route, {},
+      operations_.runtime_route_launch(operation, executor_route, {},
                                        {}, request_id);
     } catch (const std::exception &error) {
       return failure("route_recovery_failed", error.what());
     }
-    auto result = failure("runtime_recovery_requested",
-                          "Route recovery was queued. Wsprry Pi will stop and remain inhibited; use the operator client to confirm recovery. Transmission remains disabled.");
+    auto result = failure(
+        operation == "remove" ? "runtime_remove_requested"
+                              : "runtime_recovery_requested",
+        operation == "remove"
+            ? "Route removal was queued. A previously running Wsprry Pi will return after the neutral route is verified. Transmission remains disabled."
+            : "Route recovery was queued. Wsprry Pi will stop and remain inhibited; use the operator client to confirm recovery. Transmission remains disabled.");
     result["ok"] = true;
-    result["state"] = "runtime_recovery_queued";
+    result["state"] = operation == "remove" ? "runtime_remove_queued"
+                                              : "runtime_recovery_queued";
     result["requested"] = route;
     result["requestId"] = request_id;
     return result;
