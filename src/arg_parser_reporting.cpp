@@ -129,7 +129,7 @@ void print_usage(const std::string &message, int exit_code)
               << "Si5351 Backend:\n"
               << "  --si5351-ppm <value>              Set Si5351 reference-oscillator correction (-200 through 200).\n"
               << "  --si5351-i2c-bus <bus>             Linux I2C bus number. Default: 1.\n"
-              << "  --si5351-i2c-address <addr>        I2C address, decimal or 0x-prefixed hex. Valid: 0x03 through 0x77.\n"
+              << "  --si5351-i2c-address <addr>        I2C address, decimal or 0x-prefixed hex. Valid: 0x60 through 0x6F.\n"
               << "  --si5351-reference-frequency <hz>  Reference oscillator frequency in Hz.\n"
               << "  --si5351-reference-source <source> external_tcxo or crystal.\n"
               << "  --si5351-crystal-load-capacitance <pf>  Crystal load: 6, 8, or 10 pF.\n"

@@ -6,10 +6,12 @@
 #include "web_server_config_http.hpp"
 
 #include "config_handler.hpp"
+#include "config_handler_serialization.hpp"
 #include "json.hpp"
 #include "logging.hpp"
 #include "scheduling.hpp"
 
+#include <charconv>
 #include <string>
 
 namespace web_server_routes
@@ -17,6 +19,33 @@ namespace web_server_routes
 RouteResponse build_config_response()
 {
     return {200, get_public_config_json().dump(4), "application/json", true};
+}
+
+RouteResponse build_si5351_addresses_response(const std::string &i2c_bus)
+{
+    int bus = -1;
+    const auto parsed = std::from_chars(
+        i2c_bus.data(), i2c_bus.data() + i2c_bus.size(), bus);
+    if (i2c_bus.empty() || parsed.ec != std::errc{} ||
+        parsed.ptr != i2c_bus.data() + i2c_bus.size() || bus < 0)
+    {
+        const nlohmann::json body = {
+            {"error", "invalid_i2c_bus"},
+            {"message", "I2C bus must be a non-negative integer."}};
+        return {400, body.dump(4), "application/json", true};
+    }
+
+    const auto inventory = discover_si5351_addresses(
+        bus, config.si5351_reference_hz);
+    auto addresses = nlohmann::json::array();
+    for (const int address : inventory.addresses)
+        addresses.push_back(
+            config_handler_serialization::config_serialization_si5351_i2c_address(address));
+    const nlohmann::json body = {
+        {"I2C Bus", inventory.i2c_bus},
+        {"Addresses", addresses},
+        {"Discovery Error", inventory.error}};
+    return {200, body.dump(4), "application/json", true};
 }
 
 RouteResponse apply_config_update(const std::string &request_body)

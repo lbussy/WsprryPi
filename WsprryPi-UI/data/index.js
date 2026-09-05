@@ -37,6 +37,13 @@ let stopRequestTimeoutHandle = null;
 let modeChangeGuardStopTimeoutHandle = null;
 let cwSpeedSelectionOverride = null;
 let rp1RouteUi = null;
+let si5351AddressDiscoverySequence = 0;
+let si5351AddressInventoryState = {
+    bus: -1,
+    addresses: [],
+    error: "",
+    loading: true,
+};
 const cwSpacingSelectionOverride = { conventional: null, dfcw: null };
 const cwRepairRevealed = { conventional: false, dfcw: false };
 const PAIRED_PLANNING_SHORT_MESSAGE =
@@ -499,9 +506,10 @@ function restorePersistedConfigDraft() {
     $("#gpio-power-range").val(Number(gpio["Power Level"])).trigger("input");
     populateRp1GpioDrive(gpio["RP1 Drive mA"] ?? 2);
     populateI2cBuses(si5351["I2C Bus"]);
-    if (typeof setSi5351AddressValue === "function") {
-        setSi5351AddressValue(si5351["I2C Address"] || "0x60");
-    }
+    refreshSi5351Addresses(
+        Number(si5351["I2C Bus"]),
+        si5351["I2C Address"] || "0x60"
+    );
     $("#si5351_reference_frequency").val(Number(si5351["Reference Frequency"])).trigger("change");
     $("#si5351_reference_source").val(si5351["Reference Source"] || "external_tcxo").trigger("change");
     $("#si5351_crystal_load_capacitance")
@@ -686,9 +694,10 @@ function bindIndexActions() {
         });
     $("#si5351_i2c_bus").on("change", function () {
         populateI2cBuses(this.value);
+        refreshSi5351Addresses(Number(this.value));
         validateTransmitterHardwareFields();
     });
-    $("#si5351_i2c_address").on("input blur", validateSi5351I2cAddress);
+    $("#si5351_i2c_address").on("change", validateSi5351I2cAddress);
     $("#si5351_i2c_bus, #si5351_reference_frequency").on(
         "input blur",
         validateTransmitterHardwareFields
@@ -2409,6 +2418,13 @@ function syncBackendControlAvailability() {
         !(isRp1GpioPlatform() && !rp1GpioOperatorVisible());
     $("#tx_pin, #rp1-route-apply").prop("disabled", !gpioActive);
     $("#si5351_i2c_bus").prop("disabled", selectedTransmitBackend() !== "si5351" || availableI2cBuses().length === 0);
+    $("#si5351_i2c_address").prop(
+        "disabled",
+        selectedTransmitBackend() !== "si5351" ||
+            si5351AddressInventoryState.loading ||
+            !!si5351AddressInventoryState.error ||
+            si5351AddressInventoryState.addresses.length === 0
+    );
 }
 
 function syncBackendPanelVisibility() {
@@ -3958,6 +3974,90 @@ function setSi5351AddressValue(value) {
     $("#si5351_i2c_address").val(formatSi5351Address(value)).trigger("change");
 }
 
+function normalizedSi5351Addresses(addresses) {
+    if (!Array.isArray(addresses)) return [];
+    return [...new Set(addresses.map(formatSi5351Address).filter((address) => {
+        if (!/^0x[0-9A-F]+$/.test(address)) return false;
+        const parsed = Number.parseInt(address, 0);
+        return Number.isInteger(parsed) && parsed >= 0x60 && parsed <= 0x6F;
+    }))].sort((a, b) => Number.parseInt(a, 0) - Number.parseInt(b, 0));
+}
+
+function populateSi5351Addresses(bus, savedAddress, addresses, error = "", inventoryBus = bus) {
+    const field = document.getElementById("si5351_i2c_address");
+    if (!field) return;
+    const normalizedBus = Number(bus);
+    const inventoryMatches = Number(inventoryBus) === normalizedBus;
+    const normalizedAddresses = inventoryMatches
+        ? normalizedSi5351Addresses(addresses)
+        : [];
+    const normalizedSaved = formatSi5351Address(savedAddress);
+    const present = normalizedAddresses.includes(normalizedSaved);
+
+    si5351AddressInventoryState = {
+        bus: normalizedBus,
+        addresses: normalizedAddresses,
+        error: inventoryMatches ? String(error || "") : "Address information is stale for the selected bus.",
+        loading: false,
+    };
+    field.replaceChildren();
+    const placeholder = si5351AddressInventoryState.error
+        ? "Address discovery unavailable"
+        : normalizedAddresses.length === 0
+            ? "No compatible Si5351 found"
+            : "Select a detected address";
+    field.add(new Option(placeholder, "", true, !present));
+    for (const address of normalizedAddresses) field.add(new Option(address, address));
+    field.value = present ? normalizedSaved : "";
+    field.disabled = selectedTransmitBackend() !== "si5351" ||
+        normalizedAddresses.length === 0 || !!si5351AddressInventoryState.error;
+    field.removeAttribute("aria-busy");
+
+    const hint = document.getElementById("si5351-address-hint");
+    hint.textContent = si5351AddressInventoryState.error
+        ? `${si5351AddressInventoryState.error} Reload or select the bus again to retry.`
+        : normalizedAddresses.length === 0
+            ? `No register-compatible Si5351 device was detected from 0x60 through 0x6F on I2C bus ${normalizedBus}.`
+            : !present
+                ? `The saved address ${normalizedSaved || "is unavailable"}. Select a detected address on I2C bus ${normalizedBus}.`
+                : `Detected ${normalizedAddresses.length} compatible address${normalizedAddresses.length === 1 ? "" : "es"} on I2C bus ${normalizedBus}.`;
+    validateSi5351I2cAddress();
+}
+
+function refreshSi5351Addresses(bus, savedAddressOverride = null) {
+    const field = document.getElementById("si5351_i2c_address");
+    if (!field || !Number.isInteger(bus) || bus < 0) return;
+    const savedAddress = savedAddressOverride === null
+        ? field.value
+        : formatSi5351Address(savedAddressOverride);
+    const requestSequence = ++si5351AddressDiscoverySequence;
+    si5351AddressInventoryState = { bus, addresses: [], error: "", loading: true };
+    field.replaceChildren(new Option("Checking I2C bus…", "", true, true));
+    field.disabled = true;
+    field.setAttribute("aria-busy", "true");
+    document.getElementById("si5351-address-hint").textContent =
+        `Checking I2C bus ${bus} for compatible addresses from 0x60 through 0x6F.`;
+    validateTransmitterHardwareFields();
+
+    ajaxWithEndpointFallback(SI5351_ADDRESSES_ENDPOINT, {
+        data: { bus },
+        dataType: "json",
+        cache: false,
+        timeout: CONFIG_REQUEST_TIMEOUT_MS,
+    }).done((inventory) => {
+        if (requestSequence !== si5351AddressDiscoverySequence || selectedI2cBusValue() !== bus) return;
+        populateSi5351Addresses(bus, savedAddress, inventory?.Addresses,
+            inventory?.["Discovery Error"], inventory?.["I2C Bus"]);
+        validatePage();
+        scheduleAutosave();
+    }).fail(() => {
+        if (requestSequence !== si5351AddressDiscoverySequence || selectedI2cBusValue() !== bus) return;
+        populateSi5351Addresses(bus, savedAddress, [],
+            "The controller could not provide Si5351 address discovery.", bus);
+        validatePage();
+    });
+}
+
 function normalizeIntegerInputValue(selector, fallback) {
     const parsed = parseInt($(selector).val(), 10);
     return Number.isInteger(parsed) ? parsed : fallback;
@@ -3967,25 +4067,14 @@ function validateSi5351I2cAddress() {
     const fld = document.getElementById("si5351_i2c_address");
     if (!fld) return true;
 
-    const raw = String(fld.value || "").trim();
-    let valid = true;
-
-    if (!raw) {
-        fld.setCustomValidity("I2C address is required.");
-        valid = false;
-    } else if (!/^(?:0[xX][0-9A-Fa-f]+|[0-9]+)$/.test(raw)) {
-        fld.setCustomValidity("Enter a decimal or 0x-prefixed hexadecimal I2C address.");
-        valid = false;
-    } else {
-        const parsed = Number.parseInt(raw, 0);
-        if (!Number.isInteger(parsed) || parsed < 0x03 || parsed > 0x77) {
-            fld.setCustomValidity("Enter an I2C address from 0x03 through 0x77.");
-            valid = false;
-        } else {
-            fld.setCustomValidity("");
-            fld.value = formatSi5351Address(raw);
-        }
-    }
+    const address = formatSi5351Address(fld.value);
+    const valid = !si5351AddressInventoryState.loading &&
+        si5351AddressInventoryState.bus === selectedI2cBusValue() &&
+        !si5351AddressInventoryState.error &&
+        si5351AddressInventoryState.addresses.includes(address);
+    fld.setCustomValidity(valid
+        ? ""
+        : "Select a detected Si5351 address on the selected I2C bus.");
 
     setFieldValidationState(fld, valid);
     return valid;
@@ -4323,12 +4412,9 @@ function buildConfigPayload(options = {}) {
 
     const si5351_i2c_bus = selectedI2cBusValue();
 
-    let si5351_i2c_address = formatSi5351Address(
-        $("#si5351_i2c_address").val() || "0x60"
+    const si5351_i2c_address = formatSi5351Address(
+        $("#si5351_i2c_address").val()
     );
-    if (!si5351_i2c_address) {
-        si5351_i2c_address = "0x60";
-    }
 
     let si5351_reference_frequency = parseInt($("#si5351_reference_frequency").val(), 10);
     if (!Number.isInteger(si5351_reference_frequency) || si5351_reference_frequency <= 0) {

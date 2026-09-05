@@ -12,6 +12,7 @@
 #include "ppm_manager.hpp"
 #include "band_lookup.hpp"
 #include "wspr_transmit_backend_si5351.hpp"
+#include "web_server_config_http.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -667,6 +668,7 @@ int main(int argc, char *argv[])
         init_config_json();
         json_to_config();
         set_si5351_detection_override_for_test(true);
+        set_si5351_address_inventory_override_for_test(1, {0x60, 0x6F});
         set_raspberry_pi_generation_override_for_test(4);
         const auto inventory = i2c_bus_inventory::discover();
         const auto public_config = get_public_config_json();
@@ -678,6 +680,18 @@ int main(int argc, char *argv[])
             assert(platform.at("I2C Buses").at(i).at("Number") == inventory.buses[i].number);
             assert(platform.at("I2C Buses").at(i).at("Name") == inventory.buses[i].name);
         }
+        assert(platform.at("Si5351 Address Bus") == 1);
+        assert(platform.at("Si5351 Addresses") ==
+            nlohmann::json::array({"0x60", "0x6F"}));
+        assert(platform.at("Si5351 Address Discovery Error") == "");
+        const auto address_response =
+            web_server_routes::build_si5351_addresses_response("1");
+        assert(address_response.status == 200);
+        const auto address_body = nlohmann::json::parse(address_response.body);
+        assert(address_body.at("I2C Bus") == 1);
+        assert(address_body.at("Addresses") ==
+            nlohmann::json::array({"0x60", "0x6F"}));
+        assert(web_server_routes::build_si5351_addresses_response("1junk").status == 400);
         assert(!jConfig.contains("Platform"));
         const auto before = jConfig;
         const int saved_bus = config.si5351_i2c_bus;
@@ -695,6 +709,31 @@ int main(int argc, char *argv[])
         assert(rejected);
         assert(jConfig == before);
         assert(config.si5351_i2c_bus == saved_bus);
+        rejected = false;
+        try
+        {
+            patch_all_from_web({{"Si5351", {{"I2C Address", "0x61"}}}});
+        }
+        catch (const std::exception &error)
+        {
+            rejected = std::string(error.what()).find("No register-compatible") !=
+                std::string::npos;
+        }
+        assert(rejected);
+        assert(jConfig == before);
+
+        rejected = false;
+        try
+        {
+            patch_all_from_web({{"Si5351", {{"I2C Address", "0x70"}}}});
+        }
+        catch (const std::exception &error)
+        {
+            rejected = std::string(error.what()).find("0x60 through 0x6F") !=
+                std::string::npos;
+        }
+        assert(rejected);
+        assert(jConfig == before);
         std::cout << "I2C web selection rejection preserves configuration" << std::endl;
         return EXIT_SUCCESS;
     }
@@ -7054,12 +7093,27 @@ int main(int argc, char *argv[])
                 decimal_candidate.normalized_config.si5351_i2c_address == 96,
             "Si5351 I2C address must accept decimal strings");
 
+        PreparedConfigCandidate upper_boundary_candidate =
+            prepare_si5351_address_candidate("0x6F");
+        require(
+            upper_boundary_candidate.valid &&
+                upper_boundary_candidate.normalized_config.si5351_i2c_address == 0x6F,
+            "Si5351 I2C address must accept the inclusive upper boundary");
+
+        PreparedConfigCandidate below_range_candidate =
+            prepare_si5351_address_candidate("0x5F");
+        require(
+            !below_range_candidate.valid &&
+                below_range_candidate.error_reason ==
+                    "Invalid Si5351 I2C address. Expected 0x60 through 0x6F.",
+            "Si5351 I2C address must reject values below 0x60");
+
         PreparedConfigCandidate out_of_range_candidate =
             prepare_si5351_address_candidate("0x80");
         require(
             !out_of_range_candidate.valid &&
                 out_of_range_candidate.error_reason ==
-                    "Invalid Si5351 I2C address. Expected 0x03 through 0x77.",
+                    "Invalid Si5351 I2C address. Expected 0x60 through 0x6F.",
             "Si5351 I2C address must reject out-of-range hex values");
 
         PreparedConfigCandidate malformed_candidate =

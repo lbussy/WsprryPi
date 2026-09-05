@@ -72,6 +72,15 @@ struct PreparedConfigCandidate
     bool migration_required = false;
 };
 
+struct Si5351AddressInventory
+{
+    int i2c_bus = -1;
+    std::vector<int> addresses{};
+    std::string error{};
+
+    bool contains(int address) const noexcept;
+};
+
 class ConfigValidationError : public std::runtime_error
 {
 public:
@@ -112,8 +121,16 @@ bool si5351_device_detected(
     int i2c_address,
     int reference_hz,
     std::string *error_message = nullptr);
+Si5351AddressInventory discover_si5351_addresses(
+    int i2c_bus,
+    int reference_hz);
 void set_si5351_detection_override_for_test(bool detected) noexcept;
 void clear_si5351_detection_override_for_test() noexcept;
+void set_si5351_address_inventory_override_for_test(
+    int i2c_bus,
+    const std::vector<int> &addresses,
+    const std::string &error = {});
+void clear_si5351_address_inventory_override_for_test() noexcept;
 
 /**
  * @brief Initializes the global configuration JSON object.

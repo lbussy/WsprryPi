@@ -114,6 +114,7 @@ namespace
     std::shared_mutex g_test_tone_planning_snapshot_mutex;
     TestTonePlanningConfigSnapshot g_test_tone_planning_snapshot{};
     std::optional<bool> g_si5351_detection_override;
+    std::optional<Si5351AddressInventory> g_si5351_address_inventory_override;
 
     void publish_test_tone_planning_config(const ArgParserConfig &source)
     {
@@ -643,6 +644,12 @@ void resolve_backend_specific_config(ArgParserConfig &config) noexcept
     config.ppm = config.gpio_manual_ppm;
 }
 
+bool Si5351AddressInventory::contains(int address) const noexcept
+{
+    return error.empty() &&
+        std::find(addresses.begin(), addresses.end(), address) != addresses.end();
+}
+
 bool si5351_device_detected(
     int i2c_bus,
     int i2c_address,
@@ -698,6 +705,77 @@ bool si5351_device_detected(
 #endif
 }
 
+Si5351AddressInventory discover_si5351_addresses(
+    int i2c_bus,
+    int reference_hz)
+{
+    if (g_si5351_address_inventory_override.has_value())
+    {
+        Si5351AddressInventory result = *g_si5351_address_inventory_override;
+        if (result.i2c_bus != i2c_bus)
+        {
+            result.addresses.clear();
+            result.i2c_bus = i2c_bus;
+            result.error = "No test Si5351 address inventory is available for I2C bus " +
+                std::to_string(i2c_bus) + ".";
+        }
+        return result;
+    }
+    if (g_si5351_detection_override.has_value())
+    {
+        Si5351AddressInventory result;
+        result.i2c_bus = i2c_bus;
+        if (*g_si5351_detection_override)
+        {
+            for (int address = 0x60; address <= 0x6F; ++address)
+                result.addresses.push_back(address);
+        }
+        else
+        {
+            result.error = si5351_detection_unavailable_message();
+        }
+        return result;
+    }
+
+    Si5351AddressInventory result;
+    result.i2c_bus = i2c_bus;
+    const std::string bus_error = i2c_bus_inventory::selection_error(
+        i2c_bus_inventory::discover(), i2c_bus);
+    if (!bus_error.empty())
+    {
+        result.error = bus_error;
+        return result;
+    }
+
+#if WSPRRYPI_BACKEND_SI5351
+    for (int address = 0x60; address <= 0x6F; ++address)
+    {
+        Si5351Device::Config device_config;
+        device_config.i2c_bus = i2c_bus;
+        device_config.i2c_address = static_cast<std::uint8_t>(address);
+        device_config.reference_hz = static_cast<std::uint32_t>(reference_hz);
+
+        Si5351Device device(device_config);
+        if (!device.open())
+        {
+            result.addresses.clear();
+            result.error =
+                "Unable to inspect Si5351 addresses on I2C bus " +
+                std::to_string(i2c_bus) + ": " + device.getLastError();
+            return result;
+        }
+        if (device.probe()) result.addresses.push_back(address);
+        device.close();
+    }
+#else
+    (void)reference_hz;
+    result.error =
+        "Si5351 address discovery is unavailable because the Si5351 backend was not compiled.";
+#endif
+
+    return result;
+}
+
 void set_si5351_detection_override_for_test(bool detected) noexcept
 {
     g_si5351_detection_override = detected;
@@ -706,6 +784,32 @@ void set_si5351_detection_override_for_test(bool detected) noexcept
 void clear_si5351_detection_override_for_test() noexcept
 {
     g_si5351_detection_override.reset();
+}
+
+void set_si5351_address_inventory_override_for_test(
+    int i2c_bus,
+    const std::vector<int> &addresses,
+    const std::string &error)
+{
+    Si5351AddressInventory inventory;
+    inventory.i2c_bus = i2c_bus;
+    inventory.error = error;
+    for (const int address : addresses)
+    {
+        if (address >= 0x60 && address <= 0x6F &&
+            std::find(inventory.addresses.begin(), inventory.addresses.end(), address) ==
+                inventory.addresses.end())
+        {
+            inventory.addresses.push_back(address);
+        }
+    }
+    std::sort(inventory.addresses.begin(), inventory.addresses.end());
+    g_si5351_address_inventory_override = std::move(inventory);
+}
+
+void clear_si5351_address_inventory_override_for_test() noexcept
+{
+    g_si5351_address_inventory_override.reset();
 }
 
 namespace
@@ -1755,6 +1859,35 @@ void patch_all_from_web(const nlohmann::json &j)
             error_message = i2c_bus_inventory::selection_error(
                 i2c_bus_inventory::discover(), candidate_config.si5351_i2c_bus);
             if (!error_message.empty()) throw std::runtime_error(error_message);
+        }
+
+        const bool si5351_selection_changed =
+            candidate_config.si5351_i2c_bus != config.si5351_i2c_bus ||
+            candidate_config.si5351_i2c_address != config.si5351_i2c_address;
+        const bool selecting_si5351 =
+            candidate_config.transmit_backend == TransmitBackendKind::SI5351 &&
+            config.transmit_backend != TransmitBackendKind::SI5351;
+        if (si5351_selection_changed || selecting_si5351)
+        {
+            if (candidate_config.si5351_i2c_address < 0x60 ||
+                candidate_config.si5351_i2c_address > 0x6F)
+            {
+                throw std::runtime_error(
+                    "Invalid Si5351 I2C address. Expected 0x60 through 0x6F.");
+            }
+            const auto inventory = discover_si5351_addresses(
+                candidate_config.si5351_i2c_bus,
+                candidate_config.si5351_reference_hz);
+            if (!inventory.error.empty()) throw std::runtime_error(inventory.error);
+            if (!inventory.contains(candidate_config.si5351_i2c_address))
+            {
+                throw std::runtime_error(
+                    "No register-compatible Si5351 device was detected at " +
+                    config_handler_serialization::config_serialization_si5351_i2c_address(
+                        candidate_config.si5351_i2c_address) +
+                    " on I2C bus " +
+                    std::to_string(candidate_config.si5351_i2c_bus) + ".");
+            }
         }
 
         if (!validate_config_candidate(candidate_config, &error_message))

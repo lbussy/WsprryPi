@@ -907,21 +907,16 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
 
                                     <div class="col-12 col-lg-3">
                                         <label for="si5351_i2c_address" class="form-label">I2C Address</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             id="si5351_i2c_address"
-                                            class="form-control"
-                                            maxlength="10"
-                                            pattern="^(?:0[xX][0-9A-Fa-f]+|[0-9]+)$"
-                                            inputmode="text"
-                                            autocapitalize="off"
-                                            autocomplete="off"
-                                            spellcheck="false"
+                                            class="form-select"
                                             aria-describedby="si5351-address-hint"
-                                            data-bs-toggle="tooltip"
-                                            title="Enter a decimal or 0x-prefixed hexadecimal I2C address." />
-                                        <div id="si5351-address-hint" class="form-text mt-2">
-                                            Use either decimal or `0x`-prefixed hexadecimal. Valid device addresses range from `0x03` through `0x77`.
+                                            required
+                                            disabled>
+                                            <option value="">Waiting for Si5351 address discovery</option>
+                                        </select>
+                                        <div id="si5351-address-hint" class="form-text mt-2" role="status" aria-live="polite">
+                                            Select a bus to discover register-compatible Si5351 devices from 0x60 through 0x6F.
                                         </div>
                                     </div>
 

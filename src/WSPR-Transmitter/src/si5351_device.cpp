@@ -27,6 +27,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -38,6 +39,7 @@
 
 namespace
 {
+    std::mutex g_i2c_transaction_mutex;
     static constexpr std::uint8_t kOutputEnableRegister = 3;
     static constexpr std::uint8_t kClkControlBaseRegister = 16;
     static constexpr std::uint8_t kOutputDisableAll = 0xff;
@@ -319,6 +321,7 @@ bool Si5351Device::writeRegister(
     std::uint8_t address,
     std::uint8_t value)
 {
+    std::lock_guard<std::mutex> transaction_lock(g_i2c_transaction_mutex);
     if (!isOpen())
     {
         setLastError("Cannot write Si5351 register because I2C device is "
@@ -350,6 +353,7 @@ bool Si5351Device::readRegister(
     std::uint8_t address,
     std::uint8_t& value)
 {
+    std::lock_guard<std::mutex> transaction_lock(g_i2c_transaction_mutex);
     if (!isOpen())
     {
         setLastError("Cannot read Si5351 register because I2C device is "

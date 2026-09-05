@@ -53,7 +53,8 @@ int main() {
     }
 
     for (std::string_view path :
-         {"/config", "/version", "/status", "/telemetry", "/api/support-intake"}) {
+         {"/config", "/config/si5351-addresses", "/version", "/status",
+          "/telemetry", "/api/support-intake"}) {
         expect_http("GET", path, Classification::read_only);
     }
     expect_http("POST", "/api/support-intake", Classification::reject);

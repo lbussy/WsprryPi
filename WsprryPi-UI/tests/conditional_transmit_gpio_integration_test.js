@@ -200,8 +200,8 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
                 ...(window.WSPRRYPI_PLATFORM || {}),
                 i2cBuses: [{ Number: 1, Name: "bcm2835 (i2c@7e804000)" }, { Number: 10, Name: "Secondary adapter" }],
                 i2cBusDiscoveryError: "",
-                si5351Detected: false,
-                si5351DetectionError: "No Si5351 detected on the configured I2C bus.",
+                si5351Detected: true,
+                si5351DetectionError: "",
             };
             document.getElementById("transmit_backend").checked = true;
             document.querySelectorAll(".modal.show").forEach(modal => {
@@ -211,9 +211,9 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
             });
             document.querySelectorAll(".modal-backdrop").forEach(backdrop => backdrop.remove());
             document.body.classList.remove("modal-open");
-            setSi5351AddressValue("0x60");
-            document.getElementById("si5351_reference_frequency").value = "27000000";
             populateI2cBuses(1);
+            populateSi5351Addresses(1, "0x60", ["0x60"], "", 1);
+            document.getElementById("si5351_reference_frequency").value = "27000000";
             clickTransmitBackend();
             updateBackendPlatformSupportUi();
             const tab = document.getElementById("transmitter-hardware-tab");
@@ -398,7 +398,8 @@ async function browserTest() {
     }
 
     class ResolvedDeferred {
-        done(callback) { callback(); return this; }
+        constructor(value) { this.value = value; }
+        done(callback) { callback(this.value); return this; }
         fail() { return this; }
         always(callback) { callback(); return this; }
     }
@@ -408,6 +409,13 @@ async function browserTest() {
     window.clearTimeout = clock.clearTimeout.bind(clock);
     const patches = [];
     ajaxWithEndpointFallback = (endpoint, options) => {
+        if (endpoint === SI5351_ADDRESSES_ENDPOINT) {
+            return new ResolvedDeferred({
+                "I2C Bus": Number(options.data.bus),
+                "Addresses": ["0x60"],
+                "Discovery Error": "",
+            });
+        }
         patches.push({ endpoint, options });
         return new ResolvedDeferred();
     };
@@ -443,6 +451,13 @@ async function browserTest() {
         lastSavedConfigPayload = "";
         lastFailedConfigPayload = "";
         lastFailedConfigMessage = "";
+        window.WSPRRYPI_PLATFORM = {
+            ...(window.WSPRRYPI_PLATFORM || {}),
+            i2cBuses: [{ Number: 1, Name: "Header adapter" }],
+            i2cBusDiscoveryError: "",
+        };
+        populateI2cBuses(1);
+        populateSi5351Addresses(1, "0x60", ["0x60"], "", 1);
         field("transmit_backend").checked = backend === "si5351";
         field("tx_pin").value = String(txPin);
         field("tx_pin").disabled = false;
@@ -899,10 +914,30 @@ async function browserTest() {
     ];
     window.WSPRRYPI_PLATFORM.i2cBusDiscoveryError = "";
     populateI2cBuses(1);
+    populateSi5351Addresses(
+        1, "0x60", ["0x6F", "0x60", "0x60", "0x70", "96junk", 96.5], "", 1
+    );
     equal(field("si5351_i2c_bus").tagName, "SELECT", "native bus select");
     equal(field("si5351_i2c_bus").options[0].value, "1", "numeric sort");
     equal(field("si5351_i2c_bus").options.length, 2, "only detected buses");
     equal(buildConfigPayload().Si5351["I2C Bus"], 1, "saved bus retained");
+    equal(field("si5351_i2c_address").tagName, "SELECT", "native address select");
+    equal(field("si5351_i2c_address").value, "0x60", "detected saved address retained");
+    equal(field("si5351_i2c_address").options.length, 3,
+        "address selector contains one placeholder and only unique detected in-range addresses");
+    populateSi5351Addresses(1, "0x61", ["0x60"], "", 1);
+    equal(field("si5351_i2c_address").value, "", "unavailable saved address has no selection");
+    equal(buildConfigPayload().Si5351["I2C Address"], "", "no silent address fallback");
+    ok(field("si5351-address-hint").textContent.includes("saved address 0x61"),
+        "unavailable saved address is explained");
+    populateSi5351Addresses(1, "0x60", [], "", 1);
+    ok(field("si5351_i2c_address").disabled, "empty address inventory disables selector");
+    ok(field("si5351-address-hint").textContent.includes("No register-compatible"),
+        "empty address inventory is explained");
+    populateSi5351Addresses(1, "0x60", [], "Permission denied", 1);
+    ok(field("si5351-address-hint").textContent.includes("Permission denied"),
+        "address discovery failure remains distinct from empty inventory");
+    populateSi5351Addresses(1, "0x60", ["0x60"], "", 1);
     field("si5351_i2c_bus").value = "";
     ok(Number.isNaN(selectedI2cBusValue()), "empty selection is not bus zero or a saved fallback");
     populateI2cBuses(7);

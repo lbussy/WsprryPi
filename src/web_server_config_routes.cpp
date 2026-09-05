@@ -57,6 +57,20 @@ void register_config(
                 response, build_config_response(), set_cors_headers);
         });
 
+    server.Get(
+        "/config/si5351-addresses",
+        [set_cors_headers](
+            const httplib::Request &request, httplib::Response &response)
+        {
+            const std::string bus = request.has_param("bus")
+                ? request.get_param_value("bus")
+                : std::string();
+            write_route_response(
+                response,
+                build_si5351_addresses_response(bus),
+                set_cors_headers);
+        });
+
     const auto handle_put_patch =
         [set_cors_headers](
             const httplib::Request &request, httplib::Response &response)

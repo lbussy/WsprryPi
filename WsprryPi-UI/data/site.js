@@ -69,6 +69,7 @@ const REPAIR_PATH = normalizeSameOriginPath(
     PATHS.repairPath,
     `${APP_BASE_PATH}/config/repair`
 );
+const SI5351_ADDRESSES_PATH = `${APP_BASE_PATH}/config/si5351-addresses`;
 const SUPPORT_BUNDLES_PATH = normalizeSameOriginPath(
     PATHS.supportBundlesPath,
     `${APP_BASE_PATH}/api/support-bundles`
@@ -109,6 +110,11 @@ const REPAIR_ENDPOINT = createEndpointDefinition(
     "config/repair",
     REPAIR_PATH,
     buildDirectRestFallbackUrl("/config/repair")
+);
+const SI5351_ADDRESSES_ENDPOINT = createEndpointDefinition(
+    "Si5351 address discovery",
+    SI5351_ADDRESSES_PATH,
+    buildDirectRestFallbackUrl("/config/si5351-addresses")
 );
 const SUPPORT_BUNDLES_ENDPOINT = createEndpointDefinition(
     "support bundles",
@@ -1613,6 +1619,14 @@ function populateConfig(callback = null) {
                     ),
                     i2cBuses: Array.isArray(platform["I2C Buses"]) ? platform["I2C Buses"] : null,
                     i2cBusDiscoveryError: String(platform["I2C Bus Discovery Error"] || ""),
+                    si5351AddressBus: getConfigIntValue(
+                        platform, "Platform", "Si5351 Address Bus", -1
+                    ),
+                    si5351Addresses: Array.isArray(platform["Si5351 Addresses"])
+                        ? platform["Si5351 Addresses"] : null,
+                    si5351AddressDiscoveryError: String(
+                        platform["Si5351 Address Discovery Error"] || ""
+                    ),
                     si5351Detected: getConfigBoolValue(
                         platform,
                         "Platform",
@@ -1999,8 +2013,14 @@ function populateConfig(callback = null) {
                         populateRp1GpioDrive(rp1GpioDriveMa);
                     }
                     populateI2cBuses(si5351I2cBus);
-                    if (typeof setSi5351AddressValue === "function") {
-                        setSi5351AddressValue(si5351I2cAddressRaw);
+                    if (typeof populateSi5351Addresses === "function") {
+                        populateSi5351Addresses(
+                            si5351I2cBus,
+                            si5351I2cAddressRaw,
+                            window.WSPRRYPI_PLATFORM.si5351Addresses,
+                            window.WSPRRYPI_PLATFORM.si5351AddressDiscoveryError,
+                            window.WSPRRYPI_PLATFORM.si5351AddressBus
+                        );
                     } else {
                         $("#si5351_i2c_address").val(si5351I2cAddressRaw).trigger("change");
                     }

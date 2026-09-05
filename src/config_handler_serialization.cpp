@@ -170,6 +170,7 @@ nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
     }
     bool si5351_detected = true;
     std::string si5351_detection_error;
+    Si5351AddressInventory si5351_address_inventory;
     if (source.contains("Si5351") && source.at("Si5351").is_object())
     {
         const nlohmann::json &si5351 = source.at("Si5351");
@@ -190,11 +191,15 @@ nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
                       si5351.at("Reference Frequency"),
                       "Si5351.Reference Frequency")
                 : kDefaultSi5351ReferenceHz;
-        si5351_detected = si5351_device_detected(
-            i2c_bus,
-            i2c_address,
-            reference_hz,
-            &si5351_detection_error);
+        si5351_address_inventory = discover_si5351_addresses(
+            i2c_bus, reference_hz);
+        si5351_detected = si5351_address_inventory.contains(i2c_address);
+        if (!si5351_detected)
+        {
+            si5351_detection_error = si5351_address_inventory.error.empty()
+                ? "No register-compatible Si5351 device was detected at the configured I2C address."
+                : si5351_address_inventory.error;
+        }
     }
 
     nlohmann::json public_json;
@@ -217,9 +222,16 @@ nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
     auto i2c_buses = nlohmann::json::array();
     for (const auto &bus : i2c_inventory.buses)
         i2c_buses.push_back({{"Number", bus.number}, {"Name", bus.name}});
+    auto si5351_addresses = nlohmann::json::array();
+    for (const int address : si5351_address_inventory.addresses)
+        si5351_addresses.push_back(
+            config_serialization_si5351_i2c_address(address));
     public_json["Platform"] = {
         {"I2C Buses", i2c_buses},
         {"I2C Bus Discovery Error", i2c_inventory.error},
+        {"Si5351 Address Bus", si5351_address_inventory.i2c_bus},
+        {"Si5351 Addresses", si5351_addresses},
+        {"Si5351 Address Discovery Error", si5351_address_inventory.error},
         {"Model", get_pi_model()},
         {"Raspberry Pi Generation", get_raspberry_pi_generation()},
         {"GPIO Clock Transmission Supported",
