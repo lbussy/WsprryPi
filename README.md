@@ -39,9 +39,9 @@ building, explicit selection, deterministic virtual-time traces, bounded
 real-time tests, fault injection, repeated execution, Debian CI, and the limits
 of simulation evidence.
 
-For reproducible 32-bit ARMv6 builds targeting Raspberry Pi OS Bullseye or
-Bookworm on Raspberry Pi 1, Pi Zero, and Pi Zero W, see the
-[ARMv6 container build guide](docs/armv6-container-build.md).
+For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
+and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the
+[container build guide](docs/container-builds.md).
 
 RP1 GPCLK support is compiled into the application as a consumer of the
 independently maintained `/dev/rp1-gpclk` provider. On Pi 5-family systems the

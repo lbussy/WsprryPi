@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM balenalib/raspberry-pi:bookworm-build@sha256:5e44b1697cd34bac1eaf43fbadab44c54d25246ff0b57144b054b8039d85141a AS build
+FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -9,7 +9,7 @@ RUN apt-get update \
 
 WORKDIR /workspace
 COPY . .
-RUN sh containers/build-artifact.sh armv6 bookworm
+RUN sh containers/build-artifact.sh aarch64 trixie
 
 FROM scratch AS artifact
 COPY --from=build /artifact/ /

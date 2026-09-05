@@ -27,6 +27,9 @@ jobs:
           make semantics-make-regression-test SUDO=
           make semantics-test-portable SUDO=
 
+      - name: Check container build export handling
+        run: python3 scripts/tests/container_build_test.py
+
   strict-i2c-profile:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
