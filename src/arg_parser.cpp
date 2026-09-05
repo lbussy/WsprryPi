@@ -1709,13 +1709,13 @@ bool validate_config_candidate(
             return false;
         }
 
-        if (candidate.si5351_i2c_address < 0x03 ||
-            candidate.si5351_i2c_address > 0x77)
+        if (candidate.si5351_i2c_address < 0x60 ||
+            candidate.si5351_i2c_address > 0x6F)
         {
             if (error_message != nullptr)
             {
                 *error_message =
-                    "Invalid Si5351 I2C address. Expected 0x03 through 0x77.";
+                    "Invalid Si5351 I2C address. Expected 0x60 through 0x6F.";
             }
 
             return false;
@@ -2060,11 +2060,11 @@ bool validate_config_data()
                 llog.logE(ERROR,
                           " - Invalid Si5351 I2C bus. Expected a non-negative bus number.");
             }
-            if (config.si5351_i2c_address < 0x03 ||
-                config.si5351_i2c_address > 0x77)
+            if (config.si5351_i2c_address < 0x60 ||
+                config.si5351_i2c_address > 0x6F)
             {
                 llog.logE(ERROR,
-                          " - Invalid Si5351 I2C address. Expected 0x03 through 0x77.");
+                          " - Invalid Si5351 I2C address. Expected 0x60 through 0x6F.");
             }
             if (config.si5351_reference_hz <= 0)
             {

@@ -7,7 +7,7 @@ int main() {
     const SupportRequestGuardSnapshot scoped_snapshot{
         true, "wsprrypi", {}, {{"fe80::10", "ffff:ffff:ffff:ffff::"}}};
     for (const std::string method : {"PUT", "PATCH"}) {
-        assert(evaluate_backend_http_request(method, "/config", "127.0.0.1",
+    assert(evaluate_backend_http_request(method, "/config", "127.0.0.1",
             "wsprrypi", "http://wsprrypi", scoped_snapshot,
             PrivilegedNetworkMode::enforced, {"fe80::42%wlan1"}) ==
             BackendHttpGuardDecision::allowed);
@@ -48,6 +48,8 @@ int main() {
     assert(evaluate("GET", "/config", "203.0.113.4", "foreign") ==
            BackendHttpGuardDecision::rejected);
     assert(evaluate("GET", "/config", "192.168.50.42", "wsprrypi") ==
+           BackendHttpGuardDecision::allowed);
+    assert(evaluate("GET", "/config/si5351-addresses", "192.168.50.42", "wsprrypi") ==
            BackendHttpGuardDecision::allowed);
     assert(evaluate("POST", "/future-operation", "127.0.0.1", "localhost") ==
            BackendHttpGuardDecision::allowed);
