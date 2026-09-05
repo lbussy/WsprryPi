@@ -41,7 +41,8 @@ of simulation evidence.
 
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
 and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the
-[container build guide](docs/container-builds.md).
+[container build guide](docs/container-builds.md). For installing those artifacts,
+see the [precompiled installer contract](docs/precompiled-installation.md).
 
 RP1 GPCLK support is compiled into the application as a consumer of the
 independently maintained `/dev/rp1-gpclk` provider. On Pi 5-family systems the

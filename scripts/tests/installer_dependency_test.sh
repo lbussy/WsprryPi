@@ -28,29 +28,31 @@ if ! grep -Fq 'upgrade_ini "$old_path" "$source_path" "$merged_ini"' "$INSTALLER
     exit 1
 fi
 
+python3 "${SCRIPT_DIR}/precompiled_binary_test.py"
+"${SCRIPT_DIR}/precompiled_installer_test.sh"
 python3 "${SCRIPT_DIR}/ini_upgrade_schema_test.py"
 python3 "${SCRIPT_DIR}/installer_dry_run_purity_test.py"
 python3 "${SCRIPT_DIR}/service_install_recovery_test.py"
 "${SCRIPT_DIR}/build_resource_preflight_test.sh"
 
 if ! awk '
-    /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
-    in_packages && /^\)/ { exit }
+    /^readonly (RUNTIME|BUILD)_APT_PACKAGES=\(/ { in_packages = 1; next }
+    in_packages && /^\)/ { in_packages = 0; next }
     in_packages && /^[[:space:]]*"libssl-dev"[[:space:]]*$/ { found = 1 }
     END { exit(found ? 0 : 1) }
 ' "$INSTALLER"; then
-    echo "libssl-dev must remain in install.sh APT_PACKAGES" >&2
+    echo "libssl-dev must remain in the appropriate installer dependency group" >&2
     exit 1
 fi
 
 for package in build-essential python3; do
     if ! awk -v required="$package" '
-        /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
-        in_packages && /^\)/ { exit }
+        /^readonly (RUNTIME|BUILD)_APT_PACKAGES=\(/ { in_packages = 1; next }
+        in_packages && /^\)/ { in_packages = 0; next }
         in_packages && $0 ~ "^[[:space:]]*\"" required "\"[[:space:]]*$" { found = 1 }
         END { exit(found ? 0 : 1) }
     ' "$INSTALLER"; then
-        echo "$package must remain in the base install.sh APT_PACKAGES" >&2
+        echo "$package must remain in an installer dependency group" >&2
         exit 1
     fi
 done
@@ -58,7 +60,7 @@ done
 for package in dkms device-tree-compiler kmod; do
     if ! awk -v required="$package" '
         /^readonly RP1_GPCLK_DKMS_APT_PACKAGES=\(/ { in_packages = 1; next }
-        in_packages && /^\)/ { exit }
+        in_packages && /^\)/ { in_packages = 0; next }
         in_packages && $0 ~ "^[[:space:]]*\"" required "\"[[:space:]]*$" { found = 1 }
         END { exit(found ? 0 : 1) }
     ' "$INSTALLER"; then
@@ -188,12 +190,12 @@ EOF
 )
 
 if ! awk '
-    /^readonly APT_PACKAGES=\(/ { in_packages = 1; next }
-    in_packages && /^\)/ { exit }
+    /^readonly (RUNTIME|BUILD)_APT_PACKAGES=\(/ { in_packages = 1; next }
+    in_packages && /^\)/ { in_packages = 0; next }
     in_packages && /^[[:space:]]*"age"[[:space:]]*$/ { found = 1 }
     END { exit(found ? 0 : 1) }
 ' "$INSTALLER"; then
-    echo "age must remain in install.sh APT_PACKAGES" >&2
+    echo "age must remain in the appropriate installer dependency group" >&2
     exit 1
 fi
 
@@ -203,7 +205,7 @@ if ! awk '
     /validate_support_bundle_age_dependency "\$debug" \|\| return 1/ { age = NR }
     /validate_rp1_gpclk_build_dependencies "\$debug" \|\| return 1/ { rp1 = NR }
     /apply_rp1_gpclk_dkms_installation "\$debug" \|\| return 1/ { apply = NR }
-    END { exit(recovery > 0 && packages == recovery + 1 && age == packages + 1 && rp1 == age + 1 && apply == rp1 + 1 ? 0 : 1) }
+    END { exit(recovery > 0 && packages > recovery && age > packages && rp1 > age && apply > rp1 ? 0 : 1) }
 ' "$INSTALLER"; then
     echo "RP1 runtime recovery must precede package mutation and provider apply" >&2
     exit 1

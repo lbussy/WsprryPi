@@ -250,6 +250,16 @@ declare RP1_GPCLK_DKMS_STATE_DIR=""
 declare RP1_GPCLK_DKMS_HELPER=""
 declare RP1_GPCLK_DKMS_PROVIDER_REMOVAL_UNPROVEN="false"
 declare -a RESOLVED_APT_PACKAGES=()
+declare BINARY_SOURCE="${BINARY_SOURCE:-build}"
+declare BINARY_PATH="${BINARY_PATH:-}"
+declare BINARY_RELEASE_TAG="${BINARY_RELEASE_TAG:-}"
+declare BINARY_STAGE=""
+declare BINARY_VERSION=""
+declare -a BINARY_RUNTIME_PACKAGES=()
+declare BINARY_PREVIOUS=""
+declare BINARY_INSTALLED="false"
+declare BINARY_DESTINATION=""
+declare BINARY_INSTALL_DIR="/usr/local/bin"
 
 # -----------------------------------------------------------------------------
 # Declare Arguments Variables
@@ -380,7 +390,7 @@ if [[ "$REQUIRE_SUDO" == true && -z "${SUDO_USER-}" ]]; then
     USER_HOME=""
 elif [[ -n "${SUDO_USER-}" ]]; then
     # Use SUDO_USER's home directory if it's set
-    USER_HOME=$(eval echo "~$SUDO_USER")
+    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 else
     # Fallback to HOME if SUDO_USER is not set
     USER_HOME="$HOME"
@@ -796,47 +806,35 @@ declare -ar SYSTEM_READS=(
 readonly SYSTEM_READS
 
 # -----------------------------------------------------------------------------
-# @var APT_PACKAGES
-# @type array
-# @brief List of required APT packages.
-# @details Defines the APT packages that the script depends on for its
-#          execution. These packages should be available in the system's
-#          default package repository. The script will check for their presence
-#          and attempt to install any missing packages as needed.
-#
-#          Packages included:
-#          - `git`: Version control system.
-#          - `build-essential`: Compiler and build tools used for WsprryPi.
-#          - `python3`: Runtime used by installer helpers.
-#          - `libssl-dev`: OpenSSL EVP headers, libcrypto pkg-config metadata,
-#            and the matching libcrypto runtime dependency.
-#          - `age`: age encryption and age-keygen executables used by the
-#            encrypted support-bundle workflow.
-#
-# @example
-# for pkg in "${APT_PACKAGES[@]}"; do
-#     if ! dpkg -l "$pkg" &>/dev/null; then
-#         echo "Error: Required package '$pkg' is not installed."
-#         exit 1
-#     fi
-# done
+# Runtime, web, application-build, and optional kernel-build dependencies are
+# selected separately. Precompiled installation does not need application headers
+# or a compiler. age and age-keygen support encrypted diagnostic bundles.
 # -----------------------------------------------------------------------------
-readonly APT_PACKAGES=(
+readonly RUNTIME_APT_PACKAGES=(
     "git"
-    "build-essential"
     "python3"
-    "apache2"
-    "php"
     "chrony"
+    "age"
+    "libatomic1"
+    "libstdc++6"
+    "libgcc-s1"
+    "libc6"
+    "libsystemd0"
+)
+readonly WEB_APT_PACKAGES=("apache2" "php")
+readonly BUILD_APT_PACKAGES=(
+    "build-essential"
     "libgpiod-dev"
     "libsystemd-dev"
     "libssl-dev"
-    "age"
 )
+# readelf inspects supplied files; it does not compile or execute WsprryPi.
+readonly BINARY_VALIDATION_APT_PACKAGES=("binutils")
 
 # RP1 kernel-build packages are appended only when RP1 provider installation is
 # selected. The exact running-kernel header package is resolved at runtime.
 readonly RP1_GPCLK_DKMS_APT_PACKAGES=(
+    "build-essential"
     "dkms"
     "device-tree-compiler"
     "kmod"
@@ -1017,6 +1015,11 @@ declare REBOOT=${REBOOT:-false}
 # shellcheck disable=SC2329
 egress() {
     local status=$?
+    if [[ "$status" -ne 0 ]]; then
+        rollback_executable || status=1
+        restore_daemon_state || status=1
+    fi
+    cleanup_precompiled_executable
     report_ui_publication_result
     cleanup_rp1_gpclk_dkms_state
     if ! cleanup_temp_build_swap; then
@@ -2421,7 +2424,15 @@ resolve_apt_package_list() {
     local runtime_pkg="${1:-}"
     local kernel_release=""
 
-    RESOLVED_APT_PACKAGES=( "${APT_PACKAGES[@]}" )
+    RESOLVED_APT_PACKAGES=( "${RUNTIME_APT_PACKAGES[@]}" )
+    if [[ "${NO_WEB:-false}" != "true" ]]; then
+        RESOLVED_APT_PACKAGES+=( "${WEB_APT_PACKAGES[@]}" )
+    fi
+    if [[ "$BINARY_SOURCE" == "build" ]]; then
+        RESOLVED_APT_PACKAGES+=( "${BUILD_APT_PACKAGES[@]}" )
+    else
+        RESOLVED_APT_PACKAGES+=( "${BINARY_VALIDATION_APT_PACKAGES[@]}" "${BINARY_RUNTIME_PACKAGES[@]}" )
+    fi
     if [[ -n "$runtime_pkg" ]]; then
         RESOLVED_APT_PACKAGES+=( "$runtime_pkg" )
     fi
@@ -5464,6 +5475,12 @@ capture_install_sem_ver() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
+    if [[ "$BINARY_SOURCE" != "build" ]]; then
+        [[ -n "$BINARY_VERSION" ]] || { logE "Precompiled version was not validated."; return 1; }
+        SEM_VER="$BINARY_VERSION"
+        export SEM_VER
+        return 0
+    fi
     local captured_version=""
 
     captured_version=$(cd "$LOCAL_REPO_DIR" && get_sem_ver "$debug") || {
@@ -5649,15 +5666,6 @@ handle_apt_packages() {
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
 
-    # Check if APT_PACKAGES is empty
-    if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
-        logI "No packages specified in APT_PACKAGES. Skipping package handling."
-        debug_print "APT_PACKAGES is empty, skipping execution." "$debug"
-        debug_end "$debug"
-        return 0
-    fi
-
-    local package
     local error_count=0
     local runtime_pkg=""
     local packages_to_install=()
@@ -5674,15 +5682,12 @@ handle_apt_packages() {
         ((error_count++))
     fi
 
-    # Resolve the correct runtime package for libgpiod-dev (libgpiod2/libgpiod3).
-    runtime_pkg="$(resolve_libgpiod_runtime_pkg "$debug")"
-    if [[ -z "$runtime_pkg" ]]; then
-        warn "Failed to resolve required libgpiod runtime package."
-        debug_print "Continuing without explicit libgpiod runtime package." \
-            "$debug"
-        ((error_count++))
-    else
-        debug_print "Using libgpiod runtime package '$runtime_pkg'." "$debug"
+    if [[ "$BINARY_SOURCE" == "build" ]]; then
+        runtime_pkg="$(resolve_libgpiod_runtime_pkg "$debug")"
+        if [[ -z "$runtime_pkg" ]]; then
+            warn "Failed to resolve required libgpiod runtime package."
+            return 1
+        fi
     fi
 
     # Build the final platform-aware install list. RP1 kernel-development
@@ -5694,25 +5699,13 @@ handle_apt_packages() {
     fi
     packages_to_install=( "${RESOLVED_APT_PACKAGES[@]}" )
 
-    # Install or upgrade each package in the list
-    for package in "${packages_to_install[@]}"; do
-        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null \
-            | grep -q "install ok installed"; then
-            if ! exec_command \
-                "Upgrade $package" \
-                apt-get install --only-upgrade -y "${package}" "$debug"; then
-                warn "Failed to upgrade package: $package."
-                ((error_count++))
-            fi
-        else
-            if ! exec_command \
-                "Install $package" \
-                apt-get install -y "${package}" "$debug"; then
-                warn "Failed to install package: $package."
-                ((error_count++))
-            fi
-        fi
-    done
+    # One APT transaction avoids reparsing the package index for every package
+    # on low-memory Pis. Do not remove previously installed development tools.
+    if ! exec_command "Install required packages" apt-get install -y \
+        "${packages_to_install[@]}" "$debug"; then
+        warn "Failed to install the required package set."
+        ((error_count++))
+    fi
 
     # Log summary of errors
     if ((error_count > 0)); then
@@ -5920,6 +5913,9 @@ OPTIONS_LIST=(
     "-h|--help 0 usage Show these instructions 1"
     "-v|--version 0 print_version Display $WSPR_SERVICE version 1"
     "--no-web 0 set_no_web Disable web UI installation and Apache integration (service will run with --no-web) 0"
+    "--binary-source 1 set_binary_source Choose build (default), local, or release executable 0"
+    "--binary-path 1 set_binary_path Use a local executable (default: invoking user's ~/wsprrypi) 0"
+    "--release-tag 1 set_binary_release_tag Select the release tag for --binary-source release 0"
     "--release 0 set_release_build Build as release regardless of branch 0"
     "--fail-on-ui-modifications 0 set_fail_on_ui_modifications Refuse to replace a modified or unknown installed UI 0"
 )
@@ -6059,6 +6055,7 @@ process_args() {
                             # Call the function with the next argument as a parameter
                             $function_name "$next_arg" "$debug"
                             retval="$?"
+                            [[ "$retval" -eq 0 ]] || return "$retval"
 
                             # Remove the processed flag and its argument
                             args=("${args[@]:2}")
@@ -6067,6 +6064,7 @@ process_args() {
                             # Call the function with no arguments
                             $function_name
                             retval="$?"
+                            [[ "$retval" -eq 0 ]] || return "$retval"
                             # Remove the processed flag
                             args=("${args[@]:1}")
                             processed_argument=true
@@ -6678,6 +6676,10 @@ create_temp_build_swap() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 preflight_build_resources() {
+    if [[ "$BINARY_SOURCE" != "build" ]] && ! rp1_gpclk_dkms_installation_selected; then
+        logI "Using a precompiled executable; application compilation and build swap are skipped."
+        return 0
+    fi
     local mem_total_kb
     local mem_available_kb
     local swap_free_kb
@@ -6784,6 +6786,7 @@ preflight_build_resources() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 display_compilation_resource_notes() {
+    [[ "$BINARY_SOURCE" == "build" ]] || return 0
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
@@ -6893,6 +6896,122 @@ display_compilation_resource_notes() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 # shellcheck disable=SC2329
+# Precompiled executable acquisition is explicit and never falls back to a build.
+set_binary_source() { BINARY_SOURCE="$1"; }
+set_binary_path() { BINARY_PATH="$1"; }
+set_binary_release_tag() { BINARY_RELEASE_TAG="$1"; }
+
+validate_binary_options() {
+    case "$BINARY_SOURCE" in
+        build)
+            [[ -z "$BINARY_PATH$BINARY_RELEASE_TAG" ]] || {
+                logE "Binary path/tag options require --binary-source local or release."; return 1;
+            } ;;
+        local)
+            [[ -z "$BINARY_RELEASE_TAG" ]] || { logE "--release-tag requires --binary-source release."; return 1; } ;;
+        release)
+            [[ -n "$BINARY_RELEASE_TAG" && -z "$BINARY_PATH" ]] || {
+                logE "Release mode requires --release-tag and cannot use a local binary path."; return 1;
+            }
+            [[ "$BINARY_RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || { logE "Invalid release tag."; return 1; }
+            ;;
+        *) logE "--binary-source must be build, local, or release."; return 1 ;;
+    esac
+    if [[ "$ACTION" == "uninstall" && "$BINARY_SOURCE" != "build" ]]; then
+        logE "Uninstall does not take executable-source options. Run uninstall without them."
+        return 1
+    fi
+}
+
+cleanup_precompiled_executable() {
+    if [[ -n "$BINARY_PREVIOUS" && "$BINARY_INSTALLED" != "recovery-failed" ]]; then
+        rm -f -- "$BINARY_PREVIOUS"
+        BINARY_PREVIOUS=""
+    fi
+    if [[ -n "$BINARY_STAGE" ]]; then
+        rm -rf -- "$BINARY_STAGE"
+        BINARY_STAGE=""
+    fi
+}
+
+rollback_executable() {
+    [[ "$BINARY_INSTALLED" == "true" ]] || return 0
+    if systemctl is-active --quiet "$WSPR_SERVICE" 2>/dev/null; then
+        systemctl stop "$WSPR_SERVICE" || { BINARY_INSTALLED="recovery-failed"; return 1; }
+    fi
+    if [[ -n "$BINARY_PREVIOUS" ]]; then
+        if ! mv -f -- "$BINARY_PREVIOUS" "$BINARY_DESTINATION"; then
+            logE "Executable recovery failed; previous executable retained at $BINARY_PREVIOUS."
+            BINARY_INSTALLED="recovery-failed"
+            return 1
+        fi
+        BINARY_PREVIOUS=""
+    else
+        rm -f -- "$BINARY_DESTINATION" || return 1
+    fi
+    BINARY_INSTALLED="false"
+    logI "Restored the previous executable after installation failure."
+}
+
+prepare_precompiled_executable() {
+    [[ "$BINARY_SOURCE" != "build" ]] || return 0
+    local helper binary packages
+    helper="${LOCAL_REPO_DIR}/scripts/precompiled_binary.py"
+    binary="${BINARY_PATH:-${USER_HOME}/wsprrypi}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logI "Dry run: would validate and stage the $BINARY_SOURCE executable; no download or copy performed."
+        if [[ "$BINARY_SOURCE" == "local" && -f "$helper" ]]; then
+            python3 "$helper" check --binary "$binary" || return 1
+            BINARY_VERSION="dry-run-unvalidated"
+            packages=$(python3 "$helper" check --binary "$binary" --field runtime_packages) || return 1
+            mapfile -t BINARY_RUNTIME_PACKAGES <<<"$packages"
+        else
+            BINARY_VERSION="dry-run-unvalidated"
+            logI "Dry run: artifact version and dependencies require validation during a real installation."
+        fi
+        return 0
+    fi
+    git_clone "$@" || return 1
+    [[ -f "$helper" ]] || { logE "Missing precompiled validation helper in the source checkout."; return 1; }
+    BINARY_STAGE=$(mktemp -d /var/tmp/wsprrypi-binary.XXXXXXXX) || return 1
+    chmod 755 "$BINARY_STAGE" || return 1
+    if [[ "$BINARY_SOURCE" == "local" ]]; then
+        [[ -f "$binary" ]] || {
+            logE "Provide the executable at $binary."; return 1;
+        }
+        # Caller-owned files are copied, never removed, and checked after copying.
+        cp -- "$binary" "$BINARY_STAGE/wsprrypi" || return 1
+    else
+        python3 "$helper" fetch --repo "$REPO_ORG/$REPO_NAME" --tag "$BINARY_RELEASE_TAG" --directory "$BINARY_STAGE" || return 1
+    fi
+    chmod 755 "$BINARY_STAGE/wsprrypi" || return 1
+    packages=$(python3 "$helper" check --binary "$BINARY_STAGE/wsprrypi" --field runtime_packages) || return 1
+    mapfile -t BINARY_RUNTIME_PACKAGES <<<"$packages"
+    logI "Checked $BINARY_SOURCE executable architecture. Application compilation is disabled."
+}
+
+validate_precompiled_runtime() {
+    [[ "$BINARY_SOURCE" != "build" ]] || return 0
+    [[ "$DRY_RUN" != "true" ]] || { logI "Dry run: runtime library checks await installed dependencies."; return 0; }
+    BINARY_VERSION=$(python3 "$LOCAL_REPO_DIR/scripts/precompiled_binary.py" check \
+        --binary "$BINARY_STAGE/wsprrypi" --full --runtime-user "$SUDO_USER" --field version) || return 1
+}
+
+prepare_install_executable() {
+    if [[ "$BINARY_SOURCE" == "build" ]]; then
+        compile_binary "$@"
+    else
+        validate_precompiled_runtime "$@"
+    fi
+}
+
+stop_binary_service() {
+    if systemctl is-active --quiet "$WSPR_SERVICE" 2>/dev/null; then
+        WAS_RUNNING="true"
+        exec_command "Stop ${WSPR_SERVICE}.service" systemctl stop "${WSPR_SERVICE}.service" "$@" || return 1
+    fi
+}
+
 compile_binary() {
     local debug
     debug=$(debug_start "$@")
@@ -6934,18 +7053,6 @@ compile_binary() {
         logE "Error: Invalid WSPR_BUILD_TYPE '${type}'."
         debug_end "$debug"
         return 1
-    fi
-
-    # Stop Daemon
-    debug_print "Stopping daemon" "$debug"
-    if systemctl is-active --quiet "$daemon_name" 2>/dev/null; then
-        WAS_RUNNING="true"
-        exec_command "Stop ${daemon_systemd_name}" \
-            systemctl stop "${daemon_systemd_name}" "$debug" || {
-                logE "Error: Unable to stop daemon."
-                debug_end "$debug"
-                return 1
-            }
     fi
 
     # Compile the binary
@@ -7021,51 +7128,38 @@ manage_exe() {
     exe_name="${executable##*/}" # Remove path
     exe_name="${exe_name%.*}"    # Remove extension (if present)
     source_path="${LOCAL_REPO_DIR}/executables/${exe_name}"
-    exe_path="/usr/local/bin/${executable}"
+    exe_path="${BINARY_INSTALL_DIR}/${executable}"
 
     if [[ "$ACTION" == "install" ]]; then
-        # Validate source file exists
-        if [[ ! -f "$source_path" ]]; then
-            logE "Error: Source file '$source_path' not found."
-            debug_end "$debug"
+        if [[ "$BINARY_SOURCE" != "build" ]]; then
+            source_path="${BINARY_STAGE}/wsprrypi"
+        fi
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logI "Dry run: would install the validated executable at $exe_path."
+            return 0
+        fi
+        [[ -f "$source_path" ]] || { logE "Executable is missing: $source_path"; return 1; }
+        local pending
+        pending=$(mktemp "${exe_path}.new.XXXXXXXX") || return 1
+        if ! install -o root -g root -m 755 "$source_path" "$pending"; then
+            rm -f -- "$pending"
             return 1
         fi
-
-        # Install the application
-        debug_print "Copying application." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: cp -f $source_path $exe_path"
-        else
-            exec_command "Install application" cp -f "${source_path}" "${exe_path}" "$debug" || {
-                logE "Failed to install application."
-                debug_end "$debug"
-                return 1
-            }
+        BINARY_DESTINATION="$exe_path"
+        if [[ -e "$exe_path" || -L "$exe_path" ]]; then
+            BINARY_PREVIOUS=$(mktemp "${exe_path}.previous.XXXXXXXX") || { rm -f -- "$pending"; return 1; }
+            cp -p -- "$exe_path" "$BINARY_PREVIOUS" || { rm -f -- "$pending" "$BINARY_PREVIOUS"; BINARY_PREVIOUS=""; return 1; }
         fi
-
-        # Change ownership on the application
-        debug_print "Changing ownership on application." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: chown root:root $exe_path"
-        else
-            exec_command "Change ownership on application" chown root:root "${exe_path}" "$debug" || {
-                logE "Failed to change ownership on application."
-                debug_end "$debug"
-                return 1
-            }
+        if ! stop_binary_service "$debug"; then
+            rm -f -- "$pending"
+            return 1
         fi
-
-        # Change permissions on the application to make it executable
-        debug_print "Changing permissions on application." "$debug"
-        if [[ "$DRY_RUN" == "true" ]]; then
-            logD "Exec: chmod 755 $exe_path"
-        else
-            exec_command "Make app executable" chmod 755 "${exe_path}" "$debug" || {
-                logE "Failed to change permissions on application."
-                debug_end "$debug"
-                return 1
-            }
+        if ! mv -f -- "$pending" "$exe_path"; then
+            rm -f -- "$pending"
+            restore_daemon_state "$debug"
+            return 1
         fi
+        BINARY_INSTALLED="true"
 
     elif [[ "$ACTION" == "uninstall" ]]; then
         # Remove the application
@@ -9305,6 +9399,10 @@ cleanup_files_in_directories() {
 }
 
 restore_daemon_state() {
+    if [[ "${BINARY_INSTALLED:-false}" == "recovery-failed" ]]; then
+        logE "Executable recovery needs attention; automatic service restart is withheld."
+        return 1
+    fi
     local debug
     debug=$(debug_start "$@")
     eval set -- "$(debug_filter "$@")"
@@ -9369,7 +9467,9 @@ flag_need_reboot() {
             return 0
         fi
 
-        read -rp "Press any key to continue." </dev/tty
+        if [[ -t 0 ]]; then
+            read -rp "Press any key to continue." || true
+        fi
         echo
     fi
 
@@ -9546,7 +9646,7 @@ manage_wsprry_pi() {
         "capture_install_sem_ver"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
-        "compile_binary \"$WSPR_EXE\""
+        "prepare_install_executable \"$WSPR_EXE\""
         "manage_exe \"$WSPR_EXE\""
         "manage_support_bundle_runtime"
         "manage_route_application"
@@ -9566,7 +9666,7 @@ manage_wsprry_pi() {
     local skip_on_uninstall=(
         "git_clone"
         "capture_install_sem_ver"
-        "compile_binary"
+        "prepare_install_executable"
         "cleanup_files_in_directories"
         "remove_legacy_services"
         "remove_legacy_files_and_dirs"
@@ -9649,6 +9749,7 @@ manage_wsprry_pi() {
         if [[ $status -ne 0 ]]; then
             logE "$func failed with status $status" "$debug"
             if [[ "$ACTION" == "install" ]]; then
+                rollback_executable || return 1
                 cleanup_files_in_directories "${func}" "${debug}"
                 restore_daemon_state "${func}" "${debug}"
                 overall_status=1
@@ -9733,7 +9834,8 @@ _main() {
 
     # Check and set up the environment
     handle_execution_context "$debug" # Get execution context and set environment variables
-    process_args "$@" "$debug"        # Parse command-line arguments
+    process_args "$@" "$debug" || return $? # Parse command-line arguments
+    validate_binary_options || return 1
     enforce_sudo "$debug"             # Ensure proper privileges for script execution
     setup_log "$debug"                # Setup logging environment
 
@@ -9743,6 +9845,7 @@ _main() {
     validate_sys_accs "$debug" # Verify critical system files are accessible
     validate_env_vars "$debug" # Check for required environment variables
     get_proj_params "$debug"   # Get project and git parameters
+    [[ "$BINARY_SOURCE" == "build" ]] || BUILD_TYPE_OVERRIDE="RELEASE"
     resolve_build_settings "$debug"
     if [[ "${LOG_LEVEL_SET_FROM_ENV}" != "true" ]]; then
         if [[ "${WSPR_BUILD_TYPE}" == "RELEASE" ]]; then
@@ -9774,6 +9877,7 @@ _main() {
     # any package, service, or compilation mutation begins.
     if [[ "$ACTION" != "uninstall" ]]; then
         preflight_build_resources "$debug" || return 1
+        prepare_precompiled_executable "$debug" || return 1
     fi
 
     # Print/display the environment
@@ -9796,6 +9900,7 @@ _main() {
         prepare_rp1_gpclk_runtime_update "$debug" || return 1
         handle_apt_packages "$debug" || return 1
         validate_support_bundle_age_dependency "$debug" || return 1
+        validate_precompiled_runtime "$debug" || return 1
         validate_rp1_gpclk_build_dependencies "$debug" || return 1
         apply_rp1_gpclk_dkms_installation "$debug" || return 1
     fi
@@ -9813,7 +9918,7 @@ _main() {
     fi
 
     # Install or uninstall Wsprry Pi services
-    manage_wsprry_pi "$debug"
+    manage_wsprry_pi "$debug" || return $?
 
     debug_end "$debug"
     return 0
