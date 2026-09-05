@@ -198,10 +198,22 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
             document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
             window.WSPRRYPI_PLATFORM = {
                 ...(window.WSPRRYPI_PLATFORM || {}),
+                i2cBuses: [{ Number: 1, Name: "bcm2835 (i2c@7e804000)" }, { Number: 10, Name: "Secondary adapter" }],
+                i2cBusDiscoveryError: "",
                 si5351Detected: false,
                 si5351DetectionError: "No Si5351 detected on the configured I2C bus.",
             };
             document.getElementById("transmit_backend").checked = true;
+            document.querySelectorAll(".modal.show").forEach(modal => {
+                bootstrap.Modal.getInstance(modal)?.hide();
+                modal.classList.remove("show");
+                modal.style.display = "none";
+            });
+            document.querySelectorAll(".modal-backdrop").forEach(backdrop => backdrop.remove());
+            document.body.classList.remove("modal-open");
+            setSi5351AddressValue("0x60");
+            document.getElementById("si5351_reference_frequency").value = "27000000";
+            populateI2cBuses(1);
             clickTransmitBackend();
             updateBackendPlatformSupportUi();
             const tab = document.getElementById("transmitter-hardware-tab");
@@ -215,8 +227,8 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
                 pane.classList.toggle("show", selected);
             });
             document.querySelectorAll(".toast.show").forEach((toast) => toast.classList.remove("show"));
-            const outputPanel = document.getElementById("transmit_backend").closest("fieldset");
-            window.scrollTo(0, Math.max(0, outputPanel.offsetTop - 100));
+            const busPanel = document.getElementById("si5351-backend-panel");
+            window.scrollTo(0, Math.max(0, window.scrollY + busPanel.getBoundingClientRect().top - 130));
         })()`,
     });
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -880,6 +892,45 @@ async function browserTest() {
         "an explicit Si5351 selection must update the persisted backend");
     equal(field("si5351-backend-panel").hidden, false,
         "an explicit Si5351 selection must reveal its configuration panel");
+
+    // Metadata fixtures: no adapter probes.
+    window.WSPRRYPI_PLATFORM.i2cBuses = [
+        { Number: 10, Name: "Secondary adapter" }, { Number: 1, Name: "Header adapter" }, null, { Number: -1 }, { Number: 2147483648 }
+    ];
+    window.WSPRRYPI_PLATFORM.i2cBusDiscoveryError = "";
+    populateI2cBuses(1);
+    equal(field("si5351_i2c_bus").tagName, "SELECT", "native bus select");
+    equal(field("si5351_i2c_bus").options[0].value, "1", "numeric sort");
+    equal(field("si5351_i2c_bus").options.length, 2, "only detected buses");
+    equal(buildConfigPayload().Si5351["I2C Bus"], 1, "saved bus retained");
+    field("si5351_i2c_bus").value = "";
+    ok(Number.isNaN(selectedI2cBusValue()), "empty selection is not bus zero or a saved fallback");
+    populateI2cBuses(7);
+    equal(selectedI2cBusValue(), 7, "missing bus retained");
+    ok(field("si5351_i2c_bus").selectedOptions[0].disabled, "missing bus cannot be selected");
+    validateTransmitterHardwareFields();
+    equal(field("si5351_i2c_bus").getAttribute("aria-invalid"), "true", "missing bus invalid");
+    equal(buildConfigPayload().Si5351["I2C Bus"], 7, "no fallback to bus one");
+    field("si5351_i2c_bus").value = "10";
+    field("si5351_i2c_bus").dispatchEvent(new Event("change", { bubbles: true }));
+    equal(buildConfigPayload().Si5351["I2C Bus"], 10, "explicit replacement");
+    ok(!field("si5351-bus-hint").textContent.includes("saved bus is unavailable"), "recovery clears hint");
+    window.WSPRRYPI_PLATFORM.i2cBuses = [];
+    populateI2cBuses(10);
+    clickTransmitBackend();
+    ok(field("si5351_i2c_bus").disabled, "empty remains disabled after toggle");
+    ok(field("si5351-bus-hint").textContent.includes("No I2C buses"), "empty explanation");
+    equal(buildConfigPayload().Si5351["I2C Bus"], 10, "disabled selector retains value");
+    field("transmit_backend").checked = false;
+    clickTransmitBackend();
+    ok(field("si5351_i2c_bus").getAttribute("aria-invalid") !== "true", "other backend permits stale bus");
+    window.WSPRRYPI_PLATFORM.i2cBusDiscoveryError = "Permission denied";
+    populateI2cBuses(10);
+    ok(field("si5351-bus-hint").textContent.includes("Unable to read"), "failure differs from empty");
+    window.WSPRRYPI_PLATFORM.i2cBusDiscoveryError = "";
+    window.WSPRRYPI_PLATFORM.i2cBuses = null;
+    populateI2cBuses(10);
+    ok(field("si5351-bus-hint").textContent.includes("information is unavailable"), "old server fails closed");
 
     return { matrixCases, patches: patches.length, assertions: "passed" };
 }

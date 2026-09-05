@@ -6,6 +6,7 @@
 #include "config_handler.hpp"
 #include "config_handler_serialization.hpp"
 #include "arg_parser.hpp"
+#include "i2c_bus_inventory.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -212,7 +213,13 @@ nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
         {"Use Random Offset", source.at("WSPR").at("Use Random Offset")}};
     public_json["CW"] = source.at("CW");
     public_json["Band GPIO"] = source.at("Band GPIO");
+    const auto i2c_inventory = i2c_bus_inventory::discover();
+    auto i2c_buses = nlohmann::json::array();
+    for (const auto &bus : i2c_inventory.buses)
+        i2c_buses.push_back({{"Number", bus.number}, {"Name", bus.name}});
     public_json["Platform"] = {
+        {"I2C Buses", i2c_buses},
+        {"I2C Bus Discovery Error", i2c_inventory.error},
         {"Model", get_pi_model()},
         {"Raspberry Pi Generation", get_raspberry_pi_generation()},
         {"GPIO Clock Transmission Supported",

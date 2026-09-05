@@ -498,7 +498,7 @@ function restorePersistedConfigDraft() {
 
     $("#gpio-power-range").val(Number(gpio["Power Level"])).trigger("input");
     populateRp1GpioDrive(gpio["RP1 Drive mA"] ?? 2);
-    $("#si5351_i2c_bus").val(Number(si5351["I2C Bus"])).trigger("change");
+    populateI2cBuses(si5351["I2C Bus"]);
     if (typeof setSi5351AddressValue === "function") {
         setSi5351AddressValue(si5351["I2C Address"] || "0x60");
     }
@@ -684,6 +684,10 @@ function bindIndexActions() {
             }
             syncCwTimingControls({ announce: true });
         });
+    $("#si5351_i2c_bus").on("change", function () {
+        populateI2cBuses(this.value);
+        validateTransmitterHardwareFields();
+    });
     $("#si5351_i2c_address").on("input blur", validateSi5351I2cAddress);
     $("#si5351_i2c_bus, #si5351_reference_frequency").on(
         "input blur",
@@ -2404,6 +2408,7 @@ function syncBackendControlAvailability() {
     const gpioActive = selectedTransmitBackend() === "gpio" &&
         !(isRp1GpioPlatform() && !rp1GpioOperatorVisible());
     $("#tx_pin, #rp1-route-apply").prop("disabled", !gpioActive);
+    $("#si5351_i2c_bus").prop("disabled", selectedTransmitBackend() !== "si5351" || availableI2cBuses().length === 0);
 }
 
 function syncBackendPanelVisibility() {
@@ -3986,6 +3991,50 @@ function validateSi5351I2cAddress() {
     return valid;
 }
 
+function availableI2cBuses() {
+    const platform = window.WSPRRYPI_PLATFORM || {};
+    if (platform.i2cBusDiscoveryError || !Array.isArray(platform.i2cBuses)) return [];
+    return platform.i2cBuses.filter(bus => bus && Number.isInteger(bus.Number) && bus.Number >= 0 && bus.Number <= 2147483647)
+        .sort((a, b) => a.Number - b.Number);
+}
+
+function selectedI2cBusValue() {
+    const field = document.getElementById("si5351_i2c_bus");
+    // Native value retains a selected disabled option, unlike jQuery val().
+    return /^\d+$/.test(field.value) ? Number(field.value) : NaN;
+}
+
+function populateI2cBuses(savedBus) {
+    const field = document.getElementById("si5351_i2c_bus");
+    if (!field) return;
+    const platform = window.WSPRRYPI_PLATFORM || {};
+    const buses = availableI2cBuses();
+    const value = Number(savedBus);
+    field.replaceChildren();
+    const present = buses.some(bus => bus.Number === value);
+    if (!present) {
+        const option = new Option(`I2C ${savedBus} — unavailable`, String(savedBus), true, true);
+        option.disabled = true;
+        field.add(option);
+    }
+    for (const bus of buses) {
+        field.add(new Option(`I2C ${bus.Number}${typeof bus.Name === "string" && bus.Name ? " — " + bus.Name : ""}`, String(bus.Number)));
+    }
+    field.value = String(savedBus);
+    field.title = field.selectedOptions[0]?.textContent || "I2C Bus";
+    field.disabled = selectedTransmitBackend() !== "si5351" || buses.length === 0;
+    const hint = document.getElementById("si5351-bus-hint");
+    hint.textContent = platform.i2cBusDiscoveryError
+        ? "Unable to read I2C buses. Reload to try again."
+        : !Array.isArray(platform.i2cBuses)
+        ? "I2C bus information is unavailable. Reconnect or reload to try again."
+        : buses.length === 0
+        ? "No I2C buses available. Check that I2C is enabled, then reload."
+        : !present
+        ? "The saved bus is unavailable. Select an available bus."
+        : "Select an I2C bus present on this system.";
+}
+
 function validateTransmitterHardwareFields() {
     const backend = selectedTransmitBackend();
     const gpioOperatorActive = gpioBackendOperatorActive();
@@ -3993,7 +4042,7 @@ function validateTransmitterHardwareFields() {
 
     const gpioPower = normalizeIntegerInputValue("#gpio-power-range", 7);
     const rp1GpioDrive = normalizeIntegerInputValue("#rp1_gpio_drive_ma", 2);
-    const si5351Bus = normalizeIntegerInputValue("#si5351_i2c_bus", 1);
+    const si5351Bus = selectedI2cBusValue();
     const si5351Reference = normalizeIntegerInputValue("#si5351_reference_frequency", 27000000);
     const si5351Power = normalizeIntegerInputValue("#si5351-power-range", 1);
     const si5351ReferenceSource = String($("#si5351_reference_source").val() || "external_tcxo");
@@ -4035,9 +4084,9 @@ function validateTransmitterHardwareFields() {
         invalidCount++;
     }
 
-    const busValid = si5351Bus >= 0;
+    const busValid = availableI2cBuses().some(bus => bus.Number === si5351Bus);
     const si5351BusField = $("#si5351_i2c_bus").get(0);
-    si5351BusField.setCustomValidity(busValid ? "" : "I2C bus must be 0 or greater.");
+    si5351BusField.setCustomValidity(busValid ? "" : "Select an available I2C bus.");
     setFieldValidationState(si5351BusField, !(backend === "si5351") || busValid);
     if (backend === "si5351" && !busValid) {
         invalidCount++;
@@ -4272,10 +4321,7 @@ function buildConfigPayload(options = {}) {
             : parseInt(invalidSource, 10);
     }
 
-    let si5351_i2c_bus = parseInt($("#si5351_i2c_bus").val(), 10);
-    if (!Number.isInteger(si5351_i2c_bus) || si5351_i2c_bus < 0) {
-        si5351_i2c_bus = 1;
-    }
+    const si5351_i2c_bus = selectedI2cBusValue();
 
     let si5351_i2c_address = formatSi5351Address(
         $("#si5351_i2c_address").val() || "0x60"
@@ -5210,7 +5256,7 @@ function setOfflineDefaults() {
     $("#use_system_clock_frequency_estimate").prop("checked", true);
     $("#gpio_frequency_residual_ppm").val(0);
     $("#gpio_manual_ppm").val(0);
-    $("#si5351_i2c_bus").val(1);
+    populateI2cBuses(1);
     setSi5351AddressValue(0x60);
     $("#si5351_reference_frequency").val(27000000);
     $("#si5351_reference_source").val("external_tcxo").trigger("change");

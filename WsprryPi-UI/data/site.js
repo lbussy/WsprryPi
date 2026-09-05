@@ -559,6 +559,8 @@ const configSchema = {
             "GPIO Clock Transmission Supported": { required: false, type: "boolean" },
             "GPIO Clock Transmission Error": { required: false, type: "string" },
             "RP1 GPIO Operator Visible": { required: false, type: "boolean" },
+            "I2C Buses": { required: false, type: "array" },
+            "I2C Bus Discovery Error": { required: false, type: "string" },
             "Si5351 Detected": { required: false, type: "boolean" },
             "Si5351 Detection Error": { required: false, type: "string" }
         }
@@ -1144,6 +1146,8 @@ function recoverFromPopulateConfigFailure() {
 function configTypeMatches(value, expectedType) {
     if (value === undefined || value === null) return true;
 
+    if (expectedType === "array") return Array.isArray(value);
+
     if (expectedType === "number") {
         if (typeof value === "number") {
             return !Number.isNaN(value);
@@ -1607,6 +1611,8 @@ function populateConfig(callback = null) {
                         "RP1 GPIO Operator Visible",
                         false
                     ),
+                    i2cBuses: Array.isArray(platform["I2C Buses"]) ? platform["I2C Buses"] : null,
+                    i2cBusDiscoveryError: String(platform["I2C Bus Discovery Error"] || ""),
                     si5351Detected: getConfigBoolValue(
                         platform,
                         "Platform",
@@ -1992,7 +1998,7 @@ function populateConfig(callback = null) {
                     if (typeof populateRp1GpioDrive === "function") {
                         populateRp1GpioDrive(rp1GpioDriveMa);
                     }
-                    $("#si5351_i2c_bus").val(si5351I2cBus).trigger("change");
+                    populateI2cBuses(si5351I2cBus);
                     if (typeof setSi5351AddressValue === "function") {
                         setSi5351AddressValue(si5351I2cAddressRaw);
                     } else {

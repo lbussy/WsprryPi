@@ -1,6 +1,7 @@
 #include "arg_parser.hpp"
 #include "backend_capabilities.hpp"
 #include "config_handler.hpp"
+#include "i2c_bus_inventory.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
 #include "gpio_band_policy.hpp"
@@ -661,6 +662,43 @@ void test_explicit_tone_experimental_policy()
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && std::string(argv[1]) == "--i2c-bus-selection-only")
+    {
+        init_config_json();
+        json_to_config();
+        set_si5351_detection_override_for_test(true);
+        set_raspberry_pi_generation_override_for_test(4);
+        const auto inventory = i2c_bus_inventory::discover();
+        const auto public_config = get_public_config_json();
+        const auto &platform = public_config.at("Platform");
+        assert(platform.at("I2C Bus Discovery Error") == inventory.error);
+        assert(platform.at("I2C Buses").size() == inventory.buses.size());
+        for (std::size_t i = 0; i < inventory.buses.size(); ++i)
+        {
+            assert(platform.at("I2C Buses").at(i).at("Number") == inventory.buses[i].number);
+            assert(platform.at("I2C Buses").at(i).at("Name") == inventory.buses[i].name);
+        }
+        assert(!jConfig.contains("Platform"));
+        const auto before = jConfig;
+        const int saved_bus = config.si5351_i2c_bus;
+        bool rejected = false;
+        try
+        {
+            patch_all_from_web({
+                {"Si5351", {{"I2C Bus", 2147483647}}},
+                {"Platform", {{"I2C Buses", {{{"Number", 2147483647}, {"Name", "forged"}}}}}}});
+        }
+        catch (const std::exception &error)
+        {
+            rejected = std::string(error.what()).find("I2C bus") != std::string::npos;
+        }
+        assert(rejected);
+        assert(jConfig == before);
+        assert(config.si5351_i2c_bus == saved_bus);
+        std::cout << "I2C web selection rejection preserves configuration" << std::endl;
+        return EXIT_SUCCESS;
+    }
+
     if (argc == 2 &&
         std::string(argv[1]) == "--rp1-web-backend-persistence-only")
     {
