@@ -893,18 +893,15 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 <div class="row gx-3 gy-3 align-items-start">
                                     <div class="col-12 col-lg-3">
                                         <label for="si5351_i2c_bus" class="form-label">I2C Bus</label>
-                                        <input
-                                            type="number"
+                                        <select
                                             id="si5351_i2c_bus"
-                                            class="form-control"
-                                            min="0"
-                                            step="1"
-                                            inputmode="numeric"
+                                            class="form-select"
                                             aria-describedby="si5351-bus-hint"
-                                            data-bs-toggle="tooltip"
-                                            title="Linux I2C bus number for the Si5351 device." />
-                                        <div id="si5351-bus-hint" class="form-text mt-2">
-                                            Enter a Linux I2C bus number of 0 or greater.
+                                            disabled>
+                                            <option value="">Waiting for I2C buses</option>
+                                        </select>
+                                        <div id="si5351-bus-hint" class="form-text mt-2" role="status" aria-live="polite">
+                                            Waiting for the system's I2C bus list.
                                         </div>
                                     </div>
 

@@ -27,6 +27,7 @@
  */
 
 #include "config_handler.hpp"
+#include "i2c_bus_inventory.hpp"
 #include "config_handler_deserialization.hpp"
 #include "config_handler_serialization.hpp"
 
@@ -1744,6 +1745,17 @@ void patch_all_from_web(const nlohmann::json &j)
         config_handler_deserialization::deserialize_json_to_runtime_config(
             candidate_json, candidate_config);
         candidate_config.enable_web = config.enable_web;
+
+        // Validate new selections against fresh host metadata, never client Platform data.
+        // An unchanged unavailable bus must not prevent recovery to another backend.
+        if (candidate_config.si5351_i2c_bus != config.si5351_i2c_bus ||
+            (candidate_config.transmit_backend == TransmitBackendKind::SI5351 &&
+             config.transmit_backend != TransmitBackendKind::SI5351))
+        {
+            error_message = i2c_bus_inventory::selection_error(
+                i2c_bus_inventory::discover(), candidate_config.si5351_i2c_bus);
+            if (!error_message.empty()) throw std::runtime_error(error_message);
+        }
 
         if (!validate_config_candidate(candidate_config, &error_message))
         {
