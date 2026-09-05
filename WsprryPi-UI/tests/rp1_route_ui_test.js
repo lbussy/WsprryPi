@@ -133,6 +133,12 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  controller.render({profile:"runtime",ok:true,state:"runtime_inhibited",persisted:"GPIO20",active:"GPIO20",compatible:true});
  pin=null;controller.select("None");
  assert.equal(element("rp1-route-apply").textContent,"Remove route");
+ assert.equal(element("rp1-route-state").textContent,"Route Unsaved",
+  "an unapplied route selection is distinguished from application idle state");
+ pin=20;controller.select("GPIO20");
+ assert.equal(element("rp1-route-state").textContent,"Application idle",
+  "restoring the active selection restores the confirmed provider state");
+ pin=null;controller.select("None");
  controller.progressActive=true;let duplicateRequests=0;controller.request=async()=>{duplicateRequests++;throw Error("duplicate")};
  await controller.applyAndReboot();
  assert.equal(duplicateRequests,0,"an active progress cycle blocks duplicate route actions");

@@ -2431,6 +2431,7 @@ function clickTransmitPin() {
 
 const RP1_ROUTE_STATES = Object.freeze({
     runtime_inhibited: ["Application idle", "Switching restarts a running Wsprry Pi in idle mode. Transmission does not resume."],
+    runtime_unsaved: ["Route Unsaved", "The selected route has not been applied. Use the adjacent action to apply it, or choose the active route to discard the draft."],
     runtime_ready: ["Route selected", "The selected route is active and Wsprry Pi is online in idle mode. This does not start or authorize transmission."],
     runtime_neutral_running: ["Route removed", "The RP1 clock route is removed and Wsprry Pi is back online. Transmission remains disabled."],
     runtime_neutral_stopped: ["Route removed; service stopped", "The RP1 clock route is removed. Wsprry Pi remains stopped because it was stopped before removal or is administrator-masked."],
@@ -2459,6 +2460,7 @@ class Rp1RouteUiController {
     constructor(endpoint, request = window.fetch.bind(window)) {
         this.endpoint=endpoint; this.request=request; this.persisted=""; this.active=""; this.outputValidated=false;
         this.requested="Unavailable"; this.state="checking";
+        this.confirmedState="checking";
         this.completionUnknown=false; this.runtimeProfile=false; this.developmentCompatible=false; this.generation=0; this.inFlight=false;
         this.progressActive=false; this.progressOperation=""; this.progressRoute="";
         this.pollAttempt=0; this.pollTimer=null; this.maxAutomaticPolls=12;
@@ -2549,13 +2551,16 @@ class Rp1RouteUiController {
         $("#rp1-route-rollback").text(this.runtimeProfile ? "Recover to no route" : "Roll back");
         const reported=String(data.state || (requested===this.active ? "active" : "mismatch")).replaceAll("-","_");
         const displayed=confirmedNeutral && reported==="runtime_inhibited" ? "runtime_neutral_stopped" : reported;
+        this.confirmedState=displayed;
         this.setState(displayed,
             typeof data.message==="string" ? data.message : "");
         if(this.progressActive) this.handleProgressData(data,displayed);
     }
     select(route) {
         const requested=this.routeValue(route); this.requested=requested; $("#rp1-route-requested").text(requested);
-        this.setState(this.runtimeProfile ? "runtime_inhibited" : (requested === this.active ? "active" : "reboot_required"));
+        this.setState(this.runtimeProfile
+            ? (requested===this.active ? this.confirmedState : "runtime_unsaved")
+            : (requested===this.active ? "active" : "reboot_required"));
     }
     async query() {
         this.inFlight=true; this.setState("checking");
