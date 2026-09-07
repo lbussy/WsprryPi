@@ -104,6 +104,16 @@ class Tests(unittest.TestCase):
             self.assertIsNone(system.active)
             self.assertFalse(any(name.startswith('route-') for name, unused in system.calls))
 
+    def test_blocked_history_reports_provider_refusal_without_planning(self):
+        for state in ('recovery_required', 'conflict'):
+            system = System()
+            system.state = state
+            with self.assertRaisesRegex(recovery.installer.ContractError,
+                                        'provider refuses reboot activation: '+state):
+                recovery.reconcile(system)
+            self.assertEqual([name for name, unused in system.calls], ['inspect'])
+            self.assertIsNone(system.saved)
+
     def test_saved_route_mismatch_stopped_masked_and_transmission_are_preserved(self):
         changes = (
             lambda s: s.config.update(route='gpio20'),

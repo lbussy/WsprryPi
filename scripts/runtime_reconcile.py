@@ -240,6 +240,8 @@ def reconcile(system):
             journal = journal_of(inspected)
             if journal is None or journal['plan']['bootId'] == boot:
                 return 'no-reboot-reconciliation'
+            require(inspected.get('result') == 'activation_required',
+                    'provider refuses reboot activation: '+str(inspected.get('result')))
             planned = system.call('activation-plan')
             plan = planned.get('activationPlan', {})
             digest = plan.get('planSha256')
