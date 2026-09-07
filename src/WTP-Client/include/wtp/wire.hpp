@@ -52,8 +52,8 @@ class FrameWriter {
     void fail() noexcept;
 };
 
-// Slice 1 does not retry, correlate responses, or negotiate sessions. This
-// immutable packet lets the later transaction layer retain the original bytes.
+// This wire primitive does not negotiate or retry. Session retains this
+// immutable packet throughout a transaction and any explicit retry.
 class RequestPacket {
   public:
     static std::optional<RequestPacket> create(const Request &request);

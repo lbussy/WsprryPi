@@ -1,7 +1,7 @@
 # WTP-Client
 
-Portable C++20 WTP/1 wire support, implemented as Phase 10 Slice 1. This is an
-ordinary component of the WsprryPi repository. Its public headers, sources,
+Portable C++20 WTP/1 wire and session support, implemented as Phase 10 Slices
+1–2. This is an ordinary component of the WsprryPi repository. Its public headers, sources,
 tests, MIT license and fixture provenance stay together if it is extracted.
 It has no Pico SDK, application, OS, hardware or third-party runtime dependency.
 
@@ -17,13 +17,16 @@ It has no Pico SDK, application, OS, hardware or third-party runtime dependency.
 - `wtp/wire.hpp`: bounded partial-write state, injectable monotonic timeout
   budgets and an owning `RequestPacket` that retains exact serialized bytes.
   Positive write progress never extends the absolute deadline.
+- `wtp/transport.hpp` and `wtp/session.hpp`: injected nonblocking byte streams,
+  HELLO-first negotiation, response correlation, ownership/lease accounting,
+  exact-byte recovery and authoritative STATUS reconciliation. See the
+  [session API and recovery contract](SESSION.md).
 
 The application does not link or select this component yet. There is no WTP
-backend, endpoint discovery, USB I/O, Console time provisioning, session
-negotiation, transaction dispatch, retry policy, ownership, reconciliation,
-plan conversion, scheduler integration, configuration or UI in this slice.
-Decoding an `ARM` response does not validate its relationship to a request or
-clock admission policy. Writing a frame does not establish acknowledgment.
+backend, endpoint discovery, USB I/O, Console time provisioning, plan conversion,
+scheduler integration, configuration or UI in these slices. The Session layer
+validates an `ARM` acknowledgment against its request and advertised clock bounds;
+the wire codec alone does not. Writing a frame does not establish acknowledgment.
 The codec preserves explicit active-output evidence in status, terminal
 records and events; a decoded terminal state is not a success verdict.
 
@@ -51,10 +54,11 @@ event bodies, independent malformed-message and boundary expectations,
 CRC golden values, every split of a known frame, large coalesced streams,
 resynchronization limits, timeouts with virtual clocks, partial writes,
 immutable payload ownership and deterministic malformed-input stress.
-Maintained transition vectors are retained with the fixture but are not
-executed here: state-machine behavior belongs to the later session slice.
-This suite does not establish endpoint interoperability or target/USB/RF
-qualification. Parent portable semantics tests do not exercise WTP.
+Session tests add scripted transport failures, leases, replay and reconciliation.
+The optional [pinned endpoint test](SESSION.md#tests-and-reference-endpoint)
+exercises the Pico endpoint/job service using a software engine. Ordinary tests
+do not establish endpoint interoperability; neither suite establishes target,
+USB or RF qualification. Parent portable semantics tests do not exercise WTP.
 
 ## Using the wire primitives
 
@@ -70,8 +74,8 @@ qualification. Parent portable semantics tests do not exercise WTP.
    more. Check `closed()` even if the same result also contains payload events.
    Call `check_timeout` while awaiting input, and `end_of_stream` on disconnect.
 4. Decode each `Payload` event and check `DecodeResult` before reading its owned
-   variant. A later session layer must correlate identities and operations,
-   enforce HELLO-first and reconcile authoritative STATUS before mutation.
+   variant. Use Session for identity/operation correlation, HELLO-first and
+   authoritative STATUS reconciliation before mutation.
 
 All `now_ms` arguments come from the same injected monotonic clock for each
 object. Clock regression fails closed. Exact deadline boundaries expire.
@@ -82,7 +86,7 @@ must complete/cancel any I/O using a span before modifying its writer.
 about the remote job. After a failed or cancelled partial write, discard the
 transport stream before sending another frame: appending a new frame to a
 truncated frame could corrupt the peer's framing. Reconciliation belongs to
-the later transaction layer. A new writer budget is not a new retry deadline;
+the Session layer. A new writer budget is not a new retry deadline;
 the transaction must retain its original absolute deadline across attempts.
 
 Per-call input and output are bounded: the parser retains at most one incomplete
@@ -117,9 +121,8 @@ not reinterpret that value as permission for a shorter lease.
 
 ## Remaining Phase 10 prerequisites
 
-The next unfinished slice is the injected transport/session/transaction layer:
-HELLO-first negotiation, response correlation, exact-byte retries, identities,
-ownership/lease recovery and authoritative STATUS reconciliation. No new job
+The next unfinished slice is complete execution-plan conversion to finite WTP
+jobs, followed by the physical adapter and application/backend integration. No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
 expired result or `JOB_NOT_FOUND`. The complete approved plan still governs
 those later slices; wire tests do not complete Phase 10.
@@ -139,7 +142,7 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slice 1. The separate `Wsprry_Pi_Docs` repository
+No operator behavior changes in Slices 1–2. The separate `Wsprry_Pi_Docs` repository
 was reviewed and remains unchanged. Later backend/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,

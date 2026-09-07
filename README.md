@@ -40,7 +40,7 @@ real-time tests, fault injection, repeated execution, Debian CI, and the limits
 of simulation evidence.
 
 The [WTP-Client component](src/WTP-Client/README.md) provides the portable WTP/1
-wire foundation for Phase 10 Pico integration. It has a standalone hardware-free
+wire and session foundation for Phase 10 Pico integration. It has a standalone hardware-free
 test suite; application/backend integration remains planned.
 
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm

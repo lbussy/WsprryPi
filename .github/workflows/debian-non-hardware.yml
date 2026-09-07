@@ -27,7 +27,7 @@ jobs:
           make semantics-make-regression-test SUDO=
           make semantics-test-portable SUDO=
 
-      - name: Run WTP wire component tests
+      - name: Run WTP protocol and session component tests
         working-directory: src
         run: make wtp-protocol-test SUDO=
 
@@ -133,7 +133,7 @@ jobs:
           make backend-capabilities-make-regression-test SUDO=
           make debug SUDO=
 
-      - name: Run WTP wire component tests
+      - name: Run WTP protocol and session component tests
         working-directory: src
         run: make wtp-protocol-test SUDO=
 
