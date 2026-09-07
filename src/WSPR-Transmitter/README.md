@@ -19,8 +19,9 @@ label is not an application allowlist.
 `BackendKind::WTP` identifies the parent's explicitly constructed complete-plan
 backend. The shared frequency policy treats it as untested; advertised CAPS do
 not establish RF qualification. The production `WsprTransmitter` factory refuses
-WTP until early scheduler preparation is integrated. Parent lifecycle, tests and
-limitations are documented in [the WTP backend guide](../../docs/wtp-backend.md).
+WTP pending production status and selection integration. The parent now has a
+dedicated [early WTP scheduler](../../docs/wtp-scheduling.md).
+Parent lifecycle, tests and limitations are documented in [the WTP backend guide](../../docs/wtp-backend.md).
 No WTP-Client or USB dependency is introduced into this reusable component.
 
 ### Shared chipset clock offsets

@@ -159,8 +159,8 @@ separately authorized endpoint-selection, access-permission, clock prerequisite
 and unresolved-output guidance there; no udev rules or services are installed.
 
 The [complete-plan backend](wtp-backend.md) is implemented in Slice 5 with
-explicit typed construction. Early scheduler preparation,
-status/recovery and configuration/operator integration remain required.
+explicit typed construction. Slice 6 adds the [early scheduler](wtp-scheduling.md).
+Production status/recovery and configuration/operator integration remain required.
 Device UTC must already be independently provisioned; GET_CLOCK observes it.
 Future UI work still requires a temporary UI-level development toggle and
 Impeccable desktop/mobile review. Phase 10 is not complete.

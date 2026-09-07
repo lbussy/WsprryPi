@@ -5,6 +5,7 @@
 #include "WTP-Client/include/wtp/session.hpp"
 #include "execution_plan.hpp"
 #include <atomic>
+#include <functional>
 #include <set>
 
 namespace wsprrypi {
@@ -26,7 +27,10 @@ public:
 // Clock and connected stream outlive this object. Only stop() is thread safe.
 class WtpTransmitBackend final : public ITransmissionBackend {
 public:
-  WtpTransmitBackend(WtpHostClock &, wtp::SessionOptions);
+  // Optional owner-thread gate runs after reconciliation, immediately before
+  // requesting ARM. It may veto; it cannot replace device clock admission.
+  WtpTransmitBackend(WtpHostClock &, wtp::SessionOptions,
+                     std::function<bool()> arm_admission = {});
   ~WtpTransmitBackend() override;
   bool connect(wtp::ByteStream &); // explicit same-session reconciliation only
   void disconnect();               // does NOT establish inactive output
@@ -61,6 +65,7 @@ private:
   WtpHostClock &clock_;
   const wtp::SessionOptions options_;
   wtp::Session session_;
+  std::function<bool()> arm_admission_;
   std::atomic_bool stopped_{false};
   std::optional<WtpPlanOptions> schedule_;
   std::optional<WtpPreparedPlan> prepared_;

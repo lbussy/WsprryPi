@@ -130,8 +130,10 @@ not reinterpret that value as permission for a shorter lease.
 
 ## Remaining Phase 10 prerequisites
 
-The next unfinished slice is early scheduler preparation and absolute-UTC
-handoff. The USB CDC adapter is implemented but still needs physical target validation. No new job
+Slice 6 implements the parent [early scheduler and UTC handoff](../../docs/wtp-scheduling.md).
+Production status/recovery and configuration/operator integration remain.
+The USB CDC adapter is implemented but still needs physical target validation.
+No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
 expired result or `JOB_NOT_FOUND`. The complete approved plan still governs
 those later slices; wire tests do not complete Phase 10.
@@ -151,8 +153,8 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slices 1–5. The separate `Wsprry_Pi_Docs` repository
-was reviewed and remains unchanged. Later scheduler/configuration/UI slices need
+No operator behavior changes in Slices 1–6. The separate `Wsprry_Pi_Docs` repository
+was reviewed and remains unchanged. Later status/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,
 `docs/User_Interface/Setup/Transmitter/index.md`, and the applicable Operations

@@ -45,7 +45,9 @@ wire and session foundation for Phase 10 Pico integration. The parent
 WTP jobs, and the [USB CDC adapter](docs/wtp-usb-cdc.md) provides the Linux host
 transport. The [complete-plan backend](docs/wtp-backend.md) now composes these
 layers through the shared transmitter controller, with hardware-free tests.
-Early scheduler preparation and production/operator selection remain planned.
+The [early scheduler](docs/wtp-scheduling.md) freezes complete requests and hands
+off their exact UTC starts before the RF boundary. Production status and
+configuration/operator selection remain planned.
 
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
 and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the

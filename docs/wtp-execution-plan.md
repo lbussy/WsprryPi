@@ -140,7 +140,8 @@ authorized documentation for endpoint identity, finite jobs, unsupported
 features, clock prerequisites and truthful cancellation/output-unknown status.
 
 The [USB CDC transport adapter](wtp-usb-cdc.md) is implemented in Slice 4.
-Backend integration is next; early scheduler preparation, runtime status/recovery
-and operator integration remain required. Future UI work still requires a temporary
+The [backend](wtp-backend.md) and [early scheduler](wtp-scheduling.md) are
+implemented in Slices 5 and 6. Production status/recovery and operator integration
+remain required. Future UI work still requires a temporary
 UI-level development toggle and Impeccable review. Physical USB behavior,
 device timing, RF output and release readiness remain unqualified by these tests.

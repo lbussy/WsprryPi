@@ -35,8 +35,10 @@ void WtpSteadyClock::wait_ms(std::uint64_t duration) {
   std::this_thread::sleep_for(std::chrono::milliseconds(duration));
 }
 WtpTransmitBackend::WtpTransmitBackend(WtpHostClock &clock,
-                                       wtp::SessionOptions options)
-    : clock_(clock), options_(std::move(options)), session_(options_) {}
+                                       wtp::SessionOptions options,
+                                       std::function<bool()> arm_admission)
+    : clock_(clock), options_(std::move(options)), session_(options_),
+      arm_admission_(std::move(arm_admission)) {}
 WtpTransmitBackend::~WtpTransmitBackend() { session_.disconnect(); }
 bool WtpTransmitBackend::fail(std::string error) {
   error_ = std::move(error);
@@ -84,6 +86,8 @@ bool WtpTransmitBackend::transact(wtp::Operation op, wtp::RequestBody body,
   if (!settle(end, cancellable))
     return false;
   result_.reset();
+  if (op == wtp::Operation::Arm && arm_admission_ && !arm_admission_())
+    return fail("WTP scheduler declined ARM admission");
   if (!session_.request(op, std::move(body), clock_.now_ms()))
     return fail(session_.diagnostic());
   if (!settle(end, cancellable))

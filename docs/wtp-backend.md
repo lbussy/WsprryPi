@@ -7,7 +7,7 @@ WTP-Client Session with the execution-plan converter. Its explicit stream input
 accepts the [USB CDC adapter](wtp-usb-cdc.md) or an injected test transport.
 The implementation is built by focused parent targets and is not registered in
 the production application factory. `BackendKind::WTP` is deliberately reported
-unavailable by that factory until early scheduler preparation is integrated.
+unavailable by that factory pending production status and selection integration.
 
 ## Explicit lifecycle
 
@@ -141,9 +141,9 @@ Future authorized operator documentation must cover explicit Pico endpoint
 selection, USB permissions, independent device UTC prerequisites, per-event
 adjustments and unresolved-output recovery.
 
-Next is early scheduler preparation and absolute-UTC handoff, followed by status,
-configuration and operator integration. UI work must use Impeccable and the
-requested temporary UI-level development toggle. Actual Linux USB/DTR/unplug and
+Slice 6 adds the [early scheduler and absolute-UTC handoff](wtp-scheduling.md).
+Production status, configuration and operator integration remain required.
+UI work must use Impeccable and the requested temporary UI-level development toggle. Actual Linux USB/DTR/unplug and
 firmware functional validation, process/service lifecycle, RF qualification and
 release readiness require separate evidence and authorization. Phase 10 is not
 complete.

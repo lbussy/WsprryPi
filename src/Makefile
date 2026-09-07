@@ -1746,6 +1746,7 @@ help:
 	$(Q)echo "  semantics-test-portable Run the simulated-only portable semantics subset"
 	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire and session tests"
 	$(Q)echo "  wtp-plan-test           Run hardware-free WTP execution-plan conversion tests"
+	$(Q)echo "  wtp-scheduler-test      Run hardware-free early WTP scheduling tests"
 	$(Q)echo "  wtp-backend-test        Run hardware-free complete-plan WTP backend tests"
 	$(Q)echo "  wtp-usb-test            Run WTP USB adapter tests using fakes and PTYs only"
 	$(Q)echo "  gdb                     Debug with gdb"
@@ -1800,3 +1801,26 @@ wtp-backend-interop-test:
 		"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/libwtp_client.a" "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference_bridge.o" \
 		$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference/*.o -o "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/backend_reference_test"
 	$(Q)"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/backend_reference_test"
+
+# Early WTP scheduling through a virtual host/device clock and scripted peer.
+WTP_SCHEDULER_BUILD_DIR ?= build/wtp-scheduler
+WTP_SCHEDULER_CXXFLAGS ?= -O2 -g
+WTP_SCHEDULER_LDFLAGS ?=
+.PHONY: wtp-scheduler-test
+wtp-scheduler-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_SCHEDULER_BUILD_DIR)/client)" CXXFLAGS="$(WTP_SCHEDULER_CXXFLAGS)"
+	$(Q)mkdir -p "$(WTP_SCHEDULER_BUILD_DIR)"
+	$(Q)$(CXX) -std=c++20 -Wall -Wextra -Wpedantic -Werror $(WTP_SCHEDULER_CXXFLAGS) -I. -IWTP-Client/include \
+		tests/wtp_scheduler_test.cpp wtp_integration/scheduler.cpp wtp_integration/backend.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
+		"$(WTP_SCHEDULER_BUILD_DIR)/client/libwtp_client.a" $(WTP_SCHEDULER_LDFLAGS) -o "$(WTP_SCHEDULER_BUILD_DIR)/wtp_scheduler_test"
+	$(Q)"$(WTP_SCHEDULER_BUILD_DIR)/wtp_scheduler_test"
+
+.PHONY: wtp-scheduler-interop-test
+wtp-scheduler-interop-test: wtp-backend-interop-test
+	$(Q)$(CXX) -std=c++20 -Wall -Wextra -Wpedantic -Werror -O2 -g -I. -IWTP-Client/include \
+		tests/wtp_scheduler_reference_test.cpp wtp_integration/scheduler.cpp wtp_integration/backend.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
+		"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/libwtp_client.a" "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference_bridge.o" \
+		$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference/*.o -o "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/scheduler_reference_test"
+	$(Q)"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/scheduler_reference_test"
