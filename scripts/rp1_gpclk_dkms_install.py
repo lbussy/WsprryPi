@@ -1803,8 +1803,12 @@ def recover_and_remove_owned_runtime(
                 )
                 provider = migration_provider
                 inspected = validate_readiness(runtime_call(
-                    runner, provider, "inspect", (), {"recovery_required"},
-                ), "recovery_required")
+                    runner, provider, "inspect", (),
+                    {"recovery_required", "activation_required"},
+                ))
+                require(inspected.get("result") in
+                        {"recovery_required", "activation_required"},
+                        "migration provider did not recognize inactive prior-boot state")
                 candidate_binding = inspected.get("identities", {}).get(
                     "installedBinding", {})
                 require(

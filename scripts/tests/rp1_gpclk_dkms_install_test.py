@@ -2629,6 +2629,12 @@ class ApplyPolicyTests(unittest.TestCase):
         preserve.assert_called_once_with(record, "before-retirement")
 
     def test_owned_cross_boot_route_journals_use_reviewed_candidate_retirement(self):
+        self.check_candidate_retirement("recovery_required")
+
+    def test_owned_cross_boot_migration_accepts_candidate_reboot_admission(self):
+        self.check_candidate_retirement("activation_required")
+
+    def check_candidate_retirement(self, candidate_result):
         installed = self.root / "installed/runtime_provider.py"
         installed.parent.mkdir(parents=True)
         installed.write_text("# installed provider without journal retirement\n")
@@ -2682,12 +2688,16 @@ class ApplyPolicyTests(unittest.TestCase):
         removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
             "operation": "remove", "planSha256": removal_digest,
             "response": {"status": "removed-exact-deployment"}}
-        replies = iter((base, base, retirement, retired, removable, removal, removed))
+        admitted = dict(base, result=candidate_result, state=candidate_result)
+        replies = iter((base, admitted, retirement, retired, removable, removal, removed))
         providers = []
         def runtime_call(unused_runner, provider_arg, operation,
                          arguments=(), allowed_results=()):
             providers.append((operation, provider_arg))
-            return next(replies)
+            value = next(replies)
+            if operation == "inspect" and provider_arg == candidate:
+                self.assertIn(value["result"], allowed_results)
+            return value
         identity = mock.Mock(st_dev=1, st_ino=2)
         with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
              mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
