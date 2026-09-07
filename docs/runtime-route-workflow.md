@@ -41,7 +41,9 @@ select a route. Ambiguous history, changed identities, a changed saved route,
 an intentionally stopped application, or an administrator mask fails closed.
 
 The startup pre-hook reads attributable history without querying the manager
-socket. `WSPRRYPI_RP1_REBOOT_IDLE` keeps bootstrap startup idle and skips an
+socket. If provider state is temporarily absent during installation or is
+unproven, the application can still start idle for diagnostics; the worker
+refuses administration until ownership is established. `WSPRRYPI_RP1_REBOOT_IDLE` keeps bootstrap startup idle and skips an
 obsolete route-readiness acknowledgement. It is distinct from the manager's
 fresh restoration token. Once the new route is restored, normal startup must
 acknowledge that exact token. Both flags keep transmission disabled without

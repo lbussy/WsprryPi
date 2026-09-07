@@ -57,6 +57,11 @@ class Linux:
     def __init__(self):
         self.runner = installer.Runner(False)
 
+    def bootstrap_capable(self):
+        companion.inspect_service()
+        require(b'WSPRRYPI_RP1_REBOOT_IDLE' in companion.trusted(companion.BINARY)[0],
+                'application lacks separate reboot-idle startup support')
+
     def ownership(self):
         if not OWNERSHIP.exists() and not OWNERSHIP.is_symlink():
             return None
@@ -77,8 +82,6 @@ class Linux:
         for path, expected in {**binding['files'], **binding['externalFiles']}.items():
             require(installer.sha256_bytes(companion.trusted(Path(path))[0]) == expected,
                     'bound runtime file changed: '+path)
-        require(b'WSPRRYPI_RP1_REBOOT_IDLE' in companion.trusted(companion.BINARY)[0],
-                'application lacks separate reboot-idle startup support')
         return record
 
     def boot(self):
@@ -170,6 +173,18 @@ def journal_of(value):
 
 
 def prepare(system):
+    """Keep the application available and idle while provider state is unavailable."""
+    system.bootstrap_capable()
+    try:
+        prepare_environment(system)
+    except (OSError, ValueError, KeyError, TypeError, installer.ContractError) as error:
+        # Inverse deployment removes the binding before restoring the service.
+        # Unproven provider state must block administration, not its diagnostics UI.
+        system.environment(True)
+        print('RP1 provider unavailable; starting application idle: '+str(error), file=sys.stderr)
+
+
+def prepare_environment(system):
     """Set only the startup idle environment; inspection does not retire records."""
     record = system.ownership()
     if record is None or system.configuration()['backend'] != 'rp1-gpclk':

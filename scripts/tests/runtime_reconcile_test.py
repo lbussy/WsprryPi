@@ -37,6 +37,7 @@ class System:
         self.active = None
         self.interrupt = None
 
+    def bootstrap_capable(self): pass
     def lock(self): return contextlib.nullcontext()
     def ownership(self): return copy.deepcopy(self.record)
     def configuration(self): return copy.deepcopy(self.config)
@@ -228,6 +229,19 @@ class Tests(unittest.TestCase):
                     installation.apply(remove=True)
                     self.assertTrue(all(not Path(p).exists() for p in targets))
                     self.assertTrue(all(call.args[0] == ['/usr/bin/systemctl', 'daemon-reload'] for call in command.call_args_list))
+
+    def test_provider_replacement_or_conflict_starts_diagnostics_idle_without_administration(self):
+        for error in (FileNotFoundError('binding retired'), recovery.installer.ContractError('ownership differs')):
+            system = System()
+            with patch.object(system, 'ownership', side_effect=error):
+                recovery.prepare(system)
+                self.assertTrue(system.env)
+                with self.assertRaises(type(error)): recovery.reconcile(system)
+            self.assertFalse(system.calls)
+        system = System()
+        with patch.object(system, 'bootstrap_capable', side_effect=ValueError('old binary')):
+            with self.assertRaises(ValueError): recovery.prepare(system)
+        self.assertIsNone(system.env)
 
     def test_duplicate_or_malformed_checkpoint_is_rejected(self):
         with self.assertRaises(recovery.installer.ContractError): recovery.strict_json('{"a":1,"a":2}')
