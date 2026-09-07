@@ -131,7 +131,8 @@ not reinterpret that value as permission for a shorter lease.
 ## Remaining Phase 10 prerequisites
 
 Slice 6 implements the parent [early scheduler and UTC handoff](../../docs/wtp-scheduling.md).
-Production status/recovery and configuration/operator integration remain.
+Slice 7 adds parent [runtime status and recovery reporting](../../docs/wtp-status-recovery.md).
+Production configuration, selection and operator/UI wiring remain.
 The USB CDC adapter is implemented but still needs physical target validation.
 No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
@@ -153,7 +154,7 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slices 1–6. The separate `Wsprry_Pi_Docs` repository
+No operator behavior changes in Slices 1–7. The separate `Wsprry_Pi_Docs` repository
 was reviewed and remains unchanged. Later status/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,
@@ -161,3 +162,5 @@ separately authorized updates to `docs/Command_Line_Operations/transmitter_backe
 guidance for endpoint identity, finite jobs, clock prerequisites, cancellation
 and output-unknown status. The development toggle needs developer guidance,
 not permanent operator documentation.
+
+The portable client API and implementation are unchanged in Slice 7.

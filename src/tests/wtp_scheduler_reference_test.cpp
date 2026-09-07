@@ -78,6 +78,15 @@ int main() {
       CHECK(id == 'b' ? r.outcome == WtpScheduleOutcome::Invalidated
                       : r.outcome == WtpScheduleOutcome::Complete);
       CHECK(r.start_utc_ns == start && !stream.peer->output_active());
+      auto status = scheduler.status();
+      CHECK(status.last_report && status.last_report->outcome == r.outcome);
+      CHECK(status.identity && status.identity->device_id == std::string(32, '4'));
+      if (id != 'b') {
+        CHECK(status.remote && !status.remote->output_active && !status.owns);
+        CHECK(status.job && status.job->completed() && r.job && r.job->completed());
+      } else {
+        CHECK(!status.job && !r.job && !r.execution.cleanup_attempted);
+      }
     }
     CHECK(stream.peer->executions() == 2);
     std::cout << "Pinned Pico scheduler interoperability passed: two early "

@@ -7,7 +7,7 @@ shared `TransmissionRequest::slot`, compiler and transmission controller to the
 it does not use the legacy transmitter's wait-until-start execution path.
 
 The existing production configuration, legacy scheduler, GPIO callbacks and
-backend factory are unchanged. Production selection and status/configuration/UI
+backend factory are unchanged. Production selection and configuration/websocket/UI
 integration remain later work. The scheduler is an explicit typed developer API,
 built and tested by focused parent targets, with no CLI/INI/environment controls.
 
@@ -21,9 +21,9 @@ USB open, Console access or implicit fallback occurs in this scheduler.
 
 One owner thread calls `connect`, `submit`, `run`, `recover` and `disconnect`, and
 reads reports/backend evidence. `run` waits and executes synchronously on that
-owner; it creates no detached thread. Only `request_stop`, `invalidate_pending`
-and the atomic `phase` observation may run concurrently with `run`. Submission
-and connection management must be serialized with these notifications. The
+owner; it creates no detached thread. Only `request_stop`, `invalidate_pending`,
+the atomic `phase` observation and the copy-returning `status()` may run
+concurrently with `run`. Submission and connection management must be serialized with these notifications. The
 clock and stream must outlive the scheduler. Do not destroy it with `run` active.
 Destruction closes the local session; explicit cleanup/recovery is still required
 for remote output. A close is not an RF-off acknowledgment.
@@ -162,8 +162,9 @@ Its future follow-up must distinguish early preparation from on-device RF start,
 explain host/device clock prerequisites, pending versus committed reload, missed
 slots and blocked recovery, alongside endpoint selection and USB permissions.
 
-Next is production status/recovery and configuration/operator integration with
-this dedicated scheduler. Future UI must use Impeccable and the requested
+The [status/recovery boundary](wtp-status-recovery.md) now publishes coherent
+observations from this scheduler. Next is production configuration/operator
+integration with this dedicated scheduler. Future UI must use Impeccable and the requested
 UI-level development toggle. Production lifecycle integration, actual Linux USB,
 DTR/unplug behavior, firmware hardware execution, RF qualification and release
 readiness still require separate work and evidence. Phase 10 is not complete.

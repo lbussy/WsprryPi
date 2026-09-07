@@ -50,6 +50,11 @@ public:
   const std::string &diagnostic() const noexcept { return error_; }
 
 private:
+  friend class WtpScheduler;
+  // Owner-thread publication hook; no caller callback or transport activity.
+  std::function<void()> observation_;
+  std::optional<std::uint64_t> status_observed_ms_;
+  void observed();
   bool settle(std::uint64_t deadline, bool cancellable);
   bool pause(std::uint64_t deadline, bool cancellable);
   bool transact(wtp::Operation, wtp::RequestBody, std::uint64_t deadline,
@@ -71,6 +76,7 @@ private:
   std::optional<WtpPreparedPlan> prepared_;
   std::optional<wtp::TransactionResult> result_;
   std::vector<wtp::Adjustment> adjustments_;
+  std::string adjustments_job_id_;
   std::set<std::string> used_jobs_;
   std::string error_;
   bool loaded_{}, configured_{}, executed_{};

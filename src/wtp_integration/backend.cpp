@@ -40,8 +40,13 @@ WtpTransmitBackend::WtpTransmitBackend(WtpHostClock &clock,
     : clock_(clock), options_(std::move(options)), session_(options_),
       arm_admission_(std::move(arm_admission)) {}
 WtpTransmitBackend::~WtpTransmitBackend() { session_.disconnect(); }
+void WtpTransmitBackend::observed() {
+  if (observation_)
+    observation_();
+}
 bool WtpTransmitBackend::fail(std::string error) {
   error_ = std::move(error);
+  observed();
   return false;
 }
 std::uint64_t WtpTransmitBackend::deadline() const {
@@ -64,9 +69,18 @@ bool WtpTransmitBackend::settle(std::uint64_t end, bool cancellable) {
   for (;;) {
     if (clock_.now_ms() >= end)
       return fail("WTP operation deadline expired; output may be unknown");
+    const bool needed_status = session_.needs_status();
     session_.poll(clock_.now_ms());
-    while (auto result = session_.take_result())
+    if (needed_status && !session_.needs_status())
+      status_observed_ms_ = clock_.now_ms();
+    while (auto result = session_.take_result()) {
+      if (result->operation == wtp::Operation::Status &&
+          result->kind == wtp::ResultKind::Acknowledged &&
+          !session_.needs_status())
+        status_observed_ms_ = clock_.now_ms();
       result_ = std::move(result);
+    }
+    observed();
     auto phase = session_.phase();
     if (phase == wtp::SessionPhase::Disconnected ||
         phase == wtp::SessionPhase::Fault ||
@@ -90,6 +104,7 @@ bool WtpTransmitBackend::transact(wtp::Operation op, wtp::RequestBody body,
     return fail("WTP scheduler declined ARM admission");
   if (!session_.request(op, std::move(body), clock_.now_ms()))
     return fail(session_.diagnostic());
+  observed();
   if (!settle(end, cancellable))
     return false;
   if (!result_ || result_->operation != op ||
@@ -109,9 +124,14 @@ bool WtpTransmitBackend::connect(wtp::ByteStream &stream) {
   error_.clear();
   if (!session_.connect(stream, clock_.now_ms()))
     return fail(session_.diagnostic());
+  status_observed_ms_.reset();
+  observed();
   return settle(deadline(), false);
 }
-void WtpTransmitBackend::disconnect() { session_.disconnect(); }
+void WtpTransmitBackend::disconnect() {
+  session_.disconnect();
+  observed();
+}
 bool WtpTransmitBackend::schedule(WtpPlanOptions options) {
   if (prepared_ || session_.uncertain() || session_.safety_fault() ||
       session_.owns() || session_.busy() ||
@@ -199,6 +219,7 @@ WtpTransmitBackend::configure(const ExecutionPlan &plan,
   used_jobs_.insert(schedule_->job_id);
   prepared_ = std::move(converted.prepared);
   adjustments_.clear();
+  adjustments_job_id_.clear();
   if (!transact(wtp::Operation::Claim,
                 wtp::LeaseRequest{options_.owner_id,
                                   session_.capabilities()->maximum_lease_ms},
@@ -215,6 +236,7 @@ WtpTransmitBackend::configure(const ExecutionPlan &plan,
   }
   adjustments_ =
       std::get<wtp::LoadResponse>(result_->response->body).adjustments;
+  adjustments_job_id_ = prepared_->job.job_id;
   for (const auto &a : adjustments_) {
     const auto hz = static_cast<double>(a.realized_frequency_nhz) / 1e9;
     const auto policy_adjusted =
@@ -414,6 +436,7 @@ CleanupResult WtpTransmitBackend::clean() {
   schedule_.reset();
   loaded_ = false;
   configured_ = false;
+  error_.clear();
   return {true, {}};
 }
 CleanupResult WtpTransmitBackend::cleanup() noexcept {

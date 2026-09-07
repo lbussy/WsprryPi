@@ -55,9 +55,71 @@ std::optional<std::uint64_t> WtpSystemScheduleClock::utc_now_ns() const {
 WtpScheduler::WtpScheduler(WtpScheduleClock &clock, wtp::SessionOptions options)
     : clock_(clock),
       backend_(clock, std::move(options), [this] { return admit_arm(); }),
-      controller_(compiler_, backend_) {}
+      controller_(compiler_, backend_) {
+  backend_.observation_ = [this] { publish(); };
+  publish();
+}
+WtpRuntimeStatus WtpScheduler::status() const {
+  std::lock_guard lock(status_mutex_);
+  return status_;
+}
+void WtpScheduler::publish() {
+  const auto &session = backend_.session();
+  WtpRuntimeStatus next;
+  next.observed_ms = clock_.now_ms();
+  next.phase = phase();
+  next.session_phase = session.phase();
+  next.stop_requested = stopped_;
+  next.reload_requested = invalidated_;
+  next.uncertain = session.uncertain();
+  next.safety_fault = session.safety_fault();
+  next.recovery_required = next.phase == WtpSchedulePhase::Blocked;
+  next.identity = session.identity();
+  next.session_id = backend_.options_.session_id;
+  next.owner_id = backend_.options_.owner_id;
+  next.last_report = last_report_;
+  next.last_recovery = last_recovery_;
+  next.diagnostic = error_.empty() ? backend_.diagnostic() : error_;
+  next.session_diagnostic = session.diagnostic();
+  if (pending_) {
+    next.request_id = pending_->request.id;
+    next.job_id = pending_->options.job_id;
+    next.start_utc_ns = pending_->options.start_utc_ns;
+    next.dispatch_utc_ns = pending_->dispatch;
+    next.arm_handed_off = handed_off_;
+  } else if (last_report_) {
+    next.request_id = last_report_->request_id;
+    next.job_id = last_report_->job_id;
+    next.start_utc_ns = last_report_->start_utc_ns;
+    next.dispatch_utc_ns = last_report_->dispatch_utc_ns;
+    next.arm_handed_off = last_report_->arm_handed_off;
+  }
+  if (session.phase() == wtp::SessionPhase::Ready) {
+    next.capabilities = session.capabilities();
+    if (!session.needs_status()) {
+      next.remote = session.status();
+      next.status_observed_ms = backend_.status_observed_ms_;
+      next.owns = session.owns();
+      next.lease_valid = session.lease_valid(next.observed_ms);
+      if (const auto &e = session.job_evidence();
+          e && next.identity && e->job_id == next.job_id &&
+          e->device_id == next.identity->device_id &&
+          e->boot_id == next.identity->boot_id && e->authoritative)
+        next.job = e;
+    }
+  }
+  // Do not attach previous LOAD adjustments to a newly pending request.
+  if (!next.job_id.empty() && backend_.adjustments_job_id_ == next.job_id)
+    next.adjustments = backend_.adjustments();
+  else if (!pending_ && last_report_)
+    next.adjustments = last_report_->adjustments;
+  std::lock_guard lock(status_mutex_);
+  next.revision = status_.revision + 1;
+  status_ = std::move(next);
+}
 bool WtpScheduler::fail(std::string error) {
   error_ = std::move(error);
+  publish();
   return false;
 }
 bool WtpScheduler::connect(wtp::ByteStream &stream) {
@@ -65,6 +127,8 @@ bool WtpScheduler::connect(wtp::ByteStream &stream) {
     return fail("Cannot replace a stream while a WTP request is pending");
   if (!backend_.connect(stream))
     return fail(backend_.diagnostic());
+  error_.clear();
+  publish();
   return true; // Blocked remains blocked until explicit recover().
 }
 bool WtpScheduler::disconnect() {
@@ -149,6 +213,7 @@ bool WtpScheduler::submit(TransmissionRequest request, std::string job_id,
   invalidated_ = false;
   handed_off_ = false;
   phase_ = WtpSchedulePhase::Waiting;
+  publish();
   return true;
 }
 std::optional<std::uint64_t> WtpScheduler::observe() {
@@ -184,6 +249,7 @@ bool WtpScheduler::admit_arm() {
     return fail("WTP preparation consumed the ARM submission allowance; slot "
                 "will not run late");
   handed_off_ = true;
+  publish();
   return true; // Host UTC cannot move the job after this submission boundary.
 }
 WtpScheduleReport WtpScheduler::finish(WtpScheduleOutcome outcome,
@@ -203,11 +269,18 @@ WtpScheduleReport WtpScheduler::finish(WtpScheduleOutcome outcome,
   report.reload_deferred =
       invalidated_ && (phase() == WtpSchedulePhase::Preparing ||
                        phase() == WtpSchedulePhase::Executing);
+  publish();
+  const auto final_status = status();
+  report.identity = final_status.identity;
+  report.job = final_status.job;
+  report.adjustments = final_status.adjustments;
   pending_.reset();
   controller_.reset();
   phase_ = outcome == WtpScheduleOutcome::Blocked ? WtpSchedulePhase::Blocked
                                                   : WtpSchedulePhase::Idle;
   error_ = report.error;
+  last_report_ = report;
+  publish();
   return report;
 }
 WtpScheduleReport WtpScheduler::run() {
@@ -222,6 +295,7 @@ WtpScheduleReport WtpScheduler::run() {
   error_.clear();
   try {
     for (;;) {
+      publish();
       if (stopped_)
         return finish(WtpScheduleOutcome::Cancelled,
                       "Pending WTP request stopped before preparation");
@@ -252,6 +326,7 @@ WtpScheduleReport WtpScheduler::run() {
                                         WtpSchedulePhase::Preparing))
       return finish(WtpScheduleOutcome::Invalidated,
                     "Pending WTP request invalidated before commit");
+    publish();
     if (!backend_.schedule(pending_->options))
       return finish(WtpScheduleOutcome::Failed, backend_.diagnostic());
     if (stopped_) {
@@ -273,6 +348,7 @@ WtpScheduleReport WtpScheduler::run() {
                     prepared.error, result);
     }
     phase_ = WtpSchedulePhase::Executing;
+    publish();
     auto result = controller_.execute_prepared();
     auto outcome = !result.cleanup.ok ? WtpScheduleOutcome::Blocked
                    : result.ok        ? WtpScheduleOutcome::Complete
@@ -311,11 +387,19 @@ CleanupResult WtpScheduler::recover() {
   if (phase() != WtpSchedulePhase::Blocked)
     return {false, "WTP scheduler is not blocked"};
   auto cleanup = backend_.cleanup();
+  publish();
+  const auto recovery_status = status();
+  last_recovery_ = WtpRecoveryReport{
+      clock_.now_ms(), cleanup, recovery_status.request_id,
+      recovery_status.job_id, recovery_status.identity, recovery_status.job};
   if (cleanup.ok) {
     controller_.reset();
     phase_ = WtpSchedulePhase::Idle;
     error_.clear();
+  } else {
+    error_ = cleanup.error;
   }
+  publish();
   return cleanup;
 }
 } // namespace wsprrypi

@@ -1747,6 +1747,7 @@ help:
 	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire and session tests"
 	$(Q)echo "  wtp-plan-test           Run hardware-free WTP execution-plan conversion tests"
 	$(Q)echo "  wtp-scheduler-test      Run hardware-free early WTP scheduling tests"
+	$(Q)echo "  wtp-status-test         Run WTP status and explicit recovery tests"
 	$(Q)echo "  wtp-backend-test        Run hardware-free complete-plan WTP backend tests"
 	$(Q)echo "  wtp-usb-test            Run WTP USB adapter tests using fakes and PTYs only"
 	$(Q)echo "  gdb                     Debug with gdb"
@@ -1824,3 +1825,17 @@ wtp-scheduler-interop-test: wtp-backend-interop-test
 		"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/libwtp_client.a" "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference_bridge.o" \
 		$(WTP_BACKEND_REFERENCE_BUILD_DIR)/reference/*.o -o "$(WTP_BACKEND_REFERENCE_BUILD_DIR)/scheduler_reference_test"
 	$(Q)"$(WTP_BACKEND_REFERENCE_BUILD_DIR)/scheduler_reference_test"
+
+# Coherent cross-thread WTP status and explicit recovery reporting.
+WTP_STATUS_BUILD_DIR ?= build/wtp-status
+WTP_STATUS_CXXFLAGS ?= -O2 -g
+WTP_STATUS_LDFLAGS ?=
+.PHONY: wtp-status-test
+wtp-status-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_STATUS_BUILD_DIR)/client)" CXXFLAGS="$(WTP_STATUS_CXXFLAGS)"
+	$(Q)mkdir -p "$(WTP_STATUS_BUILD_DIR)"
+	$(Q)$(CXX) -std=c++20 -pthread -Wall -Wextra -Wpedantic -Werror $(WTP_STATUS_CXXFLAGS) -I. -IWTP-Client/include \
+		tests/wtp_status_test.cpp wtp_integration/status.cpp wtp_integration/scheduler.cpp wtp_integration/backend.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
+		"$(WTP_STATUS_BUILD_DIR)/client/libwtp_client.a" $(WTP_STATUS_LDFLAGS) -o "$(WTP_STATUS_BUILD_DIR)/wtp_status_test"
+	$(Q)"$(WTP_STATUS_BUILD_DIR)/wtp_status_test"
