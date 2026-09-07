@@ -22,9 +22,9 @@ It has no Pico SDK, application, OS, hardware or third-party runtime dependency.
   exact-byte recovery and authoritative STATUS reconciliation. See the
   [session API and recovery contract](SESSION.md).
 
-The application does not link or select this component yet. There is no WTP
-backend, endpoint discovery, USB I/O, Console time provisioning,
-scheduler integration, configuration or UI in these slices. The Session layer
+The production application does not select this component yet. The portable
+component itself contains no backend, endpoint discovery, USB I/O, Console time
+provisioning, scheduler integration, configuration or UI in these slices. The Session layer
 validates an `ARM` acknowledgment against its request and advertised clock bounds;
 the wire codec alone does not. Writing a frame does not establish acknowledgment.
 The codec preserves explicit active-output evidence in status, terminal
@@ -35,7 +35,9 @@ Phase 10 Slice 3 adds a separate parent application
 component's types without introducing a WSPR-Transmitter dependency here.
 Slice 4 adds the parent's [USB CDC transport](../../docs/wtp-usb-cdc.md), with
 Linux identity resolution and hardware-free POSIX tests. Neither adapter adds
-OS dependencies to this portable component.
+OS dependencies to this portable component. Slice 5 adds the parent's
+[complete-plan backend](../../docs/wtp-backend.md), tested through the shared
+transmitter controller. This component retains its standalone boundary.
 
 ## Building and testing
 
@@ -128,8 +130,8 @@ not reinterpret that value as permission for a shorter lease.
 
 ## Remaining Phase 10 prerequisites
 
-The next unfinished slice is application/backend integration. The USB CDC
-adapter is implemented but still needs physical target validation. No new job
+The next unfinished slice is early scheduler preparation and absolute-UTC
+handoff. The USB CDC adapter is implemented but still needs physical target validation. No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
 expired result or `JOB_NOT_FOUND`. The complete approved plan still governs
 those later slices; wire tests do not complete Phase 10.
@@ -149,8 +151,8 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slices 1–4. The separate `Wsprry_Pi_Docs` repository
-was reviewed and remains unchanged. Later backend/configuration/UI slices need
+No operator behavior changes in Slices 1–5. The separate `Wsprry_Pi_Docs` repository
+was reviewed and remains unchanged. Later scheduler/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,
 `docs/User_Interface/Setup/Transmitter/index.md`, and the applicable Operations

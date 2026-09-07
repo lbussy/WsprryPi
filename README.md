@@ -43,7 +43,9 @@ The [WTP-Client component](src/WTP-Client/README.md) provides the portable WTP/1
 wire and session foundation for Phase 10 Pico integration. The parent
 [execution-plan converter](docs/wtp-execution-plan.md) prepares complete finite
 WTP jobs, and the [USB CDC adapter](docs/wtp-usb-cdc.md) provides the Linux host
-transport. Hardware-free tests cover these layers; runtime/backend integration remains planned.
+transport. The [complete-plan backend](docs/wtp-backend.md) now composes these
+layers through the shared transmitter controller, with hardware-free tests.
+Early scheduler preparation and production/operator selection remain planned.
 
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
 and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the

@@ -20,6 +20,8 @@ bool compiled(wsprrypi::BackendKind backend)
         return WSPRRYPI_BACKEND_RP1_GPCLK;
     case wsprrypi::BackendKind::SI5351:
         return WSPRRYPI_BACKEND_SI5351;
+    case wsprrypi::BackendKind::WTP:
+        return false;
     case wsprrypi::BackendKind::SIMULATED:
         return WSPRRYPI_BACKEND_SIMULATED;
     }
@@ -55,6 +57,7 @@ int main()
         wsprrypi::BackendKind::RP1_GPCLK,
         wsprrypi::BackendKind::SI5351,
         wsprrypi::BackendKind::SIMULATED,
+        wsprrypi::BackendKind::WTP,
     };
 
     for (const auto backend : backends)
@@ -120,6 +123,11 @@ int main()
             throw std::runtime_error("unavailable GPIO cleanup was not a successful no-op");
         if (ledControl.toggleGPIO(true))
             throw std::runtime_error("unavailable GPIO assertion unexpectedly succeeded");
+
+        // Remaining INI fixtures specifically select Si5351. Its omission was
+        // already checked above; do not require it in the portable profile.
+        if (!WSPRRYPI_BACKEND_SI5351)
+            return 0;
 
         ArgParserConfig compatible_disabled_config;
         compatible_disabled_config.transmit_backend = TransmitBackendKind::SI5351;

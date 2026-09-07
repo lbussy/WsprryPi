@@ -27,9 +27,9 @@ jobs:
           make semantics-make-regression-test SUDO=
           make semantics-test-portable SUDO=
 
-      - name: Run WTP component, plan conversion and USB adapter tests
+      - name: Run WTP component, plan, USB adapter and backend tests
         working-directory: src
-        run: make wtp-protocol-test wtp-plan-test wtp-usb-test SUDO=
+        run: make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test SUDO=
 
       - name: Check container build export handling
         run: python3 scripts/tests/container_build_test.py
@@ -133,9 +133,9 @@ jobs:
           make backend-capabilities-make-regression-test SUDO=
           make debug SUDO=
 
-      - name: Run WTP component, plan conversion and USB adapter tests
+      - name: Run WTP component, plan, USB adapter and backend tests
         working-directory: src
-        run: make wtp-protocol-test wtp-plan-test wtp-usb-test SUDO=
+        run: make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test SUDO=
 
       - name: Run parent semantics and cleanup lifecycle tests
         working-directory: src
