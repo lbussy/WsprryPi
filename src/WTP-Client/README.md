@@ -23,12 +23,16 @@ It has no Pico SDK, application, OS, hardware or third-party runtime dependency.
   [session API and recovery contract](SESSION.md).
 
 The application does not link or select this component yet. There is no WTP
-backend, endpoint discovery, USB I/O, Console time provisioning, plan conversion,
+backend, endpoint discovery, USB I/O, Console time provisioning,
 scheduler integration, configuration or UI in these slices. The Session layer
 validates an `ARM` acknowledgment against its request and advertised clock bounds;
 the wire codec alone does not. Writing a frame does not establish acknowledgment.
 The codec preserves explicit active-output evidence in status, terminal
 records and events; a decoded terminal state is not a success verdict.
+
+Phase 10 Slice 3 adds a separate parent application
+[execution-plan converter](../../docs/wtp-execution-plan.md). It consumes this
+component's types without introducing a WSPR-Transmitter dependency here.
 
 ## Building and testing
 
@@ -121,8 +125,8 @@ not reinterpret that value as permission for a shorter lease.
 
 ## Remaining Phase 10 prerequisites
 
-The next unfinished slice is complete execution-plan conversion to finite WTP
-jobs, followed by the physical adapter and application/backend integration. No new job
+The next unfinished slice is the physical USB CDC adapter, followed by
+application/backend integration. No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
 expired result or `JOB_NOT_FOUND`. The complete approved plan still governs
 those later slices; wire tests do not complete Phase 10.
@@ -142,7 +146,7 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slices 1–2. The separate `Wsprry_Pi_Docs` repository
+No operator behavior changes in Slices 1–3. The separate `Wsprry_Pi_Docs` repository
 was reviewed and remains unchanged. Later backend/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,

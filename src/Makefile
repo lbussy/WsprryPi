@@ -1182,6 +1182,22 @@ semantics-make-regression-test:
 wtp-protocol-test:
 	$(Q)$(MAKE) --no-print-directory -C WTP-Client test
 
+# Pure parent adapter tests. Kept outside automatic production source discovery
+# until WTP backend integration is approved. No transport or hardware is opened.
+WTP_PLAN_BUILD_DIR ?= build/wtp-plan
+WTP_PLAN_CXXFLAGS ?= -O2 -g
+WTP_PLAN_LDFLAGS ?=
+.PHONY: wtp-plan-test
+wtp-plan-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_PLAN_BUILD_DIR)/client)" CXXFLAGS="$(WTP_PLAN_CXXFLAGS)"
+	$(Q)mkdir -p "$(WTP_PLAN_BUILD_DIR)"
+	$(Q)$(CXX) -std=c++20 -Wall -Wextra -Wpedantic -Werror $(WTP_PLAN_CXXFLAGS) -I. -IWTP-Client/include \
+		tests/wtp_execution_plan_test.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp "$(WTP_PLAN_BUILD_DIR)/client/libwtp_client.a" \
+		$(WTP_PLAN_LDFLAGS) -o "$(WTP_PLAN_BUILD_DIR)/wtp_execution_plan_test"
+	$(Q)"$(WTP_PLAN_BUILD_DIR)/wtp_execution_plan_test"
+	$(Q)python3 -B tests/wtp_frequency_vectors.py "$(WTP_PLAN_BUILD_DIR)/wtp_execution_plan_test"
+
 backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
 	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
 
@@ -1716,7 +1732,8 @@ help:
 	$(Q)echo "  test                    Run tests"
 	$(Q)echo "  semantics-test          Run the full Linux semantics suite (requires gpiod.hpp)"
 	$(Q)echo "  semantics-test-portable Run the simulated-only portable semantics subset"
-	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire component tests"
+	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire and session tests"
+	$(Q)echo "  wtp-plan-test           Run hardware-free WTP execution-plan conversion tests"
 	$(Q)echo "  gdb                     Debug with gdb"
 	$(Q)echo "  test-tone               Run the binary with a test tone"
 	$(Q)echo "  test-oneshot            Run the binary with one iteration"

@@ -27,9 +27,9 @@ jobs:
           make semantics-make-regression-test SUDO=
           make semantics-test-portable SUDO=
 
-      - name: Run WTP protocol and session component tests
+      - name: Run WTP component and execution-plan conversion tests
         working-directory: src
-        run: make wtp-protocol-test SUDO=
+        run: make wtp-protocol-test wtp-plan-test SUDO=
 
       - name: Check container build export handling
         run: python3 scripts/tests/container_build_test.py
@@ -133,9 +133,9 @@ jobs:
           make backend-capabilities-make-regression-test SUDO=
           make debug SUDO=
 
-      - name: Run WTP protocol and session component tests
+      - name: Run WTP component and execution-plan conversion tests
         working-directory: src
-        run: make wtp-protocol-test SUDO=
+        run: make wtp-protocol-test wtp-plan-test SUDO=
 
       - name: Run parent semantics and cleanup lifecycle tests
         working-directory: src
