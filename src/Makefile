@@ -1251,7 +1251,7 @@ semantics-test-portable:
 	$(Q)$(MAKE) --no-print-directory semantics-test-portable-profile \
 		BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
 
-semantics-test-portable-profile: i2c-bus-inventory-test i2c-bus-selection-test backend-capabilities-regression-test backend-capabilities-make-regression-test debug band-lookup-correlation-test chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test websocket-lifecycle-test web-server-network-lifecycle-test $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
+semantics-test-portable-profile: idle-startup-policy-test i2c-bus-inventory-test i2c-bus-selection-test backend-capabilities-regression-test backend-capabilities-make-regression-test debug band-lookup-correlation-test chipset-offsets-test mailbox-memory-flag-test legacy-gpio-clock-model-test gpio-frequency-correction-test websocket-lifecycle-test web-server-network-lifecycle-test $(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT) $(BIN_DIR)/$(GPIO_BAND_POLICY_TEST_OUT)
 	$(Q)echo "Running portable UI/source regression tests."
 	$(Q)./$(BIN_DIR)/$(UI_SOURCE_REGRESSION_TEST_OUT)
 	$(Q)echo "Running portable GPIO band fail-closed policy tests."
@@ -1621,6 +1621,7 @@ $(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT): tests/rp1_gpclk_route_service_te
 rp1-gpclk-route-service-test: $(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(RP1_GPCLK_ROUTE_SERVICE_TEST_OUT)
 	$(Q)python3 ../scripts/tests/route_application_test.py
+	$(Q)python3 ../scripts/tests/runtime_reconcile_test.py
 
 $(BIN_DIR)/$(RP1_GPCLK_TRANSMIT_BACKEND_TEST_OUT): WSPR-Transmitter/src/rp1_gpclk_transmit_backend_test.cpp WSPR-Transmitter/src/rp1_gpclk_transmit_backend.cpp WSPR-Transmitter/src/rp1_gpclk_development_policy.cpp WSPR-Transmitter/src/rp1_gpclk_event_program.cpp WSPR-Transmitter/src/rp1_gpclk_backend.cpp WSPR-Transmitter/src/rp1_gpclk_linux_provider.cpp WSPR-Transmitter/src/rp1_gpclk_planner.cpp WSPR-Transmitter/src/rp1_gpclk_reconciliation.cpp Chipset-Offsets/src/chipset_offsets.hpp
 	$(Q)mkdir -p $(BIN_DIR)
@@ -1733,3 +1734,7 @@ $(BIN_DIR)/i2c_bus_inventory_test: tests/i2c_bus_inventory_test.cpp i2c_bus_inve
 
 i2c-bus-selection-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT)
 	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT) --i2c-bus-selection-only
+
+.PHONY: idle-startup-policy-test
+idle-startup-policy-test: $(BIN_DIR)/$(SEMANTICS_TEST_OUT)
+	$(Q)./$(BIN_DIR)/$(SEMANTICS_TEST_OUT) --idle-startup-overrides-only

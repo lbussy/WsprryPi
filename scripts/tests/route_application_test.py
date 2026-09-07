@@ -104,7 +104,7 @@ class Tests(unittest.TestCase):
         function = source.split('manage_route_application() {', 1)[1].split('\n}\n', 1)[0]
         function = 'manage_route_application() {'+function+'\n}\n'
         for dry_run in ('true', 'false'):
-            script = ('install() { printf "%s\\n" "$*"; }\n'+function+
+            script = ('python3() { printf "%s\\n" "$*"; }\n'+'install() { printf "%s\\n" "$*"; }\n'+function+
                 'ACTION=install\nLOCAL_REPO_DIR=/selected-checkout\nDRY_RUN='+dry_run+
                 '\nmanage_route_application\n')
             result = subprocess.check_output(['bash', '-c', script], text=True, cwd='/tmp')

@@ -1686,7 +1686,8 @@ bool apply_enable_on_boot_startup_policy()
 {
     // A route restoration restarts the application, never its transmission.
     // This startup-only override leaves the saved boot preference unchanged.
-    if (std::getenv("WSPRRYPI_ROUTE_RESTORE_IDLE") != nullptr)
+    if (std::getenv("WSPRRYPI_ROUTE_RESTORE_IDLE") != nullptr ||
+        std::getenv("WSPRRYPI_RP1_REBOOT_IDLE") != nullptr)
     {
         config.transmit = false;
         config_to_json();

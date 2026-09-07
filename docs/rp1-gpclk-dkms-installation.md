@@ -7,6 +7,25 @@ lifecycle, select a GPIO route during installation, edit boot configuration, or
 enable output. A source or release that implements the reviewed runtime contract
 is activated only to route-neutral controller and manager administration.
 
+## Startup integration
+
+The selected application checkout installs `runtime_reconcile.py`, its
+application-owned installer support, `wsprrypi-rp1-reconcile.service`, and the
+`92-rp1-reconcile.conf` application drop-in through
+`scripts/install_runtime_reconcile.py install`. The normal installer and
+`scripts/copy_exe.py` invoke that helper. It records a fixed file inventory under
+`/var/lib/wsprrypi/rp1-startup-files.json`, preserves foreign files, and permits
+exact interrupted-installation retries. `remove` removes only that recorded
+inventory; neither operation starts a service or selects a route.
+
+Normal reboot recovery requires a provider supporting version-3 post-reboot
+activation plans and an application binary with the separate reboot-idle flag.
+A provider-only update does not supply this orchestration. See the
+[runtime workflow](runtime-route-workflow.md) for route and idle policy. Provider
+updates and rollback still use exact source/bundle provenance and the existing
+installation workflow; historical session values in installation provenance do
+not assert current-boot ownership.
+
 ## Selection
 
 `INSTALL_RP1_GPCLK_DKMS` accepts exactly:

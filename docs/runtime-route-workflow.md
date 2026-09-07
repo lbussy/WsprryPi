@@ -32,6 +32,27 @@ in idle mode; a previously stopped or administrator-masked application stays
 stopped. Saved `Enable on Boot` preferences and unrelated configuration remain
 unchanged. A stopped application's first subsequent startup is also idle.
 
+On a clean reboot, the application-owned `wsprrypi-rp1-reconcile.service`
+obtains fresh public provider activation and route plans. It runs outside the
+application service because neutral activation and route restoration stop and
+restart WsprryPi. A complete terminal prior-boot selection must match the saved
+GPIO4 or GPIO20 route. Neutral state or completed removal does not implicitly
+select a route. Ambiguous history, changed identities, a changed saved route,
+an intentionally stopped application, or an administrator mask fails closed.
+
+The startup pre-hook reads attributable history without querying the manager
+socket. If provider state is temporarily absent during installation or is
+unproven, the application can still start idle for diagnostics; the worker
+refuses administration until ownership is established. `WSPRRYPI_RP1_REBOOT_IDLE` keeps bootstrap startup idle and skips an
+obsolete route-readiness acknowledgement. It is distinct from the manager's
+fresh restoration token. Once the new route is restored, normal startup must
+acknowledge that exact token. Both flags keep transmission disabled without
+changing the saved boot preference. A checkpoint under
+`/var/lib/wsprrypi/rp1-runtime-reconcile.json` binds the current boot, provider
+binding, activation-plan digest and saved route across worker interruption.
+Unsupported or interrupted provider hardware transitions retain their evidence
+for the provider's explicit recovery path.
+
 The browser may disconnect when its application stops. The Setup route-status
 dialog remains open, treats this interruption as expected, and retries read-only
 status queries with bounded backoff after the application restarts. It never
@@ -52,7 +73,8 @@ authorization.
 `runtime_route_client.py restore --execute` retries incomplete application
 restoration on the installed route without repeating overlay removal/application.
 An interrupted route change requires `recover --execute`, followed by a new
-explicit switch. Prior-boot state is never used to restart automatically.
+explicit switch. Prior-boot ownership and transmission intent are never reused.
+Normal clean-reboot reconciliation uses the separately described startup worker.
 Transmission is not resumed by either switching or restoration. The normal
 operator controls and application-owned RP1 operation authorization remain
 available; the kernel endpoint does not receive an authorization credential.
@@ -83,7 +105,7 @@ manual deployment must be reviewed during installation; it is not automatically
 removed or assumed to belong to this workflow.
 
 The startup-only `WSPRRYPI_ROUTE_RESTORE_IDLE` environment value is supplied by
-the manager's owned drop-in. It is not a transmission permit or operator setting.
+the manager's owned drop-in for a current route transaction. It is not a transmission permit or operator setting.
 Startup forces `Transmit=false` while preserving the stored boot preference;
 the token binds the application's readiness acknowledgement to this transaction.
 
