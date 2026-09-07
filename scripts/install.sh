@@ -7212,6 +7212,9 @@ manage_route_application() {
         install -d -o root -g root -m 0755 /usr/local/lib/wsprrypi || return 1
         install -o root -g root -m 0755 "${LOCAL_REPO_DIR}/scripts/route_application.py" \
             /usr/local/lib/wsprrypi/route_application.py || return 1
+        python3 "${LOCAL_REPO_DIR}/scripts/install_runtime_reconcile.py" install || return 1
+    elif [[ "$ACTION" == "uninstall" && "$DRY_RUN" != "true" ]]; then
+        python3 "${LOCAL_REPO_DIR}/scripts/install_runtime_reconcile.py" remove || return 1
     fi
 }
 

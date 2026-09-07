@@ -869,7 +869,10 @@ bool wspr_loop()
         }
     }
 
-    if (const char *restoration = std::getenv("WSPRRYPI_ROUTE_RESTORE_IDLE"))
+    // Reboot bootstrap has no current route transaction to acknowledge. The
+    // separate worker restores the route and restarts us with its fresh token.
+    if (const char *restoration = std::getenv("WSPRRYPI_ROUTE_RESTORE_IDLE");
+        restoration && std::getenv("WSPRRYPI_RP1_REBOOT_IDLE") == nullptr)
     {
         const auto listener_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (start_web && !webServer.isListening() &&

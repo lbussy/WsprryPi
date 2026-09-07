@@ -103,6 +103,7 @@ def main():
         run(["sudo", "install", "-d", "-o", "root", "-g", "root", "-m", "0755", "/usr/local/lib/wsprrypi"])
         install_file(git_root / "scripts" / "route_application.py",
                      Path("/usr/local/lib/wsprrypi/route_application.py"))
+        run(["sudo", "python3", str(git_root / "scripts" / "install_runtime_reconcile.py"), "install"])
         install_file(source, INSTALL_PATH)
     finally:
         if was_active:

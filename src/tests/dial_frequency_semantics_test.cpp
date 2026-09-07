@@ -661,8 +661,42 @@ void test_explicit_tone_experimental_policy()
 
 } // namespace
 
+void test_idle_startup_overrides()
+{
+    for (const char *flag : {"WSPRRYPI_ROUTE_RESTORE_IDLE", "WSPRRYPI_RP1_REBOOT_IDLE"})
+    {
+        setenv(flag, "offline-restoration", 1);
+        for (auto policy : {EnableOnBootBehavior::Never,
+                            EnableOnBootBehavior::Follow,
+                            EnableOnBootBehavior::Always})
+        {
+            init_default_config();
+            config.use_ini = true;
+            config.ini_filename = "/tmp/route_restoration_startup.ini";
+            write_text_file(config.ini_filename, "");
+            iniFile.set_filename(config.ini_filename);
+            config.enable_on_boot = policy;
+            config.transmit = true;
+            config_to_json();
+            json_to_ini();
+            apply_enable_on_boot_startup_policy();
+            require(!config.transmit &&
+                iniFile.getData().at("Operation").at("Transmit") == "false",
+                "Idle startup must disable and persist transmission for every boot policy");
+            require(config.enable_on_boot == policy,
+                "Idle startup must preserve the saved boot preference");
+        }
+        unsetenv(flag);
+    }
+}
+
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && std::string(argv[1]) == "--idle-startup-overrides-only")
+    {
+        test_idle_startup_overrides();
+        return EXIT_SUCCESS;
+    }
     if (argc == 2 && std::string(argv[1]) == "--i2c-bus-selection-only")
     {
         init_config_json();
@@ -5000,18 +5034,7 @@ int main(int argc, char *argv[])
             "/tmp/enable_on_boot_startup_always.ini",
             "Enable on Boot Always must enable and persist Operation.Transmit on startup");
 
-        setenv("WSPRRYPI_ROUTE_RESTORE_IDLE", "offline-restoration", 1);
-        for (auto policy : {EnableOnBootBehavior::Never,
-                            EnableOnBootBehavior::Follow,
-                            EnableOnBootBehavior::Always})
-        {
-            exercise_startup_policy(policy, true, false,
-                "/tmp/route_restoration_startup.ini",
-                "Route restoration must persist idle startup for every boot policy");
-            require(config.enable_on_boot == policy,
-                "Route restoration must preserve the saved boot preference");
-        }
-        unsetenv("WSPRRYPI_ROUTE_RESTORE_IDLE");
+        test_idle_startup_overrides();
 
         auto exercise_managed_startup_gate =
             [](EnableOnBootBehavior behavior,
