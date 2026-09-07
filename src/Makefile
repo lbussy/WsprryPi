@@ -1178,6 +1178,10 @@ backend-capabilities-make-regression-test:
 semantics-make-regression-test:
 	$(Q)python3 $(SEMANTICS_MAKE_REGRESSION_TEST)
 
+.PHONY: wtp-protocol-test
+wtp-protocol-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client test
+
 backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
 	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
 
@@ -1712,6 +1716,7 @@ help:
 	$(Q)echo "  test                    Run tests"
 	$(Q)echo "  semantics-test          Run the full Linux semantics suite (requires gpiod.hpp)"
 	$(Q)echo "  semantics-test-portable Run the simulated-only portable semantics subset"
+	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire component tests"
 	$(Q)echo "  gdb                     Debug with gdb"
 	$(Q)echo "  test-tone               Run the binary with a test tone"
 	$(Q)echo "  test-oneshot            Run the binary with one iteration"
