@@ -1198,6 +1198,18 @@ wtp-plan-test:
 	$(Q)"$(WTP_PLAN_BUILD_DIR)/wtp_execution_plan_test"
 	$(Q)python3 -B tests/wtp_frequency_vectors.py "$(WTP_PLAN_BUILD_DIR)/wtp_execution_plan_test"
 
+WTP_USB_BUILD_DIR ?= build/wtp-usb
+WTP_USB_CXXFLAGS ?= -O2 -g
+WTP_USB_LDFLAGS ?=
+.PHONY: wtp-usb-test
+wtp-usb-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_USB_BUILD_DIR)/client)" CXXFLAGS="$(WTP_USB_CXXFLAGS)"
+	$(Q)mkdir -p "$(WTP_USB_BUILD_DIR)"
+	$(Q)$(CXX) -std=c++20 -Wall -Wextra -Wpedantic -Werror $(WTP_USB_CXXFLAGS) -I. -IWTP-Client/include \
+		tests/wtp_usb_cdc_test.cpp wtp_integration/usb_cdc.cpp "$(WTP_USB_BUILD_DIR)/client/libwtp_client.a" \
+		$(WTP_USB_LDFLAGS) -o "$(WTP_USB_BUILD_DIR)/wtp_usb_cdc_test"
+	$(Q)"$(WTP_USB_BUILD_DIR)/wtp_usb_cdc_test"
+
 backend-profile-factory-test: $(BACKEND_PROFILE_FACTORY_TEST_BIN)
 	$(Q)./$(BACKEND_PROFILE_FACTORY_TEST_BIN)
 
@@ -1734,6 +1746,7 @@ help:
 	$(Q)echo "  semantics-test-portable Run the simulated-only portable semantics subset"
 	$(Q)echo "  wtp-protocol-test       Run standalone WTP/1 wire and session tests"
 	$(Q)echo "  wtp-plan-test           Run hardware-free WTP execution-plan conversion tests"
+	$(Q)echo "  wtp-usb-test            Run WTP USB adapter tests using fakes and PTYs only"
 	$(Q)echo "  gdb                     Debug with gdb"
 	$(Q)echo "  test-tone               Run the binary with a test tone"
 	$(Q)echo "  test-oneshot            Run the binary with one iteration"

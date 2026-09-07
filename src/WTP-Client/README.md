@@ -33,6 +33,9 @@ records and events; a decoded terminal state is not a success verdict.
 Phase 10 Slice 3 adds a separate parent application
 [execution-plan converter](../../docs/wtp-execution-plan.md). It consumes this
 component's types without introducing a WSPR-Transmitter dependency here.
+Slice 4 adds the parent's [USB CDC transport](../../docs/wtp-usb-cdc.md), with
+Linux identity resolution and hardware-free POSIX tests. Neither adapter adds
+OS dependencies to this portable component.
 
 ## Building and testing
 
@@ -125,8 +128,8 @@ not reinterpret that value as permission for a shorter lease.
 
 ## Remaining Phase 10 prerequisites
 
-The next unfinished slice is the physical USB CDC adapter, followed by
-application/backend integration. No new job
+The next unfinished slice is application/backend integration. The USB CDC
+adapter is implemented but still needs physical target validation. No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
 expired result or `JOB_NOT_FOUND`. The complete approved plan still governs
 those later slices; wire tests do not complete Phase 10.
@@ -146,7 +149,7 @@ belong to the UI slice, including the mandatory Impeccable review.
 ## Documentation impact
 
 This README and the parent development link document the new developer API.
-No operator behavior changes in Slices 1–3. The separate `Wsprry_Pi_Docs` repository
+No operator behavior changes in Slices 1–4. The separate `Wsprry_Pi_Docs` repository
 was reviewed and remains unchanged. Later backend/configuration/UI slices need
 separately authorized updates to `docs/Command_Line_Operations/transmitter_backends.md`,
 `docs/Advanced_Operations/ini_configuration/transmitter_backends.md`,

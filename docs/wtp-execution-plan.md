@@ -139,8 +139,8 @@ considered and remains unchanged. Later operator integration needs separately
 authorized documentation for endpoint identity, finite jobs, unsupported
 features, clock prerequisites and truthful cancellation/output-unknown status.
 
-The next unfinished slice is the physical USB CDC transport adapter. Backend
-selection, early scheduler preparation, runtime status/recovery and operator
-integration remain later work. Future UI work still requires a temporary
+The [USB CDC transport adapter](wtp-usb-cdc.md) is implemented in Slice 4.
+Backend integration is next; early scheduler preparation, runtime status/recovery
+and operator integration remain required. Future UI work still requires a temporary
 UI-level development toggle and Impeccable review. Physical USB behavior,
 device timing, RF output and release readiness remain unqualified by these tests.
