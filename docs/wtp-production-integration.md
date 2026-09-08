@@ -3,20 +3,33 @@
 WsprryPi can explicitly select a Pico WTP/1 endpoint using persisted settings
 and `--backend wtp`. The parent application owns the complete-job scheduler,
 worker, Linux USB CDC adapter and explicit recovery lifecycle. The web interface
-can reveal Pico settings through a temporary development toggle. This is
+can reveal Pico settings through a browser-console boolean. This is
 implemented software integration; physical USB, target lifecycle, timing and RF
 qualification remain separate acceptance work.
 
 ## Selection and configuration
 
-Select **Show Pico development controls** on Signal Setup's Transmitter tab.
-The switch defaults off and is stored only in that browser's local storage.
+On Signal Setup, open the browser's developer console and assign:
+
+```js
+window.WtpUi.developmentControlsVisible = true;  // Show Pico controls.
+window.WtpUi.developmentControlsVisible = false; // Hide Pico controls.
+```
+
+The boolean updates the Transmitter tab immediately; there is no visible
+visibility switch. Read `window.WtpUi.developmentControlsVisible` to check it.
+Only boolean values are accepted (not strings such as `"false"`). It defaults to
+false and persists across reloads in that browser's local storage, using the
+existing preference. If browser storage is unavailable, it lasts for the page
+session only.
+
 **Use Pico over USB** is the separate, persisted backend selection. Hiding the
-controls preserves saved selection and field drafts; a selected Pico remains
-identified beside the switch. Visibility changes do not save configuration,
-enable transmission, select another output or clear recovery faults. This
-temporary switch is for development and is not intended as a permanent operator
-feature.
+controls preserves saved selection and field drafts; a passive notice identifies
+Pico when it remains selected. Visibility changes do not save configuration,
+enable transmission, select another output, reconcile the device or clear
+recovery faults. Status polling continues while Pico is selected, even when its
+controls are hidden. This console preference is a development convenience, not
+an access-control boundary.
 
 An explicit endpoint requires all of the following:
 

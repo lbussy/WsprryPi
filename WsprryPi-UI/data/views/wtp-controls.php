@@ -1,11 +1,6 @@
 <?php // SPDX-License-Identifier: MIT ?>
-<div class="wtp-development mt-3">
-    <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" role="switch" id="wtp_visible" aria-controls="wtp-controls" aria-describedby="wtp-visibility-hint">
-        <label class="form-check-label" for="wtp_visible">Show Pico development controls</label>
-    </div>
-    <p class="form-text mb-0" id="wtp-visibility-hint">Browser-only preference. Hiding controls keeps the saved output selection.</p>
-    <p id="wtp-hidden-selection" class="form-text mt-2 mb-0" hidden>Pico is selected. Enable development controls to edit its settings or reconcile its state.</p>
+<div id="wtp-development" class="wtp-development mt-3" hidden>
+    <p id="wtp-hidden-selection" class="form-text mt-2 mb-0" hidden>Pico is selected. Its development controls are hidden.</p>
     <section id="wtp-controls" class="transmitter-backend-fields" aria-labelledby="wtp-heading" hidden>
         <h3 id="wtp-heading" class="transmitter-backend-fields__title">Pico output</h3>
         <div class="form-check form-switch mb-3">

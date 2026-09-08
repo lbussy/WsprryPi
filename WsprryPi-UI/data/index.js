@@ -730,7 +730,7 @@ function bindIndexActions() {
 
     $("#wsprform").on(
         "change input",
-        'input:not(#transmit, #wtp_visible, [name="mode_toggle"], [name="qrss_type"]), select:not(#tx_pin), textarea',
+        'input:not(#transmit, [name="mode_toggle"], [name="qrss_type"]), select:not(#tx_pin), textarea',
         scheduleAutosave
     );
 
@@ -2333,7 +2333,9 @@ function updateBackendPlatformSupportUi() {
 
     $backend.prop("disabled", currentBackend === "wtp" || !anyBackendSupported);
     $selectorHint.text(
-        currentBackend === "wtp" ? "Pico is selected below. Turn off Use Pico over USB to choose GPIO or Si5351." :
+        currentBackend === "wtp" ? (window.WtpUi.developmentControlsVisible
+            ? "Pico is selected below. Turn off Use Pico over USB to choose GPIO or Si5351."
+            : "GPIO and Si5351 selection is unavailable while Pico is in use.") :
         rp1RouteSelectable && !gpioSupported
             ? rp1RouteSelectorHint()
             : isRp1GpioPlatform() && !rp1GpioOperatorVisible()

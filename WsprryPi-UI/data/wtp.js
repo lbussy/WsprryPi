@@ -73,7 +73,7 @@
         if (!byId("wtp-controls")) return;
         byId("wtp-controls").hidden = !visible;
         byId("wtp-hidden-selection").hidden = visible || !selected();
-        byId("wtp_visible").setAttribute("aria-expanded", String(visible));
+        byId("wtp-development").hidden = !visible && !selected();
         byId("wtp_use").disabled = !visible;
         root.document.querySelectorAll("[data-wtp-key]").forEach(field => { field.disabled = !visible || !selected(); });
         const state = summarize(snapshot);
@@ -129,7 +129,17 @@
         });
         render();
     }
+    try { visible = root.localStorage.getItem(storageKey) === "true"; } catch (_) { /* Preference is optional. */ }
     root.WtpUi = { selected, read, validate, populate,
+        get developmentControlsVisible() { return visible; },
+        set developmentControlsVisible(value) {
+            if (typeof value !== "boolean") throw new TypeError("developmentControlsVisible must be a boolean.");
+            visible = value;
+            try { root.localStorage.setItem(storageKey, String(visible)); } catch (_) { /* Keep session preference. */ }
+            if (!initialized) return;
+            render();
+            if (visible || selected()) request(); else clearTimeout(timer);
+        },
         select(value) { if (byId("wtp_use")) byId("wtp_use").checked = value; render(); if (initialized && !busy) request(); },
         unavailable() {
             if (!selected()) return "";
@@ -139,17 +149,9 @@
         }
     };
     function init() {
-        if (!byId("wtp_visible")) return;
+        if (!byId("wtp-controls")) return;
         initialized = true;
-        try { visible = root.localStorage.getItem(storageKey) === "true"; } catch (_) { /* Preference is optional. */ }
-        byId("wtp_visible").checked = visible;
         populate(saved);
-        byId("wtp_visible").addEventListener("change", () => {
-            visible = byId("wtp_visible").checked;
-            try { root.localStorage.setItem(storageKey, String(visible)); } catch (_) { /* Keep session preference. */ }
-            render();
-            if (visible || selected()) request(); else clearTimeout(timer);
-        });
         byId("wtp_use").addEventListener("change", () => { render(); root.clickTransmitBackend?.(); request(); });
         byId("wtp-recover").addEventListener("click", () => request(true));
         root.addEventListener("pagehide", () => { closed = true; clearTimeout(timer); });

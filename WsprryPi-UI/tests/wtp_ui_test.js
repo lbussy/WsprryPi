@@ -17,29 +17,48 @@ assert.match(summarize({ ...status, recovery_required: true }).text, /unresolved
 assert.equal(summarize({ ...status, worker_active: true }).recover, false);
 assert.equal(summarize({ ...status, session_phase: "identity_changed" }).recover, false);
 assert.match(summarize({ ...status, remote: { output_active: true } }).output, /^Active/); // historical completion cannot override current output
-const fields = new Map();
-function field(id, key, type = "text") {
-    const f = { id, dataset: key ? { wtpKey: key } : {}, type, value: "", checked: false, disabled: false, hidden: false, listeners: {}, textContent: "", setCustomValidity(v) { this.validityMessage = v; }, setAttribute() {}, addEventListener(name, fn) { this.listeners[name] = fn; } };
-    fields.set(id, f); return f;
+const markup = fs.readFileSync(path.join(__dirname, "../data/views/wtp-controls.php"), "utf8");
+assert.doesNotMatch(markup, /wtp_visible|Show Pico development controls|wtp-visibility-hint/);
+function browser(storage = new Map(), storageBlocked = false) {
+    const fields = new Map();
+    function field(id, key, type = "text") {
+        const f = { id, dataset: key ? { wtpKey: key } : {}, type, value: "", checked: false, disabled: false, hidden: false, listeners: {}, textContent: "", setCustomValidity(v) { this.validityMessage = v; }, setAttribute() {}, addEventListener(name, fn) { this.listeners[name] = fn; } };
+        fields.set(id, f); return f;
+    }
+    for (const id of ["wtp-development", "wtp_use", "wtp-controls", "wtp-hidden-selection", "wtp-status-text", "wtp-output", "wtp-clock", "wtp-identity", "wtp-history", "wtp-recover", "wtp-feedback"]) field(id);
+    for (const [key, value] of Object.entries(defaults)) field(key, key, typeof value === "number" ? "number" : typeof value === "boolean" ? "checkbox" : "text");
+    const writes = [], calls = [], events = {}, timers = new Map();
+    let nextTimer = 0;
+    let response = status;
+    const root = { document: { readyState: "loading", getElementById: id => fields.get(id), querySelectorAll: () => [...fields.values()].filter(f => f.dataset.wtpKey), addEventListener: (name, fn) => { events[name] = fn; } }, localStorage: { getItem: k => { if (storageBlocked) throw new Error("Storage blocked"); return storage.get(k); }, setItem: (k, v) => { if (storageBlocked) throw new Error("Storage blocked"); storage.set(k, v); writes.push(v); } }, addEventListener() {}, fetch: async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => response }; } };
+    const context = { window: root, AbortController, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: id => timers.delete(id), console };
+    vm.runInNewContext(source, context);
+    return { root, fields, calls, writes, events, timers };
 }
-for (const id of ["wtp_visible", "wtp_use", "wtp-controls", "wtp-hidden-selection", "wtp-status-text", "wtp-output", "wtp-clock", "wtp-identity", "wtp-history", "wtp-recover", "wtp-feedback"]) field(id);
-for (const [key, value] of Object.entries(defaults)) field(key, key, typeof value === "number" ? "number" : typeof value === "boolean" ? "checkbox" : "text");
-const writes = [], calls = [], events = {}, storage = new Map();
-let response = status;
-const root = { document: { readyState: "loading", getElementById: id => fields.get(id), querySelectorAll: () => [...fields.values()].filter(f => f.dataset.wtpKey), addEventListener: (name, fn) => { events[name] = fn; } }, localStorage: { getItem: k => storage.get(k), setItem: (k, v) => { storage.set(k, v); writes.push(v); } }, addEventListener() {}, fetch: async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => response }; } };
-const context = { window: root, AbortController, setTimeout: () => 1, clearTimeout() {}, console };
-vm.runInNewContext(source, context);
 (async () => {
+    const storage = new Map();
+    const { root, fields, calls, writes, events, timers } = browser(storage);
     events.DOMContentLoaded();
-    assert.equal(fields.get("wtp_visible").checked, false);
+    assert.equal(root.WtpUi.developmentControlsVisible, false);
+    assert.equal(fields.get("wtp-development").hidden, true);
+    assert.equal(calls.length, 0);
+    for (const invalid of ["false", "true", 0, 1, null, undefined, {}, []]) {
+        assert.throws(() => { root.WtpUi.developmentControlsVisible = invalid; }, /must be a boolean/);
+        assert.equal(root.WtpUi.developmentControlsVisible, false);
+    }
+    assert.equal(writes.length, 0);
+    assert.equal(calls.length, 0);
     assert.equal(fields.get("wtp-controls").hidden, true);
     root.WtpUi.populate(settings); root.WtpUi.select(true);
     await new Promise(setImmediate);
     assert.equal(root.WtpUi.selected(), true);
     assert.equal(fields.get("wtp-hidden-selection").hidden, false);
     for (const visible of [true, false, true]) {
-        fields.get("wtp_visible").checked = visible;
-        fields.get("wtp_visible").listeners.change();
+        root.WtpUi.developmentControlsVisible = visible;
+        assert.equal(root.WtpUi.developmentControlsVisible, visible);
+        assert.equal(fields.get("wtp-controls").hidden, !visible);
+        assert.equal(fields.get("wtp_use").disabled, !visible);
+        assert.equal(fields.get("wtp-hidden-selection").hidden, visible);
         await new Promise(setImmediate);
         assert.equal(root.WtpUi.selected(), true);
         assert.equal(JSON.stringify(root.WtpUi.read()), JSON.stringify(settings));
@@ -48,8 +67,34 @@ vm.runInNewContext(source, context);
     assert.deepEqual(writes, ["true", "false", "true"]);
     fields.get("USB Serial").value = "";
     assert.equal(root.WtpUi.validate(), false);
-    fields.get("wtp_visible").checked = false; fields.get("wtp_visible").listeners.change();
+    root.WtpUi.developmentControlsVisible = false;
     assert.equal(root.WtpUi.read()["USB Serial"], ""); // hiding does not restore or normalize a failed draft
     await new Promise(setImmediate);
-    console.log("WTP UI validation, observation, hidden-selection and draft-preservation tests passed");
+    assert([...timers.values()].some(t => t.ms === 3000)); // Selected Pico remains monitored while hidden.
+    root.WtpUi.select(false);
+    assert.equal(fields.get("wtp-development").hidden, true);
+    root.WtpUi.developmentControlsVisible = true;
+    await new Promise(setImmediate);
+    root.WtpUi.developmentControlsVisible = false;
+    assert.equal(timers.size, 0); // Hidden, unselected Pico does not keep polling.
+    assert(calls.every(c => c.options.method === "GET"));
+    for (const value of [true, false]) {
+        root.WtpUi.developmentControlsVisible = value;
+        const reloaded = browser(storage);
+        reloaded.events.DOMContentLoaded();
+        assert.equal(reloaded.root.WtpUi.developmentControlsVisible, value);
+        assert.equal(reloaded.fields.get("wtp-controls").hidden, !value);
+    }
+    const blocked = browser(new Map(), true);
+    blocked.events.DOMContentLoaded();
+    for (const value of [true, false]) {
+        blocked.root.WtpUi.developmentControlsVisible = value;
+        assert.equal(blocked.fields.get("wtp-controls").hidden, !value);
+    }
+    const early = browser();
+    early.root.WtpUi.developmentControlsVisible = true;
+    assert.equal(early.calls.length, 0);
+    early.events.DOMContentLoaded();
+    assert.equal(early.fields.get("wtp-controls").hidden, false);
+    console.log("WTP UI console boolean, persistence, polling, validation and draft-preservation tests passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });
