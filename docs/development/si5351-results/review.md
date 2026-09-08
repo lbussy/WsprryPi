@@ -124,3 +124,22 @@ is exercised. The 2 m divide-by-6 PLL experiment remains selected. This delibera
 strategy difference is recorded; step 5 versus step 4 is not a single-variable
 40 m synthesis comparison. Carrier register programming for step 5 matches the
 ordinary reference strategy, with the tiny reporting residual checked in software.
+
+## Final adversarial assessment
+
+- Reconstructed-frequency tests fail with 52 assertions against the pre-fix
+  planner and pass with the corrected implementation.
+- Added disabled-cache and all ordered PLL tone-pair software coverage; repeated
+  tones still skip programming. Added slow-I2C/cancellation checks for both
+  linear and raised-cosine fades. RF envelope comparisons use raised-cosine.
+- Moved the new planner option to the end of its public aggregate so existing
+  positional initialization keeps its meanings; added a compatibility fixture.
+- Corrected the comparison harness summary to report its actual planned mode,
+  tone list and duration instead of legacy default option values. Earlier exact
+  command/plan logs and captures remain authoritative and are not rewritten.
+- The stage 4 2 m spur pattern varied even in carrier/hard-key controls whose
+  register programming did not change with the fade fix. Treat that variation
+  as a limitation on spectral attribution; retain it and repeat final captures.
+- `origin/devel` advanced during this campaign with unrelated WTP work. The
+  branch and measurements remain pinned to a523904; no new-base integration or
+  release-readiness claim is made.

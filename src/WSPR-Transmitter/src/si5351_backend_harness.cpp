@@ -27,6 +27,7 @@
 #include "wspr_transmit.hpp"
 #include "wspr_transmit_backend_si5351.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -474,17 +475,23 @@ namespace
         return config;
     }
 
-    static void print_summary(const HarnessOptions& options)
+    static void print_summary(const HarnessOptions& options, const wsprrypi::ExecutionPlan& plan)
     {
-        const std::vector<double> frequencies = mode_frequencies(options);
+        std::vector<double> frequencies;
+        for (const auto& event : plan.events)
+            if (event.frequency_hz > 0 &&
+                std::find(frequencies.begin(), frequencies.end(), event.frequency_hz) == frequencies.end())
+                frequencies.push_back(event.frequency_hz);
+        const auto duration = plan.events.empty() ? std::chrono::nanoseconds::zero()
+            : plan.events.back().offset_from_start + plan.events.back().duration;
         std::cout << std::setprecision(17) << "Si5351 backend harness\n";
         std::cout << "  Scenario: " << options.scenario << " fade=" << options.fade << " ppm=" << options.ppm << "\n";
-        std::cout << "  Mode:        " << options.mode << "\n";
+        std::cout << "  Mode:        " << (options.scenario.empty() ? options.mode : (options.scenario == "transitions" ? "wspr" : "tone")) << "\n";
         std::cout << "  Frequencies:";
         for (const double frequency_hz : frequencies)
             std::cout << " " << frequency_hz;
         std::cout << " Hz\n";
-        std::cout << "  Duration:    " << options.duration_ms << " ms\n";
+        std::cout << "  Duration:    " << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() << " ms\n";
         std::cout << "  Power level: " << options.power_level << "\n";
         std::cout << "  Dry run:     "
                   << (options.dry_run ? "yes" : "no") << "\n";
@@ -505,7 +512,8 @@ int main(int argc, char **argv)
     try
     {
         const HarnessOptions options = parse_options(argc, argv);
-        print_summary(options);
+        const wsprrypi::ExecutionPlan plan = build_plan(options);
+        print_summary(options, plan);
         if (options.dry_run)
         {
             std::cout << "[si5351][info] Harness dry-run mode enabled; "
@@ -516,8 +524,6 @@ int main(int argc, char **argv)
         WsprSi5351Backend backend(
             bridge,
             build_backend_config(options));
-        const wsprrypi::ExecutionPlan plan = build_plan(options);
-
         const wsprrypi::BackendCompileResult configure_result =
             backend.configure(
                 plan,

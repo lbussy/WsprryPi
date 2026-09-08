@@ -874,6 +874,10 @@ namespace
 
 void test_integer_multisynth_comparison()
 {
+    const Si5351Planner::Config legacy{27000000, 0.0, 850000000,
+        Si5351Device::Output::CLK1, false, false};
+    expect(!legacy.park_unused_outputs && !legacy.disable_tx_output_when_idle &&
+        !legacy.prefer_integer_multisynth, "legacy aggregate config keeps its meanings");
     Si5351Planner::Config config;
     config.prefer_integer_multisynth = true;
     config.calibration_ppm = 3.470680;

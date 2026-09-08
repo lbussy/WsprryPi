@@ -862,6 +862,7 @@ void test_optimized_backend_and_drive()
 
 void test_envelope_deadlines_and_off_retune_readiness()
 {
+    for (auto shape : {wsprrypi::FadeShape::LINEAR, wsprrypi::FadeShape::RAISED_COSINE})
     for (bool cancel : {false, true})
     {
         TestBridge bridge; bridge.real_waits = true;
@@ -872,7 +873,7 @@ void test_envelope_deadlines_and_off_retune_readiness()
         auto key = plan.events[0]; key.rf_on = true;
         key.offset_from_start = std::chrono::milliseconds(100);
         key.duration = std::chrono::milliseconds(40);
-        key.envelope.fade_shape = wsprrypi::FadeShape::RAISED_COSINE;
+        key.envelope.fade_shape = shape;
         key.envelope.fade_in = key.envelope.fade_out = std::chrono::milliseconds(20);
         key.envelope.fade_slice = std::chrono::milliseconds(1);
         plan.events.push_back(key); plan.summary.event_count = 2;

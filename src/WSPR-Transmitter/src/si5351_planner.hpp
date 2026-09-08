@@ -46,10 +46,10 @@ public:
         double calibration_ppm = 0.0;
         std::uint64_t parked_pll_hz = 850000000;
         Si5351Device::Output tx_output = Si5351Device::Output::CLK0;
-        // Maintainer comparison; production planning remains fixed PLL by default.
-        bool prefer_integer_multisynth = false;
         bool park_unused_outputs = true;
         bool disable_tx_output_when_idle = true;
+        // Append optional fields to preserve existing aggregate initialization.
+        bool prefer_integer_multisynth = false;
     };
 
     /**
