@@ -201,6 +201,10 @@
     padding-bottom: 0.4rem;
 }
 
+.navbar label.form-check.form-switch {
+    cursor: pointer;
+}
+
 .navbar .form-check-label.toggle-text {
     width: 5ch;
     /* enough for “Light” */
@@ -214,42 +218,21 @@
 }
 
 /* ------------------------------------------------------------
-       Theme toggle (keep the track white, thumb follows theme)
+       Theme toggle (use the standard Bootstrap/Zephyr switch)
 ------------------------------------------------------------ */
 input#themeToggle.form-check-input {
-    position: relative;
-    width: 3.25rem;
-    height: 1.85rem;
-    min-width: 3.25rem;
-    min-height: 1.85rem;
-    background-color: var(--bs-body-bg);
-    background-image: none;
-    border: 1px solid var(--bs-border-color);
-    border-radius: 999px;
-    margin-left: auto;
+    flex-shrink: 0;
+    margin: 0 0 0 auto;
     cursor: pointer;
-    transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out,
-        box-shadow 120ms ease-in-out;
-}
-
-input#themeToggle.form-check-input:checked::before {
-    transform: translateX(1.4rem);
 }
 
 input#themeToggle.form-check-input:focus {
     box-shadow: var(--focus-ring);
 }
 
-input#themeToggle.form-check-input::before {
-    content: "";
-    position: absolute;
-    top: 0.2rem;
-    left: 0.2rem;
-    width: 1.4rem;
-    height: 1.4rem;
-    background-color: rgb(var(--bs-primary-rgb));
-    border-radius: 50%;
-    transition: transform 0.15s ease-in-out;
+input#themeToggle.form-check-input:focus-visible {
+    outline: 2px solid rgb(var(--wspr-accent-text-rgb));
+    outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------
@@ -1083,7 +1066,6 @@ footer .container {
 
     #connection-alert,
     input#themeToggle.form-check-input,
-    input#themeToggle.form-check-input::before,
     .btn,
     .dropdown-menu,
     .dropdown-item,

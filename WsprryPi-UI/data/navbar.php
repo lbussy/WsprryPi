@@ -147,21 +147,20 @@
                 </ul>
 
                 <div class="nav-item d-flex align-items-center">
-                    <div
+                    <label for="themeToggle"
                         class="form-check form-switch d-inline-flex align-items-center mb-0 text-white">
-                        <label
+                        <span
                             class="form-check-label mb-0 toggle-text"
-                            for="themeToggle"
                             id="themeToggleLabel"
                             data-bs-toggle="tooltip"
-                            title="Change Theme">Dark</label>
+                            title="Change Theme">Dark</span>
                         <input
                             class="form-check-input"
                             type="checkbox"
                             id="themeToggle"
                             data-bs-toggle="tooltip"
                             title="Change Theme">
-                    </div>
+                    </label>
                 </div>
             </div>
         </div>
