@@ -255,7 +255,10 @@ lease, and output disabled. WsprryPi checks the receipt against its reviewed
 bundle and deployment/activation digests.
 
 The bundle must be self-contained for these pre-deployment calls: its bootstrap
-set includes the route client imported by the provider and activation tools.
+set includes the route client imported by the provider and activation tools,
+and the route manager imported by provider update execution. Validation checks
+local imports inside functions as well as top-level imports. All standalone
+helpers must match their digest-bound deployment payloads.
 The route-manager socket and service units are digest-bound deployment payloads,
 not assumed host prerequisites; the installed WsprryPi route companion and the
 DKMS-owned module pair are external bound prerequisites. A stock

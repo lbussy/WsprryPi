@@ -2203,6 +2203,7 @@ def validate_runtime_bundle(
         "runtime_deployment.py", "runtime_controller_admin.py", "runtime_layout.py",
         "runtime_application.py", "runtime_output.py", "runtime_provider.py",
         "runtime_binding.py", "runtime_activation.py", "runtime_route_client.py",
+        "runtime_manager.py",
     }
     expected_members = {"binding.json", *bootstrap}
     for destination, expected in files.items():

@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -43,6 +44,58 @@ class PublicRunner:
 
 
 class ContractTests(unittest.TestCase):
+    def test_generated_provider_bundle_passes_installer_validation(self):
+        import build_runtime_binding as builder
+        import build_runtime_bundle as bundler
+        from check_runtime_provider import KERNEL
+        # Synthetic module images/notes and a mapped companion keep this
+        # hardware-free. Build real bindings, payloads and bootstrap helpers.
+        bundler.generate(PROVIDER / 'build/runtime-controller')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            modules = root / 'lib/modules' / KERNEL / 'updates/dkms'
+            modules.mkdir(parents=True)
+            prefix = b'\x7fELF\x02\x01\0version=0.9.0\0vermagic=' + KERNEL.encode() + b' '
+            consumer = prefix + b'\0rp1_runtime_controller=1\0rp1_route_controller\0'
+            controller = prefix + b''.join((PROVIDER / 'build/runtime-controller' /
+                (route + '.dtbo')).read_bytes() for route in ('gpio4', 'gpio20'))
+            (modules / 'rp1_gpclk_dkms.ko').write_bytes(consumer)
+            (modules / 'rp1_route_controller.ko').write_bytes(controller)
+            companion = root / 'companion.py'
+            companion.write_bytes((APP / 'scripts/route_application.py').read_bytes())
+            output = root / 'bundle'
+            with mock.patch.object(builder, 'module_note', return_value=b'offline ELF note'):
+                bound = bundler.bundle(modules, output, companion, KERNEL)
+            installed_companion = mock.MagicMock(spec=Path)
+            installed_companion.__str__.return_value = builder.APPLICATION
+            installed_companion.is_file.side_effect = companion.is_file
+            installed_companion.is_symlink.side_effect = companion.is_symlink
+            installed_companion.open.side_effect = companion.open
+            resolved = {'channel': 'development', 'commit': bound['sourceCommit'],
+                        'version': bound['productVersion']}
+            with mock.patch.object(installer.platform, 'release', return_value=KERNEL):
+                checked = installer.validate_runtime_bundle(output, resolved,
+                    companion=installed_companion, module_root=root)
+                self.assertEqual(checked['binding'], bound)
+                manager = output / 'runtime_manager.py'
+                original = manager.read_bytes()
+                manager.unlink()
+                with self.assertRaisesRegex(installer.ContractError, 'unsupported or missing member'):
+                    installer.validate_runtime_bundle(output, resolved,
+                        companion=installed_companion, module_root=root)
+                manager.write_bytes(original + b'\n# changed helper\n')
+                with self.assertRaisesRegex(installer.ContractError, 'bootstrap digest differs'):
+                    installer.validate_runtime_bundle(output, resolved,
+                        companion=installed_companion, module_root=root)
+                manager.write_bytes(original)
+            helpers = sorted(path.stem for path in output.glob('runtime_*.py'))
+            subprocess.run([sys.executable, '-I', '-c',
+                'import importlib,pathlib,sys; root=pathlib.Path(sys.argv[1]); '
+                'sys.path.insert(0,str(root)); '
+                'modules=[importlib.import_module(name) for name in sys.argv[2:]]; '
+                'assert all(pathlib.Path(module.__file__).parent == root for module in modules)',
+                str(output), *helpers], cwd=root, check=True)
+
     def test_real_json_contract_and_lifecycle_planners(self):
         for route in (None, 4, 20, "removed"):
             for active, masked in ((True, False), (False, False), (False, True)):
